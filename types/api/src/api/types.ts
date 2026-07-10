@@ -462,42 +462,80 @@ export interface SortOptions {
   hasHeaders?: boolean;
   /** Sort only currently visible row slots, preserving hidden row positions. */
   visibleRowsOnly?: boolean;
+  /** OfficeJS-compatible matchCase option, applied when a column omits caseSensitive. */
+  matchCase?: boolean;
+  /** OfficeJS-compatible orientation. Only row sorting is currently supported. */
+  orientation?: 'Rows' | 'rows';
+  /** OfficeJS-compatible collation method. Explicit methods are not currently supported. */
+  method?: never;
 }
+
+/** Selects a sort key column, using a Mog or OfficeJS-compatible property name. */
+export type SortColumnSelector =
+  | {
+      /** Column index (0-based, relative to the sort range). */
+      column: number;
+      columnIndex?: never;
+      key?: never;
+    }
+  | {
+      /** Column index (0-based, relative to the sort range). */
+      columnIndex: number;
+      column?: never;
+      key?: never;
+    }
+  | {
+      /** OfficeJS SortField key (0-based offset from the first column in the range). */
+      key: number;
+      column?: never;
+      columnIndex?: never;
+    };
 
 /**
  * A single column sort specification.
  *
- * Discriminated on `sortBy`. The default ('value') accepts an optional
- * Workbook `customList`. Color sorts (`cellColor` / `fontColor`)
- * require a `targetColor` and `colorPosition` so invalid combinations
- * cannot be expressed.
+ * Accepts Mog's `column`/`direction` shape, the historical `columnIndex`/
+ * `ascending` shape used by SDK guidance, and OfficeJS `SortField` value-sort
+ * shape (`key`/`ascending`). Color/icon OfficeJS fields are structurally
+ * accepted for compatibility but unsupported combinations fail at runtime
+ * instead of silently no-oping.
  */
-export type SortColumn = {
-  /** Column index (0-based, relative to the sort range) */
-  column: number;
+export type SortColumn = SortColumnSelector & {
   /** Sort direction: 'asc' (default) or 'desc'. */
   direction?: 'asc' | 'desc';
+  /** OfficeJS-compatible direction flag. `false` maps to descending. */
+  ascending?: boolean;
   /** Case sensitive comparison (default: false) */
   caseSensitive?: boolean;
+  /** OfficeJS-compatible sort mode. Value sorts are supported. */
+  sortOn?: string;
+  /** OfficeJS-compatible color target for color sorts. */
+  color?: string;
+  /** OfficeJS-compatible text/numeric sort hint. */
+  dataOption?: string;
+  /** OfficeJS-compatible icon target. Icon sorts are not currently supported. */
+  icon?: unknown;
+  /** OfficeJS rich-value subfield target. Rich-value subfield sorts are not currently supported. */
+  subField?: string;
 } & (
-  | {
-      /** What to sort by (default: 'value' if omitted) */
-      sortBy?: 'value';
-      /**
-       * Optional Excel custom-list sort: values present in the list
-       * sort by their list position; values not in the list sort
-       * *after* list members (Excel compatibility).
-       */
-      customList?: CellValue[];
-    }
-  | {
-      sortBy: 'cellColor' | 'fontColor';
-      /** Hex color to match (e.g. '#FFFF00'). */
-      targetColor: string;
-      /** Whether matched rows go to top or bottom of the sorted range. */
-      colorPosition: 'top' | 'bottom';
-    }
-);
+    | {
+        /** What to sort by (default: 'value' if omitted) */
+        sortBy?: 'value';
+        /**
+         * Optional Excel custom-list sort: values present in the list
+         * sort by their list position; values not in the list sort
+         * *after* list members (Excel compatibility).
+         */
+        customList?: CellValue[];
+      }
+    | {
+        sortBy: 'cellColor' | 'fontColor';
+        /** Hex color to match (e.g. '#FFFF00'). */
+        targetColor: string;
+        /** Whether matched rows go to top or bottom of the sorted range. */
+        colorPosition: 'top' | 'bottom';
+      }
+  );
 
 // =============================================================================
 // Filter Types

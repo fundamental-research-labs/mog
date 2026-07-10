@@ -31,6 +31,7 @@ import type {
   TableSetCalculatedColumnReceipt,
   WorksheetTableEvents,
   WorksheetTableSort,
+  WorksheetTableSortField,
   WorksheetTables,
 } from '@mog-sdk/contracts/api';
 import type { CallableDisposable } from '@mog-sdk/contracts/core';
@@ -83,6 +84,7 @@ import {
 import { columnFilterCriteriaToCompute } from '../../bridges/compute/compute-wire-converters';
 import * as FilterOps from './operations/filter-operations';
 import { toCellInput } from './operations/cell-input';
+import { normalizeTableSortOptions, type NormalizedTableSortOptions } from './sort-helpers';
 import {
   assertCalculatedColumnAllowed,
   assertTableCellsEditable,
@@ -105,7 +107,7 @@ import {
 export class WorksheetTablesImpl implements WorksheetTables {
   // TODO(4.8): Persist sort specs to document model via bridge (OOXML
   // TableSortState infrastructure exists but canonical Table type lacks it).
-  private sortSpecCache = new Map<string, Array<{ columnIndex: number; ascending?: boolean }>>();
+  private sortSpecCache = new Map<string, NormalizedTableSortOptions>();
 
   constructor(
     private readonly ctx: DocumentContext,
@@ -289,7 +291,8 @@ export class WorksheetTablesImpl implements WorksheetTables {
   get sort(): WorksheetTableSort {
     if (!this._sort) {
       this._sort = {
-        apply: (tableName, fields) => this.sortApply(tableName, fields),
+        apply: (tableName, fields, matchCase, method) =>
+          this.sortApply(tableName, fields, matchCase, method),
         clear: (tableName) => this.sortClear(tableName),
         reapply: (tableName) => this.sortReapply(tableName),
       };
@@ -1773,12 +1776,13 @@ export class WorksheetTablesImpl implements WorksheetTables {
 
   async sortApply(
     tableName: string,
-    fields: Array<{ columnIndex: number; ascending?: boolean }>,
+    fields: WorksheetTableSortField[],
+    matchCase?: boolean,
+    method?: unknown,
   ): Promise<void> {
     const table = await this.get(tableName);
     if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
     await assertTableSortAllowed(this.ctx, this.sheetId, 'tables.sort.apply', table);
-    this.sortSpecCache.set(tableName, fields);
     const parsed = parseCellRange(table.range);
     if (!parsed) return;
 
@@ -1788,6 +1792,11 @@ export class WorksheetTablesImpl implements WorksheetTables {
 
     const numCols = parsed.endCol - parsed.startCol + 1;
     const numRows = dataEndRow - dataStartRow + 1;
+    const normalizedSort = normalizeTableSortOptions(fields, matchCase, method, {
+      context: 'tables.sort.apply',
+      maxColumnIndex: numCols - 1,
+    });
+    this.sortSpecCache.set(tableName, normalizedSort);
 
     // Read all data body values via queryRange (returns actual cell values)
     const rangeResult = await this.ctx.computeBridge.queryRange(
@@ -1818,7 +1827,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
     // Sort rows by the specified fields
     const indices = Array.from({ length: numRows }, (_, i) => i);
     indices.sort((a, b) => {
-      for (const field of fields) {
+      for (const field of normalizedSort.fields) {
         const aVal = rows[a][field.columnIndex] ?? '';
         const bVal = rows[b][field.columnIndex] ?? '';
         const aNum = Number(aVal);
@@ -1827,7 +1836,9 @@ export class WorksheetTablesImpl implements WorksheetTables {
         if (!isNaN(aNum) && !isNaN(bNum) && aVal !== '' && bVal !== '') {
           cmp = aNum - bNum;
         } else {
-          cmp = String(aVal).localeCompare(String(bVal));
+          cmp = String(aVal).localeCompare(String(bVal), undefined, {
+            sensitivity: normalizedSort.matchCase === true ? 'variant' : 'base',
+          });
         }
         if (field.ascending === false) cmp = -cmp;
         if (cmp !== 0) return cmp;
@@ -1861,8 +1872,8 @@ export class WorksheetTablesImpl implements WorksheetTables {
   }
 
   async sortReapply(tableName: string): Promise<void> {
-    const fields = this.sortSpecCache.get(tableName);
-    if (!fields)
+    const sortSpec = this.sortSpecCache.get(tableName);
+    if (!sortSpec)
       throw new KernelError(
         'COMPUTE_ERROR',
         `No sort specification cached for table "${tableName}". ` +
@@ -1872,7 +1883,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
     const table = await this.get(tableName);
     if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
     await assertTableSortAllowed(this.ctx, this.sheetId, 'tables.sort.reapply', table);
-    await this.sortApply(tableName, fields);
+    await this.sortApply(tableName, sortSpec.fields, sortSpec.matchCase);
   }
 
   // ---------------------------------------------------------------------------

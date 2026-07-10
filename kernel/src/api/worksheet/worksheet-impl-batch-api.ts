@@ -36,7 +36,7 @@ import * as FillOps from './operations/fill-operations';
 import * as QueryOps from './operations/query-operations';
 import * as SortOps from './operations/sort-operations';
 import { normalizeSetCellsEntries } from './set-cells-normalization';
-import { mapSortDirection } from './sort-helpers';
+import { normalizeRangeSortOptions } from './sort-helpers';
 import { worksheetToCSV, worksheetToJSON } from './worksheet-serialization';
 import { WorksheetImplQueryApi } from './worksheet-impl-query-api';
 
@@ -47,12 +47,6 @@ export abstract class WorksheetImplBatchApi extends WorksheetImplQueryApi {
 
   async sortRange(range: string | CellRange, options: SortOptions): Promise<void> {
     this._ensureWritable('worksheet.sortRange');
-    if (!options?.columns || !Array.isArray(options.columns)) {
-      throw new KernelError(
-        'COMPUTE_ERROR',
-        'sortRange requires options.columns to be a non-empty array of SortColumn',
-      );
-    }
 
     const parsed =
       typeof range === 'object'
@@ -70,15 +64,20 @@ export abstract class WorksheetImplBatchApi extends WorksheetImplQueryApi {
       endRow: parsed.endRow,
       endCol: parsed.endCol,
     };
+    const maxColumnIndex = parsed.endCol - parsed.startCol;
+    const normalizedOptions = normalizeRangeSortOptions(options, {
+      context: 'sortRange',
+      maxColumnIndex,
+    });
 
     // Normalize direction from SortColumn to contracts SortDirection ('asc'/'desc').
     // SortOps maps further to bridge SortOrder, and forwards the full
     // discriminated-union mode (value / cellColor / fontColor) so custom-list
     // and color-target fields survive the kernel boundary.
-    const sortBy: ApiSortCriterion[] = options.columns.map((c): ApiSortCriterion => {
+    const sortBy: ApiSortCriterion[] = normalizedOptions.columns.map((c): ApiSortCriterion => {
       const base = {
         column: parsed.startCol + c.column,
-        direction: mapSortDirection(c.direction),
+        direction: c.direction,
         caseSensitive: c.caseSensitive,
       };
       if (c.sortBy === 'cellColor' || c.sortBy === 'fontColor') {
@@ -105,8 +104,8 @@ export abstract class WorksheetImplBatchApi extends WorksheetImplQueryApi {
     this._invalidateActiveCellEditSourceForRange(cellRange);
     await SortOps.sortRange(this.ctx, this.sheetId, cellRange, {
       sortBy,
-      hasHeaders: options.hasHeaders,
-      visibleRowsOnly: options.visibleRowsOnly,
+      hasHeaders: normalizedOptions.hasHeaders,
+      visibleRowsOnly: normalizedOptions.visibleRowsOnly,
     });
   }
 

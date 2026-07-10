@@ -19091,7 +19091,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "apply(\n    tableName: string,\n    fields: Array<{ columnIndex: number; ascending?: boolean }>,\n  ): Promise<void>;",
+      "signature": "apply(\n    tableName: string,\n    fields: WorksheetTableSortField[],\n    matchCase?: boolean,\n    method?: never,\n  ): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -39373,7 +39373,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "apply(\n    tableName: string,\n    fields: Array<{ columnIndex: number; ascending?: boolean }>,\n  ): Promise<void>;",
+      "signature": "apply(\n    tableName: string,\n    fields: WorksheetTableSortField[],\n    matchCase?: boolean,\n    method?: never,\n  ): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {

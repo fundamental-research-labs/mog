@@ -361,6 +361,7 @@ export type {
   TableRowCollection,
   WorksheetTableEvents,
   WorksheetTableSort,
+  WorksheetTableSortField,
   WorksheetTables,
   DropdownItemsWithRevision,
   ListValidationOptions,

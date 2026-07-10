@@ -139,6 +139,7 @@ export type {
   TableRowCollection,
   WorksheetTableEvents,
   WorksheetTableSort,
+  WorksheetTableSortField,
   WorksheetTables,
 } from './tables';
 export type {

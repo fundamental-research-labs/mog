@@ -250,7 +250,7 @@ jobs:
             artifact: native-linux-arm64-musl
             npm-dir: compute/napi/npm/linux-arm64-musl
           - target: x86_64-pc-windows-msvc
-            os: windows-2025-8core
+            os: windows-latest
             artifact: native-win32-x64-msvc
             npm-dir: compute/napi/npm/win32-x64-msvc
     steps:

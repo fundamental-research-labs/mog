@@ -89,7 +89,7 @@ pub(super) fn resolve_font(
     ff
 }
 
-/// Resolve fill input to `FillFormat`. Returns `None` if no visible fill.
+/// Resolve fill input to `FillFormat` while preserving authored pattern semantics.
 pub(super) fn resolve_fill(fill: &FillInput, theme_colors: &[String]) -> Option<FillFormat> {
     // Handle gradient fills
     if fill.fill_type == "gradient" {
@@ -154,17 +154,14 @@ pub(super) fn resolve_fill(fill: &FillInput, theme_colors: &[String]) -> Option<
             .as_ref()
             .and_then(|c| c.tint)
             .filter(|&t| t != 0.0);
-        if bg.is_some() {
-            return Some(FillFormat {
-                background_color: bg,
-                background_color_tint: bg_tint,
-                pattern_type: Some("solid".to_string()),
-                pattern_foreground_color: None,
-                pattern_foreground_color_tint: None,
-                gradient_fill: None,
-            });
-        }
-        return None;
+        return Some(FillFormat {
+            background_color: bg,
+            background_color_tint: bg_tint,
+            pattern_type: Some("solid".to_string()),
+            pattern_foreground_color: None,
+            pattern_foreground_color_tint: None,
+            gradient_fill: None,
+        });
     }
 
     if fill.pattern_type != "none" {

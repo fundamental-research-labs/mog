@@ -1,7 +1,7 @@
 use super::super::components::{resolve_alignment, resolve_border};
 use super::super::{
-    AlignmentInput, BorderInput, BorderSideInput, CellXfInput, ColorInput, FontInput, StyleInput,
-    resolve_styles,
+    AlignmentInput, BorderInput, BorderSideInput, CellXfInput, ColorInput, FillInput, FontInput,
+    StyleInput, resolve_styles,
 };
 use super::make_input;
 
@@ -45,6 +45,69 @@ fn full_style_conversion() {
     let prot = fmt.protection.as_ref().expect("should have protection");
     assert_eq!(prot.locked, Some(true));
     assert_eq!(prot.hidden, Some(true));
+}
+
+#[test]
+fn fill_resolution_preserves_no_fill_colorless_solid_and_colored_solid() {
+    let input = StyleInput {
+        fills: vec![
+            FillInput {
+                fill_type: "pattern".to_string(),
+                pattern_type: "none".to_string(),
+                ..Default::default()
+            },
+            FillInput {
+                fill_type: "pattern".to_string(),
+                pattern_type: "solid".to_string(),
+                ..Default::default()
+            },
+            FillInput {
+                fill_type: "pattern".to_string(),
+                pattern_type: "solid".to_string(),
+                fg_color: Some(ColorInput {
+                    rgb: Some("FFFF0000".to_string()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        ],
+        cell_xfs: vec![
+            CellXfInput::default(),
+            CellXfInput {
+                fill_id: Some(0),
+                apply_fill: Some(true),
+                ..Default::default()
+            },
+            CellXfInput {
+                fill_id: Some(1),
+                apply_fill: Some(true),
+                ..Default::default()
+            },
+            CellXfInput {
+                fill_id: Some(2),
+                apply_fill: Some(true),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+
+    let palette = resolve_styles(&input);
+    let no_fill = palette[1].fill.as_ref().expect("explicit no-fill");
+    assert_eq!(no_fill.pattern_type.as_deref(), Some("none"));
+    assert!(no_fill.background_color.is_none());
+
+    let colorless_solid = palette[2].fill.as_ref().expect("colorless solid fill");
+    assert_eq!(colorless_solid.pattern_type.as_deref(), Some("solid"));
+    assert!(colorless_solid.background_color.is_none());
+
+    let colored_solid = palette[3].fill.as_ref().expect("colored solid fill");
+    assert_eq!(colored_solid.pattern_type.as_deref(), Some("solid"));
+    assert_eq!(colored_solid.background_color.as_deref(), Some("#FF0000"));
+
+    assert_ne!(no_fill, colorless_solid);
+    assert_ne!(colorless_solid, colored_solid);
+    assert_ne!(no_fill, colored_solid);
 }
 
 #[test]

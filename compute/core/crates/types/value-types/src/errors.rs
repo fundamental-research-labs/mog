@@ -314,6 +314,39 @@ pub enum ComputeError {
         cell_id: String,
     },
 
+    /// Requested slicer does not exist on the receiver worksheet.
+    ///
+    /// A slicer owned by another worksheet is intentionally reported through
+    /// the same variant so callers cannot use sheet-scoped APIs to discover
+    /// entities outside their receiver scope.
+    #[error("Slicer not found on sheet {sheet_id}: {slicer_id}")]
+    #[serde(rename_all = "camelCase")]
+    SlicerNotFound {
+        /// Receiver worksheet UUID.
+        sheet_id: String,
+        /// Requested stable slicer ID.
+        slicer_id: String,
+    },
+
+    /// A create request supplied a slicer ID that is already in use.
+    #[error("Slicer ID already exists: {slicer_id}")]
+    #[serde(rename_all = "camelCase")]
+    SlicerIdConflict {
+        /// Conflicting workbook-unique slicer ID.
+        slicer_id: String,
+    },
+
+    /// A create request attempted to assign a slicer to a worksheet other
+    /// than the receiver worksheet.
+    #[error("Slicer sheet mismatch: receiver {receiver_sheet_id}, requested {requested_sheet_id}")]
+    #[serde(rename_all = "camelCase")]
+    SlicerSheetMismatch {
+        /// Canonical receiver worksheet UUID.
+        receiver_sheet_id: String,
+        /// Worksheet ID supplied in the create payload.
+        requested_sheet_id: String,
+    },
+
     /// UUID string could not be parsed.
     #[error("UUID parse error: {message}")]
     #[serde(rename_all = "camelCase")]
@@ -805,6 +838,17 @@ mod tests {
             ComputeError::CellNotFound {
                 cell_id: "c".into(),
             },
+            ComputeError::SlicerNotFound {
+                sheet_id: "s".into(),
+                slicer_id: "sl".into(),
+            },
+            ComputeError::SlicerIdConflict {
+                slicer_id: "sl".into(),
+            },
+            ComputeError::SlicerSheetMismatch {
+                receiver_sheet_id: "s1".into(),
+                requested_sheet_id: "s2".into(),
+            },
             ComputeError::UuidParse {
                 message: "u".into(),
             },
@@ -853,6 +897,9 @@ mod tests {
             "DocNotFound",
             "SheetNotFound",
             "CellNotFound",
+            "SlicerNotFound",
+            "SlicerIdConflict",
+            "SlicerSheetMismatch",
             "UuidParse",
             "Deserialize",
             "InternalPanic",

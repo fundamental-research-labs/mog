@@ -13,7 +13,7 @@ import type {
 } from '@mog-sdk/contracts/api';
 import { type CellValue, type SheetId, sheetId } from '@mog-sdk/contracts/core';
 import type { DocumentContext } from '../../context';
-import { KernelError } from '../../errors';
+import { slicerNotFoundError } from '../../errors';
 
 /**
  * Dependencies injected from WorkbookImpl.
@@ -31,24 +31,11 @@ export interface WorkbookSlicersDeps {
 }
 
 export class WorkbookSlicersImpl implements WorkbookSlicers {
-  /** Cached raw slicer data from the bridge. Invalidated on add/remove. */
-  private _cachedSlicers: Awaited<
-    ReturnType<DocumentContext['computeBridge']['getAllSlicersWorkbook']>
-  > | null = null;
-
   constructor(private readonly deps: WorkbookSlicersDeps) {}
 
-  /** Fetch all slicers from the bridge, using cache if available. */
+  /** Fetch current authoritative slicer ownership from the bridge. */
   private async _getAllSlicers() {
-    if (this._cachedSlicers === null) {
-      this._cachedSlicers = await this.deps.ctx.computeBridge.getAllSlicersWorkbook();
-    }
-    return this._cachedSlicers;
-  }
-
-  /** Invalidate the cached slicer list. */
-  private _invalidateCache(): void {
-    this._cachedSlicers = null;
+    return this.deps.ctx.computeBridge.getAllSlicersWorkbook();
   }
 
   async list(): Promise<SlicerInfo[]> {
@@ -91,7 +78,7 @@ export class WorkbookSlicersImpl implements WorkbookSlicers {
   async getItem(slicerId: string, key: CellValue): Promise<SlicerItem> {
     const stored = await this._findSlicerSheet(slicerId);
     if (!stored) {
-      throw new KernelError('COMPUTE_ERROR', `Slicer "${slicerId}" not found`);
+      throw slicerNotFoundError(undefined, slicerId);
     }
     const wsSlicers = this.deps.getWorksheetSlicers(sheetId(stored.sheetId));
     return wsSlicers.getItem(slicerId, key);
@@ -107,10 +94,9 @@ export class WorkbookSlicersImpl implements WorkbookSlicers {
   async remove(slicerId: string): Promise<SlicerRemoveReceipt> {
     const stored = await this._findSlicerSheet(slicerId);
     if (!stored) {
-      throw new KernelError('COMPUTE_ERROR', `Slicer "${slicerId}" not found`);
+      throw slicerNotFoundError(undefined, slicerId);
     }
     const wsSlicers = this.deps.getWorksheetSlicers(sheetId(stored.sheetId));
-    this._invalidateCache();
     return wsSlicers.remove(slicerId);
   }
 
@@ -119,7 +105,7 @@ export class WorkbookSlicersImpl implements WorkbookSlicers {
     return slicers.length;
   }
 
-  /** Find which sheet a slicer belongs to via the cached workbook-level query. */
+  /** Find which sheet a slicer belongs to via a current workbook-level query. */
   private async _findSlicerSheet(slicerId: string) {
     const all = await this._getAllSlicers();
     return all.find((s) => s.id === slicerId) ?? null;

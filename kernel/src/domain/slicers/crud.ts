@@ -4,7 +4,7 @@
  * Delegates all data access to ComputeBridge (Rust compute-core).
  *
  * Architecture:
- * - Write operations: fire-and-forget via ctx.computeBridge
+ * - Write operations: awaited so strict native failures cannot become unhandled rejections
  * - Read operations: async via ctx.computeBridge
  * - Events: handled by MutationResultHandler from Rust MutationResult
  *
@@ -44,14 +44,14 @@ import { generateSlicerId } from './types';
  * @param options - Optional slicer configuration
  * @param _origin - Origin of the change (handled by Rust)
  */
-export function createTableSlicer(
+export async function createTableSlicer(
   ctx: DocumentContext,
   sheetId: SheetId,
   tableId: string,
   columnCellId: CellId,
   options?: CreateSlicerOptions,
   _origin: StructureChangeSource = 'user',
-): void {
+): Promise<void> {
   const source: SlicerTableSource = {
     type: 'table',
     tableId,
@@ -97,7 +97,7 @@ export function createTableSlicer(
     selectedValues: [],
   };
 
-  void ctx.computeBridge.createSlicer(sheetId, config);
+  await ctx.computeBridge.createSlicer(sheetId, config);
 }
 
 /**
@@ -113,7 +113,7 @@ export function createTableSlicer(
  * @param options - Optional slicer configuration
  * @param _origin - Origin of the change (handled by Rust)
  */
-export function createPivotSlicer(
+export async function createPivotSlicer(
   ctx: DocumentContext,
   sheetId: SheetId,
   pivotId: string,
@@ -121,7 +121,7 @@ export function createPivotSlicer(
   fieldArea: 'row' | 'column' | 'filter',
   options?: CreateSlicerOptions,
   _origin: StructureChangeSource = 'user',
-): void {
+): Promise<void> {
   const source: SlicerPivotSource = {
     type: 'pivot',
     pivotId,
@@ -168,7 +168,7 @@ export function createPivotSlicer(
     selectedValues: [],
   };
 
-  void ctx.computeBridge.createSlicer(sheetId, config);
+  await ctx.computeBridge.createSlicer(sheetId, config);
 }
 
 /**
@@ -306,11 +306,11 @@ export function updateSlicer(
  * @param slicerId - Slicer ID to delete
  * @param _origin - Origin of the change (handled by Rust)
  */
-export function deleteSlicer(
+export async function deleteSlicer(
   ctx: DocumentContext,
   sheetId: SheetId,
   slicerId: string,
   _origin: StructureChangeSource = 'user',
-): void {
-  void ctx.computeBridge.deleteSlicer(sheetId, slicerId);
+): Promise<void> {
+  await ctx.computeBridge.deleteSlicer(sheetId, slicerId);
 }

@@ -41,6 +41,12 @@ export {
 } from './document';
 export { FloatingObjectError } from './floating-object';
 export {
+  slicerIdExistsError,
+  slicerNotFoundError,
+  slicerSheetMismatchError,
+  translateNativeSlicerError,
+} from './slicer';
+export {
   createPivotInvalidDataSourceError,
   createPivotAmbiguousPlacementError,
   createPivotNotFoundError,

@@ -148,6 +148,29 @@ export interface PartialArrayWriteError {
   anchorCol: number;
 }
 
+/** Requested slicer ID is absent from the receiver worksheet. */
+export interface SlicerNotFoundError {
+  kind: 'SlicerNotFound';
+  message: string;
+  sheetId: string;
+  slicerId: string;
+}
+
+/** Requested slicer ID already exists in the workbook identity map. */
+export interface SlicerIdConflictError {
+  kind: 'SlicerIdConflict';
+  message: string;
+  slicerId: string;
+}
+
+/** Create payload requested an owner other than the receiver worksheet. */
+export interface SlicerSheetMismatchError {
+  kind: 'SlicerSheetMismatch';
+  message: string;
+  receiverSheetId: string;
+  requestedSheetId: string;
+}
+
 /** Access denied by the privacy policy engine. */
 export interface SecurityDeniedError {
   kind: 'SecurityDenied';
@@ -238,6 +261,9 @@ export type BridgeError =
   | ExportError
   | InvalidInputError
   | PartialArrayWriteError
+  | SlicerNotFoundError
+  | SlicerIdConflictError
+  | SlicerSheetMismatchError
   | SecurityDeniedError
   | InvalidAddressError
   | InvalidRangeError

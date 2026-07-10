@@ -6,6 +6,9 @@ const REQUIRED_MAPPINGS = [
   ['API_UNSUPPORTED_OPERATION', 'INVALID_ARGUMENT'],
   ['DOC_LEGACY_OPTION_REJECTED', 'INVALID_ARGUMENT'],
   ['WRITE_GATE_BLOCKED', 'READ_ONLY'],
+  ['SLICER_NOT_FOUND', 'NOT_FOUND'],
+  ['SLICER_ID_EXISTS', 'CONFLICT'],
+  ['SLICER_SHEET_MISMATCH', 'INVALID_ARGUMENT'],
 ] as const satisfies readonly (readonly [KernelErrorCode, MogSdkErrorCode])[];
 
 describe('MogSdkError kernel mapping', () => {

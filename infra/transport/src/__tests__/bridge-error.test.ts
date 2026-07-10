@@ -76,6 +76,28 @@ describe('parseBridgeError — happy paths', () => {
     expect(parseBridgeError(envelope({ kind: 'DeadlineExceeded' }))?.kind).toBe('DeadlineExceeded');
   });
 
+  it.each([
+    {
+      kind: 'SlicerNotFound',
+      message: 'slicer not found',
+      sheetId: 'sheet-1',
+      slicerId: 'slicer-1',
+    },
+    {
+      kind: 'SlicerIdConflict',
+      message: 'slicer id conflict',
+      slicerId: 'slicer-1',
+    },
+    {
+      kind: 'SlicerSheetMismatch',
+      message: 'slicer sheet mismatch',
+      receiverSheetId: 'sheet-1',
+      requestedSheetId: 'sheet-2',
+    },
+  ] as const)('parses structured slicer error $kind', (payload) => {
+    expect(parseBridgeError(envelope(payload))).toEqual(payload);
+  });
+
   it('handles trailing content after the JSON object', () => {
     // Some transports may append diagnostic context after the envelope.
     // Parser must consume only the JSON object.
@@ -157,6 +179,9 @@ describe('wire-shape uniformity — NAPI and WASM produce the same envelope', ()
     'Eval',
     'Cycle',
     'PartialArrayWrite',
+    'SlicerNotFound',
+    'SlicerIdConflict',
+    'SlicerSheetMismatch',
     'OperationLimit',
     'DepthLimit',
     'DeadlineExceeded',
@@ -176,6 +201,16 @@ describe('wire-shape uniformity — NAPI and WASM produce the same envelope', ()
         col: 0,
         anchorRow: 0,
         anchorCol: 0,
+      });
+    if (kind === 'SlicerNotFound')
+      Object.assign(sample, { message: 'm', sheetId: 'sheet-1', slicerId: 'slicer-1' });
+    if (kind === 'SlicerIdConflict')
+      Object.assign(sample, { message: 'm', slicerId: 'slicer-1' });
+    if (kind === 'SlicerSheetMismatch')
+      Object.assign(sample, {
+        message: 'm',
+        receiverSheetId: 'sheet-1',
+        requestedSheetId: 'sheet-2',
       });
     if (kind === 'SecurityDenied')
       Object.assign(sample, {

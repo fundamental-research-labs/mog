@@ -22,10 +22,10 @@ pub(super) fn create_slicer(
 
 pub(super) fn delete_slicer(
     engine: &YrsComputeEngine,
-    _sheet_id: &SheetId,
+    sheet_id: &SheetId,
     slicer_id: &str,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    svc::delete_slicer(&engine.stores, slicer_id).map(|r| {
+    svc::delete_slicer(&engine.stores, sheet_id, slicer_id).map(|r| {
         (
             compute_wire::mutation::serialize_multi_viewport_patches(&[]),
             r,
@@ -35,11 +35,11 @@ pub(super) fn delete_slicer(
 
 pub(super) fn update_slicer_config(
     engine: &YrsComputeEngine,
-    _sheet_id: &SheetId,
+    sheet_id: &SheetId,
     slicer_id: &str,
     update: StoredSlicerUpdate,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    svc::update_slicer_config(&engine.stores, slicer_id, &update).map(|r| {
+    svc::update_slicer_config(&engine.stores, sheet_id, slicer_id, &update).map(|r| {
         (
             compute_wire::mutation::serialize_multi_viewport_patches(&[]),
             r,
@@ -57,19 +57,33 @@ pub(super) fn get_all_slicers_workbook(engine: &YrsComputeEngine) -> Vec<StoredS
 
 pub(super) fn get_slicer_state(
     engine: &YrsComputeEngine,
-    _sheet_id: &SheetId,
+    sheet_id: &SheetId,
     slicer_id: &str,
 ) -> Option<StoredSlicer> {
-    svc::get_slicer_state(&engine.stores, slicer_id)
+    svc::get_slicer_state(&engine.stores, sheet_id, slicer_id)
 }
 
 pub(super) fn toggle_slicer_item(
     engine: &YrsComputeEngine,
-    _sheet_id: &SheetId,
+    sheet_id: &SheetId,
     slicer_id: &str,
     value: CellValue,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    svc::toggle_slicer_item(&engine.stores, slicer_id, &value).map(|r| {
+    svc::toggle_slicer_item(&engine.stores, sheet_id, slicer_id, &value).map(|r| {
+        (
+            compute_wire::mutation::serialize_multi_viewport_patches(&[]),
+            r,
+        )
+    })
+}
+
+pub(super) fn set_slicer_selection(
+    engine: &YrsComputeEngine,
+    sheet_id: &SheetId,
+    slicer_id: &str,
+    values: Vec<CellValue>,
+) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    svc::set_slicer_selection(&engine.stores, sheet_id, slicer_id, &values).map(|r| {
         (
             compute_wire::mutation::serialize_multi_viewport_patches(&[]),
             r,
@@ -79,10 +93,10 @@ pub(super) fn toggle_slicer_item(
 
 pub(super) fn clear_slicer_selection(
     engine: &YrsComputeEngine,
-    _sheet_id: &SheetId,
+    sheet_id: &SheetId,
     slicer_id: &str,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    svc::clear_slicer_selection(&engine.stores, slicer_id).map(|r| {
+    svc::clear_slicer_selection(&engine.stores, sheet_id, slicer_id).map(|r| {
         (
             compute_wire::mutation::serialize_multi_viewport_patches(&[]),
             r,

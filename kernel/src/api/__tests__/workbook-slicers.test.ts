@@ -3,6 +3,7 @@ import { jest } from '@jest/globals';
 import { sheetId } from '@mog-sdk/contracts/core';
 
 import { WorkbookSlicersImpl } from '../workbook/slicers';
+import { KernelError } from '../../errors';
 
 const SHEET_ID = sheetId('sheet-1');
 
@@ -30,7 +31,20 @@ const REMOVE_RECEIPT = {
   diagnostics: [],
   slicerId: 'slicer-imported',
   sourceTableId: 'tbl-stable-sales',
-  slicer: null,
+  slicer: {
+    id: 'slicer-imported',
+    name: 'RegionSlicer',
+    caption: 'Region',
+    tableName: 'SdkSlicerSales',
+    columnName: 'Region',
+    source: {
+      type: 'table',
+      tableId: 'tbl-stable-sales',
+      columnCellId: 'col-stable-region',
+    },
+    selectedItems: [],
+    position: { x: 0, y: 0, width: 200, height: 300 },
+  },
 } as const;
 
 function createMockComputeBridge() {
@@ -141,6 +155,66 @@ describe('WorkbookSlicersImpl', () => {
     bridge.getAllSlicersWorkbook.mockResolvedValue([]);
     await expect(workbookSlicers.getCount()).resolves.toBe(0);
     expect(worksheetSlicers.remove).toHaveBeenCalledWith('slicer-imported');
-    expect(bridge.getAllSlicersWorkbook).toHaveBeenCalledTimes(2);
+    expect(bridge.getAllSlicersWorkbook).toHaveBeenCalledTimes(3);
+  });
+
+  it('always observes worksheet-scoped add/remove and history replay without a stale cache', async () => {
+    const bridge = createMockComputeBridge();
+    const ctx = createMockCtx(bridge);
+    let authoritative: any[] = [];
+    bridge.getAllSlicersWorkbook.mockImplementation(() => Promise.resolve(authoritative));
+    const worksheetSlicers = {
+      get: jest.fn().mockResolvedValue(REMOVE_RECEIPT.slicer),
+      getItems: jest.fn(),
+      getItem: jest.fn(),
+      getItemOrNullObject: jest.fn(),
+      remove: jest.fn().mockResolvedValue(REMOVE_RECEIPT),
+    };
+    const workbookSlicers = new WorkbookSlicersImpl({
+      ctx,
+      getWorksheetSlicers: () => worksheetSlicers,
+    });
+
+    await expect(workbookSlicers.getCount()).resolves.toBe(0);
+    authoritative = [
+      {
+        id: 'slicer-imported',
+        sheetId: String(SHEET_ID),
+        caption: 'Region',
+        name: 'RegionSlicer',
+        source: REMOVE_RECEIPT.slicer.source,
+      },
+    ];
+    await expect(workbookSlicers.getCount()).resolves.toBe(1);
+    await expect(workbookSlicers.get('slicer-imported')).resolves.toEqual(REMOVE_RECEIPT.slicer);
+
+    authoritative = [];
+    await expect(workbookSlicers.list()).resolves.toEqual([]);
+    authoritative = [
+      {
+        id: 'slicer-imported',
+        sheetId: String(SHEET_ID),
+        caption: 'Region',
+        name: 'RegionSlicer',
+        source: REMOVE_RECEIPT.slicer.source,
+      },
+    ];
+    await expect(workbookSlicers.getCount()).resolves.toBe(1);
+  });
+
+  it('uses SLICER_NOT_FOUND for strict workbook targets', async () => {
+    const workbookSlicers = new WorkbookSlicersImpl({
+      ctx: createMockCtx(),
+      getWorksheetSlicers: jest.fn() as any,
+    });
+
+    for (const action of [
+      () => workbookSlicers.getItem('missing', 'x'),
+      () => workbookSlicers.remove('missing'),
+    ]) {
+      await expect(action()).rejects.toMatchObject<Partial<KernelError>>({
+        code: 'SLICER_NOT_FOUND',
+      });
+    }
   });
 });

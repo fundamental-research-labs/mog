@@ -43,6 +43,39 @@ import { KernelError } from '../../errors';
 
 const SHEET_ID = sheetId('sheet-1');
 
+function storedSlicer(id = 'slicer-1', overrides: Record<string, unknown> = {}) {
+  return {
+    id,
+    sheetId: String(SHEET_ID),
+    caption: 'Region',
+    name: 'RegionSlicer',
+    source: { type: 'table', tableId: 'SalesTable', columnCellId: 'col-region' },
+    style: null,
+    position: null,
+    zIndex: 0,
+    locked: false,
+    showHeader: true,
+    multiSelect: true,
+    selectedValues: [],
+    ...overrides,
+  };
+}
+
+function mutation(kind: string, data: ReturnType<typeof storedSlicer>) {
+  return {
+    data,
+    slicerChanges: [
+      {
+        sheetId: String(SHEET_ID),
+        slicerId: data.id,
+        kind,
+        data,
+        selectedValues: data.selectedValues,
+      },
+    ],
+  };
+}
+
 function mockTable(id: string, columns: Array<{ name: string; id?: string; index?: number }>) {
   const mappedColumns = columns.map((col, index) => ({
     name: col.name,
@@ -74,12 +107,27 @@ const DEFAULT_TABLES = [
 function createMockComputeBridge() {
   return {
     // Slicer CRUD
-    createSlicer: jest.fn().mockResolvedValue(undefined),
-    deleteSlicer: jest.fn().mockResolvedValue(undefined),
+    createSlicer: jest.fn().mockResolvedValue(mutation('created', storedSlicer('slicer-created'))),
+    deleteSlicer: jest
+      .fn()
+      .mockImplementation((_sheetId: unknown, id: string) =>
+        Promise.resolve(mutation('deleted', storedSlicer(id))),
+      ),
     getAllSlicers: jest.fn().mockResolvedValue([]),
     getAllSlicersWorkbook: jest.fn().mockResolvedValue([]),
-    getSlicerState: jest.fn().mockResolvedValue(null),
-    updateSlicerConfig: jest.fn().mockResolvedValue(undefined),
+    getSlicerState: jest
+      .fn()
+      .mockImplementation((_sheetId: unknown, id: string) => Promise.resolve(storedSlicer(id))),
+    updateSlicerConfig: jest
+      .fn()
+      .mockImplementation((_sheetId: unknown, id: string, updates: Record<string, unknown>) =>
+        Promise.resolve(mutation('updated', storedSlicer(id, updates))),
+      ),
+    setSlicerSelection: jest
+      .fn()
+      .mockImplementation((_sheetId: unknown, id: string, selectedValues: unknown[]) =>
+        Promise.resolve(mutation('selectionChanged', storedSlicer(id, { selectedValues }))),
+      ),
     clearSlicerSelection: jest.fn().mockResolvedValue(undefined),
     getSheetProtectionOptions: jest.fn().mockResolvedValue(null),
     toggleSlicerItem: jest.fn().mockResolvedValue(undefined),
@@ -157,6 +205,7 @@ describe('WorksheetSlicersImpl', () => {
       bridge.getAllSlicers.mockResolvedValue([
         {
           id: 'slicer-1',
+          sheetId: String(SHEET_ID),
           caption: 'Region Filter',
           name: 'Slicer_Region',
           source: { type: 'table', tableId: 'Table1', columnCellId: 'Region' },
@@ -180,6 +229,7 @@ describe('WorksheetSlicersImpl', () => {
       bridge.getAllSlicers.mockResolvedValue([
         {
           id: 'slicer-2',
+          sheetId: String(SHEET_ID),
           caption: 'Sales by Category',
           name: 'Slicer_Category',
           source: { type: 'table', tableId: 'SalesTable', columnCellId: 'Category' },
@@ -196,6 +246,7 @@ describe('WorksheetSlicersImpl', () => {
       bridge.getAllSlicers.mockResolvedValue([
         {
           id: 'slicer-3',
+          sheetId: String(SHEET_ID),
           caption: 'Department',
           // name is undefined — should fall back to caption
           source: { type: 'table', tableId: 'Table2', columnCellId: 'Dept' },
@@ -211,6 +262,7 @@ describe('WorksheetSlicersImpl', () => {
     it('get() also returns caption and name fields', async () => {
       bridge.getSlicerState.mockResolvedValue({
         id: 'slicer-4',
+        sheetId: String(SHEET_ID),
         caption: 'My Slicer',
         name: 'Slicer_Custom',
         source: { type: 'table', tableId: 'T1', columnCellId: 'Col1' },
@@ -232,6 +284,7 @@ describe('WorksheetSlicersImpl', () => {
     it('get() falls back name to caption when name is undefined', async () => {
       bridge.getSlicerState.mockResolvedValue({
         id: 'slicer-5',
+        sheetId: String(SHEET_ID),
         caption: 'Auto Name',
         // no name field
         source: { type: 'table', tableId: 'T2', columnCellId: 'Col2' },
@@ -286,11 +339,7 @@ describe('WorksheetSlicersImpl', () => {
         multiSelect: false,
         selectedValues: ['West'],
       });
-      bridge.createSlicer.mockResolvedValue({
-        data: {
-          id: 'slicer-2',
-        },
-      });
+      bridge.createSlicer.mockResolvedValue(mutation('created', storedSlicer('slicer-2')));
 
       const receipt = await slicers.duplicate('slicer-1');
 
@@ -508,6 +557,7 @@ describe('WorksheetSlicersImpl', () => {
       // Set up a table slicer with real data
       bridge.getSlicerState.mockResolvedValue({
         id: 'slicer-t1',
+        sheetId: String(SHEET_ID),
         caption: 'Region',
         source: { type: 'table', tableId: 'SalesTable', columnCellId: 'col-region' },
         selectedValues: [],
@@ -549,6 +599,7 @@ describe('WorksheetSlicersImpl', () => {
     it('resolves table slicer items from a header CellId source', async () => {
       bridge.getSlicerState.mockResolvedValue({
         id: 'slicer-cell-id',
+        sheetId: String(SHEET_ID),
         caption: 'Region',
         source: {
           type: 'table',
@@ -597,6 +648,7 @@ describe('WorksheetSlicersImpl', () => {
     it('returns numeric slicer items from Rust number cell values', async () => {
       bridge.getSlicerState.mockResolvedValue({
         id: 'slicer-amount',
+        sheetId: String(SHEET_ID),
         caption: 'Amount',
         source: {
           type: 'table',
@@ -643,6 +695,7 @@ describe('WorksheetSlicersImpl', () => {
     it('applies slicer selection to the resolved CellId-backed table column', async () => {
       bridge.getSlicerState.mockResolvedValue({
         id: 'slicer-cell-id',
+        sheetId: String(SHEET_ID),
         caption: 'Region',
         source: {
           type: 'table',
@@ -675,8 +728,9 @@ describe('WorksheetSlicersImpl', () => {
 
       await slicers.setSelection('slicer-cell-id', ['West']);
 
-      expect(bridge.clearSlicerSelection).toHaveBeenCalledWith(SHEET_ID, 'slicer-cell-id');
-      expect(bridge.toggleSlicerItem).toHaveBeenCalledWith(SHEET_ID, 'slicer-cell-id', 'West');
+      expect(bridge.setSlicerSelection).toHaveBeenCalledWith(SHEET_ID, 'slicer-cell-id', ['West']);
+      expect(bridge.clearSlicerSelection).not.toHaveBeenCalled();
+      expect(bridge.toggleSlicerItem).not.toHaveBeenCalled();
       expect(bridge.setColumnFilter).toHaveBeenCalledWith(
         SHEET_ID,
         'f-1',
@@ -688,6 +742,7 @@ describe('WorksheetSlicersImpl', () => {
     it('getState returns isConnected=false when table is missing', async () => {
       bridge.getSlicerState.mockResolvedValue({
         id: 'slicer-orphan',
+        sheetId: String(SHEET_ID),
         caption: 'Orphan',
         source: { type: 'table', tableId: 'DeletedTable', columnCellId: 'Col' },
         selectedValues: [],

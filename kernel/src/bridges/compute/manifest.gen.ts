@@ -473,6 +473,7 @@ export const BRIDGE_METHOD_KIND: Readonly<Record<string, BridgeMethodKind>> = Ob
   getAllSlicersWorkbook: 'read',
   getSlicerState: 'read',
   toggleSlicerItem: 'write',
+  setSlicerSelection: 'write',
   clearSlicerSelection: 'write',
   mapSlicerInvalidationReason: 'read',
   mapSlicerDisconnectionReason: 'read',

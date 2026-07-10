@@ -18,7 +18,8 @@ pub(in crate::storage::engine) use self::grouping::{
 };
 pub(in crate::storage::engine) use self::slicer_crdt::{
     clear_slicer_selection, create_slicer, delete_slicer, get_all_slicers,
-    get_all_slicers_workbook, get_slicer_state, toggle_slicer_item, update_slicer_config,
+    get_all_slicers_workbook, get_slicer_state, set_slicer_selection, toggle_slicer_item,
+    update_slicer_config,
 };
 pub(in crate::storage::engine) use self::slicer_helpers::{
     find_disconnected_slicers, find_slicers_for_table, get_slicer_items_from_cache,

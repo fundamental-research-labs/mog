@@ -419,21 +419,21 @@ impl YrsComputeEngine {
     #[bridge::write(scope = "sheet")]
     pub fn delete_slicer(
         &self,
-        _sheet_id: &SheetId,
+        sheet_id: &SheetId,
         slicer_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        slicers::delete_slicer(self, _sheet_id, slicer_id)
+        slicers::delete_slicer(self, sheet_id, slicer_id)
     }
 
     /// Update a slicer's configuration with a partial update.
     #[bridge::write(scope = "sheet")]
     pub fn update_slicer_config(
         &self,
-        _sheet_id: &SheetId,
+        sheet_id: &SheetId,
         slicer_id: &str,
         update: StoredSlicerUpdate,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        slicers::update_slicer_config(self, _sheet_id, slicer_id, update)
+        slicers::update_slicer_config(self, sheet_id, slicer_id, update)
     }
 
     /// Get all slicers for a sheet.
@@ -450,29 +450,40 @@ impl YrsComputeEngine {
 
     /// Get a slicer's current state.
     #[bridge::read(scope = "sheet")]
-    pub fn get_slicer_state(&self, _sheet_id: &SheetId, slicer_id: &str) -> Option<StoredSlicer> {
-        slicers::get_slicer_state(self, _sheet_id, slicer_id)
+    pub fn get_slicer_state(&self, sheet_id: &SheetId, slicer_id: &str) -> Option<StoredSlicer> {
+        slicers::get_slicer_state(self, sheet_id, slicer_id)
     }
 
     /// Toggle a slicer item selection.
     #[bridge::write(scope = "sheet")]
     pub fn toggle_slicer_item(
         &self,
-        _sheet_id: &SheetId,
+        sheet_id: &SheetId,
         slicer_id: &str,
         value: CellValue,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        slicers::toggle_slicer_item(self, _sheet_id, slicer_id, value)
+        slicers::toggle_slicer_item(self, sheet_id, slicer_id, value)
+    }
+
+    /// Replace a slicer's selection in one authoritative mutation.
+    #[bridge::write(scope = "sheet")]
+    pub fn set_slicer_selection(
+        &self,
+        sheet_id: &SheetId,
+        slicer_id: &str,
+        values: Vec<CellValue>,
+    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+        slicers::set_slicer_selection(self, sheet_id, slicer_id, values)
     }
 
     /// Clear all slicer selections (show all data).
     #[bridge::write(scope = "sheet")]
     pub fn clear_slicer_selection(
         &self,
-        _sheet_id: &SheetId,
+        sheet_id: &SheetId,
         slicer_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        slicers::clear_slicer_selection(self, _sheet_id, slicer_id)
+        slicers::clear_slicer_selection(self, sheet_id, slicer_id)
     }
 
     // -------------------------------------------------------------------

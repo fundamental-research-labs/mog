@@ -69,6 +69,9 @@ export type {
   PartialArrayWriteError,
   SecurityDeniedError,
   SheetNotFoundEngineError,
+  SlicerIdConflictError,
+  SlicerNotFoundError,
+  SlicerSheetMismatchError,
   ThreadSpawnError,
   UuidParseError,
 } from './bridge-error';

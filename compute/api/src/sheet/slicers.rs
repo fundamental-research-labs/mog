@@ -68,6 +68,22 @@ impl SheetSlicers {
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
+    /// Replace a slicer's selected values atomically.
+    pub fn set_slicer_selection(
+        &self,
+        slicer_id: &str,
+        values: Vec<CellValue>,
+    ) -> Result<MutationResult, ComputeApiError> {
+        let sid = self.sheet_id;
+        let owned_id = slicer_id.to_owned();
+        self.dispatch
+            .call_engine(move |e| {
+                e.set_slicer_selection(&sid, &owned_id, values)
+                    .map(|(_, r)| r)
+            })
+            .and_then(|r| r.map_err(ComputeApiError::from))
+    }
+
     /// Clear all selections on a slicer (show all items).
     pub fn clear_slicer_selection(
         &self,

@@ -45,6 +45,10 @@ export type KernelErrorCode =
   | 'PIVOT_NOT_FOUND'
   | 'PIVOT_INVALID_DATA_SOURCE'
   | 'PIVOT_UNRESOLVED_FIELD_REFERENCES'
+  // === Slicer (SLICER_*) ===
+  | 'SLICER_NOT_FOUND'
+  | 'SLICER_ID_EXISTS'
+  | 'SLICER_SHEET_MISMATCH'
   // === Scenario (SCENARIO_*) ===
   | 'SCENARIO_ACTIVE_STATE_READ_ONLY'
   // === Domain (DOMAIN_*) ===

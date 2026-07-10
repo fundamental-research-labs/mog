@@ -481,6 +481,7 @@ export interface GeneratedBridgeMethods {
   getAllSlicersWorkbook(): Promise<StoredSlicer[]>;
   getSlicerState(sheetId: SheetId, slicerId: string): Promise<StoredSlicer | null>;
   toggleSlicerItem(sheetId: SheetId, slicerId: string, value: CellValue, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setSlicerSelection(sheetId: SheetId, slicerId: string, values: CellValue[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   clearSlicerSelection(sheetId: SheetId, slicerId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   mapSlicerInvalidationReason(reason: string): Promise<CacheInvalidationEventReason>;
   mapSlicerDisconnectionReason(reason: string): Promise<DisconnectionEventReason>;
@@ -2543,6 +2544,10 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
 
   toggleSlicerItem(sheetId: SheetId, slicerId: string, value: CellValue, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
     return this.core.mutatePublic('compute_toggle_slicer_item', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_toggle_slicer_item', { docId: this.core.docId, sheetId, slicerId, value }), undefined, admissionOptions);
+  }
+
+  setSlicerSelection(sheetId: SheetId, slicerId: string, values: CellValue[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_slicer_selection', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_slicer_selection', { docId: this.core.docId, sheetId, slicerId, values }), undefined, admissionOptions);
   }
 
   clearSlicerSelection(sheetId: SheetId, slicerId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {

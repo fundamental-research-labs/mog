@@ -21,13 +21,12 @@
 import { toCellId, type CellId } from '@mog-sdk/contracts/cell-identity';
 import { type CellValue, type SheetId, sheetId as toSheetId } from '@mog-sdk/contracts/core';
 import type { StructureChangeSource } from '@mog-sdk/contracts/event-base';
-import type { SlicerSelectionChangedEvent } from '@mog-sdk/contracts/events';
 
 import type { Slicer } from '../../bridges/compute/compute-types.gen';
 import type { DocumentContext } from '../../context/types';
 import * as Filters from '../sorting/filters';
 import { getTable } from '../tables/core';
-import { getSlicer, updateSlicer } from './crud';
+import { getSlicer } from './crud';
 import { storedSlicerToComputeSlicer } from './table-binding';
 
 // =============================================================================
@@ -94,23 +93,11 @@ export async function setSlicerSelection(
   const storedSlicer = await getSlicer(ctx, sheetId, slicerId);
   if (!storedSlicer) return;
 
-  if (storedSlicer.source.type === 'pivot') {
-    // Pivot slicer selection: store selectedValues on the slicer itself,
-    // then emit the event. The slicer-pivot-bridge handles the actual
-    // pivot field filter update via setPivotFieldFilter.
-    await updateSlicer(ctx, sheetId, slicerId, { selectedValues });
+  await ctx.computeBridge.setSlicerSelection(sheetId, slicerId, selectedValues);
 
-    const now = Date.now();
-    const changeType = selectedValues.length === 0 ? 'clear' : 'select';
-    const event: SlicerSelectionChangedEvent = {
-      type: 'slicer:selectionChanged',
-      timestamp: now,
-      sheetId,
-      slicerId,
-      selectedValues,
-      changeType,
-    };
-    ctx.eventBus.emit(event);
+  if (storedSlicer.source.type === 'pivot') {
+    // MutationResultHandler emits the selection event; the slicer-pivot bridge
+    // projects that event onto the pivot filter.
     return;
   }
 
@@ -133,8 +120,6 @@ export async function setSlicerSelection(
   }
 
   const columnCellId = toCellId(storedSlicer.source.columnCellId);
-  const now = Date.now();
-
   if (selectedValues.length === 0) {
     // Clear filter (show all)
     await Filters.clearColumnFilter(ctx, toSheetId(table.sheetId), filter.id, columnCellId, origin);
@@ -150,18 +135,7 @@ export async function setSlicerSelection(
     );
   }
 
-  // Emit slicer selection changed event (Section 7: EventBus integration)
-  // This event triggers slicer-table-bridge to update related components
-  const changeType = selectedValues.length === 0 ? 'clear' : 'select';
-  const event: SlicerSelectionChangedEvent = {
-    type: 'slicer:selectionChanged',
-    timestamp: now,
-    sheetId,
-    slicerId,
-    selectedValues,
-    changeType,
-  };
-  ctx.eventBus.emit(event);
+  // MutationResultHandler emits slicer:selectionChanged from native evidence.
 }
 
 /**

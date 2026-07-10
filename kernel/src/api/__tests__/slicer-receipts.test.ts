@@ -52,14 +52,32 @@ function storedSalesSlicer(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function mutation(kind: string, data: ReturnType<typeof storedSalesSlicer>) {
+  return {
+    data,
+    slicerChanges: [
+      {
+        sheetId: String(SHEET_ID),
+        slicerId: data.id,
+        kind,
+        data,
+        selectedValues: data.selectedValues,
+      },
+    ],
+  };
+}
+
 function createMockComputeBridge() {
   return {
-    createSlicer: jest.fn().mockResolvedValue(undefined),
-    deleteSlicer: jest.fn().mockResolvedValue(undefined),
+    createSlicer: jest.fn().mockResolvedValue(mutation('created', storedSalesSlicer())),
+    deleteSlicer: jest.fn().mockResolvedValue(mutation('deleted', storedSalesSlicer())),
     getAllSlicers: jest.fn().mockResolvedValue([]),
     getAllSlicersWorkbook: jest.fn().mockResolvedValue([]),
     getSlicerState: jest.fn().mockResolvedValue(null),
-    updateSlicerConfig: jest.fn().mockResolvedValue(undefined),
+    updateSlicerConfig: jest.fn().mockResolvedValue(mutation('updated', storedSalesSlicer())),
+    setSlicerSelection: jest
+      .fn()
+      .mockResolvedValue(mutation('selectionChanged', storedSalesSlicer())),
     clearSlicerSelection: jest.fn().mockResolvedValue(undefined),
     getSheetProtectionOptions: jest.fn().mockResolvedValue(null),
     toggleSlicerItem: jest.fn().mockResolvedValue(undefined),
@@ -108,14 +126,12 @@ describe('WorksheetSlicersImpl operation receipts', () => {
 
   it('add returns a receipt preserving the created slicer payload', async () => {
     bridge.getTableByName.mockResolvedValue(SALES_TABLE);
-    bridge.createSlicer.mockResolvedValue({ data: { id: 'slicer-new' } });
-    bridge.getSlicerState.mockResolvedValue(
-      storedSalesSlicer({
-        id: 'slicer-new',
-        caption: 'Region',
-        name: 'RegionSlicer',
-      }),
-    );
+    const created = storedSalesSlicer({
+      id: 'slicer-new',
+      caption: 'Region',
+      name: 'RegionSlicer',
+    });
+    bridge.createSlicer.mockResolvedValue(mutation('created', created));
 
     const receipt = await slicers.add({
       name: 'RegionSlicer',
@@ -153,6 +169,9 @@ describe('WorksheetSlicersImpl operation receipts', () => {
         caption: 'Region Filter',
       }),
     );
+    bridge.updateSlicerConfig.mockResolvedValue(
+      mutation('updated', storedSalesSlicer({ caption: 'Region Filter' })),
+    );
 
     const receipt = await slicers.update('slicer-1', { caption: 'Region Filter' });
 
@@ -178,6 +197,7 @@ describe('WorksheetSlicersImpl operation receipts', () => {
 
   it('remove returns a removal receipt with the prior slicer projection', async () => {
     bridge.getSlicerState.mockResolvedValue(storedSalesSlicer());
+    bridge.deleteSlicer.mockResolvedValue(mutation('deleted', storedSalesSlicer()));
 
     const receipt = await slicers.remove('slicer-1');
 
@@ -203,7 +223,9 @@ describe('WorksheetSlicersImpl operation receipts', () => {
     bridge.getSlicerState.mockImplementation((...args: unknown[]) =>
       Promise.resolve(storedSalesSlicer({ id: String(args[1] ?? 'slicer-1') })),
     );
-    bridge.createSlicer.mockResolvedValue({ data: { id: 'slicer-2' } });
+    bridge.createSlicer.mockResolvedValue(
+      mutation('created', storedSalesSlicer({ id: 'slicer-2', selectedValues: [] })),
+    );
 
     const receipt = await slicers.duplicate('slicer-1');
 
@@ -229,6 +251,9 @@ describe('WorksheetSlicersImpl operation receipts', () => {
       storedSalesSlicer({
         selectedValues: ['West'],
       }),
+    );
+    bridge.setSlicerSelection.mockResolvedValue(
+      mutation('selectionChanged', storedSalesSlicer({ selectedValues: ['West'] })),
     );
 
     const receipt = await slicers.setSelection('slicer-1', ['West']);
@@ -263,6 +288,9 @@ describe('WorksheetSlicersImpl operation receipts', () => {
 
   it('clearSelection returns a receipt with clear projection effects', async () => {
     bridge.getSlicerState.mockResolvedValue(storedSalesSlicer());
+    bridge.setSlicerSelection.mockResolvedValue(
+      mutation('selectionChanged', storedSalesSlicer({ selectedValues: [] })),
+    );
 
     const receipt = await slicers.clearSelection('slicer-1');
 
@@ -287,5 +315,29 @@ describe('WorksheetSlicersImpl operation receipts', () => {
         expect.objectContaining({ type: 'invalidatedCache', objectId: 'slicer-1' }),
       ]),
     );
+  });
+
+  it('rejects add and duplicate when native creation evidence is absent', async () => {
+    bridge.getTableByName.mockResolvedValue(SALES_TABLE);
+    bridge.createSlicer.mockResolvedValue({ data: storedSalesSlicer({ id: 'fabricated' }) });
+
+    await expect(
+      slicers.add({
+        tableName: 'SalesTable',
+        columnName: 'Region',
+      } as any),
+    ).rejects.toMatchObject({ code: 'OPERATION_FAILED' });
+
+    bridge.getSlicerState.mockResolvedValue(storedSalesSlicer());
+    await expect(slicers.duplicate('slicer-1')).rejects.toMatchObject({
+      code: 'OPERATION_FAILED',
+    });
+  });
+
+  it('builds clear receipts only from observed delete evidence', async () => {
+    bridge.getAllSlicers.mockResolvedValue([storedSalesSlicer()]);
+    bridge.deleteSlicer.mockResolvedValue({ slicerChanges: [] });
+
+    await expect(slicers.clear()).rejects.toMatchObject({ code: 'OPERATION_FAILED' });
   });
 });

@@ -1139,14 +1139,14 @@ export interface SlicerUpdateReceipt extends OperationReceiptBase, SlicerReceipt
   readonly kind: 'slicer.update';
   readonly status: 'applied' | 'noOp';
   readonly slicerId: string;
-  readonly slicer?: Slicer | null;
+  readonly slicer: Slicer;
 }
 
 export interface SlicerRemoveReceipt extends OperationReceiptBase, SlicerReceiptSourceFields {
   readonly kind: 'slicer.remove';
   readonly status: 'applied';
   readonly slicerId: string;
-  readonly slicer?: Slicer | null;
+  readonly slicer: Slicer;
 }
 
 export interface SlicerClearReceipt extends OperationReceiptBase {
@@ -1162,7 +1162,7 @@ export interface SlicerDuplicateReceipt extends OperationReceiptBase, SlicerRece
   readonly status: 'applied';
   readonly slicerId: string;
   readonly sourceSlicerId: string;
-  readonly slicer?: Slicer | null;
+  readonly slicer: Slicer;
 }
 
 export interface SlicerSelectionSetReceipt extends OperationReceiptBase, SlicerReceiptSourceFields {
@@ -1170,7 +1170,7 @@ export interface SlicerSelectionSetReceipt extends OperationReceiptBase, SlicerR
   readonly status: 'applied';
   readonly slicerId: string;
   readonly selectedItems: readonly CellValue[];
-  readonly slicer?: Slicer | null;
+  readonly slicer: Slicer;
 }
 
 export interface SlicerSelectionClearReceipt
@@ -1179,7 +1179,7 @@ export interface SlicerSelectionClearReceipt
   readonly status: 'applied';
   readonly slicerId: string;
   readonly selectedItems: readonly [];
-  readonly slicer?: Slicer | null;
+  readonly slicer: Slicer;
 }
 
 export type SlicerSelectionReceipt = SlicerSelectionSetReceipt | SlicerSelectionClearReceipt;

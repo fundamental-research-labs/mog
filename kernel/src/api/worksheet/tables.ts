@@ -73,6 +73,7 @@ import {
   getTotalRowRangeFromInfo,
   type TableMutationOptions,
 } from './operations/table-operations';
+import { assertValidTableName } from './operations/table-name-validation';
 import { attachTableInfoMethods } from './operations/table-info-methods';
 import { applyAutoExpansion as applyAutoExpansionOperation } from './operations/table-auto-expansion';
 import {
@@ -230,17 +231,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
     const existingNames = (await this.list())
       .map((table) => table.name)
       .filter((name) => name.toLowerCase() !== currentName.toLowerCase());
-    const validation = await this.ctx.computeBridge.tableValidateTableName(newName, existingNames);
-    if (!validation.valid) {
-      throw new KernelError(
-        'TABLE_INVALID_NAME',
-        validation.reason ?? `Invalid table name: ${newName}`,
-        {
-          context: { currentName, newName },
-          path: ['name'],
-        },
-      );
-    }
+    await assertValidTableName(this.ctx, newName, existingNames, { currentName, newName });
   }
 
   private tableUpdateOptionsToEventChanges(
@@ -333,6 +324,10 @@ export class WorksheetTablesImpl implements WorksheetTables {
     const startCol = bounds.startCol;
     const endRow = bounds.endRow;
     const endCol = bounds.endCol;
+    if (options?.name != null) {
+      const existingNames = (await this.list()).map((table) => table.name);
+      await assertValidTableName(this.ctx, options.name, existingNames);
+    }
 
     await this.ctx.computeBridge.createTableLifecycle(
       this.sheetId,

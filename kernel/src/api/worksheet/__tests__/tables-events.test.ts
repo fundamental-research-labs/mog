@@ -131,6 +131,21 @@ describe('WorksheetTablesImpl table event identity', () => {
     tables = new WorksheetTablesImpl(ctx, SHEET_ID as SheetId);
   });
 
+  it('rejects invalid requested table names before lifecycle creation', async () => {
+    ctx.computeBridge.tableValidateTableName.mockResolvedValueOnce({
+      valid: false,
+      reason: 'Table name cannot be a cell reference',
+    });
+
+    await expect(tables.add('A1:B3', { name: 'A1' })).rejects.toMatchObject({
+      code: 'TABLE_INVALID_NAME',
+      message: 'Table name cannot be a cell reference',
+      suggestion: expect.stringContaining('does not parse as a cell reference'),
+    });
+    expect(ctx.computeBridge.tableValidateTableName).toHaveBeenCalledWith('A1', ['Sales']);
+    expect(ctx.computeBridge.createTableLifecycle).not.toHaveBeenCalled();
+  });
+
   it('emits table:created with the stable table id', async () => {
     const receipt = await tables.add('A1:B3', { name: 'Sales' });
 

@@ -315,7 +315,7 @@
         },
         "toXlsx": {
           "signature": "toXlsx(options?: WorkbookXlsxExportOptions | undefined): Promise<Uint8Array>",
-          "docstring": "Export the workbook as XLSX binary data.\n\nDefault export omits Mog-owned version metadata. Pass\n`versionMetadata: \"include\"` to write a redacted Mog sidecar with the\ncurrent version head.",
+          "docstring": "Export the workbook as XLSX binary data.\n\nDefault export omits Mog-owned version metadata. `include` writes a\nredacted sidecar when a readable version head and authority are available.",
           "usedTypes": []
         },
         "insertWorksheets": {
@@ -1408,6 +1408,11 @@
           "docstring": "Sparkline CRUD and groups",
           "usedTypes": []
         },
+        "annotations": {
+          "signature": "readonly annotations: WorksheetAnnotations;",
+          "docstring": "Review annotations anchored to cell/table content",
+          "usedTypes": []
+        },
         "comments": {
           "signature": "readonly comments: WorksheetComments;",
           "docstring": "Notes and threaded comments",
@@ -1484,7 +1489,7 @@
           "usedTypes": ["CellWriteOptions"]
         },
         "setValue": {
-          "signature": "setValue(address: string, value: CellValuePrimitive | Date, options?: Pick<CellWriteOptions, \"literal\" | \"asText\"> | undefined): Promise<void>",
+          "signature": "setValue(address: string, value: CellValuePrimitive | Date, options?: Pick<CellWriteOptions, \"literal\" | \"asText\" | \"annotation\"> | undefined): Promise<void>",
           "docstring": "Set an explicit scalar value by A1 address.\n\nUnlike {@link setCell}, this method does not accept formula intent through\nthe value string. Formula-shaped strings are rejected unless\n`options.asText` / `options.literal` is set; use {@link setFormula} for formulas.",
           "usedTypes": []
         },
@@ -1524,18 +1529,18 @@
           "usedTypes": []
         },
         "setRange": {
-          "signature": "setRange(range: string, values: (CellValuePrimitive | Date)[][]): Promise<void>",
-          "docstring": "Set a 2D array of values into a range (A1 notation).\nString values starting with \"=\" are treated as formulas.",
+          "signature": "setRange(range: string, values: WorksheetRangeValueInput[][]): Promise<void>",
+          "docstring": "Set a 2D array of values into a range (A1 notation).\nString values starting with \"=\" are treated as formulas.\nTo annotate a cell while writing, pass an entry as `{ value, annotation }`.",
           "usedTypes": []
         },
         "setFormula": {
-          "signature": "setFormula(address: string, formula: string): Promise<void>",
+          "signature": "setFormula(address: string, formula: string, options?: CellAnnotationWriteOptions | undefined): Promise<void>",
           "docstring": "Set a formula in one cell. Accepts either \"=SUM(A1:A10)\" or\n\"SUM(A1:A10)\" and stores the normalized formula with a leading \"=\".",
           "usedTypes": []
         },
         "setFormulas": {
-          "signature": "setFormulas(range: string, formulas: string[][]): Promise<void>",
-          "docstring": "Set formulas into a range, starting at the top-left cell.\nEach formula accepts either leading-\"=\" or bare expression form.",
+          "signature": "setFormulas(range: string, formulas: WorksheetRangeFormulaInput[][]): Promise<void>",
+          "docstring": "Set formulas into a range, starting at the top-left cell.\nEach formula accepts either leading-\"=\" or bare expression form.\nTo annotate a cell while writing, pass an entry as `{ formula, annotation }`.",
           "usedTypes": []
         },
         "setArrayFormula": {
@@ -2006,6 +2011,11 @@
         "charts.list": {
           "signature": "charts.list(options?: ChartReadOptions | undefined): Promise<Chart[]>",
           "docstring": "List charts in the sheet. Pass `{ materialization: \"available\" }` for passive UI reads.",
+          "usedTypes": ["Chart"]
+        },
+        "charts.listCharts": {
+          "signature": "charts.listCharts(options?: ChartReadOptions | undefined): Promise<Chart[]>",
+          "docstring": "@deprecated Use `list()` instead. Compatibility alias for learned chart paths.",
           "usedTypes": ["Chart"]
         },
         "charts.clear": {
@@ -2849,19 +2859,19 @@
           "usedTypes": []
         },
         "formats.set": {
-          "signature": "formats.set(address: string, format: CellFormat): Promise<FormatChangeResult>",
+          "signature": "formats.set(address: string, format: CellFormatInput): Promise<FormatChangeResult>",
           "docstring": "Set format for a single cell.\n@param - A1-style cell address (e.g. \"A1\", \"B3\")\n@param - Format properties to apply\n@example // Bold red currency\nawait ws.formats.set('A1', { bold: true, fontColor: '#ff0000', numberFormat: '$#,##0.00' });\n// Date format\nawait ws.formats.set('B1', { numberFormat: 'YYYY-MM-DD' });\n// Header style\nawait ws.formats.set('A1', { bold: true, fontSize: 14, backgroundColor: '#4472c4', fontColor: '#ffffff' });",
-          "usedTypes": ["CellFormat"]
+          "usedTypes": []
         },
         "formats.setRange": {
-          "signature": "formats.setRange(range: string, format: CellFormat): Promise<FormatChangeResult>",
+          "signature": "formats.setRange(range: string, format: CellFormatInput): Promise<FormatChangeResult>",
           "docstring": "Set format for a contiguous range.\n@param - A1-style range string (e.g. \"A1:B2\")\n@param - Format properties to apply\n@example // Currency column\nawait ws.formats.setRange('B2:B100', { numberFormat: '$#,##0.00' });\n// Header row with borders\nawait ws.formats.setRange('A1:F1', {\n  bold: true,\n  backgroundColor: '#4472c4',\n  fontColor: '#ffffff',\n  borders: { bottom: { style: 'medium', color: '#2f5496' } }\n});",
-          "usedTypes": ["CellFormat"]
+          "usedTypes": []
         },
         "formats.setRanges": {
-          "signature": "formats.setRanges(ranges: CellRange[], format: CellFormat): Promise<void>",
+          "signature": "formats.setRanges(ranges: CellRange[], format: CellFormatInput): Promise<void>",
           "docstring": "Set format for multiple ranges, with full row/column optimization.\n@param - Array of range objects\n@param - Format properties to apply",
-          "usedTypes": ["CellFormat"]
+          "usedTypes": []
         },
         "formats.hasExplicit": {
           "signature": "formats.hasExplicit(address: string): Promise<boolean>",
@@ -2934,9 +2944,9 @@
           "usedTypes": []
         },
         "formats.applyPattern": {
-          "signature": "formats.applyPattern(format: CellFormat, sourceRange: CellRange | null, targetRange: CellRange): Promise<void>",
+          "signature": "formats.applyPattern(format: CellFormatInput, sourceRange: CellRange | null, targetRange: CellRange): Promise<void>",
           "docstring": "Apply a format pattern from a source range to a target range.\n\nWhen the target range is larger than the source range, the source format\npattern is tiled to fill the target (like Excel's Format Painter with\nmulti-cell sources).\n@param - The base format to apply (used when sourceRange is null or single-cell)\n@param - Source range for pattern replication, or null for simple application\n@param - Target range to apply formats to",
-          "usedTypes": ["CellFormat"]
+          "usedTypes": []
         },
         "formats.getCellProperties": {
           "signature": "formats.getCellProperties(range: string): Promise<(CellFormat | null)[][]>",
@@ -2944,7 +2954,7 @@
           "usedTypes": ["CellFormat"]
         },
         "formats.setCellProperties": {
-          "signature": "formats.setCellProperties(updates: { row: number; col: number; format: Partial<CellFormat>; }[]): Promise<void>",
+          "signature": "formats.setCellProperties(updates: { row: number; col: number; format: Partial<CellFormatInput>; }[]): Promise<void>",
           "docstring": "Set cell formats for a batch of individual cells with heterogeneous formats.\n\nUnlike setRange (which applies one format to all cells), this allows each\ncell to receive a different format. Formats merge with existing cell formats\non a per-property basis.\n@param - Array of {row, col, format} entries",
           "usedTypes": []
         },
@@ -2954,7 +2964,7 @@
           "usedTypes": ["CellFormat"]
         },
         "formats.setRowProperties": {
-          "signature": "formats.setRowProperties(updates: Map<number, Partial<CellFormat>>): Promise<void>",
+          "signature": "formats.setRowProperties(updates: Map<number, Partial<CellFormatInput>>): Promise<void>",
           "docstring": "Set row-level formats for multiple rows.\n\nFormats merge with existing row formats on a per-property basis.\n@param - Map of row index to format properties",
           "usedTypes": []
         },
@@ -2964,7 +2974,7 @@
           "usedTypes": ["CellFormat"]
         },
         "formats.setColumnProperties": {
-          "signature": "formats.setColumnProperties(updates: Map<number, Partial<CellFormat>>): Promise<void>",
+          "signature": "formats.setColumnProperties(updates: Map<number, Partial<CellFormatInput>>): Promise<void>",
           "docstring": "Set column-level formats for multiple columns.\n\nFormats merge with existing column formats on a per-property basis.\n@param - Map of column index to format properties",
           "usedTypes": []
         },
@@ -3009,43 +3019,43 @@
           "usedTypes": []
         },
         "layout.getColumnWidth": {
-          "signature": "layout.getColumnWidth(col: number): Promise<number>",
-          "docstring": "Get the width of a column in pixels.\n@param - Column index (0-based)\n@returns Column width in pixels",
+          "signature": "layout.getColumnWidth(col: WorksheetLayoutColumnSelector): Promise<number>",
+          "docstring": "Get the width of a column in pixels.\n@param - One column: a 0-based index, column name, or single-column reference\n@returns Column width in pixels",
           "usedTypes": []
         },
         "layout.setColumnWidth": {
-          "signature": "layout.setColumnWidth(col: number, widthPx: number): Promise<void>",
-          "docstring": "Set the width of a column in pixels.\n@param - Column index (0-based)\n@param - Width in pixels (must be > 0)",
+          "signature": "layout.setColumnWidth(col: WorksheetLayoutColumnSelector, widthPx: number): Promise<void>",
+          "docstring": "Set the width of a column in pixels.\n@param - Columns selected by 0-based index, column name, or whole-column reference\n@param - Width in pixels (must be > 0)",
           "usedTypes": []
         },
         "layout.getColumnWidthChars": {
-          "signature": "layout.getColumnWidthChars(col: number): Promise<number>",
-          "docstring": "Get the width of a column in character-width units\n(relative to the Normal style font's maximum digit width, matching OOXML/Excel convention).\n@param - Column index (0-based)\n@returns Column width in character-width units",
+          "signature": "layout.getColumnWidthChars(col: WorksheetLayoutColumnSelector): Promise<number>",
+          "docstring": "Get the width of a column in character-width units\n(relative to the Normal style font's maximum digit width, matching OOXML/Excel convention).\n@param - One column: a 0-based index, column name, or single-column reference\n@returns Column width in character-width units",
           "usedTypes": []
         },
         "layout.setColumnWidthChars": {
-          "signature": "layout.setColumnWidthChars(col: number, widthChars: number): Promise<void>",
-          "docstring": "Set the width of a column in character-width units\n(relative to the Normal style font's maximum digit width, matching OOXML/Excel convention).\n@param - Column index (0-based)\n@param - Width in character-width units (must be > 0)",
+          "signature": "layout.setColumnWidthChars(col: WorksheetLayoutColumnSelector, widthChars: number): Promise<void>",
+          "docstring": "Set the width of a column in character-width units\n(relative to the Normal style font's maximum digit width, matching OOXML/Excel convention).\n@param - Columns selected by 0-based index, column name, or whole-column reference\n@param - Width in character-width units (must be > 0)",
           "usedTypes": []
         },
         "layout.setColumnWidths": {
-          "signature": "layout.setColumnWidths(widths: [number, number][]): Promise<void>",
-          "docstring": "Set multiple column widths in pixels.\n@param - Array of [columnIndex, widthPx] pairs",
+          "signature": "layout.setColumnWidths(widths: [WorksheetLayoutColumnSelector, number][]): Promise<void>",
+          "docstring": "Set multiple column widths in pixels.\n@param - Array of [columnSelector, widthPx] pairs",
           "usedTypes": []
         },
         "layout.setColumnWidthsChars": {
-          "signature": "layout.setColumnWidthsChars(widths: [number, number][]): Promise<void>",
-          "docstring": "Set multiple column widths in character-width units.\n@param - Array of [columnIndex, widthChars] pairs",
+          "signature": "layout.setColumnWidthsChars(widths: [WorksheetLayoutColumnSelector, number][]): Promise<void>",
+          "docstring": "Set multiple column widths in character-width units.\n@param - Array of [columnSelector, widthChars] pairs",
           "usedTypes": []
         },
         "layout.autoFitColumn": {
-          "signature": "layout.autoFitColumn(col: number): Promise<void>",
-          "docstring": "Auto-fit a column width to its content.\n@param - Column index (0-based)",
+          "signature": "layout.autoFitColumn(col: WorksheetLayoutColumnSelector): Promise<void>",
+          "docstring": "Auto-fit selected column widths to their content.\n@param - Columns selected by 0-based index, column name, or whole-column reference",
           "usedTypes": []
         },
         "layout.autoFitColumns": {
-          "signature": "layout.autoFitColumns(cols: number[]): Promise<void>",
-          "docstring": "Auto-fit multiple columns to their content in a single batch call.\n@param - Array of column indices (0-based)",
+          "signature": "layout.autoFitColumns(cols: WorksheetLayoutColumnSelector | readonly WorksheetLayoutColumnSelector[]): Promise<void>",
+          "docstring": "Auto-fit multiple columns to their content in a single batch call.\n@param - A column selector or array of selectors",
           "usedTypes": []
         },
         "layout.autoFitRow": {
@@ -3064,13 +3074,13 @@
           "usedTypes": []
         },
         "layout.getColWidthsBatch": {
-          "signature": "layout.getColWidthsBatch(startCol: number, endCol: number): Promise<[number, number][]>",
-          "docstring": "Get column widths for a range of columns in pixels.\n@param - Start column index (0-based, inclusive)\n@param - End column index (0-based, inclusive)\n@returns Array of [colIndex, widthPx] pairs",
+          "signature": "layout.getColWidthsBatch(startCol: WorksheetLayoutColumnSelector, endCol?: WorksheetLayoutColumnSelector | undefined): Promise<[number, number][]>",
+          "docstring": "Get column widths for a range of columns in pixels.\n\nPass a single range selector such as `\"B:D\"`, or separate inclusive start\nand end selectors. Separate selectors must each identify exactly one column.\n@param - Range selector or inclusive start column\n@param - Inclusive end column when startCol is not a range selector\n@returns Array of [colIndex, widthPx] pairs",
           "usedTypes": []
         },
         "layout.getColWidthsBatchChars": {
-          "signature": "layout.getColWidthsBatchChars(startCol: number, endCol: number): Promise<[number, number][]>",
-          "docstring": "Get column widths for a range of columns in character-width units\n(relative to the Normal style font's maximum digit width, matching OOXML/Excel convention).\n@param - Start column index (0-based, inclusive)\n@param - End column index (0-based, inclusive)\n@returns Array of [colIndex, charWidth] pairs",
+          "signature": "layout.getColWidthsBatchChars(startCol: WorksheetLayoutColumnSelector, endCol?: WorksheetLayoutColumnSelector | undefined): Promise<[number, number][]>",
+          "docstring": "Get column widths for a range of columns in character-width units\n(relative to the Normal style font's maximum digit width, matching OOXML/Excel convention).\n\nPass a single range selector such as `\"B:D\"`, or separate inclusive start\nand end selectors. Separate selectors must each identify exactly one column.\n@param - Range selector or inclusive start column\n@param - Inclusive end column when startCol is not a range selector\n@returns Array of [colIndex, charWidth] pairs",
           "usedTypes": []
         },
         "layout.setRowVisible": {
@@ -3079,8 +3089,8 @@
           "usedTypes": []
         },
         "layout.setColumnVisible": {
-          "signature": "layout.setColumnVisible(col: number, visible: boolean): Promise<void>",
-          "docstring": "Set the visibility of a single column.\n@param - Column index (0-based)\n@param - True to show, false to hide",
+          "signature": "layout.setColumnVisible(col: WorksheetLayoutColumnSelector, visible: boolean): Promise<void>",
+          "docstring": "Set the visibility of selected columns.\n@param - Columns selected by 0-based index, column name, or whole-column reference\n@param - True to show, false to hide",
           "usedTypes": []
         },
         "layout.isRowHidden": {
@@ -3089,8 +3099,8 @@
           "usedTypes": []
         },
         "layout.isColumnHidden": {
-          "signature": "layout.isColumnHidden(col: number): Promise<boolean>",
-          "docstring": "Check whether a column is hidden.\n@param - Column index (0-based)\n@returns True if the column is hidden",
+          "signature": "layout.isColumnHidden(col: WorksheetLayoutColumnSelector): Promise<boolean>",
+          "docstring": "Check whether a column is hidden.\n@param - One column: a 0-based index, column name, or single-column reference\n@returns True if the column is hidden",
           "usedTypes": []
         },
         "layout.unhideRows": {
@@ -3099,8 +3109,8 @@
           "usedTypes": []
         },
         "layout.unhideColumns": {
-          "signature": "layout.unhideColumns(startCol: number, endCol: number): Promise<void>",
-          "docstring": "Unhide all columns in a range.\n@param - Start column index (0-based, inclusive)\n@param - End column index (0-based, inclusive)",
+          "signature": "layout.unhideColumns(startCol: WorksheetLayoutColumnSelector, endCol?: WorksheetLayoutColumnSelector | undefined): Promise<void>",
+          "docstring": "Unhide all columns in a range.\n\nPass a single range selector such as `\"B:D\"`, or separate inclusive start\nand end selectors. Separate selectors must each identify exactly one column.\n@param - Range selector or inclusive start column\n@param - Inclusive end column when startCol is not a range selector",
           "usedTypes": []
         },
         "layout.hideRows": {
@@ -3109,8 +3119,8 @@
           "usedTypes": []
         },
         "layout.hideColumns": {
-          "signature": "layout.hideColumns(cols: number[]): Promise<void>",
-          "docstring": "Hide multiple columns by index.\n@param - Array of column indices to hide (0-based)",
+          "signature": "layout.hideColumns(cols: WorksheetLayoutColumnSelector | readonly WorksheetLayoutColumnSelector[]): Promise<void>",
+          "docstring": "Hide multiple columns by index.\n@param - A column selector or array of selectors",
           "usedTypes": []
         },
         "layout.getHiddenRowsBitmap": {
@@ -3134,8 +3144,8 @@
           "usedTypes": []
         },
         "layout.resetColumnWidth": {
-          "signature": "layout.resetColumnWidth(col: number): Promise<void>",
-          "docstring": "Reset a column's width to the sheet default.\n@param - Column index (0-based)",
+          "signature": "layout.resetColumnWidth(col: WorksheetLayoutColumnSelector): Promise<void>",
+          "docstring": "Reset selected column widths to the sheet default.\n@param - Columns selected by 0-based index, column name, or whole-column reference",
           "usedTypes": []
         },
         "layout.getRowPosition": {
@@ -3144,8 +3154,8 @@
           "usedTypes": []
         },
         "layout.getColPosition": {
-          "signature": "layout.getColPosition(col: number): Promise<number>",
-          "docstring": "Get the pixel offset of a column's left edge from the worksheet origin.\n@param - Column index (0-based)\n@returns Pixel offset from the left of the worksheet",
+          "signature": "layout.getColPosition(col: WorksheetLayoutColumnSelector): Promise<number>",
+          "docstring": "Get the pixel offset of a column's left edge from the worksheet origin.\n@param - One column: a 0-based index, column name, or single-column reference\n@returns Pixel offset from the left of the worksheet",
           "usedTypes": []
         },
         "layout.getRangePosition": {
@@ -3746,9 +3756,7 @@
         "slicers.add": {
           "signature": "slicers.add(config: SlicerConfig): Promise<SlicerAddReceipt>",
           "docstring": "Create a new slicer on this worksheet.\n@param - Slicer configuration. An omitted `sheetId` is owned by this\nworksheet; a different explicit `sheetId` is rejected.\n@returns Operation receipt containing the created slicer with full state",
-          "usedTypes": [
-            "SlicerConfig"
-          ]
+          "usedTypes": ["SlicerConfig"]
         },
         "slicers.remove": {
           "signature": "slicers.remove(slicerId: string): Promise<SlicerRemoveReceipt>",
@@ -3763,9 +3771,7 @@
         "slicers.list": {
           "signature": "slicers.list(): Promise<SlicerInfo[]>",
           "docstring": "List all slicers on this worksheet.\n@returns Array of slicer summary information",
-          "usedTypes": [
-            "SlicerInfo"
-          ]
+          "usedTypes": ["SlicerInfo"]
         },
         "slicers.has": {
           "signature": "slicers.has(slicerId: string): Promise<boolean>",
@@ -3790,30 +3796,22 @@
         "slicers.getItemAt": {
           "signature": "slicers.getItemAt(index: number): Promise<SlicerInfo | null>",
           "docstring": "Get a slicer by its zero-based index in the list.\n@param - Zero-based index of the slicer\n@returns Slicer summary information, or null if index is out of range",
-          "usedTypes": [
-            "SlicerInfo"
-          ]
+          "usedTypes": ["SlicerInfo"]
         },
         "slicers.getItems": {
           "signature": "slicers.getItems(slicerId: string): Promise<SlicerItem[]>",
           "docstring": "Get the items (values) available in a slicer.\n@param - Stable ID of a slicer owned by this worksheet\n@returns Array of slicer items with selection state",
-          "usedTypes": [
-            "SlicerItem"
-          ]
+          "usedTypes": ["SlicerItem"]
         },
         "slicers.getItem": {
           "signature": "slicers.getItem(slicerId: string, key: CellValue): Promise<SlicerItem>",
           "docstring": "Get a slicer item by its string key.\nThrows if no item matches — use when you expect the item to exist.\nFor conditional checks, use {@link getItemOrNullObject} which returns null instead.\n@param - Stable ID of a slicer owned by this worksheet\n@param - The value to look up (matched via string coercion)\n@returns The matching slicer item\n@throws KernelError if no item matches the key",
-          "usedTypes": [
-            "SlicerItem"
-          ]
+          "usedTypes": ["SlicerItem"]
         },
         "slicers.getItemOrNullObject": {
           "signature": "slicers.getItemOrNullObject(slicerId: string, key: CellValue): Promise<SlicerItem | null>",
           "docstring": "Get a slicer item by its string key, or null if not found.\nNon-throwing alternative to {@link getItem} — use for conditional checks.\n@param - Stable ID of a slicer owned by this worksheet\n@param - The value to look up (matched via string coercion)\n@returns The matching slicer item, or null if not found",
-          "usedTypes": [
-            "SlicerItem"
-          ]
+          "usedTypes": ["SlicerItem"]
         },
         "slicers.setSelection": {
           "signature": "slicers.setSelection(slicerId: string, selectedItems: CellValue[]): Promise<SlicerSelectionSetReceipt>",
@@ -3838,9 +3836,7 @@
         "slicers.getState": {
           "signature": "slicers.getState(slicerId: string): Promise<SlicerState>",
           "docstring": "Get the enriched runtime state of a slicer.\n@param - Stable ID of a slicer owned by this worksheet\n@returns Enriched slicer state including computed items and connection status",
-          "usedTypes": [
-            "SlicerState"
-          ]
+          "usedTypes": ["SlicerState"]
         },
         "sparklines.add": {
           "signature": "sparklines.add(cell: string, dataRange: string | CellRange, type: SparklineType, options?: CreateSparklineOptions | undefined): Promise<Sparkline>",
@@ -4014,7 +4010,7 @@
         },
         "tables.add": {
           "signature": "tables.add(range: string | CellRange, options?: TableOptions | undefined): Promise<TableAddReceipt>",
-          "docstring": "Create a new table from a cell range.\n@param - A1-style range string (e.g. \"A1:D10\") or CellRange object\n@param - Optional table creation settings (name, headers, style)\n@returns A receipt containing the created table information.",
+          "docstring": "Create a new table from a cell range.\n@param - A1-style range string (e.g. \"A1:D10\") or CellRange object\n@param - Optional table creation settings (name, headers, style). A name must start\nwith a letter or underscore, contain only letters, digits, and underscores, and must not\nparse as a cell reference such as A1, T1, or Q3.\n@returns A receipt containing the created table information.",
           "usedTypes": ["TableOptions"]
         },
         "tables.get": {
@@ -4493,13 +4489,13 @@
     },
     "SortOptions": {
       "name": "SortOptions",
-      "definition": "{\n  /** Columns to sort by, in priority order */\n  columns: SortColumn[];\n  /** Whether the first row of the range contains headers (default: false) */\n  hasHeaders?: boolean | undefined;\n  /** Sort only currently visible row slots, preserving hidden row positions. */\n  visibleRowsOnly?: boolean | undefined;\n}",
+      "definition": "{\n  /** Columns to sort by, in priority order */\n  columns: SortColumn[];\n  /** Whether the first row of the range contains headers (default: false) */\n  hasHeaders?: boolean | undefined;\n  /** Sort only currently visible row slots, preserving hidden row positions. */\n  visibleRowsOnly?: boolean | undefined;\n  /** OfficeJS-compatible matchCase option, applied when a column omits caseSensitive. */\n  matchCase?: boolean | undefined;\n  /** OfficeJS-compatible orientation. Only row sorting is currently supported. */\n  orientation?: \"Rows\" | \"rows\" | undefined;\n  /** OfficeJS-compatible collation method. Explicit methods are not currently supported. */\n  method?: undefined;\n}",
       "docstring": "Options for sorting a range of cells."
     },
     "SortColumn": {
       "name": "SortColumn",
-      "definition": "{\n  /** Column index (0-based, relative to the sort range) */\n  column: number;\n  /** Sort direction: 'asc' (default) or 'desc'. */\n  direction?: 'asc' | 'desc';\n  /** Case sensitive comparison (default: false) */\n  caseSensitive?: boolean;\n} & (\n  | {\n      /** What to sort by (default: 'value' if omitted) */\n      sortBy?: 'value';\n      /**\n       * Optional Excel custom-list sort: values present in the list\n       * sort by their list position; values not in the list sort\n       * *after* list members (Excel compatibility).\n       */\n      customList?: CellValue[];\n    }\n  | {\n      sortBy: 'cellColor' | 'fontColor';\n      /** Hex color to match (e.g. '#FFFF00'). */\n      targetColor: string;\n      /** Whether matched rows go to top or bottom of the sorted range. */\n      colorPosition: 'top' | 'bottom';\n    }\n)",
-      "docstring": "A single column sort specification.\n\nDiscriminated on `sortBy`. The default ('value') accepts an optional\nWorkbook `customList`. Color sorts (`cellColor` / `fontColor`)\nrequire a `targetColor` and `colorPosition` so invalid combinations\ncannot be expressed."
+      "definition": "SortColumnSelector & {\n  /** Sort direction: 'asc' (default) or 'desc'. */\n  direction?: 'asc' | 'desc';\n  /** OfficeJS-compatible direction flag. `false` maps to descending. */\n  ascending?: boolean;\n  /** Case sensitive comparison (default: false) */\n  caseSensitive?: boolean;\n  /** OfficeJS-compatible sort mode. Value sorts are supported. */\n  sortOn?: string;\n  /** OfficeJS-compatible color target for color sorts. */\n  color?: string;\n  /** OfficeJS-compatible text/numeric sort hint. */\n  dataOption?: string;\n  /** OfficeJS-compatible icon target. Icon sorts are not currently supported. */\n  icon?: unknown;\n  /** OfficeJS rich-value subfield target. Rich-value subfield sorts are not currently supported. */\n  subField?: string;\n} & (\n    | {\n        /** What to sort by (default: 'value' if omitted) */\n        sortBy?: 'value';\n        /**\n         * Optional Excel custom-list sort: values present in the list\n         * sort by their list position; values not in the list sort\n         * *after* list members (Excel compatibility).\n         */\n        customList?: CellValue[];\n      }\n    | {\n        sortBy: 'cellColor' | 'fontColor';\n        /** Hex color to match (e.g. '#FFFF00'). */\n        targetColor: string;\n        /** Whether matched rows go to top or bottom of the sorted range. */\n        colorPosition: 'top' | 'bottom';\n      }\n  )",
+      "docstring": "A single column sort specification.\n\nAccepts Mog's `column`/`direction` shape, the historical `columnIndex`/\n`ascending` shape used by SDK guidance, and OfficeJS `SortField` value-sort\nshape (`key`/`ascending`). Color/icon OfficeJS fields are structurally\naccepted for compatibility but unsupported combinations fail at runtime\ninstead of silently no-oping."
     },
     "MergedRegion": {
       "name": "MergedRegion",
@@ -4523,7 +4519,7 @@
     },
     "TableOptions": {
       "name": "TableOptions",
-      "definition": "{\n  /** Table name (auto-generated if omitted) */\n  name?: string | undefined;\n  /** Whether the first row of the range contains headers (default: true) */\n  hasHeaders?: boolean | undefined;\n  /** Table style preset name */\n  style?: string | undefined;\n  /** Whether the table automatically expands when adjacent user input is entered (default: true) */\n  autoExpand?: boolean | undefined;\n  /** Whether formulas entered in table data columns automatically create/fill calculated columns (default: true) */\n  autoCalculatedColumns?: boolean | undefined;\n}",
+      "definition": "{\n  /** Table name (auto-generated if omitted).\nMust start with a letter or underscore, contain only letters, digits, and\nunderscores, and must not parse as a cell reference such as A1, T1, or Q3. */\n  name?: string | undefined;\n  /** Whether the first row of the range contains headers (default: true) */\n  hasHeaders?: boolean | undefined;\n  /** Table style preset name */\n  style?: string | undefined;\n  /** Whether the table automatically expands when adjacent user input is entered (default: true) */\n  autoExpand?: boolean | undefined;\n  /** Whether formulas entered in table data columns automatically create/fill calculated columns (default: true) */\n  autoCalculatedColumns?: boolean | undefined;\n}",
       "docstring": "Options for creating a new table."
     },
     "NamedRangeInfo": {
@@ -4640,7 +4636,7 @@
       "docstring": "A single item in a slicer's value list."
     }
   },
-  "generated": "2026-06-28T05:34:07.481Z",
+  "generated": "2026-07-10T21:42:38.423Z",
   "formatPresets": {
     "general": {
       "default": {

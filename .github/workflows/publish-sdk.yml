@@ -270,9 +270,14 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ matrix.target }}
+          key: ${{ matrix.target }}-${{ matrix.target == 'x86_64-pc-windows-msvc' && 'workspace-v1' || 'dependencies-v1' }}
           workspaces: |
             . -> target-native
+          # The Windows release build is the publish critical path. Retaining
+          # workspace libraries makes same-commit retries useful while Cargo's
+          # fingerprints still rebuild every changed crate. Other platforms
+          # keep the smaller dependency-only caches.
+          cache-workspace-crates: ${{ matrix.target == 'x86_64-pc-windows-msvc' }}
 
       - name: Install Zig toolchain
         if: contains(matrix.target, 'linux-musl')

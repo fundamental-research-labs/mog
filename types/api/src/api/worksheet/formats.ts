@@ -11,64 +11,66 @@ type CellFormatBorderSideInput = NonNullable<NonNullable<CellFormat['borders']>[
 
 /** Compatibility font container accepted by worksheet format mutators. */
 export interface CellFormatFontInput {
-  name?: string;
-  fontFamily?: CellFormat['fontFamily'];
-  size?: CellFormat['fontSize'];
-  fontSize?: CellFormat['fontSize'];
-  color?: CellFormat['fontColor'];
-  fontColor?: CellFormat['fontColor'];
-  tintAndShade?: CellFormat['fontColorTint'];
-  colorTint?: CellFormat['fontColorTint'];
-  fontColorTint?: CellFormat['fontColorTint'];
-  bold?: CellFormat['bold'];
-  italic?: CellFormat['italic'];
-  underline?: boolean | CellFormat['underlineType'];
-  underlineType?: CellFormat['underlineType'];
-  strikethrough?: CellFormat['strikethrough'];
-  superscript?: CellFormat['superscript'];
-  subscript?: CellFormat['subscript'];
-  outline?: CellFormat['fontOutline'];
-  fontOutline?: CellFormat['fontOutline'];
-  shadow?: CellFormat['fontShadow'];
-  fontShadow?: CellFormat['fontShadow'];
-  fontTheme?: CellFormat['fontTheme'];
+  name?: string | null;
+  fontFamily?: CellFormat['fontFamily'] | null;
+  size?: CellFormat['fontSize'] | null;
+  fontSize?: CellFormat['fontSize'] | null;
+  color?: CellFormat['fontColor'] | null;
+  fontColor?: CellFormat['fontColor'] | null;
+  tintAndShade?: CellFormat['fontColorTint'] | null;
+  colorTint?: CellFormat['fontColorTint'] | null;
+  fontColorTint?: CellFormat['fontColorTint'] | null;
+  bold?: CellFormat['bold'] | null;
+  italic?: CellFormat['italic'] | null;
+  underline?: boolean | CellFormat['underlineType'] | null;
+  underlineType?: CellFormat['underlineType'] | null;
+  strikethrough?: CellFormat['strikethrough'] | null;
+  superscript?: CellFormat['superscript'] | null;
+  subscript?: CellFormat['subscript'] | null;
+  outline?: CellFormat['fontOutline'] | null;
+  fontOutline?: CellFormat['fontOutline'] | null;
+  shadow?: CellFormat['fontShadow'] | null;
+  fontShadow?: CellFormat['fontShadow'] | null;
+  fontTheme?: CellFormat['fontTheme'] | null;
+  fontCharset?: CellFormat['fontCharset'] | null;
+  fontFamilyType?: CellFormat['fontFamilyType'] | null;
 }
 
 /** Compatibility fill container accepted by worksheet format mutators. */
 export interface CellFormatFillInput {
-  color?: CellFormat['backgroundColor'];
-  backgroundColor?: CellFormat['backgroundColor'];
-  tintAndShade?: CellFormat['backgroundColorTint'];
-  backgroundColorTint?: CellFormat['backgroundColorTint'];
-  pattern?: CellFormat['patternType'];
-  patternType?: CellFormat['patternType'];
-  patternColor?: CellFormat['patternForegroundColor'];
-  patternForegroundColor?: CellFormat['patternForegroundColor'];
-  patternTintAndShade?: CellFormat['patternForegroundColorTint'];
-  patternForegroundColorTint?: CellFormat['patternForegroundColorTint'];
-  gradientFill?: CellFormat['gradientFill'];
+  color?: CellFormat['backgroundColor'] | null;
+  backgroundColor?: CellFormat['backgroundColor'] | null;
+  tintAndShade?: CellFormat['backgroundColorTint'] | null;
+  backgroundColorTint?: CellFormat['backgroundColorTint'] | null;
+  pattern?: CellFormat['patternType'] | null;
+  patternType?: CellFormat['patternType'] | null;
+  patternColor?: CellFormat['patternForegroundColor'] | null;
+  patternForegroundColor?: CellFormat['patternForegroundColor'] | null;
+  patternTintAndShade?: CellFormat['patternForegroundColorTint'] | null;
+  patternForegroundColorTint?: CellFormat['patternForegroundColorTint'] | null;
+  gradientFill?: CellFormat['gradientFill'] | null;
 }
 
 /** Compatibility alignment container accepted by worksheet format mutators. */
 export interface CellFormatAlignmentInput {
-  horizontalAlignment?: CellFormat['horizontalAlign'];
-  horizontalAlign?: CellFormat['horizontalAlign'];
-  verticalAlignment?: CellFormat['verticalAlign'] | 'center';
-  verticalAlign?: CellFormat['verticalAlign'] | 'center';
-  wrapText?: CellFormat['wrapText'];
-  indent?: CellFormat['indent'];
-  indentLevel?: CellFormat['indent'];
-  textRotation?: CellFormat['textRotation'];
-  textOrientation?: CellFormat['textRotation'];
-  shrinkToFit?: CellFormat['shrinkToFit'];
-  readingOrder?: CellFormat['readingOrder'];
-  autoIndent?: CellFormat['autoIndent'];
+  horizontalAlignment?: CellFormat['horizontalAlign'] | null;
+  horizontalAlign?: CellFormat['horizontalAlign'] | null;
+  verticalAlignment?: CellFormat['verticalAlign'] | 'center' | null;
+  verticalAlign?: CellFormat['verticalAlign'] | 'center' | null;
+  wrapText?: CellFormat['wrapText'] | null;
+  indent?: CellFormat['indent'] | null;
+  indentLevel?: CellFormat['indent'] | null;
+  textRotation?: CellFormat['textRotation'] | null;
+  textOrientation?: CellFormat['textRotation'] | null;
+  shrinkToFit?: CellFormat['shrinkToFit'] | null;
+  readingOrder?: CellFormat['readingOrder'] | null;
+  autoIndent?: CellFormat['autoIndent'] | null;
 }
 
 /** Compatibility protection container accepted by worksheet format mutators. */
 export interface CellFormatProtectionInput {
-  locked?: CellFormat['locked'];
-  hidden?: CellFormat['hidden'];
+  locked?: CellFormat['locked'] | null;
+  hidden?: CellFormat['hidden'] | null;
 }
 
 /** Compatibility border container accepted by worksheet format mutators. */
@@ -78,14 +80,19 @@ export type CellFormatBorderInput = NonNullable<CellFormat['borders']> & {
   colorTint?: CellFormatBorderSideInput['colorTint'];
 };
 
-/** Public worksheet format mutators accept canonical CellFormat plus known compatibility containers. */
-export interface CellFormatInput extends CellFormat {
+/** Canonical tri-state patch: missing=no change, null=clear, value=set. */
+export type CellFormatPatch = {
+  [K in keyof CellFormat]?: CellFormat[K] | null;
+};
+
+/** Public worksheet format mutators accept canonical patches plus compatibility containers. */
+export type CellFormatInput = CellFormatPatch & {
   font?: CellFormatFontInput;
   fill?: CellFormatFillInput;
   alignment?: CellFormatAlignmentInput;
   protection?: CellFormatProtectionInput;
   border?: CellFormatBorderInput;
-}
+};
 
 /** Sub-API for cell formatting operations on a worksheet. */
 export interface WorksheetFormats {
@@ -212,9 +219,10 @@ export interface WorksheetFormats {
   /**
    * Get the fully-resolved format of a single cell.
    *
-   * Returns a dense CellFormat with all fields present (null for unset properties,
-   * never undefined). Includes the full cascade (default → col → row → table → cell → CF)
-   * with theme colors resolved to hex.
+   * Returns a dense transferable CellFormat with all fields present (null for
+   * unset properties, never undefined). Includes the effective authored cascade
+   * (default → col → row → table → cell), preserves symbolic theme references,
+   * and excludes conditional-format/display overlays.
    *
    * @param address - A1-style cell address
    * @returns The resolved cell format (always an object, never null)

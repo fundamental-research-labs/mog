@@ -324,6 +324,7 @@ export type {
   CellFormatFillInput,
   CellFormatFontInput,
   CellFormatInput,
+  CellFormatPatch,
   CellFormatProtectionInput,
   WorksheetFormControls,
   WorksheetFormats,

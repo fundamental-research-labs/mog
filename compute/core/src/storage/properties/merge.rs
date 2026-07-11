@@ -1,5 +1,6 @@
 use domain_types::{CellBorderSide, CellBorders, CellFormat};
 use ooxml_types::styles::PatternType;
+use value_types::ComputeError;
 
 /// Merge two `CellFormat` objects with property-level precedence.
 /// For each field: if `higher` has `Some`, use it; otherwise keep `lower`.
@@ -49,12 +50,82 @@ pub(crate) fn merge_formats(lower: &CellFormat, higher: &CellFormat) -> CellForm
         hidden: higher.hidden.or(lower.hidden),
         quote_prefix: higher.quote_prefix.or(lower.quote_prefix),
         pivot_button: higher.pivot_button.or(lower.pivot_button),
+        extensions: higher.extensions.clone().or(lower.extensions.clone()),
     };
 
     // Clean up any invalid legacy lower layer that already carries both flags.
     enforce_wrap_shrink_exclusive(&mut merged);
     clear_fill_fields_for_no_fill(&mut merged);
     merged
+}
+
+/// Apply a tri-state public format patch to a stored sparse format.
+///
+/// Values in `format` are merged, names in `clear_fields` are removed, and
+/// omitted properties remain unchanged. Clear names use the Rust/persisted JSON
+/// vocabulary (`quotePrefix`, not the public alias `forcedTextMode`).
+pub(crate) fn apply_format_patch(
+    lower: &CellFormat,
+    format: &CellFormat,
+    clear_fields: &[String],
+) -> Result<CellFormat, ComputeError> {
+    let mut merged = merge_formats(lower, format);
+
+    // Public tri-state patches operate on top-level CellFormat properties.
+    // Unlike the legacy formatting merge path, a supplied composite value is
+    // therefore a replacement, not a recursive patch. Borders are the only
+    // CellFormat composite for which merge_formats performs a deep merge;
+    // gradient_fill and extensions already replace atomically via Option::or.
+    if let Some(borders) = &format.borders {
+        merged.borders = Some(borders.clone());
+    }
+
+    for field in clear_fields {
+        match field.as_str() {
+            "fontFamily" => merged.font_family = None,
+            "fontSize" => merged.font_size = None,
+            "fontColor" => merged.font_color = None,
+            "fontColorTint" => merged.font_color_tint = None,
+            "bold" => merged.bold = None,
+            "italic" => merged.italic = None,
+            "underlineType" => merged.underline_type = None,
+            "strikethrough" => merged.strikethrough = None,
+            "superscript" => merged.superscript = None,
+            "subscript" => merged.subscript = None,
+            "fontOutline" => merged.font_outline = None,
+            "fontShadow" => merged.font_shadow = None,
+            "fontTheme" => merged.font_theme = None,
+            "fontCharset" => merged.font_charset = None,
+            "fontFamilyType" => merged.font_family_type = None,
+            "horizontalAlign" => merged.horizontal_align = None,
+            "verticalAlign" => merged.vertical_align = None,
+            "wrapText" => merged.wrap_text = None,
+            "indent" => merged.indent = None,
+            "textRotation" => merged.text_rotation = None,
+            "shrinkToFit" => merged.shrink_to_fit = None,
+            "readingOrder" => merged.reading_order = None,
+            "autoIndent" => merged.auto_indent = None,
+            "numberFormat" => merged.number_format = None,
+            "backgroundColor" => merged.background_color = None,
+            "backgroundColorTint" => merged.background_color_tint = None,
+            "patternType" => merged.pattern_type = None,
+            "patternForegroundColor" => merged.pattern_foreground_color = None,
+            "patternForegroundColorTint" => merged.pattern_foreground_color_tint = None,
+            "gradientFill" => merged.gradient_fill = None,
+            "borders" => merged.borders = None,
+            "locked" => merged.locked = None,
+            "hidden" => merged.hidden = None,
+            "quotePrefix" => merged.quote_prefix = None,
+            "pivotButton" => merged.pivot_button = None,
+            "extensions" => merged.extensions = None,
+            unknown => {
+                return Err(ComputeError::InvalidInput {
+                    message: format!("Unsupported cell format clear field: {unknown}"),
+                });
+            }
+        }
+    }
+    Ok(merged)
 }
 
 fn merge_borders(lower: Option<&CellBorders>, higher: Option<&CellBorders>) -> Option<CellBorders> {

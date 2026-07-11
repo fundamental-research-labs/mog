@@ -97,6 +97,7 @@ export type {
   CellFormatFillInput,
   CellFormatFontInput,
   CellFormatInput,
+  CellFormatPatch,
   CellFormatProtectionInput,
   WorksheetFormats,
 } from './formats';

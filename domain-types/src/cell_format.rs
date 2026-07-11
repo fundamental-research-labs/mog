@@ -10,6 +10,7 @@ use ooxml_types::styles::{
     UnderlineStyle, VerticalAlign as OoxmlVerticalAlign,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::collections::BTreeMap;
 
 // ---------------------------------------------------------------------------
 // FontSize newtype — compile-time unit safety for millipoints vs points
@@ -388,6 +389,9 @@ pub struct CellFormat {
     /// Pivot button flag (ECMA-376 §18.8.1, pivotButton attribute).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pivot_button: Option<bool>,
+    /// Namespaced application extension data persisted with the cell format.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extensions: Option<BTreeMap<String, serde_json::Value>>,
 }
 
 /// Manual `Eq` impl: treats NaN-bit-identical f64 fields as equal via `to_bits()`.
@@ -441,6 +445,17 @@ impl std::hash::Hash for CellFormat {
         self.hidden.hash(state);
         self.quote_prefix.hash(state);
         self.pivot_button.hash(state);
+        match &self.extensions {
+            Some(extensions) => {
+                1u8.hash(state);
+                // BTreeMap provides stable key ordering. serde_json::Value is not
+                // Hash, so hash its canonical map-order serialization.
+                serde_json::to_string(extensions)
+                    .unwrap_or_default()
+                    .hash(state);
+            }
+            None => 0u8.hash(state),
+        }
     }
 }
 
@@ -501,6 +516,7 @@ pub struct ResolvedCellFormat {
     pub hidden: Option<bool>,
     pub quote_prefix: Option<bool>,
     pub pivot_button: Option<bool>,
+    pub extensions: Option<BTreeMap<String, serde_json::Value>>,
 }
 
 impl From<CellFormat> for ResolvedCellFormat {
@@ -541,6 +557,7 @@ impl From<CellFormat> for ResolvedCellFormat {
             hidden: cf.hidden,
             quote_prefix: cf.quote_prefix,
             pivot_button: cf.pivot_button,
+            extensions: cf.extensions,
         }
     }
 }
@@ -596,6 +613,10 @@ mod tests {
             hidden: Some(false),
             quote_prefix: Some(false),
             pivot_button: Some(true),
+            extensions: Some(BTreeMap::from([(
+                "mog.ignoreError".into(),
+                serde_json::Value::Bool(true),
+            )])),
         };
 
         let resolved: ResolvedCellFormat = cf.clone().into();
@@ -630,8 +651,8 @@ mod tests {
         // test (skip_serializing_if would silently omit it, making both sides look equal).
         assert_eq!(
             cf_keys.len(),
-            35,
-            "Expected 35 CellFormat fields. If you added a field, update this count \
+            36,
+            "Expected 36 CellFormat fields. If you added a field, update this count \
              AND add a Some(...) value above AND add it to ResolvedCellFormat.",
         );
     }

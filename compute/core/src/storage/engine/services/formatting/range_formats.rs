@@ -200,7 +200,15 @@ pub(in crate::storage::engine) fn set_format_for_ranges(
     ranges: &[(u32, u32, u32, u32)],
     format: &CellFormat,
 ) -> FormatResult {
-    set_format_for_ranges_with_origin(stores, mirror, sheet_id, ranges, format, ORIGIN_USER_EDIT)
+    patch_format_for_ranges_with_origin(
+        stores,
+        mirror,
+        sheet_id,
+        ranges,
+        format,
+        &[],
+        ORIGIN_USER_EDIT,
+    )
 }
 
 pub(in crate::storage::engine) fn set_format_for_ranges_with_origin(
@@ -211,6 +219,37 @@ pub(in crate::storage::engine) fn set_format_for_ranges_with_origin(
     format: &CellFormat,
     origin: &'static [u8],
 ) -> FormatResult {
+    patch_format_for_ranges_with_origin(stores, mirror, sheet_id, ranges, format, &[], origin)
+}
+
+pub(in crate::storage::engine) fn patch_format_for_ranges(
+    stores: &mut EngineStores,
+    mirror: &CellMirror,
+    sheet_id: &SheetId,
+    ranges: &[(u32, u32, u32, u32)],
+    format: &CellFormat,
+    clear_fields: &[String],
+) -> FormatResult {
+    patch_format_for_ranges_with_origin(
+        stores,
+        mirror,
+        sheet_id,
+        ranges,
+        format,
+        clear_fields,
+        ORIGIN_USER_EDIT,
+    )
+}
+
+pub(in crate::storage::engine) fn patch_format_for_ranges_with_origin(
+    stores: &mut EngineStores,
+    mirror: &CellMirror,
+    sheet_id: &SheetId,
+    ranges: &[(u32, u32, u32, u32)],
+    format: &CellFormat,
+    clear_fields: &[String],
+    origin: &'static [u8],
+) -> FormatResult {
     if !stores.grid_indexes.contains_key(sheet_id) {
         return Err(ComputeError::Eval {
             message: format!("Sheet not found: {:?}", sheet_id),
@@ -219,7 +258,14 @@ pub(in crate::storage::engine) fn set_format_for_ranges_with_origin(
 
     let format = properties::normalize_format_patch(format);
     let sheet_id_str: String = id_to_hex(sheet_id.as_u128()).into();
-    let format_json = serde_json::to_value(&format).ok();
+    let format_json = serde_json::to_value(&format).ok().map(|mut value| {
+        if let Some(object) = value.as_object_mut() {
+            for field in clear_fields {
+                object.insert(field.clone(), serde_json::Value::Null);
+            }
+        }
+        value
+    });
     let mut result = MutationResult::empty();
     let mut affected_cells: Vec<(u128, u32, u32)> = Vec::new();
 
@@ -244,15 +290,16 @@ pub(in crate::storage::engine) fn set_format_for_ranges_with_origin(
                 .map(|(cell_id, _, _)| id_to_hex(cell_id.as_u128()))
                 .collect();
             let cell_hex_refs: Vec<&str> = cell_hexes.iter().map(|s| s.as_str()).collect();
-            properties::set_cell_formats_with_origin(
+            properties::patch_cell_formats_with_origin(
                 stores.storage.doc(),
                 stores.storage.workbook_map(),
                 stores.storage.sheets(),
                 sheet_id,
                 &cell_hex_refs,
                 &format,
+                clear_fields,
                 origin,
-            );
+            )?;
 
             for (cell_id, row, col) in existing {
                 affected_cells.push((cell_id.as_u128(), row, col));
@@ -288,15 +335,16 @@ pub(in crate::storage::engine) fn set_format_for_ranges_with_origin(
                 .iter()
                 .map(|(hex, _, _, _)| hex.as_str())
                 .collect();
-            properties::set_cell_formats_with_origin(
+            properties::patch_cell_formats_with_origin(
                 stores.storage.doc(),
                 stores.storage.workbook_map(),
                 stores.storage.sheets(),
                 sheet_id,
                 &cell_hex_refs,
                 &format,
+                clear_fields,
                 origin,
-            );
+            )?;
 
             for (cell_hex, cell_id_u128, row, col) in &cell_data {
                 affected_cells.push((*cell_id_u128, *row, *col));

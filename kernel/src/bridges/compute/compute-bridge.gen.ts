@@ -363,13 +363,16 @@ export interface GeneratedBridgeMethods {
   getCellFormat(sheetId: SheetId, cellId: CellId, row: number, col: number): Promise<CellFormat>;
   getCellFormatWithCf(sheetId: SheetId, cellId: CellId, row: number, col: number): Promise<CellFormat>;
   getResolvedFormat(sheetId: SheetId, row: number, col: number): Promise<ResolvedCellFormat>;
+  getTransferableFormat(sheetId: SheetId, row: number, col: number): Promise<ResolvedCellFormat>;
   setCellFormat(sheetId: SheetId, cellId: CellId, format: CellFormat, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   clearCellFormat(sheetId: SheetId, cellId: CellId, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   toggleFormatProperty(sheetId: SheetId, ranges: [number, number, number, number][], property: string, activeRow: number, activeCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   setFormatForRanges(sheetId: SheetId, ranges: [number, number, number, number][], format: CellFormat, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  patchFormatForRanges(sheetId: SheetId, ranges: [number, number, number, number][], format: CellFormat, clearFields: string[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   setFormatForRangesUiState(sheetId: SheetId, ranges: [number, number, number, number][], format: CellFormat, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   clearFormatForRanges(sheetId: SheetId, ranges: [number, number, number, number][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   setCellPropertiesBatch(sheetId: SheetId, updates: [number, number, CellFormat][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  patchCellPropertiesBatch(sheetId: SheetId, updates: [number, number, CellFormat, string[]][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   addCfRule(sheetId: SheetId, rule: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   updateCfRule(sheetId: SheetId, ruleId: string, updates: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   deleteCfRule(sheetId: SheetId, ruleId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
@@ -391,13 +394,17 @@ export interface GeneratedBridgeMethods {
   getIconSetPresets(): Promise<CFIconSetPreset[]>;
   getCfPresetById(id: string): Promise<CFPresetCategory | null>;
   setRowFormat(sheetId: SheetId, row: number, format: CellFormat, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  patchRowFormat(sheetId: SheetId, row: number, format: CellFormat, clearFields: string[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   setColFormat(sheetId: SheetId, col: number, format: CellFormat, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  patchColFormat(sheetId: SheetId, col: number, format: CellFormat, clearFields: string[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   clearColFormat(sheetId: SheetId, col: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   setColFormatRange(sheetId: SheetId, startCol: number, endCol: number, format: CellFormat, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getRowFormats(sheetId: SheetId, rows: number[]): Promise<[number, CellFormat | null][]>;
   setRowFormats(sheetId: SheetId, updates: [number, CellFormat][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  patchRowFormats(sheetId: SheetId, updates: [number, CellFormat, string[]][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getColFormats(sheetId: SheetId, cols: number[]): Promise<[number, CellFormat | null][]>;
   setColFormats(sheetId: SheetId, updates: [number, CellFormat][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  patchColFormats(sheetId: SheetId, updates: [number, CellFormat, string[]][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   queryRangeProperties(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<(CellFormat | null)[][]>;
   getDisplayedCellProperties(sheetId: SheetId, row: number, col: number): Promise<CellFormat>;
   getDisplayedRangeProperties(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<CellFormat[][]>;
@@ -2075,6 +2082,10 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<ResolvedCellFormat>('compute_get_resolved_format', { docId: this.core.docId, sheetId, row, col }));
   }
 
+  getTransferableFormat(sheetId: SheetId, row: number, col: number): Promise<ResolvedCellFormat> {
+    return this.core.query(this.core.transport.call<ResolvedCellFormat>('compute_get_transferable_format', { docId: this.core.docId, sheetId, row, col }));
+  }
+
   setCellFormat(sheetId: SheetId, cellId: CellId, format: CellFormat, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
     return this.core.mutatePublic('compute_set_cell_format', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_cell_format', { docId: this.core.docId, sheetId, cellId, format }), undefined, admissionOptions);
   }
@@ -2091,6 +2102,10 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.mutatePublic('compute_set_format_for_ranges', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_format_for_ranges', { docId: this.core.docId, sheetId, ranges, format }), undefined, admissionOptions);
   }
 
+  patchFormatForRanges(sheetId: SheetId, ranges: [number, number, number, number][], format: CellFormat, clearFields: string[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_patch_format_for_ranges', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_patch_format_for_ranges', { docId: this.core.docId, sheetId, ranges, format, clearFields }), undefined, admissionOptions);
+  }
+
   setFormatForRangesUiState(sheetId: SheetId, ranges: [number, number, number, number][], format: CellFormat, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
     return this.core.mutateSystem('compute_set_format_for_ranges_ui_state', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_format_for_ranges_ui_state', { docId: this.core.docId, sheetId, ranges, format }), undefined, admissionOptions);
   }
@@ -2101,6 +2116,10 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
 
   setCellPropertiesBatch(sheetId: SheetId, updates: [number, number, CellFormat][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
     return this.core.mutatePublic('compute_set_cell_properties_batch', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_cell_properties_batch', { docId: this.core.docId, sheetId, updates }), undefined, admissionOptions);
+  }
+
+  patchCellPropertiesBatch(sheetId: SheetId, updates: [number, number, CellFormat, string[]][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_patch_cell_properties_batch', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_patch_cell_properties_batch', { docId: this.core.docId, sheetId, updates }), undefined, admissionOptions);
   }
 
   addCfRule(sheetId: SheetId, rule: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
@@ -2187,8 +2206,16 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.mutatePublic('compute_set_row_format', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_row_format', { docId: this.core.docId, sheetId, row, format }), undefined, admissionOptions);
   }
 
+  patchRowFormat(sheetId: SheetId, row: number, format: CellFormat, clearFields: string[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_patch_row_format', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_patch_row_format', { docId: this.core.docId, sheetId, row, format, clearFields }), undefined, admissionOptions);
+  }
+
   setColFormat(sheetId: SheetId, col: number, format: CellFormat, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
     return this.core.mutatePublic('compute_set_col_format', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_col_format', { docId: this.core.docId, sheetId, col, format }), undefined, admissionOptions);
+  }
+
+  patchColFormat(sheetId: SheetId, col: number, format: CellFormat, clearFields: string[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_patch_col_format', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_patch_col_format', { docId: this.core.docId, sheetId, col, format, clearFields }), undefined, admissionOptions);
   }
 
   clearColFormat(sheetId: SheetId, col: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
@@ -2207,12 +2234,20 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.mutatePublic('compute_set_row_formats', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_row_formats', { docId: this.core.docId, sheetId, updates }), undefined, admissionOptions);
   }
 
+  patchRowFormats(sheetId: SheetId, updates: [number, CellFormat, string[]][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_patch_row_formats', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_patch_row_formats', { docId: this.core.docId, sheetId, updates }), undefined, admissionOptions);
+  }
+
   getColFormats(sheetId: SheetId, cols: number[]): Promise<[number, CellFormat | null][]> {
     return this.core.query(this.core.transport.call<[number, CellFormat | null][]>('compute_get_col_formats', { docId: this.core.docId, sheetId, cols }));
   }
 
   setColFormats(sheetId: SheetId, updates: [number, CellFormat][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
     return this.core.mutatePublic('compute_set_col_formats', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_col_formats', { docId: this.core.docId, sheetId, updates }), undefined, admissionOptions);
+  }
+
+  patchColFormats(sheetId: SheetId, updates: [number, CellFormat, string[]][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_patch_col_formats', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_patch_col_formats', { docId: this.core.docId, sheetId, updates }), undefined, admissionOptions);
   }
 
   queryRangeProperties(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<(CellFormat | null)[][]> {

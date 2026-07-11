@@ -99,6 +99,16 @@ impl YrsComputeEngine {
         cell_formats::get_resolved_format(self, sheet_id, row, col)
     }
 
+    #[bridge::read(scope = "cell")]
+    pub fn get_transferable_format(
+        &self,
+        sheet_id: &SheetId,
+        row: u32,
+        col: u32,
+    ) -> ResolvedCellFormat {
+        cell_formats::get_transferable_format(self, sheet_id, row, col)
+    }
+
     #[bridge::write(scope = "sheet")]
     pub fn set_cell_format(
         &mut self,
@@ -142,6 +152,19 @@ impl YrsComputeEngine {
         range_mutations::set_format_for_ranges(self, sheet_id, ranges, format)
     }
 
+    /// Apply a tri-state format patch: values set properties and clear_fields
+    /// remove direct properties while omitted properties remain unchanged.
+    #[bridge::write(scope = "sheet")]
+    pub fn patch_format_for_ranges(
+        &mut self,
+        sheet_id: &SheetId,
+        ranges: &[(u32, u32, u32, u32)],
+        format: &CellFormat,
+        clear_fields: &[String],
+    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+        range_mutations::patch_format_for_ranges(self, sheet_id, ranges, format, clear_fields)
+    }
+
     #[bridge::write(scope = "sheet")]
     pub fn set_format_for_ranges_ui_state(
         &mut self,
@@ -174,6 +197,15 @@ impl YrsComputeEngine {
         updates: Vec<(u32, u32, CellFormat)>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
         range_mutations::set_cell_properties_batch(self, sheet_id, updates)
+    }
+
+    #[bridge::write(scope = "sheet")]
+    pub fn patch_cell_properties_batch(
+        &mut self,
+        sheet_id: &SheetId,
+        updates: Vec<(u32, u32, CellFormat, Vec<String>)>,
+    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+        range_mutations::patch_cell_properties_batch(self, sheet_id, updates)
     }
 
     #[bridge::write(scope = "sheet")]
@@ -341,6 +373,17 @@ impl YrsComputeEngine {
     }
 
     #[bridge::write(scope = "sheet")]
+    pub fn patch_row_format(
+        &mut self,
+        sheet_id: &SheetId,
+        row: u32,
+        format: CellFormat,
+        clear_fields: Vec<String>,
+    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+        row_col::patch_row_format(self, sheet_id, row, format, clear_fields)
+    }
+
+    #[bridge::write(scope = "sheet")]
     pub fn set_col_format(
         &mut self,
         sheet_id: &SheetId,
@@ -348,6 +391,17 @@ impl YrsComputeEngine {
         format: CellFormat,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
         row_col::set_col_format(self, sheet_id, col, format)
+    }
+
+    #[bridge::write(scope = "sheet")]
+    pub fn patch_col_format(
+        &mut self,
+        sheet_id: &SheetId,
+        col: u32,
+        format: CellFormat,
+        clear_fields: Vec<String>,
+    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+        row_col::patch_col_format(self, sheet_id, col, format, clear_fields)
     }
 
     #[bridge::write(scope = "sheet")]
@@ -388,6 +442,15 @@ impl YrsComputeEngine {
         row_col::set_row_formats(self, sheet_id, updates)
     }
 
+    #[bridge::write(scope = "sheet")]
+    pub fn patch_row_formats(
+        &mut self,
+        sheet_id: &SheetId,
+        updates: Vec<(u32, CellFormat, Vec<String>)>,
+    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+        row_col::patch_row_formats(self, sheet_id, updates)
+    }
+
     #[bridge::read(scope = "sheet")]
     pub fn get_col_formats(
         &self,
@@ -404,6 +467,15 @@ impl YrsComputeEngine {
         updates: Vec<(u32, CellFormat)>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
         row_col::set_col_formats(self, sheet_id, updates)
+    }
+
+    #[bridge::write(scope = "sheet")]
+    pub fn patch_col_formats(
+        &mut self,
+        sheet_id: &SheetId,
+        updates: Vec<(u32, CellFormat, Vec<String>)>,
+    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+        row_col::patch_col_formats(self, sheet_id, updates)
     }
 
     #[bridge::read(scope = "range")]

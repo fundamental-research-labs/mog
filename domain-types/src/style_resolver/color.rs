@@ -143,6 +143,53 @@ pub fn resolve_color(color: &ColorInput, theme_colors: &[String]) -> Option<Stri
     None
 }
 
+/// Preserve an authored static-style color instead of resolving it for display.
+///
+/// Static cell formats retain symbolic theme linkage so changing the workbook
+/// theme also changes the cell. Most format properties have a parallel tint
+/// field and therefore store only `theme:<slot>` here. Gradient stops have no
+/// parallel tint field, so their caller requests an inline
+/// `theme:<slot>:<tint>` representation.
+pub(super) fn preserve_authored_color(
+    color: &ColorInput,
+    inline_theme_tint: bool,
+) -> Option<String> {
+    if let Some(ref rgb) = color.rgb
+        && !rgb.is_empty()
+    {
+        return Some(normalize_rgb(rgb));
+    }
+
+    if let Some(theme_idx) = color.theme
+        && let Some(&slot) = THEME_COLOR_SLOTS.get(theme_idx as usize)
+    {
+        if inline_theme_tint
+            && let Some(tint) = color.tint
+            && tint != 0.0
+        {
+            return Some(format!("theme:{slot}:{tint}"));
+        }
+        return Some(format!("theme:{slot}"));
+    }
+
+    if let Some(idx) = color.indexed
+        && let Some(hex) = resolve_indexed_color(idx)
+    {
+        if let Some(tint) = color.tint
+            && tint != 0.0
+        {
+            return Some(apply_tint(hex, tint));
+        }
+        return Some(hex.to_string());
+    }
+
+    if color.auto {
+        return Some("#000000".to_string());
+    }
+
+    None
+}
+
 /// Normalize an RGB string to `#RRGGBB` format.
 ///
 /// Handles:

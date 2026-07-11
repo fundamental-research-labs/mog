@@ -22,6 +22,24 @@ pub(in crate::storage::engine) fn set_row_format(
     Ok(MutationResult::empty())
 }
 
+pub(in crate::storage::engine) fn patch_row_format(
+    stores: &mut EngineStores,
+    sheet_id: &SheetId,
+    row: u32,
+    format: &CellFormat,
+    clear_fields: &[String],
+) -> Result<MutationResult, ComputeError> {
+    properties::patch_row_format(
+        &mut stores.storage,
+        sheet_id,
+        row,
+        format,
+        clear_fields,
+        stores.grid_indexes.get(sheet_id),
+    )?;
+    Ok(MutationResult::empty())
+}
+
 pub(in crate::storage::engine) fn set_col_format(
     stores: &mut EngineStores,
     sheet_id: &SheetId,
@@ -33,6 +51,24 @@ pub(in crate::storage::engine) fn set_col_format(
         sheet_id,
         col,
         format,
+        stores.grid_indexes.get(sheet_id),
+    )?;
+    Ok(MutationResult::empty())
+}
+
+pub(in crate::storage::engine) fn patch_col_format(
+    stores: &mut EngineStores,
+    sheet_id: &SheetId,
+    col: u32,
+    format: &CellFormat,
+    clear_fields: &[String],
+) -> Result<MutationResult, ComputeError> {
+    properties::patch_col_format(
+        &mut stores.storage,
+        sheet_id,
+        col,
+        format,
+        clear_fields,
         stores.grid_indexes.get(sheet_id),
     )?;
     Ok(MutationResult::empty())

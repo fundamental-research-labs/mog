@@ -81,6 +81,39 @@ pub fn set_row_format(
     Ok(())
 }
 
+/// Apply a tri-state patch to a row's stored direct format.
+pub fn patch_row_format(
+    storage: &mut YrsStorage,
+    sheet_id: &SheetId,
+    row: u32,
+    format: &CellFormat,
+    clear_fields: &[String],
+    grid_index: Option<&GridIndex>,
+) -> Result<(), ComputeError> {
+    let row_id = grid_index
+        .and_then(|gi| gi.row_id(row))
+        .map(|rid| id_to_hex(rid.as_u128()))
+        .ok_or_else(|| ComputeError::SheetNotFound {
+            sheet_id: sheet_id.to_uuid_string(),
+        })?;
+    let existing = get_row_format(storage, sheet_id, row, grid_index).unwrap_or_default();
+    let patched = super::apply_format_patch(&existing, format, clear_fields)?;
+
+    let sheets = storage.sheets_ref();
+    let mut txn = storage
+        .doc()
+        .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
+    if let Some(fmt_map) = get_sheet_submap(&txn, &sheets, sheet_id, KEY_ROW_FORMATS) {
+        fmt_map.remove(&mut txn, &row_id);
+        if patched != CellFormat::default() {
+            let entries = yrs_schema::cell_format::to_yrs_prelim(&patched);
+            let nested: MapPrelim = entries.into_iter().collect();
+            fmt_map.insert(&mut txn, &*row_id, nested);
+        }
+    }
+    Ok(())
+}
+
 /// Clear the format for a row.
 ///
 /// Uses read-only `get_row_id_at` -- if the row is virtual (no RowId),
@@ -221,6 +254,39 @@ pub fn set_col_format(
         let entries = yrs_schema::cell_format::to_yrs_prelim(&merged);
         let nested: MapPrelim = entries.into_iter().collect();
         fmt_map.insert(&mut txn, &*col_id, nested);
+    }
+    Ok(())
+}
+
+/// Apply a tri-state patch to a column's stored direct format.
+pub fn patch_col_format(
+    storage: &mut YrsStorage,
+    sheet_id: &SheetId,
+    col: u32,
+    format: &CellFormat,
+    clear_fields: &[String],
+    grid_index: Option<&GridIndex>,
+) -> Result<(), ComputeError> {
+    let col_id = grid_index
+        .and_then(|gi| gi.col_id(col))
+        .map(|cid| id_to_hex(cid.as_u128()))
+        .ok_or_else(|| ComputeError::SheetNotFound {
+            sheet_id: sheet_id.to_uuid_string(),
+        })?;
+    let existing = get_col_format(storage, sheet_id, col, grid_index).unwrap_or_default();
+    let patched = super::apply_format_patch(&existing, format, clear_fields)?;
+
+    let sheets = storage.sheets_ref();
+    let mut txn = storage
+        .doc()
+        .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
+    if let Some(fmt_map) = get_sheet_submap(&txn, &sheets, sheet_id, KEY_COL_FORMATS) {
+        fmt_map.remove(&mut txn, &col_id);
+        if patched != CellFormat::default() {
+            let entries = yrs_schema::cell_format::to_yrs_prelim(&patched);
+            let nested: MapPrelim = entries.into_iter().collect();
+            fmt_map.insert(&mut txn, &*col_id, nested);
+        }
     }
     Ok(())
 }

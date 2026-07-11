@@ -67,7 +67,7 @@ pub(super) fn convert_font_to_input(f: &FontOutput) -> FontInput {
         extend: f.extend,
         outline: f.outline,
         shadow: f.shadow,
-        charset: None,
+        charset: f.charset,
         family: f.family,
     }
 }

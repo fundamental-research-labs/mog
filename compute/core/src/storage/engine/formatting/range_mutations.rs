@@ -62,6 +62,30 @@ pub(super) fn set_format_for_ranges_with_origin(
     Ok((patches, result))
 }
 
+pub(super) fn patch_format_for_ranges(
+    engine: &mut YrsComputeEngine,
+    sheet_id: &SheetId,
+    ranges: &[(u32, u32, u32, u32)],
+    format: &CellFormat,
+    clear_fields: &[String],
+) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    validation::format::validate_cell_format(format)?;
+    properties::apply_format_patch(&CellFormat::default(), format, clear_fields)?;
+    let (affected_cells, result) = {
+        let _guard = engine.mutation.suppress_guard();
+        services::formatting::patch_format_for_ranges(
+            &mut engine.stores,
+            &engine.mirror,
+            sheet_id,
+            ranges,
+            format,
+            clear_fields,
+        )?
+    };
+    let patches = engine.produce_format_change_patches(sheet_id, &affected_cells);
+    Ok((patches, result))
+}
+
 pub(super) fn clear_format_for_ranges(
     engine: &mut YrsComputeEngine,
     sheet_id: &SheetId,
@@ -102,6 +126,49 @@ pub(super) fn set_cell_properties_batch(
         let cell_id = grid.ensure_cell_id(*row, *col);
         let cell_hex = id_to_hex(cell_id.as_u128());
         services::formatting::set_cell_format(&mut engine.stores, sheet_id, &cell_hex, format);
+    }
+
+    Ok((
+        serialize_multi_viewport_patches(&[]),
+        MutationResult::empty(),
+    ))
+}
+
+pub(super) fn patch_cell_properties_batch(
+    engine: &mut YrsComputeEngine,
+    sheet_id: &SheetId,
+    updates: Vec<(u32, u32, CellFormat, Vec<String>)>,
+) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    if !engine.stores.grid_indexes.contains_key(sheet_id) {
+        return Err(ComputeError::Eval {
+            message: format!("Sheet not found: {:?}", sheet_id),
+        });
+    }
+
+    for (_, _, format, clear_fields) in &updates {
+        validation::format::validate_cell_format(format)?;
+        properties::apply_format_patch(&CellFormat::default(), format, clear_fields)?;
+    }
+    for (row, col, format, clear_fields) in &updates {
+        let Some(grid) = engine.stores.grid_indexes.get_mut(sheet_id) else {
+            continue;
+        };
+        crate::storage::cells::values::maybe_register_virtual_cell_id(
+            &engine.mirror,
+            sheet_id,
+            grid,
+            *row,
+            *col,
+        );
+        let cell_id = grid.ensure_cell_id(*row, *col);
+        let cell_hex = id_to_hex(cell_id.as_u128());
+        services::formatting::patch_cell_format(
+            &mut engine.stores,
+            sheet_id,
+            &cell_hex,
+            format,
+            clear_fields,
+        )?;
     }
 
     Ok((

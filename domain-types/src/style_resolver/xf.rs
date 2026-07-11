@@ -28,7 +28,6 @@ pub(super) fn resolve_xf_direct(xf: &CellXfInput, input: &StyleInput) -> Documen
     if let Some(font) = input.fonts.get(font_id as usize) {
         let ff = resolve_font(
             font,
-            &input.theme_colors,
             input.major_font.as_deref(),
             input.minor_font.as_deref(),
         );
@@ -40,7 +39,7 @@ pub(super) fn resolve_xf_direct(xf: &CellXfInput, input: &StyleInput) -> Documen
     // --- Fill ---
     let fill_id = xf.fill_id.unwrap_or(0);
     if let Some(fill) = input.fills.get(fill_id as usize)
-        && let Some(ff) = resolve_fill(fill, &input.theme_colors)
+        && let Some(ff) = resolve_fill(fill)
     {
         fmt.fill = Some(ff);
     }
@@ -48,7 +47,7 @@ pub(super) fn resolve_xf_direct(xf: &CellXfInput, input: &StyleInput) -> Documen
     // --- Border ---
     let border_id = xf.border_id.unwrap_or(0);
     if let Some(border) = input.borders.get(border_id as usize)
-        && let Some(bf) = resolve_border(border, &input.theme_colors)
+        && let Some(bf) = resolve_border(border)
     {
         fmt.border = Some(bf);
     }
@@ -113,7 +112,6 @@ fn resolve_applied_font(xf: &CellXfInput, input: &StyleInput) -> Option<FontForm
     input.fonts.get(font_id as usize).map(|font| {
         let mut fmt = resolve_font(
             font,
-            &input.theme_colors,
             input.major_font.as_deref(),
             input.minor_font.as_deref(),
         );
@@ -128,7 +126,7 @@ fn resolve_applied_fill(xf: &CellXfInput, input: &StyleInput) -> Option<FillForm
         if fill.fill_type == "pattern" && fill.pattern_type == "none" {
             Some(explicit_no_fill())
         } else {
-            resolve_fill(fill, &input.theme_colors)
+            resolve_fill(fill)
         }
     })
 }

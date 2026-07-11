@@ -49,6 +49,7 @@ pub const KEY_BG_COLOR_TINT: &str = "bct";
 pub const KEY_PATTERN_FG_COLOR_TINT: &str = "pfct";
 pub const KEY_BORDERS: &str = "bd";
 pub const KEY_GRADIENT_FILL: &str = "gf";
+pub const KEY_EXTENSIONS: &str = "ex";
 
 /// Convert a [`CellFormat`] to Yrs prelim entries for initial hydration.
 ///
@@ -169,6 +170,11 @@ pub fn to_yrs_prelim(fmt: &CellFormat) -> Vec<(&str, Any)> {
     {
         entries.push((KEY_GRADIENT_FILL, Any::String(Arc::from(json.as_str()))));
     }
+    if let Some(ref v) = fmt.extensions
+        && let Ok(json) = serde_json::to_string(v)
+    {
+        entries.push((KEY_EXTENSIONS, Any::String(Arc::from(json.as_str()))));
+    }
 
     entries
 }
@@ -221,6 +227,8 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<CellFormat> {
         pivot_button: read_bool(map, txn, KEY_PIVOT_BUTTON),
         borders: read_string(map, txn, KEY_BORDERS).and_then(|s| serde_json::from_str(&s).ok()),
         gradient_fill: read_string(map, txn, KEY_GRADIENT_FILL)
+            .and_then(|s| serde_json::from_str(&s).ok()),
+        extensions: read_string(map, txn, KEY_EXTENSIONS)
             .and_then(|s| serde_json::from_str(&s).ok()),
     };
 

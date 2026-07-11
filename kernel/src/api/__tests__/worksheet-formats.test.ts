@@ -15,12 +15,13 @@ function createMockCtx(): any {
     computeBridge: {
       canDoStructureOp: jest.fn().mockResolvedValue(true),
       setFormatForRanges: jest.fn().mockResolvedValue({ propertyChanges: [{}] }),
+      patchFormatForRanges: jest.fn().mockResolvedValue({ propertyChanges: [{}] }),
       clearFormatForRanges: jest.fn().mockResolvedValue({}),
-      setRowFormat: jest.fn().mockResolvedValue({}),
-      setColFormat: jest.fn().mockResolvedValue({}),
-      setRowFormats: jest.fn().mockResolvedValue({}),
-      setColFormats: jest.fn().mockResolvedValue({}),
-      setCellPropertiesBatch: jest.fn().mockResolvedValue({}),
+      patchRowFormat: jest.fn().mockResolvedValue({}),
+      patchColFormat: jest.fn().mockResolvedValue({}),
+      patchRowFormats: jest.fn().mockResolvedValue({}),
+      patchColFormats: jest.fn().mockResolvedValue({}),
+      patchCellPropertiesBatch: jest.fn().mockResolvedValue({}),
       queryRange: jest.fn().mockResolvedValue({ cells: [], merges: [] }),
       getResolvedFormat: jest.fn().mockResolvedValue({}),
     },
@@ -61,10 +62,11 @@ describe('WorksheetFormatsImpl admission options', () => {
     await formats.set('A1', { bold: true });
     await formats.clearCell('B2');
 
-    expect(ctx.computeBridge.setFormatForRanges).toHaveBeenCalledWith(
+    expect(ctx.computeBridge.patchFormatForRanges).toHaveBeenCalledWith(
       SHEET_ID,
       [[0, 0, 0, 0]],
       { bold: true },
+      [],
       expectFormatAdmission('formats.set', DIRECT_CELL_FORMAT_DOMAIN_IDS),
     );
     expect(ctx.computeBridge.clearFormatForRanges).toHaveBeenCalledWith(
@@ -78,15 +80,16 @@ describe('WorksheetFormatsImpl admission options', () => {
     await formats.setRange('A1:B2', { bold: true });
     await formats.setCellProperties([{ row: 2, col: 3, format: { italic: true } }]);
 
-    expect(ctx.computeBridge.setFormatForRanges).toHaveBeenCalledWith(
+    expect(ctx.computeBridge.patchFormatForRanges).toHaveBeenCalledWith(
       SHEET_ID,
       [[0, 0, 1, 1]],
       { bold: true },
+      [],
       expectFormatAdmission('formats.setRange', DIRECT_CELL_FORMAT_DOMAIN_IDS),
     );
-    expect(ctx.computeBridge.setCellPropertiesBatch).toHaveBeenCalledWith(
+    expect(ctx.computeBridge.patchCellPropertiesBatch).toHaveBeenCalledWith(
       SHEET_ID,
-      [[2, 3, { italic: true }]],
+      [[2, 3, { italic: true }, []]],
       expectFormatAdmission('formats.setCellProperties', DIRECT_CELL_FORMAT_DOMAIN_IDS),
     );
   });
@@ -104,7 +107,7 @@ describe('WorksheetFormatsImpl admission options', () => {
       },
     } as any);
 
-    expect(ctx.computeBridge.setFormatForRanges).toHaveBeenCalledWith(
+    expect(ctx.computeBridge.patchFormatForRanges).toHaveBeenCalledWith(
       SHEET_ID,
       [[0, 0, 0, 0]],
       {
@@ -123,6 +126,7 @@ describe('WorksheetFormatsImpl admission options', () => {
           left: { style: 'thin', color: '#111111' },
         },
       },
+      [],
       expectFormatAdmission('formats.set', DIRECT_CELL_FORMAT_DOMAIN_IDS),
     );
   });
@@ -136,7 +140,7 @@ describe('WorksheetFormatsImpl admission options', () => {
       fill: { color: '#ADD8E6' },
     } as any);
 
-    expect(ctx.computeBridge.setFormatForRanges).toHaveBeenCalledWith(
+    expect(ctx.computeBridge.patchFormatForRanges).toHaveBeenCalledWith(
       SHEET_ID,
       [[0, 0, 0, 0]],
       {
@@ -144,6 +148,7 @@ describe('WorksheetFormatsImpl admission options', () => {
         fontColor: '#111111',
         backgroundColor: '#222222',
       },
+      [],
       expectFormatAdmission('formats.set', DIRECT_CELL_FORMAT_DOMAIN_IDS),
     );
   });
@@ -162,7 +167,7 @@ describe('WorksheetFormatsImpl admission options', () => {
       } as any),
     ).rejects.toThrow('Unsupported format property "formats.set.format.richText".');
 
-    expect(ctx.computeBridge.setFormatForRanges).not.toHaveBeenCalled();
+    expect(ctx.computeBridge.patchFormatForRanges).not.toHaveBeenCalled();
   });
 
   it('normalizes compatibility inputs for bulk row and column properties', async () => {
@@ -189,7 +194,7 @@ describe('WorksheetFormatsImpl admission options', () => {
       ]),
     );
 
-    expect(ctx.computeBridge.setRowFormats).toHaveBeenCalledWith(
+    expect(ctx.computeBridge.patchRowFormats).toHaveBeenCalledWith(
       SHEET_ID,
       [
         [
@@ -198,11 +203,12 @@ describe('WorksheetFormatsImpl admission options', () => {
             bold: true,
             backgroundColor: '#ADD8E6',
           },
+          [],
         ],
       ],
       expectFormatAdmission('formats.setRowProperties'),
     );
-    expect(ctx.computeBridge.setColFormats).toHaveBeenCalledWith(
+    expect(ctx.computeBridge.patchColFormats).toHaveBeenCalledWith(
       SHEET_ID,
       [
         [
@@ -211,6 +217,7 @@ describe('WorksheetFormatsImpl admission options', () => {
             verticalAlign: 'middle',
             hidden: true,
           },
+          [],
         ],
       ],
       expectFormatAdmission('formats.setColumnProperties'),
@@ -243,37 +250,41 @@ describe('WorksheetFormatsImpl admission options', () => {
       format,
     );
 
-    expect(ctx.computeBridge.setColFormat).toHaveBeenCalledWith(
+    expect(ctx.computeBridge.patchColFormat).toHaveBeenCalledWith(
       SHEET_ID,
       1,
       format,
+      [],
       expectFormatAdmission('formats.setRanges'),
     );
-    expect(ctx.computeBridge.setColFormat).toHaveBeenCalledWith(
+    expect(ctx.computeBridge.patchColFormat).toHaveBeenCalledWith(
       SHEET_ID,
       2,
       format,
+      [],
       expectFormatAdmission('formats.setRanges'),
     );
-    expect(ctx.computeBridge.setRowFormat).toHaveBeenCalledWith(
+    expect(ctx.computeBridge.patchRowFormat).toHaveBeenCalledWith(
       SHEET_ID,
       3,
       format,
+      [],
       expectFormatAdmission('formats.setRanges'),
     );
-    expect(ctx.computeBridge.setFormatForRanges).toHaveBeenCalledWith(
+    expect(ctx.computeBridge.patchFormatForRanges).toHaveBeenCalledWith(
       SHEET_ID,
       [[4, 4, 5, 5]],
       format,
+      [],
       expectFormatAdmission('formats.setRanges', DIRECT_CELL_FORMAT_DOMAIN_IDS),
     );
 
-    const groupId = ctx.computeBridge.setColFormat.mock.calls[0][3].operationContext.groupId;
+    const groupId = ctx.computeBridge.patchColFormat.mock.calls[0][4].operationContext.groupId;
     expect(groupId).toEqual(expect.any(String));
     for (const call of [
-      ...ctx.computeBridge.setColFormat.mock.calls,
-      ...ctx.computeBridge.setRowFormat.mock.calls,
-      ...ctx.computeBridge.setFormatForRanges.mock.calls,
+      ...ctx.computeBridge.patchColFormat.mock.calls,
+      ...ctx.computeBridge.patchRowFormat.mock.calls,
+      ...ctx.computeBridge.patchFormatForRanges.mock.calls,
     ]) {
       expect(call[call.length - 1].operationContext.groupId).toBe(groupId);
     }

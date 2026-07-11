@@ -457,6 +457,29 @@ pub fn set_cell_format(
     set_properties(doc, sheets, sheet_id, cell_id, &props);
 }
 
+/// Apply a tri-state format patch to one cell's direct format.
+pub fn patch_cell_format(
+    doc: &Doc,
+    workbook: &MapRef,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    cell_id: &str,
+    format: &CellFormat,
+    clear_fields: &[String],
+) -> Result<(), value_types::ComputeError> {
+    let mut props = get_properties(doc, workbook, sheets, sheet_id, cell_id).unwrap_or_default();
+    let existing = props.format.as_ref().cloned().unwrap_or_default();
+    let patched = super::apply_format_patch(&existing, format, clear_fields)?;
+    props.format = (patched != CellFormat::default()).then_some(patched);
+    props.style_id = None;
+    if props.format.is_none() && props.metadata_is_empty() {
+        clear_properties(doc, sheets, sheet_id, cell_id);
+    } else {
+        set_properties(doc, sheets, sheet_id, cell_id, &props);
+    }
+    Ok(())
+}
+
 /// Replace the format portion of a cell's properties.
 ///
 /// Copy/paste and autofill replicate a source format snapshot. Unlike toolbar
@@ -557,6 +580,47 @@ pub fn set_cell_formats_with_origin(
             props_map.insert(&mut txn, *cid, nested);
         }
     }
+}
+
+/// Apply one tri-state format patch to multiple cells in a single Yrs transaction.
+pub fn patch_cell_formats_with_origin(
+    doc: &Doc,
+    workbook: &MapRef,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    cell_ids: &[&str],
+    format: &CellFormat,
+    clear_fields: &[String],
+    origin: &'static [u8],
+) -> Result<(), value_types::ComputeError> {
+    let existing: Vec<CellProperties> = cell_ids
+        .iter()
+        .map(|cid| get_properties(doc, workbook, sheets, sheet_id, cid).unwrap_or_default())
+        .collect();
+    let patched = existing
+        .iter()
+        .map(|props| {
+            let lower = props.format.clone().unwrap_or_default();
+            super::apply_format_patch(&lower, format, clear_fields)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let mut txn = doc.transact_mut_with(Origin::from(origin));
+    if let Some(props_map) = get_sheet_submap(&txn, sheets, sheet_id, KEY_CELL_PROPERTIES) {
+        for (i, cid) in cell_ids.iter().enumerate() {
+            let mut props = existing[i].clone();
+            props.format = (patched[i] != CellFormat::default()).then(|| patched[i].clone());
+            props.style_id = None;
+            props_map.remove(&mut txn, cid);
+            if props.format.is_some() || !props.metadata_is_empty() {
+                let dt_props: domain_types::CellProperties = props.into();
+                let entries = props_schema::to_yrs_prelim(&dt_props);
+                let nested: MapPrelim = entries.into_iter().collect();
+                props_map.insert(&mut txn, *cid, nested);
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Clear format on multiple cells in a single Yrs transaction.

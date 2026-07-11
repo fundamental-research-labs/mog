@@ -42,6 +42,7 @@ mod sparklines;
 mod style_lineage;
 mod styles;
 mod theme;
+mod theme_color_roundtrip;
 
 fn make_cell(row: u32, col: u32, value: DomainValue) -> DomainCellData {
     DomainCellData {

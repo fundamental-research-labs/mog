@@ -1,7 +1,7 @@
 use super::super::components::{resolve_alignment, resolve_border};
 use super::super::{
     AlignmentInput, BorderInput, BorderSideInput, CellXfInput, ColorInput, FillInput, FontInput,
-    StyleInput, resolve_styles,
+    GradientFillInput, GradientStopInput, StyleInput, resolve_color, resolve_styles,
 };
 use super::make_input;
 
@@ -45,6 +45,147 @@ fn full_style_conversion() {
     let prot = fmt.protection.as_ref().expect("should have protection");
     assert_eq!(prot.locked, Some(true));
     assert_eq!(prot.hidden, Some(true));
+}
+
+#[test]
+fn static_styles_preserve_theme_identity_and_tint_across_color_categories() {
+    let theme_colors = vec![
+        "#000000".to_string(),
+        "#FFFFFF".to_string(),
+        "#44546A".to_string(),
+        "#E7E6E6".to_string(),
+        "#4472C4".to_string(),
+        "#ED7D31".to_string(),
+        "#A5A5A5".to_string(),
+        "#FFC000".to_string(),
+        "#5B9BD5".to_string(),
+        "#70AD47".to_string(),
+        "#0563C1".to_string(),
+        "#954F72".to_string(),
+    ];
+    let theme = |index, tint| ColorInput {
+        theme: Some(index),
+        tint,
+        ..Default::default()
+    };
+    let input = StyleInput {
+        fonts: vec![
+            FontInput::default(),
+            FontInput {
+                color: Some(theme(4, Some(0.25))),
+                ..Default::default()
+            },
+        ],
+        fills: vec![
+            FillInput::default(),
+            FillInput {
+                fill_type: "pattern".to_string(),
+                pattern_type: "solid".to_string(),
+                fg_color: Some(theme(5, Some(-0.2))),
+                ..Default::default()
+            },
+            FillInput {
+                fill_type: "pattern".to_string(),
+                pattern_type: "darkGrid".to_string(),
+                fg_color: Some(theme(6, Some(0.1))),
+                bg_color: Some(theme(2, Some(-0.1))),
+                ..Default::default()
+            },
+            FillInput {
+                fill_type: "gradient".to_string(),
+                gradient: Some(GradientFillInput {
+                    gradient_type: "linear".to_string(),
+                    degree: Some(45.0),
+                    stops: vec![
+                        GradientStopInput {
+                            position: 0.0,
+                            color: theme(7, Some(0.4)),
+                        },
+                        GradientStopInput {
+                            position: 1.0,
+                            color: theme(8, None),
+                        },
+                    ],
+                    left: None,
+                    right: None,
+                    top: None,
+                    bottom: None,
+                }),
+                ..Default::default()
+            },
+        ],
+        borders: vec![
+            BorderInput::default(),
+            BorderInput {
+                top: Some(BorderSideInput {
+                    style: "thin".to_string(),
+                    color: Some(theme(10, Some(0.3))),
+                }),
+                ..Default::default()
+            },
+        ],
+        cell_xfs: vec![
+            CellXfInput::default(),
+            CellXfInput {
+                font_id: Some(1),
+                fill_id: Some(1),
+                border_id: Some(1),
+                apply_font: Some(true),
+                apply_fill: Some(true),
+                apply_border: Some(true),
+                ..Default::default()
+            },
+            CellXfInput {
+                fill_id: Some(2),
+                apply_fill: Some(true),
+                ..Default::default()
+            },
+            CellXfInput {
+                fill_id: Some(3),
+                apply_fill: Some(true),
+                ..Default::default()
+            },
+        ],
+        theme_colors: theme_colors.clone(),
+        ..Default::default()
+    };
+
+    let palette = resolve_styles(&input);
+    let combined = &palette[1];
+    let font = combined.font.as_ref().unwrap();
+    assert_eq!(font.color.as_deref(), Some("theme:accent1"));
+    assert_eq!(font.color_tint, Some(0.25));
+    let solid = combined.fill.as_ref().unwrap();
+    assert_eq!(solid.background_color.as_deref(), Some("theme:accent2"));
+    assert_eq!(solid.background_color_tint, Some(-0.2));
+    let top = combined.border.as_ref().unwrap().top.as_ref().unwrap();
+    assert_eq!(top.color.as_deref(), Some("theme:hyperlink"));
+    assert_eq!(top.color_tint, Some(0.3));
+
+    let pattern = palette[2].fill.as_ref().unwrap();
+    assert_eq!(
+        pattern.pattern_foreground_color.as_deref(),
+        Some("theme:accent3")
+    );
+    assert_eq!(pattern.pattern_foreground_color_tint, Some(0.1));
+    assert_eq!(pattern.background_color.as_deref(), Some("theme:light2"));
+    assert_eq!(pattern.background_color_tint, Some(-0.1));
+
+    let gradient = palette[3]
+        .fill
+        .as_ref()
+        .unwrap()
+        .gradient_fill
+        .as_ref()
+        .unwrap();
+    assert_eq!(gradient.stops[0].color, "theme:accent4:0.4");
+    assert_eq!(gradient.stops[1].color, "theme:accent5");
+
+    // Display resolution remains a separate operation over the workbook theme.
+    assert_eq!(
+        resolve_color(&theme(4, None), &theme_colors).as_deref(),
+        Some("#4472C4")
+    );
 }
 
 #[test]
@@ -159,7 +300,7 @@ fn border_resolution() {
         ..Default::default()
     };
 
-    let bf = resolve_border(&border, &[]).expect("should resolve border");
+    let bf = resolve_border(&border).expect("should resolve border");
     assert!(bf.top.is_some());
     assert_eq!(bf.top.as_ref().unwrap().style, "medium");
     assert_eq!(bf.top.as_ref().unwrap().color.as_deref(), Some("#FF0000"));
@@ -181,7 +322,7 @@ fn border_diagonal_absent_vs_explicit_false_preserved() {
         diagonal_down: None,
         ..Default::default()
     };
-    let bf = resolve_border(&absent, &[]).expect("has a diagonal side");
+    let bf = resolve_border(&absent).expect("has a diagonal side");
     assert_eq!(bf.diagonal_up, None);
     assert_eq!(bf.diagonal_down, None);
 
@@ -195,7 +336,7 @@ fn border_diagonal_absent_vs_explicit_false_preserved() {
         diagonal_down: Some(false),
         ..Default::default()
     };
-    let bf = resolve_border(&explicit_false, &[]).expect("has a diagonal side");
+    let bf = resolve_border(&explicit_false).expect("has a diagonal side");
     assert_eq!(bf.diagonal_up, Some(false));
     assert_eq!(bf.diagonal_down, Some(false));
 
@@ -209,7 +350,7 @@ fn border_diagonal_absent_vs_explicit_false_preserved() {
         diagonal_down: None,
         ..Default::default()
     };
-    let bf = resolve_border(&asymmetric, &[]).expect("has a diagonal side");
+    let bf = resolve_border(&asymmetric).expect("has a diagonal side");
     assert_eq!(bf.diagonal_up, Some(true));
     assert_eq!(bf.diagonal_down, None);
 }

@@ -185,6 +185,7 @@ export const RUST_CELL_FORMAT_FIELDS = [
   'backgroundColorTint',
   'bold',
   'borders',
+  'extensions',
   'fontCharset',
   'fontColor',
   'fontColorTint',

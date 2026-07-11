@@ -270,7 +270,7 @@ fn convert_font(font: &FontFormat) -> FontDef {
         color: font
             .color
             .as_deref()
-            .map(|c| hex_to_color_def_with_tint(c, font.color_tint)),
+            .map(|c| semantic_color_to_def(c, font.color_tint)),
         family: font.family,
         charset: font.charset,
         scheme: font.scheme.as_deref().map(|s| match s {
@@ -316,7 +316,7 @@ fn convert_fill(fill: &FillFormat) -> FillDef {
                 .iter()
                 .map(|stop| GradientStop {
                     position: stop.position,
-                    color: hex_to_color_def(&stop.color),
+                    color: semantic_color_to_def(&stop.color, None),
                 })
                 .collect(),
             left: gradient.center.as_ref().map(|c| c.left),
@@ -329,11 +329,11 @@ fn convert_fill(fill: &FillFormat) -> FillDef {
     let background_color = fill
         .background_color
         .as_deref()
-        .map(|color| hex_to_color_def_with_tint(color, fill.background_color_tint));
+        .map(|color| semantic_color_to_def(color, fill.background_color_tint));
     let pattern_foreground_color = fill
         .pattern_foreground_color
         .as_deref()
-        .map(|color| hex_to_color_def_with_tint(color, fill.pattern_foreground_color_tint));
+        .map(|color| semantic_color_to_def(color, fill.pattern_foreground_color_tint));
 
     let Some(pattern_token) = fill.pattern_type.as_deref() else {
         // `backgroundColor` is also the public shorthand for a solid cell
@@ -396,7 +396,7 @@ fn convert_border(border: &BorderFormat) -> BorderDef {
             let color = s
                 .color
                 .as_deref()
-                .map(|color| hex_to_color_def_with_tint(color, s.color_tint));
+                .map(|color| semantic_color_to_def(color, s.color_tint));
             BorderSideDef { style, color }
         })
     };
@@ -484,24 +484,79 @@ fn convert_underline(s: &str) -> UnderlineStyle {
     }
 }
 
-/// Convert a "#RRGGBB" hex string to a `ColorDef`.
+/// Convert a semantic cell-format color to its OOXML representation.
 ///
-/// If the string starts with '#', strips it and prepends "FF" for full alpha.
-/// Otherwise passes it through as-is (assumes "AARRGGBB" format).
-pub(super) fn hex_to_color_def(hex: &str) -> ColorDef {
-    hex_to_color_def_with_tint(hex, None)
+/// In addition to RGB/ARGB strings, the cell-format domain carries symbolic
+/// theme colors as `theme:<slot-or-index>[:tint]`. Keeping those symbolic on
+/// export is what lets a workbook continue to follow its theme after a
+/// save/reload cycle.
+pub(super) fn hex_to_color_def(color: &str) -> ColorDef {
+    semantic_color_to_def(color, None)
 }
 
-/// Convert a "#RRGGBB" hex string to a `ColorDef`, optionally attaching a tint.
-fn hex_to_color_def_with_tint(hex: &str, tint: Option<f64>) -> ColorDef {
-    let argb = if let Some(stripped) = hex.strip_prefix('#') {
+/// Lower one semantic color. A separate typed tint is authoritative when it
+/// is present (including `0.0`, which explicitly removes an inline tint);
+/// otherwise a tint embedded in the theme reference is used.
+fn semantic_color_to_def(color: &str, explicit_tint: Option<f64>) -> ColorDef {
+    if let Some((id, inline_tint)) = parse_theme_color_ref(color) {
+        return ColorDef::Theme {
+            id,
+            tint: serialize_tint(explicit_tint.or(inline_tint)),
+        };
+    }
+
+    let argb = if let Some(stripped) = color.strip_prefix('#') {
         format!("FF{}", stripped.to_uppercase())
     } else {
-        hex.to_uppercase()
+        color.to_uppercase()
     };
-    let tint_str = tint.filter(|&t| t != 0.0).map(|t| t.to_string());
     ColorDef::Rgb {
         val: argb,
-        tint: tint_str,
+        tint: serialize_tint(explicit_tint),
+    }
+}
+
+fn serialize_tint(tint: Option<f64>) -> Option<String> {
+    tint.filter(|t| t.is_finite() && *t != 0.0)
+        .map(|t| t.to_string())
+}
+
+/// Parse the public symbolic theme-color vocabulary into the numeric indices
+/// used by `<color theme="…">` (§18.8.3). The first four indices deliberately
+/// follow the OOXML color-reference order (light1, dark1, light2, dark2), not
+/// the `<a:clrScheme>` child order.
+fn parse_theme_color_ref(color: &str) -> Option<(u32, Option<f64>)> {
+    let mut parts = color.strip_prefix("theme:")?.split(':');
+    let theme = theme_slot_to_index(parts.next()?)?;
+    let tint = match parts.next() {
+        Some(raw) if !raw.is_empty() => {
+            let tint = raw.parse::<f64>().ok()?;
+            (tint.is_finite() && (-1.0..=1.0).contains(&tint)).then_some(tint)?
+        }
+        Some(_) => return None,
+        None => return Some((theme, None)),
+    };
+    parts.next().is_none().then_some((theme, Some(tint)))
+}
+
+fn theme_slot_to_index(slot: &str) -> Option<u32> {
+    if let Ok(index) = slot.parse::<u32>() {
+        return (index <= 11).then_some(index);
+    }
+
+    match slot.to_ascii_lowercase().as_str() {
+        "light1" | "lt1" => Some(0),
+        "dark1" | "dk1" => Some(1),
+        "light2" | "lt2" => Some(2),
+        "dark2" | "dk2" => Some(3),
+        "accent1" => Some(4),
+        "accent2" => Some(5),
+        "accent3" => Some(6),
+        "accent4" => Some(7),
+        "accent5" => Some(8),
+        "accent6" => Some(9),
+        "hyperlink" | "hlink" => Some(10),
+        "followedhyperlink" | "folhlink" | "fol_hlink" => Some(11),
+        _ => None,
     }
 }

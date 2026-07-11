@@ -67,12 +67,12 @@ pub use cell::{
     clear_cell_format, clear_cell_formats, clear_formula_cache_metadata,
     clear_formula_cache_metadata_for_cell_ids, clear_properties, get_all_properties,
     get_cell_format, get_properties, iter_all_properties, iter_formatted_property_cell_ids,
-    replace_cell_format, set_cell_format, set_cell_formats, set_cell_formats_with_origin,
-    set_properties,
+    patch_cell_format, patch_cell_formats_with_origin, replace_cell_format, set_cell_format,
+    set_cell_formats, set_cell_formats_with_origin, set_properties,
 };
 pub use defaults::default_format;
-pub(crate) use merge::merge_formats;
 pub(crate) use merge::normalize_format_patch;
+pub(crate) use merge::{apply_format_patch, merge_formats};
 pub use protection::{is_cell_locked, is_formula_hidden};
 pub(crate) use ranges::set_col_format_range_with_alloc;
 pub use ranges::{
@@ -82,7 +82,7 @@ pub(crate) use row_col::clear_col_format_with_alloc;
 pub use row_col::{
     ColFormatEntry, RowFormatEntry, clear_col_format, clear_row_format, get_all_col_formats,
     get_all_row_formats, get_col_format, get_col_xlsx_style_id, get_row_format,
-    get_row_xlsx_style_id, set_col_format, set_row_format,
+    get_row_xlsx_style_id, patch_col_format, patch_row_format, set_col_format, set_row_format,
 };
 pub(crate) use yrs::resolve_compact_props_with_txn;
 #[cfg(test)]

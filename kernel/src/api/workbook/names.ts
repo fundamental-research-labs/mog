@@ -300,7 +300,7 @@ export class WorkbookNamesImpl implements WorkbookNames {
 
     const defined = await NamedRanges.getByName(ctx, name, scopeSheetId);
     if (!defined) {
-      throw new KernelError('COMPUTE_ERROR', `Named range "${name}" not found.`);
+      throw new KernelError('DOMAIN_DEFINED_NAME_NOT_FOUND', `Named range "${name}" not found.`);
     }
 
     const removed = await this._toReceiptItem(defined);
@@ -313,7 +313,10 @@ export class WorkbookNamesImpl implements WorkbookNames {
     const { ctx } = this.deps;
     const defined = await NamedRanges.getById(ctx, id);
     if (!defined) {
-      throw new KernelError('COMPUTE_ERROR', `Named range with ID "${id}" not found.`);
+      throw new KernelError(
+        'DOMAIN_DEFINED_NAME_NOT_FOUND',
+        `Named range with ID "${id}" not found.`,
+      );
     }
 
     const removed = await this._toReceiptItem(defined);
@@ -334,7 +337,7 @@ export class WorkbookNamesImpl implements WorkbookNames {
     // Resolve name to internal ID — NamedRanges.update() expects an ID, not a name
     const defined = await NamedRanges.getByName(ctx, name, scopeSheetId);
     if (!defined) {
-      throw new KernelError('COMPUTE_ERROR', `Named range "${name}" not found.`);
+      throw new KernelError('DOMAIN_DEFINED_NAME_NOT_FOUND', `Named range "${name}" not found.`);
     }
 
     const previous = await this._toReceiptItem(defined);

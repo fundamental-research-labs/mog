@@ -19,7 +19,7 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../context';
-import { KernelError } from '../../errors';
+import { KernelError, targetNotFoundError } from '../../errors';
 import { resolveRange } from '../internal/address-resolver';
 import { createConditionalFormatMutationOptionsFactory } from './conditional-format-mutation-context';
 import * as CFOps from './operations/cf-operations';
@@ -569,6 +569,43 @@ export class WorksheetConditionalFormattingImpl implements WorksheetConditionalF
     this.ctx.writeGate.assertWritable(op);
   }
 
+  private _formatNotFound(formatId: string, operation: string): KernelError {
+    return targetNotFoundError({
+      code: 'CONDITIONAL_FORMAT_NOT_FOUND',
+      resourceType: 'Conditional format',
+      resourceId: formatId,
+      operation,
+      sheetId: this.sheetId,
+      path: ['formatId'],
+      suggestion: 'Use worksheet.conditionalFormats.list() to resolve an existing format ID.',
+    });
+  }
+
+  private _ruleNotFound(formatId: string, ruleId: string, operation: string): KernelError {
+    return targetNotFoundError({
+      code: 'CONDITIONAL_FORMAT_RULE_NOT_FOUND',
+      resourceType: 'Conditional format rule',
+      resourceId: ruleId,
+      operation,
+      sheetId: this.sheetId,
+      path: ['ruleId'],
+      suggestion: 'Read the conditional format and use one of its current rule IDs.',
+      context: { formatId },
+    });
+  }
+
+  private async _requireFormat(formatId: string, operation: string): Promise<ConditionalFormat> {
+    const format = await CFOps.getConditionalFormat(this.ctx, this.sheetId, formatId);
+    if (!format) throw this._formatNotFound(formatId, operation);
+    return format;
+  }
+
+  private _requireRule(format: ConditionalFormat, ruleId: string, operation: string): CFRule {
+    const rule = format.rules.find((candidate) => candidate.id === ruleId);
+    if (!rule) throw this._ruleNotFound(format.id, ruleId, operation);
+    return rule;
+  }
+
   async addFormula(
     range: string | CellRange | (string | CellRange)[],
     formula: string,
@@ -664,15 +701,7 @@ export class WorksheetConditionalFormattingImpl implements WorksheetConditionalF
       assertCfRuleArray(ruleUpdates.rules, ['updates', 'rules'], 'conditionalFormats.update');
     }
 
-    const before = await CFOps.getConditionalFormat(this.ctx, this.sheetId, formatId);
-    if (!before) {
-      return CFOps.buildConditionalFormatMutationReceipt({
-        kind: 'conditionalFormat.update',
-        sheetId: this.sheetId,
-        status: 'noOp',
-        format: null,
-      });
-    }
+    const before = await this._requireFormat(formatId, 'conditionalFormats.update');
 
     let nextRules = ruleUpdates.rules;
     if (stopIfTrue !== undefined) {
@@ -738,15 +767,8 @@ export class WorksheetConditionalFormattingImpl implements WorksheetConditionalF
     formatId: string,
     ruleId: string,
   ): Promise<ConditionalFormatMutationReceipt> {
-    const format = await CFOps.getConditionalFormat(this.ctx, this.sheetId, formatId);
-    if (!format) {
-      return CFOps.buildConditionalFormatMutationReceipt({
-        kind: 'conditionalFormat.clearRuleStyle',
-        sheetId: this.sheetId,
-        status: 'noOp',
-        format: null,
-      });
-    }
+    const format = await this._requireFormat(formatId, 'conditionalFormats.clearRuleStyle');
+    this._requireRule(format, ruleId, 'conditionalFormats.clearRuleStyle');
 
     let updatedRule: CFRule | null = null;
     const updatedRules = format.rules.map((rule) => {
@@ -760,15 +782,8 @@ export class WorksheetConditionalFormattingImpl implements WorksheetConditionalF
       return rule;
     });
 
-    if (!updatedRule) {
-      return CFOps.buildConditionalFormatMutationReceipt({
-        kind: 'conditionalFormat.clearRuleStyle',
-        sheetId: this.sheetId,
-        status: 'noOp',
-        formatCount: 0,
-        ruleCount: 0,
-      });
-    }
+    if (!updatedRule)
+      throw this._ruleNotFound(formatId, ruleId, 'conditionalFormats.clearRuleStyle');
 
     await this.ctx.computeBridge.updateCfRule(
       this.sheetId,
@@ -793,15 +808,8 @@ export class WorksheetConditionalFormattingImpl implements WorksheetConditionalF
     ruleId: string,
     newRule: CFRuleInput,
   ): Promise<ConditionalFormatMutationReceipt> {
-    const format = await CFOps.getConditionalFormat(this.ctx, this.sheetId, formatId);
-    if (!format) {
-      return CFOps.buildConditionalFormatMutationReceipt({
-        kind: 'conditionalFormat.changeRuleType',
-        sheetId: this.sheetId,
-        status: 'noOp',
-        format: null,
-      });
-    }
+    const format = await this._requireFormat(formatId, 'conditionalFormats.changeRuleType');
+    this._requireRule(format, ruleId, 'conditionalFormats.changeRuleType');
 
     let updatedRule: CFRule | null = null;
     const updatedRules = format.rules.map((rule) => {
@@ -810,15 +818,8 @@ export class WorksheetConditionalFormattingImpl implements WorksheetConditionalF
       return updatedRule;
     });
 
-    if (!updatedRule) {
-      return CFOps.buildConditionalFormatMutationReceipt({
-        kind: 'conditionalFormat.changeRuleType',
-        sheetId: this.sheetId,
-        status: 'noOp',
-        formatCount: 0,
-        ruleCount: 0,
-      });
-    }
+    if (!updatedRule)
+      throw this._ruleNotFound(formatId, ruleId, 'conditionalFormats.changeRuleType');
 
     const normalizedRules = normalizeRules(updatedRules);
     await this.ctx.computeBridge.updateCfRule(
@@ -845,15 +846,7 @@ export class WorksheetConditionalFormattingImpl implements WorksheetConditionalF
   }
 
   async remove(formatId: string): Promise<ConditionalFormatMutationReceipt> {
-    const before = await CFOps.getConditionalFormat(this.ctx, this.sheetId, formatId);
-    if (!before) {
-      return CFOps.buildConditionalFormatMutationReceipt({
-        kind: 'conditionalFormat.remove',
-        sheetId: this.sheetId,
-        status: 'noOp',
-        format: null,
-      });
-    }
+    const before = await this._requireFormat(formatId, 'conditionalFormats.remove');
 
     await this.ctx.computeBridge.deleteCfRule(
       this.sheetId,
@@ -868,17 +861,8 @@ export class WorksheetConditionalFormattingImpl implements WorksheetConditionalF
   }
 
   async removeRule(formatId: string, ruleId: string): Promise<ConditionalFormatMutationReceipt> {
-    const before = await CFOps.getConditionalFormat(this.ctx, this.sheetId, formatId);
-    const removedRule = before?.rules.find((rule) => rule.id === ruleId);
-    if (!before || !removedRule) {
-      return CFOps.buildConditionalFormatMutationReceipt({
-        kind: 'conditionalFormat.removeRule',
-        sheetId: this.sheetId,
-        status: 'noOp',
-        formatCount: 0,
-        ruleCount: 0,
-      });
-    }
+    const before = await this._requireFormat(formatId, 'conditionalFormats.removeRule');
+    const removedRule = this._requireRule(before, ruleId, 'conditionalFormats.removeRule');
 
     await this.ctx.computeBridge.deleteRuleFromCf(
       this.sheetId,
@@ -922,17 +906,25 @@ export class WorksheetConditionalFormattingImpl implements WorksheetConditionalF
   }
 
   async reorder(formatIds: string[]): Promise<ConditionalFormatMutationReceipt> {
-    const before = await this.list();
-    const affectedBefore = before.filter((format) => formatIds.includes(format.id));
-    if (formatIds.length === 0 || affectedBefore.length === 0) {
-      return CFOps.buildConditionalFormatMutationReceipt({
-        kind: 'conditionalFormat.reorder',
-        sheetId: this.sheetId,
-        status: 'noOp',
-        formatCount: 0,
-        ruleCount: 0,
-      });
+    if (formatIds.length === 0) {
+      throw new KernelError(
+        'API_INVALID_ARGUMENT',
+        'conditionalFormats.reorder: formatIds must contain at least one format ID.',
+        {
+          path: ['formatIds'],
+          suggestion: 'Pass the existing conditional-format IDs in desired priority order.',
+        },
+      );
     }
+    const before = await this.list();
+    const byId = new Map(before.map((format) => [format.id, format]));
+    const missingFormatIds = formatIds.filter((formatId) => !byId.has(formatId));
+    if (missingFormatIds.length > 0) {
+      const error = this._formatNotFound(missingFormatIds[0]!, 'conditionalFormats.reorder');
+      error.context.missingFormatIds = missingFormatIds;
+      throw error;
+    }
+    const affectedBefore = formatIds.map((formatId) => byId.get(formatId)!);
     await this.ctx.computeBridge.reorderCfRules(
       this.sheetId,
       formatIds,

@@ -43,10 +43,11 @@ function createManager() {
       }),
       getControlsForSheet: jest.fn(() => [checkbox, comboBox]),
       getAllControls: jest.fn(() => [checkbox, comboBox]),
-      updateControl: jest.fn(),
+      hydrateControlsForSheet: jest.fn(async () => undefined),
+      updateControl: jest.fn(async () => undefined),
       moveControl: jest.fn(async () => undefined),
-      resizeControl: jest.fn(),
-      deleteControl: jest.fn(),
+      resizeControl: jest.fn(async () => undefined),
+      deleteControl: jest.fn(async () => undefined),
       deleteControlsForSheet: jest.fn(),
       isLinkedCellValid: jest.fn(() => true),
       getControlsAtPosition: jest.fn(() => [checkbox]),
@@ -162,10 +163,10 @@ describe('WorksheetFormControlsImpl', () => {
     await expect(
       api.addCheckbox({ anchor: { row: 1, col: 2 }, linkedCell: { row: 1, col: 3 } }),
     ).resolves.toBe(checkbox);
-    expect(api.update(checkbox.id, { enabled: false })).toBe(checkbox);
+    await expect(api.update(checkbox.id, { enabled: false })).resolves.toBe(checkbox);
     await expect(api.move(checkbox.id, { row: 3, col: 4 })).resolves.toBe(checkbox);
-    expect(api.resize(checkbox.id, 32, 20)).toBe(checkbox);
-    expect(api.remove(checkbox.id)).toBe(true);
+    await expect(api.resize(checkbox.id, 32, 20)).resolves.toBe(checkbox);
+    await expect(api.remove(checkbox.id)).resolves.toBe(true);
 
     expect(manager.createCheckbox).toHaveBeenCalledTimes(1);
     expect(manager.updateControl).toHaveBeenCalledWith(checkbox.id, { enabled: false });
@@ -174,18 +175,36 @@ describe('WorksheetFormControlsImpl', () => {
     expect(manager.deleteControl).toHaveBeenCalledWith(checkbox.id);
   });
 
-  it('updates only controls on the worksheet', () => {
+  it('updates only controls on the worksheet', async () => {
     const { manager, checkbox } = createManager();
     const api = new WorksheetFormControlsImpl(createCtx() as any, manager as any, 'sheet-1');
 
-    expect(api.update(checkbox.id, { enabled: false })).toBe(checkbox);
+    await expect(api.update(checkbox.id, { enabled: false })).resolves.toBe(checkbox);
     expect(manager.updateControl).toHaveBeenCalledWith(checkbox.id, { enabled: false });
 
-    expect(api.update('other-sheet', { enabled: false })).toBeUndefined();
+    await expect(api.update('other-sheet', { enabled: false })).rejects.toMatchObject({
+      code: 'FORM_CONTROL_NOT_FOUND',
+    });
     expect(manager.updateControl).toHaveBeenCalledTimes(1);
   });
 
-  it('rejects update and resize on protected sheets before manager mutation', () => {
+  it('awaits sheet hydration before deciding that a mutation target is missing', async () => {
+    const { manager, checkbox } = createManager();
+    let hydrated = false;
+    manager.getControl.mockImplementation((id: string) =>
+      hydrated && id === checkbox.id ? checkbox : undefined,
+    );
+    manager.hydrateControlsForSheet.mockImplementation(async () => {
+      hydrated = true;
+    });
+    const api = new WorksheetFormControlsImpl(createCtx() as any, manager as any, 'sheet-1');
+
+    await expect(api.update(checkbox.id, { enabled: false })).resolves.toBe(checkbox);
+    expect(manager.hydrateControlsForSheet).toHaveBeenCalledWith('sheet-1');
+    expect(manager.updateControl).toHaveBeenCalledWith(checkbox.id, { enabled: false });
+  });
+
+  it('rejects update and resize on protected sheets before manager mutation', async () => {
     const { manager, checkbox } = createManager();
     const api = new WorksheetFormControlsImpl(
       createCtx({ isProtected: true, editObjects: false }) as any,
@@ -193,13 +212,13 @@ describe('WorksheetFormControlsImpl', () => {
       'sheet-1',
     );
 
-    expect(() => api.update(checkbox.id, { enabled: false })).toThrow(KernelError);
-    expect(() => api.resize(checkbox.id, 32, 20)).toThrow(KernelError);
+    await expect(api.update(checkbox.id, { enabled: false })).rejects.toThrow(KernelError);
+    await expect(api.resize(checkbox.id, 32, 20)).rejects.toThrow(KernelError);
     expect(manager.updateControl).not.toHaveBeenCalled();
     expect(manager.resizeControl).not.toHaveBeenCalled();
 
     try {
-      api.update(checkbox.id, { enabled: false });
+      await api.update(checkbox.id, { enabled: false });
     } catch (error) {
       expectProtectedSheetError(error);
     }
@@ -223,18 +242,20 @@ describe('WorksheetFormControlsImpl', () => {
     }
   });
 
-  it('removes only controls on the worksheet', () => {
+  it('removes only controls on the worksheet', async () => {
     const { manager, checkbox } = createManager();
     const api = new WorksheetFormControlsImpl(createCtx() as any, manager as any, 'sheet-1');
 
-    expect(api.remove(checkbox.id)).toBe(true);
+    await expect(api.remove(checkbox.id)).resolves.toBe(true);
     expect(manager.deleteControl).toHaveBeenCalledWith(checkbox.id);
 
-    expect(api.remove('other-sheet')).toBe(false);
+    await expect(api.remove('other-sheet')).rejects.toMatchObject({
+      code: 'FORM_CONTROL_NOT_FOUND',
+    });
     expect(manager.deleteControl).toHaveBeenCalledTimes(1);
   });
 
-  it('rejects remove on protected sheets before manager mutation', () => {
+  it('rejects remove on protected sheets before manager mutation', async () => {
     const { manager, checkbox } = createManager();
     const api = new WorksheetFormControlsImpl(
       createCtx({ isProtected: true, editObjects: false }) as any,
@@ -242,25 +263,33 @@ describe('WorksheetFormControlsImpl', () => {
       'sheet-1',
     );
 
-    expect(() => api.remove(checkbox.id)).toThrow(KernelError);
+    await expect(api.remove(checkbox.id)).rejects.toThrow(KernelError);
     expect(manager.deleteControl).not.toHaveBeenCalled();
 
     try {
-      api.remove(checkbox.id);
+      await api.remove(checkbox.id);
     } catch (error) {
       expectProtectedSheetError(error);
     }
   });
 
-  it('does not run protection checks or mutate controls from other sheets', async () => {
+  it('rejects controls from other sheets before protection checks or mutation', async () => {
     const { manager } = createManager();
     const ctx = createCtx({ canEditObjects: false, isProtected: true, editObjects: false });
     const api = new WorksheetFormControlsImpl(ctx as any, manager as any, 'sheet-1');
 
-    expect(api.update('other-sheet', { enabled: false })).toBeUndefined();
-    await expect(api.move('other-sheet', { row: 3, col: 4 })).resolves.toBeUndefined();
-    expect(api.resize('other-sheet', 32, 20)).toBeUndefined();
-    expect(api.remove('other-sheet')).toBe(false);
+    await expect(api.update('other-sheet', { enabled: false })).rejects.toMatchObject({
+      code: 'FORM_CONTROL_NOT_FOUND',
+    });
+    await expect(api.move('other-sheet', { row: 3, col: 4 })).rejects.toMatchObject({
+      code: 'FORM_CONTROL_NOT_FOUND',
+    });
+    await expect(api.resize('other-sheet', 32, 20)).rejects.toMatchObject({
+      code: 'FORM_CONTROL_NOT_FOUND',
+    });
+    await expect(api.remove('other-sheet')).rejects.toMatchObject({
+      code: 'FORM_CONTROL_NOT_FOUND',
+    });
 
     expect(ctx.computeBridge.canDoStructureOp).not.toHaveBeenCalled();
     expect(ctx.mirror.getSheetSettings).not.toHaveBeenCalled();

@@ -479,9 +479,10 @@ describe('WorksheetCommentsImpl — Comment Threading', () => {
     it('throws when parent comment not found', async () => {
       mockCtx.computeBridge.getComment.mockResolvedValue(null);
 
-      await expect(ws.addReply('nonexistent', 'text', 'author')).rejects.toThrow(
-        'Comment not found: nonexistent',
-      );
+      await expect(ws.addReply('nonexistent', 'text', 'author')).rejects.toMatchObject({
+        code: 'COMMENT_NOT_FOUND',
+        context: expect.objectContaining({ resourceId: 'nonexistent' }),
+      });
     });
   });
 
@@ -992,6 +993,77 @@ describe('WorksheetCommentsImpl — Comment Threading', () => {
 
       expect(result[0].resolved).toBeUndefined();
       expect(result[1].resolved).toBeUndefined();
+    });
+  });
+
+  describe('missing mutation targets', () => {
+    it('rejects missing comment IDs before mutation', async () => {
+      mockCtx.computeBridge.getComment.mockResolvedValue(null);
+
+      const actions = [
+        () => ws.update('missing-comment', { text: 'updated' }),
+        () => ws.remove('missing-comment'),
+        () => ws.addReply('missing-comment', 'reply', 'author'),
+        () => ws.convertNoteToThread('missing-comment'),
+      ];
+      for (const action of actions) {
+        await expect(action()).rejects.toMatchObject({
+          code: 'COMMENT_NOT_FOUND',
+          context: expect.objectContaining({ resourceId: 'missing-comment' }),
+        });
+      }
+
+      expect(mockCtx.computeBridge.updateComment).not.toHaveBeenCalled();
+      expect(mockCtx.computeBridge.deleteComment).not.toHaveBeenCalled();
+      expect(mockCtx.computeBridge.addCommentByPosition).not.toHaveBeenCalled();
+      expect(mockCtx.computeBridge.convertNoteToThread).not.toHaveBeenCalled();
+    });
+
+    it('rejects a missing comment thread before mutation', async () => {
+      mockCtx.computeBridge.getCommentThread.mockResolvedValue([]);
+
+      await expect(ws.resolveThread('missing-thread', true)).rejects.toMatchObject({
+        code: 'COMMENT_NOT_FOUND',
+        context: expect.objectContaining({
+          resourceType: 'Comment thread',
+          resourceId: 'missing-thread',
+        }),
+      });
+      expect(mockCtx.computeBridge.setThreadResolved).not.toHaveBeenCalled();
+    });
+
+    it('rejects missing note targets before mutation', async () => {
+      mockCtx.computeBridge.getCommentsForCellByPosition.mockResolvedValue([]);
+
+      const actions = [
+        () => ws.removeNote('Z99'),
+        () => ws.setNoteVisible('Z99', true),
+        () => ws.setNoteHeight('Z99', 80),
+        () => ws.setNoteWidth('Z99', 120),
+      ];
+      for (const action of actions) {
+        await expect(action()).rejects.toMatchObject({
+          code: 'COMMENT_NOT_FOUND',
+          context: expect.objectContaining({
+            resourceType: 'Note',
+            resourceId: 'Z99',
+          }),
+        });
+      }
+
+      expect(mockCtx.computeBridge.deleteComment).not.toHaveBeenCalled();
+      expect(mockCtx.computeBridge.setNoteVisible).not.toHaveBeenCalled();
+      expect(mockCtx.computeBridge.setNoteDimensions).not.toHaveBeenCalled();
+    });
+
+    it('rejects removing comments from a cell with no comments', async () => {
+      mockCtx.computeBridge.getCommentsForCellByPosition.mockResolvedValue([]);
+
+      await expect(ws.removeForCell('Z99')).rejects.toMatchObject({
+        code: 'COMMENT_NOT_FOUND',
+        context: expect.objectContaining({ resourceId: 'Z99' }),
+      });
+      expect(mockCtx.computeBridge.deleteCommentsForCellByPosition).not.toHaveBeenCalled();
     });
   });
 });

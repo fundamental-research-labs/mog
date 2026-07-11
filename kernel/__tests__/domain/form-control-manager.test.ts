@@ -431,7 +431,7 @@ describe('FormControlManager', () => {
         linkedCell: { row: 0, col: 1 },
       });
 
-      manager.updateControl(checkbox.id, { enabled: false, name: 'my-checkbox' });
+      await manager.updateControl(checkbox.id, { enabled: false, name: 'my-checkbox' });
 
       const updated = manager.getControl(checkbox.id)!;
       expect(updated.enabled).toBe(false);
@@ -459,8 +459,10 @@ describe('FormControlManager', () => {
       );
     });
 
-    it('should not fail for non-existent control', () => {
-      expect(() => manager.updateControl('non-existent', { enabled: false })).not.toThrow();
+    it('should not fail for non-existent control', async () => {
+      await expect(
+        manager.updateControl('non-existent', { enabled: false }),
+      ).resolves.toBeUndefined();
     });
   });
 
@@ -490,7 +492,7 @@ describe('FormControlManager', () => {
         label: 'Button',
       });
 
-      manager.resizeControl(button.id, 200, 50);
+      await manager.resizeControl(button.id, 200, 50);
 
       const resized = manager.getControl(button.id)!;
       expect(resized.width).toBe(200);
@@ -520,7 +522,7 @@ describe('FormControlManager', () => {
         linkedCell: { row: 0, col: 1 },
       });
 
-      manager.deleteControl(checkbox.id);
+      await manager.deleteControl(checkbox.id);
       expect(manager.getControl(checkbox.id)).toBeUndefined();
       expect(ctx.eventBus.emit).toHaveBeenLastCalledWith(
         expect.objectContaining({
@@ -533,8 +535,8 @@ describe('FormControlManager', () => {
       );
     });
 
-    it('should not fail for non-existent control', () => {
-      expect(() => manager.deleteControl('non-existent')).not.toThrow();
+    it('should not fail for non-existent control', async () => {
+      await expect(manager.deleteControl('non-existent')).resolves.toBeUndefined();
     });
   });
 

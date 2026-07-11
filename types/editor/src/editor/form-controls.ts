@@ -543,6 +543,9 @@ export interface IFormControlManager {
    */
   getAllControls(): FormControl[];
 
+  /** Ensure the synchronous control projection is hydrated for a worksheet. */
+  hydrateControlsForSheet(sheetId: SheetId): Promise<void>;
+
   // -------------------------------------------------------------------------
   // Update Operations
   // -------------------------------------------------------------------------
@@ -554,7 +557,7 @@ export interface IFormControlManager {
   updateControl(
     controlId: string,
     updates: Partial<Omit<FormControl, 'id' | 'type' | 'sheetId'>>,
-  ): void;
+  ): Promise<void>;
 
   /**
    * Move a control to a new anchor position.
@@ -567,7 +570,7 @@ export interface IFormControlManager {
   /**
    * Resize a control.
    */
-  resizeControl(controlId: string, width: number, height: number): void;
+  resizeControl(controlId: string, width: number, height: number): Promise<void>;
 
   // -------------------------------------------------------------------------
   // Delete Operations
@@ -576,7 +579,7 @@ export interface IFormControlManager {
   /**
    * Delete a form control.
    */
-  deleteControl(controlId: string): void;
+  deleteControl(controlId: string): Promise<void>;
 
   /**
    * Delete all form controls for a sheet.

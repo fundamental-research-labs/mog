@@ -59,6 +59,11 @@ export {
   type PivotStaleHandleContext,
   type PivotUnresolvedFieldReferencesContext,
 } from './pivot';
+export {
+  targetNotFoundError,
+  type TargetNotFoundCode,
+  type TargetNotFoundErrorOptions,
+} from './target-not-found';
 export { failResult, mapResult, okResult, unwrap, type OperationResult } from './operation';
 export { type KernelWarningCode } from './warning-codes';
 export { createWarning, type OperationWarning } from './warning';

@@ -56,6 +56,26 @@ pub(in crate::storage::engine) fn remove_hyperlink(
     row: u32,
     col: u32,
 ) -> Result<MutationResult, ComputeError> {
+    let has_hyperlink = stores
+        .grid_indexes
+        .get(sheet_id)
+        .and_then(|grid| {
+            hyperlinks::get_hyperlink(
+                stores.storage.doc(),
+                stores.storage.sheets(),
+                sheet_id,
+                grid,
+                row,
+                col,
+            )
+        })
+        .is_some();
+    if !has_hyperlink {
+        return Err(ComputeError::InvalidInput {
+            message: format!("hyperlink not found at row {row}, column {col}"),
+        });
+    }
+
     // Capture the (potential) marker CellId before removal; if the cell is
     // fully deleted below, its id will no longer resolve in the GridIndex.
     let pre_existing_id = stores

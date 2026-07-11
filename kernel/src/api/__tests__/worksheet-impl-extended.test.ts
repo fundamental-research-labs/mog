@@ -1175,6 +1175,22 @@ describe('WorksheetImpl Extended Methods', () => {
       );
     });
 
+    it('applyAutoExpansion rejects a missing table before detection or mutation', async () => {
+      ctx.computeBridge.getTableByName.mockResolvedValue(null);
+
+      await expect(ws.tables.applyAutoExpansion('MissingTable')).rejects.toMatchObject({
+        code: 'TABLE_NOT_FOUND',
+        context: expect.objectContaining({
+          resourceType: 'Table',
+          resourceId: 'MissingTable',
+          operation: 'tables.applyAutoExpansion',
+          sheetId: SHEET_ID,
+        }),
+      });
+      expect(ctx.computeBridge.detectAutoExpansion).not.toHaveBeenCalled();
+      expect(ctx.computeBridge.applyAutoExpansion).not.toHaveBeenCalled();
+    });
+
     it('resizeTable delegates to computeBridge.resizeTable', async () => {
       await ws.tables.resize('Table1', 'A1:E20');
 

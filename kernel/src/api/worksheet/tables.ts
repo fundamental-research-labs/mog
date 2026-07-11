@@ -46,7 +46,7 @@ import type { RangeCellData, TotalsFunction } from '../../bridges/compute/comput
 import type { CellRange } from '@mog-sdk/contracts/core';
 import type { DocumentContext } from '../../context';
 import * as Structures from '../../domain/sheets/structures';
-import { KernelError } from '../../errors';
+import { KernelError, targetNotFoundError } from '../../errors';
 import { toDisposable } from '@mog/spreadsheet-utils/disposable';
 import { normalizeCellValue } from '../internal/value-conversions';
 import { resolveCell, resolveRange, resolveRangeToA1 } from '../internal/address-resolver';
@@ -118,6 +118,18 @@ export class WorksheetTablesImpl implements WorksheetTables {
     this.ctx.writeGate.assertWritable(op);
   }
 
+  private _tableNotFound(tableName: string, operation?: string): KernelError {
+    return targetNotFoundError({
+      code: 'TABLE_NOT_FOUND',
+      resourceType: 'Table',
+      resourceId: tableName,
+      operation,
+      sheetId: this.sheetId,
+      path: ['tableName'],
+      suggestion: 'Use worksheet.tables.list() to resolve an existing table name.',
+    });
+  }
+
   private _tableMutationOptions(operationIdPrefix: string, groupId?: string): TableMutationOptions {
     return createTableMutationOptions(this.ctx, operationIdPrefix, this.sheetId, groupId);
   }
@@ -160,7 +172,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
 
   private tableIdForEvent(table: TableInfo | null | undefined, tableName: string): string {
     if (!table) {
-      throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
+      throw this._tableNotFound(tableName);
     }
     return table.id;
   }
@@ -409,7 +421,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
     nextMutationOptions?: () => TableMutationOptions,
   ): Promise<TableRemoveReceipt> {
     const table = await this.get(name);
-    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${name}`);
+    if (!table) throw this._tableNotFound(name, 'tables.remove');
     await assertUnprotectedTableDefinition(
       this.ctx,
       this.sheetId,
@@ -428,7 +440,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
 
   async convertToRange(name: string): Promise<TableConvertToRangeReceipt> {
     const table = await this.get(name);
-    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${name}`);
+    if (!table) throw this._tableNotFound(name, 'tables.convertToRange');
     await assertUnprotectedTableDefinition(
       this.ctx,
       this.sheetId,
@@ -488,7 +500,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
 
   async rename(oldName: string, newName: string): Promise<TableRenameReceipt> {
     const table = await this.get(oldName);
-    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${oldName}`);
+    if (!table) throw this._tableNotFound(oldName, 'tables.rename');
     if (oldName === newName) {
       return buildTableRenameReceipt({
         sheetId: this.sheetId,
@@ -528,7 +540,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
 
   async update(tableName: string, updates: TableUpdateOptions): Promise<TableUpdateReceipt> {
     const table = await this.get(tableName);
-    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
+    if (!table) throw this._tableNotFound(tableName, 'tables.update');
     const effectiveUpdates = effectiveTableUpdateOptions(table, updates);
     if (Object.keys(effectiveUpdates).length === 0) {
       return buildTableUpdateReceipt({
@@ -647,7 +659,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
     // Look up the table to find its range, then find the overlapping filter and clear it.
     const table = await this.get(tableName);
     if (!table) {
-      throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
+      throw this._tableNotFound(tableName, 'tables.clearFilters');
     }
 
     const parsed = table.range.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/i);
@@ -687,7 +699,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
   ): Promise<void> {
     const table = await this.get(tableName);
     if (!table) {
-      throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
+      throw this._tableNotFound(tableName, 'tables.applyIconFilter');
     }
 
     // Parse the table range to find the overlapping filter
@@ -751,7 +763,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
 
   async setStylePreset(tableName: string, preset: string): Promise<TableUpdateReceipt> {
     const table = await this.get(tableName);
-    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
+    if (!table) throw this._tableNotFound(tableName, 'tables.setStylePreset');
     const effectiveUpdates = effectiveTableUpdateOptions(table, { style: preset });
     if (Object.keys(effectiveUpdates).length === 0) {
       return buildTableUpdateReceipt({
@@ -781,7 +793,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
   async resize(name: string, newRange: string | CellRange): Promise<TableResizeReceipt> {
     const bounds = resolveRange(newRange);
     const table = await this.get(name);
-    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${name}`);
+    if (!table) throw this._tableNotFound(name, 'tables.resize');
     const rangeStr = resolveRangeToA1(bounds);
     if (rangeStr === table.range) {
       return buildTableResizeReceipt({
@@ -817,7 +829,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
     position?: number,
   ): Promise<TableAddColumnReceipt> {
     const table = await this.get(name);
-    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${name}`);
+    if (!table) throw this._tableNotFound(name, 'tables.addColumn');
     const bounds = parseCellRange(table.range);
     if (!bounds) throw new KernelError('COMPUTE_ERROR', `Invalid table range: ${table.range}`);
     const actualPosition = Math.max(
@@ -874,7 +886,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
     newColumnName: string,
   ): Promise<TableRenameColumnReceipt> {
     const table = await this.get(name);
-    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${name}`);
+    if (!table) throw this._tableNotFound(name, 'tables.renameColumn');
     const oldColumnName = table.columns[columnIndex]?.name;
     if (oldColumnName === undefined) {
       throw new KernelError(
@@ -918,7 +930,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
 
   async removeColumn(name: string, columnIndex: number): Promise<TableRemoveColumnReceipt> {
     const table = await this.get(name);
-    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${name}`);
+    if (!table) throw this._tableNotFound(name, 'tables.removeColumn');
     const bounds = parseCellRange(table.range);
     if (!bounds) throw new KernelError('COMPUTE_ERROR', `Invalid table range: ${table.range}`);
     if (columnIndex < 0 || columnIndex >= table.columns.length) {
@@ -983,7 +995,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
   /** @deprecated Use {@link setShowTotals} instead. */
   async toggleTotalsRow(name: string): Promise<TableUpdateReceipt> {
     const table = await this.get(name);
-    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${name}`);
+    if (!table) throw this._tableNotFound(name, 'tables.toggleTotalsRow');
     await assertUnprotectedTableDefinition(
       this.ctx,
       this.sheetId,
@@ -1008,7 +1020,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
   /** @deprecated Use {@link setShowHeaders} instead. */
   async toggleHeaderRow(name: string): Promise<TableUpdateReceipt> {
     const table = await this.get(name);
-    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${name}`);
+    if (!table) throw this._tableNotFound(name, 'tables.toggleHeaderRow');
     await assertUnprotectedTableDefinition(
       this.ctx,
       this.sheetId,
@@ -1031,6 +1043,9 @@ export class WorksheetTablesImpl implements WorksheetTables {
   }
 
   async applyAutoExpansion(tableName: string): Promise<TableAutoExpansionReceipt> {
+    const table = await this.get(tableName);
+    if (!table) throw this._tableNotFound(tableName, 'tables.applyAutoExpansion');
+
     const result = await applyAutoExpansionOperation(this.ctx, this.sheetId, tableName, {
       assertAllowed: (table) =>
         assertUnprotectedTableDefinition(
@@ -1065,7 +1080,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
   ): Promise<TableSetCalculatedColumnReceipt> {
     const table = await this.get(tableName);
     if (!table) {
-      throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
+      throw this._tableNotFound(tableName, 'tables.setCalculatedColumn');
     }
 
     const cells = [...getTableColumnDataCellsFromInfo(table, colIndex)].sort((a, b) =>
@@ -1097,7 +1112,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
   ): Promise<TableClearCalculatedColumnReceipt> {
     const table = await this.get(tableName);
     if (!table) {
-      throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
+      throw this._tableNotFound(tableName, 'tables.clearCalculatedColumn');
     }
 
     const cells = [...getTableColumnDataCellsFromInfo(table, colIndex)].sort((a, b) =>
@@ -1146,7 +1161,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
 
   async setHighlightFirstColumn(tableName: string, value: boolean): Promise<TableUpdateReceipt> {
     const table = await this.get(tableName);
-    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
+    if (!table) throw this._tableNotFound(tableName, 'tables.setHighlightFirstColumn');
     const updates = effectiveTableUpdateOptions(table, { emphasizeFirstColumn: value });
     if (Object.keys(updates).length === 0) {
       return buildTableUpdateReceipt({ sheetId: this.sheetId, table, updates, status: 'noOp' });
@@ -1164,7 +1179,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
 
   async setHighlightLastColumn(tableName: string, value: boolean): Promise<TableUpdateReceipt> {
     const table = await this.get(tableName);
-    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
+    if (!table) throw this._tableNotFound(tableName, 'tables.setHighlightLastColumn');
     const updates = effectiveTableUpdateOptions(table, { emphasizeLastColumn: value });
     if (Object.keys(updates).length === 0) {
       return buildTableUpdateReceipt({ sheetId: this.sheetId, table, updates, status: 'noOp' });
@@ -1182,7 +1197,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
 
   async setShowBandedColumns(tableName: string, value: boolean): Promise<TableUpdateReceipt> {
     const table = await this.get(tableName);
-    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
+    if (!table) throw this._tableNotFound(tableName, 'tables.setShowBandedColumns');
     const updates = effectiveTableUpdateOptions(table, { bandedColumns: value });
     if (Object.keys(updates).length === 0) {
       return buildTableUpdateReceipt({ sheetId: this.sheetId, table, updates, status: 'noOp' });
@@ -1200,7 +1215,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
 
   async setShowBandedRows(tableName: string, value: boolean): Promise<TableUpdateReceipt> {
     const table = await this.get(tableName);
-    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
+    if (!table) throw this._tableNotFound(tableName, 'tables.setShowBandedRows');
     const updates = effectiveTableUpdateOptions(table, { bandedRows: value });
     if (Object.keys(updates).length === 0) {
       return buildTableUpdateReceipt({ sheetId: this.sheetId, table, updates, status: 'noOp' });
@@ -1218,7 +1233,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
 
   async setShowFilterButton(tableName: string, value: boolean): Promise<TableUpdateReceipt> {
     const table = await this.get(tableName);
-    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
+    if (!table) throw this._tableNotFound(tableName, 'tables.setShowFilterButton');
     const updates = effectiveTableUpdateOptions(table, { showFilterButtons: value });
     if (Object.keys(updates).length === 0) {
       return buildTableUpdateReceipt({ sheetId: this.sheetId, table, updates, status: 'noOp' });
@@ -1250,7 +1265,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
     nextMutationOptions?: () => TableMutationOptions,
   ): Promise<TableUpdateReceipt> {
     const table = await this.get(tableName);
-    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
+    if (!table) throw this._tableNotFound(tableName, 'tables.setShowHeaders');
     const updates = effectiveTableUpdateOptions(table, { hasHeaderRow: visible });
     if (Object.keys(updates).length === 0) {
       return buildTableUpdateReceipt({ sheetId: this.sheetId, table, updates, status: 'noOp' });
@@ -1276,7 +1291,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
     nextMutationOptions?: () => TableMutationOptions,
   ): Promise<TableUpdateReceipt> {
     const table = await this.get(tableName);
-    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
+    if (!table) throw this._tableNotFound(tableName, 'tables.setShowTotals');
     const updates = effectiveTableUpdateOptions(table, { hasTotalsRow: visible });
     if (Object.keys(updates).length === 0) {
       return buildTableUpdateReceipt({ sheetId: this.sheetId, table, updates, status: 'noOp' });
@@ -1405,7 +1420,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
     values?: CellValue[],
   ): Promise<TableAddRowReceipt> {
     const before = await this.get(tableName);
-    if (!before) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
+    if (!before) throw this._tableNotFound(tableName, 'tables.addRow');
     const beforeRange = parseTableRange(before);
     const rowCount = await this.getRowCount(tableName);
     const insertedDataRowIndex = index == null ? rowCount : Math.max(0, Math.min(index, rowCount));
@@ -1521,7 +1536,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
     nextMutationOptions?: () => TableMutationOptions,
   ): Promise<TableDeleteRowReceipt> {
     const table = await this.get(tableName);
-    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
+    if (!table) throw this._tableNotFound(tableName, 'tables.deleteRow');
     const rowCount = await this.getRowCount(tableName);
     if (index < 0 || index >= rowCount) {
       throw new KernelError(
@@ -1593,7 +1608,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
     }
 
     const table = await this.get(tableName);
-    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
+    if (!table) throw this._tableNotFound(tableName, 'tables.deleteRows');
     await assertTableRowsDeleteAllowed(
       this.ctx,
       this.sheetId,
@@ -1615,7 +1630,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
 
   async getRowCount(tableName: string): Promise<number> {
     const table = await this.get(tableName);
-    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
+    if (!table) throw this._tableNotFound(tableName, 'tables.getRowCount');
     const parsed = parseCellRange(table.range);
     if (!parsed) return 0;
     const dataStartRow = table.hasHeaderRow ? parsed.startRow + 1 : parsed.startRow;
@@ -1625,7 +1640,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
 
   async getRowRange(tableName: string, index: number): Promise<string> {
     const table = await this.get(tableName);
-    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
+    if (!table) throw this._tableNotFound(tableName, 'tables.getRowRange');
     const parsed = parseCellRange(table.range);
     if (!parsed) throw new KernelError('COMPUTE_ERROR', `Invalid table range: ${table.range}`);
     const dataStartRow = table.hasHeaderRow ? parsed.startRow + 1 : parsed.startRow;
@@ -1637,7 +1652,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
 
   async getRowValues(tableName: string, index: number): Promise<CellValue[]> {
     const table = await this.get(tableName);
-    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
+    if (!table) throw this._tableNotFound(tableName, 'tables.getRowValues');
     const parsed = parseCellRange(table.range);
     if (!parsed) return [];
     const dataStartRow = table.hasHeaderRow ? parsed.startRow + 1 : parsed.startRow;
@@ -1647,7 +1662,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
 
   async setRowValues(tableName: string, index: number, values: CellValue[]): Promise<void> {
     const table = await this.get(tableName);
-    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
+    if (!table) throw this._tableNotFound(tableName, 'tables.setRowValues');
     const parsed = parseCellRange(table.range);
     if (!parsed) return;
     const dataStartRow = table.hasHeaderRow ? parsed.startRow + 1 : parsed.startRow;
@@ -1727,7 +1742,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
 
   async getColumnValues(tableName: string, columnIndex: number): Promise<CellValue[]> {
     const table = await this.get(tableName);
-    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
+    if (!table) throw this._tableNotFound(tableName, 'tables.getColumnValues');
     const parsed = parseCellRange(table.range);
     if (!parsed) return [];
     const col = parsed.startCol + columnIndex;
@@ -1744,7 +1759,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
     values: CellValue[],
   ): Promise<void> {
     const table = await this.get(tableName);
-    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
+    if (!table) throw this._tableNotFound(tableName, 'tables.setColumnValues');
     const parsed = parseCellRange(table.range);
     if (!parsed) return;
     const col = parsed.startCol + columnIndex;
@@ -1781,7 +1796,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
     method?: unknown,
   ): Promise<void> {
     const table = await this.get(tableName);
-    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
+    if (!table) throw this._tableNotFound(tableName, 'tables.sort.apply');
     await assertTableSortAllowed(this.ctx, this.sheetId, 'tables.sort.apply', table);
     const parsed = parseCellRange(table.range);
     if (!parsed) return;
@@ -1881,7 +1896,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
           `Call sortApply() first to establish the sort specification.`,
       );
     const table = await this.get(tableName);
-    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
+    if (!table) throw this._tableNotFound(tableName, 'tables.sort.reapply');
     await assertTableSortAllowed(this.ctx, this.sheetId, 'tables.sort.reapply', table);
     await this.sortApply(tableName, sortSpec.fields, sortSpec.matchCase);
   }

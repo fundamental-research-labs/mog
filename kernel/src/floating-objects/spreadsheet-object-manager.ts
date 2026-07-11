@@ -318,16 +318,12 @@ export class SpreadsheetObjectManager implements IFloatingObjectManager {
   async groupObjects(docOrIds: string | string[], objectIds?: string[]): Promise<string | null> {
     const ids = objectIds !== undefined ? objectIds : (docOrIds as string[]);
     const cId = objectIds !== undefined ? (docOrIds as string) : '';
-    try {
-      const groupId = await coreGroupObjects(
-        { store: this.objectStore, groupStore: this.groupStore },
-        ids,
-      );
-      emitGroupCreated({ eventBus: this.eventBus }, { containerId: cId, groupId, memberIds: ids });
-      return groupId;
-    } catch {
-      return null;
-    }
+    const groupId = await coreGroupObjects(
+      { store: this.objectStore, groupStore: this.groupStore },
+      ids,
+    );
+    emitGroupCreated({ eventBus: this.eventBus }, { containerId: cId, groupId, memberIds: ids });
+    return groupId;
   }
 
   /** Ungroup a group. */

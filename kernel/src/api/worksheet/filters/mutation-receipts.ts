@@ -15,6 +15,7 @@ import type {
 } from '../../../bridges/compute/compute-types.gen';
 import { columnFilterCriteriaToCompute } from '../../../bridges/compute/compute-wire-converters';
 import type { DocumentContext } from '../../../context';
+import { targetNotFoundError } from '../../../errors';
 import { toA1 } from '../../internal/utils';
 import { selectDefaultFilter } from '../filter-selection';
 import { resolveFilterRange, type ResolvedFilterRange } from '../filter-range-resolution';
@@ -240,15 +241,62 @@ export async function getFilterById(
   return filters.find((filter) => filter.id === filterId) ?? null;
 }
 
+function filterTargetNotFound(sheetId: SheetId, filterId: string, operation: string) {
+  return targetNotFoundError({
+    code: 'FILTER_NOT_FOUND',
+    resourceType: 'Filter',
+    resourceId: filterId,
+    operation,
+    sheetId: String(sheetId),
+    path: ['filterId'],
+    suggestion: 'Use worksheet.filters.list() to resolve a live filter ID.',
+  });
+}
+
+export async function requireFilterById(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+  filterId: string,
+  operation: string,
+): Promise<FilterState> {
+  const filter = await getFilterById(ctx, sheetId, filterId);
+  if (!filter) throw filterTargetNotFound(sheetId, filterId, operation);
+  return filter;
+}
+
+/**
+ * Native filter mutations historically emitted an untyped change even when a
+ * target disappeared between the kernel preflight and the transactional write.
+ * A live filter always contributes its kind, so reject that stale-target
+ * sentinel instead of exposing a misleading applied receipt.
+ */
+export function assertFilterMutationTargetResult(
+  result: MutationResult | null | undefined,
+  sheetId: SheetId,
+  filterId: string,
+  operation: string,
+): void {
+  // Legacy/test bridges may omit mutation metadata; the production bridge
+  // always returns MutationResult and is the race boundary this guard covers.
+  if (!result) return;
+  const change = filterChangeForReceipt(result, sheetId, filterId);
+  if (change && !change.filterKind) {
+    throw filterTargetNotFound(sheetId, filterId, operation);
+  }
+}
+
 export async function resolveFilterForMutation(
   ctx: DocumentContext,
   sheetId: SheetId,
   filterId?: string,
+  operation = 'filters.mutate',
 ): Promise<FilterState | null> {
   const filters = await ctx.computeBridge.getFiltersInSheet(sheetId);
-  return filterId
+  const filter = filterId
     ? (filters.find((filter) => filter.id === filterId) ?? null)
     : selectDefaultFilter(filters);
+  if (!filter && filterId) throw filterTargetNotFound(sheetId, filterId, operation);
+  return filter;
 }
 
 export async function resolveHeaderCellIdForFilterColumn(
@@ -294,7 +342,7 @@ export async function setColumnFilterWithReceipt(
   filterId?: string,
 ): Promise<FilterMutationReceipt> {
   await ctx.awaitMaterialized?.('allSheets');
-  const filter = await resolveFilterForMutation(ctx, sheetId, filterId);
+  const filter = await resolveFilterForMutation(ctx, sheetId, filterId, 'filters.setColumnFilter');
   if (!filter) {
     return buildFilterMutationReceipt({
       kind: 'filter.columnFilter.set',
@@ -312,6 +360,7 @@ export async function setColumnFilterWithReceipt(
     col,
     columnFilterCriteriaToCompute(criteria),
   );
+  assertFilterMutationTargetResult(result, sheetId, filter.id, 'filters.setColumnFilter');
   return buildFilterMutationReceipt({
     kind: 'filter.columnFilter.set',
     sheetId,
@@ -331,7 +380,12 @@ export async function applyDynamicFilterWithReceipt(
   filterId?: string,
 ): Promise<FilterMutationReceipt> {
   await ctx.awaitMaterialized?.('allSheets');
-  const filter = await resolveFilterForMutation(ctx, sheetId, filterId);
+  const filter = await resolveFilterForMutation(
+    ctx,
+    sheetId,
+    filterId,
+    'filters.applyDynamicFilter',
+  );
   if (!filter) {
     return buildFilterMutationReceipt({
       kind: 'filter.dynamicFilter.apply',
@@ -369,6 +423,7 @@ export async function applyDynamicFilterWithReceipt(
     col,
     columnFilterCriteriaToCompute(criteria),
   );
+  assertFilterMutationTargetResult(result, sheetId, filter.id, 'filters.applyDynamicFilter');
   return buildFilterMutationReceipt({
     kind: 'filter.dynamicFilter.apply',
     sheetId,
@@ -387,7 +442,12 @@ export async function clearColumnFilterWithReceipt(
   filterId?: string,
 ): Promise<FilterMutationReceipt> {
   await ctx.awaitMaterialized?.('allSheets');
-  const filter = await resolveFilterForMutation(ctx, sheetId, filterId);
+  const filter = await resolveFilterForMutation(
+    ctx,
+    sheetId,
+    filterId,
+    'filters.clearColumnFilter',
+  );
   if (!filter) {
     return buildFilterMutationReceipt({
       kind: 'filter.columnFilter.clear',
@@ -411,6 +471,7 @@ export async function clearColumnFilterWithReceipt(
   }
   await assertFilterMutationAllowed(ctx, sheetId, 'filters.clearColumnFilter', filter.id);
   const result = await ctx.computeBridge.clearColumnFilter(sheetId, filter.id, col);
+  assertFilterMutationTargetResult(result, sheetId, filter.id, 'filters.clearColumnFilter');
   return buildFilterMutationReceipt({
     kind: 'filter.columnFilter.clear',
     sheetId,
@@ -428,7 +489,7 @@ export async function clearAllCriteriaWithReceipt(
   filterId: string,
 ): Promise<FilterMutationReceipt> {
   await ctx.awaitMaterialized?.('allSheets');
-  const filter = await resolveFilterForMutation(ctx, sheetId, filterId);
+  const filter = await resolveFilterForMutation(ctx, sheetId, filterId, 'filters.clearAllCriteria');
   if (!filter) {
     return buildFilterMutationReceipt({
       kind: 'filter.criteria.clearAll',
@@ -450,6 +511,7 @@ export async function clearAllCriteriaWithReceipt(
   }
   await assertFilterMutationAllowed(ctx, sheetId, 'filters.clearAllColumnFilters', filterId);
   const result = await ctx.computeBridge.clearAllColumnFilters(sheetId, filterId);
+  assertFilterMutationTargetResult(result, sheetId, filterId, 'filters.clearAllCriteria');
   return buildFilterMutationReceipt({
     kind: 'filter.criteria.clearAll',
     sheetId,
@@ -466,7 +528,7 @@ export async function applyFilterWithReceipt(
   filterId: string,
 ): Promise<FilterMutationReceipt> {
   await ctx.awaitMaterialized?.('allSheets');
-  const filter = await resolveFilterForMutation(ctx, sheetId, filterId);
+  const filter = await resolveFilterForMutation(ctx, sheetId, filterId, 'filters.apply');
   if (!filter) {
     return buildFilterMutationReceipt({
       kind: 'filter.apply',
@@ -478,6 +540,7 @@ export async function applyFilterWithReceipt(
   await assertFilterMutationAllowed(ctx, sheetId, 'filters.apply', filterId);
   const range = await resolveFilterRange(ctx, sheetId, filter);
   const result = await ctx.computeBridge.applyFilter(sheetId, filterId);
+  assertFilterMutationTargetResult(result, sheetId, filterId, 'filters.apply');
   return buildFilterMutationReceipt({
     kind: 'filter.apply',
     sheetId,
@@ -494,7 +557,7 @@ export async function reapplyFilterWithReceipt(
   filterId: string,
 ): Promise<FilterMutationReceipt> {
   await ctx.awaitMaterialized?.('allSheets');
-  const filter = await resolveFilterForMutation(ctx, sheetId, filterId);
+  const filter = await resolveFilterForMutation(ctx, sheetId, filterId, 'filters.reapply');
   if (!filter) {
     return buildFilterMutationReceipt({
       kind: 'filter.reapply',
@@ -506,6 +569,7 @@ export async function reapplyFilterWithReceipt(
   await assertFilterMutationAllowed(ctx, sheetId, 'filters.reapply', filterId);
   const range = await resolveFilterRange(ctx, sheetId, filter);
   const result = await ctx.computeBridge.reapplyFilter(sheetId, filterId);
+  assertFilterMutationTargetResult(result, sheetId, filterId, 'filters.reapply');
   return buildFilterMutationReceipt({
     kind: 'filter.reapply',
     sheetId,

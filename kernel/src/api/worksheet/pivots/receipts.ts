@@ -17,6 +17,7 @@ import type {
   PivotTableResult,
 } from '@mog-sdk/contracts/pivot';
 import type { DocumentContext } from '../../../context';
+import { createPivotNotFoundError, isKernelError } from '../../../errors';
 import { rangeToA1 } from '../../internal/utils';
 import { toWorksheetRangeOrNull } from '../public-ranges';
 import { findPivotByName, resolvePivotName } from '../../../domain/pivots/lookup';
@@ -55,6 +56,10 @@ type PivotReceipt<K extends PivotWorksheetMutationReceipt['kind']> = Extract<
   { kind: K }
 >;
 
+function rethrowPivotTargetNotFound(error: unknown): void {
+  if (isKernelError(error) && error.code === 'PIVOT_NOT_FOUND') throw error;
+}
+
 export async function runPivotMutationReceipt<
   K extends PivotWorksheetMutationReceipt['kind'],
 >(input: {
@@ -67,13 +72,12 @@ export async function runPivotMutationReceipt<
   noOp?: (currentConfig?: DataPivotTableConfig) => string | null;
   extra?: Record<string, unknown>;
 }): Promise<PivotReceipt<K>> {
-  let currentConfig: DataPivotTableConfig | undefined;
-  try {
-    currentConfig = await findPivotByName(input.ctx, input.sheetId, input.pivotName);
-  } catch {
-    currentConfig = undefined;
-  }
-  const pivotId = currentConfig ? pivotIdFor(currentConfig) : undefined;
+  const { config: currentConfig, pivotId } = await resolvePivotName(
+    input.ctx,
+    input.sheetId,
+    input.pivotName,
+    input.kind,
+  );
   const noOpReason = input.noOp?.(currentConfig);
   if (noOpReason) {
     return buildPivotMutationReceipt({
@@ -92,6 +96,7 @@ export async function runPivotMutationReceipt<
   try {
     kernelReceipt = await input.mutate(currentConfig);
   } catch (error) {
+    rethrowPivotTargetNotFound(error);
     return buildPivotMutationReceipt({
       kind: input.kind,
       sheetId: input.sheetId,
@@ -129,25 +134,12 @@ export async function applyPivotRenameReceipt(input: {
   newName: string;
   cachePivot?: CachePivot;
 }): Promise<PivotReceipt<'pivot.rename'>> {
-  let pivotId: string;
-  let config: DataPivotTableConfig;
-  try {
-    ({ pivotId, config } = await resolvePivotName(
-      input.ctx,
-      input.sheetId,
-      input.pivotName,
-      'rename',
-    ));
-  } catch (error) {
-    return buildPivotMutationReceipt({
-      kind: 'pivot.rename',
-      sheetId: input.sheetId,
-      pivotName: input.pivotName,
-      status: 'failed',
-      error,
-      extra: { oldName: input.pivotName, newName: input.newName },
-    }) as PivotReceipt<'pivot.rename'>;
-  }
+  const { pivotId, config } = await resolvePivotName(
+    input.ctx,
+    input.sheetId,
+    input.pivotName,
+    'rename',
+  );
   if ((config.name ?? pivotId) === input.newName) {
     return buildPivotMutationReceipt({
       kind: 'pivot.rename',
@@ -170,6 +162,7 @@ export async function applyPivotRenameReceipt(input: {
       { reason: 'renamed', refreshPolicy: 'refreshAndMaterialize' },
     );
   } catch (caught) {
+    rethrowPivotTargetNotFound(caught);
     error = caught;
   }
   if (updated) input.cachePivot?.(updated);
@@ -192,38 +185,41 @@ export async function applyPivotRemoveReceipt(input: {
   pivotName: string;
   markPivotDeleted?: MarkPivotDeleted;
 }): Promise<PivotRemoveReceipt> {
-  const pivot = await findPivotByName(input.ctx, input.sheetId, input.pivotName);
-  if (!pivot?.id) {
-    return buildPivotRemoveReceipt({
-      sheetId: input.sheetId,
-      pivotName: input.pivotName,
-      removedConfig: pivot ?? null,
-      status: 'failed',
-      error: new Error(`Pivot table "${input.pivotName}" not found`),
-    });
-  }
+  const { pivotId, config: pivot } = await resolvePivotName(
+    input.ctx,
+    input.sheetId,
+    input.pivotName,
+    'remove',
+  );
   let deleted = false;
   let error: unknown;
   try {
-    deleted = await input.ctx.pivot.deletePivot(input.sheetId, pivot.id);
+    deleted = await input.ctx.pivot.deletePivot(input.sheetId, pivotId);
   } catch (caught) {
+    rethrowPivotTargetNotFound(caught);
     error = caught;
   }
   if (!deleted) {
+    if (!error) {
+      throw createPivotNotFoundError({
+        pivotName: input.pivotName,
+        sheetId: String(input.sheetId),
+      });
+    }
     return buildPivotRemoveReceipt({
       sheetId: input.sheetId,
       pivotName: input.pivotName,
-      pivotId: pivot.id,
+      pivotId,
       removedConfig: pivot,
       status: 'failed',
-      error: error ?? new Error('Pivot bridge delete returned false'),
+      error,
     });
   }
-  input.markPivotDeleted?.(pivot.id);
+  input.markPivotDeleted?.(pivotId);
   return buildPivotRemoveReceipt({
     sheetId: input.sheetId,
     pivotName: input.pivotName,
-    pivotId: pivot.id,
+    pivotId,
     removedConfig: pivot,
     status: 'applied',
   });

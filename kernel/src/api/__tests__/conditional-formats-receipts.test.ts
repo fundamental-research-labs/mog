@@ -267,4 +267,78 @@ describe('WorksheetConditionalFormattingImpl — mutation receipts', () => {
       }),
     ]);
   });
+
+  describe('missing mutation targets', () => {
+    const replacementRule = {
+      type: 'formula' as const,
+      formula: '=A1>0',
+      style: {},
+    };
+
+    it('rejects missing conditional-format IDs before mutation', async () => {
+      mockFormatReads(bridge, []);
+
+      const actions = [
+        () => cf.update('missing-format', { stopIfTrue: true }),
+        () => cf.remove('missing-format'),
+        () => cf.removeRule('missing-format', 'rule-1'),
+        () => cf.clearRuleStyle('missing-format', 'rule-1'),
+        () => cf.changeRuleType('missing-format', 'rule-1', replacementRule),
+      ];
+      for (const action of actions) {
+        await expect(action()).rejects.toMatchObject({
+          code: 'CONDITIONAL_FORMAT_NOT_FOUND',
+          context: expect.objectContaining({ resourceId: 'missing-format' }),
+        });
+      }
+
+      expect(bridge.updateCfRule).not.toHaveBeenCalled();
+      expect(bridge.updateCfRanges).not.toHaveBeenCalled();
+      expect(bridge.deleteCfRule).not.toHaveBeenCalled();
+      expect(bridge.deleteRuleFromCf).not.toHaveBeenCalled();
+    });
+
+    it('rejects missing rule IDs before mutation', async () => {
+      mockFormatReads(bridge, [makeFormat()]);
+
+      const actions = [
+        () => cf.removeRule('fmt-1', 'missing-rule'),
+        () => cf.clearRuleStyle('fmt-1', 'missing-rule'),
+        () => cf.changeRuleType('fmt-1', 'missing-rule', replacementRule),
+      ];
+      for (const action of actions) {
+        await expect(action()).rejects.toMatchObject({
+          code: 'CONDITIONAL_FORMAT_RULE_NOT_FOUND',
+          context: expect.objectContaining({
+            resourceId: 'missing-rule',
+            formatId: 'fmt-1',
+          }),
+        });
+      }
+
+      expect(bridge.updateCfRule).not.toHaveBeenCalled();
+      expect(bridge.deleteRuleFromCf).not.toHaveBeenCalled();
+    });
+
+    it('rejects both wholly missing and partially stale reorder targets', async () => {
+      mockFormatReads(bridge, [makeFormat()]);
+
+      await expect(cf.reorder(['missing-format'])).rejects.toMatchObject({
+        code: 'CONDITIONAL_FORMAT_NOT_FOUND',
+        context: expect.objectContaining({
+          resourceId: 'missing-format',
+          missingFormatIds: ['missing-format'],
+        }),
+      });
+      await expect(cf.reorder(['fmt-1', 'stale-format'])).rejects.toMatchObject({
+        code: 'CONDITIONAL_FORMAT_NOT_FOUND',
+        context: expect.objectContaining({
+          resourceId: 'stale-format',
+          missingFormatIds: ['stale-format'],
+        }),
+      });
+
+      expect(bridge.reorderCfRules).not.toHaveBeenCalled();
+    });
+  });
 });

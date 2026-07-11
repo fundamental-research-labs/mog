@@ -18,7 +18,7 @@ import type {
 
 import type { Sparkline as BridgeSparkline } from '../../bridges/compute/compute-types.gen';
 import type { DocumentContext } from '../../context';
-import { KernelError } from '../../errors';
+import { KernelError, targetNotFoundError } from '../../errors';
 import { resolveCell, resolveRange } from '../internal/address-resolver';
 
 // =============================================================================
@@ -177,22 +177,47 @@ export class WorksheetSparklinesImpl implements WorksheetSparklines {
     return this.ctx.computeBridge.getSparklineGroup(this.sheetId, groupId);
   }
 
+  private async requireSparkline(sparklineId: string, operation: string): Promise<Sparkline> {
+    const sparkline = await this.get(sparklineId);
+    if (!sparkline) {
+      throw targetNotFoundError({
+        code: 'SPARKLINE_NOT_FOUND',
+        resourceType: 'sparkline',
+        resourceId: sparklineId,
+        operation,
+        sheetId: this.sheetId,
+        path: ['sparklineId'],
+      });
+    }
+    return sparkline;
+  }
+
+  private async requireGroup(groupId: string, operation: string): Promise<SparklineGroup> {
+    const group = await this.getGroup(groupId);
+    if (!group) {
+      throw targetNotFoundError({
+        code: 'SPARKLINE_GROUP_NOT_FOUND',
+        resourceType: 'sparklineGroup',
+        resourceId: groupId,
+        operation,
+        sheetId: this.sheetId,
+        path: ['groupId'],
+      });
+    }
+    return group;
+  }
+
   async listGroups(): Promise<SparklineGroup[]> {
     return this.ctx.computeBridge.getSparklineGroupsInSheet(this.sheetId);
   }
 
   async update(sparklineId: string, updates: Partial<Sparkline>): Promise<void> {
+    await this.requireSparkline(sparklineId, 'sparklines.update');
     await this.ctx.computeBridge.updateSparkline(this.sheetId, sparklineId, updates);
   }
 
   async updateGroup(groupId: string, updates: Partial<SparklineGroup>): Promise<void> {
-    const group = await this.getGroup(groupId);
-    if (!group) {
-      throw new KernelError(
-        'OPERATION_FAILED',
-        `Operation "updateSparklineGroup" failed: Group "${groupId}" not found`,
-      );
-    }
+    const group = await this.requireGroup(groupId, 'sparklines.updateGroup');
 
     const updatedGroup: SparklineGroup = {
       ...group,
@@ -216,10 +241,12 @@ export class WorksheetSparklinesImpl implements WorksheetSparklines {
   }
 
   async remove(sparklineId: string): Promise<void> {
+    await this.requireSparkline(sparklineId, 'sparklines.remove');
     await this.ctx.computeBridge.deleteSparkline(this.sheetId, sparklineId);
   }
 
   async removeGroup(groupId: string): Promise<void> {
+    await this.requireGroup(groupId, 'sparklines.removeGroup');
     await this.ctx.computeBridge.deleteSparklineGroup(this.sheetId, groupId, true);
   }
 
@@ -244,37 +271,37 @@ export class WorksheetSparklinesImpl implements WorksheetSparklines {
   }
 
   async addToGroup(sparklineId: string, groupId: string): Promise<void> {
+    const [sparkline, group] = await Promise.all([
+      this.requireSparkline(sparklineId, 'sparklines.addToGroup'),
+      this.requireGroup(groupId, 'sparklines.addToGroup'),
+    ]);
+    if (sparkline.groupId === groupId && group.sparklineIds.includes(sparklineId)) return;
+
     await this.ctx.computeBridge.updateSparkline(this.sheetId, sparklineId, { groupId });
-    // Also update the group's sparklineIds in the store
-    const group = await this.ctx.computeBridge.getSparklineGroup(this.sheetId, groupId);
-    if (group && !group.sparklineIds.includes(sparklineId)) {
-      group.sparklineIds.push(sparklineId);
-      await this.ctx.computeBridge.addSparklineGroup(this.sheetId, group);
+    if (!group.sparklineIds.includes(sparklineId)) {
+      await this.ctx.computeBridge.addSparklineGroup(this.sheetId, {
+        ...group,
+        sparklineIds: [...group.sparklineIds, sparklineId],
+      });
     }
   }
 
   async removeFromGroup(sparklineId: string): Promise<void> {
-    // Find the sparkline's current group before clearing it
-    const sparkline = await this.ctx.computeBridge.getSparkline(this.sheetId, sparklineId);
+    const sparkline = await this.requireSparkline(sparklineId, 'sparklines.removeFromGroup');
+    const group = sparkline.groupId
+      ? await this.requireGroup(sparkline.groupId, 'sparklines.removeFromGroup')
+      : null;
     await this.ctx.computeBridge.updateSparkline(this.sheetId, sparklineId, { groupId: null });
-    // Also update the group's sparklineIds in the store
-    if (sparkline?.groupId) {
-      const group = await this.ctx.computeBridge.getSparklineGroup(this.sheetId, sparkline.groupId);
-      if (group) {
-        group.sparklineIds = group.sparklineIds.filter((id) => id !== sparklineId);
-        await this.ctx.computeBridge.addSparklineGroup(this.sheetId, group);
-      }
+    if (group) {
+      await this.ctx.computeBridge.addSparklineGroup(this.sheetId, {
+        ...group,
+        sparklineIds: group.sparklineIds.filter((id) => id !== sparklineId),
+      });
     }
   }
 
   async ungroupAll(groupId: string): Promise<string[]> {
-    const group = await this.getGroup(groupId);
-    if (!group) {
-      throw new KernelError(
-        'OPERATION_FAILED',
-        `Operation "ungroupSparklines" failed: Group "${groupId}" not found`,
-      );
-    }
+    const group = await this.requireGroup(groupId, 'sparklines.ungroupAll');
 
     await Promise.all(
       group.sparklineIds.map((sparklineId) =>

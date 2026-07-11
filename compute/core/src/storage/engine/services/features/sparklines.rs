@@ -49,7 +49,9 @@ pub(in crate::storage::engine) fn update_sparkline(
         updates,
     );
     if !updated {
-        return Ok(MutationResult::empty());
+        return Err(ComputeError::InvalidInput {
+            message: format!("sparkline '{sparkline_id}' not found"),
+        });
     }
 
     let after = sparklines::get_sparkline(
@@ -121,8 +123,13 @@ pub(in crate::storage::engine) fn delete_sparkline(
         sheet_id,
         sparkline_id,
     );
+    if !deleted {
+        return Err(ComputeError::InvalidInput {
+            message: format!("sparkline '{sparkline_id}' not found"),
+        });
+    }
     let mut result = MutationResult::empty();
-    if deleted && let Some(old) = before {
+    if let Some(old) = before {
         push_sparkline_change(
             stores,
             &mut result,
@@ -267,23 +274,26 @@ pub(in crate::storage::engine) fn delete_sparkline_group(
         group_id,
         delete_sparklines,
     );
+    if !deleted {
+        return Err(ComputeError::InvalidInput {
+            message: format!("sparkline group '{group_id}' not found"),
+        });
+    }
     let mut result = MutationResult::empty();
-    if deleted {
-        let kind = if delete_sparklines {
-            ChangeKind::Removed
-        } else {
-            ChangeKind::Set
-        };
-        for sparkline in before_sparklines {
-            push_sparkline_change(
-                stores,
-                &mut result,
-                sheet_id,
-                sparkline.cell.row,
-                sparkline.cell.col,
-                kind,
-            );
-        }
+    let kind = if delete_sparklines {
+        ChangeKind::Removed
+    } else {
+        ChangeKind::Set
+    };
+    for sparkline in before_sparklines {
+        push_sparkline_change(
+            stores,
+            &mut result,
+            sheet_id,
+            sparkline.cell.row,
+            sparkline.cell.col,
+            kind,
+        );
     }
     Ok(result)
 }

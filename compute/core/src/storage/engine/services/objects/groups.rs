@@ -63,12 +63,17 @@ pub(in crate::storage::engine) fn delete_floating_object_group(
     sheet_id: &SheetId,
     group_id: &str,
 ) -> Result<MutationResult, ComputeError> {
-    floating_objects::delete_floating_object_group(
+    let deleted = floating_objects::delete_floating_object_group(
         stores.storage.doc(),
         stores.storage.sheets(),
         sheet_id,
         group_id,
     );
+    if !deleted {
+        return Err(ComputeError::InvalidInput {
+            message: format!("floating object group '{group_id}' not found"),
+        });
+    }
     let mut result = MutationResult::empty();
     result
         .floating_object_group_changes
@@ -91,6 +96,36 @@ pub(in crate::storage::engine) fn create_floating_object_group(
     sheet_id: &SheetId,
     config: &serde_json::Value,
 ) -> Result<MutationResult, ComputeError> {
+    let member_ids = config
+        .get("children")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| ComputeError::InvalidInput {
+            message: "floating object group requires a children array".to_string(),
+        })?;
+    if member_ids.len() < 2 {
+        return Err(ComputeError::InvalidInput {
+            message: "floating object group requires at least two members".to_string(),
+        });
+    }
+    for member_id in member_ids {
+        let member_id = member_id
+            .as_str()
+            .ok_or_else(|| ComputeError::InvalidInput {
+                message: "floating object group member IDs must be strings".to_string(),
+            })?;
+        if floating_objects::get_floating_object_typed(
+            stores.storage.doc(),
+            stores.storage.sheets(),
+            sheet_id,
+            member_id,
+        )
+        .is_none()
+        {
+            return Err(ComputeError::InvalidInput {
+                message: format!("floating object '{member_id}' not found"),
+            });
+        }
+    }
     let group_id = floating_objects::create_floating_object_group(
         stores.storage.doc(),
         stores.storage.sheets(),

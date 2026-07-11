@@ -140,6 +140,7 @@ describe('FilterOps resolved ranges', () => {
 
   it('waits for all sheets before mutating filter sort state', async () => {
     const ctx = createMockCtx();
+    ctx.computeBridge.getFiltersInSheet.mockResolvedValue([tableBackedFilter()]);
 
     const result = await FilterOps.setFilterSortState(ctx, SHEET_ID, 'filter-1', {
       columnCellId: 'header-a',
@@ -217,7 +218,7 @@ describe('FilterOps resolved ranges', () => {
     );
   });
 
-  it('does not call filter bridge mutations for no-op missing filters', async () => {
+  it('returns FILTER_NOT_FOUND without calling the bridge for missing filters', async () => {
     const ctx = createMockCtx();
 
     const result = await FilterOps.setColumnFilter(ctx, SHEET_ID, 'missing-filter', 0, {
@@ -225,7 +226,10 @@ describe('FilterOps resolved ranges', () => {
       values: ['East'],
     });
 
-    expect(result.success).toBe(true);
+    expect(result).toMatchObject({
+      success: false,
+      error: { code: 'FILTER_NOT_FOUND' },
+    });
     expect(ctx.computeBridge.setColumnFilter).not.toHaveBeenCalled();
   });
 });

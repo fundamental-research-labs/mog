@@ -36,7 +36,7 @@ import type {
 import type { TextWarpPreset } from '@mog-sdk/contracts/text-effects';
 
 import type { DocumentContext } from '../../context';
-import { KernelError } from '../../errors';
+import { KernelError, targetNotFoundError } from '../../errors';
 import type { SpreadsheetObjectManager } from '../../floating-objects';
 import { toFloatingObject } from '../../bridges/compute/floating-object-mapper';
 import * as DrawingOps from './operations/drawing-operations';
@@ -203,7 +203,27 @@ export class WorksheetObjectsImpl implements WorksheetObjects {
   // ===========================================================================
 
   async group(ids: string[]): Promise<string> {
-    return await FloatingObjectOps.groupFloatingObjects(this.ctx, this.sheetId, ids);
+    // Receiver-scoped preflight prevents cross-sheet discovery and ensures a
+    // stale member is reported before the grouping domain performs arity checks.
+    await Promise.all(
+      ids.map(async (id) => {
+        if (await this.getFullObject(id)) return;
+        throw targetNotFoundError({
+          code: 'OBJ_NOT_FOUND',
+          resourceType: 'floatingObject',
+          resourceId: id,
+          operation: 'objects.group',
+          sheetId: this.sheetId,
+          path: ['ids'],
+          message: `Floating object "${id}" not found`,
+        });
+      }),
+    );
+    const groupId = await this.mgr.groupObjects(this.sheetId, ids);
+    if (!groupId) {
+      throw new KernelError('OPERATION_FAILED', 'Failed to group floating objects');
+    }
+    return groupId;
   }
 
   async ungroup(groupId: string): Promise<void> {

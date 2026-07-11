@@ -257,7 +257,10 @@ export class ComputeBridgeGroupStore implements IGroupStore<CanvasObjectGroup> {
   async create(containerId: string, group: CanvasObjectGroup): Promise<boolean> {
     const sheet = toSheetId(containerId);
     try {
-      await this.computeBridge.setFloatingObjectGroup(sheet, group.id, group);
+      await this.computeBridge.setFloatingObjectGroup(sheet, group.id, {
+        ...group,
+        children: group.memberIds,
+      });
       return true;
     } catch {
       return false;

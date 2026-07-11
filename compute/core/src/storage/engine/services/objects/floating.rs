@@ -72,21 +72,29 @@ pub(in crate::storage::engine) fn delete_floating_object(
         stores.storage.sheets(),
         sheet_id,
         object_id,
-    );
-    floating_objects::delete_floating_object(
+    )
+    .ok_or_else(|| ComputeError::InvalidInput {
+        message: format!("floating object '{object_id}' not found"),
+    })?;
+    let deleted = floating_objects::delete_floating_object(
         stores.storage.doc(),
         stores.storage.sheets(),
         sheet_id,
         object_id,
     );
-    let object_type = pre_delete.as_ref().map(|d| d.kind());
+    if !deleted {
+        return Err(ComputeError::InvalidInput {
+            message: format!("floating object '{object_id}' disappeared before deletion"),
+        });
+    }
+    let object_type = Some(pre_delete.kind());
     let mut result = MutationResult::empty();
     result.floating_object_changes.push(FloatingObjectChange {
         sheet_id: sheet_id.to_uuid_string(),
         object_id: object_id.to_string(),
         kind: FloatingObjectChangeKind::Removed,
         object_type,
-        data: pre_delete,
+        data: Some(pre_delete),
         bounds: None,
     });
     Ok(result)

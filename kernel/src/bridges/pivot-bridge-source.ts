@@ -3,6 +3,7 @@ import type { PivotTableConfig } from '@mog-sdk/contracts/pivot';
 import type { DocumentContext } from '../context/types';
 import { normalizeCellValue } from '../api/internal/value-conversions';
 import { getOrder as getSheetOrder } from '../domain/sheets/sheet-meta';
+import { createPivotNotFoundError } from '../errors';
 import { toPublicPivotConfig } from './pivot-bridge-mappers';
 
 export function pivotUsesSourceSheet(
@@ -40,7 +41,7 @@ export async function findPivotLocation(
     const config = await ctx.computeBridge.pivotGet(sheetId, pivotId);
     if (config) return { sheetId, config: toPublicPivotConfig(config) };
   }
-  throw new Error(`Pivot table "${pivotId}" not found`);
+  throw createPivotNotFoundError({ pivotName: pivotId });
 }
 
 export async function getPivotSourceData(

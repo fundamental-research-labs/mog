@@ -130,7 +130,7 @@ export class FormControlManager implements IFormControlManager {
   private readonly deletedControls = new Map<string, FormControl>();
 
   private readonly hydratedSheets = new Set<SheetId>();
-  private readonly hydratingSheets = new Set<SheetId>();
+  private readonly hydrationPromises = new Map<SheetId, Promise<void>>();
 
   /** Store context for CellId resolution */
   private readonly ctx: DocumentContext;
@@ -348,7 +348,7 @@ export class FormControlManager implements IFormControlManager {
    * Get all form controls for a sheet.
    */
   getControlsForSheet(sheetId: SheetId): FormControl[] {
-    this.ensureHydratedForSheet(sheetId);
+    void this.hydrateControlsForSheet(sheetId);
     const result: FormControl[] = [];
     for (const control of this.controls.values()) {
       if (control.sheetId === sheetId) {
@@ -373,16 +373,20 @@ export class FormControlManager implements IFormControlManager {
    * Update a form control's properties.
    * Does NOT update the linked cell value - use SpreadsheetStore for that.
    */
-  updateControl(
+  async updateControl(
     controlId: string,
     updates: Partial<Omit<FormControl, 'id' | 'type' | 'sheetId'>>,
-  ): void {
+  ): Promise<void> {
     const control = this.controls.get(controlId);
     if (!control) return;
 
     const updated = { ...control, ...updates, updatedAt: Date.now() } as FormControl;
+    await this.ctx.computeBridge.updateFloatingObject(
+      control.sheetId,
+      controlId,
+      this.formControlToFloatingObjectUpdates(updated),
+    );
     this.controls.set(controlId, updated);
-    this.persistControlUpdate(controlId, this.formControlToFloatingObjectUpdates(updated));
     this.emitFormControlEvent('updated', updated, control);
   }
 
@@ -408,7 +412,6 @@ export class FormControlManager implements IFormControlManager {
     };
 
     const updated = { ...control, anchor, updatedAt: Date.now() } as FormControl;
-    this.controls.set(controlId, updated);
     await this.ctx.computeBridge.updateFloatingObject(control.sheetId, controlId, {
       anchor: {
         anchorRow: newAnchor.row,
@@ -421,24 +424,25 @@ export class FormControlManager implements IFormControlManager {
       },
       anchorCellId,
     });
+    this.controls.set(controlId, updated);
     this.emitFormControlEvent('updated', updated, control);
   }
 
   /**
    * Resize a control.
    */
-  resizeControl(controlId: string, width: number, height: number): void {
+  async resizeControl(controlId: string, width: number, height: number): Promise<void> {
     const control = this.controls.get(controlId);
     if (!control) return;
 
     const updated = { ...control, width, height, updatedAt: Date.now() } as FormControl;
-    this.controls.set(controlId, updated);
-    this.persistControlUpdate(controlId, {
+    await this.ctx.computeBridge.updateFloatingObject(control.sheetId, controlId, {
       width,
       height,
       extentCxEmu: pxToEmu(width),
       extentCyEmu: pxToEmu(height),
     });
+    this.controls.set(controlId, updated);
     this.emitFormControlEvent('updated', updated, control);
   }
 
@@ -449,11 +453,11 @@ export class FormControlManager implements IFormControlManager {
   /**
    * Delete a form control.
    */
-  deleteControl(controlId: string): void {
+  async deleteControl(controlId: string): Promise<void> {
     const control = this.controls.get(controlId);
     if (!control) return;
+    await this.ctx.computeBridge.deleteFloatingObject(control.sheetId, controlId);
     this.removeControlFromCache(controlId, true);
-    void this.ctx.computeBridge.deleteFloatingObject(control.sheetId, controlId);
   }
 
   /**
@@ -478,7 +482,7 @@ export class FormControlManager implements IFormControlManager {
     this.controls.clear();
     this.deletedControls.clear();
     this.hydratedSheets.clear();
-    this.hydratingSheets.clear();
+    this.hydrationPromises.clear();
   }
 
   // ---------------------------------------------------------------------------
@@ -734,12 +738,6 @@ export class FormControlManager implements IFormControlManager {
     return updates;
   }
 
-  private persistControlUpdate(controlId: string, updates: Record<string, unknown>): void {
-    const control = this.controls.get(controlId);
-    if (!control) return;
-    void this.ctx.computeBridge.updateFloatingObject(control.sheetId, controlId, updates);
-  }
-
   private upsertControl(control: FormControl, createdKind: 'created' | 'updated'): void {
     const previous = this.controls.get(control.id);
     this.controls.set(control.id, control);
@@ -785,10 +783,12 @@ export class FormControlManager implements IFormControlManager {
     });
   }
 
-  private ensureHydratedForSheet(sheetId: SheetId): void {
-    if (this.hydratedSheets.has(sheetId) || this.hydratingSheets.has(sheetId)) return;
-    this.hydratingSheets.add(sheetId);
-    void this.ctx.computeBridge
+  async hydrateControlsForSheet(sheetId: SheetId): Promise<void> {
+    if (this.hydratedSheets.has(sheetId)) return;
+    const pending = this.hydrationPromises.get(sheetId);
+    if (pending) return pending;
+
+    const hydration = this.ctx.computeBridge
       .getFloatingObjectsInSheet(sheetId)
       .then(async (objects) => {
         await Promise.all(
@@ -799,8 +799,10 @@ export class FormControlManager implements IFormControlManager {
         this.hydratedSheets.add(sheetId);
       })
       .finally(() => {
-        this.hydratingSheets.delete(sheetId);
+        this.hydrationPromises.delete(sheetId);
       });
+    this.hydrationPromises.set(sheetId, hydration);
+    return hydration;
   }
 
   private async syncControlFromFloatingObject(sheetId: SheetId, objectId: string): Promise<void> {

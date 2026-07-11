@@ -2,7 +2,12 @@ import { jest } from '@jest/globals';
 
 import { sheetId } from '@mog-sdk/contracts/core';
 
-import { copyToSheet, updateFloatingObject, updatePicture } from '../floating-object-operations';
+import {
+  copyToSheet,
+  deleteManyFloatingObjects,
+  updateFloatingObject,
+  updatePicture,
+} from '../floating-object-operations';
 
 const SHEET_ID = sheetId('sheet-1');
 const TARGET_SHEET_ID = sheetId('sheet-2');
@@ -34,6 +39,7 @@ function createMockCtx() {
       getFloatingObjectTyped: jest.fn(async (sheet: string, objectId: string) =>
         pictureWire(objectId, sheetId(sheet)),
       ),
+      deleteFloatingObject: jest.fn().mockResolvedValue({ floatingObjectChanges: [] }),
       updateFloatingObject: jest.fn().mockResolvedValue({ floatingObjectChanges: [] }),
       resizeFloatingObjectTyped: jest.fn().mockResolvedValue({ floatingObjectChanges: [] }),
       moveFloatingObjectTyped: jest.fn().mockResolvedValue({ floatingObjectChanges: [] }),
@@ -143,5 +149,18 @@ describe('floating object operation admission contexts', () => {
         groupId,
       ),
     );
+  });
+
+  it('preflights every removeMany target before deleting any object', async () => {
+    const ctx = createMockCtx();
+    ctx.computeBridge.getFloatingObjectTyped.mockImplementation(
+      async (sheet: string, objectId: string) =>
+        objectId === 'missing' ? null : pictureWire(objectId, sheetId(sheet)),
+    );
+
+    await expect(
+      deleteManyFloatingObjects(ctx, SHEET_ID, ['picture-1', 'missing']),
+    ).rejects.toMatchObject({ code: 'OBJ_NOT_FOUND' });
+    expect(ctx.computeBridge.deleteFloatingObject).not.toHaveBeenCalled();
   });
 });

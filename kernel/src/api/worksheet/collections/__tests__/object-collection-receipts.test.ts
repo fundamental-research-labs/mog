@@ -76,12 +76,12 @@ describe('floating object collection receipts', () => {
     expect(receipt).toBeInstanceOf(ShapeHandleImpl);
   });
 
-  it('object remove returns false when the object is missing', async () => {
+  it('object remove propagates the strict missing-target error', async () => {
     const objects = createMockObjectsImpl();
-    objects.get.mockResolvedValue(null);
+    objects.remove.mockRejectedValue(new Error('missing object'));
     const collection = new WorksheetObjectCollectionImpl(objects, null);
 
-    await expect(collection.remove('missing-1')).resolves.toBe(false);
+    await expect(collection.remove('missing-1')).rejects.toThrow('missing object');
   });
 
   it('object remove returns true when the object is deleted', async () => {

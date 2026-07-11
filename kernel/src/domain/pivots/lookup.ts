@@ -1,17 +1,17 @@
 import type { SheetId } from '@mog-sdk/contracts/core';
 import type { PivotTableConfig as DataPivotTableConfig } from '@mog-sdk/contracts/pivot';
 import type { DocumentContext } from '../../context';
-import { KernelError } from '../../errors';
+import { createPivotNotFoundError, KernelError } from '../../errors';
 
 export async function requirePivot(
   ctx: DocumentContext,
   sheetId: SheetId,
   pivotId: string,
-  operation: string,
+  _operation: string,
 ): Promise<DataPivotTableConfig> {
   const config = await ctx.pivot.getPivot(sheetId, pivotId);
   if (!config) {
-    throw new KernelError('COMPUTE_ERROR', `${operation}: Pivot table not found`);
+    throw createPivotNotFoundError({ pivotName: pivotId, sheetId: String(sheetId) });
   }
   return config;
 }
@@ -51,11 +51,19 @@ export async function resolvePivotName(
   ctx: DocumentContext,
   sheetId: SheetId,
   name: string,
-  operation: string,
+  _operation: string,
 ): Promise<{ pivotId: string; config: DataPivotTableConfig }> {
-  const config = await findPivotByName(ctx, sheetId, name);
-  if (!config) {
-    throw new KernelError('COMPUTE_ERROR', `${operation}: Pivot table "${name}" not found`);
+  const pivots = await ctx.pivot.getAllPivots(sheetId);
+  const matches = pivots.filter((pivot) => (pivot.name ?? pivot.id) === name);
+  if (matches.length > 1) {
+    throw new KernelError(
+      'COMPUTE_ERROR',
+      `Pivot table name "${name}" is ambiguous; matching pivot IDs: ${matches
+        .map((pivot) => pivot.id)
+        .join(', ')}`,
+    );
   }
+  const config = matches[0];
+  if (!config) throw createPivotNotFoundError({ pivotName: name, sheetId: String(sheetId) });
   return { pivotId: config.id, config };
 }

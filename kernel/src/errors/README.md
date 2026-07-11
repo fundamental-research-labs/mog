@@ -56,6 +56,12 @@ Each domain owns its prefix exclusively. No two domains share a namespace.
 | `DOC_*`      | Document lifecycle          | `DOC_NOT_READY`, `DOC_DISPOSED` |
 | `DOMAIN_*`   | Domain-specific operations  | `DOMAIN_FILTER_CREATE_FAILED` |
 | `COMMENT_*`  | Comments                    | `COMMENT_NOT_FOUND` |
+| `CONDITIONAL_FORMAT_*` | Conditional formatting | `CONDITIONAL_FORMAT_NOT_FOUND` |
+| `VALIDATION_*` | Data validation           | `VALIDATION_NOT_FOUND` |
+| `FILTER_*`   | Worksheet filters           | `FILTER_NOT_FOUND` |
+| `FORM_CONTROL_*` | Form controls           | `FORM_CONTROL_NOT_FOUND` |
+| `SPARKLINE_*` | Sparklines                 | `SPARKLINE_NOT_FOUND` |
+| `HYPERLINK_*` | Hyperlinks                 | `HYPERLINK_NOT_FOUND` |
 | `FS_*`       | Filesystem                  | `FS_INVALID_PATH` |
 | `REGISTRY_*` | Driver registry             | `REGISTRY_DRIVER_NOT_FOUND` |
 | `COMPUTE_*`  | Compute-core                | `COMPUTE_ERROR` |

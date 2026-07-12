@@ -96,6 +96,7 @@ import {
   createGridHitTest,
   createGridLayers,
   createInteractiveElementCollector,
+  getClippedCellText,
   GridCoordinateSystem,
   DEFAULT_CHROME_THEME,
   NULL_SELECTION_DATA_SOURCE,
@@ -2650,10 +2651,10 @@ export class GridRendererImpl implements GridRenderer {
     return this.currentSheetId;
   }
 
-  getClippedCellContent(_row: number, _col: number): string | null {
-    // The grid-renderer CellsLayer tracks clipped cells internally.
-    // TODO: Expose clipped content from CellsLayer when needed for tooltips.
-    return null;
+  getClippedCellContent(row: number, col: number): string | null {
+    const clippedCells = this.gridLayers.cells?.getClippedCells();
+    if (!clippedCells) return null;
+    return getClippedCellText(clippedCells, row, col) ?? null;
   }
 
   // ===========================================================================

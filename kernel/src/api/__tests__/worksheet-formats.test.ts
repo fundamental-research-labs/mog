@@ -131,6 +131,148 @@ describe('WorksheetFormatsImpl admission options', () => {
     );
   });
 
+  it('normalizes supported top-level aliases to canonical bridge fields', async () => {
+    await formats.set('A1', {
+      fillColor: '#D9EAF7',
+      horizontalAlignment: 'Center',
+      verticalAlignment: 'Center',
+    } as any);
+
+    expect(ctx.computeBridge.patchFormatForRanges).toHaveBeenCalledWith(
+      SHEET_ID,
+      [[0, 0, 0, 0]],
+      {
+        backgroundColor: '#D9EAF7',
+        horizontalAlign: 'center',
+        verticalAlign: 'middle',
+      },
+      [],
+      expectFormatAdmission('formats.set', DIRECT_CELL_FORMAT_DOMAIN_IDS),
+    );
+  });
+
+  it('uses canonical fields before aliases and aliases before containers regardless of order', async () => {
+    const canonicalLast = Object.fromEntries([
+      ['fill', { color: '#111111' }],
+      ['fillColor', '#222222'],
+      ['backgroundColor', '#333333'],
+      ['alignment', { horizontalAlignment: 'left', verticalAlignment: 'top' }],
+      ['horizontalAlignment', 'center'],
+      ['verticalAlignment', 'center'],
+      ['horizontalAlign', 'right'],
+      ['verticalAlign', 'bottom'],
+    ]);
+    const aliasLast = Object.fromEntries([
+      ['fill', { color: '#111111' }],
+      ['alignment', { horizontalAlignment: 'left', verticalAlignment: 'top' }],
+      ['backgroundColor', '#333333'],
+      ['horizontalAlign', 'right'],
+      ['verticalAlign', 'bottom'],
+      ['fillColor', '#222222'],
+      ['horizontalAlignment', 'center'],
+      ['verticalAlignment', 'center'],
+    ]);
+
+    await formats.set('A1', canonicalLast as any);
+    await formats.set('B1', aliasLast as any);
+    await formats.set('C1', {
+      fill: { color: '#111111' },
+      alignment: { horizontalAlignment: 'left', verticalAlignment: 'top' },
+      fillColor: '#222222',
+      horizontalAlignment: 'center',
+      verticalAlignment: 'center',
+    } as any);
+    await formats.set('D1', {
+      fillColor: '#222222',
+      horizontalAlignment: 'center',
+      verticalAlignment: 'center',
+      fill: { color: '#111111' },
+      alignment: { horizontalAlignment: 'left', verticalAlignment: 'top' },
+    } as any);
+
+    expect(ctx.computeBridge.patchFormatForRanges).toHaveBeenNthCalledWith(
+      1,
+      SHEET_ID,
+      [[0, 0, 0, 0]],
+      {
+        backgroundColor: '#333333',
+        horizontalAlign: 'right',
+        verticalAlign: 'bottom',
+      },
+      [],
+      expectFormatAdmission('formats.set', DIRECT_CELL_FORMAT_DOMAIN_IDS),
+    );
+    expect(ctx.computeBridge.patchFormatForRanges).toHaveBeenNthCalledWith(
+      2,
+      SHEET_ID,
+      [[0, 1, 0, 1]],
+      {
+        backgroundColor: '#333333',
+        horizontalAlign: 'right',
+        verticalAlign: 'bottom',
+      },
+      [],
+      expectFormatAdmission('formats.set', DIRECT_CELL_FORMAT_DOMAIN_IDS),
+    );
+    expect(ctx.computeBridge.patchFormatForRanges).toHaveBeenNthCalledWith(
+      3,
+      SHEET_ID,
+      [[0, 2, 0, 2]],
+      {
+        backgroundColor: '#222222',
+        horizontalAlign: 'center',
+        verticalAlign: 'middle',
+      },
+      [],
+      expectFormatAdmission('formats.set', DIRECT_CELL_FORMAT_DOMAIN_IDS),
+    );
+    expect(ctx.computeBridge.patchFormatForRanges).toHaveBeenNthCalledWith(
+      4,
+      SHEET_ID,
+      [[0, 3, 0, 3]],
+      {
+        backgroundColor: '#222222',
+        horizontalAlign: 'center',
+        verticalAlign: 'middle',
+      },
+      [],
+      expectFormatAdmission('formats.set', DIRECT_CELL_FORMAT_DOMAIN_IDS),
+    );
+  });
+
+  it('preserves alias clear and undefined no-op semantics', async () => {
+    await formats.set('A1', {
+      fillColor: null,
+      horizontalAlignment: null,
+      verticalAlignment: null,
+      fill: { color: '#111111' },
+      alignment: { horizontalAlignment: 'left', verticalAlignment: 'top' },
+    } as any);
+    await formats.set('B1', {
+      fillColor: undefined,
+      verticalAlignment: undefined,
+      fill: { color: '#111111' },
+      alignment: { verticalAlignment: 'Top' },
+    } as any);
+
+    expect(ctx.computeBridge.patchFormatForRanges).toHaveBeenNthCalledWith(
+      1,
+      SHEET_ID,
+      [[0, 0, 0, 0]],
+      {},
+      ['backgroundColor', 'horizontalAlign', 'verticalAlign'],
+      expectFormatAdmission('formats.set', DIRECT_CELL_FORMAT_DOMAIN_IDS),
+    );
+    expect(ctx.computeBridge.patchFormatForRanges).toHaveBeenNthCalledWith(
+      2,
+      SHEET_ID,
+      [[0, 1, 0, 1]],
+      { backgroundColor: '#111111', verticalAlign: 'top' },
+      [],
+      expectFormatAdmission('formats.set', DIRECT_CELL_FORMAT_DOMAIN_IDS),
+    );
+  });
+
   it('keeps canonical flat keys authoritative when compatibility containers overlap', async () => {
     await formats.set('A1', {
       bold: false,
@@ -221,6 +363,37 @@ describe('WorksheetFormatsImpl admission options', () => {
         ],
       ],
       expectFormatAdmission('formats.setColumnProperties'),
+    );
+  });
+
+  it('normalizes top-level aliases for bulk row properties', async () => {
+    await formats.setRowProperties(
+      new Map([
+        [
+          4,
+          {
+            fillColor: '#D9EAF7',
+            horizontalAlignment: 'Center',
+            verticalAlignment: 'Center',
+          } as any,
+        ],
+      ]),
+    );
+
+    expect(ctx.computeBridge.patchRowFormats).toHaveBeenCalledWith(
+      SHEET_ID,
+      [
+        [
+          4,
+          {
+            backgroundColor: '#D9EAF7',
+            horizontalAlign: 'center',
+            verticalAlign: 'middle',
+          },
+          [],
+        ],
+      ],
+      expectFormatAdmission('formats.setRowProperties'),
     );
   });
 

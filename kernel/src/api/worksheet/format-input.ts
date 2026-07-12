@@ -88,6 +88,7 @@ const PUBLIC_TO_PERSISTED_KEY: Partial<Record<keyof CellFormat, string>> = {
   forcedTextMode: 'quotePrefix',
 };
 
+const TOP_LEVEL_ALIAS_KEYS = new Set(['fillColor', 'horizontalAlignment', 'verticalAlignment']);
 const COMPAT_CONTAINER_KEYS = new Set(['font', 'fill', 'alignment', 'protection', 'border']);
 const BORDER_KEYS = new Set([
   'top',
@@ -117,6 +118,7 @@ export function normalizeCellFormatInput(
   const source = asRecord(format, path);
   const result: FormatRecord = {};
   const clearFields = new Set<string>();
+  const aliasEntries: Array<[string, unknown]> = [];
   const compatEntries: Array<[string, unknown]> = [];
 
   for (const [key, value] of Object.entries(source)) {
@@ -129,10 +131,29 @@ export function normalizeCellFormatInput(
         persistedKey,
         key === 'borders' && isRecord(value) ? normalizeBorders(value, [path, key]) : value,
       );
+    } else if (TOP_LEVEL_ALIAS_KEYS.has(key)) {
+      aliasEntries.push([key, value]);
     } else if (COMPAT_CONTAINER_KEYS.has(key)) {
       compatEntries.push([key, value]);
     } else {
       throwUnsupported([path, key]);
+    }
+  }
+
+  // Canonical flat keys are processed first, then top-level aliases, then
+  // compatibility containers. This makes precedence independent of input
+  // object insertion order while preserving tri-state patch semantics.
+  for (const [key, value] of aliasEntries) {
+    switch (key) {
+      case 'fillColor':
+        assignPatchIfUnset(result, clearFields, 'backgroundColor', value);
+        break;
+      case 'horizontalAlignment':
+        assignPatchIfUnset(result, clearFields, 'horizontalAlign', normalizeHorizontalAlign(value));
+        break;
+      case 'verticalAlignment':
+        assignPatchIfUnset(result, clearFields, 'verticalAlign', normalizeVerticalAlign(value));
+        break;
     }
   }
 
@@ -576,6 +597,6 @@ function throwUnsupported(path: string[]): never {
   throw new KernelError('API_INVALID_ARGUMENT', `Unsupported format property "${joined}".`, {
     path,
     suggestion:
-      'Use canonical CellFormat keys, or supported compatibility containers: font, fill, alignment, protection, and border.',
+      'Use canonical CellFormat keys, supported top-level aliases (fillColor, horizontalAlignment, verticalAlignment), or supported compatibility containers: font, fill, alignment, protection, and border.',
   });
 }

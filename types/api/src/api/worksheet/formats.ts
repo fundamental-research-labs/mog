@@ -85,8 +85,23 @@ export type CellFormatPatch = {
   [K in keyof CellFormat]?: CellFormat[K] | null;
 };
 
-/** Public worksheet format mutators accept canonical patches plus compatibility containers. */
+/**
+ * Public worksheet format mutators accept canonical patches plus write-only
+ * compatibility aliases and containers.
+ *
+ * Compatibility aliases are normalized to canonical `CellFormat` keys before
+ * persistence. Format read APIs return only the canonical keys.
+ */
 export type CellFormatInput = CellFormatPatch & {
+  /** Write-only alias for `backgroundColor`; reads return `backgroundColor`. */
+  fillColor?: CellFormat['backgroundColor'] | null;
+  /** Write-only alias for `horizontalAlign`; reads return `horizontalAlign`. */
+  horizontalAlignment?: CellFormat['horizontalAlign'] | null;
+  /**
+   * Write-only alias for `verticalAlign`; `center` normalizes to `middle`, and
+   * reads return `verticalAlign`.
+   */
+  verticalAlignment?: CellFormat['verticalAlign'] | 'center' | null;
   font?: CellFormatFontInput;
   fill?: CellFormatFillInput;
   alignment?: CellFormatAlignmentInput;

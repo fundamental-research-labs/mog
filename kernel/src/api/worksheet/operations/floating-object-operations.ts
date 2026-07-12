@@ -512,7 +512,7 @@ export async function groupFloatingObjects(
   const options = floatingObjectOptions(ctx, 'floatingObjects.group', sheetId, admissionOptions);
   const result = await ctx.computeBridge.createFloatingObjectGroup(
     sheetId,
-    { memberIds: objectIds },
+    { children: objectIds },
     options,
   );
   const groupId = result.floatingObjectGroupChanges?.[0]?.objectId;

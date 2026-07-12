@@ -41,7 +41,7 @@ use super::mutation;
 
 // Types required by bridge_delegate macro expansion (referenced in bridge descriptors).
 use compute_core::CellInfo;
-use compute_core::bridge_types::{PivotExpansionState, PivotTableResult};
+use compute_core::bridge_types::{BorderPatchOperation, PivotExpansionState, PivotTableResult};
 use compute_core::storage::engine::CsvImportOptions;
 use compute_core::storage::engine::search::{WorkbookComment, WorkbookPivotTable, WorkbookTable};
 use compute_core::storage::sheet::{

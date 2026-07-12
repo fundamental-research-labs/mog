@@ -23,7 +23,24 @@ import type { ActionDependencies } from '@mog-sdk/contracts/actions';
 import type { CellBorders, CellRange } from '@mog-sdk/contracts/core';
 import { sheetId as makeSheetId } from '@mog-sdk/contracts/core';
 
-import { APPLY_BORDERS } from '../formatting/borders';
+import {
+  APPLY_BORDERS,
+  APPLY_OUTLINE_BORDER,
+  SET_ALL_BORDERS,
+  SET_BOTTOM_BORDER,
+  SET_DIAGONAL_BOTH_BORDER,
+  SET_DIAGONAL_DOWN_BORDER,
+  SET_DIAGONAL_UP_BORDER,
+  SET_INSIDE_BORDERS,
+  SET_INSIDE_HORIZONTAL_BORDERS,
+  SET_INSIDE_VERTICAL_BORDERS,
+  SET_LEFT_BORDER,
+  SET_RIGHT_BORDER,
+  SET_TOP_AND_BOTTOM_BORDERS,
+  SET_TOP_AND_DOUBLE_BOTTOM_BORDERS,
+  SET_TOP_AND_THICK_BOTTOM_BORDERS,
+  SET_TOP_BORDER,
+} from '../formatting/borders';
 
 // =============================================================================
 // Test utilities
@@ -32,6 +49,7 @@ import { APPLY_BORDERS } from '../formatting/borders';
 interface MockSetup {
   deps: ActionDependencies;
   setRangesMock: jest.Mock;
+  patchBordersMock: jest.Mock;
   setLastUsedBorderFormatMock: jest.Mock;
 }
 
@@ -45,6 +63,7 @@ function createMockDeps(opts: {
   const activeSheetId = makeSheetId('sheet1');
 
   const setRangesMock = jest.fn().mockResolvedValue(undefined);
+  const patchBordersMock = jest.fn().mockResolvedValue(undefined);
   const setLastUsedBorderFormatMock = jest.fn();
   const hiddenRows = new Set(opts.hiddenRows ?? []);
   const bitmapHiddenRows = new Set(opts.bitmapHiddenRows ?? opts.hiddenRows ?? []);
@@ -57,7 +76,7 @@ function createMockDeps(opts: {
   const clampMock = jest.fn().mockImplementation(async (r: CellRange) => r);
 
   const mockWorksheet = {
-    formats: { setRanges: setRangesMock },
+    formats: { setRanges: setRangesMock, patchBorders: patchBordersMock },
     layout: {
       getHiddenRowsBitmap: jest.fn(async () => bitmapHiddenRows),
       getHiddenColumnsBitmap: jest.fn(async () => bitmapHiddenCols),
@@ -95,7 +114,7 @@ function createMockDeps(opts: {
     },
   } as unknown as ActionDependencies;
 
-  return { deps, setRangesMock, setLastUsedBorderFormatMock };
+  return { deps, setRangesMock, patchBordersMock, setLastUsedBorderFormatMock };
 }
 
 const thinBlack = { style: 'thin' as const, color: '#000000' };
@@ -113,37 +132,35 @@ const outlineBorders: CellBorders = {
 describe('APPLY_BORDERS — direct-mode preset routing', () => {
   it("preset 'outline' on a 3×3 emits four edge ranges (perimeter), not nine cells", async () => {
     const range: CellRange = { startRow: 0, startCol: 0, endRow: 2, endCol: 2 };
-    const { deps, setRangesMock } = createMockDeps({ ranges: [range] });
+    const { deps, patchBordersMock } = createMockDeps({ ranges: [range] });
 
     await APPLY_BORDERS(deps, { borders: outlineBorders, preset: 'outline' });
 
-    // Four calls — one per edge — each writing exactly one edge style.
-    expect(setRangesMock).toHaveBeenCalledTimes(4);
-
-    const calls = setRangesMock.mock.calls.map((c: unknown[]) => ({
-      ranges: c[0] as CellRange[],
-      payload: c[1] as { borders?: CellBorders },
-    }));
+    expect(patchBordersMock).toHaveBeenCalledTimes(1);
+    const calls = patchBordersMock.mock.calls[0]![0] as Array<{
+      ranges: CellRange[];
+      borders: CellBorders;
+    }>;
 
     // Top edge: row 0, full width
     expect(calls).toContainEqual({
       ranges: [{ startRow: 0, startCol: 0, endRow: 0, endCol: 2 }],
-      payload: { borders: { top: thinBlack } },
+      borders: { top: thinBlack },
     });
     // Bottom edge: row 2, full width
     expect(calls).toContainEqual({
       ranges: [{ startRow: 2, startCol: 0, endRow: 2, endCol: 2 }],
-      payload: { borders: { bottom: thinBlack } },
+      borders: { bottom: thinBlack },
     });
     // Left edge: col 0, full height
     expect(calls).toContainEqual({
       ranges: [{ startRow: 0, startCol: 0, endRow: 2, endCol: 0 }],
-      payload: { borders: { left: thinBlack } },
+      borders: { left: thinBlack },
     });
     // Right edge: col 2, full height
     expect(calls).toContainEqual({
       ranges: [{ startRow: 0, startCol: 2, endRow: 2, endCol: 2 }],
-      payload: { borders: { right: thinBlack } },
+      borders: { right: thinBlack },
     });
 
     // Critical: NO call writes all four sides to the full 3×3, which is
@@ -151,13 +168,13 @@ describe('APPLY_BORDERS — direct-mode preset routing', () => {
     for (const call of calls) {
       const r = call.ranges[0];
       const isFullRange = r.startRow === 0 && r.startCol === 0 && r.endRow === 2 && r.endCol === 2;
-      expect(isFullRange && Object.keys(call.payload.borders ?? {}).length === 4).toBe(false);
+      expect(isFullRange && Object.keys(call.borders).length === 4).toBe(false);
     }
   });
 
   it("preset 'outline' treats hidden-column gaps as visible perimeter boundaries", async () => {
     const range: CellRange = { startRow: 0, startCol: 0, endRow: 2, endCol: 4 };
-    const { deps, setRangesMock } = createMockDeps({
+    const { deps, patchBordersMock } = createMockDeps({
       ranges: [range],
       hiddenCols: [2, 3],
       bitmapHiddenCols: [],
@@ -165,65 +182,66 @@ describe('APPLY_BORDERS — direct-mode preset routing', () => {
 
     await APPLY_BORDERS(deps, { borders: outlineBorders, preset: 'outline' });
 
-    const calls = setRangesMock.mock.calls.map((c: unknown[]) => ({
-      ranges: c[0] as CellRange[],
-      payload: c[1] as { borders?: CellBorders },
-    }));
+    const calls = patchBordersMock.mock.calls[0]![0] as Array<{
+      ranges: CellRange[];
+      borders: CellBorders;
+    }>;
 
     expect(calls).toContainEqual({
       ranges: [{ startRow: 0, startCol: 1, endRow: 2, endCol: 1 }],
-      payload: { borders: { right: thinBlack } },
+      borders: { right: thinBlack },
     });
     expect(calls).toContainEqual({
       ranges: [{ startRow: 0, startCol: 4, endRow: 2, endCol: 4 }],
-      payload: { borders: { left: thinBlack } },
+      borders: { left: thinBlack },
     });
   });
 
   it("preset 'outline' formats a selected range even when all rows are hidden", async () => {
     const range: CellRange = { startRow: 10, startCol: 0, endRow: 12, endCol: 2 };
-    const { deps, setRangesMock } = createMockDeps({
+    const { deps, patchBordersMock } = createMockDeps({
       ranges: [range],
       hiddenRows: [10, 11, 12],
     });
 
     await APPLY_BORDERS(deps, { borders: outlineBorders, preset: 'outline' });
 
-    const calls = setRangesMock.mock.calls.map((c: unknown[]) => ({
-      ranges: c[0] as CellRange[],
-      payload: c[1] as { borders?: CellBorders },
-    }));
+    const calls = patchBordersMock.mock.calls[0]![0] as Array<{
+      ranges: CellRange[];
+      borders: CellBorders;
+    }>;
 
     expect(calls).toContainEqual({
       ranges: [{ startRow: 10, startCol: 0, endRow: 10, endCol: 2 }],
-      payload: { borders: { top: thinBlack } },
+      borders: { top: thinBlack },
     });
     expect(calls).toContainEqual({
       ranges: [{ startRow: 12, startCol: 0, endRow: 12, endCol: 2 }],
-      payload: { borders: { bottom: thinBlack } },
+      borders: { bottom: thinBlack },
     });
     expect(calls).toContainEqual({
       ranges: [{ startRow: 10, startCol: 0, endRow: 12, endCol: 0 }],
-      payload: { borders: { left: thinBlack } },
+      borders: { left: thinBlack },
     });
     expect(calls).toContainEqual({
       ranges: [{ startRow: 10, startCol: 2, endRow: 12, endCol: 2 }],
-      payload: { borders: { right: thinBlack } },
+      borders: { right: thinBlack },
     });
   });
 
   it('preset null (no preset) on a multi-cell range applies borders per-cell', async () => {
     const range: CellRange = { startRow: 0, startCol: 0, endRow: 1, endCol: 1 };
-    const { deps, setRangesMock } = createMockDeps({ ranges: [range] });
+    const { deps, patchBordersMock } = createMockDeps({ ranges: [range] });
 
     await APPLY_BORDERS(deps, {
       borders: { bottom: thinBlack },
       preset: null,
     });
 
-    // Single setRanges call across the whole 2×2 with the bottom border.
-    expect(setRangesMock).toHaveBeenCalledTimes(1);
-    expect(setRangesMock).toHaveBeenCalledWith([range], { borders: { bottom: thinBlack } });
+    expect(patchBordersMock).toHaveBeenCalledTimes(1);
+    expect(patchBordersMock).toHaveBeenCalledWith([
+      { ranges: [range], borders: { bottom: thinBlack } },
+    ]);
   });
 
   it("preset 'none' clears borders on every cell with one call", async () => {
@@ -284,11 +302,43 @@ describe('APPLY_BORDERS — direct-mode preset routing', () => {
     // payload.preset is undefined. Handler must treat it as null
     // (per-cell apply), not blow up.
     const range: CellRange = { startRow: 0, startCol: 0, endRow: 0, endCol: 0 };
-    const { deps, setRangesMock } = createMockDeps({ ranges: [range] });
+    const { deps, patchBordersMock } = createMockDeps({ ranges: [range] });
 
     await APPLY_BORDERS(deps, { borders: { bottom: thinBlack } });
 
-    expect(setRangesMock).toHaveBeenCalledTimes(1);
-    expect(setRangesMock).toHaveBeenCalledWith([range], { borders: { bottom: thinBlack } });
+    expect(patchBordersMock).toHaveBeenCalledTimes(1);
+    expect(patchBordersMock).toHaveBeenCalledWith([
+      { ranges: [range], borders: { bottom: thinBlack } },
+    ]);
+  });
+});
+
+describe('additive border actions', () => {
+  const handlers = [
+    ['outline', APPLY_OUTLINE_BORDER],
+    ['all', SET_ALL_BORDERS],
+    ['inside', SET_INSIDE_BORDERS],
+    ['inside horizontal', SET_INSIDE_HORIZONTAL_BORDERS],
+    ['inside vertical', SET_INSIDE_VERTICAL_BORDERS],
+    ['top', SET_TOP_BORDER],
+    ['bottom', SET_BOTTOM_BORDER],
+    ['left', SET_LEFT_BORDER],
+    ['right', SET_RIGHT_BORDER],
+    ['diagonal up', SET_DIAGONAL_UP_BORDER],
+    ['diagonal down', SET_DIAGONAL_DOWN_BORDER],
+    ['both diagonals', SET_DIAGONAL_BOTH_BORDER],
+    ['top and bottom', SET_TOP_AND_BOTTOM_BORDERS],
+    ['top and thick bottom', SET_TOP_AND_THICK_BOTTOM_BORDERS],
+    ['top and double bottom', SET_TOP_AND_DOUBLE_BOTTOM_BORDERS],
+  ] as const;
+
+  it.each(handlers)('%s uses one nested patch command', async (_name, handler) => {
+    const range: CellRange = { startRow: 0, startCol: 0, endRow: 2, endCol: 2 };
+    const { deps, patchBordersMock, setRangesMock } = createMockDeps({ ranges: [range] });
+
+    await handler(deps);
+
+    expect(patchBordersMock).toHaveBeenCalledTimes(1);
+    expect(setRangesMock).not.toHaveBeenCalled();
   });
 });

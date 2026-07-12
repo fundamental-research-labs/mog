@@ -1,9 +1,10 @@
+use crate::border_patch::BorderPatchField;
 use crate::mirror::CellMirror;
 use crate::snapshot::MutationResult;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::properties;
 use cell_types::SheetId;
-use domain_types::CellFormat;
+use domain_types::{CellBorders, CellFormat};
 use value_types::ComputeError;
 
 pub(in crate::storage::engine) fn set_row_format(
@@ -40,6 +41,24 @@ pub(in crate::storage::engine) fn patch_row_format(
     Ok(MutationResult::empty())
 }
 
+pub(in crate::storage::engine) fn patch_row_borders(
+    stores: &mut EngineStores,
+    sheet_id: &SheetId,
+    row: u32,
+    borders: &CellBorders,
+    clear_fields: &[BorderPatchField],
+) -> Result<MutationResult, ComputeError> {
+    properties::patch_row_borders(
+        &mut stores.storage,
+        sheet_id,
+        row,
+        borders,
+        clear_fields,
+        stores.grid_indexes.get(sheet_id),
+    )?;
+    Ok(MutationResult::empty())
+}
+
 pub(in crate::storage::engine) fn set_col_format(
     stores: &mut EngineStores,
     sheet_id: &SheetId,
@@ -68,6 +87,24 @@ pub(in crate::storage::engine) fn patch_col_format(
         sheet_id,
         col,
         format,
+        clear_fields,
+        stores.grid_indexes.get(sheet_id),
+    )?;
+    Ok(MutationResult::empty())
+}
+
+pub(in crate::storage::engine) fn patch_col_borders(
+    stores: &mut EngineStores,
+    sheet_id: &SheetId,
+    col: u32,
+    borders: &CellBorders,
+    clear_fields: &[BorderPatchField],
+) -> Result<MutationResult, ComputeError> {
+    properties::patch_col_borders(
+        &mut stores.storage,
+        sheet_id,
+        col,
+        borders,
         clear_fields,
         stores.grid_indexes.get(sheet_id),
     )?;

@@ -9,6 +9,7 @@
  */
 
 import type {
+  BorderRangePatch,
   CellFormat,
   CellFormatInput,
   CellRange,
@@ -23,6 +24,7 @@ import { detectFormatType } from '@mog/spreadsheet-utils/number-formats';
 import { KernelError, unwrap } from '../../errors';
 
 import type { MutationAdmissionOptions } from '../../bridges/compute';
+import type { BorderPatchOperation } from '../../bridges/compute/compute-types.gen';
 import type { DocumentContext } from '../../context';
 import { resolveCell, resolveCellArgs } from '../internal/address-resolver';
 import {
@@ -32,6 +34,7 @@ import {
 import { normalizeRange, parseCellRange } from '../internal/utils';
 import { createVersionOperationContext } from '../internal/version-operation-context';
 import {
+  normalizeCellBordersPatch,
   normalizeCellFormatInput,
   projectCellFormat,
   projectResolvedCellFormat,
@@ -165,6 +168,57 @@ export class WorksheetFormatsImpl implements WorksheetFormats {
     if (promises.length > 0) {
       await Promise.all(promises);
     }
+  }
+
+  async patchBorders(patches: BorderRangePatch[]): Promise<void> {
+    this._ensureWritable('formats.patchBorders');
+    if (patches.length === 0) return;
+
+    const ranges = patches.flatMap((patch) => patch.ranges);
+    await assertFormatRangesAllowed(this.ctx, this.sheetId, ranges);
+
+    const operations: BorderPatchOperation[] = [];
+    for (const [patchIndex, patch] of patches.entries()) {
+      const normalized = normalizeCellBordersPatch(patch.borders, `patches.${patchIndex}.borders`);
+      for (const range of patch.ranges) {
+        if (range.isFullColumn) {
+          for (let col = range.startCol; col <= range.endCol; col++) {
+            operations.push({
+              target: { kind: 'column', col },
+              borders: normalized.borders,
+              clearFields: normalized.clearFields,
+            });
+          }
+        } else if (range.isFullRow) {
+          for (let row = range.startRow; row <= range.endRow; row++) {
+            operations.push({
+              target: { kind: 'row', row },
+              borders: normalized.borders,
+              clearFields: normalized.clearFields,
+            });
+          }
+        } else {
+          operations.push({
+            target: {
+              kind: 'cells',
+              startRow: range.startRow,
+              startCol: range.startCol,
+              endRow: range.endRow,
+              endCol: range.endCol,
+            },
+            borders: normalized.borders,
+            clearFields: normalized.clearFields,
+          });
+        }
+      }
+    }
+
+    if (operations.length === 0) return;
+    await this.ctx.computeBridge.patchBorders(
+      this.sheetId,
+      operations,
+      createDirectFormatMutationOptions(this.ctx, this.sheetId, 'formats.patchBorders'),
+    );
   }
 
   async hasExplicit(a: string | number, b?: number): Promise<boolean> {

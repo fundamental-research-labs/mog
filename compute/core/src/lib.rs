@@ -111,6 +111,9 @@ pub mod data_table;
 
 pub mod diagnostics;
 
+/// Typed wire contract for ordered nested border mutations.
+pub mod border_patch;
+
 pub mod versioning;
 
 // Table Engine (extracted to compute-table crate)

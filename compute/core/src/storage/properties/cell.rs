@@ -1,12 +1,13 @@
 use super::super::{KEY_CELL_PROPERTIES, KEY_STYLE_PALETTE};
 use super::merge::{merge_formats, normalize_format_patch};
 use super::yrs::{get_sheet_submap, resolve_compact_props};
+use crate::border_patch::BorderPatchField;
 use crate::engine_types::formatting::*;
 use cell_types::{CellId, SheetId};
 use compute_document::hex::{id_to_hex, parse_cell_id};
 use compute_document::undo::ORIGIN_USER_EDIT;
-use domain_types::CellFormat;
 use domain_types::yrs_schema::cell_properties as props_schema;
+use domain_types::{CellBorders, CellFormat};
 use yrs::{Any, Doc, Map, MapPrelim, MapRef, Origin, Out, Transact};
 
 /// Get all properties for a cell by cell_id.
@@ -612,6 +613,50 @@ pub fn patch_cell_formats_with_origin(
             props.format = (patched[i] != CellFormat::default()).then(|| patched[i].clone());
             props.style_id = None;
             props_map.remove(&mut txn, cid);
+            if props.format.is_some() || !props.metadata_is_empty() {
+                let dt_props: domain_types::CellProperties = props.into();
+                let entries = props_schema::to_yrs_prelim(&dt_props);
+                let nested: MapPrelim = entries.into_iter().collect();
+                props_map.insert(&mut txn, *cid, nested);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Apply one tri-state border-edge patch to multiple cells in a single Yrs
+/// transaction. Other format properties and omitted border edges are preserved.
+pub fn patch_cell_borders_with_origin(
+    doc: &Doc,
+    workbook: &MapRef,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    cell_ids: &[&str],
+    borders: &CellBorders,
+    clear_fields: &[BorderPatchField],
+    origin: &'static [u8],
+) -> Result<(), value_types::ComputeError> {
+    let existing: Vec<CellProperties> = cell_ids
+        .iter()
+        .map(|cid| get_properties(doc, workbook, sheets, sheet_id, cid).unwrap_or_default())
+        .collect();
+    let patched = existing
+        .iter()
+        .map(|props| {
+            let mut format = props.format.clone().unwrap_or_default();
+            format.borders =
+                super::apply_borders_patch(format.borders.as_ref(), borders, clear_fields);
+            format
+        })
+        .collect::<Vec<_>>();
+
+    let mut txn = doc.transact_mut_with(Origin::from(origin));
+    if let Some(props_map) = get_sheet_submap(&txn, sheets, sheet_id, KEY_CELL_PROPERTIES) {
+        for (i, cid) in cell_ids.iter().enumerate() {
+            let mut props = existing[i].clone();
+            props.format = (patched[i] != CellFormat::default()).then(|| patched[i].clone());
+            props.style_id = None;
+            props_map.remove(&mut txn, *cid);
             if props.format.is_some() || !props.metadata_is_empty() {
                 let dt_props: domain_types::CellProperties = props.into();
                 let entries = props_schema::to_yrs_prelim(&dt_props);

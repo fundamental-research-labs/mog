@@ -160,6 +160,7 @@ fn build_import_config() -> ImportConfig {
                     ti("BridgeFlashFillRequest"),
                     ti("BridgeSortCriterion"),
                     ti("BridgeSortOptions"),
+                    ti("BorderPatchOperation"),
                     ti("CFColorScale"),
                     ti("CFDataBar"),
                     ti("CFIconSetName"),

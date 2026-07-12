@@ -1,3 +1,4 @@
+use crate::border_patch::BorderPatchField;
 use domain_types::{CellBorderSide, CellBorders, CellFormat};
 use ooxml_types::styles::PatternType;
 use value_types::ComputeError;
@@ -126,6 +127,71 @@ pub(crate) fn apply_format_patch(
         }
     }
     Ok(merged)
+}
+
+/// Apply a tri-state patch to the nested `CellBorders` value.
+///
+/// This is intentionally separate from [`apply_format_patch`]. Public cell-format
+/// patches treat a supplied `borders` object as one complete top-level value so
+/// formats returned by read APIs can be transferred losslessly. Spreadsheet UI
+/// commands, however, are edge operations: adding a bottom border must preserve
+/// an existing top border. Values in `patch` replace one complete edge/flag,
+/// names in `clear_fields` remove that direct edge/flag, and omitted members are
+/// left unchanged.
+pub(crate) fn apply_borders_patch(
+    lower: Option<&CellBorders>,
+    patch: &CellBorders,
+    clear_fields: &[BorderPatchField],
+) -> Option<CellBorders> {
+    let mut merged = lower.cloned().unwrap_or_default();
+
+    if let Some(value) = &patch.top {
+        merged.top = Some(value.clone());
+    }
+    if let Some(value) = &patch.right {
+        merged.right = Some(value.clone());
+    }
+    if let Some(value) = &patch.bottom {
+        merged.bottom = Some(value.clone());
+    }
+    if let Some(value) = &patch.left {
+        merged.left = Some(value.clone());
+    }
+    if let Some(value) = &patch.diagonal {
+        merged.diagonal = Some(value.clone());
+    }
+    if let Some(value) = patch.diagonal_up {
+        merged.diagonal_up = Some(value);
+    }
+    if let Some(value) = patch.diagonal_down {
+        merged.diagonal_down = Some(value);
+    }
+    if let Some(value) = &patch.vertical {
+        merged.vertical = Some(value.clone());
+    }
+    if let Some(value) = &patch.horizontal {
+        merged.horizontal = Some(value.clone());
+    }
+    if let Some(value) = patch.outline {
+        merged.outline = Some(value);
+    }
+
+    for field in clear_fields {
+        match field {
+            BorderPatchField::Top => merged.top = None,
+            BorderPatchField::Right => merged.right = None,
+            BorderPatchField::Bottom => merged.bottom = None,
+            BorderPatchField::Left => merged.left = None,
+            BorderPatchField::Diagonal => merged.diagonal = None,
+            BorderPatchField::DiagonalUp => merged.diagonal_up = None,
+            BorderPatchField::DiagonalDown => merged.diagonal_down = None,
+            BorderPatchField::Vertical => merged.vertical = None,
+            BorderPatchField::Horizontal => merged.horizontal = None,
+            BorderPatchField::Outline => merged.outline = None,
+        }
+    }
+
+    (merged != CellBorders::default()).then_some(merged)
 }
 
 fn merge_borders(lower: Option<&CellBorders>, higher: Option<&CellBorders>) -> Option<CellBorders> {

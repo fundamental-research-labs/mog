@@ -13,22 +13,23 @@
  * Protection: All handlers skip protected cells silently (Excel behavior)
  *
  *
- * PERFORMANCE OPTIMIZATION (
+ * PERFORMANCE OPTIMIZATION
  * Border handlers are categorized by whether they can use row/column-level storage:
  *
  * Category A: Position-Independent Borders (can use row/column storage - O(1))
  * - REMOVE_BORDERS, SET_ALL_BORDERS, SET_DIAGONAL_* - same border on every cell
- * - These use setFormatForRanges() for O(1) per row/column
+ * - These use nested border patches backed by O(1) row/column storage
  *
  * Category B: Position-Dependent Borders (edge-range decomposition)
  * - APPLY_OUTLINE_BORDER, APPLY_BORDERS outline/inside presets
  * - SET_INSIDE_BORDERS, SET_INSIDE_HORIZONTAL/VERTICAL_BORDERS
  * - SET_TOP/BOTTOM/LEFT/RIGHT_BORDER, compound top+bottom variants
- * - Decomposed into edge ranges using setFormatForRanges()
+ * - Decomposed into ordered edge patches and dispatched as one command
  * - Clamp full row/column selections to data bounds first
  */
 
 import type { AsyncActionHandler } from '@mog-sdk/contracts/actions';
+import type { BorderRangePatch } from '@mog-sdk/contracts/api';
 import type { BorderPresetMode, CellBorders, CellRange } from '@mog-sdk/contracts/core';
 
 import {
@@ -188,6 +189,7 @@ export const APPLY_OUTLINE_BORDER: AsyncActionHandler = async (deps) => {
   // Apply to ALL selected sheets
   for (const sheetId of targetSheetIds) {
     const ws = deps.workbook.getSheetById(sheetId);
+    const patches: BorderRangePatch[] = [];
     for (const range of ranges) {
       // Performance: Clamp full row/column selections to data bounds
       const clampedRange = await ws._internal.clampRangeToDataBounds(range);
@@ -196,24 +198,25 @@ export const APPLY_OUTLINE_BORDER: AsyncActionHandler = async (deps) => {
       for (const outlineRange of outlineRanges) {
         const { startRow, startCol, endRow, endCol } = outlineRange;
 
-        // Decompose outline into 4 edge ranges — 4 IPC calls instead of N*M
+        // Decompose the perimeter into four ordered patches in one command.
         // Top edge: apply top border to first row
         const topRange = { startRow, startCol, endRow: startRow, endCol };
-        await ws.formats.setRanges([topRange], { borders: { top: thinBorder } });
+        patches.push({ ranges: [topRange], borders: { top: thinBorder } });
 
         // Bottom edge: apply bottom border to last row
         const bottomRange = { startRow: endRow, startCol, endRow, endCol };
-        await ws.formats.setRanges([bottomRange], { borders: { bottom: thinBorder } });
+        patches.push({ ranges: [bottomRange], borders: { bottom: thinBorder } });
 
         // Left edge: apply left border to first column
         const leftRange = { startRow, startCol, endRow, endCol: startCol };
-        await ws.formats.setRanges([leftRange], { borders: { left: thinBorder } });
+        patches.push({ ranges: [leftRange], borders: { left: thinBorder } });
 
         // Right edge: apply right border to last column
         const rightRange = { startRow, startCol: endCol, endRow, endCol };
-        await ws.formats.setRanges([rightRange], { borders: { right: thinBorder } });
+        patches.push({ ranges: [rightRange], borders: { right: thinBorder } });
       }
     }
+    await ws.formats.patchBorders(patches);
   }
 
   return handled();
@@ -325,10 +328,16 @@ export const APPLY_BORDERS: AsyncActionHandler = async (
   }
 
   if (!borderPreset) {
-    // Default (no preset): Apply borders as specified to all cells - position-independent
+    // Toolbar picks are sparse edge commands. Format Cells supplies a complete
+    // draft and intentionally replaces the composite so toggled-off edges are
+    // removed rather than interpreted as omitted/no-op.
     for (const sheetId of targetSheetIds) {
       const ws = deps.workbook.getSheetById(sheetId);
-      await ws.formats.setRanges(ranges, { borders: borderFormat });
+      if (isDirectMode) {
+        await ws.formats.patchBorders([{ ranges, borders: borderFormat }]);
+      } else {
+        await ws.formats.setRanges(ranges, { borders: borderFormat });
+      }
     }
     // Only clear UIStore if we used it (not in direct mode)
     if (!isDirectMode) {
@@ -344,6 +353,7 @@ export const APPLY_BORDERS: AsyncActionHandler = async (
   // Decomposed into edge ranges for batch writes instead of per-cell loops
   for (const sheetId of targetSheetIds) {
     const ws = deps.workbook.getSheetById(sheetId);
+    const patches: BorderRangePatch[] = [];
     for (const range of ranges) {
       // Performance: Clamp full row/column selections to data bounds
       const clampedRange = await ws._internal.clampRangeToDataBounds(range);
@@ -357,21 +367,19 @@ export const APPLY_BORDERS: AsyncActionHandler = async (
 
           if (borderFormat.top) {
             const topRange = { startRow, startCol, endRow: startRow, endCol };
-            await ws.formats.setRanges([topRange], { borders: { top: borderFormat.top } });
+            patches.push({ ranges: [topRange], borders: { top: borderFormat.top } });
           }
           if (borderFormat.bottom) {
             const bottomRange = { startRow: endRow, startCol, endRow, endCol };
-            await ws.formats.setRanges([bottomRange], {
-              borders: { bottom: borderFormat.bottom },
-            });
+            patches.push({ ranges: [bottomRange], borders: { bottom: borderFormat.bottom } });
           }
           if (borderFormat.left) {
             const leftRange = { startRow, startCol, endRow, endCol: startCol };
-            await ws.formats.setRanges([leftRange], { borders: { left: borderFormat.left } });
+            patches.push({ ranges: [leftRange], borders: { left: borderFormat.left } });
           }
           if (borderFormat.right) {
             const rightRange = { startRow, startCol: endCol, endRow, endCol };
-            await ws.formats.setRanges([rightRange], { borders: { right: borderFormat.right } });
+            patches.push({ ranges: [rightRange], borders: { right: borderFormat.right } });
           }
         }
       } else if (borderPreset === 'inside') {
@@ -380,15 +388,16 @@ export const APPLY_BORDERS: AsyncActionHandler = async (
         // Bottom border on all rows except the last (horizontal dividers)
         if (endRow > startRow && borderFormat.bottom) {
           const hRange = { startRow, startCol, endRow: endRow - 1, endCol };
-          await ws.formats.setRanges([hRange], { borders: { bottom: borderFormat.bottom } });
+          patches.push({ ranges: [hRange], borders: { bottom: borderFormat.bottom } });
         }
         // Right border on all columns except the last (vertical dividers)
         if (endCol > startCol && borderFormat.right) {
           const vRange = { startRow, startCol, endRow, endCol: endCol - 1 };
-          await ws.formats.setRanges([vRange], { borders: { right: borderFormat.right } });
+          patches.push({ ranges: [vRange], borders: { right: borderFormat.right } });
         }
       }
     }
+    await ws.formats.patchBorders(patches);
   }
 
   // Clear pending format after application (only if we used UIStore mode)
@@ -420,19 +429,17 @@ export const SET_ALL_BORDERS: AsyncActionHandler = async (deps) => {
   const targetSheetIds = getTargetSheetIds(deps);
   const { ranges } = getSelectionContext(deps);
 
-  const allBorders = {
-    borders: {
-      top: thinBorder,
-      bottom: thinBorder,
-      left: thinBorder,
-      right: thinBorder,
-    },
+  const allBorders: CellBorders = {
+    top: thinBorder,
+    bottom: thinBorder,
+    left: thinBorder,
+    right: thinBorder,
   };
 
   // Performance: Uses row/column format storage for full row/column selections
   for (const sheetId of targetSheetIds) {
     const ws = deps.workbook.getSheetById(sheetId);
-    await ws.formats.setRanges(ranges, allBorders);
+    await ws.formats.patchBorders([{ ranges, borders: allBorders }]);
   }
 
   return handled();
@@ -453,6 +460,7 @@ export const SET_INSIDE_BORDERS: AsyncActionHandler = async (deps) => {
 
   for (const sheetId of targetSheetIds) {
     const ws = deps.workbook.getSheetById(sheetId);
+    const patches: BorderRangePatch[] = [];
     for (const range of ranges) {
       // Performance: Clamp full row/column selections to data bounds
       const clampedRange = await ws._internal.clampRangeToDataBounds(range);
@@ -461,14 +469,15 @@ export const SET_INSIDE_BORDERS: AsyncActionHandler = async (deps) => {
       // Inside horizontal: bottom border on all rows except the last
       if (endRow > startRow) {
         const hRange = { startRow, startCol, endRow: endRow - 1, endCol };
-        await ws.formats.setRanges([hRange], { borders: { bottom: thinBorder } });
+        patches.push({ ranges: [hRange], borders: { bottom: thinBorder } });
       }
       // Inside vertical: right border on all columns except the last
       if (endCol > startCol) {
         const vRange = { startRow, startCol, endRow, endCol: endCol - 1 };
-        await ws.formats.setRanges([vRange], { borders: { right: thinBorder } });
+        patches.push({ ranges: [vRange], borders: { right: thinBorder } });
       }
     }
+    await ws.formats.patchBorders(patches);
   }
 
   return handled();
@@ -489,6 +498,7 @@ export const SET_INSIDE_HORIZONTAL_BORDERS: AsyncActionHandler = async (deps) =>
 
   for (const sheetId of targetSheetIds) {
     const ws = deps.workbook.getSheetById(sheetId);
+    const patches: BorderRangePatch[] = [];
     for (const range of ranges) {
       // Performance: Clamp full row/column selections to data bounds
       const clampedRange = await ws._internal.clampRangeToDataBounds(range);
@@ -497,9 +507,10 @@ export const SET_INSIDE_HORIZONTAL_BORDERS: AsyncActionHandler = async (deps) =>
       // Inside horizontal: bottom border on all rows except the last
       if (endRow > startRow) {
         const hRange = { startRow, startCol, endRow: endRow - 1, endCol };
-        await ws.formats.setRanges([hRange], { borders: { bottom: thinBorder } });
+        patches.push({ ranges: [hRange], borders: { bottom: thinBorder } });
       }
     }
+    await ws.formats.patchBorders(patches);
   }
 
   return handled();
@@ -520,6 +531,7 @@ export const SET_INSIDE_VERTICAL_BORDERS: AsyncActionHandler = async (deps) => {
 
   for (const sheetId of targetSheetIds) {
     const ws = deps.workbook.getSheetById(sheetId);
+    const patches: BorderRangePatch[] = [];
     for (const range of ranges) {
       // Performance: Clamp full row/column selections to data bounds
       const clampedRange = await ws._internal.clampRangeToDataBounds(range);
@@ -528,9 +540,10 @@ export const SET_INSIDE_VERTICAL_BORDERS: AsyncActionHandler = async (deps) => {
       // Inside vertical: right border on all columns except the last
       if (endCol > startCol) {
         const vRange = { startRow, startCol, endRow, endCol: endCol - 1 };
-        await ws.formats.setRanges([vRange], { borders: { right: thinBorder } });
+        patches.push({ ranges: [vRange], borders: { right: thinBorder } });
       }
     }
+    await ws.formats.patchBorders(patches);
   }
 
   return handled();
@@ -552,6 +565,7 @@ export const SET_TOP_BORDER: AsyncActionHandler = async (deps) => {
 
   for (const sheetId of targetSheetIds) {
     const ws = deps.workbook.getSheetById(sheetId);
+    const patches: BorderRangePatch[] = [];
     for (const range of ranges) {
       // Performance: Clamp to data bounds for full row selections
       const clampedRange = await ws._internal.clampRangeToDataBounds(range);
@@ -559,8 +573,9 @@ export const SET_TOP_BORDER: AsyncActionHandler = async (deps) => {
 
       // Top border on the first row of the selection
       const topRange = { startRow, startCol, endRow: startRow, endCol };
-      await ws.formats.setRanges([topRange], { borders: { top: thinBorder } });
+      patches.push({ ranges: [topRange], borders: { top: thinBorder } });
     }
+    await ws.formats.patchBorders(patches);
   }
 
   return handled();
@@ -582,6 +597,7 @@ export const SET_BOTTOM_BORDER: AsyncActionHandler = async (deps) => {
 
   for (const sheetId of targetSheetIds) {
     const ws = deps.workbook.getSheetById(sheetId);
+    const patches: BorderRangePatch[] = [];
     for (const range of ranges) {
       // Performance: Clamp to data bounds for full row selections
       const clampedRange = await ws._internal.clampRangeToDataBounds(range);
@@ -589,8 +605,9 @@ export const SET_BOTTOM_BORDER: AsyncActionHandler = async (deps) => {
 
       // Bottom border on the last row of the selection
       const bottomRange = { startRow: endRow, startCol, endRow, endCol };
-      await ws.formats.setRanges([bottomRange], { borders: { bottom: thinBorder } });
+      patches.push({ ranges: [bottomRange], borders: { bottom: thinBorder } });
     }
+    await ws.formats.patchBorders(patches);
   }
 
   return handled();
@@ -612,6 +629,7 @@ export const SET_LEFT_BORDER: AsyncActionHandler = async (deps) => {
 
   for (const sheetId of targetSheetIds) {
     const ws = deps.workbook.getSheetById(sheetId);
+    const patches: BorderRangePatch[] = [];
     for (const range of ranges) {
       // Performance: Clamp to data bounds for full column selections
       const clampedRange = await ws._internal.clampRangeToDataBounds(range);
@@ -619,8 +637,9 @@ export const SET_LEFT_BORDER: AsyncActionHandler = async (deps) => {
 
       // Left border on the first column of the selection
       const leftRange = { startRow, startCol, endRow, endCol: startCol };
-      await ws.formats.setRanges([leftRange], { borders: { left: thinBorder } });
+      patches.push({ ranges: [leftRange], borders: { left: thinBorder } });
     }
+    await ws.formats.patchBorders(patches);
   }
 
   return handled();
@@ -642,6 +661,7 @@ export const SET_RIGHT_BORDER: AsyncActionHandler = async (deps) => {
 
   for (const sheetId of targetSheetIds) {
     const ws = deps.workbook.getSheetById(sheetId);
+    const patches: BorderRangePatch[] = [];
     for (const range of ranges) {
       // Performance: Clamp to data bounds for full column selections
       const clampedRange = await ws._internal.clampRangeToDataBounds(range);
@@ -649,8 +669,9 @@ export const SET_RIGHT_BORDER: AsyncActionHandler = async (deps) => {
 
       // Right border on the last column of the selection
       const rightRange = { startRow, startCol: endCol, endRow, endCol };
-      await ws.formats.setRanges([rightRange], { borders: { right: thinBorder } });
+      patches.push({ ranges: [rightRange], borders: { right: thinBorder } });
     }
+    await ws.formats.patchBorders(patches);
   }
 
   return handled();
@@ -668,16 +689,16 @@ export const SET_DIAGONAL_UP_BORDER: AsyncActionHandler = async (deps) => {
   const targetSheetIds = getTargetSheetIds(deps);
   const { ranges } = getSelectionContext(deps);
 
-  const diagonalUpBorder = {
-    borders: {
-      diagonal: { ...thinBorder, direction: 'up' as const },
-    },
+  const diagonalUpBorder: CellBorders = {
+    diagonal: thinBorder,
+    diagonalUp: true,
+    diagonalDown: false,
   };
 
   // Performance: Uses row/column format storage for full row/column selections
   for (const sheetId of targetSheetIds) {
     const ws = deps.workbook.getSheetById(sheetId);
-    await ws.formats.setRanges(ranges, diagonalUpBorder);
+    await ws.formats.patchBorders([{ ranges, borders: diagonalUpBorder }]);
   }
 
   return handled();
@@ -695,16 +716,16 @@ export const SET_DIAGONAL_DOWN_BORDER: AsyncActionHandler = async (deps) => {
   const targetSheetIds = getTargetSheetIds(deps);
   const { ranges } = getSelectionContext(deps);
 
-  const diagonalDownBorder = {
-    borders: {
-      diagonal: { ...thinBorder, direction: 'down' as const },
-    },
+  const diagonalDownBorder: CellBorders = {
+    diagonal: thinBorder,
+    diagonalUp: false,
+    diagonalDown: true,
   };
 
   // Performance: Uses row/column format storage for full row/column selections
   for (const sheetId of targetSheetIds) {
     const ws = deps.workbook.getSheetById(sheetId);
-    await ws.formats.setRanges(ranges, diagonalDownBorder);
+    await ws.formats.patchBorders([{ ranges, borders: diagonalDownBorder }]);
   }
 
   return handled();
@@ -722,16 +743,16 @@ export const SET_DIAGONAL_BOTH_BORDER: AsyncActionHandler = async (deps) => {
   const targetSheetIds = getTargetSheetIds(deps);
   const { ranges } = getSelectionContext(deps);
 
-  const diagonalBothBorder = {
-    borders: {
-      diagonal: { ...thinBorder, direction: 'both' as const },
-    },
+  const diagonalBothBorder: CellBorders = {
+    diagonal: thinBorder,
+    diagonalUp: true,
+    diagonalDown: true,
   };
 
   // Performance: Uses row/column format storage for full row/column selections
   for (const sheetId of targetSheetIds) {
     const ws = deps.workbook.getSheetById(sheetId);
-    await ws.formats.setRanges(ranges, diagonalBothBorder);
+    await ws.formats.patchBorders([{ ranges, borders: diagonalBothBorder }]);
   }
 
   return handled();
@@ -752,6 +773,7 @@ export const SET_TOP_AND_BOTTOM_BORDERS: AsyncActionHandler = async (deps) => {
 
   for (const sheetId of targetSheetIds) {
     const ws = deps.workbook.getSheetById(sheetId);
+    const patches: BorderRangePatch[] = [];
     for (const range of ranges) {
       // Performance: Clamp to data bounds for full row selections
       const clampedRange = await ws._internal.clampRangeToDataBounds(range);
@@ -759,12 +781,13 @@ export const SET_TOP_AND_BOTTOM_BORDERS: AsyncActionHandler = async (deps) => {
 
       // Top border on first row
       const topRange = { startRow, startCol, endRow: startRow, endCol };
-      await ws.formats.setRanges([topRange], { borders: { top: thinBorder } });
+      patches.push({ ranges: [topRange], borders: { top: thinBorder } });
 
       // Bottom border on last row
       const bottomRange = { startRow: endRow, startCol, endRow, endCol };
-      await ws.formats.setRanges([bottomRange], { borders: { bottom: thinBorder } });
+      patches.push({ ranges: [bottomRange], borders: { bottom: thinBorder } });
     }
+    await ws.formats.patchBorders(patches);
   }
 
   return handled();
@@ -785,6 +808,7 @@ export const SET_TOP_AND_THICK_BOTTOM_BORDERS: AsyncActionHandler = async (deps)
 
   for (const sheetId of targetSheetIds) {
     const ws = deps.workbook.getSheetById(sheetId);
+    const patches: BorderRangePatch[] = [];
     for (const range of ranges) {
       // Performance: Clamp to data bounds for full row selections
       const clampedRange = await ws._internal.clampRangeToDataBounds(range);
@@ -792,12 +816,13 @@ export const SET_TOP_AND_THICK_BOTTOM_BORDERS: AsyncActionHandler = async (deps)
 
       // Top border (thin) on first row
       const topRange = { startRow, startCol, endRow: startRow, endCol };
-      await ws.formats.setRanges([topRange], { borders: { top: thinBorder } });
+      patches.push({ ranges: [topRange], borders: { top: thinBorder } });
 
       // Bottom border (thick) on last row
       const bottomRange = { startRow: endRow, startCol, endRow, endCol };
-      await ws.formats.setRanges([bottomRange], { borders: { bottom: thickBorder } });
+      patches.push({ ranges: [bottomRange], borders: { bottom: thickBorder } });
     }
+    await ws.formats.patchBorders(patches);
   }
 
   return handled();
@@ -818,6 +843,7 @@ export const SET_TOP_AND_DOUBLE_BOTTOM_BORDERS: AsyncActionHandler = async (deps
 
   for (const sheetId of targetSheetIds) {
     const ws = deps.workbook.getSheetById(sheetId);
+    const patches: BorderRangePatch[] = [];
     for (const range of ranges) {
       // Performance: Clamp to data bounds for full row selections
       const clampedRange = await ws._internal.clampRangeToDataBounds(range);
@@ -825,12 +851,13 @@ export const SET_TOP_AND_DOUBLE_BOTTOM_BORDERS: AsyncActionHandler = async (deps
 
       // Top border (thin) on first row
       const topRange = { startRow, startCol, endRow: startRow, endCol };
-      await ws.formats.setRanges([topRange], { borders: { top: thinBorder } });
+      patches.push({ ranges: [topRange], borders: { top: thinBorder } });
 
       // Bottom border (double) on last row
       const bottomRange = { startRow: endRow, startCol, endRow, endCol };
-      await ws.formats.setRanges([bottomRange], { borders: { bottom: doubleBorder } });
+      patches.push({ ranges: [bottomRange], borders: { bottom: doubleBorder } });
     }
+    await ws.formats.patchBorders(patches);
   }
 
   return handled();

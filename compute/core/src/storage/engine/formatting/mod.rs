@@ -3,6 +3,7 @@
 use super::YrsComputeEngine;
 use super::services;
 use super::validation;
+use crate::bridge_types::BorderPatchOperation;
 use crate::snapshot::MutationResult;
 use crate::storage::properties;
 use crate::storage::sheet::cf_store::{CFCellRange, CFIconSetPreset, CFPresetCategory};
@@ -163,6 +164,18 @@ impl YrsComputeEngine {
         clear_fields: &[String],
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
         range_mutations::patch_format_for_ranges(self, sheet_id, ranges, format, clear_fields)
+    }
+
+    /// Apply an ordered batch of nested border patches as one undoable command.
+    /// Supplied edges/flags replace complete members, cleared members remove
+    /// direct overrides, and omitted members remain unchanged.
+    #[bridge::write(scope = "sheet")]
+    pub fn patch_borders(
+        &mut self,
+        sheet_id: &SheetId,
+        operations: Vec<BorderPatchOperation>,
+    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+        range_mutations::patch_borders(self, sheet_id, operations)
     }
 
     #[bridge::write(scope = "sheet")]

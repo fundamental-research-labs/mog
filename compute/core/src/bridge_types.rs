@@ -14,6 +14,7 @@ pub use snapshot_types::*;
 pub use value_types::*;
 
 // Engine types (covers bare names like Comment, FloatingObject, StoredSlicer, etc.)
+pub use crate::border_patch::{BorderPatchField, BorderPatchOperation, BorderPatchTarget};
 pub use crate::diagnostics::formula_references::*;
 pub use crate::engine_types::*;
 

@@ -3,6 +3,7 @@
 use crate::dispatch::Dispatch;
 use crate::error::ComputeApiError;
 use cell_types::{CellId, SheetId};
+use compute_core::bridge_types::BorderPatchOperation;
 use domain_types::{CellFormat, ResolvedCellFormat};
 use snapshot_types::MutationResult;
 
@@ -155,6 +156,17 @@ impl SheetFormats {
         let sid = self.sheet_id;
         self.dispatch
             .call_engine(move |e| e.patch_format_for_ranges(&sid, &ranges, &format, &clear_fields))
+            .and_then(|r| r.map(|(_vp, m)| m).map_err(ComputeApiError::from))
+    }
+
+    /// Apply an ordered batch of nested border patches as one undoable command.
+    pub fn patch_borders(
+        &self,
+        operations: Vec<BorderPatchOperation>,
+    ) -> Result<MutationResult, ComputeApiError> {
+        let sid = self.sheet_id;
+        self.dispatch
+            .call_engine(move |e| e.patch_borders(&sid, operations))
             .and_then(|r| r.map(|(_vp, m)| m).map_err(ComputeApiError::from))
     }
 

@@ -1,4 +1,4 @@
-import type { CellFormat, ResolvedCellFormat } from '@mog-sdk/contracts/core';
+import type { CellBorders, CellFormat, ResolvedCellFormat } from '@mog-sdk/contracts/core';
 import { detectFormatType } from '@mog/spreadsheet-utils/number-formats';
 import { KernelError } from '../../errors';
 
@@ -90,7 +90,7 @@ const PUBLIC_TO_PERSISTED_KEY: Partial<Record<keyof CellFormat, string>> = {
 
 const TOP_LEVEL_ALIAS_KEYS = new Set(['fillColor', 'horizontalAlignment', 'verticalAlignment']);
 const COMPAT_CONTAINER_KEYS = new Set(['font', 'fill', 'alignment', 'protection', 'border']);
-const BORDER_KEYS = new Set([
+const PERSISTED_BORDER_KEYS = [
   'top',
   'right',
   'bottom',
@@ -101,14 +101,46 @@ const BORDER_KEYS = new Set([
   'vertical',
   'horizontal',
   'outline',
-  'start',
-  'end',
-]);
+] as const;
+type PersistedBorderKey = (typeof PERSISTED_BORDER_KEYS)[number];
+const BORDER_KEYS = new Set<string>([...PERSISTED_BORDER_KEYS, 'start', 'end']);
 const BORDER_SIDE_KEYS = new Set(['style', 'color', 'colorTint', 'direction']);
 
 export interface NormalizedCellFormatPatch {
   format: CellFormat;
   clearFields: string[];
+}
+
+export interface NormalizedCellBordersPatch {
+  borders: CellBorders;
+  clearFields: PersistedBorderKey[];
+}
+
+/** Normalize a tri-state patch over persisted border members. */
+export function normalizeCellBordersPatch(
+  borders: unknown,
+  path = 'borders',
+): NormalizedCellBordersPatch {
+  const source = asRecord(borders, path);
+  const normalized = normalizeBorders(source, [path]);
+  const result: FormatRecord = {};
+  const clearFields = new Set<PersistedBorderKey>();
+
+  for (const [key, value] of Object.entries(normalized)) {
+    if (key === 'start' || key === 'end') {
+      throw new KernelError(
+        'API_INVALID_ARGUMENT',
+        `${path}.${key} is not a persisted border member.`,
+        { path: [path, key] },
+      );
+    }
+    assignPatch(result, clearFields, key as PersistedBorderKey, value);
+  }
+
+  return {
+    borders: result as CellBorders,
+    clearFields: Array.from(clearFields),
+  };
 }
 
 export function normalizeCellFormatInput(
@@ -385,6 +417,7 @@ function normalizeCompatBorder(value: unknown, path: string[]): FormatRecord {
 
 function normalizeBorders(value: FormatRecord, path: string[]): FormatRecord {
   const result: FormatRecord = {};
+  let diagonalDirection: unknown;
   for (const [key, nested] of Object.entries(value)) {
     if (!BORDER_KEYS.has(key)) {
       throwUnsupported([...path, key]);
@@ -400,12 +433,47 @@ function normalizeBorders(value: FormatRecord, path: string[]): FormatRecord {
       key === 'start' ||
       key === 'end'
     ) {
-      result[key] = nested == null ? nested : normalizeBorderSide(nested, [...path, key]);
+      const side = nested == null ? nested : normalizeBorderSide(nested, [...path, key]);
+      if (key === 'diagonal' && isRecord(side)) {
+        diagonalDirection = side.direction;
+        delete side.direction;
+      }
+      result[key] = side;
     } else {
       result[key] = nested;
     }
   }
+
+  if (diagonalDirection !== undefined) {
+    const flags = diagonalDirectionFlags(diagonalDirection, [...path, 'diagonal', 'direction']);
+    if (!Object.prototype.hasOwnProperty.call(result, 'diagonalUp')) {
+      result.diagonalUp = flags.up;
+    }
+    if (!Object.prototype.hasOwnProperty.call(result, 'diagonalDown')) {
+      result.diagonalDown = flags.down;
+    }
+  }
   return result;
+}
+
+function diagonalDirectionFlags(
+  direction: unknown,
+  path: string[],
+): { up: boolean; down: boolean } {
+  switch (direction) {
+    case 'up':
+      return { up: true, down: false };
+    case 'down':
+      return { up: false, down: true };
+    case 'both':
+      return { up: true, down: true };
+    default:
+      throw new KernelError(
+        'API_INVALID_ARGUMENT',
+        `Expected ${path.join('.')} to be "up", "down", or "both".`,
+        { path },
+      );
+  }
 }
 
 function normalizeBorderSide(value: unknown, path: string[]): FormatRecord {
@@ -552,10 +620,10 @@ function validateNumberFormatType(
   }
 }
 
-function assignPatch(
+function assignPatch<Key extends string>(
   target: FormatRecord,
-  clearFields: Set<string>,
-  key: string,
+  clearFields: Set<Key>,
+  key: Key,
   value: unknown,
 ): void {
   if (value === undefined) return;
@@ -568,10 +636,10 @@ function assignPatch(
   }
 }
 
-function assignPatchIfUnset(
+function assignPatchIfUnset<Key extends string>(
   target: FormatRecord,
-  clearFields: Set<string>,
-  key: string,
+  clearFields: Set<Key>,
+  key: Key,
   value: unknown,
 ): void {
   if (!Object.prototype.hasOwnProperty.call(target, key) && !clearFields.has(key)) {

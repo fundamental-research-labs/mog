@@ -16,6 +16,7 @@ function createMockCtx(): any {
       canDoStructureOp: jest.fn().mockResolvedValue(true),
       setFormatForRanges: jest.fn().mockResolvedValue({ propertyChanges: [{}] }),
       patchFormatForRanges: jest.fn().mockResolvedValue({ propertyChanges: [{}] }),
+      patchBorders: jest.fn().mockResolvedValue({ propertyChanges: [{}] }),
       clearFormatForRanges: jest.fn().mockResolvedValue({}),
       patchRowFormat: jest.fn().mockResolvedValue({}),
       patchColFormat: jest.fn().mockResolvedValue({}),
@@ -461,6 +462,77 @@ describe('WorksheetFormatsImpl admission options', () => {
     ]) {
       expect(call[call.length - 1].operationContext.groupId).toBe(groupId);
     }
+  });
+
+  it('routes one ordered border batch across cell, row, and column targets', async () => {
+    const fullColumns = {
+      sheetId: SHEET_ID,
+      startRow: 0,
+      startCol: 1,
+      endRow: MAX_ROWS - 1,
+      endCol: 2,
+      isFullColumn: true,
+    };
+    const fullRow = {
+      sheetId: SHEET_ID,
+      startRow: 3,
+      startCol: 0,
+      endRow: 3,
+      endCol: MAX_COLS - 1,
+      isFullRow: true,
+    };
+    const cells = { sheetId: SHEET_ID, startRow: 4, startCol: 4, endRow: 5, endCol: 5 };
+
+    await formats.patchBorders([
+      {
+        ranges: [fullColumns, fullRow, cells],
+        borders: {
+          top: null,
+          diagonal: { style: 'thin', color: '#000000', direction: 'up' },
+        },
+      },
+    ]);
+
+    const borders = {
+      diagonal: { style: 'thin', color: '#000000' },
+      diagonalUp: true,
+      diagonalDown: false,
+    };
+    expect(ctx.computeBridge.patchBorders).toHaveBeenCalledWith(
+      SHEET_ID,
+      [
+        {
+          target: { kind: 'column', col: 1 },
+          borders,
+          clearFields: ['top'],
+        },
+        {
+          target: { kind: 'column', col: 2 },
+          borders,
+          clearFields: ['top'],
+        },
+        {
+          target: { kind: 'row', row: 3 },
+          borders,
+          clearFields: ['top'],
+        },
+        {
+          target: {
+            kind: 'cells',
+            startRow: 4,
+            startCol: 4,
+            endRow: 5,
+            endCol: 5,
+          },
+          borders,
+          clearFields: ['top'],
+        },
+      ],
+      expectFormatAdmission('formats.patchBorders', DIRECT_CELL_FORMAT_DOMAIN_IDS),
+    );
+    expect(ctx.computeBridge.patchFormatForRanges).not.toHaveBeenCalled();
+    expect(ctx.computeBridge.patchRowFormat).not.toHaveBeenCalled();
+    expect(ctx.computeBridge.patchColFormat).not.toHaveBeenCalled();
   });
 
   it('groups clearFill clear and reapply bridge writes under one command', async () => {

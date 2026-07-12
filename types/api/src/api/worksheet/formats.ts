@@ -4,7 +4,13 @@
  * Provides methods to get, set, and clear cell formats, as well as
  * apply format patterns across ranges (Format Painter).
  */
-import type { CellFormat, CellRange, FormatChangeResult, ResolvedCellFormat } from '../types';
+import type {
+  CellBorders,
+  CellFormat,
+  CellRange,
+  FormatChangeResult,
+  ResolvedCellFormat,
+} from '../types';
 import type { NumberFormatType } from '@mog/types-core/core';
 
 type CellFormatBorderSideInput = NonNullable<NonNullable<CellFormat['borders']>['top']>;
@@ -109,6 +115,30 @@ export type CellFormatInput = CellFormatPatch & {
   border?: CellFormatBorderInput;
 };
 
+/**
+ * Nested border patch over the ten persisted ECMA-376 border members.
+ * Missing members are preserved, values replace one complete member, and
+ * `null` clears that direct override.
+ */
+export interface CellBordersPatch {
+  top?: CellBorders['top'] | null;
+  right?: CellBorders['right'] | null;
+  bottom?: CellBorders['bottom'] | null;
+  left?: CellBorders['left'] | null;
+  diagonal?: CellBorders['diagonal'] | null;
+  diagonalUp?: CellBorders['diagonalUp'] | null;
+  diagonalDown?: CellBorders['diagonalDown'] | null;
+  vertical?: CellBorders['vertical'] | null;
+  horizontal?: CellBorders['horizontal'] | null;
+  outline?: CellBorders['outline'] | null;
+}
+
+/** One ordered border patch applied to one or more ranges. */
+export interface BorderRangePatch {
+  ranges: CellRange[];
+  borders: CellBordersPatch;
+}
+
 /** Sub-API for cell formatting operations on a worksheet. */
 export interface WorksheetFormats {
   /**
@@ -168,6 +198,15 @@ export interface WorksheetFormats {
    * @param format - Format properties to apply
    */
   setRanges(ranges: CellRange[], format: CellFormatInput): Promise<void>;
+
+  /**
+   * Apply ordered nested border patches as one undoable command.
+   *
+   * Unlike `setRanges(..., { borders })`, which replaces the complete borders
+   * composite for transferable-format fidelity, this method preserves omitted
+   * border members. Overlapping patches are applied in array order.
+   */
+  patchBorders(patches: BorderRangePatch[]): Promise<void>;
 
   /**
    * Check if a cell has explicit formatting applied (not just inherited from row/column/sheet).

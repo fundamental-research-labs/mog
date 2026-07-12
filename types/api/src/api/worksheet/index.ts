@@ -93,6 +93,8 @@ export type {
   WorksheetFill,
 } from './fill';
 export type {
+  BorderRangePatch,
+  CellBordersPatch,
   CellFormatAlignmentInput,
   CellFormatBorderInput,
   CellFormatFillInput,

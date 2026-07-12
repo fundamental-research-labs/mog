@@ -48,6 +48,10 @@ fn compute_config() -> TypeGenConfig {
         "CellValue".to_string(),
         bridge_ts::types::TsType::Named("CellValue".into()),
     );
+    map.insert(
+        "CellBorders".to_string(),
+        bridge_ts::types::TsType::Named("CellBorders".into()),
+    );
     // cell_types::CellId — serialized as UUID string at IPC boundary
     map.insert("CellId".to_string(), bridge_ts::types::TsType::String);
     // cell_types::SheetId — UUID newtype, serialized as string
@@ -550,6 +554,10 @@ fn build_import_config() -> ImportConfig {
                         local_name: "CellFormat".into(),
                         imported_name: None,
                     },
+                    TypeImport {
+                        local_name: "CellBorders".into(),
+                        imported_name: None,
+                    },
                 ],
             },
             // Hand-written leaf wire types live in `./types`. Previously this
@@ -683,6 +691,7 @@ fn generate_combined() {
         format!("{manifest_dir}/../../../domain-types/src/domain/formatting.rs"),
         // other compute-core source files
         format!("{manifest_dir}/../../../compute/core/src/range_manager.rs"),
+        format!("{manifest_dir}/../../../compute/core/src/border_patch.rs"),
         // engine files (for TableHitRegion, AutoExpansionResult, MergeRangeRef)
         format!("{manifest_dir}/../../../compute/core/src/storage/engine/mod.rs"),
         format!("{manifest_dir}/../../../compute/core/src/storage/engine/tables.rs"),

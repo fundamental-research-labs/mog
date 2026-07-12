@@ -8,6 +8,7 @@ mod test_advanced_filter;
 mod test_annotations;
 mod test_binary_patches;
 mod test_bootstrap_hydration;
+mod test_border_patches;
 mod test_cell_input_value;
 mod test_comments;
 mod test_copy_range;

@@ -322,6 +322,8 @@ export type {
   FilterListScope,
   CellFormatAlignmentInput,
   CellFormatBorderInput,
+  CellBordersPatch,
+  BorderRangePatch,
   CellFormatFillInput,
   CellFormatFontInput,
   CellFormatInput,

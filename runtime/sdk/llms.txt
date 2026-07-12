@@ -116,7 +116,9 @@ await ws.charts.add({
 
 Canonical flat `CellFormat` keys:
 
-`numberFormat`, `numberFormatType`, `fontFamily`, `fontSize`, `fontTheme`, `fontColor`, `fontColorTint`, `bold`, `italic`, `underlineType`, `strikethrough`, `superscript`, `subscript`, `fontOutline`, `fontShadow`, `horizontalAlign`, `verticalAlign`, `wrapText`, `textRotation`, `indent`, `shrinkToFit`, `readingOrder`, `autoIndent`, `backgroundColor`, `backgroundColorTint`, `patternType`, `patternForegroundColor`, `patternForegroundColorTint`, `gradientFill`, `borders`, `locked`, `hidden`, `forcedTextMode`, `extensions`
+`numberFormat`, `numberFormatType`, `fontFamily`, `fontSize`, `fontTheme`, `fontCharset`, `fontFamilyType`, `fontColor`, `fontColorTint`, `bold`, `italic`, `underlineType`, `strikethrough`, `superscript`, `subscript`, `fontOutline`, `fontShadow`, `horizontalAlign`, `verticalAlign`, `wrapText`, `textRotation`, `indent`, `shrinkToFit`, `readingOrder`, `autoIndent`, `backgroundColor`, `backgroundColorTint`, `patternType`, `patternForegroundColor`, `patternForegroundColorTint`, `gradientFill`, `borders`, `locked`, `hidden`, `pivotButton`, `forcedTextMode`, `extensions`
+
+`CellFormatInput` also accepts write-only compatibility aliases: `fillColor` → `backgroundColor`, `horizontalAlignment` → `horizontalAlign`, `verticalAlignment` → `verticalAlign`. Aliases are normalized before persistence; format reads expose only the canonical keys.
 
 `CellFormatInput` also accepts compatibility containers: `font`, `fill`, `alignment`, `protection`, `border`. Prefer the flat keys for Mog-native code.
 

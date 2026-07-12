@@ -11654,8 +11654,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "move(controlId: string, newAnchor: FormControlAnchorUpdate): Promise<FormControl | undefined>;",
-      "typeText": "Promise<FormControl|undefined>",
+      "signature": "move(controlId: string, newAnchor: FormControlAnchorUpdate): Promise<FormControl>;",
+      "typeText": "Promise<FormControl>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/form-controls.ts"
@@ -11672,9 +11672,9 @@
       "member": "remove",
       "kind": "method",
       "visibility": "public",
-      "asyncModel": "sync",
-      "signature": "remove(controlId: string): boolean;",
-      "typeText": "boolean",
+      "asyncModel": "promise",
+      "signature": "remove(controlId: string): Promise<boolean>;",
+      "typeText": "Promise<boolean>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/form-controls.ts"
@@ -11691,9 +11691,9 @@
       "member": "resize",
       "kind": "method",
       "visibility": "public",
-      "asyncModel": "sync",
-      "signature": "resize(controlId: string, width: number, height: number): FormControl | undefined;",
-      "typeText": "FormControl|undefined",
+      "asyncModel": "promise",
+      "signature": "resize(controlId: string, width: number, height: number): Promise<FormControl>;",
+      "typeText": "Promise<FormControl>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/form-controls.ts"
@@ -11710,9 +11710,9 @@
       "member": "update",
       "kind": "method",
       "visibility": "public",
-      "asyncModel": "sync",
-      "signature": "update(controlId: string, updates: FormControlUpdate): FormControl | undefined;",
-      "typeText": "FormControl|undefined",
+      "asyncModel": "promise",
+      "signature": "update(controlId: string, updates: FormControlUpdate): Promise<FormControl>;",
+      "typeText": "Promise<FormControl>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/form-controls.ts"
@@ -31944,8 +31944,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "move(controlId: string, newAnchor: FormControlAnchorUpdate): Promise<FormControl | undefined>;",
-      "typeText": "Promise<FormControl|undefined>",
+      "signature": "move(controlId: string, newAnchor: FormControlAnchorUpdate): Promise<FormControl>;",
+      "typeText": "Promise<FormControl>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/form-controls.ts"
@@ -31962,9 +31962,9 @@
       "member": "remove",
       "kind": "method",
       "visibility": "public",
-      "asyncModel": "sync",
-      "signature": "remove(controlId: string): boolean;",
-      "typeText": "boolean",
+      "asyncModel": "promise",
+      "signature": "remove(controlId: string): Promise<boolean>;",
+      "typeText": "Promise<boolean>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/form-controls.ts"
@@ -31981,9 +31981,9 @@
       "member": "resize",
       "kind": "method",
       "visibility": "public",
-      "asyncModel": "sync",
-      "signature": "resize(controlId: string, width: number, height: number): FormControl | undefined;",
-      "typeText": "FormControl|undefined",
+      "asyncModel": "promise",
+      "signature": "resize(controlId: string, width: number, height: number): Promise<FormControl>;",
+      "typeText": "Promise<FormControl>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/form-controls.ts"
@@ -32000,9 +32000,9 @@
       "member": "update",
       "kind": "method",
       "visibility": "public",
-      "asyncModel": "sync",
-      "signature": "update(controlId: string, updates: FormControlUpdate): FormControl | undefined;",
-      "typeText": "FormControl|undefined",
+      "asyncModel": "promise",
+      "signature": "update(controlId: string, updates: FormControlUpdate): Promise<FormControl>;",
+      "typeText": "Promise<FormControl>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/form-controls.ts"

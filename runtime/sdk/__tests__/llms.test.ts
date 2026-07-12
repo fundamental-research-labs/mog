@@ -30,6 +30,16 @@ describe('SDK llms.txt contract', () => {
     expect(llms).toContain('<!-- BEGIN GENERATED:API-CONTRACTS -->');
     expect(llms).toContain('<!-- END GENERATED:API-CONTRACTS -->');
     expect(llms).toContain("api.describe('type:CellFormatInput')");
+    expect(llms).toContain(
+      '`fillColor` → `backgroundColor`, `horizontalAlignment` → `horizontalAlign`, `verticalAlignment` → `verticalAlign`',
+    );
+    expect(llms).toContain(
+      'Aliases are normalized before persistence; format reads expose only the canonical keys.',
+    );
+    expect(llms).toContain(
+      'compatibility containers: `font`, `fill`, `alignment`, `protection`, `border`',
+    );
+    expect(llms).not.toMatch(/compatibility containers:[^\n]*`fillColor`/);
     expect(llms).not.toContain("tags: ['action']");
     expect(llms).not.toMatch(/\b582 spreadsheet formula functions\b/);
   });

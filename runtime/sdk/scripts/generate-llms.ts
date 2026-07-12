@@ -143,6 +143,10 @@ function requireProperty(properties: TypeProperty[], name: string): TypeProperty
   return property;
 }
 
+function writeAliasTarget(property: TypeProperty): string | null {
+  return property.docstring.match(/write-only alias for `([^`]+)`/i)?.[1] ?? null;
+}
+
 function renderGeneratedContracts(spec: ApiSpec): string {
   const methods = methodIndex(spec);
   const layout = requireMethod(methods, 'ws.layout.setColumnWidth');
@@ -157,9 +161,16 @@ function renderGeneratedContracts(spec: ApiSpec): string {
   const chartFields = ['anchorRow', 'anchorCol', 'width', 'height'].map((name) =>
     requireProperty(chartProperties, name),
   );
-  const compatibilityContainers = cellFormatInputProperties
-    .filter((property) => !cellFormatProperties.some((flat) => flat.name === property.name))
-    .map((property) => property.name);
+  const compatibilityInputs = cellFormatInputProperties.filter(
+    (property) => !cellFormatProperties.some((flat) => flat.name === property.name),
+  );
+  const compatibilityAliases = compatibilityInputs.flatMap((property) => {
+    const target = writeAliasTarget(property);
+    return target ? [{ property, target }] : [];
+  });
+  const compatibilityContainers = compatibilityInputs.filter(
+    (property) => writeAliasTarget(property) === null,
+  );
 
   if (!layout.docstring) fail('ws.layout.setColumnWidth must document selectors and units');
   for (const field of chartFields) {
@@ -210,10 +221,20 @@ function renderGeneratedContracts(spec: ApiSpec): string {
     '',
     cellFormatProperties.map((property) => `\`${property.name}\``).join(', '),
     '',
+    ...(compatibilityAliases.length > 0
+      ? [
+          `\`CellFormatInput\` also accepts write-only compatibility aliases: ${compatibilityAliases
+            .map(({ property, target }) => `\`${property.name}\` → \`${target}\``)
+            .join(
+              ', ',
+            )}. Aliases are normalized before persistence; format reads expose only the canonical keys.`,
+          '',
+        ]
+      : []),
     ...(compatibilityContainers.length > 0
       ? [
           `\`CellFormatInput\` also accepts compatibility containers: ${compatibilityContainers
-            .map((name) => `\`${name}\``)
+            .map((property) => `\`${property.name}\``)
             .join(', ')}. Prefer the flat keys for Mog-native code.`,
           '',
         ]

@@ -371,7 +371,9 @@
         "searchAllSheets": {
           "signature": "searchAllSheets(patterns: string[], options?: SearchOptions | undefined): Promise<(SearchResult & { sheetName: string; })[]>",
           "docstring": "Search all sheets for cells matching regex patterns (single IPC call).",
-          "usedTypes": ["SearchOptions"]
+          "usedTypes": [
+            "SearchOptions"
+          ]
         },
         "getChartDataPointTrack": {
           "signature": "getChartDataPointTrack(): Promise<boolean>",
@@ -386,7 +388,9 @@
         "getSettings": {
           "signature": "getSettings(): Promise<WorkbookSettings>",
           "docstring": "Get workbook-level settings.",
-          "usedTypes": ["WorkbookSettings"]
+          "usedTypes": [
+            "WorkbookSettings"
+          ]
         },
         "setSettings": {
           "signature": "setSettings(updates: WorkbookSettingsPatch): Promise<void>",
@@ -396,7 +400,9 @@
         "replaceSettings": {
           "signature": "replaceSettings(settings: WorkbookSettings): Promise<void>",
           "docstring": null,
-          "usedTypes": ["WorkbookSettings"]
+          "usedTypes": [
+            "WorkbookSettings"
+          ]
         },
         "getCustomLists": {
           "signature": "getCustomLists(): Promise<readonly CustomList[]>",
@@ -516,7 +522,9 @@
         "cellStyles.get": {
           "signature": "cellStyles.get(styleId: string): Promise<CellFormat | null>",
           "docstring": "Get a cell format (style) by its style ID. Returns the format, or null if not found.",
-          "usedTypes": ["CellFormat"]
+          "usedTypes": [
+            "CellFormat"
+          ]
         },
         "cellStyles.getStyle": {
           "signature": "cellStyles.getStyle(styleId: string): Promise<CellStyle | null>",
@@ -536,7 +544,9 @@
         "cellStyles.add": {
           "signature": "cellStyles.add(name: string, format: CellFormat): Promise<CellStyle>",
           "docstring": "Create a new custom cell style.",
-          "usedTypes": ["CellFormat"]
+          "usedTypes": [
+            "CellFormat"
+          ]
         },
         "cellStyles.update": {
           "signature": "cellStyles.update(styleId: string, updates: Partial<Omit<CellStyle, \"id\" | \"builtIn\">>): Promise<CellStyle | null>",
@@ -611,7 +621,9 @@
         "names.get": {
           "signature": "names.get(name: string, scope?: string | undefined): Promise<NamedRangeInfo | null>",
           "docstring": "Get a named range by name.\n@param - The name to look up.\n@param - Optional sheet name scope. Omit for workbook-scoped names.\n@returns The named range info, or null if not found.",
-          "usedTypes": ["NamedRangeInfo"]
+          "usedTypes": [
+            "NamedRangeInfo"
+          ]
         },
         "names.getRange": {
           "signature": "names.getRange(name: string, scope?: string | undefined): Promise<NamedRangeReference | null>",
@@ -641,7 +653,9 @@
         "names.list": {
           "signature": "names.list(): Promise<NamedRangeInfo[]>",
           "docstring": "List all named ranges in the workbook.\n@returns Array of named range info objects.",
-          "usedTypes": ["NamedRangeInfo"]
+          "usedTypes": [
+            "NamedRangeInfo"
+          ]
         },
         "names.createFromSelection": {
           "signature": "names.createFromSelection(sheet: string | SheetId, range: CellRange, options: CreateNamesFromSelectionOptions): Promise<CreateNamesResult>",
@@ -836,7 +850,9 @@
         "slicers.list": {
           "signature": "slicers.list(): Promise<SlicerInfo[]>",
           "docstring": "List all slicers across all sheets in the workbook.\n@returns Array of slicer summary information",
-          "usedTypes": ["SlicerInfo"]
+          "usedTypes": [
+            "SlicerInfo"
+          ]
         },
         "slicers.get": {
           "signature": "slicers.get(slicerId: string): Promise<Slicer | null>",
@@ -846,22 +862,30 @@
         "slicers.getItemAt": {
           "signature": "slicers.getItemAt(index: number): Promise<SlicerInfo | null>",
           "docstring": "Get a slicer by its zero-based index in the list.\n@param - Zero-based index of the slicer\n@returns Slicer summary information, or null if index is out of range",
-          "usedTypes": ["SlicerInfo"]
+          "usedTypes": [
+            "SlicerInfo"
+          ]
         },
         "slicers.getItems": {
           "signature": "slicers.getItems(slicerId: string): Promise<SlicerItem[]>",
           "docstring": "Get the items (values) available in a slicer by ID.\n@param - ID of the slicer\n@returns Array of slicer items with selection state",
-          "usedTypes": ["SlicerItem"]
+          "usedTypes": [
+            "SlicerItem"
+          ]
         },
         "slicers.getItem": {
           "signature": "slicers.getItem(slicerId: string, key: CellValue): Promise<SlicerItem>",
           "docstring": "Get a slicer item by its string key.\n@param - ID of the slicer\n@param - The value to look up (matched via string coercion)\n@returns The matching slicer item\n@throws KernelError if no item matches the key",
-          "usedTypes": ["SlicerItem"]
+          "usedTypes": [
+            "SlicerItem"
+          ]
         },
         "slicers.getItemOrNullObject": {
           "signature": "slicers.getItemOrNullObject(slicerId: string, key: CellValue): Promise<SlicerItem | null>",
           "docstring": "Get a slicer item by its string key, or null if not found.\n@param - ID of the slicer\n@param - The value to look up (matched via string coercion)\n@returns The matching slicer item, or null if not found",
-          "usedTypes": ["SlicerItem"]
+          "usedTypes": [
+            "SlicerItem"
+          ]
         },
         "slicers.remove": {
           "signature": "slicers.remove(slicerId: string): Promise<SlicerRemoveReceipt>",
@@ -881,7 +905,9 @@
         "tableStyles.add": {
           "signature": "tableStyles.add(name: string, style: TableStyleConfig): Promise<string>",
           "docstring": "Create a custom table style. Returns the style name/ID.",
-          "usedTypes": ["TableStyleConfig"]
+          "usedTypes": [
+            "TableStyleConfig"
+          ]
         },
         "tableStyles.update": {
           "signature": "tableStyles.update(name: string, style: Partial<TableStyleConfig>): Promise<void>",
@@ -906,7 +932,9 @@
         "tableStyles.duplicate": {
           "signature": "tableStyles.duplicate(name: string, newName: string): Promise<TableStyleInfo>",
           "docstring": "Duplicate an existing table style. Returns the new style info.",
-          "usedTypes": ["TableStyleInfo"]
+          "usedTypes": [
+            "TableStyleInfo"
+          ]
         },
         "theme.getWorkbookTheme": {
           "signature": "theme.getWorkbookTheme(): Promise<ThemeDefinition>",
@@ -1486,7 +1514,9 @@
         "setCell": {
           "signature": "setCell(address: string, value: CellValuePrimitive | Date, options?: CellWriteOptions | undefined): Promise<void>",
           "docstring": "Set a cell value by A1 address.\nString values starting with \"=\" are treated as formulas (e.g. \"=SUM(B1:B10)\").\nUse `options.asFormula` to force formula interpretation without the \"=\" prefix.\nUse `options.literal` / `options.asText` to store formula-shaped strings as literal text.\nDate values are automatically converted via setDateValue().",
-          "usedTypes": ["CellWriteOptions"]
+          "usedTypes": [
+            "CellWriteOptions"
+          ]
         },
         "setValue": {
           "signature": "setValue(address: string, value: CellValuePrimitive | Date, options?: Pick<CellWriteOptions, \"literal\" | \"asText\" | \"annotation\"> | undefined): Promise<void>",
@@ -1506,17 +1536,23 @@
         "getCell": {
           "signature": "getCell(address: string): Promise<CellData>",
           "docstring": "Get cell data by A1 address.",
-          "usedTypes": ["CellData"]
+          "usedTypes": [
+            "CellData"
+          ]
         },
         "getRange": {
           "signature": "getRange(range: string): Promise<CellData[][]>",
           "docstring": "Get a 2D array of cell data for a range (A1 notation).",
-          "usedTypes": ["CellData"]
+          "usedTypes": [
+            "CellData"
+          ]
         },
         "getRanges": {
           "signature": "getRanges(addresses: string): Promise<CellData[][][]>",
           "docstring": "Get cell data for multiple ranges at once (spreadsheet special-cell typeWorksheet.getRanges equivalent).\n@param - Comma-separated A1-style range addresses (e.g. \"A1:B5,D1:E5,G1\")\n@returns Array of 2D cell data arrays, one per address",
-          "usedTypes": ["CellData"]
+          "usedTypes": [
+            "CellData"
+          ]
         },
         "getCells": {
           "signature": "getCells(range: string | CellRange, options?: WorksheetGetCellsFullOptions | undefined): Promise<WorksheetRangeCell[]>",
@@ -1631,12 +1667,16 @@
         "getRawCellData": {
           "signature": "getRawCellData(address: string, includeFormula?: boolean | undefined): Promise<RawCellData>",
           "docstring": "Get raw cell data (value, formula, format, borders, etc.) by A1 address.",
-          "usedTypes": ["RawCellData"]
+          "usedTypes": [
+            "RawCellData"
+          ]
         },
         "getRawRangeData": {
           "signature": "getRawRangeData(range: string | CellRange, options?: { includeFormula?: boolean | undefined; } | undefined): Promise<RawCellData[][]>",
           "docstring": "Get raw data for a range as a 2D array (A1 notation or CellRange).",
-          "usedTypes": ["RawCellData"]
+          "usedTypes": [
+            "RawCellData"
+          ]
         },
         "getRangeWithIdentity": {
           "signature": "getRangeWithIdentity(range: string | CellRange): Promise<IdentifiedCellData[]>",
@@ -1656,7 +1696,9 @@
         "summarize": {
           "signature": "summarize(options?: SummaryOptions | undefined): Promise<string>",
           "docstring": "Get a sheet overview summary for agent context.",
-          "usedTypes": ["SummaryOptions"]
+          "usedTypes": [
+            "SummaryOptions"
+          ]
         },
         "getCharts": {
           "signature": "getCharts(options?: ChartReadOptions | undefined): Promise<Chart[]>",
@@ -1692,7 +1734,9 @@
         "addPivotTable": {
           "signature": "addPivotTable(config: PivotCreateConfig): Promise<PivotTableConfig>",
           "docstring": "@deprecated Use `ws.pivots.add(config)` instead.",
-          "usedTypes": ["PivotTableConfig"]
+          "usedTypes": [
+            "PivotTableConfig"
+          ]
         },
         "removePivotTable": {
           "signature": "removePivotTable(name: string): Promise<void>",
@@ -1707,7 +1751,9 @@
         "getPivotTable": {
           "signature": "getPivotTable(name: string): Promise<PivotTableHandle | null>",
           "docstring": "@deprecated Use `ws.pivots.get(name)` instead.",
-          "usedTypes": ["PivotTableHandle"]
+          "usedTypes": [
+            "PivotTableHandle"
+          ]
         },
         "getUsedRange": {
           "signature": "getUsedRange(): Promise<WorksheetRange | null>",
@@ -1752,7 +1798,10 @@
         "regexSearch": {
           "signature": "regexSearch(patterns: string[], options?: SearchOptions | undefined): Promise<SearchResult[]>",
           "docstring": "Search cells using regex patterns.",
-          "usedTypes": ["SearchOptions", "SearchResult"]
+          "usedTypes": [
+            "SearchOptions",
+            "SearchResult"
+          ]
         },
         "signCheck": {
           "signature": "signCheck(range?: string | undefined, options?: SignCheckOptions | undefined): Promise<SignCheckResult>",
@@ -1762,7 +1811,9 @@
         "findInRange": {
           "signature": "findInRange(range: string, text: string, options?: FindInRangeOptions | undefined): Promise<SearchResult | null>",
           "docstring": "Find the first cell matching text within a range (spreadsheet special-cell typeRange.find equivalent).\n@param - A1 range string to search within\n@param - Text or regex pattern to search for\n@param - Search options (matchCase, entireCell)\n@returns The first matching SearchResult, or null if no match found",
-          "usedTypes": ["SearchResult"]
+          "usedTypes": [
+            "SearchResult"
+          ]
         },
         "replaceAll": {
           "signature": "replaceAll(range: string, text: string, replacement: string, options?: FindInRangeOptions | undefined): Promise<number>",
@@ -1822,7 +1873,9 @@
         "sortRange": {
           "signature": "sortRange(range: string, options: SortOptions): Promise<void>",
           "docstring": "Sort a range by the specified options (A1 notation).",
-          "usedTypes": ["SortOptions"]
+          "usedTypes": [
+            "SortOptions"
+          ]
         },
         "sortByColor": {
           "signature": "sortByColor(range: string | CellRange, opts: SortByColorOptions): Promise<void>",
@@ -1867,7 +1920,9 @@
         "getSelectionAggregates": {
           "signature": "getSelectionAggregates(ranges: CellRange[]): Promise<AggregateResult>",
           "docstring": "Get aggregates (SUM, COUNT, AVG, MIN, MAX) for selected ranges.",
-          "usedTypes": ["AggregateResult"]
+          "usedTypes": [
+            "AggregateResult"
+          ]
         },
         "formatValues": {
           "signature": "formatValues(entries: FormatEntry[]): Promise<string[]>",
@@ -1937,6 +1992,96 @@
         "setBoundsReader": {
           "signature": "setBoundsReader(reader: IObjectBoundsReader): void",
           "docstring": "Inject the bounds reader (from the renderer's SceneGraphBoundsReader) so that\nfloating-object handles can resolve pixel bounds via `handle.getBounds()`.\n\nCalling this invalidates cached typed collections so they pick up the new reader\non their next access.",
+          "usedTypes": []
+        },
+        "annotations.cells.diagnostics.get": {
+          "signature": "annotations.cells.diagnostics.get(ref: WorksheetCellAnnotationRef, options?: WorksheetAnnotationDiagnosticReadOptions | undefined): Promise<WorksheetCellAnnotationRecord | null>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "annotations.cells.diagnostics.list": {
+          "signature": "annotations.cells.diagnostics.list(options?: WorksheetCellAnnotationDiagnosticListOptions | undefined): Promise<WorksheetCellAnnotationRecord[]>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "annotations.cells.set": {
+          "signature": "annotations.cells.set(ref: WorksheetCellAnnotationRef, text: string): Promise<WorksheetCellAnnotationRecord>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "annotations.cells.setMany": {
+          "signature": "annotations.cells.setMany(entries: readonly WorksheetCellAnnotationWriteEntry[]): Promise<void>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "annotations.cells.get": {
+          "signature": "annotations.cells.get(ref: WorksheetCellAnnotationRef, options?: WorksheetAnnotationReadOptions | undefined): Promise<WorksheetCellAnnotationView | null>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "annotations.cells.getText": {
+          "signature": "annotations.cells.getText(ref: WorksheetCellAnnotationRef): Promise<string | null>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "annotations.cells.list": {
+          "signature": "annotations.cells.list(options?: WorksheetCellAnnotationListOptions | undefined): Promise<WorksheetCellAnnotationView[]>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "annotations.cells.remove": {
+          "signature": "annotations.cells.remove(ref: WorksheetCellAnnotationRef): Promise<WorksheetCellAnnotationDeleteResult>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "annotations.cells.clear": {
+          "signature": "annotations.cells.clear(range?: string | CellRange | undefined): Promise<void>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "annotations.cells.acceptStale": {
+          "signature": "annotations.cells.acceptStale(ref: WorksheetCellAnnotationRef): Promise<WorksheetCellAnnotationRecord>",
+          "docstring": "Accept a stale annotation by re-anchoring it to the cell's current content.\nThis preserves the annotation text and replaces the fingerprint through the\nsame kernel-backed write path as {@link set}.",
+          "usedTypes": []
+        },
+        "annotations.setCell": {
+          "signature": "annotations.setCell(cell: string, text: string): Promise<WorksheetAnnotationRecord>",
+          "docstring": "Set or replace the annotation for a cell.\n@deprecated Use `worksheet.annotations.cells.set(...)`.\n@param - A1-style cell address\n@param - Annotation text\n@returns The stored annotation record",
+          "usedTypes": []
+        },
+        "annotations.getCell": {
+          "signature": "annotations.getCell(cell: string): Promise<WorksheetAnnotationRecord | null>",
+          "docstring": "Get the annotation for a cell.\n@deprecated Use `worksheet.annotations.cells.diagnostics.get(...)` for the\nraw record, or `worksheet.annotations.cells.get(...)` for a safe fresh-text\nview.\n@param - A1-style cell address\n@returns The annotation record, or null if none exists",
+          "usedTypes": []
+        },
+        "annotations.removeCell": {
+          "signature": "annotations.removeCell(cell: string): Promise<WorksheetAnnotationDeleteResult>",
+          "docstring": "Remove the annotation for a cell.\n@deprecated Use `worksheet.annotations.cells.remove(...)`.\n@param - A1-style cell address\n@returns Deletion status and removed record when one existed",
+          "usedTypes": []
+        },
+        "annotations.listCells": {
+          "signature": "annotations.listCells(): Promise<WorksheetAnnotationRecord[]>",
+          "docstring": "List all cell annotations on this worksheet.\n@deprecated Use `worksheet.annotations.cells.diagnostics.list(...)` for raw\nrecords, or `worksheet.annotations.cells.list(...)` for safe fresh-text\nviews.\n@returns Cell annotation records for this worksheet",
+          "usedTypes": []
+        },
+        "annotations.setTable": {
+          "signature": "annotations.setTable(tableRef: string, text: string): Promise<WorksheetAnnotationRecord>",
+          "docstring": "Set or replace the annotation for a table on this worksheet.\n@param - Table id, name, or display name\n@param - Annotation text\n@returns The stored annotation record",
+          "usedTypes": []
+        },
+        "annotations.getTable": {
+          "signature": "annotations.getTable(tableRef: string): Promise<WorksheetAnnotationRecord | null>",
+          "docstring": "Get the annotation for a table on this worksheet.\n@param - Table id, name, or display name\n@returns The annotation record, or null if none exists",
+          "usedTypes": []
+        },
+        "annotations.removeTable": {
+          "signature": "annotations.removeTable(tableRef: string): Promise<WorksheetAnnotationDeleteResult>",
+          "docstring": "Remove the annotation for a table on this worksheet.\n@param - Table id, name, or display name\n@returns Deletion status and removed record when one existed",
+          "usedTypes": []
+        },
+        "annotations.listTables": {
+          "signature": "annotations.listTables(): Promise<WorksheetAnnotationRecord[]>",
+          "docstring": "List all table annotations for tables on this worksheet.\n@returns Table annotation records scoped to this worksheet",
           "usedTypes": []
         },
         "bindings.list": {
@@ -2576,7 +2721,9 @@
         "diagrams.add": {
           "signature": "diagrams.add(config: DiagramConfig): Promise<DiagramObject>",
           "docstring": "Add a diagram to the sheet. Returns the created floating object.",
-          "usedTypes": ["DiagramConfig"]
+          "usedTypes": [
+            "DiagramConfig"
+          ]
         },
         "diagrams.get": {
           "signature": "diagrams.get(objectId: string): Promise<Diagram | null>",
@@ -2696,7 +2843,9 @@
         "filters.get": {
           "signature": "filters.get(): Promise<FilterState | null>",
           "docstring": "Get the current auto-filter state.\n@returns The filter state, or null if no auto-filter is set",
-          "usedTypes": ["FilterState"]
+          "usedTypes": [
+            "FilterState"
+          ]
         },
         "filters.clear": {
           "signature": "filters.clear(): Promise<AutoFilterClearReceipt>",
@@ -2716,7 +2865,9 @@
         "filters.getAutoFilter": {
           "signature": "filters.getAutoFilter(): Promise<FilterState | null>",
           "docstring": "@deprecated Use {@link get} instead.\nGet the current auto-filter state.\n@returns The filter state, or null if no auto-filter is set",
-          "usedTypes": ["FilterState"]
+          "usedTypes": [
+            "FilterState"
+          ]
         },
         "filters.getForRange": {
           "signature": "filters.getForRange(range: string): Promise<{ id: string; filterKind: \"autoFilter\" | \"tableFilter\" | \"advancedFilter\"; } | null>",
@@ -2859,23 +3010,23 @@
           "usedTypes": []
         },
         "formControls.update": {
-          "signature": "formControls.update(controlId: string, updates: Partial<Omit<FormControl, \"id\" | \"type\" | \"sheetId\">>): FormControl | undefined",
-          "docstring": "Update a control on this sheet. Returns undefined if the control is absent or on another sheet.",
+          "signature": "formControls.update(controlId: string, updates: Partial<Omit<FormControl, \"id\" | \"type\" | \"sheetId\">>): Promise<FormControl>",
+          "docstring": "Update a control on this sheet. Throws `FORM_CONTROL_NOT_FOUND` when absent.",
           "usedTypes": []
         },
         "formControls.move": {
-          "signature": "formControls.move(controlId: string, newAnchor: FormControlAnchorUpdate): Promise<FormControl | undefined>",
+          "signature": "formControls.move(controlId: string, newAnchor: FormControlAnchorUpdate): Promise<FormControl>",
           "docstring": "Move a control on this sheet to a new anchor cell.",
           "usedTypes": []
         },
         "formControls.resize": {
-          "signature": "formControls.resize(controlId: string, width: number, height: number): FormControl | undefined",
+          "signature": "formControls.resize(controlId: string, width: number, height: number): Promise<FormControl>",
           "docstring": "Resize a control on this sheet.",
           "usedTypes": []
         },
         "formControls.remove": {
-          "signature": "formControls.remove(controlId: string): boolean",
-          "docstring": "Remove a control from this sheet. Returns true when a control was removed.",
+          "signature": "formControls.remove(controlId: string): Promise<boolean>",
+          "docstring": "Remove a control from this sheet. Throws `FORM_CONTROL_NOT_FOUND` when absent.",
           "usedTypes": []
         },
         "formats.set": {
@@ -2926,12 +3077,16 @@
         "formats.getDisplayedCellProperties": {
           "signature": "formats.getDisplayedCellProperties(address: string): Promise<CellFormat>",
           "docstring": "Get the fully-resolved displayed format of a single cell.\n\nIncludes the full 6-layer cascade (default → col → row → table → cell → CF)\nwith theme colors resolved to hex. Unlike `get()`, this includes the\nconditional formatting overlay.\n@param - A1-style cell address\n@returns The displayed cell format with CF applied",
-          "usedTypes": ["CellFormat"]
+          "usedTypes": [
+            "CellFormat"
+          ]
         },
         "formats.getDisplayedRangeProperties": {
           "signature": "formats.getDisplayedRangeProperties(range: string | CellRange): Promise<CellFormat[][]>",
           "docstring": "Get displayed formats for a rectangular range.\n\nEach element includes the full 6-layer cascade with CF overlay.\nMaximum 10,000 cells per call.\n@param - A1-style range string (e.g. \"A1:C3\")\n@returns 2D array of displayed cell formats",
-          "usedTypes": ["CellFormat"]
+          "usedTypes": [
+            "CellFormat"
+          ]
         },
         "formats.adjustIndent": {
           "signature": "formats.adjustIndent(address: string, amount: number): Promise<void>",
@@ -2951,7 +3106,9 @@
         "formats.getNumberFormatCategory": {
           "signature": "formats.getNumberFormatCategory(address: string): Promise<NumberFormatType>",
           "docstring": "Get the auto-derived number format category for a cell based on its format code.\n@param - A1-style cell address\n@returns The detected NumberFormatType category",
-          "usedTypes": ["NumberFormatType"]
+          "usedTypes": [
+            "NumberFormatType"
+          ]
         },
         "formats.getNumberFormatLocal": {
           "signature": "formats.getNumberFormatLocal(address: string): Promise<string>",
@@ -2971,7 +3128,9 @@
         "formats.getCellProperties": {
           "signature": "formats.getCellProperties(range: string): Promise<(CellFormat | null)[][]>",
           "docstring": "Get effective (resolved) cell formats for a rectangular range.\n\nReturns a 2D array (row-major) where each element is the fully resolved\nformat from the 5-layer cascade (default -> col -> row -> table -> cell).\nCells with no explicit format may return null.\n@param - A1-style range string (e.g. \"A1:C3\")\n@returns 2D array of CellFormat (or null for cells with default format)",
-          "usedTypes": ["CellFormat"]
+          "usedTypes": [
+            "CellFormat"
+          ]
         },
         "formats.setCellProperties": {
           "signature": "formats.setCellProperties(updates: { row: number; col: number; format: Partial<CellFormatInput>; }[]): Promise<void>",
@@ -2981,7 +3140,9 @@
         "formats.getRowProperties": {
           "signature": "formats.getRowProperties(rows: number[]): Promise<Map<number, CellFormat>>",
           "docstring": "Get row-level formats for the specified rows.\n\nReturns a Map from row index to CellFormat (only rows with explicit\nformats are included; rows with no format are omitted).\n@param - Row indices (0-based)\n@returns Map of row index to CellFormat",
-          "usedTypes": ["CellFormat"]
+          "usedTypes": [
+            "CellFormat"
+          ]
         },
         "formats.setRowProperties": {
           "signature": "formats.setRowProperties(updates: Map<number, Partial<CellFormatInput>>): Promise<void>",
@@ -2991,7 +3152,9 @@
         "formats.getColumnProperties": {
           "signature": "formats.getColumnProperties(cols: number[]): Promise<Map<number, CellFormat>>",
           "docstring": "Get column-level formats for the specified columns.\n\nReturns a Map from column index to CellFormat (only columns with\nexplicit formats are included).\n@param - Column indices (0-based)\n@returns Map of column index to CellFormat",
-          "usedTypes": ["CellFormat"]
+          "usedTypes": [
+            "CellFormat"
+          ]
         },
         "formats.setColumnProperties": {
           "signature": "formats.setColumnProperties(updates: Map<number, Partial<CellFormatInput>>): Promise<void>",
@@ -3015,7 +3178,7 @@
         },
         "hyperlinks.remove": {
           "signature": "hyperlinks.remove(address: string): Promise<void>",
-          "docstring": "Remove a hyperlink from a cell.\n@param - A1-style cell address",
+          "docstring": "Remove a hyperlink from a cell.\n@param - A1-style cell address\n@throws `HYPERLINK_NOT_FOUND` when the cell has no hyperlink",
           "usedTypes": []
         },
         "hyperlinks.list": {
@@ -3186,7 +3349,9 @@
         "names.add": {
           "signature": "names.add(name: string, reference: string, comment?: string | undefined): Promise<NamedRangeInfo>",
           "docstring": "Add a named range scoped to this sheet.\n@param - Name for the range\n@param - Cell reference (e.g., \"A1:B10\" or \"=Sheet1!A1:B10\")\n@param - Optional comment\n@returns The created named range info",
-          "usedTypes": ["NamedRangeInfo"]
+          "usedTypes": [
+            "NamedRangeInfo"
+          ]
         },
         "names.has": {
           "signature": "names.has(name: string): Promise<boolean>",
@@ -3201,7 +3366,9 @@
         "names.get": {
           "signature": "names.get(name: string): Promise<NamedRangeInfo | null>",
           "docstring": "Get a named range by name, scoped to this sheet.\n@param - Name to look up\n@returns Named range info or null if not found",
-          "usedTypes": ["NamedRangeInfo"]
+          "usedTypes": [
+            "NamedRangeInfo"
+          ]
         },
         "names.getRange": {
           "signature": "names.getRange(name: string): Promise<NamedRangeReference | null>",
@@ -3226,7 +3393,9 @@
         "names.list": {
           "signature": "names.list(): Promise<NamedRangeInfo[]>",
           "docstring": "List all named ranges scoped to this sheet.\n@returns Array of named range info objects",
-          "usedTypes": ["NamedRangeInfo"]
+          "usedTypes": [
+            "NamedRangeInfo"
+          ]
         },
         "outline.groupRows": {
           "signature": "outline.groupRows(startRow: number, endRow: number): Promise<void>",
@@ -3301,17 +3470,23 @@
         "pivots.add": {
           "signature": "pivots.add(config: PivotCreateConfig, options?: PivotCreateOptions | undefined): Promise<PivotAddReceipt>",
           "docstring": "Create a new pivot table on this worksheet.\n\nAccepts either:\n- **Simple config**: `{ name, dataSource: \"Sheet1!A1:D100\", rowFields: [\"Region\"], ... }`\n  Fields are auto-detected from source headers, placements are generated from field arrays.\n- **Full config**: `{ name, sourceSheetName, sourceRange, fields, placements, filters, ... }`\n  Direct wire format — no conversion needed.\n@param - Pivot table configuration\n@param - Creation lifecycle; defaults to defineOnly.\n@returns A receipt containing the created pivot table configuration.",
-          "usedTypes": ["PivotTableConfig"]
+          "usedTypes": [
+            "PivotTableConfig"
+          ]
         },
         "pivots.addWithSheet": {
           "signature": "pivots.addWithSheet(sheetName: string, config: PivotCreateConfig, options?: PivotCreateWithSheetOptions | undefined): Promise<PivotAddWithSheetReceipt>",
           "docstring": "Atomically create a new sheet AND a pivot table on it.\nBoth operations happen in a single transaction for undo atomicity.\n\nAccepts the same simple or full config formats as `add()`.\n@param - Name for the new sheet\n@param - Pivot table configuration\n@param - Creation lifecycle; defaults to defineOnly.\n@returns A receipt containing the new sheet ID and created pivot config.",
-          "usedTypes": ["PivotTableConfig"]
+          "usedTypes": [
+            "PivotTableConfig"
+          ]
         },
         "pivots.getAll": {
           "signature": "pivots.getAll(): Promise<PivotTableConfig[]>",
           "docstring": "List full pivot configs rendered on this worksheet.",
-          "usedTypes": ["PivotTableConfig"]
+          "usedTypes": [
+            "PivotTableConfig"
+          ]
         },
         "pivots.getImportedViewRecords": {
           "signature": "pivots.getImportedViewRecords(): Promise<ImportedPivotViewRecord[]>",
@@ -3341,7 +3516,9 @@
         "pivots.get": {
           "signature": "pivots.get(name: string): Promise<PivotTableHandle | null>",
           "docstring": "Get a pivot table handle by name.\n@param - Pivot table name\n@returns A handle for the pivot table, or null if not found",
-          "usedTypes": ["PivotTableHandle"]
+          "usedTypes": [
+            "PivotTableHandle"
+          ]
         },
         "pivots.getInfo": {
           "signature": "pivots.getInfo(name: string): Promise<PivotTableInfo | null>",
@@ -3681,7 +3858,9 @@
         "protection.protectWithOptions": {
           "signature": "protection.protectWithOptions(password?: string | undefined, options?: ProtectionOptions | undefined): Promise<void>",
           "docstring": "Protect the sheet with an optional password and granular permission options.\n@param - Optional password to require for unprotection\n@param - Granular permissions (e.g., allowSort, allowFormatCells)",
-          "usedTypes": ["ProtectionOptions"]
+          "usedTypes": [
+            "ProtectionOptions"
+          ]
         },
         "protection.unprotect": {
           "signature": "protection.unprotect(password?: string | undefined): Promise<boolean>",
@@ -3711,7 +3890,9 @@
         "protection.getConfig": {
           "signature": "protection.getConfig(): Promise<ProtectionConfig>",
           "docstring": "Get the full protection configuration for the sheet.\n@returns Protection configuration including status and permission flags",
-          "usedTypes": ["ProtectionConfig"]
+          "usedTypes": [
+            "ProtectionConfig"
+          ]
         },
         "protection.getSelectionMode": {
           "signature": "protection.getSelectionMode(): Promise<\"none\" | \"normal\" | \"unlockedOnly\">",
@@ -3776,7 +3957,9 @@
         "slicers.add": {
           "signature": "slicers.add(config: SlicerConfig): Promise<SlicerAddReceipt>",
           "docstring": "Create a new slicer on this worksheet.\n@param - Slicer configuration. An omitted `sheetId` is owned by this\nworksheet; a different explicit `sheetId` is rejected.\n@returns Operation receipt containing the created slicer with full state",
-          "usedTypes": ["SlicerConfig"]
+          "usedTypes": [
+            "SlicerConfig"
+          ]
         },
         "slicers.remove": {
           "signature": "slicers.remove(slicerId: string): Promise<SlicerRemoveReceipt>",
@@ -3791,7 +3974,9 @@
         "slicers.list": {
           "signature": "slicers.list(): Promise<SlicerInfo[]>",
           "docstring": "List all slicers on this worksheet.\n@returns Array of slicer summary information",
-          "usedTypes": ["SlicerInfo"]
+          "usedTypes": [
+            "SlicerInfo"
+          ]
         },
         "slicers.has": {
           "signature": "slicers.has(slicerId: string): Promise<boolean>",
@@ -3816,22 +4001,30 @@
         "slicers.getItemAt": {
           "signature": "slicers.getItemAt(index: number): Promise<SlicerInfo | null>",
           "docstring": "Get a slicer by its zero-based index in the list.\n@param - Zero-based index of the slicer\n@returns Slicer summary information, or null if index is out of range",
-          "usedTypes": ["SlicerInfo"]
+          "usedTypes": [
+            "SlicerInfo"
+          ]
         },
         "slicers.getItems": {
           "signature": "slicers.getItems(slicerId: string): Promise<SlicerItem[]>",
           "docstring": "Get the items (values) available in a slicer.\n@param - Stable ID of a slicer owned by this worksheet\n@returns Array of slicer items with selection state",
-          "usedTypes": ["SlicerItem"]
+          "usedTypes": [
+            "SlicerItem"
+          ]
         },
         "slicers.getItem": {
           "signature": "slicers.getItem(slicerId: string, key: CellValue): Promise<SlicerItem>",
           "docstring": "Get a slicer item by its string key.\nThrows if no item matches — use when you expect the item to exist.\nFor conditional checks, use {@link getItemOrNullObject} which returns null instead.\n@param - Stable ID of a slicer owned by this worksheet\n@param - The value to look up (matched via string coercion)\n@returns The matching slicer item\n@throws KernelError if no item matches the key",
-          "usedTypes": ["SlicerItem"]
+          "usedTypes": [
+            "SlicerItem"
+          ]
         },
         "slicers.getItemOrNullObject": {
           "signature": "slicers.getItemOrNullObject(slicerId: string, key: CellValue): Promise<SlicerItem | null>",
           "docstring": "Get a slicer item by its string key, or null if not found.\nNon-throwing alternative to {@link getItem} — use for conditional checks.\n@param - Stable ID of a slicer owned by this worksheet\n@param - The value to look up (matched via string coercion)\n@returns The matching slicer item, or null if not found",
-          "usedTypes": ["SlicerItem"]
+          "usedTypes": [
+            "SlicerItem"
+          ]
         },
         "slicers.setSelection": {
           "signature": "slicers.setSelection(slicerId: string, selectedItems: CellValue[]): Promise<SlicerSelectionSetReceipt>",
@@ -3856,7 +4049,9 @@
         "slicers.getState": {
           "signature": "slicers.getState(slicerId: string): Promise<SlicerState>",
           "docstring": "Get the enriched runtime state of a slicer.\n@param - Stable ID of a slicer owned by this worksheet\n@returns Enriched slicer state including computed items and connection status",
-          "usedTypes": ["SlicerState"]
+          "usedTypes": [
+            "SlicerState"
+          ]
         },
         "sparklines.add": {
           "signature": "sparklines.add(cell: string, dataRange: string | CellRange, type: SparklineType, options?: CreateSparklineOptions | undefined): Promise<Sparkline>",
@@ -3895,22 +4090,22 @@
         },
         "sparklines.update": {
           "signature": "sparklines.update(sparklineId: string, updates: Partial<Sparkline>): Promise<void>",
-          "docstring": "Update a sparkline's settings.\n@param - Sparkline identifier\n@param - Partial sparkline properties to update",
+          "docstring": "Update a sparkline's settings.\n@param - Sparkline identifier\n@param - Partial sparkline properties to update\n@throws `SPARKLINE_NOT_FOUND` when the ID is absent from this worksheet",
           "usedTypes": []
         },
         "sparklines.updateGroup": {
           "signature": "sparklines.updateGroup(groupId: string, updates: Partial<SparklineGroup>): Promise<void>",
-          "docstring": "Update a sparkline group's settings (applies to all members).\n@param - Group identifier\n@param - Partial group properties to update",
+          "docstring": "Update a sparkline group's settings (applies to all members).\n@param - Group identifier\n@param - Partial group properties to update\n@throws `SPARKLINE_GROUP_NOT_FOUND` when the group is absent",
           "usedTypes": []
         },
         "sparklines.remove": {
           "signature": "sparklines.remove(sparklineId: string): Promise<void>",
-          "docstring": "Remove a sparkline.\n@param - Sparkline identifier",
+          "docstring": "Remove a sparkline.\n@param - Sparkline identifier\n@throws `SPARKLINE_NOT_FOUND` when the ID is absent",
           "usedTypes": []
         },
         "sparklines.removeGroup": {
           "signature": "sparklines.removeGroup(groupId: string): Promise<void>",
-          "docstring": "Remove a sparkline group and all its member sparklines.\n@param - Group identifier",
+          "docstring": "Remove a sparkline group and all its member sparklines.\n@param - Group identifier\n@throws `SPARKLINE_GROUP_NOT_FOUND` when the group is absent",
           "usedTypes": []
         },
         "sparklines.clearInRange": {
@@ -3930,17 +4125,17 @@
         },
         "sparklines.addToGroup": {
           "signature": "sparklines.addToGroup(sparklineId: string, groupId: string): Promise<void>",
-          "docstring": "Add a sparkline to a group.\n@param - Sparkline identifier\n@param - Group identifier",
+          "docstring": "Add a sparkline to a group.\n@param - Sparkline identifier\n@param - Group identifier\n@throws `SPARKLINE_NOT_FOUND` or `SPARKLINE_GROUP_NOT_FOUND` for stale IDs",
           "usedTypes": []
         },
         "sparklines.removeFromGroup": {
           "signature": "sparklines.removeFromGroup(sparklineId: string): Promise<void>",
-          "docstring": "Remove a sparkline from its group (becomes standalone).\n@param - Sparkline identifier",
+          "docstring": "Remove a sparkline from its group (becomes standalone).\n@param - Sparkline identifier\n@throws `SPARKLINE_NOT_FOUND` when the ID is absent; `SPARKLINE_GROUP_NOT_FOUND` for dangling membership",
           "usedTypes": []
         },
         "sparklines.ungroupAll": {
           "signature": "sparklines.ungroupAll(groupId: string): Promise<string[]>",
-          "docstring": "Ungroup all sparklines in a group (members become standalone).\n@param - Group identifier\n@returns IDs of sparklines that were ungrouped",
+          "docstring": "Ungroup all sparklines in a group (members become standalone).\n@param - Group identifier\n@returns IDs of sparklines that were ungrouped\n@throws `SPARKLINE_GROUP_NOT_FOUND` when the group is absent",
           "usedTypes": []
         },
         "sparklines.has": {
@@ -4001,12 +4196,16 @@
         "structure.textToColumns": {
           "signature": "structure.textToColumns(range: string | CellRange, options: TextToColumnsOptions): Promise<TextToColumnsResult>",
           "docstring": "Split text in a column into multiple columns.",
-          "usedTypes": ["TextToColumnsOptions"]
+          "usedTypes": [
+            "TextToColumnsOptions"
+          ]
         },
         "structure.removeDuplicates": {
           "signature": "structure.removeDuplicates(range: string | CellRange, columns: number[], hasHeaders?: boolean | undefined): Promise<RemoveDuplicatesResult>",
           "docstring": "Remove duplicate rows in a range.",
-          "usedTypes": ["RemoveDuplicatesResult"]
+          "usedTypes": [
+            "RemoveDuplicatesResult"
+          ]
         },
         "structure.merge": {
           "signature": "structure.merge(range: string): Promise<MergeReceipt>",
@@ -4021,7 +4220,9 @@
         "structure.getMergedRegions": {
           "signature": "structure.getMergedRegions(): Promise<MergedRegion[]>",
           "docstring": "Get all merged regions in the sheet.",
-          "usedTypes": ["MergedRegion"]
+          "usedTypes": [
+            "MergedRegion"
+          ]
         },
         "structure.getMergeAtCell": {
           "signature": "structure.getMergeAtCell(address: string): Promise<WorksheetRange | null>",
@@ -4031,12 +4232,16 @@
         "tables.add": {
           "signature": "tables.add(range: string | CellRange, options?: TableOptions | undefined): Promise<TableAddReceipt>",
           "docstring": "Create a new table from a cell range.\n@param - A1-style range string (e.g. \"A1:D10\") or CellRange object\n@param - Optional table creation settings (name, headers, style). A name must start\nwith a letter or underscore, contain only letters, digits, and underscores, and must not\nparse as a cell reference such as A1, T1, or Q3.\n@returns A receipt containing the created table information.",
-          "usedTypes": ["TableOptions"]
+          "usedTypes": [
+            "TableOptions"
+          ]
         },
         "tables.get": {
           "signature": "tables.get(name: string): Promise<TableInfo | null>",
           "docstring": "Get a table by name.\n\nTables are workbook-scoped, so the name is unique across all sheets.\n@param - Table name\n@returns Table information, or null if not found",
-          "usedTypes": ["TableInfo"]
+          "usedTypes": [
+            "TableInfo"
+          ]
         },
         "tables.has": {
           "signature": "tables.has(name: string): Promise<boolean>",
@@ -4046,7 +4251,9 @@
         "tables.list": {
           "signature": "tables.list(): Promise<TableInfo[]>",
           "docstring": "List all tables in this worksheet.\n@returns Array of table information objects",
-          "usedTypes": ["TableInfo"]
+          "usedTypes": [
+            "TableInfo"
+          ]
         },
         "tables.getCount": {
           "signature": "tables.getCount(): Promise<number>",
@@ -4056,12 +4263,16 @@
         "tables.getItemAt": {
           "signature": "tables.getItemAt(index: number): Promise<TableInfo | null>",
           "docstring": "Get a table by its position in the list of tables on this worksheet.\n@param - Zero-based index into the table list\n@returns Table information, or null if the index is out of range",
-          "usedTypes": ["TableInfo"]
+          "usedTypes": [
+            "TableInfo"
+          ]
         },
         "tables.getFirst": {
           "signature": "tables.getFirst(): Promise<TableInfo | null>",
           "docstring": "Get the first table on this worksheet.\n\nConvenience shortcut equivalent to `getAt(0)`.\n@returns Table information, or null if no tables exist",
-          "usedTypes": ["TableInfo"]
+          "usedTypes": [
+            "TableInfo"
+          ]
         },
         "tables.getColumnByName": {
           "signature": "tables.getColumnByName(tableName: string, columnName: string): Promise<TableColumn | null>",
@@ -4096,7 +4307,9 @@
         "tables.getAtCell": {
           "signature": "tables.getAtCell(address: string): Promise<TableInfo | null>",
           "docstring": "Get the table at a specific cell position, if one exists.\n@param - A1-style cell address (e.g. \"B3\")\n@returns Table information, or null if no table exists at that cell",
-          "usedTypes": ["TableInfo"]
+          "usedTypes": [
+            "TableInfo"
+          ]
         },
         "tables.clearFilters": {
           "signature": "tables.clearFilters(tableName: string): Promise<void>",
@@ -4281,7 +4494,9 @@
         "tables.getAutoFilter": {
           "signature": "tables.getAutoFilter(tableName: string): Promise<FilterInfo | null>",
           "docstring": "Get the auto-filter associated with a table.\n@param - Table name\n@returns Filter information, or null if the table has no associated filter",
-          "usedTypes": ["FilterInfo"]
+          "usedTypes": [
+            "FilterInfo"
+          ]
         },
         "tables.getRows": {
           "signature": "tables.getRows(tableName: string): Promise<TableRowCollection>",
@@ -4296,7 +4511,9 @@
         "validation.set": {
           "signature": "validation.set(address: string, rule: ValidationRule): Promise<ValidationSetReceipt>",
           "docstring": "Set a validation rule on a cell or range.\n@param - A1-style cell or range address (e.g. \"A1\", \"A1:B5\")\n@param - Validation rule to apply",
-          "usedTypes": ["ValidationRule"]
+          "usedTypes": [
+            "ValidationRule"
+          ]
         },
         "validation.remove": {
           "signature": "validation.remove(address: string): Promise<ValidationRemoveReceipt>",
@@ -4306,12 +4523,16 @@
         "validation.get": {
           "signature": "validation.get(address: string): Promise<ValidationRule | null>",
           "docstring": "Get the validation rule for a cell.\n@param - A1-style cell address\n@returns The validation rule, or null if none",
-          "usedTypes": ["ValidationRule"]
+          "usedTypes": [
+            "ValidationRule"
+          ]
         },
         "validation.peek": {
           "signature": "validation.peek(address: string): ValidationRule | null | undefined",
           "docstring": "Synchronously read a validation rule when this sheet's validation cache is\nalready hydrated.\n\nReturns `undefined` when the sheet cache is cold, `null` when it is warm and\nno rule covers the cell, or the covering rule when one exists.",
-          "usedTypes": ["ValidationRule"]
+          "usedTypes": [
+            "ValidationRule"
+          ]
         },
         "validation.has": {
           "signature": "validation.has(address: string): Promise<boolean>",
@@ -4336,7 +4557,9 @@
         "validation.list": {
           "signature": "validation.list(): Promise<ValidationRule[]>",
           "docstring": "List all validation rules on the sheet.\n@returns Array of validation rules",
-          "usedTypes": ["ValidationRule"]
+          "usedTypes": [
+            "ValidationRule"
+          ]
         },
         "validation.clear": {
           "signature": "validation.clear(range?: string | CellRange | undefined): Promise<ValidationClearReceipt>",
@@ -4421,7 +4644,9 @@
         "view.getViewOptions": {
           "signature": "view.getViewOptions(): Promise<ViewOptions>",
           "docstring": "Get the current view options (gridlines, headings).\n@returns Current view options",
-          "usedTypes": ["ViewOptions"]
+          "usedTypes": [
+            "ViewOptions"
+          ]
         },
         "view.setShowFormulas": {
           "signature": "view.setShowFormulas(show: boolean): Promise<void>",
@@ -4656,7 +4881,7 @@
       "docstring": "A single item in a slicer's value list."
     }
   },
-  "generated": "2026-07-10T21:42:38.423Z",
+  "generated": "2026-07-12T03:14:27.150Z",
   "formatPresets": {
     "general": {
       "default": {

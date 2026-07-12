@@ -55,9 +55,10 @@ import {
 } from '../cells/indicators';
 import {
   collectInteractiveElements,
-  toInteractiveViewportBounds,
+  toRegionLocalInteractiveCell,
   type InteractiveCellInfo,
 } from '../cells/interactive-elements';
+import { createRegionInteractiveElementCollector } from '../cells/interactive-element-placement';
 import { collectVisibleInteractiveElements } from '../cells/visible-interactive-elements';
 import { renderRichText, renderRichTextWrapped } from '../cells/rich-text';
 import { renderRotatedText } from '../cells/rotated-text';
@@ -364,6 +365,9 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
     const editorState = selectionData.getEditorState();
     const theme = sheetData.theme;
     const dpr = frame.dpr;
+    const regionInteractiveElements = this.interactiveElements
+      ? createRegionInteractiveElementCollector(this.interactiveElements, region)
+      : undefined;
 
     // Collect CellRenderInfo in Pass 1 for reuse in Pass 2
     const cellInfoCache: CellRenderInfoExtended[] = [];
@@ -384,7 +388,8 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
     // forEachVisibleCell compares against doc-space cell positions from ViewportPositionIndex,
     // so we must convert frame.dirtyRects (canvas-space) to doc-space using the region transform.
     const dirtyRectsDoc = frame.dirtyRects?.map((r) => canvasToDoc(r, region));
-    if (dirtyRectsDoc && dirtyRectsDoc.length > 0 && this.interactiveElements) {
+    let rebuiltInteractiveElements = false;
+    if (dirtyRectsDoc && dirtyRectsDoc.length > 0 && regionInteractiveElements) {
       collectVisibleInteractiveElements(
         sheetId,
         meta.cellRange,
@@ -394,8 +399,9 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
         mergeIndex,
         reader,
         editorState,
-        this.interactiveElements,
+        regionInteractiveElements,
       );
+      rebuiltInteractiveElements = true;
     }
 
     const renderFilterOnlyCell = (
@@ -439,9 +445,11 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
         filterInfo.hasActiveFilter,
         controlSkin,
       );
-      if (this.interactiveElements) {
+      // Fringe filter cells sit just outside meta.cellRange, so the dirty-frame
+      // visible-range rebuild does not include them. Always collect them here.
+      if (regionInteractiveElements) {
         collectInteractiveElements(
-          fallbackCellInfo,
+          toRegionLocalInteractiveCell(fallbackCellInfo),
           {
             hasComment: false,
             isCheckbox: false,
@@ -449,8 +457,7 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
             filterInfo,
             sheetId,
           },
-          this.interactiveElements,
-          (bounds) => toInteractiveViewportBounds(bounds, region),
+          regionInteractiveElements,
         );
       }
     };
@@ -812,7 +819,11 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
       }
 
       // --- Collect interactive elements ---
-      if (this.interactiveElements) {
+      if (
+        regionInteractiveElements &&
+        !rebuiltInteractiveElements &&
+        (hasComment || isCheckbox || filterInfo)
+      ) {
         const interactiveInfo: InteractiveCellInfo = {
           hasComment,
           isCheckbox,
@@ -820,8 +831,10 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
           filterInfo,
           sheetId,
         };
-        collectInteractiveElements(cellInfo, interactiveInfo, this.interactiveElements, (bounds) =>
-          toInteractiveViewportBounds(bounds, region),
+        collectInteractiveElements(
+          toRegionLocalInteractiveCell(cellInfo),
+          interactiveInfo,
+          regionInteractiveElements,
         );
       }
     }

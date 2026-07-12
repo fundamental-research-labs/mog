@@ -3,14 +3,15 @@
  *
  * During the cell rendering pass, interactive elements (checkboxes, comment
  * indicators, filter buttons, validation dropdowns) are detected and emitted
- * to an InteractiveElementCollector. The collector bridges the canvas coordinate
- * system to React's DOM overlay system for tooltips, popovers, and click handlers.
+ * in the same unzoomed region-local coordinate space used to draw the cell.
+ * Region placement and the public DOM-overlay collector live at separate
+ * boundaries so this module remains independent of pane topology.
  *
  * @module grid-renderer/cells/interactive-elements
  */
 
-import { canvasToDocXY, docToCanvasXY, type RenderRegion } from '@mog/canvas-engine';
-import type { InteractiveElement, InteractiveElementCollector } from '@mog-sdk/contracts/rendering';
+import { regionLocalRect, type RegionLocalRect } from '@mog/canvas-engine';
+import type { InteractiveElement } from '@mog-sdk/contracts/rendering';
 import { getFilterButtonHitBounds } from './indicators';
 import type { CellRenderInfo } from './types';
 
@@ -42,28 +43,26 @@ export interface InteractiveCellInfo {
   sheetId: string;
 }
 
-type Bounds = { x: number; y: number; width: number; height: number };
-export type InteractiveBoundsMapper = (bounds: Bounds) => Bounds;
+export type RegionLocalInteractiveElement = Omit<InteractiveElement, 'bounds'> & {
+  localBounds: RegionLocalRect;
+};
+export interface RegionLocalInteractiveElementCollector {
+  addRegionLocal(element: RegionLocalInteractiveElement): void;
+}
+export interface RegionLocalInteractiveCell {
+  row: number;
+  col: number;
+  localBounds: RegionLocalRect;
+}
 
-export function toInteractiveViewportBounds(bounds: Bounds, region: RenderRegion): Bounds {
-  const zoom = region.zoom || 1;
-  const viewportSpaceRegion = {
-    bounds: { x: 0, y: 0 },
-    viewportOrigin: { x: 0, y: 0 },
-    scrollOffset: region.scrollOffset,
-    zoom,
-  };
-  const doc = canvasToDocXY(
-    region.bounds.x + bounds.x * zoom,
-    region.bounds.y + bounds.y * zoom,
-    region,
-  );
-  const viewport = docToCanvasXY(doc.x, doc.y, viewportSpaceRegion);
+/** Brand the documented region-local geometry carried by CellRenderInfo. */
+export function toRegionLocalInteractiveCell(
+  cell: Pick<CellRenderInfo, 'row' | 'col' | 'x' | 'y' | 'width' | 'height'>,
+): RegionLocalInteractiveCell {
   return {
-    x: viewport.x,
-    y: viewport.y,
-    width: bounds.width * zoom,
-    height: bounds.height * zoom,
+    row: cell.row,
+    col: cell.col,
+    localBounds: regionLocalRect(cell.x, cell.y, cell.width, cell.height),
   };
 }
 
@@ -99,26 +98,16 @@ function cellId(row: number, col: number): string {
  *
  * @param cell - The cell render info (position and dimensions)
  * @param info - Cell metadata for determining interactive elements
- * @param collector - The interactive element collector to emit elements to
+ * @param collector - Region-local collector supplied by the current render region
  */
 export function collectInteractiveElements(
-  cell: CellRenderInfo,
+  cell: RegionLocalInteractiveCell,
   info: InteractiveCellInfo,
-  collector: InteractiveElementCollector,
-  mapBounds?: InteractiveBoundsMapper,
+  collector: RegionLocalInteractiveElementCollector,
 ): void {
-  const { row, col, x, y, width, height } = cell;
+  const { row, col } = cell;
+  const { x, y, width, height } = cell.localBounds;
   const { sheetId } = info;
-  const addElement = (element: InteractiveElement): void => {
-    collector.add(
-      mapBounds
-        ? {
-            ...element,
-            bounds: mapBounds(element.bounds),
-          }
-        : element,
-    );
-  };
 
   // Comment indicator — bounds cover only the top-right triangle + hit padding
   if (info.hasComment) {
@@ -126,15 +115,15 @@ export function collectInteractiveElements(
     const COMMENT_HIT_PADDING = 4;
     const indicatorWidth = COMMENT_TRIANGLE_SIZE + COMMENT_HIT_PADDING * 2;
     const indicatorHeight = COMMENT_TRIANGLE_SIZE + COMMENT_HIT_PADDING * 2;
-    const element: InteractiveElement = {
+    const element: RegionLocalInteractiveElement = {
       id: elementId('comment-indicator', sheetId, row, col),
       type: 'comment-indicator',
-      bounds: {
-        x: x + width - COMMENT_TRIANGLE_SIZE - COMMENT_HIT_PADDING,
-        y: y - COMMENT_HIT_PADDING,
-        width: indicatorWidth,
-        height: indicatorHeight,
-      },
+      localBounds: regionLocalRect(
+        x + width - COMMENT_TRIANGLE_SIZE - COMMENT_HIT_PADDING,
+        y - COMMENT_HIT_PADDING,
+        indicatorWidth,
+        indicatorHeight,
+      ),
       metadata: {
         type: 'comment-indicator',
         cellId: cellId(row, col),
@@ -143,15 +132,15 @@ export function collectInteractiveElements(
         col,
       },
     };
-    addElement(element);
+    collector.addRegionLocal(element);
   }
 
   // Checkbox
   if (info.isCheckbox) {
-    const element: InteractiveElement = {
+    const element: RegionLocalInteractiveElement = {
       id: elementId('checkbox', sheetId, row, col),
       type: 'checkbox',
-      bounds: { x, y, width, height },
+      localBounds: regionLocalRect(x, y, width, height),
       metadata: {
         type: 'checkbox',
         cellId: cellId(row, col),
@@ -161,17 +150,17 @@ export function collectInteractiveElements(
         col,
       },
     };
-    addElement(element);
+    collector.addRegionLocal(element);
   }
 
   // Filter button
   if (info.filterInfo) {
     const { filterId, headerCellId, hasActiveFilter } = info.filterInfo;
     const bounds = getFilterButtonHitBounds(x, y, width, height);
-    const element: InteractiveElement = {
+    const element: RegionLocalInteractiveElement = {
       id: elementId('filter-button', sheetId, row, col),
       type: 'filter-button',
-      bounds,
+      localBounds: regionLocalRect(bounds.x, bounds.y, bounds.width, bounds.height),
       metadata: {
         type: 'filter-button',
         filterId,
@@ -180,15 +169,15 @@ export function collectInteractiveElements(
         col,
       },
     };
-    addElement(element);
+    collector.addRegionLocal(element);
   }
 
   // Validation dropdown
   if (info.validationDropdown) {
-    const element: InteractiveElement = {
+    const element: RegionLocalInteractiveElement = {
       id: elementId('validation-dropdown', sheetId, row, col),
       type: 'validation-dropdown',
-      bounds: { x, y, width, height },
+      localBounds: regionLocalRect(x, y, width, height),
       metadata: {
         type: 'validation-dropdown',
         cellId: cellId(row, col),
@@ -198,109 +187,6 @@ export function collectInteractiveElements(
         options: info.validationDropdown.options,
       },
     };
-    addElement(element);
+    collector.addRegionLocal(element);
   }
-}
-
-// =============================================================================
-// Interactive Element Collector Implementation
-// =============================================================================
-
-/**
- * Collector that gathers interactive element positions during canvas render
- * and provides them to React for DOM overlay rendering.
- *
- * Key characteristics:
- * - Cleared at start of each render frame
- * - Elements added during render pass
- * - Subscribers notified once per frame (batched via rAF)
- * - Uses Map with composite keys for O(1) lookup
- */
-export class InteractiveElementCollectorImpl implements InteractiveElementCollector {
-  /** Map of element ID to element data for O(1) lookup and deduplication */
-  private elements = new Map<string, InteractiveElement>();
-
-  /** Set of callbacks to notify when elements change */
-  private subscribers = new Set<(elements: InteractiveElement[]) => void>();
-
-  /** Flag to prevent multiple rAF callbacks in the same frame */
-  private pendingNotify = false;
-
-  /**
-   * Clear all collected elements.
-   * Called at the start of each render frame before any layers paint.
-   * Schedules a notification so subscribers learn about the empty state
-   * even when no elements are added in the new frame.
-   */
-  clear(): void {
-    this.elements.clear();
-    this.scheduleNotify();
-  }
-
-  /**
-   * Add an interactive element to the collection.
-   * If an element with the same ID already exists, it will be replaced.
-   *
-   * @param element - The interactive element with position and metadata
-   */
-  add(element: InteractiveElement): void {
-    this.elements.set(element.id, element);
-    this.scheduleNotify();
-  }
-
-  /**
-   * Get all collected elements as an array.
-   * Returns a new array each time to ensure React detects changes.
-   */
-  getAll(): InteractiveElement[] {
-    return Array.from(this.elements.values());
-  }
-
-  /**
-   * Subscribe to element updates.
-   * The callback will be invoked once per render frame (batched via rAF).
-   *
-   * @param callback - Function to call with updated element list
-   * @returns Unsubscribe function
-   */
-  subscribe(callback: (elements: InteractiveElement[]) => void): () => void {
-    this.subscribers.add(callback);
-    return () => {
-      this.subscribers.delete(callback);
-    };
-  }
-
-  /**
-   * Schedule subscriber notification for end of the current render task.
-   * Uses a microtask (Promise.resolve) so the notification fires after all
-   * add() calls in the same render pass complete, but before the next rAF.
-   * This keeps DOM overlays in sync within the same animation frame that
-   * the canvas render ran in, avoiding an extra rAF hop.
-   */
-  private scheduleNotify(): void {
-    if (this.pendingNotify) {
-      return;
-    }
-
-    this.pendingNotify = true;
-
-    Promise.resolve().then(() => {
-      this.pendingNotify = false;
-      const all = this.getAll();
-      for (const callback of this.subscribers) {
-        callback(all);
-      }
-    });
-  }
-}
-
-// =============================================================================
-// Factory
-// =============================================================================
-
-/**
- * Create a new interactive element collector instance.
- */
-export function createInteractiveElementCollector(): InteractiveElementCollector {
-  return new InteractiveElementCollectorImpl();
 }

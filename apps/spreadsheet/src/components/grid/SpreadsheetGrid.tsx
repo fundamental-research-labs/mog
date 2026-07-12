@@ -24,7 +24,6 @@ import { printHandler, type PrintArea, type PrintOptions } from '@mog/print-expo
 import { MAX_COLS, MAX_ROWS, type PaperSize, type SheetId } from '@mog-sdk/contracts/core';
 import { toCellId } from '@mog-sdk/contracts/cell-identity';
 import type { PageBreakEntry } from '@mog-sdk/contracts/rendering';
-import { getEffectiveHeaderDimensions } from '@mog/spreadsheet-utils/rendering/constants';
 import type { TableConfig } from '@mog-sdk/contracts/tables';
 import type { SplitViewportConfig } from '@mog-sdk/contracts/viewport-config';
 // All reads use Worksheet/Workbook API or ViewportBuffer.
@@ -51,7 +50,6 @@ import { useSparklineManager } from '../../hooks/data/use-sparkline-manager';
 import { useTableLayoutCache } from '../../hooks/data/use-table-layout-cache';
 import { useFloatingObjectsInSheet } from '../../hooks/objects/use-floating-objects-in-sheet';
 import { useWorkbookSettings } from '../../hooks/settings/use-workbook-settings';
-import { useSheetViewOptions } from '../../hooks/view/use-sheet-view-options';
 import { useSpreadsheetDisplayMode } from '../../hooks/view/use-display-mode';
 import { CommentEvents } from '../../systems/grid-editing/machines/comment-machine';
 // PERFORMANCE: Use granular input hooks instead of useInput()
@@ -298,16 +296,7 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
     isReady,
   });
 
-  const { viewOptions } = useSheetViewOptions(activeSheetId);
   const { rendererSkin } = useSpreadsheetDisplayMode();
-
-  const headerOffset = useMemo(() => {
-    const { rowHeaderWidth, colHeaderHeight } = getEffectiveHeaderDimensions({
-      showRowHeaders: viewOptions.showRowHeaders,
-      showColumnHeaders: viewOptions.showColumnHeaders,
-    });
-    return { x: rowHeaderWidth, y: colHeaderHeight };
-  }, [viewOptions.showRowHeaders, viewOptions.showColumnHeaders]);
 
   // @see STREAM-H-EDITOR-PROTECTION.md
   const protectionAlertOpen = useUIStore((s) => s.protectionAlertOpen);
@@ -919,7 +908,6 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
  */}
           <CanvasInteractiveOverlay
             interactiveElements={rendererActions.getInteractiveElements()}
-            headerOffset={headerOffset}
           />
 
           {/* Outline Gutter DOM Input Overlay - outline affordance

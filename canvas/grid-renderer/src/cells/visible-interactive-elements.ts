@@ -4,7 +4,6 @@ import { displayString } from '@mog-sdk/contracts/core';
 import type {
   CellDataSource,
   GridRegionMeta,
-  InteractiveElementCollector,
   SelectionDataSource,
 } from '@mog-sdk/contracts/rendering';
 
@@ -12,7 +11,11 @@ import type { ViewportMergeIndex } from '../coordinates/viewport-merge-index';
 import type { ViewportPositionIndex } from '../coordinates/viewport-position-index';
 import { forEachVisibleCell } from '../layout/for-each-visible-cell';
 import { docToRegionXY } from '../shared/cell-bounds';
-import { collectInteractiveElements, toInteractiveViewportBounds } from './interactive-elements';
+import {
+  collectInteractiveElements,
+  toRegionLocalInteractiveCell,
+  type RegionLocalInteractiveElementCollector,
+} from './interactive-elements';
 import type { CellRenderInfo } from './types';
 
 interface InteractiveCellReader {
@@ -45,7 +48,7 @@ export function collectVisibleInteractiveElements(
   mergeIndex: ViewportMergeIndex,
   reader: InteractiveCellReader | undefined,
   editorState: ReturnType<SelectionDataSource['getEditorState']>,
-  collector: InteractiveElementCollector,
+  collector: RegionLocalInteractiveElementCollector,
 ): void {
   forEachVisibleCell(cellRange, positionIndex, mergeIndex, (cell) => {
     if (
@@ -108,7 +111,7 @@ export function collectVisibleInteractiveElements(
     };
 
     collectInteractiveElements(
-      cellInfo,
+      toRegionLocalInteractiveCell(cellInfo),
       {
         hasComment,
         isCheckbox,
@@ -117,7 +120,6 @@ export function collectVisibleInteractiveElements(
         sheetId,
       },
       collector,
-      (bounds) => toInteractiveViewportBounds(bounds, region),
     );
   });
 }

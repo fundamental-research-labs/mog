@@ -30,10 +30,8 @@ export {
 // Interactive elements
 export {
   InteractiveElementCollectorImpl,
-  collectInteractiveElements,
   createInteractiveElementCollector,
-} from './interactive-elements';
-export type { InteractiveCellInfo } from './interactive-elements';
+} from './interactive-element-collector';
 
 // Data bars (conditional formatting)
 export { renderDataBar, renderDataBarWithAxis } from './data-bars';

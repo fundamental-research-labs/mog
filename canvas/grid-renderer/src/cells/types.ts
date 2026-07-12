@@ -22,13 +22,13 @@ export interface CellRenderInfo {
   row: number;
   /** Sheet column index (0-based) */
   col: number;
-  /** Cell left edge in canvas pixels */
+  /** Cell left edge in unzoomed region-local layer coordinates */
   x: number;
-  /** Cell top edge in canvas pixels */
+  /** Cell top edge in unzoomed region-local layer coordinates */
   y: number;
-  /** Cell width in canvas pixels */
+  /** Unzoomed cell width used by the region-local layer context */
   width: number;
-  /** Cell height in canvas pixels */
+  /** Unzoomed cell height used by the region-local layer context */
   height: number;
   /** Raw cell value (number, string, boolean, error, null, etc.) */
   value: unknown;

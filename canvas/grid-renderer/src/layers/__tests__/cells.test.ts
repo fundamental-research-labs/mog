@@ -560,7 +560,7 @@ describe('CellsLayer', () => {
       layer.beginFrame(frame);
       layer.render(ctx, frozenHeaderRegion, frame);
       expect(collector.getAll().map((element) => element.id)).toContain(
-        `filter-button:${sheetId}:0,2`,
+        `filter-button:${sheetId}:0,2@frozen-row`,
       );
 
       layer.render(ctx, mainRegion, frame);
@@ -571,9 +571,9 @@ describe('CellsLayer', () => {
           .map((element) => element.id)
           .sort(),
       ).toEqual([
-        `checkbox:${sheetId}:1,0`,
-        `comment-indicator:${sheetId}:1,0`,
-        `filter-button:${sheetId}:0,2`,
+        `checkbox:${sheetId}:1,0@main`,
+        `comment-indicator:${sheetId}:1,0@main`,
+        `filter-button:${sheetId}:0,2@frozen-row`,
       ]);
       expect(collector.clear).toHaveBeenCalledTimes(1);
     });
@@ -604,6 +604,7 @@ describe('CellsLayer', () => {
       const frozenRowsRegion = makeMainRegion({
         sheetId,
         viewportId: 'frozen-rows',
+        bounds: { x: 850, y: 21, width: 150, height: 579 },
         viewportOrigin: { x: 800, y: 0 },
         scrollOffset: { x: 200, y: 0 },
         cellRange: { startRow: 3, startCol: 10, endRow: 3, endCol: 10 },
@@ -613,11 +614,11 @@ describe('CellsLayer', () => {
 
       const filterButton = collector
         .getAll()
-        .find((element) => element.id === `filter-button:${sheetId}:3,10`);
+        .find((element) => element.id === `filter-button:${sheetId}:3,10@frozen-rows`);
 
       expect(filterButton?.bounds).toEqual({
-        x: 884,
-        y: 79.5,
+        x: 934,
+        y: 100.5,
         width: 16,
         height: 16,
       });
@@ -649,6 +650,7 @@ describe('CellsLayer', () => {
       const frozenRowsRegion = makeMainRegion({
         sheetId,
         viewportId: 'frozen-rows',
+        bounds: { x: 770, y: 21, width: 230, height: 579 },
         viewportOrigin: { x: 800, y: 0 },
         scrollOffset: { x: 200, y: 0 },
         zoom: 0.9,
@@ -659,17 +661,17 @@ describe('CellsLayer', () => {
 
       const filterButton = collector
         .getAll()
-        .find((element) => element.id === `filter-button:${sheetId}:3,10`);
+        .find((element) => element.id === `filter-button:${sheetId}:3,10@frozen-rows`);
 
       expect(filterButton?.bounds).toEqual({
-        x: 795.6,
-        y: 71.55,
+        x: 845.6,
+        y: 92.55,
         width: 14.4,
         height: 14.4,
       });
     });
 
-    it('keeps filter button overlays outside dirty cells in partial frames', () => {
+    it('keeps visible and fringe filter overlays in partial frames', () => {
       const sheetId = 'sheet-filter-buttons';
       const collector = createInteractiveElementCollector();
       const cellData: CellDataSource = {
@@ -694,7 +696,7 @@ describe('CellsLayer', () => {
       const ctx = createMockContext();
       const region = makeMainRegion({
         sheetId,
-        cellRange: { startRow: 0, startCol: 0, endRow: 0, endCol: 4 },
+        cellRange: { startRow: 0, startCol: 1, endRow: 0, endCol: 3 },
       });
 
       layer.render(ctx, region, createFrame());
@@ -705,10 +707,10 @@ describe('CellsLayer', () => {
           .map((element) => element.id)
           .sort(),
       ).toEqual([
-        `filter-button:${sheetId}:0,0`,
-        `filter-button:${sheetId}:0,1`,
-        `filter-button:${sheetId}:0,3`,
-        `filter-button:${sheetId}:0,4`,
+        `filter-button:${sheetId}:0,0@main`,
+        `filter-button:${sheetId}:0,1@main`,
+        `filter-button:${sheetId}:0,3@main`,
+        `filter-button:${sheetId}:0,4@main`,
       ]);
 
       layer.render(ctx, region, {
@@ -724,10 +726,10 @@ describe('CellsLayer', () => {
           .map((element) => element.id)
           .sort(),
       ).toEqual([
-        `filter-button:${sheetId}:0,0`,
-        `filter-button:${sheetId}:0,1`,
-        `filter-button:${sheetId}:0,3`,
-        `filter-button:${sheetId}:0,4`,
+        `filter-button:${sheetId}:0,0@main`,
+        `filter-button:${sheetId}:0,1@main`,
+        `filter-button:${sheetId}:0,3@main`,
+        `filter-button:${sheetId}:0,4@main`,
       ]);
     });
   });

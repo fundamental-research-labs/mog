@@ -949,7 +949,7 @@ export type InteractiveElementType =
   | 'sparkline-edit'
   | 'hyperlink';
 
-/** Bounds of an interactive element in viewport coordinates. */
+/** Renderer-container bounds clipped to the producing frozen/split render region. */
 export interface InteractiveElementBounds {
   readonly x: number;
   readonly y: number;

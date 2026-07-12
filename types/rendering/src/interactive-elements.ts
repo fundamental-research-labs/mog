@@ -22,12 +22,14 @@ export type InteractiveElementType =
   | 'hyperlink'; // Ctrl+click to follow link (future)
 
 /**
- * Position and bounds of an interactive element in viewport coordinates.
+ * Position and bounds of an interactive element in renderer-container coordinates.
+ * Bounds are clipped to the render region that produced the element, so DOM
+ * hit testing matches canvas clipping across frozen and split panes.
  */
 export interface InteractiveElementBounds {
-  /** X position relative to grid viewport (not including headers) */
+  /** X position relative to the renderer container (including header space) */
   x: number;
-  /** Y position relative to grid viewport */
+  /** Y position relative to the renderer container (including header space) */
   y: number;
   /** Width in pixels */
   width: number;
@@ -116,7 +118,7 @@ export interface InteractiveElement {
   id: string;
   /** Element type */
   type: InteractiveElementType;
-  /** Position and size in viewport coordinates */
+  /** Position and size in clipped renderer-container coordinates */
   bounds: InteractiveElementBounds;
   /** Type-specific metadata */
   metadata: InteractiveElementMetadata;

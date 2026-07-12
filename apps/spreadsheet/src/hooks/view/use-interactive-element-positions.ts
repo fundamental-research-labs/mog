@@ -31,7 +31,7 @@ import type { ISheetViewInteractiveElements, InteractiveElementInfo } from '@mog
  * returns the current list of interactive elements with their positions.
  *
  * @param capability - The interactive elements capability from SheetView
- * @returns Array of interactive elements with viewport-relative positions
+ * @returns Array of interactive elements with clipped renderer-container positions
  *
  * @example
  * ```tsx

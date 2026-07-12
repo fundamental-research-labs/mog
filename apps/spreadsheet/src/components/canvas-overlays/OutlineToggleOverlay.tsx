@@ -49,13 +49,10 @@
  *
  * ## Why a separate overlay container
  *
- * `CanvasInteractiveOverlay` is offset by `headerOffset` (after row/col
- * headers) so its children's coordinate space matches per-cell elements.
- * Outline elements live in the gutter regions BEFORE/ABOVE headers, so
- * sharing that container would require negative coordinates that break
- * the "elements are positioned in cell-viewport space" invariant. A
- * dedicated container starting at (0, 0) of the canvas keeps both
- * pieces simple.
+ * `CanvasInteractiveOverlay` and this overlay now share the renderer-container
+ * origin. They remain separate because outline controls are derived from
+ * grouping geometry, while cell controls come from the renderer's interactive
+ * element capability and carry per-pane clipping.
  *
  * @see canvas/grid-renderer/src/features/outline-renderer.ts (canonical geometry)
  * @see apps/spreadsheet/src/hooks/shared/use-grid-mouse.ts (legacy canvas hit-test)
@@ -212,9 +209,8 @@ export const OutlineToggleOverlay = memo(function OutlineToggleOverlay() {
 
   return (
     <div
-      // Container starts at the top-left of the canvas viewport — outline
-      // gutters and level buttons live BEFORE the row/col headers, so we
-      // do NOT offset by headerOffset like CanvasInteractiveOverlay does.
+      // Container starts at the renderer-container origin because outline
+      // gutters and level buttons live before the row/column headers.
       className="absolute inset-0 pointer-events-none overflow-hidden"
       style={{ zIndex: 1 }}
       aria-hidden="true"

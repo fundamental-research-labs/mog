@@ -69,10 +69,11 @@ export type { ResizeConstraints, ResizeHandle } from './geometry/transform-math'
 export {
   canvasToDoc,
   canvasToDocXY,
-  canvasToLocal,
+  canvasToRegionLocal,
   canvasToPhysical,
   docToCanvas,
   docToCanvasXY,
+  regionLocalToCanvas,
   regionLocalVisibleRect,
 } from './core/coordinate-space';
 

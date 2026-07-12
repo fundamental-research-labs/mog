@@ -1017,6 +1017,53 @@ export const WORKBOOK_SUB_API_INTERFACES: WorkbookSubApiInterfaces = {
     },
   },
   worksheet: {
+    annotations: {
+      signature: 'readonly annotations: WorksheetAnnotations;',
+      docstring: 'Review annotations anchored to cell/table content',
+      usedTypes: ['WorksheetAnnotations'],
+      stableId: 'Worksheet.annotations',
+      canonicalPath: 'ws.annotations',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'annotations',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetAnnotations',
+        },
+        typeText: 'WorksheetAnnotations',
+      },
+      typeScript: {
+        signature: 'readonly annotations: WorksheetAnnotations;',
+        parameters: [],
+        returnTypeText: 'WorksheetAnnotations',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetAnnotations',
+    },
     bindings: {
       signature: 'readonly bindings: WorksheetBindings;',
       docstring: 'Data source bindings and projections',
@@ -3992,6 +4039,53 @@ export const WORKBOOK_SUB_API_INTERFACES: WorkbookSubApiInterfaces = {
     },
   },
   Worksheet: {
+    annotations: {
+      signature: 'readonly annotations: WorksheetAnnotations;',
+      docstring: 'Review annotations anchored to cell/table content',
+      usedTypes: ['WorksheetAnnotations'],
+      stableId: 'Worksheet.annotations',
+      canonicalPath: 'ws.annotations',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'annotations',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetAnnotations',
+        },
+        typeText: 'WorksheetAnnotations',
+      },
+      typeScript: {
+        signature: 'readonly annotations: WorksheetAnnotations;',
+        parameters: [],
+        returnTypeText: 'WorksheetAnnotations',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetAnnotations',
+    },
     bindings: {
       signature: 'readonly bindings: WorksheetBindings;',
       docstring: 'Data source bindings and projections',
@@ -5638,6 +5732,104 @@ export const WORKBOOK_SUB_API_INTERFACES: WorkbookSubApiInterfaces = {
         file: 'types/api/src/api/worksheet.ts',
       },
       targetInterface: 'WorksheetWhatIf',
+    },
+  },
+  WorksheetAnnotations: {
+    cells: {
+      signature: 'readonly cells: WorksheetCellAnnotations;',
+      docstring: 'Cell annotation operations for agents and first-party UI.',
+      usedTypes: ['WorksheetCellAnnotations'],
+      stableId: 'WorksheetAnnotations.cells',
+      canonicalPath: 'ws.annotations.cells',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'WorksheetAnnotations',
+      method: 'cells',
+      kind: 'property',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetCellAnnotations',
+        },
+        typeText: 'WorksheetCellAnnotations',
+      },
+      typeScript: {
+        signature: 'readonly cells: WorksheetCellAnnotations;',
+        parameters: [],
+        returnTypeText: 'WorksheetCellAnnotations',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet/annotations.ts',
+      },
+      targetInterface: 'WorksheetCellAnnotations',
+    },
+  },
+  WorksheetCellAnnotations: {
+    diagnostics: {
+      signature: 'readonly diagnostics: WorksheetCellAnnotationDiagnostics;',
+      docstring: '',
+      usedTypes: ['WorksheetCellAnnotationDiagnostics'],
+      stableId: 'WorksheetCellAnnotations.diagnostics',
+      canonicalPath: 'ws.annotations.cells.diagnostics',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'WorksheetCellAnnotations',
+      method: 'diagnostics',
+      kind: 'property',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetCellAnnotationDiagnostics',
+        },
+        typeText: 'WorksheetCellAnnotationDiagnostics',
+      },
+      typeScript: {
+        signature: 'readonly diagnostics: WorksheetCellAnnotationDiagnostics;',
+        parameters: [],
+        returnTypeText: 'WorksheetCellAnnotationDiagnostics',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet/annotations.ts',
+      },
+      targetInterface: 'WorksheetCellAnnotationDiagnostics',
     },
   },
   WorksheetProtection: {
@@ -7558,6 +7750,40 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       capability: 'workbook:write',
     },
   },
+  WorksheetAnnotations: {
+    getCell: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getTable: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    listCells: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    listTables: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    removeCell: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    removeTable: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setCell: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setTable: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+  },
   WorksheetBindings: {
     add: {
       decision: 'allow',
@@ -7596,6 +7822,50 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       capability: 'workbook:read',
     },
     remove: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+  },
+  WorksheetCellAnnotationDiagnostics: {
+    get: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    list: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+  },
+  WorksheetCellAnnotations: {
+    acceptStale: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    clear: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    get: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getText: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    list: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    remove: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    set: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setMany: {
       decision: 'allow',
       capability: 'workbook:write',
     },
@@ -7758,6 +8028,10 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       capability: 'workbook:read',
     },
     list: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    listCharts: {
       decision: 'allow',
       capability: 'workbook:read',
     },

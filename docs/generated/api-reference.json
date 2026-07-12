@@ -1661,25 +1661,31 @@
         "getCharts": {
           "signature": "getCharts(options?: ChartReadOptions | undefined): Promise<Chart[]>",
           "docstring": "Supported compatibility alias for {@link WorksheetCharts.list}.\n\nPrefer `ws.charts.list(options)` in new code.",
-          "usedTypes": ["Chart"]
+          "usedTypes": [
+            "Chart"
+          ]
         },
         "listCharts": {
           "signature": "listCharts(options?: ChartReadOptions | undefined): Promise<Chart[]>",
           "docstring": "@deprecated Use `ws.charts.list(options)` instead.",
-          "usedTypes": ["Chart"]
+          "usedTypes": [
+            "Chart"
+          ]
         },
         "getChart": {
-          "signature": "getChart(chartId: string): Promise<Chart | null>",
+          "signature": "getChart(chartTarget: ChartTarget): Promise<Chart | null>",
           "docstring": "@deprecated Use `ws.charts.get(chartId)` instead.",
-          "usedTypes": ["Chart"]
+          "usedTypes": [
+            "Chart"
+          ]
         },
         "updateChart": {
-          "signature": "updateChart(chartId: string, updates: Partial<ChartConfig>): Promise<ChartUpdateReceipt>",
+          "signature": "updateChart(chartTarget: ChartTarget, updates: Partial<ChartConfig>): Promise<ChartUpdateReceipt>",
           "docstring": "@deprecated Use `ws.charts.update(chartId, updates)` instead.",
           "usedTypes": []
         },
         "removeChart": {
-          "signature": "removeChart(chartId: string): Promise<ChartRemoveReceipt>",
+          "signature": "removeChart(chartTarget: ChartTarget): Promise<ChartRemoveReceipt>",
           "docstring": "@deprecated Use `ws.charts.remove(chartId)` instead.",
           "usedTypes": []
         },
@@ -1986,37 +1992,45 @@
         "charts.add": {
           "signature": "charts.add(config: ChartConfig): Promise<ChartAddReceipt>",
           "docstring": "Add a chart to the sheet. Returns a receipt with the created chart.",
-          "usedTypes": ["ChartConfig"]
+          "usedTypes": [
+            "ChartConfig"
+          ]
         },
         "charts.get": {
-          "signature": "charts.get(chartId: string): Promise<Chart | null>",
-          "docstring": "Get a chart by ID, or null if not found.",
-          "usedTypes": ["Chart"]
+          "signature": "charts.get(chartTarget: ChartTarget): Promise<Chart | null>",
+          "docstring": "Get a chart by exact ID or name, or null if not found.",
+          "usedTypes": [
+            "Chart"
+          ]
         },
         "charts.getAppModel": {
-          "signature": "charts.getAppModel(chartId: string, options?: ChartReadOptions | undefined): Promise<ChartAppModel | null>",
+          "signature": "charts.getAppModel(chartTarget: ChartTarget, options?: ChartReadOptions | undefined): Promise<ChartAppModel | null>",
           "docstring": "Get the normalized app-facing chart model used by first-party UI controls.",
           "usedTypes": []
         },
         "charts.update": {
-          "signature": "charts.update(chartId: string, updates: Partial<ChartConfig>): Promise<ChartUpdateReceipt>",
+          "signature": "charts.update(chartTarget: ChartTarget, updates: Partial<ChartConfig>): Promise<ChartUpdateReceipt>",
           "docstring": "Update a chart's configuration.",
           "usedTypes": []
         },
         "charts.remove": {
-          "signature": "charts.remove(chartId: string): Promise<ChartRemoveReceipt>",
-          "docstring": "Remove a chart by ID.",
+          "signature": "charts.remove(chartTarget: ChartTarget): Promise<ChartRemoveReceipt>",
+          "docstring": "Remove a chart by exact ID or name.",
           "usedTypes": []
         },
         "charts.list": {
           "signature": "charts.list(options?: ChartReadOptions | undefined): Promise<Chart[]>",
           "docstring": "List charts in the sheet. Pass `{ materialization: \"available\" }` for passive UI reads.",
-          "usedTypes": ["Chart"]
+          "usedTypes": [
+            "Chart"
+          ]
         },
         "charts.listCharts": {
           "signature": "charts.listCharts(options?: ChartReadOptions | undefined): Promise<Chart[]>",
           "docstring": "@deprecated Use `list()` instead. Compatibility alias for learned chart paths.",
-          "usedTypes": ["Chart"]
+          "usedTypes": [
+            "Chart"
+          ]
         },
         "charts.clear": {
           "signature": "charts.clear(): Promise<void>",
@@ -2024,28 +2038,30 @@
           "usedTypes": []
         },
         "charts.duplicate": {
-          "signature": "charts.duplicate(chartId: string): Promise<ChartDuplicateReceipt>",
+          "signature": "charts.duplicate(chartTarget: ChartTarget): Promise<ChartDuplicateReceipt>",
           "docstring": "Duplicate a chart, offsetting the copy by 2 rows. Returns a receipt with the copy.",
           "usedTypes": []
         },
         "charts.exportImage": {
-          "signature": "charts.exportImage(chartId: string, options?: ImageExportOptions | undefined): Promise<string>",
+          "signature": "charts.exportImage(chartTarget: ChartTarget, options?: ImageExportOptions | undefined): Promise<string>",
           "docstring": "Export a chart as an image.\n\nSupported formats are SVG, PNG, and JPEG. SVG uses the portable vector\nrenderer; PNG and JPEG require a runtime raster backend.",
           "usedTypes": []
         },
         "charts.setDataRange": {
-          "signature": "charts.setDataRange(chartId: string, range: string): Promise<void>",
+          "signature": "charts.setDataRange(chartTarget: ChartTarget, range: string): Promise<void>",
           "docstring": "Set a chart's data range (A1 notation).",
           "usedTypes": []
         },
         "charts.setType": {
-          "signature": "charts.setType(chartId: string, type: ChartType, subType?: string | undefined): Promise<void>",
+          "signature": "charts.setType(chartTarget: ChartTarget, type: ChartType, subType?: string | undefined): Promise<void>",
           "docstring": "Set a chart's type and optional sub-type.",
-          "usedTypes": ["ChartType"]
+          "usedTypes": [
+            "ChartType"
+          ]
         },
         "charts.has": {
-          "signature": "charts.has(chartId: string): Promise<boolean>",
-          "docstring": "Check if a chart exists by ID.",
+          "signature": "charts.has(chartTarget: ChartTarget): Promise<boolean>",
+          "docstring": "Check if a chart exists by exact ID or name.",
           "usedTypes": []
         },
         "charts.getCount": {
@@ -2056,20 +2072,22 @@
         "charts.getByName": {
           "signature": "charts.getByName(name: string): Promise<Chart | null>",
           "docstring": "Find a chart by its name, or null if not found.",
-          "usedTypes": ["Chart"]
+          "usedTypes": [
+            "Chart"
+          ]
         },
         "charts.describe": {
-          "signature": "charts.describe(chartId: string, options?: ImageExportOptions | undefined): Promise<ChartDescription>",
+          "signature": "charts.describe(chartTarget: ChartTarget, options?: ImageExportOptions | undefined): Promise<ChartDescription>",
           "docstring": "Describe the chart using the same resolved spec and source data that the\nproduction chart renderer uses.",
           "usedTypes": []
         },
         "charts.getSourceData": {
-          "signature": "charts.getSourceData(chartId: string, options?: ImageExportOptions | undefined): Promise<{ dataRange: ChartRangeReferenceSnapshot | null; categoryRange: ChartRangeReferenceSnapshot | null; seriesRange: ChartRangeReferenceSnapshot | null; seriesReferences: { index: number; name?: ChartRangeReferenceSnapshot | null | undefined; values: ChartRangeReferenceSnapshot | null; categories: ChartRangeReferenceSnapshot | null; bubbleSize?: ChartRangeReferenceSnapshot | null | undefined; }[]; diagnostics: ChartRangeDiagnosticSnapshot[]; }>",
+          "signature": "charts.getSourceData(chartTarget: ChartTarget, options?: ImageExportOptions | undefined): Promise<{ dataRange: ChartRangeReferenceSnapshot | null; categoryRange: ChartRangeReferenceSnapshot | null; seriesRange: ChartRangeReferenceSnapshot | null; seriesReferences: { index: number; name?: ChartRangeReferenceSnapshot | null | undefined; values: ChartRangeReferenceSnapshot | null; categories: ChartRangeReferenceSnapshot | null; bubbleSize?: ChartRangeReferenceSnapshot | null | undefined; }[]; diagnostics: ChartRangeDiagnosticSnapshot[]; }>",
           "docstring": "Get the resolved chart source ranges and source-range diagnostics.",
           "usedTypes": []
         },
         "charts.setSourceData": {
-          "signature": "charts.setSourceData(chartId: string, sourceData: ChartSourceDataUpdate): Promise<void>",
+          "signature": "charts.setSourceData(chartTarget: ChartTarget, sourceData: ChartSourceDataUpdate): Promise<void>",
           "docstring": "Replace chart source range metadata. This does not write worksheet cell\nvalues; it changes which worksheet ranges feed the chart.",
           "usedTypes": []
         },
@@ -2084,147 +2102,149 @@
           "usedTypes": []
         },
         "charts.bringToFront": {
-          "signature": "charts.bringToFront(chartId: string): Promise<void>",
+          "signature": "charts.bringToFront(chartTarget: ChartTarget): Promise<void>",
           "docstring": "Bring a chart to the front (highest z-index).",
           "usedTypes": []
         },
         "charts.sendToBack": {
-          "signature": "charts.sendToBack(chartId: string): Promise<void>",
+          "signature": "charts.sendToBack(chartTarget: ChartTarget): Promise<void>",
           "docstring": "Send a chart to the back (lowest z-index).",
           "usedTypes": []
         },
         "charts.bringForward": {
-          "signature": "charts.bringForward(chartId: string): Promise<void>",
+          "signature": "charts.bringForward(chartTarget: ChartTarget): Promise<void>",
           "docstring": "Bring a chart forward by one layer.",
           "usedTypes": []
         },
         "charts.sendBackward": {
-          "signature": "charts.sendBackward(chartId: string): Promise<void>",
+          "signature": "charts.sendBackward(chartTarget: ChartTarget): Promise<void>",
           "docstring": "Send a chart backward by one layer.",
           "usedTypes": []
         },
         "charts.linkToTable": {
-          "signature": "charts.linkToTable(chartId: string, tableId: string): Promise<void>",
+          "signature": "charts.linkToTable(chartTarget: ChartTarget, tableId: string): Promise<void>",
           "docstring": "Link a chart to a table so it auto-updates with the table's data.",
           "usedTypes": []
         },
         "charts.unlinkFromTable": {
-          "signature": "charts.unlinkFromTable(chartId: string): Promise<void>",
+          "signature": "charts.unlinkFromTable(chartTarget: ChartTarget): Promise<void>",
           "docstring": "Unlink a chart from its source table.",
           "usedTypes": []
         },
         "charts.isLinkedToTable": {
-          "signature": "charts.isLinkedToTable(chartId: string): Promise<boolean>",
+          "signature": "charts.isLinkedToTable(chartTarget: ChartTarget): Promise<boolean>",
           "docstring": "Check whether a chart is linked to a table.",
           "usedTypes": []
         },
         "charts.addSeries": {
-          "signature": "charts.addSeries(chartId: string, config: SeriesConfig): Promise<ChartMutationReceipt>",
+          "signature": "charts.addSeries(chartTarget: ChartTarget, config: SeriesConfig): Promise<ChartMutationReceipt>",
           "docstring": "Add a data series to a chart. Returns the new series index.",
           "usedTypes": []
         },
         "charts.removeSeries": {
-          "signature": "charts.removeSeries(chartId: string, index: number): Promise<ChartMutationReceipt>",
+          "signature": "charts.removeSeries(chartTarget: ChartTarget, index: number): Promise<ChartMutationReceipt>",
           "docstring": "Remove a data series by index.",
           "usedTypes": []
         },
         "charts.getSeries": {
-          "signature": "charts.getSeries(chartId: string, index: number): Promise<SeriesConfig>",
+          "signature": "charts.getSeries(chartTarget: ChartTarget, index: number): Promise<SeriesConfig>",
           "docstring": "Get a data series by index.",
           "usedTypes": []
         },
         "charts.updateSeries": {
-          "signature": "charts.updateSeries(chartId: string, index: number, updates: Partial<SeriesConfig>): Promise<ChartMutationReceipt>",
+          "signature": "charts.updateSeries(chartTarget: ChartTarget, index: number, updates: Partial<SeriesConfig>): Promise<ChartMutationReceipt>",
           "docstring": "Update a data series at the given index.",
           "usedTypes": []
         },
         "charts.getSeriesCount": {
-          "signature": "charts.getSeriesCount(chartId: string): Promise<number>",
+          "signature": "charts.getSeriesCount(chartTarget: ChartTarget): Promise<number>",
           "docstring": "Get the number of data series in a chart.",
           "usedTypes": []
         },
         "charts.reorderSeries": {
-          "signature": "charts.reorderSeries(chartId: string, fromIndex: number, toIndex: number): Promise<ChartMutationReceipt>",
+          "signature": "charts.reorderSeries(chartTarget: ChartTarget, fromIndex: number, toIndex: number): Promise<ChartMutationReceipt>",
           "docstring": "Reorder a series from one index to another.",
           "usedTypes": []
         },
         "charts.setSeriesValues": {
-          "signature": "charts.setSeriesValues(chartId: string, index: number, range: string): Promise<ChartMutationReceipt>",
+          "signature": "charts.setSeriesValues(chartTarget: ChartTarget, index: number, range: string): Promise<ChartMutationReceipt>",
           "docstring": "Set the values range for a series (A1 notation).",
           "usedTypes": []
         },
         "charts.setSeriesCategories": {
-          "signature": "charts.setSeriesCategories(chartId: string, index: number, range: string): Promise<ChartMutationReceipt>",
+          "signature": "charts.setSeriesCategories(chartTarget: ChartTarget, index: number, range: string): Promise<ChartMutationReceipt>",
           "docstring": "Set the categories range for a series (A1 notation).",
           "usedTypes": []
         },
         "charts.getSeriesBinOptions": {
-          "signature": "charts.getSeriesBinOptions(chartId: string, seriesIndex: number): Promise<HistogramConfig | null>",
+          "signature": "charts.getSeriesBinOptions(chartTarget: ChartTarget, seriesIndex: number): Promise<HistogramConfig | null>",
           "docstring": "Get per-series histogram bin options, or null if not set (falls back to chart-level).",
           "usedTypes": []
         },
         "charts.setSeriesBinOptions": {
-          "signature": "charts.setSeriesBinOptions(chartId: string, seriesIndex: number, options: HistogramConfig): Promise<ChartMutationReceipt>",
+          "signature": "charts.setSeriesBinOptions(chartTarget: ChartTarget, seriesIndex: number, options: HistogramConfig): Promise<ChartMutationReceipt>",
           "docstring": "Set per-series histogram bin options (overrides chart-level histogram config).",
           "usedTypes": []
         },
         "charts.getSeriesBoxwhiskerOptions": {
-          "signature": "charts.getSeriesBoxwhiskerOptions(chartId: string, seriesIndex: number): Promise<BoxplotConfig | null>",
+          "signature": "charts.getSeriesBoxwhiskerOptions(chartTarget: ChartTarget, seriesIndex: number): Promise<BoxplotConfig | null>",
           "docstring": "Get per-series box/whisker options, or null if not set (falls back to chart-level).",
           "usedTypes": []
         },
         "charts.setSeriesBoxwhiskerOptions": {
-          "signature": "charts.setSeriesBoxwhiskerOptions(chartId: string, seriesIndex: number, options: BoxplotConfig): Promise<ChartMutationReceipt>",
+          "signature": "charts.setSeriesBoxwhiskerOptions(chartTarget: ChartTarget, seriesIndex: number, options: BoxplotConfig): Promise<ChartMutationReceipt>",
           "docstring": "Set per-series box/whisker options (overrides chart-level boxplot config).",
           "usedTypes": []
         },
         "charts.formatPoint": {
-          "signature": "charts.formatPoint(chartId: string, seriesIndex: number, pointIndex: number, format: { fill?: string | undefined; border?: ChartBorder | undefined; }): Promise<ChartMutationReceipt>",
+          "signature": "charts.formatPoint(chartTarget: ChartTarget, seriesIndex: number, pointIndex: number, format: { fill?: string | undefined; border?: ChartBorder | undefined; }): Promise<ChartMutationReceipt>",
           "docstring": "Format an individual data point within a series.",
           "usedTypes": []
         },
         "charts.setPointDataLabel": {
-          "signature": "charts.setPointDataLabel(chartId: string, seriesIndex: number, pointIndex: number, config: DataLabelConfig): Promise<ChartMutationReceipt>",
+          "signature": "charts.setPointDataLabel(chartTarget: ChartTarget, seriesIndex: number, pointIndex: number, config: DataLabelConfig): Promise<ChartMutationReceipt>",
           "docstring": "Set the data label configuration for an individual data point.",
           "usedTypes": []
         },
         "charts.addTrendline": {
-          "signature": "charts.addTrendline(chartId: string, seriesIndex: number, config: TrendlineConfig): Promise<ChartMutationReceipt>",
+          "signature": "charts.addTrendline(chartTarget: ChartTarget, seriesIndex: number, config: TrendlineConfig): Promise<ChartMutationReceipt>",
           "docstring": "Add a trendline to a series. Returns the new trendline index.",
           "usedTypes": []
         },
         "charts.updateTrendline": {
-          "signature": "charts.updateTrendline(chartId: string, seriesIndex: number, trendlineIndex: number, updates: Partial<TrendlineConfig>): Promise<ChartMutationReceipt>",
+          "signature": "charts.updateTrendline(chartTarget: ChartTarget, seriesIndex: number, trendlineIndex: number, updates: Partial<TrendlineConfig>): Promise<ChartMutationReceipt>",
           "docstring": "Update a trendline on a series by index.",
           "usedTypes": []
         },
         "charts.removeTrendline": {
-          "signature": "charts.removeTrendline(chartId: string, seriesIndex: number, trendlineIndex: number): Promise<ChartMutationReceipt>",
+          "signature": "charts.removeTrendline(chartTarget: ChartTarget, seriesIndex: number, trendlineIndex: number): Promise<ChartMutationReceipt>",
           "docstring": "Remove a trendline from a series by index.",
           "usedTypes": []
         },
         "charts.getTrendline": {
-          "signature": "charts.getTrendline(chartId: string, seriesIndex: number, trendlineIndex: number): Promise<TrendlineConfig | null>",
+          "signature": "charts.getTrendline(chartTarget: ChartTarget, seriesIndex: number, trendlineIndex: number): Promise<TrendlineConfig | null>",
           "docstring": "Get a trendline configuration by index, or null if not found.",
           "usedTypes": []
         },
         "charts.getTrendlineCount": {
-          "signature": "charts.getTrendlineCount(chartId: string, seriesIndex: number): Promise<number>",
+          "signature": "charts.getTrendlineCount(chartTarget: ChartTarget, seriesIndex: number): Promise<number>",
           "docstring": "Get the number of trendlines on a series.",
           "usedTypes": []
         },
         "charts.getDataTable": {
-          "signature": "charts.getDataTable(chartId: string): Promise<DataTableConfig | null>",
+          "signature": "charts.getDataTable(chartTarget: ChartTarget): Promise<DataTableConfig | null>",
           "docstring": "Get the chart's data table configuration, or null if none.",
           "usedTypes": []
         },
         "charts.getItemAt": {
           "signature": "charts.getItemAt(index: number): Promise<Chart | null>",
           "docstring": "Get a chart by its positional index, or null if out of range.",
-          "usedTypes": ["Chart"]
+          "usedTypes": [
+            "Chart"
+          ]
         },
         "charts.setBubbleSizes": {
-          "signature": "charts.setBubbleSizes(chartId: string, seriesIndex: number, range: string): Promise<ChartMutationReceipt>",
+          "signature": "charts.setBubbleSizes(chartTarget: ChartTarget, seriesIndex: number, range: string): Promise<ChartMutationReceipt>",
           "docstring": "Set the bubble sizes range for a series (A1 notation).",
           "usedTypes": []
         },
@@ -2239,87 +2259,87 @@
           "usedTypes": []
         },
         "charts.getAxisItem": {
-          "signature": "charts.getAxisItem(chartId: string, type: \"category\" | \"value\" | \"series\", group: \"primary\" | \"secondary\"): Promise<SingleAxisConfig | null>",
+          "signature": "charts.getAxisItem(chartTarget: ChartTarget, type: \"category\" | \"value\" | \"series\", group: \"primary\" | \"secondary\"): Promise<SingleAxisConfig | null>",
           "docstring": "Get an axis by spreadsheet special-cell typetype/group identifiers.",
           "usedTypes": []
         },
         "charts.setAxisTitle": {
-          "signature": "charts.setAxisTitle(chartId: string, axisType: ChartAxisRole, title: string): Promise<ChartMutationReceipt>",
+          "signature": "charts.setAxisTitle(chartTarget: ChartTarget, axisType: ChartAxisRole, title: string): Promise<ChartMutationReceipt>",
           "docstring": "Set axis title by semantic axis role. Title text is stored literally.",
           "usedTypes": []
         },
         "charts.setAxisVisible": {
-          "signature": "charts.setAxisVisible(chartId: string, axisRole: ChartAxisRole, visible: boolean): Promise<ChartMutationReceipt>",
+          "signature": "charts.setAxisVisible(chartTarget: ChartTarget, axisRole: ChartAxisRole, visible: boolean): Promise<ChartMutationReceipt>",
           "docstring": "Set axis visibility by semantic axis role.",
           "usedTypes": []
         },
         "charts.setLegendVisible": {
-          "signature": "charts.setLegendVisible(chartId: string, visible: boolean): Promise<ChartMutationReceipt>",
+          "signature": "charts.setLegendVisible(chartTarget: ChartTarget, visible: boolean): Promise<ChartMutationReceipt>",
           "docstring": "Set legend visibility with chart-app-model semantics.",
           "usedTypes": []
         },
         "charts.setChartTitleVisible": {
-          "signature": "charts.setChartTitleVisible(chartId: string, visible: boolean): Promise<ChartMutationReceipt>",
+          "signature": "charts.setChartTitleVisible(chartTarget: ChartTarget, visible: boolean): Promise<ChartMutationReceipt>",
           "docstring": "Set chart title visibility without requiring callers to patch raw title fields.",
           "usedTypes": []
         },
         "charts.switchSeriesOrientation": {
-          "signature": "charts.switchSeriesOrientation(chartId: string): Promise<ChartMutationReceipt>",
+          "signature": "charts.switchSeriesOrientation(chartTarget: ChartTarget): Promise<ChartMutationReceipt>",
           "docstring": "Switch source orientation when supported, otherwise return an explicit no-op/unsupported receipt.",
           "usedTypes": []
         },
         "charts.setCategoryNames": {
-          "signature": "charts.setCategoryNames(chartId: string, range: string): Promise<ChartMutationReceipt>",
+          "signature": "charts.setCategoryNames(chartTarget: ChartTarget, range: string): Promise<ChartMutationReceipt>",
           "docstring": "Set category axis labels from a cell range (A1 notation).",
           "usedTypes": []
         },
         "charts.getSeriesDimensionValues": {
-          "signature": "charts.getSeriesDimensionValues(chartId: string, seriesIndex: number, dimension: ChartSeriesDimension): Promise<(string | number)[]>",
+          "signature": "charts.getSeriesDimensionValues(chartTarget: ChartTarget, seriesIndex: number, dimension: ChartSeriesDimension): Promise<(string | number)[]>",
           "docstring": "Get computed values for a series dimension.",
           "usedTypes": []
         },
         "charts.getSeriesDimensionDataSourceString": {
-          "signature": "charts.getSeriesDimensionDataSourceString(chartId: string, seriesIndex: number, dimension: ChartSeriesDimension): Promise<string>",
+          "signature": "charts.getSeriesDimensionDataSourceString(chartTarget: ChartTarget, seriesIndex: number, dimension: ChartSeriesDimension): Promise<string>",
           "docstring": "Get the range/formula string for a series dimension.",
           "usedTypes": []
         },
         "charts.getSeriesDimensionDataSourceType": {
-          "signature": "charts.getSeriesDimensionDataSourceType(chartId: string, seriesIndex: number, dimension: ChartSeriesDimension): Promise<string>",
+          "signature": "charts.getSeriesDimensionDataSourceType(chartTarget: ChartTarget, seriesIndex: number, dimension: ChartSeriesDimension): Promise<string>",
           "docstring": "Get the data source type for a series dimension ('range' | 'literal' | 'formula').",
           "usedTypes": []
         },
         "charts.getDataLabelSubstring": {
-          "signature": "charts.getDataLabelSubstring(chartId: string, seriesIndex: number, pointIndex: number, start: number, length: number): Promise<ChartFormatString>",
+          "signature": "charts.getDataLabelSubstring(chartTarget: ChartTarget, seriesIndex: number, pointIndex: number, start: number, length: number): Promise<ChartFormatString>",
           "docstring": "Get a rich text substring from a data label.",
           "usedTypes": []
         },
         "charts.setDataLabelHeight": {
-          "signature": "charts.setDataLabelHeight(chartId: string, seriesIndex: number, pointIndex: number, value: number): Promise<ChartMutationReceipt>",
+          "signature": "charts.setDataLabelHeight(chartTarget: ChartTarget, seriesIndex: number, pointIndex: number, value: number): Promise<ChartMutationReceipt>",
           "docstring": "Set the height of a data label.",
           "usedTypes": []
         },
         "charts.setDataLabelWidth": {
-          "signature": "charts.setDataLabelWidth(chartId: string, seriesIndex: number, pointIndex: number, value: number): Promise<ChartMutationReceipt>",
+          "signature": "charts.setDataLabelWidth(chartTarget: ChartTarget, seriesIndex: number, pointIndex: number, value: number): Promise<ChartMutationReceipt>",
           "docstring": "Set the width of a data label.",
           "usedTypes": []
         },
         "charts.getDataLabelTailAnchor": {
-          "signature": "charts.getDataLabelTailAnchor(chartId: string, seriesIndex: number, pointIndex: number): Promise<{ row: number; col: number; }>",
+          "signature": "charts.getDataLabelTailAnchor(chartTarget: ChartTarget, seriesIndex: number, pointIndex: number): Promise<{ row: number; col: number; }>",
           "docstring": "Get the tail anchor point for a data label's leader line.",
           "usedTypes": []
         },
         "charts.setTitleFormula": {
-          "signature": "charts.setTitleFormula(chartId: string, formula: string): Promise<void>",
+          "signature": "charts.setTitleFormula(chartTarget: ChartTarget, formula: string): Promise<void>",
           "docstring": "Set chart title from a formula string.",
           "usedTypes": []
         },
         "charts.getTitleSubstring": {
-          "signature": "charts.getTitleSubstring(chartId: string, start: number, length: number): Promise<ChartFormatString>",
+          "signature": "charts.getTitleSubstring(chartTarget: ChartTarget, start: number, length: number): Promise<ChartFormatString>",
           "docstring": "Get a rich text substring from the chart title.",
           "usedTypes": []
         },
         "charts.activate": {
-          "signature": "charts.activate(chartId: string): Promise<ChartActivateReceipt>",
+          "signature": "charts.activate(chartTarget: ChartTarget): Promise<ChartActivateReceipt>",
           "docstring": "Activate (select + focus) a chart. Emits 'chart:selected' event and scrolls chart into view.",
           "usedTypes": []
         },

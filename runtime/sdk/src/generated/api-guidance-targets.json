@@ -7022,7 +7022,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "activate(chartId: string): Promise<ChartActivateReceipt>;",
+      "signature": "activate(chartTarget: ChartTarget): Promise<ChartActivateReceipt>;",
       "typeText": "Promise<ChartActivateReceipt>",
       "compatibility": [],
       "source": {
@@ -7068,7 +7068,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "addSeries(chartId: string, config: SeriesConfig): Promise<ChartMutationReceipt>;",
+      "signature": "addSeries(chartTarget: ChartTarget, config: SeriesConfig): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -7087,7 +7087,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "addTrendline(\n    chartId: string,\n    seriesIndex: number,\n    config: TrendlineConfig,\n  ): Promise<ChartMutationReceipt>;",
+      "signature": "addTrendline(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n    config: TrendlineConfig,\n  ): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -7106,7 +7106,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "bringForward(chartId: string): Promise<void>;",
+      "signature": "bringForward(chartTarget: ChartTarget): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -7125,7 +7125,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "bringToFront(chartId: string): Promise<void>;",
+      "signature": "bringToFront(chartTarget: ChartTarget): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -7163,7 +7163,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "describe(chartId: string, options?: ImageExportOptions): Promise<ChartDescription>;",
+      "signature": "describe(chartTarget: ChartTarget, options?: ImageExportOptions): Promise<ChartDescription>;",
       "typeText": "Promise<ChartDescription>",
       "compatibility": [],
       "source": {
@@ -7182,7 +7182,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "duplicate(chartId: string): Promise<ChartDuplicateReceipt>;",
+      "signature": "duplicate(chartTarget: ChartTarget): Promise<ChartDuplicateReceipt>;",
       "typeText": "Promise<ChartDuplicateReceipt>",
       "compatibility": [],
       "source": {
@@ -7201,7 +7201,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "exportImage(chartId: string, options?: ImageExportOptions): Promise<string>;",
+      "signature": "exportImage(chartTarget: ChartTarget, options?: ImageExportOptions): Promise<string>;",
       "typeText": "Promise<string>",
       "compatibility": [],
       "source": {
@@ -7239,7 +7239,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "formatPoint(\n    chartId: string,\n    seriesIndex: number,\n    pointIndex: number,\n    format: { fill?: string; border?: ChartBorder },\n  ): Promise<ChartMutationReceipt>;",
+      "signature": "formatPoint(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n    pointIndex: number,\n    format: { fill?: string; border?: ChartBorder },\n  ): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -7258,7 +7258,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "get(chartId: string): Promise<Chart | null>;",
+      "signature": "get(chartTarget: ChartTarget): Promise<Chart | null>;",
       "typeText": "Promise<Chart|null>",
       "compatibility": [
         {
@@ -7285,7 +7285,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getAppModel(chartId: string, options?: ChartReadOptions): Promise<ChartAppModel | null>;",
+      "signature": "getAppModel(chartTarget: ChartTarget, options?: ChartReadOptions): Promise<ChartAppModel | null>;",
       "typeText": "Promise<ChartAppModel|null>",
       "compatibility": [],
       "source": {
@@ -7304,7 +7304,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getAxisItem(\n    chartId: string,\n    type: 'category' | 'value' | 'series',\n    group: 'primary' | 'secondary',\n  ): Promise<SingleAxisConfig | null>;",
+      "signature": "getAxisItem(\n    chartTarget: ChartTarget,\n    type: 'category' | 'value' | 'series',\n    group: 'primary' | 'secondary',\n  ): Promise<SingleAxisConfig | null>;",
       "typeText": "Promise<SingleAxisConfig|null>",
       "compatibility": [
         {
@@ -7369,7 +7369,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getDataLabelSubstring(\n    chartId: string,\n    seriesIndex: number,\n    pointIndex: number,\n    start: number,\n    length: number,\n  ): Promise<ChartFormatString>;",
+      "signature": "getDataLabelSubstring(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n    pointIndex: number,\n    start: number,\n    length: number,\n  ): Promise<ChartFormatString>;",
       "typeText": "Promise<ChartFormatString>",
       "compatibility": [],
       "source": {
@@ -7388,7 +7388,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getDataLabelTailAnchor(\n    chartId: string,\n    seriesIndex: number,\n    pointIndex: number,\n  ): Promise<{ row: number; col: number }>;",
+      "signature": "getDataLabelTailAnchor(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n    pointIndex: number,\n  ): Promise<{ row: number; col: number }>;",
       "typeText": "Promise<{row:number;col:number}>",
       "compatibility": [],
       "source": {
@@ -7407,7 +7407,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getDataTable(chartId: string): Promise<DataTableConfig | null>;",
+      "signature": "getDataTable(chartTarget: ChartTarget): Promise<DataTableConfig | null>;",
       "typeText": "Promise<DataTableConfig|null>",
       "compatibility": [],
       "source": {
@@ -7445,7 +7445,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getSeries(chartId: string, index: number): Promise<SeriesConfig>;",
+      "signature": "getSeries(chartTarget: ChartTarget, index: number): Promise<SeriesConfig>;",
       "typeText": "Promise<SeriesConfig>",
       "compatibility": [],
       "source": {
@@ -7464,7 +7464,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getSeriesBinOptions(chartId: string, seriesIndex: number): Promise<HistogramConfig | null>;",
+      "signature": "getSeriesBinOptions(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n  ): Promise<HistogramConfig | null>;",
       "typeText": "Promise<HistogramConfig|null>",
       "compatibility": [],
       "source": {
@@ -7483,7 +7483,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getSeriesBoxwhiskerOptions(chartId: string, seriesIndex: number): Promise<BoxplotConfig | null>;",
+      "signature": "getSeriesBoxwhiskerOptions(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n  ): Promise<BoxplotConfig | null>;",
       "typeText": "Promise<BoxplotConfig|null>",
       "compatibility": [],
       "source": {
@@ -7502,7 +7502,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getSeriesCount(chartId: string): Promise<number>;",
+      "signature": "getSeriesCount(chartTarget: ChartTarget): Promise<number>;",
       "typeText": "Promise<number>",
       "compatibility": [],
       "source": {
@@ -7521,7 +7521,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getSeriesDimensionDataSourceString(\n    chartId: string,\n    seriesIndex: number,\n    dimension: ChartSeriesDimension,\n  ): Promise<string>;",
+      "signature": "getSeriesDimensionDataSourceString(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n    dimension: ChartSeriesDimension,\n  ): Promise<string>;",
       "typeText": "Promise<string>",
       "compatibility": [],
       "source": {
@@ -7540,7 +7540,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getSeriesDimensionDataSourceType(\n    chartId: string,\n    seriesIndex: number,\n    dimension: ChartSeriesDimension,\n  ): Promise<string>;",
+      "signature": "getSeriesDimensionDataSourceType(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n    dimension: ChartSeriesDimension,\n  ): Promise<string>;",
       "typeText": "Promise<string>",
       "compatibility": [],
       "source": {
@@ -7559,7 +7559,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getSeriesDimensionValues(\n    chartId: string,\n    seriesIndex: number,\n    dimension: ChartSeriesDimension,\n  ): Promise<(string | number)[]>;",
+      "signature": "getSeriesDimensionValues(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n    dimension: ChartSeriesDimension,\n  ): Promise<(string | number)[]>;",
       "typeText": "Promise<(string|number)[]>",
       "compatibility": [],
       "source": {
@@ -7578,7 +7578,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getSourceData(chartId: string, options?: ImageExportOptions): Promise<ChartSourceData>;",
+      "signature": "getSourceData(chartTarget: ChartTarget, options?: ImageExportOptions): Promise<ChartSourceData>;",
       "typeText": "Promise<ChartSourceData>",
       "compatibility": [],
       "source": {
@@ -7597,7 +7597,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getTitleSubstring(chartId: string, start: number, length: number): Promise<ChartFormatString>;",
+      "signature": "getTitleSubstring(\n    chartTarget: ChartTarget,\n    start: number,\n    length: number,\n  ): Promise<ChartFormatString>;",
       "typeText": "Promise<ChartFormatString>",
       "compatibility": [],
       "source": {
@@ -7616,7 +7616,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getTrendline(\n    chartId: string,\n    seriesIndex: number,\n    trendlineIndex: number,\n  ): Promise<TrendlineConfig | null>;",
+      "signature": "getTrendline(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n    trendlineIndex: number,\n  ): Promise<TrendlineConfig | null>;",
       "typeText": "Promise<TrendlineConfig|null>",
       "compatibility": [],
       "source": {
@@ -7635,7 +7635,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getTrendlineCount(chartId: string, seriesIndex: number): Promise<number>;",
+      "signature": "getTrendlineCount(chartTarget: ChartTarget, seriesIndex: number): Promise<number>;",
       "typeText": "Promise<number>",
       "compatibility": [],
       "source": {
@@ -7654,7 +7654,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "has(chartId: string): Promise<boolean>;",
+      "signature": "has(chartTarget: ChartTarget): Promise<boolean>;",
       "typeText": "Promise<boolean>",
       "compatibility": [],
       "source": {
@@ -7673,7 +7673,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "isLinkedToTable(chartId: string): Promise<boolean>;",
+      "signature": "isLinkedToTable(chartTarget: ChartTarget): Promise<boolean>;",
       "typeText": "Promise<boolean>",
       "compatibility": [],
       "source": {
@@ -7692,7 +7692,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "linkToTable(chartId: string, tableId: string): Promise<void>;",
+      "signature": "linkToTable(chartTarget: ChartTarget, tableId: string): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -7824,7 +7824,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(chartId: string): Promise<ChartRemoveReceipt>;",
+      "signature": "remove(chartTarget: ChartTarget): Promise<ChartRemoveReceipt>;",
       "typeText": "Promise<ChartRemoveReceipt>",
       "compatibility": [
         {
@@ -7851,7 +7851,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeSeries(chartId: string, index: number): Promise<ChartMutationReceipt>;",
+      "signature": "removeSeries(chartTarget: ChartTarget, index: number): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -7870,7 +7870,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeTrendline(\n    chartId: string,\n    seriesIndex: number,\n    trendlineIndex: number,\n  ): Promise<ChartMutationReceipt>;",
+      "signature": "removeTrendline(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n    trendlineIndex: number,\n  ): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -7889,7 +7889,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "reorderSeries(chartId: string, fromIndex: number, toIndex: number): Promise<ChartMutationReceipt>;",
+      "signature": "reorderSeries(\n    chartTarget: ChartTarget,\n    fromIndex: number,\n    toIndex: number,\n  ): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -7908,7 +7908,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "sendBackward(chartId: string): Promise<void>;",
+      "signature": "sendBackward(chartTarget: ChartTarget): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -7927,7 +7927,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "sendToBack(chartId: string): Promise<void>;",
+      "signature": "sendToBack(chartTarget: ChartTarget): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -7946,7 +7946,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setAxisTitle(\n    chartId: string,\n    axisType: ChartAxisRole,\n    title: string,\n  ): Promise<ChartMutationReceipt>;",
+      "signature": "setAxisTitle(\n    chartTarget: ChartTarget,\n    axisType: ChartAxisRole,\n    title: string,\n  ): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -7965,7 +7965,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setAxisVisible(\n    chartId: string,\n    axisRole: ChartAxisRole,\n    visible: boolean,\n  ): Promise<ChartMutationReceipt>;",
+      "signature": "setAxisVisible(\n    chartTarget: ChartTarget,\n    axisRole: ChartAxisRole,\n    visible: boolean,\n  ): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -7984,7 +7984,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setBubbleSizes(\n    chartId: string,\n    seriesIndex: number,\n    range: string,\n  ): Promise<ChartMutationReceipt>;",
+      "signature": "setBubbleSizes(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n    range: string,\n  ): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -8003,7 +8003,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setCategoryNames(chartId: string, range: string): Promise<ChartMutationReceipt>;",
+      "signature": "setCategoryNames(chartTarget: ChartTarget, range: string): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -8022,7 +8022,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setChartTitleVisible(chartId: string, visible: boolean): Promise<ChartMutationReceipt>;",
+      "signature": "setChartTitleVisible(chartTarget: ChartTarget, visible: boolean): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -8041,7 +8041,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setDataLabelHeight(\n    chartId: string,\n    seriesIndex: number,\n    pointIndex: number,\n    value: number,\n  ): Promise<ChartMutationReceipt>;",
+      "signature": "setDataLabelHeight(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n    pointIndex: number,\n    value: number,\n  ): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -8060,7 +8060,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setDataLabelWidth(\n    chartId: string,\n    seriesIndex: number,\n    pointIndex: number,\n    value: number,\n  ): Promise<ChartMutationReceipt>;",
+      "signature": "setDataLabelWidth(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n    pointIndex: number,\n    value: number,\n  ): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -8079,7 +8079,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setDataRange(chartId: string, range: string): Promise<void>;",
+      "signature": "setDataRange(chartTarget: ChartTarget, range: string): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -8098,7 +8098,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setLegendVisible(chartId: string, visible: boolean): Promise<ChartMutationReceipt>;",
+      "signature": "setLegendVisible(chartTarget: ChartTarget, visible: boolean): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -8117,7 +8117,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setPointDataLabel(\n    chartId: string,\n    seriesIndex: number,\n    pointIndex: number,\n    config: DataLabelConfig,\n  ): Promise<ChartMutationReceipt>;",
+      "signature": "setPointDataLabel(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n    pointIndex: number,\n    config: DataLabelConfig,\n  ): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -8136,7 +8136,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setSeriesBinOptions(\n    chartId: string,\n    seriesIndex: number,\n    options: HistogramConfig,\n  ): Promise<ChartMutationReceipt>;",
+      "signature": "setSeriesBinOptions(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n    options: HistogramConfig,\n  ): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -8155,7 +8155,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setSeriesBoxwhiskerOptions(\n    chartId: string,\n    seriesIndex: number,\n    options: BoxplotConfig,\n  ): Promise<ChartMutationReceipt>;",
+      "signature": "setSeriesBoxwhiskerOptions(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n    options: BoxplotConfig,\n  ): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -8174,7 +8174,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setSeriesCategories(chartId: string, index: number, range: string): Promise<ChartMutationReceipt>;",
+      "signature": "setSeriesCategories(\n    chartTarget: ChartTarget,\n    index: number,\n    range: string,\n  ): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -8193,7 +8193,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setSeriesValues(chartId: string, index: number, range: string): Promise<ChartMutationReceipt>;",
+      "signature": "setSeriesValues(\n    chartTarget: ChartTarget,\n    index: number,\n    range: string,\n  ): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -8212,7 +8212,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setSourceData(chartId: string, sourceData: ChartSourceDataUpdate): Promise<void>;",
+      "signature": "setSourceData(chartTarget: ChartTarget, sourceData: ChartSourceDataUpdate): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -8231,7 +8231,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setTitleFormula(chartId: string, formula: string): Promise<void>;",
+      "signature": "setTitleFormula(chartTarget: ChartTarget, formula: string): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -8250,7 +8250,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setType(chartId: string, type: ChartType, subType?: string): Promise<void>;",
+      "signature": "setType(chartTarget: ChartTarget, type: ChartType, subType?: string): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -8269,7 +8269,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "switchSeriesOrientation(chartId: string): Promise<ChartMutationReceipt>;",
+      "signature": "switchSeriesOrientation(chartTarget: ChartTarget): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -8288,7 +8288,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "unlinkFromTable(chartId: string): Promise<void>;",
+      "signature": "unlinkFromTable(chartTarget: ChartTarget): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -8307,7 +8307,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "update(chartId: string, updates: Partial<ChartConfig>): Promise<ChartUpdateReceipt>;",
+      "signature": "update(chartTarget: ChartTarget, updates: Partial<ChartConfig>): Promise<ChartUpdateReceipt>;",
       "typeText": "Promise<ChartUpdateReceipt>",
       "compatibility": [
         {
@@ -8341,7 +8341,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "updateSeries(\n    chartId: string,\n    index: number,\n    updates: Partial<SeriesConfig>,\n  ): Promise<ChartMutationReceipt>;",
+      "signature": "updateSeries(\n    chartTarget: ChartTarget,\n    index: number,\n    updates: Partial<SeriesConfig>,\n  ): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -8360,7 +8360,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "updateTrendline(\n    chartId: string,\n    seriesIndex: number,\n    trendlineIndex: number,\n    updates: Partial<TrendlineConfig>,\n  ): Promise<ChartMutationReceipt>;",
+      "signature": "updateTrendline(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n    trendlineIndex: number,\n    updates: Partial<TrendlineConfig>,\n  ): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -11783,7 +11783,7 @@
       "kind": "method",
       "visibility": "deprecated",
       "asyncModel": "promise",
-      "signature": "getChart(chartId: string): Promise<Chart | null>;",
+      "signature": "getChart(chartTarget: ChartTarget): Promise<Chart | null>;",
       "typeText": "Promise<Chart|null>",
       "compatibility": [
         {
@@ -16284,7 +16284,7 @@
       "kind": "method",
       "visibility": "deprecated",
       "asyncModel": "promise",
-      "signature": "removeChart(chartId: string): Promise<ChartRemoveReceipt>;",
+      "signature": "removeChart(chartTarget: ChartTarget): Promise<ChartRemoveReceipt>;",
       "typeText": "Promise<ChartRemoveReceipt>",
       "compatibility": [
         {
@@ -19440,7 +19440,7 @@
       "kind": "method",
       "visibility": "deprecated",
       "asyncModel": "promise",
-      "signature": "updateChart(chartId: string, updates: Partial<ChartConfig>): Promise<ChartUpdateReceipt>;",
+      "signature": "updateChart(chartTarget: ChartTarget, updates: Partial<ChartConfig>): Promise<ChartUpdateReceipt>;",
       "typeText": "Promise<ChartUpdateReceipt>",
       "compatibility": [
         {
@@ -27312,7 +27312,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "activate(chartId: string): Promise<ChartActivateReceipt>;",
+      "signature": "activate(chartTarget: ChartTarget): Promise<ChartActivateReceipt>;",
       "typeText": "Promise<ChartActivateReceipt>",
       "compatibility": [],
       "source": {
@@ -27358,7 +27358,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "addSeries(chartId: string, config: SeriesConfig): Promise<ChartMutationReceipt>;",
+      "signature": "addSeries(chartTarget: ChartTarget, config: SeriesConfig): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -27377,7 +27377,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "addTrendline(\n    chartId: string,\n    seriesIndex: number,\n    config: TrendlineConfig,\n  ): Promise<ChartMutationReceipt>;",
+      "signature": "addTrendline(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n    config: TrendlineConfig,\n  ): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -27396,7 +27396,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "bringForward(chartId: string): Promise<void>;",
+      "signature": "bringForward(chartTarget: ChartTarget): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -27415,7 +27415,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "bringToFront(chartId: string): Promise<void>;",
+      "signature": "bringToFront(chartTarget: ChartTarget): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -27453,7 +27453,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "describe(chartId: string, options?: ImageExportOptions): Promise<ChartDescription>;",
+      "signature": "describe(chartTarget: ChartTarget, options?: ImageExportOptions): Promise<ChartDescription>;",
       "typeText": "Promise<ChartDescription>",
       "compatibility": [],
       "source": {
@@ -27472,7 +27472,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "duplicate(chartId: string): Promise<ChartDuplicateReceipt>;",
+      "signature": "duplicate(chartTarget: ChartTarget): Promise<ChartDuplicateReceipt>;",
       "typeText": "Promise<ChartDuplicateReceipt>",
       "compatibility": [],
       "source": {
@@ -27491,7 +27491,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "exportImage(chartId: string, options?: ImageExportOptions): Promise<string>;",
+      "signature": "exportImage(chartTarget: ChartTarget, options?: ImageExportOptions): Promise<string>;",
       "typeText": "Promise<string>",
       "compatibility": [],
       "source": {
@@ -27529,7 +27529,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "formatPoint(\n    chartId: string,\n    seriesIndex: number,\n    pointIndex: number,\n    format: { fill?: string; border?: ChartBorder },\n  ): Promise<ChartMutationReceipt>;",
+      "signature": "formatPoint(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n    pointIndex: number,\n    format: { fill?: string; border?: ChartBorder },\n  ): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -27548,7 +27548,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "get(chartId: string): Promise<Chart | null>;",
+      "signature": "get(chartTarget: ChartTarget): Promise<Chart | null>;",
       "typeText": "Promise<Chart|null>",
       "compatibility": [
         {
@@ -27575,7 +27575,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getAppModel(chartId: string, options?: ChartReadOptions): Promise<ChartAppModel | null>;",
+      "signature": "getAppModel(chartTarget: ChartTarget, options?: ChartReadOptions): Promise<ChartAppModel | null>;",
       "typeText": "Promise<ChartAppModel|null>",
       "compatibility": [],
       "source": {
@@ -27594,7 +27594,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getAxisItem(\n    chartId: string,\n    type: 'category' | 'value' | 'series',\n    group: 'primary' | 'secondary',\n  ): Promise<SingleAxisConfig | null>;",
+      "signature": "getAxisItem(\n    chartTarget: ChartTarget,\n    type: 'category' | 'value' | 'series',\n    group: 'primary' | 'secondary',\n  ): Promise<SingleAxisConfig | null>;",
       "typeText": "Promise<SingleAxisConfig|null>",
       "compatibility": [
         {
@@ -27659,7 +27659,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getDataLabelSubstring(\n    chartId: string,\n    seriesIndex: number,\n    pointIndex: number,\n    start: number,\n    length: number,\n  ): Promise<ChartFormatString>;",
+      "signature": "getDataLabelSubstring(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n    pointIndex: number,\n    start: number,\n    length: number,\n  ): Promise<ChartFormatString>;",
       "typeText": "Promise<ChartFormatString>",
       "compatibility": [],
       "source": {
@@ -27678,7 +27678,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getDataLabelTailAnchor(\n    chartId: string,\n    seriesIndex: number,\n    pointIndex: number,\n  ): Promise<{ row: number; col: number }>;",
+      "signature": "getDataLabelTailAnchor(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n    pointIndex: number,\n  ): Promise<{ row: number; col: number }>;",
       "typeText": "Promise<{row:number;col:number}>",
       "compatibility": [],
       "source": {
@@ -27697,7 +27697,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getDataTable(chartId: string): Promise<DataTableConfig | null>;",
+      "signature": "getDataTable(chartTarget: ChartTarget): Promise<DataTableConfig | null>;",
       "typeText": "Promise<DataTableConfig|null>",
       "compatibility": [],
       "source": {
@@ -27735,7 +27735,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getSeries(chartId: string, index: number): Promise<SeriesConfig>;",
+      "signature": "getSeries(chartTarget: ChartTarget, index: number): Promise<SeriesConfig>;",
       "typeText": "Promise<SeriesConfig>",
       "compatibility": [],
       "source": {
@@ -27754,7 +27754,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getSeriesBinOptions(chartId: string, seriesIndex: number): Promise<HistogramConfig | null>;",
+      "signature": "getSeriesBinOptions(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n  ): Promise<HistogramConfig | null>;",
       "typeText": "Promise<HistogramConfig|null>",
       "compatibility": [],
       "source": {
@@ -27773,7 +27773,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getSeriesBoxwhiskerOptions(chartId: string, seriesIndex: number): Promise<BoxplotConfig | null>;",
+      "signature": "getSeriesBoxwhiskerOptions(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n  ): Promise<BoxplotConfig | null>;",
       "typeText": "Promise<BoxplotConfig|null>",
       "compatibility": [],
       "source": {
@@ -27792,7 +27792,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getSeriesCount(chartId: string): Promise<number>;",
+      "signature": "getSeriesCount(chartTarget: ChartTarget): Promise<number>;",
       "typeText": "Promise<number>",
       "compatibility": [],
       "source": {
@@ -27811,7 +27811,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getSeriesDimensionDataSourceString(\n    chartId: string,\n    seriesIndex: number,\n    dimension: ChartSeriesDimension,\n  ): Promise<string>;",
+      "signature": "getSeriesDimensionDataSourceString(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n    dimension: ChartSeriesDimension,\n  ): Promise<string>;",
       "typeText": "Promise<string>",
       "compatibility": [],
       "source": {
@@ -27830,7 +27830,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getSeriesDimensionDataSourceType(\n    chartId: string,\n    seriesIndex: number,\n    dimension: ChartSeriesDimension,\n  ): Promise<string>;",
+      "signature": "getSeriesDimensionDataSourceType(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n    dimension: ChartSeriesDimension,\n  ): Promise<string>;",
       "typeText": "Promise<string>",
       "compatibility": [],
       "source": {
@@ -27849,7 +27849,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getSeriesDimensionValues(\n    chartId: string,\n    seriesIndex: number,\n    dimension: ChartSeriesDimension,\n  ): Promise<(string | number)[]>;",
+      "signature": "getSeriesDimensionValues(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n    dimension: ChartSeriesDimension,\n  ): Promise<(string | number)[]>;",
       "typeText": "Promise<(string|number)[]>",
       "compatibility": [],
       "source": {
@@ -27868,7 +27868,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getSourceData(chartId: string, options?: ImageExportOptions): Promise<ChartSourceData>;",
+      "signature": "getSourceData(chartTarget: ChartTarget, options?: ImageExportOptions): Promise<ChartSourceData>;",
       "typeText": "Promise<ChartSourceData>",
       "compatibility": [],
       "source": {
@@ -27887,7 +27887,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getTitleSubstring(chartId: string, start: number, length: number): Promise<ChartFormatString>;",
+      "signature": "getTitleSubstring(\n    chartTarget: ChartTarget,\n    start: number,\n    length: number,\n  ): Promise<ChartFormatString>;",
       "typeText": "Promise<ChartFormatString>",
       "compatibility": [],
       "source": {
@@ -27906,7 +27906,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getTrendline(\n    chartId: string,\n    seriesIndex: number,\n    trendlineIndex: number,\n  ): Promise<TrendlineConfig | null>;",
+      "signature": "getTrendline(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n    trendlineIndex: number,\n  ): Promise<TrendlineConfig | null>;",
       "typeText": "Promise<TrendlineConfig|null>",
       "compatibility": [],
       "source": {
@@ -27925,7 +27925,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getTrendlineCount(chartId: string, seriesIndex: number): Promise<number>;",
+      "signature": "getTrendlineCount(chartTarget: ChartTarget, seriesIndex: number): Promise<number>;",
       "typeText": "Promise<number>",
       "compatibility": [],
       "source": {
@@ -27944,7 +27944,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "has(chartId: string): Promise<boolean>;",
+      "signature": "has(chartTarget: ChartTarget): Promise<boolean>;",
       "typeText": "Promise<boolean>",
       "compatibility": [],
       "source": {
@@ -27963,7 +27963,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "isLinkedToTable(chartId: string): Promise<boolean>;",
+      "signature": "isLinkedToTable(chartTarget: ChartTarget): Promise<boolean>;",
       "typeText": "Promise<boolean>",
       "compatibility": [],
       "source": {
@@ -27982,7 +27982,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "linkToTable(chartId: string, tableId: string): Promise<void>;",
+      "signature": "linkToTable(chartTarget: ChartTarget, tableId: string): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -28114,7 +28114,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(chartId: string): Promise<ChartRemoveReceipt>;",
+      "signature": "remove(chartTarget: ChartTarget): Promise<ChartRemoveReceipt>;",
       "typeText": "Promise<ChartRemoveReceipt>",
       "compatibility": [
         {
@@ -28141,7 +28141,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeSeries(chartId: string, index: number): Promise<ChartMutationReceipt>;",
+      "signature": "removeSeries(chartTarget: ChartTarget, index: number): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -28160,7 +28160,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeTrendline(\n    chartId: string,\n    seriesIndex: number,\n    trendlineIndex: number,\n  ): Promise<ChartMutationReceipt>;",
+      "signature": "removeTrendline(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n    trendlineIndex: number,\n  ): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -28179,7 +28179,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "reorderSeries(chartId: string, fromIndex: number, toIndex: number): Promise<ChartMutationReceipt>;",
+      "signature": "reorderSeries(\n    chartTarget: ChartTarget,\n    fromIndex: number,\n    toIndex: number,\n  ): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -28198,7 +28198,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "sendBackward(chartId: string): Promise<void>;",
+      "signature": "sendBackward(chartTarget: ChartTarget): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -28217,7 +28217,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "sendToBack(chartId: string): Promise<void>;",
+      "signature": "sendToBack(chartTarget: ChartTarget): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -28236,7 +28236,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setAxisTitle(\n    chartId: string,\n    axisType: ChartAxisRole,\n    title: string,\n  ): Promise<ChartMutationReceipt>;",
+      "signature": "setAxisTitle(\n    chartTarget: ChartTarget,\n    axisType: ChartAxisRole,\n    title: string,\n  ): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -28255,7 +28255,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setAxisVisible(\n    chartId: string,\n    axisRole: ChartAxisRole,\n    visible: boolean,\n  ): Promise<ChartMutationReceipt>;",
+      "signature": "setAxisVisible(\n    chartTarget: ChartTarget,\n    axisRole: ChartAxisRole,\n    visible: boolean,\n  ): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -28274,7 +28274,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setBubbleSizes(\n    chartId: string,\n    seriesIndex: number,\n    range: string,\n  ): Promise<ChartMutationReceipt>;",
+      "signature": "setBubbleSizes(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n    range: string,\n  ): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -28293,7 +28293,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setCategoryNames(chartId: string, range: string): Promise<ChartMutationReceipt>;",
+      "signature": "setCategoryNames(chartTarget: ChartTarget, range: string): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -28312,7 +28312,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setChartTitleVisible(chartId: string, visible: boolean): Promise<ChartMutationReceipt>;",
+      "signature": "setChartTitleVisible(chartTarget: ChartTarget, visible: boolean): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -28331,7 +28331,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setDataLabelHeight(\n    chartId: string,\n    seriesIndex: number,\n    pointIndex: number,\n    value: number,\n  ): Promise<ChartMutationReceipt>;",
+      "signature": "setDataLabelHeight(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n    pointIndex: number,\n    value: number,\n  ): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -28350,7 +28350,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setDataLabelWidth(\n    chartId: string,\n    seriesIndex: number,\n    pointIndex: number,\n    value: number,\n  ): Promise<ChartMutationReceipt>;",
+      "signature": "setDataLabelWidth(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n    pointIndex: number,\n    value: number,\n  ): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -28369,7 +28369,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setDataRange(chartId: string, range: string): Promise<void>;",
+      "signature": "setDataRange(chartTarget: ChartTarget, range: string): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -28388,7 +28388,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setLegendVisible(chartId: string, visible: boolean): Promise<ChartMutationReceipt>;",
+      "signature": "setLegendVisible(chartTarget: ChartTarget, visible: boolean): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -28407,7 +28407,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setPointDataLabel(\n    chartId: string,\n    seriesIndex: number,\n    pointIndex: number,\n    config: DataLabelConfig,\n  ): Promise<ChartMutationReceipt>;",
+      "signature": "setPointDataLabel(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n    pointIndex: number,\n    config: DataLabelConfig,\n  ): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -28426,7 +28426,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setSeriesBinOptions(\n    chartId: string,\n    seriesIndex: number,\n    options: HistogramConfig,\n  ): Promise<ChartMutationReceipt>;",
+      "signature": "setSeriesBinOptions(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n    options: HistogramConfig,\n  ): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -28445,7 +28445,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setSeriesBoxwhiskerOptions(\n    chartId: string,\n    seriesIndex: number,\n    options: BoxplotConfig,\n  ): Promise<ChartMutationReceipt>;",
+      "signature": "setSeriesBoxwhiskerOptions(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n    options: BoxplotConfig,\n  ): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -28464,7 +28464,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setSeriesCategories(chartId: string, index: number, range: string): Promise<ChartMutationReceipt>;",
+      "signature": "setSeriesCategories(\n    chartTarget: ChartTarget,\n    index: number,\n    range: string,\n  ): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -28483,7 +28483,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setSeriesValues(chartId: string, index: number, range: string): Promise<ChartMutationReceipt>;",
+      "signature": "setSeriesValues(\n    chartTarget: ChartTarget,\n    index: number,\n    range: string,\n  ): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -28502,7 +28502,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setSourceData(chartId: string, sourceData: ChartSourceDataUpdate): Promise<void>;",
+      "signature": "setSourceData(chartTarget: ChartTarget, sourceData: ChartSourceDataUpdate): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -28521,7 +28521,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setTitleFormula(chartId: string, formula: string): Promise<void>;",
+      "signature": "setTitleFormula(chartTarget: ChartTarget, formula: string): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -28540,7 +28540,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setType(chartId: string, type: ChartType, subType?: string): Promise<void>;",
+      "signature": "setType(chartTarget: ChartTarget, type: ChartType, subType?: string): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -28559,7 +28559,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "switchSeriesOrientation(chartId: string): Promise<ChartMutationReceipt>;",
+      "signature": "switchSeriesOrientation(chartTarget: ChartTarget): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -28578,7 +28578,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "unlinkFromTable(chartId: string): Promise<void>;",
+      "signature": "unlinkFromTable(chartTarget: ChartTarget): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -28597,7 +28597,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "update(chartId: string, updates: Partial<ChartConfig>): Promise<ChartUpdateReceipt>;",
+      "signature": "update(chartTarget: ChartTarget, updates: Partial<ChartConfig>): Promise<ChartUpdateReceipt>;",
       "typeText": "Promise<ChartUpdateReceipt>",
       "compatibility": [
         {
@@ -28631,7 +28631,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "updateSeries(\n    chartId: string,\n    index: number,\n    updates: Partial<SeriesConfig>,\n  ): Promise<ChartMutationReceipt>;",
+      "signature": "updateSeries(\n    chartTarget: ChartTarget,\n    index: number,\n    updates: Partial<SeriesConfig>,\n  ): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -28650,7 +28650,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "updateTrendline(\n    chartId: string,\n    seriesIndex: number,\n    trendlineIndex: number,\n    updates: Partial<TrendlineConfig>,\n  ): Promise<ChartMutationReceipt>;",
+      "signature": "updateTrendline(\n    chartTarget: ChartTarget,\n    seriesIndex: number,\n    trendlineIndex: number,\n    updates: Partial<TrendlineConfig>,\n  ): Promise<ChartMutationReceipt>;",
       "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -32073,7 +32073,7 @@
       "kind": "method",
       "visibility": "deprecated",
       "asyncModel": "promise",
-      "signature": "getChart(chartId: string): Promise<Chart | null>;",
+      "signature": "getChart(chartTarget: ChartTarget): Promise<Chart | null>;",
       "typeText": "Promise<Chart|null>",
       "compatibility": [
         {
@@ -36574,7 +36574,7 @@
       "kind": "method",
       "visibility": "deprecated",
       "asyncModel": "promise",
-      "signature": "removeChart(chartId: string): Promise<ChartRemoveReceipt>;",
+      "signature": "removeChart(chartTarget: ChartTarget): Promise<ChartRemoveReceipt>;",
       "typeText": "Promise<ChartRemoveReceipt>",
       "compatibility": [
         {
@@ -39730,7 +39730,7 @@
       "kind": "method",
       "visibility": "deprecated",
       "asyncModel": "promise",
-      "signature": "updateChart(chartId: string, updates: Partial<ChartConfig>): Promise<ChartUpdateReceipt>;",
+      "signature": "updateChart(chartTarget: ChartTarget, updates: Partial<ChartConfig>): Promise<ChartUpdateReceipt>;",
       "typeText": "Promise<ChartUpdateReceipt>",
       "compatibility": [
         {

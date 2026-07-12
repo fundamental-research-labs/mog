@@ -59,6 +59,7 @@ export type {
   ChartSourceDataUpdate,
   ChartSourceRangeKind,
   ChartSourceRangeMatch,
+  ChartTarget,
   WorksheetCharts,
 } from './charts';
 export type { ChartMutationReceipt } from '../mutation-receipt';

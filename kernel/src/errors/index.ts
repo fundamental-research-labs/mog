@@ -40,6 +40,7 @@ export {
   HydrationError,
 } from './document';
 export { FloatingObjectError } from './floating-object';
+export { callNativeChartMutation, translateNativeChartError } from './chart';
 export {
   slicerIdExistsError,
   slicerNotFoundError,

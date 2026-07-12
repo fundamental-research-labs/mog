@@ -380,20 +380,49 @@ target refs fail closed.
 ## Error Handling
 
 The package exports `MogSdkError` and the `MogSdkErrorCode` type for structured
-error handling. Catch errors, normalize unknown values with `MogSdkError.from`,
-and inspect `code`.
+error handling. Stable workbook APIs reject with `MogSdkError`; catch errors,
+normalize unknown values with `MogSdkError.from`, and inspect the complete
+agent-facing feedback contract:
+
+- `code`: stable broad category for control flow
+- `operation`: exact SDK route that failed
+- `path`: invalid or unresolved input fields
+- `suggestion`: concrete recovery guidance
+- `details`: resource IDs, matched names, limits, and other safe context
+- `diagnostics.issueCode`: granular kernel reason for precise handling
 
 ```typescript
 import { MogSdkError, type MogSdkErrorCode } from '@mog-sdk/sdk';
 
 try {
-  await wb.getSheet('MissingSheet');
+  await wb.activeSheet.charts.setLegendVisible('Revenue chart', false);
 } catch (error) {
-  const err = MogSdkError.from(error, 'getSheet');
+  const err = MogSdkError.from(error);
   const code: MogSdkErrorCode = err.code;
-  console.error(code, err.message);
+  console.error({
+    code,
+    message: err.message,
+    operation: err.operation,
+    path: err.path,
+    suggestion: err.suggestion,
+    details: err.details,
+    diagnostics: err.diagnostics,
+  });
 }
 ```
+
+Chart APIs accept an exact stable ID or exact display name as a bare string:
+
+```typescript
+await wb.activeSheet.charts.setLegendVisible('Revenue chart', false);
+```
+
+Matching is case-sensitive and does not trim whitespace. If a name is duplicated,
+or a string matches one chart's ID and another chart's name, Mog rejects with
+`code: 'CONFLICT'`, `path: ['chartTarget']`, granular issue code
+`OBJ_CHART_TARGET_AMBIGUOUS`, and candidate IDs in `details.candidates`. Pass an
+explicit selector such as `{ id: 'chart-123' }` to disambiguate. Missing targets
+still reject with `NOT_FOUND`; receipts describe only admitted operations.
 
 ## API Discovery
 

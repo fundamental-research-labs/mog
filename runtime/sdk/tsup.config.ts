@@ -54,6 +54,7 @@ function applyWorkspaceAliases(
       __dirname,
       '../../kernel/src/host-lifecycle-internal.ts',
     ),
+    '@mog-sdk/kernel/internal': resolve(__dirname, '../../kernel/src/internal.ts'),
     '@mog-sdk/kernel/storage': resolve(__dirname, '../../kernel/src/storage/index.ts'),
     '@mog-sdk/kernel': resolve(__dirname, '../../kernel/src/index.ts'),
     '@rust-bridge/client': resolve(__dirname, '../../infra/rust-bridge/client/src/index.ts'),

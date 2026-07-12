@@ -4,6 +4,7 @@ import type {
   ChartMutationReceipt,
   ChartMutationReceiptKind,
   ChartSeriesMutationReceipt,
+  ChartTarget,
   OperationDiagnostic,
   OperationEffect,
   SheetId,
@@ -27,10 +28,9 @@ import { parseCellRange } from '@mog/spreadsheet-utils/a1';
 import type { ChartFloatingObject } from '../../bridges/compute/compute-bridge';
 import type { DocumentContext } from '../../context';
 import {
-  applyUpdate,
-  awaitSheetMaterialized,
+  applyResolvedChartUpdate,
   chartSeriesCount,
-  resolveChartIdInput,
+  requireChartTarget,
 } from './chart-api-helpers';
 import { serializedChartToChart } from '../../domain/charts/chart-public-api-converters';
 import { ensurePointsArray } from '../../domain/charts/chart-series-mutations';
@@ -328,43 +328,30 @@ export function chartSeriesMutationCapacityForReceipt(chart: Chart): number {
   return explicitSeriesCount > 0 ? explicitSeriesCount : inferredRangeSeriesMutationCapacity(chart);
 }
 
-export type ChartMutationReadResult =
-  | {
-      chart: Chart;
-      series: SeriesConfig[];
-      resolvedChartId: string;
-    }
+export interface ChartMutationReadResult {
+  chart: Chart;
+  chartTarget: ChartTarget;
+  raw: ChartFloatingObject;
+  series: SeriesConfig[];
+  resolvedChartId: string;
+}
+
+export type ChartSeriesMutationReadResult =
+  | ChartMutationReadResult
   | { receipt: ChartMutationReceipt };
 
 export async function readChartForMutation(
   ctx: DocumentContext,
   sheetId: SheetId,
-  kind: ChartMutationReceiptKind,
-  chartId: string,
-  target: ChartMutationTarget = {},
+  chartTarget: ChartTarget,
 ): Promise<ChartMutationReadResult> {
-  await awaitSheetMaterialized(ctx, sheetId);
-  const resolvedChartId = await resolveChartIdInput(ctx, sheetId, chartId);
-  const raw = (await ctx.computeBridge.getChart(
-    sheetId,
-    resolvedChartId,
-  )) as ChartFloatingObject | null;
-  if (!raw) {
-    return {
-      receipt: buildFailedChartMutationReceipt(
-        kind,
-        sheetId,
-        resolvedChartId,
-        `Chart "${chartId}" not found`,
-        target,
-        { chartId },
-      ),
-    };
-  }
+  const { resolvedChartId, raw } = await requireChartTarget(ctx, sheetId, chartTarget);
 
   const chart = serializedChartToChart(raw);
   return {
     chart,
+    chartTarget,
+    raw,
     series: [...(chart.series ?? [])],
     resolvedChartId,
   };
@@ -374,26 +361,25 @@ export async function readSeriesForMutation(
   ctx: DocumentContext,
   sheetId: SheetId,
   kind: ChartMutationReceiptKind,
-  chartId: string,
+  chartTarget: ChartTarget,
   seriesIndex: number,
   target: ChartMutationTarget = {},
-): Promise<ChartMutationReadResult> {
+): Promise<ChartSeriesMutationReadResult> {
   const resolvedTarget = { ...target, seriesIndex };
+  const read = await readChartForMutation(ctx, sheetId, chartTarget);
+
   if (!Number.isInteger(seriesIndex) || seriesIndex < 0) {
     return {
       receipt: buildFailedChartMutationReceipt(
         kind,
         sheetId,
-        chartId,
+        read.resolvedChartId,
         `Series index ${seriesIndex} out of range`,
         resolvedTarget,
         { received: seriesIndex },
       ),
     };
   }
-
-  const read = await readChartForMutation(ctx, sheetId, kind, chartId, resolvedTarget);
-  if ('receipt' in read) return read;
 
   const capacity = chartSeriesMutationCapacityForReceipt(read.chart);
   if (seriesIndex >= capacity) {
@@ -440,25 +426,31 @@ async function applyChartUpdateAndReceipt(
   sheetId: SheetId,
   kind: ChartMutationReceiptKind,
   chartId: string,
+  existing: ChartFloatingObject,
   updates: Partial<ChartConfig>,
   target: ChartMutationTarget = {},
+  diagnosticTarget: unknown = { id: chartId },
 ): Promise<ChartMutationReceipt> {
-  await applyUpdate(ctx, sheetId, chartId, updates);
+  await applyResolvedChartUpdate(
+    ctx,
+    sheetId,
+    chartId,
+    existing,
+    updates,
+    undefined,
+    diagnosticTarget,
+  );
   return finishChartMutationReceipt(ctx, sheetId, kind, chartId, target);
 }
 
 export async function addChartSeriesMutation(
   ctx: DocumentContext,
   sheetId: SheetId,
-  chartId: string,
+  chartTarget: ChartTarget,
   config: SeriesConfig,
 ): Promise<ChartMutationReceipt> {
   const kind = 'chart.series.add';
-  const read = await readChartForMutation(ctx, sheetId, kind, chartId, {
-    series: config,
-    changedRanges: changedRangesFromSeries(config),
-  });
-  if ('receipt' in read) return read.receipt;
+  const read = await readChartForMutation(ctx, sheetId, chartTarget);
 
   read.series.push(config);
   const seriesIndex = read.series.length - 1;
@@ -467,6 +459,7 @@ export async function addChartSeriesMutation(
     sheetId,
     kind,
     read.resolvedChartId,
+    read.raw,
     {
       series: read.series,
     },
@@ -475,19 +468,19 @@ export async function addChartSeriesMutation(
       series: config,
       changedRanges: changedRangesFromSeries(config),
     },
+    read.chartTarget,
   );
 }
 
 export async function removeChartSeriesMutation(
   ctx: DocumentContext,
   sheetId: SheetId,
-  chartId: string,
+  chartTarget: ChartTarget,
   seriesIndex: number,
 ): Promise<ChartMutationReceipt> {
   const kind = 'chart.series.remove';
   const target = { seriesIndex };
-  const read = await readChartForMutation(ctx, sheetId, kind, chartId, target);
-  if ('receipt' in read) return read.receipt;
+  const read = await readChartForMutation(ctx, sheetId, chartTarget);
   if (!Number.isInteger(seriesIndex) || seriesIndex < 0 || seriesIndex >= read.series.length) {
     return buildFailedChartMutationReceipt(
       kind,
@@ -505,6 +498,7 @@ export async function removeChartSeriesMutation(
     sheetId,
     kind,
     read.resolvedChartId,
+    read.raw,
     {
       series: read.series,
     },
@@ -513,6 +507,7 @@ export async function removeChartSeriesMutation(
       series: null,
       changedRanges: changedRangesFromSeries(removed),
     },
+    read.chartTarget,
   );
 }
 
@@ -520,11 +515,11 @@ export async function updateChartSeriesMutation(
   ctx: DocumentContext,
   sheetId: SheetId,
   kind: ChartMutationReceiptKind,
-  chartId: string,
+  chartTarget: ChartTarget,
   seriesIndex: number,
   updates: Partial<SeriesConfig>,
 ): Promise<ChartMutationReceipt> {
-  const read = await readSeriesForMutation(ctx, sheetId, kind, chartId, seriesIndex, {
+  const read = await readSeriesForMutation(ctx, sheetId, kind, chartTarget, seriesIndex, {
     series: updates,
     changedRanges: changedRangesFromSeries(updates),
   });
@@ -537,6 +532,7 @@ export async function updateChartSeriesMutation(
     sheetId,
     kind,
     read.resolvedChartId,
+    read.raw,
     {
       series: read.series,
     },
@@ -545,20 +541,20 @@ export async function updateChartSeriesMutation(
       series: nextSeries,
       changedRanges: changedRangesFromSeries(updates),
     },
+    read.chartTarget,
   );
 }
 
 export async function reorderChartSeriesMutation(
   ctx: DocumentContext,
   sheetId: SheetId,
-  chartId: string,
+  chartTarget: ChartTarget,
   fromIndex: number,
   toIndex: number,
 ): Promise<ChartMutationReceipt> {
   const kind = 'chart.series.reorder';
   const target = { fromSeriesIndex: fromIndex, toSeriesIndex: toIndex };
-  const read = await readChartForMutation(ctx, sheetId, kind, chartId, target);
-  if ('receipt' in read) return read.receipt;
+  const read = await readChartForMutation(ctx, sheetId, chartTarget);
 
   if (!Number.isInteger(fromIndex) || fromIndex < 0 || fromIndex >= read.series.length) {
     return buildFailedChartMutationReceipt(
@@ -588,36 +584,38 @@ export async function reorderChartSeriesMutation(
     sheetId,
     kind,
     read.resolvedChartId,
+    read.raw,
     {
       series: read.series,
     },
     target,
+    read.chartTarget,
   );
 }
 
 export async function formatChartPointMutation(
   ctx: DocumentContext,
   sheetId: SheetId,
-  chartId: string,
+  chartTarget: ChartTarget,
   seriesIndex: number,
   pointIndex: number,
   format: { fill?: string; border?: ChartBorder },
 ): Promise<ChartMutationReceipt> {
   const kind = 'chart.point.format';
   const target = { seriesIndex, pointIndex };
+  const read = await readSeriesForMutation(ctx, sheetId, kind, chartTarget, seriesIndex, target);
+  if ('receipt' in read) return read.receipt;
+
   if (!Number.isInteger(pointIndex) || pointIndex < 0) {
     return buildFailedChartMutationReceipt(
       kind,
       sheetId,
-      chartId,
+      read.resolvedChartId,
       `Point index ${pointIndex} out of range`,
       target,
       { received: pointIndex },
     );
   }
-
-  const read = await readSeriesForMutation(ctx, sheetId, kind, chartId, seriesIndex, target);
-  if ('receipt' in read) return read.receipt;
 
   const points = ensurePointsArray(read.series[seriesIndex], pointIndex);
   points[pointIndex] = { ...points[pointIndex], ...format };
@@ -628,6 +626,7 @@ export async function formatChartPointMutation(
     sheetId,
     kind,
     read.resolvedChartId,
+    read.raw,
     {
       series: read.series,
     },
@@ -635,32 +634,33 @@ export async function formatChartPointMutation(
       ...target,
       series: nextSeries,
     },
+    read.chartTarget,
   );
 }
 
 export async function setChartPointDataLabelMutation(
   ctx: DocumentContext,
   sheetId: SheetId,
-  chartId: string,
+  chartTarget: ChartTarget,
   seriesIndex: number,
   pointIndex: number,
   config: DataLabelConfig,
 ): Promise<ChartMutationReceipt> {
   const kind = 'chart.point.setDataLabel';
   const target = { seriesIndex, pointIndex };
+  const read = await readSeriesForMutation(ctx, sheetId, kind, chartTarget, seriesIndex, target);
+  if ('receipt' in read) return read.receipt;
+
   if (!Number.isInteger(pointIndex) || pointIndex < 0) {
     return buildFailedChartMutationReceipt(
       kind,
       sheetId,
-      chartId,
+      read.resolvedChartId,
       `Point index ${pointIndex} out of range`,
       target,
       { received: pointIndex },
     );
   }
-
-  const read = await readSeriesForMutation(ctx, sheetId, kind, chartId, seriesIndex, target);
-  if ('receipt' in read) return read.receipt;
 
   const points = ensurePointsArray(read.series[seriesIndex], pointIndex);
   points[pointIndex] = { ...points[pointIndex], dataLabel: config };
@@ -671,6 +671,7 @@ export async function setChartPointDataLabelMutation(
     sheetId,
     kind,
     read.resolvedChartId,
+    read.raw,
     {
       series: read.series,
     },
@@ -678,18 +679,19 @@ export async function setChartPointDataLabelMutation(
       ...target,
       series: nextSeries,
     },
+    read.chartTarget,
   );
 }
 
 export async function addChartTrendlineMutation(
   ctx: DocumentContext,
   sheetId: SheetId,
-  chartId: string,
+  chartTarget: ChartTarget,
   seriesIndex: number,
   trendline: TrendlineConfig,
 ): Promise<ChartMutationReceipt> {
   const kind = 'chart.trendline.add';
-  const read = await readSeriesForMutation(ctx, sheetId, kind, chartId, seriesIndex, {
+  const read = await readSeriesForMutation(ctx, sheetId, kind, chartTarget, seriesIndex, {
     seriesIndex,
     trendline,
   });
@@ -703,6 +705,7 @@ export async function addChartTrendlineMutation(
     sheetId,
     kind,
     read.resolvedChartId,
+    read.raw,
     {
       series: read.series,
     },
@@ -711,20 +714,21 @@ export async function addChartTrendlineMutation(
       trendlineIndex,
       trendline,
     },
+    read.chartTarget,
   );
 }
 
 export async function updateChartTrendlineMutation(
   ctx: DocumentContext,
   sheetId: SheetId,
-  chartId: string,
+  chartTarget: ChartTarget,
   seriesIndex: number,
   trendlineIndex: number,
   updates: Partial<TrendlineConfig>,
 ): Promise<ChartMutationReceipt> {
   const kind = 'chart.trendline.update';
   const target = { seriesIndex, trendlineIndex, trendline: updates };
-  const read = await readSeriesForMutation(ctx, sheetId, kind, chartId, seriesIndex, target);
+  const read = await readSeriesForMutation(ctx, sheetId, kind, chartTarget, seriesIndex, target);
   if ('receipt' in read) return read.receipt;
 
   const trendlines = [...(read.series[seriesIndex].trendlines ?? [])];
@@ -751,6 +755,7 @@ export async function updateChartTrendlineMutation(
     sheetId,
     kind,
     read.resolvedChartId,
+    read.raw,
     {
       series: read.series,
     },
@@ -759,19 +764,20 @@ export async function updateChartTrendlineMutation(
       trendlineIndex,
       trendline: nextTrendline,
     },
+    read.chartTarget,
   );
 }
 
 export async function removeChartTrendlineMutation(
   ctx: DocumentContext,
   sheetId: SheetId,
-  chartId: string,
+  chartTarget: ChartTarget,
   seriesIndex: number,
   trendlineIndex: number,
 ): Promise<ChartMutationReceipt> {
   const kind = 'chart.trendline.remove';
   const target = { seriesIndex, trendlineIndex };
-  const read = await readSeriesForMutation(ctx, sheetId, kind, chartId, seriesIndex, target);
+  const read = await readSeriesForMutation(ctx, sheetId, kind, chartTarget, seriesIndex, target);
   if ('receipt' in read) return read.receipt;
 
   const trendlines = [...(read.series[seriesIndex].trendlines ?? [])];
@@ -797,6 +803,7 @@ export async function removeChartTrendlineMutation(
     sheetId,
     kind,
     read.resolvedChartId,
+    read.raw,
     {
       series: read.series,
     },
@@ -805,22 +812,19 @@ export async function removeChartTrendlineMutation(
       trendlineIndex,
       trendline: null,
     },
+    read.chartTarget,
   );
 }
 
 export async function setChartAxisTitleMutation(
   ctx: DocumentContext,
   sheetId: SheetId,
-  chartId: string,
+  chartTarget: ChartTarget,
   axisType: 'category' | 'value',
   formula: string,
 ): Promise<ChartMutationReceipt> {
   const kind = 'chart.axis.setTitle';
-  const read = await readChartForMutation(ctx, sheetId, kind, chartId, {
-    axisType,
-    changedRanges: [formulaRangeCandidate(formula)],
-  });
-  if ('receipt' in read) return read.receipt;
+  const read = await readChartForMutation(ctx, sheetId, chartTarget);
 
   const axis = { ...(read.chart.axis ?? {}) };
   if (axisType === 'category') {
@@ -834,23 +838,24 @@ export async function setChartAxisTitleMutation(
     sheetId,
     kind,
     read.resolvedChartId,
+    read.raw,
     { axis },
     {
       axisType,
       changedRanges: [formulaRangeCandidate(formula)],
     },
+    read.chartTarget,
   );
 }
 
 export async function setChartCategoryNamesMutation(
   ctx: DocumentContext,
   sheetId: SheetId,
-  chartId: string,
+  chartTarget: ChartTarget,
   range: string,
 ): Promise<ChartMutationReceipt> {
   const kind = 'chart.categoryNames.set';
-  const read = await readChartForMutation(ctx, sheetId, kind, chartId, { range });
-  if ('receipt' in read) return read.receipt;
+  const read = await readChartForMutation(ctx, sheetId, chartTarget);
 
   const updatedSeries = read.series.map((series) => ({ ...series, categories: range }));
   return applyChartUpdateAndReceipt(
@@ -858,6 +863,7 @@ export async function setChartCategoryNamesMutation(
     sheetId,
     kind,
     read.resolvedChartId,
+    read.raw,
     {
       series: updatedSeries,
     },
@@ -865,13 +871,14 @@ export async function setChartCategoryNamesMutation(
       range,
       changedRanges: [range],
     },
+    read.chartTarget,
   );
 }
 
 export async function setChartDataLabelDimensionMutation(
   ctx: DocumentContext,
   sheetId: SheetId,
-  chartId: string,
+  chartTarget: ChartTarget,
   seriesIndex: number,
   pointIndex: number,
   dimension: 'height' | 'width',
@@ -879,11 +886,14 @@ export async function setChartDataLabelDimensionMutation(
 ): Promise<ChartMutationReceipt> {
   const kind = dimension === 'height' ? 'chart.dataLabel.setHeight' : 'chart.dataLabel.setWidth';
   const target = { seriesIndex, pointIndex };
+  const read = await readSeriesForMutation(ctx, sheetId, kind, chartTarget, seriesIndex, target);
+  if ('receipt' in read) return read.receipt;
+
   if (!Number.isFinite(value) || value < 0) {
     return buildFailedChartMutationReceipt(
       kind,
       sheetId,
-      chartId,
+      read.resolvedChartId,
       `${dimension} must be a non-negative finite number`,
       target,
       { dimension, value },
@@ -893,15 +903,12 @@ export async function setChartDataLabelDimensionMutation(
     return buildFailedChartMutationReceipt(
       kind,
       sheetId,
-      chartId,
+      read.resolvedChartId,
       `Point index ${pointIndex} out of range`,
       target,
       { received: pointIndex },
     );
   }
-
-  const read = await readSeriesForMutation(ctx, sheetId, kind, chartId, seriesIndex, target);
-  if ('receipt' in read) return read.receipt;
 
   const targetSeries = { ...read.series[seriesIndex] };
   const points = ensurePointsArray(targetSeries, pointIndex);
@@ -921,6 +928,7 @@ export async function setChartDataLabelDimensionMutation(
     sheetId,
     kind,
     read.resolvedChartId,
+    read.raw,
     {
       series: read.series,
     },
@@ -928,13 +936,14 @@ export async function setChartDataLabelDimensionMutation(
       ...target,
       series: targetSeries,
     },
+    read.chartTarget,
   );
 }
 
 export async function setSeriesBinOptionsMutation(
   ctx: DocumentContext,
   sheetId: SheetId,
-  chartId: string,
+  chartTarget: ChartTarget,
   seriesIndex: number,
   options: HistogramConfig,
 ): Promise<ChartMutationReceipt> {
@@ -942,7 +951,7 @@ export async function setSeriesBinOptionsMutation(
     ctx,
     sheetId,
     'chart.series.setBinOptions',
-    chartId,
+    chartTarget,
     seriesIndex,
     { binOptions: options },
   );
@@ -951,7 +960,7 @@ export async function setSeriesBinOptionsMutation(
 export async function setSeriesBoxwhiskerOptionsMutation(
   ctx: DocumentContext,
   sheetId: SheetId,
-  chartId: string,
+  chartTarget: ChartTarget,
   seriesIndex: number,
   options: BoxplotConfig,
 ): Promise<ChartMutationReceipt> {
@@ -959,7 +968,7 @@ export async function setSeriesBoxwhiskerOptionsMutation(
     ctx,
     sheetId,
     'chart.series.setBoxwhiskerOptions',
-    chartId,
+    chartTarget,
     seriesIndex,
     { boxwhiskerOptions: options },
   );

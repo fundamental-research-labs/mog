@@ -288,6 +288,7 @@ export type {
   ChartSourceDataUpdate,
   ChartSourceRangeKind,
   ChartSourceRangeMatch,
+  ChartTarget,
   ConditionalFormatUpdate,
   NodeMoveDirection,
   NodePosition,

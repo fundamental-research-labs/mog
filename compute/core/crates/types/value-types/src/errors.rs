@@ -314,6 +314,19 @@ pub enum ComputeError {
         cell_id: String,
     },
 
+    /// Requested chart does not exist on the receiver worksheet.
+    ///
+    /// An object of another kind at the same ID is intentionally reported as
+    /// missing because chart APIs only admit chart targets.
+    #[error("Chart not found on sheet {sheet_id}: {chart_id}")]
+    #[serde(rename_all = "camelCase")]
+    ChartNotFound {
+        /// Receiver worksheet UUID.
+        sheet_id: String,
+        /// Requested stable chart ID.
+        chart_id: String,
+    },
+
     /// Requested slicer does not exist on the receiver worksheet.
     ///
     /// A slicer owned by another worksheet is intentionally reported through

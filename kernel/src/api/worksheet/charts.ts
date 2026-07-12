@@ -14,6 +14,7 @@ import type {
   ChartSourceData,
   ChartSourceDataUpdate,
   ChartSourceRangeMatch,
+  ChartTarget,
   ChartType,
   ChartUpdateReceipt,
   SheetId,
@@ -46,8 +47,9 @@ import {
   chartSeriesCount,
   requireChart,
   requireChartSeriesForMutation,
+  requireChartTarget,
   requireChartWithSeries,
-  resolveChartIdInput,
+  resolveOptionalChartTarget,
 } from './chart-api-helpers';
 import { orderChartsForList } from '../../domain/charts/chart-list-ordering';
 import {
@@ -56,7 +58,7 @@ import {
 } from '../../domain/charts/chart-public-api-converters';
 import { withInferredChartTitle } from '../../domain/charts/chart-title-inference';
 import { sliceChartTitle } from './chart-title-substring';
-import { chartNotFound, invalidChartConfig, operationFailed } from '../../errors/api';
+import { invalidChartConfig, operationFailed } from '../../errors/api';
 import { KernelError } from '../../errors';
 import { type CallableDisposable, toDisposable } from '@mog/spreadsheet-utils/disposable';
 import {
@@ -114,6 +116,21 @@ import { assertChartSourceRefsResolvable } from './chart-source-validation';
 // Implementation
 // =============================================================================
 
+function chartSeriesDimensionSourceString(
+  series: SeriesConfig,
+  dimension: ChartSeriesDimension,
+): string {
+  if (dimension === 'categories') return series.categories ?? '';
+  if (dimension === 'values') return series.values ?? '';
+  if (dimension === 'bubbleSizes') return series.bubbleSize ?? '';
+  return '';
+}
+
+function chartSeriesDimensionSourceType(source: string): string {
+  if (!source) return 'literal';
+  return /[A-Z]+\d+/i.test(source) || source.includes('!') ? 'range' : 'formula';
+}
+
 export class WorksheetChartsImpl implements WorksheetCharts {
   /** Monotonic counter to ensure unique chart IDs within the same millisecond. */
   private static _idCounter = 0;
@@ -158,7 +175,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
     const actualId = change?.objectId ?? change?.data?.id ?? chartId;
 
     // Read back the full chart entity.
-    const full = await this.get(actualId);
+    const full = await this.get({ id: actualId });
     if (full) return buildChartAddReceipt(this.sheetId, full);
 
     // Fallback: return minimal chart from config if read-back fails.
@@ -177,29 +194,28 @@ export class WorksheetChartsImpl implements WorksheetCharts {
     return buildChartAddReceipt(this.sheetId, fallback);
   }
 
-  async get(chartId: string): Promise<Chart | null> {
+  async get(chartId: ChartTarget): Promise<Chart | null> {
     await awaitSheetMaterialized(this.ctx, this.sheetId);
-    const resolvedChartId = await resolveChartIdInput(this.ctx, this.sheetId, chartId);
-    const raw = (await this.ctx.computeBridge.getChart(
-      this.sheetId,
-      resolvedChartId,
-    )) as ChartFloatingObject | null;
+    const raw = (await resolveOptionalChartTarget(this.ctx, this.sheetId, chartId))?.raw ?? null;
     return raw ? withChartCompatibilityMethods(serializedChartToChart(raw), this) : null;
   }
 
-  async getAppModel(chartId: string, options?: ChartReadOptions): Promise<ChartAppModel | null> {
+  async getAppModel(
+    chartId: ChartTarget,
+    options?: ChartReadOptions,
+  ): Promise<ChartAppModel | null> {
     return getWorksheetChartAppModel(this.ctx, this.sheetId, chartId, options);
   }
 
-  async update(chartId: string, updates: Partial<ChartConfig>): Promise<ChartUpdateReceipt> {
+  async update(chartId: ChartTarget, updates: Partial<ChartConfig>): Promise<ChartUpdateReceipt> {
     return updateChartWithReceipt(this.ctx, this.sheetId, chartId, updates);
   }
 
-  async updateRaw(chartId: string, fields: Record<string, unknown>): Promise<void> {
+  async updateRaw(chartId: ChartTarget, fields: Record<string, unknown>): Promise<void> {
     await updateRawWorksheetChart(this.ctx, this.sheetId, chartId, fields);
   }
 
-  async remove(chartId: string): Promise<ChartRemoveReceipt> {
+  async remove(chartId: ChartTarget): Promise<ChartRemoveReceipt> {
     return removeChartWithReceipt(this.ctx, this.sheetId, chartId);
   }
 
@@ -230,7 +246,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   // Group A: Simple Convenience Methods (2a-2f)
   // ===========================================================================
 
-  async duplicate(chartId: string): Promise<ChartDuplicateReceipt> {
+  async duplicate(chartId: ChartTarget): Promise<ChartDuplicateReceipt> {
     const chart = await requireChart(this.ctx, this.sheetId, chartId);
 
     const { id: _id, sheetId: _sheetId, createdAt: _ca, updatedAt: _ua, ...configFields } = chart;
@@ -244,14 +260,8 @@ export class WorksheetChartsImpl implements WorksheetCharts {
     return buildChartDuplicateReceipt(this.sheetId, chart.id, receipt.chart);
   }
 
-  async exportImage(chartId: string, options?: ImageExportOptions): Promise<string> {
-    await awaitSheetMaterialized(this.ctx, this.sheetId);
-    const resolvedChartId = await resolveChartIdInput(this.ctx, this.sheetId, chartId);
-    const raw = (await this.ctx.computeBridge.getChart(
-      this.sheetId,
-      resolvedChartId,
-    )) as ChartFloatingObject | null;
-    if (!raw) throw chartNotFound(chartId);
+  async exportImage(chartId: ChartTarget, options?: ImageExportOptions): Promise<string> {
+    const { resolvedChartId } = await requireChartTarget(this.ctx, this.sheetId, chartId);
 
     const exporter = this.exporter ?? this.ctx.chartImageExporter;
     if (exporter) {
@@ -268,18 +278,18 @@ export class WorksheetChartsImpl implements WorksheetCharts {
     throw operationFailed('exportChartImage', 'No chart image exporter registered');
   }
 
-  async setDataRange(chartId: string, range: string): Promise<void> {
+  async setDataRange(chartId: ChartTarget, range: string): Promise<void> {
     await this.setSourceData(chartId, { dataRange: range });
   }
 
-  async setType(chartId: string, type: ChartType, subType?: string): Promise<void> {
+  async setType(chartId: ChartTarget, type: ChartType, subType?: string): Promise<void> {
     await applyUpdate(this.ctx, this.sheetId, chartId, {
       type,
       subType: subType as ChartConfig['subType'],
     });
   }
 
-  async has(chartId: string): Promise<boolean> {
+  async has(chartId: ChartTarget): Promise<boolean> {
     return (await this.get(chartId)) !== null;
   }
 
@@ -292,19 +302,23 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   }
 
   async getByName(name: string): Promise<Chart | null> {
-    const charts = await this.list();
-    return charts.find((c) => c.name === name) ?? null;
+    await awaitSheetMaterialized(this.ctx, this.sheetId);
+    const raw = (await resolveOptionalChartTarget(this.ctx, this.sheetId, { name }, name))?.raw;
+    return raw ? withChartCompatibilityMethods(serializedChartToChart(raw), this) : null;
   }
 
-  async describe(chartId: string, options?: ImageExportOptions): Promise<ChartDescription> {
+  async describe(chartId: ChartTarget, options?: ImageExportOptions): Promise<ChartDescription> {
     return describeWorksheetChart(this.ctx, this.sheetId, chartId, options);
   }
 
-  async getSourceData(chartId: string, options?: ImageExportOptions): Promise<ChartSourceData> {
+  async getSourceData(
+    chartId: ChartTarget,
+    options?: ImageExportOptions,
+  ): Promise<ChartSourceData> {
     return getWorksheetChartSourceData(this.ctx, this.sheetId, chartId, options);
   }
 
-  async setSourceData(chartId: string, sourceData: ChartSourceDataUpdate): Promise<void> {
+  async setSourceData(chartId: ChartTarget, sourceData: ChartSourceDataUpdate): Promise<void> {
     await updateChartSourceData(this.ctx, this.sheetId, chartId, sourceData);
   }
 
@@ -314,7 +328,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
       this.sheetId,
       range,
       () => this.list(),
-      (chartId) => this.describe(chartId),
+      (chartId) => this.describe({ id: chartId }),
     );
   }
 
@@ -326,19 +340,19 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   // Group B: Z-Order Methods (2g)
   // ===========================================================================
 
-  async bringToFront(chartId: string): Promise<void> {
+  async bringToFront(chartId: ChartTarget): Promise<void> {
     await bringWorksheetChartToFront(this.ctx, this.sheetId, chartId);
   }
 
-  async sendToBack(chartId: string): Promise<void> {
+  async sendToBack(chartId: ChartTarget): Promise<void> {
     await sendWorksheetChartToBack(this.ctx, this.sheetId, chartId);
   }
 
-  async bringForward(chartId: string): Promise<void> {
+  async bringForward(chartId: ChartTarget): Promise<void> {
     await bringWorksheetChartForward(this.ctx, this.sheetId, chartId);
   }
 
-  async sendBackward(chartId: string): Promise<void> {
+  async sendBackward(chartId: ChartTarget): Promise<void> {
     await sendWorksheetChartBackward(this.ctx, this.sheetId, chartId);
   }
 
@@ -346,35 +360,34 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   // Group C: Table-Linking Methods (2h)
   // ===========================================================================
 
-  async linkToTable(chartId: string, tableId: string): Promise<void> {
+  async linkToTable(chartId: ChartTarget, tableId: string): Promise<void> {
     await linkWorksheetChartToTable(this.ctx, this.sheetId, chartId, tableId);
   }
 
-  async unlinkFromTable(chartId: string): Promise<void> {
+  async unlinkFromTable(chartId: ChartTarget): Promise<void> {
     await unlinkWorksheetChartFromTable(this.ctx, this.sheetId, chartId);
   }
 
-  async isLinkedToTable(chartId: string): Promise<boolean> {
+  async isLinkedToTable(chartId: ChartTarget): Promise<boolean> {
     await awaitSheetMaterialized(this.ctx, this.sheetId);
-    return this.ctx.computeBridge.isChartLinkedToTable(
-      this.sheetId,
-      await resolveChartIdInput(this.ctx, this.sheetId, chartId),
-    );
+    const resolved = await resolveOptionalChartTarget(this.ctx, this.sheetId, chartId);
+    if (!resolved) return false;
+    return this.ctx.computeBridge.isChartLinkedToTable(this.sheetId, resolved.resolvedChartId);
   }
 
   // ===========================================================================
   // Group D: Series Methods (2i)
   // ===========================================================================
 
-  async addSeries(chartId: string, config: SeriesConfig): Promise<ChartMutationReceipt> {
+  async addSeries(chartId: ChartTarget, config: SeriesConfig): Promise<ChartMutationReceipt> {
     return addChartSeriesMutation(this.ctx, this.sheetId, chartId, config);
   }
 
-  async removeSeries(chartId: string, index: number): Promise<ChartMutationReceipt> {
+  async removeSeries(chartId: ChartTarget, index: number): Promise<ChartMutationReceipt> {
     return removeChartSeriesMutation(this.ctx, this.sheetId, chartId, index);
   }
 
-  async getSeries(chartId: string, index: number): Promise<SeriesConfig> {
+  async getSeries(chartId: ChartTarget, index: number): Promise<SeriesConfig> {
     const { chart, series } = await requireChartWithSeries(this.ctx, this.sheetId, chartId);
     const seriesCount = chartSeriesCount(chart);
     if (index < 0 || index >= seriesCount) {
@@ -387,7 +400,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   }
 
   async updateSeries(
-    chartId: string,
+    chartId: ChartTarget,
     index: number,
     updates: Partial<SeriesConfig>,
   ): Promise<ChartMutationReceipt> {
@@ -401,13 +414,13 @@ export class WorksheetChartsImpl implements WorksheetCharts {
     );
   }
 
-  async getSeriesCount(chartId: string): Promise<number> {
+  async getSeriesCount(chartId: ChartTarget): Promise<number> {
     const { chart } = await requireChartWithSeries(this.ctx, this.sheetId, chartId);
     return chartSeriesCount(chart);
   }
 
   async reorderSeries(
-    chartId: string,
+    chartId: ChartTarget,
     fromIndex: number,
     toIndex: number,
   ): Promise<ChartMutationReceipt> {
@@ -415,7 +428,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   }
 
   async setSeriesValues(
-    chartId: string,
+    chartId: ChartTarget,
     index: number,
     range: string,
   ): Promise<ChartMutationReceipt> {
@@ -430,7 +443,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   }
 
   async setSeriesCategories(
-    chartId: string,
+    chartId: ChartTarget,
     index: number,
     range: string,
   ): Promise<ChartMutationReceipt> {
@@ -449,7 +462,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   // ===========================================================================
 
   async formatPoint(
-    chartId: string,
+    chartId: ChartTarget,
     seriesIndex: number,
     pointIndex: number,
     format: { fill?: string; border?: ChartBorder },
@@ -465,7 +478,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   }
 
   async setPointDataLabel(
-    chartId: string,
+    chartId: ChartTarget,
     seriesIndex: number,
     pointIndex: number,
     config: DataLabelConfig,
@@ -485,7 +498,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   // ===========================================================================
 
   async addTrendline(
-    chartId: string,
+    chartId: ChartTarget,
     seriesIndex: number,
     trendline: TrendlineConfig,
   ): Promise<ChartMutationReceipt> {
@@ -493,7 +506,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   }
 
   async updateTrendline(
-    chartId: string,
+    chartId: ChartTarget,
     seriesIndex: number,
     trendlineIndex: number,
     updates: Partial<TrendlineConfig>,
@@ -509,7 +522,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   }
 
   async removeTrendline(
-    chartId: string,
+    chartId: ChartTarget,
     seriesIndex: number,
     trendlineIndex: number,
   ): Promise<ChartMutationReceipt> {
@@ -523,7 +536,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   }
 
   async getTrendline(
-    chartId: string,
+    chartId: ChartTarget,
     seriesIndex: number,
     trendlineIndex: number,
   ): Promise<TrendlineConfig | null> {
@@ -539,7 +552,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
     return trendlines[trendlineIndex] ?? null;
   }
 
-  async getTrendlineCount(chartId: string, seriesIndex: number): Promise<number> {
+  async getTrendlineCount(chartId: ChartTarget, seriesIndex: number): Promise<number> {
     const { series } = await requireChartSeriesForMutation(
       this.ctx,
       this.sheetId,
@@ -554,7 +567,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   // Group I: Data Table Method
   // ===========================================================================
 
-  async getDataTable(chartId: string): Promise<DataTableConfig | null> {
+  async getDataTable(chartId: ChartTarget): Promise<DataTableConfig | null> {
     const chart = await requireChart(this.ctx, this.sheetId, chartId);
     if (!chart.dataTable) return null;
     // Map showKeys ↔ showLegendKey for OfficeJS compatibility
@@ -575,7 +588,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   }
 
   async setBubbleSizes(
-    chartId: string,
+    chartId: ChartTarget,
     seriesIndex: number,
     range: string,
   ): Promise<ChartMutationReceipt> {
@@ -593,7 +606,10 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   // Group D2: Per-Series Statistical Options
   // ===========================================================================
 
-  async getSeriesBinOptions(chartId: string, seriesIndex: number): Promise<HistogramConfig | null> {
+  async getSeriesBinOptions(
+    chartId: ChartTarget,
+    seriesIndex: number,
+  ): Promise<HistogramConfig | null> {
     const { chart, series } = await requireChartWithSeries(this.ctx, this.sheetId, chartId);
     const seriesCount = chartSeriesCount(chart);
     if (seriesIndex < 0 || seriesIndex >= seriesCount) {
@@ -606,7 +622,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   }
 
   async setSeriesBinOptions(
-    chartId: string,
+    chartId: ChartTarget,
     seriesIndex: number,
     options: HistogramConfig,
   ): Promise<ChartMutationReceipt> {
@@ -614,7 +630,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   }
 
   async getSeriesBoxwhiskerOptions(
-    chartId: string,
+    chartId: ChartTarget,
     seriesIndex: number,
   ): Promise<BoxplotConfig | null> {
     const { chart, series } = await requireChartWithSeries(this.ctx, this.sheetId, chartId);
@@ -629,7 +645,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   }
 
   async setSeriesBoxwhiskerOptions(
-    chartId: string,
+    chartId: ChartTarget,
     seriesIndex: number,
     options: BoxplotConfig,
   ): Promise<ChartMutationReceipt> {
@@ -675,7 +691,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   // ===========================================================================
 
   async getPlotAreaLayout(
-    chartId: string,
+    chartId: ChartTarget,
   ): Promise<{ left: number; top: number; width: number; height: number } | null> {
     const layout = await this.getChartLayout(chartId);
     if (!layout?.plotArea) return null;
@@ -683,7 +699,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   }
 
   async getLegendLayout(
-    chartId: string,
+    chartId: ChartTarget,
   ): Promise<{ left: number; top: number; width: number; height: number } | null> {
     const layout = await this.getChartLayout(chartId);
     if (!layout?.legend) return null;
@@ -691,7 +707,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   }
 
   async getTitleLayout(
-    chartId: string,
+    chartId: ChartTarget,
   ): Promise<{ left: number; top: number; width: number; height: number } | null> {
     const layout = await this.getChartLayout(chartId);
     if (!layout?.title) return null;
@@ -699,23 +715,22 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   }
 
   async getDataLabelLayout(
-    chartId: string,
+    chartId: ChartTarget,
   ): Promise<{ left: number; top: number; width: number; height: number } | null> {
     const layout = await this.getChartLayout(chartId);
     if (!layout?.dataLabels) return null;
     return layout.dataLabels;
   }
 
-  private async getChartLayout(chartId: string): Promise<ChartLayoutSnapshot | null> {
+  private async getChartLayout(chartId: ChartTarget): Promise<ChartLayoutSnapshot | null> {
     await awaitSheetMaterialized(this.ctx, this.sheetId);
+    const resolved = await resolveOptionalChartTarget(this.ctx, this.sheetId, chartId);
+    if (!resolved) return null;
     const bridge = this.ctx.charts;
     if (!bridge || typeof bridge.getLayout !== 'function') {
       return null;
     }
-    return bridge.getLayout(
-      this.sheetId,
-      await resolveChartIdInput(this.ctx, this.sheetId, chartId),
-    );
+    return bridge.getLayout(this.sheetId, resolved.resolvedChartId);
   }
 
   // ===========================================================================
@@ -723,7 +738,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   // ===========================================================================
 
   async getAxisItem(
-    chartId: string,
+    chartId: ChartTarget,
     type: 'category' | 'value' | 'series',
     group: 'primary' | 'secondary',
   ): Promise<SingleAxisConfig | null> {
@@ -747,7 +762,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   }
 
   async setAxisTitle(
-    chartId: string,
+    chartId: ChartTarget,
     axisType: ChartAxisRole,
     title: string,
   ): Promise<ChartMutationReceipt> {
@@ -755,24 +770,27 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   }
 
   async setAxisVisible(
-    chartId: string,
+    chartId: ChartTarget,
     axisRole: ChartAxisRole,
     visible: boolean,
   ): Promise<ChartMutationReceipt> {
     return setChartAxisVisibleMutation(this.ctx, this.sheetId, chartId, axisRole, visible);
   }
 
-  async setLegendVisible(chartId: string, visible: boolean): Promise<ChartMutationReceipt> {
+  async setLegendVisible(chartId: ChartTarget, visible: boolean): Promise<ChartMutationReceipt> {
     return setChartLegendVisibleMutation(this.ctx, this.sheetId, chartId, visible);
   }
-  async setChartTitleVisible(chartId: string, visible: boolean): Promise<ChartMutationReceipt> {
+  async setChartTitleVisible(
+    chartId: ChartTarget,
+    visible: boolean,
+  ): Promise<ChartMutationReceipt> {
     return setChartTitleVisibleMutation(this.ctx, this.sheetId, chartId, visible);
   }
-  async switchSeriesOrientation(chartId: string): Promise<ChartMutationReceipt> {
+  async switchSeriesOrientation(chartId: ChartTarget): Promise<ChartMutationReceipt> {
     return switchChartSeriesOrientationMutation(this.ctx, this.sheetId, chartId);
   }
 
-  async setCategoryNames(chartId: string, range: string): Promise<ChartMutationReceipt> {
+  async setCategoryNames(chartId: ChartTarget, range: string): Promise<ChartMutationReceipt> {
     return setChartCategoryNamesMutation(this.ctx, this.sheetId, chartId, range);
   }
 
@@ -781,18 +799,15 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   // ===========================================================================
 
   async getSeriesDimensionValues(
-    chartId: string,
+    chartId: ChartTarget,
     seriesIndex: number,
     dimension: ChartSeriesDimension,
   ): Promise<(string | number)[]> {
-    const sourceString = await this.getSeriesDimensionDataSourceString(
-      chartId,
-      seriesIndex,
-      dimension,
-    );
+    const series = await this.getSeries(chartId, seriesIndex);
+    const sourceString = chartSeriesDimensionSourceString(series, dimension);
     if (!sourceString) return [];
 
-    const sourceType = await this.getSeriesDimensionDataSourceType(chartId, seriesIndex, dimension);
+    const sourceType = chartSeriesDimensionSourceType(sourceString);
 
     if (sourceType === 'range') {
       // Parse the range reference and read cell values from the compute bridge
@@ -855,7 +870,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   }
 
   async getSeriesDimensionDataSourceString(
-    chartId: string,
+    chartId: ChartTarget,
     seriesIndex: number,
     dimension: ChartSeriesDimension,
   ): Promise<string> {
@@ -867,21 +882,11 @@ export class WorksheetChartsImpl implements WorksheetCharts {
         `Series index ${seriesIndex} out of range (0-${seriesCount - 1})`,
       );
     }
-    const s = series[seriesIndex] ?? {};
-    switch (dimension) {
-      case 'categories':
-        return s.categories ?? '';
-      case 'values':
-        return s.values ?? '';
-      case 'bubbleSizes':
-        return s.bubbleSize ?? '';
-      default:
-        return '';
-    }
+    return chartSeriesDimensionSourceString(series[seriesIndex] ?? {}, dimension);
   }
 
   async getSeriesDimensionDataSourceType(
-    chartId: string,
+    chartId: ChartTarget,
     seriesIndex: number,
     dimension: ChartSeriesDimension,
   ): Promise<string> {
@@ -890,10 +895,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
       seriesIndex,
       dimension,
     );
-    if (!sourceString) return 'literal';
-    // If it looks like a cell range (contains sheet reference or A1 notation), it's a range
-    if (/[A-Z]+\d+/i.test(sourceString) || sourceString.includes('!')) return 'range';
-    return 'formula';
+    return chartSeriesDimensionSourceType(sourceString);
   }
 
   // ===========================================================================
@@ -901,18 +903,19 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   // ===========================================================================
 
   async getDataLabelSubstring(
-    _chartId: string,
+    chartId: ChartTarget,
     _seriesIndex: number,
     _pointIndex: number,
     _start: number,
     _length: number,
   ): Promise<ChartFormatString> {
+    await requireChartTarget(this.ctx, this.sheetId, chartId);
     // Stub: requires rich text model for data labels.
     return { text: '' };
   }
 
   async setDataLabelHeight(
-    chartId: string,
+    chartId: ChartTarget,
     seriesIndex: number,
     pointIndex: number,
     value: number,
@@ -929,7 +932,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   }
 
   async setDataLabelWidth(
-    chartId: string,
+    chartId: ChartTarget,
     seriesIndex: number,
     pointIndex: number,
     value: number,
@@ -946,10 +949,11 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   }
 
   async getDataLabelTailAnchor(
-    _chartId: string,
+    chartId: ChartTarget,
     _seriesIndex: number,
     _pointIndex: number,
   ): Promise<{ row: number; col: number }> {
+    await requireChartTarget(this.ctx, this.sheetId, chartId);
     // Stub: requires render engine layout data.
     return { row: 0, col: 0 };
   }
@@ -958,7 +962,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   // Title Methods
   // ===========================================================================
 
-  async setTitleFormula(chartId: string, formula: string): Promise<void> {
+  async setTitleFormula(chartId: ChartTarget, formula: string): Promise<void> {
     // Keep the formula in the dedicated metadata field. Until chart-title
     // formula evaluation is available, do not expose the raw formula as
     // rendered title text.
@@ -966,7 +970,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   }
 
   async getTitleSubstring(
-    chartId: string,
+    chartId: ChartTarget,
     start: number,
     length: number,
   ): Promise<ChartFormatString> {
@@ -978,15 +982,9 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   // Chart Activation
   // ===========================================================================
 
-  async activate(chartId: string): Promise<ChartActivateReceipt> {
+  async activate(chartId: ChartTarget): Promise<ChartActivateReceipt> {
     // Verify chart exists
-    await awaitSheetMaterialized(this.ctx, this.sheetId);
-    const resolvedChartId = await resolveChartIdInput(this.ctx, this.sheetId, chartId);
-    const raw = (await this.ctx.computeBridge.getChart(
-      this.sheetId,
-      resolvedChartId,
-    )) as ChartFloatingObject | null;
-    if (!raw) throw chartNotFound(chartId);
+    const { resolvedChartId } = await requireChartTarget(this.ctx, this.sheetId, chartId);
 
     // Emit activation event. Shell layer handles scroll/focus.
     this.ctx.eventBus.emit({

@@ -65,6 +65,10 @@ export interface MogSdkSavePathErrorDetails {
 export interface MogSdkErrorJSON {
   readonly code: MogSdkErrorCode;
   readonly message: string;
+  /** Path to the invalid or unresolved input, preserved from the kernel error. */
+  readonly path?: readonly string[];
+  /** Concrete recovery guidance intended for people and coding agents. */
+  readonly suggestion?: string;
   readonly operation?: string;
   readonly details?: Record<string, unknown> | MogSdkSavePathErrorDetails;
   readonly diagnostics?: MogSdkDiagnostics;
@@ -77,6 +81,8 @@ export interface MogSdkErrorJSON {
 
 export interface IMogSdkError extends Error {
   readonly code: MogSdkErrorCode;
+  readonly path?: readonly string[];
+  readonly suggestion?: string;
   readonly details?: Record<string, unknown> | MogSdkSavePathErrorDetails;
   readonly operation?: string;
   readonly diagnostics?: MogSdkDiagnostics;
@@ -182,6 +188,7 @@ export interface KernelToSdkErrorMapping {
   OBJ_NOT_FOUND: 'NOT_FOUND';
   OBJ_INVALID_CONFIG: 'INVALID_ARGUMENT';
   OBJ_CHART_NOT_FOUND: 'NOT_FOUND';
+  OBJ_CHART_TARGET_AMBIGUOUS: 'CONFLICT';
   OBJ_CHART_INVALID_CONFIG: 'INVALID_ARGUMENT';
   OBJ_SHAPE_NOT_FOUND: 'NOT_FOUND';
   OBJ_SHAPE_INVALID_CONFIG: 'INVALID_ARGUMENT';

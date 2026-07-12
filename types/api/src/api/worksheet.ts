@@ -30,6 +30,7 @@
 import type { CallableDisposable } from '@mog/types-core/disposable';
 import type { CellControl, CellValue, CellValuePrimitive } from '@mog/types-core/core';
 import type { WorksheetRange } from './ranges';
+import type { ChartTarget } from './worksheet/charts';
 import type {
   EventByType,
   SpreadsheetEventType as InternalEventType,
@@ -808,17 +809,17 @@ export interface Worksheet extends WorksheetFill {
   /**
    * @deprecated Use `ws.charts.get(chartId)` instead.
    */
-  getChart(chartId: string): Promise<Chart | null>;
+  getChart(chartTarget: ChartTarget): Promise<Chart | null>;
 
   /**
    * @deprecated Use `ws.charts.update(chartId, updates)` instead.
    */
-  updateChart(chartId: string, updates: Partial<ChartConfig>): Promise<ChartUpdateReceipt>;
+  updateChart(chartTarget: ChartTarget, updates: Partial<ChartConfig>): Promise<ChartUpdateReceipt>;
 
   /**
    * @deprecated Use `ws.charts.remove(chartId)` instead.
    */
-  removeChart(chartId: string): Promise<ChartRemoveReceipt>;
+  removeChart(chartTarget: ChartTarget): Promise<ChartRemoveReceipt>;
 
   /**
    * @deprecated Use `ws.pivots.add(config)` instead.

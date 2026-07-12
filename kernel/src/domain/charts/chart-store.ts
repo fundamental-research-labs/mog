@@ -9,6 +9,7 @@ import type { SheetId } from '@mog-sdk/contracts/core';
 
 import type { ChartFloatingObject } from '../../bridges/compute/compute-bridge';
 import type { DocumentContext } from '../../context/types';
+import { callNativeChartMutation } from '../../errors/chart';
 import {
   createChartMutationOptions,
   nextChartMutationOptions,
@@ -56,11 +57,13 @@ export async function update(
   updates: Partial<ChartFloatingObject>,
   admissionOptions?: ChartMutationOptionsInput,
 ): Promise<void> {
-  await ctx.computeBridge.updateChart(
-    sheetId,
-    chartId,
-    updates as ChartFloatingObject,
-    chartStoreMutationOptions(ctx, sheetId, 'charts.update', admissionOptions),
+  await callNativeChartMutation(chartId, () =>
+    ctx.computeBridge.updateChart(
+      sheetId,
+      chartId,
+      updates as ChartFloatingObject,
+      chartStoreMutationOptions(ctx, sheetId, 'charts.update', admissionOptions),
+    ),
   );
 }
 
@@ -77,10 +80,12 @@ export async function remove(
   chartId: string,
   admissionOptions?: ChartMutationOptionsInput,
 ): Promise<void> {
-  await ctx.computeBridge.deleteChart(
-    sheetId,
-    chartId,
-    chartStoreMutationOptions(ctx, sheetId, 'charts.delete', admissionOptions),
+  await callNativeChartMutation(chartId, () =>
+    ctx.computeBridge.deleteChart(
+      sheetId,
+      chartId,
+      chartStoreMutationOptions(ctx, sheetId, 'charts.delete', admissionOptions),
+    ),
   );
 }
 

@@ -3,22 +3,45 @@ describe('SDK entry validation', () => {
     const { createWorkbook } = await import('../src/boot');
     const wasmModule = emptyWasmModule();
 
-    await expect(
-      createWorkbook({
-        source: { type: 'path', path: '/definitely/missing/workbook.xlsx' },
-        wasmModule,
-      } as never),
-    ).rejects.toThrow('wasmModule is only valid from the @mog-sdk/sdk/wasm entry');
+    const operation = createWorkbook({
+      source: { type: 'path', path: '/definitely/missing/workbook.xlsx' },
+      wasmModule,
+    } as never);
+
+    await expect(operation).rejects.toMatchObject({
+      name: 'MogSdkError',
+      code: 'INVALID_ARGUMENT',
+      operation: 'createWorkbook',
+      path: ['wasmModule'],
+      suggestion: expect.stringContaining('Import createWorkbook from @mog-sdk/sdk/wasm'),
+      details: { paramName: 'wasmModule' },
+      diagnostics: {
+        property: 'wasmModule',
+        issueCode: 'SDK_INVALID_CREATE_WORKBOOK_ARGUMENT',
+      },
+      message: expect.stringContaining('wasmModule is only valid from the @mog-sdk/sdk/wasm entry'),
+    });
   });
 
   it('rejects path-shaped sources on the WASM entry', async () => {
     const { createWorkbook } = await import('../src/wasm');
 
-    await expect(
-      createWorkbook({
-        source: { type: 'path', path: '/definitely/missing/workbook.xlsx' },
-      } as never),
-    ).rejects.toThrow('File-path workbook sources are not supported by the WASM SDK entry');
+    const operation = createWorkbook({
+      source: { type: 'path', path: '/definitely/missing/workbook.xlsx' },
+    } as never);
+
+    await expect(operation).rejects.toMatchObject({
+      name: 'MogSdkError',
+      code: 'INVALID_ARGUMENT',
+      operation: 'createWorkbook',
+      path: ['source'],
+      suggestion: 'Read the file in the host and pass source: { type: "bytes", data }.',
+      details: { paramName: 'source', received: 'path' },
+      diagnostics: {
+        property: 'source',
+        issueCode: 'SDK_INVALID_CREATE_WORKBOOK_ARGUMENT',
+      },
+    });
   });
 });
 

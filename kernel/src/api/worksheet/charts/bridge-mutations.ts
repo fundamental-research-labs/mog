@@ -1,104 +1,135 @@
-import type { SheetId } from '@mog-sdk/contracts/api';
+import type { ChartTarget, SheetId } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../../context';
-import {
-  awaitSheetMaterialized,
-  chartMutationOptions,
-  resolveChartIdInput,
-} from '../chart-api-helpers';
+import { callNativeChartMutation } from '../../../errors/chart';
+import { chartMutationOptions, requireChartTarget } from '../chart-api-helpers';
 
 export async function updateRawWorksheetChart(
   ctx: DocumentContext,
   sheetId: SheetId,
-  chartId: string,
+  chartTarget: ChartTarget,
   fields: Record<string, unknown>,
 ): Promise<void> {
-  await awaitSheetMaterialized(ctx, sheetId);
-  const resolvedChartId = await resolveChartIdInput(ctx, sheetId, chartId);
-  await ctx.computeBridge.updateChart(
-    sheetId,
+  const { resolvedChartId } = await requireChartTarget(ctx, sheetId, chartTarget);
+  await callNativeChartMutation(
+    chartTarget,
+    () =>
+      ctx.computeBridge.updateChart(
+        sheetId,
+        resolvedChartId,
+        fields,
+        chartMutationOptions(ctx, sheetId, 'charts.update'),
+      ),
     resolvedChartId,
-    fields,
-    chartMutationOptions(ctx, sheetId, 'charts.update'),
   );
 }
 
 export async function bringWorksheetChartToFront(
   ctx: DocumentContext,
   sheetId: SheetId,
-  chartId: string,
+  chartTarget: ChartTarget,
 ): Promise<void> {
-  await awaitSheetMaterialized(ctx, sheetId);
-  await ctx.computeBridge.bringChartToFront(
-    sheetId,
-    await resolveChartIdInput(ctx, sheetId, chartId),
-    chartMutationOptions(ctx, sheetId, 'charts.bringToFront'),
+  const { resolvedChartId } = await requireChartTarget(ctx, sheetId, chartTarget);
+  await callNativeChartMutation(
+    chartTarget,
+    () =>
+      ctx.computeBridge.bringChartToFront(
+        sheetId,
+        resolvedChartId,
+        chartMutationOptions(ctx, sheetId, 'charts.bringToFront'),
+      ),
+    resolvedChartId,
   );
 }
 
 export async function sendWorksheetChartToBack(
   ctx: DocumentContext,
   sheetId: SheetId,
-  chartId: string,
+  chartTarget: ChartTarget,
 ): Promise<void> {
-  await awaitSheetMaterialized(ctx, sheetId);
-  await ctx.computeBridge.sendChartToBack(
-    sheetId,
-    await resolveChartIdInput(ctx, sheetId, chartId),
-    chartMutationOptions(ctx, sheetId, 'charts.sendToBack'),
+  const { resolvedChartId } = await requireChartTarget(ctx, sheetId, chartTarget);
+  await callNativeChartMutation(
+    chartTarget,
+    () =>
+      ctx.computeBridge.sendChartToBack(
+        sheetId,
+        resolvedChartId,
+        chartMutationOptions(ctx, sheetId, 'charts.sendToBack'),
+      ),
+    resolvedChartId,
   );
 }
 
 export async function bringWorksheetChartForward(
   ctx: DocumentContext,
   sheetId: SheetId,
-  chartId: string,
+  chartTarget: ChartTarget,
 ): Promise<void> {
-  await awaitSheetMaterialized(ctx, sheetId);
-  await ctx.computeBridge.bringChartForward(
-    sheetId,
-    await resolveChartIdInput(ctx, sheetId, chartId),
-    chartMutationOptions(ctx, sheetId, 'charts.bringForward'),
+  const { resolvedChartId } = await requireChartTarget(ctx, sheetId, chartTarget);
+  await callNativeChartMutation(
+    chartTarget,
+    () =>
+      ctx.computeBridge.bringChartForward(
+        sheetId,
+        resolvedChartId,
+        chartMutationOptions(ctx, sheetId, 'charts.bringForward'),
+      ),
+    resolvedChartId,
   );
 }
 
 export async function sendWorksheetChartBackward(
   ctx: DocumentContext,
   sheetId: SheetId,
-  chartId: string,
+  chartTarget: ChartTarget,
 ): Promise<void> {
-  await awaitSheetMaterialized(ctx, sheetId);
-  await ctx.computeBridge.sendChartBackward(
-    sheetId,
-    await resolveChartIdInput(ctx, sheetId, chartId),
-    chartMutationOptions(ctx, sheetId, 'charts.sendBackward'),
+  const { resolvedChartId } = await requireChartTarget(ctx, sheetId, chartTarget);
+  await callNativeChartMutation(
+    chartTarget,
+    () =>
+      ctx.computeBridge.sendChartBackward(
+        sheetId,
+        resolvedChartId,
+        chartMutationOptions(ctx, sheetId, 'charts.sendBackward'),
+      ),
+    resolvedChartId,
   );
 }
 
 export async function linkWorksheetChartToTable(
   ctx: DocumentContext,
   sheetId: SheetId,
-  chartId: string,
+  chartTarget: ChartTarget,
   tableId: string,
 ): Promise<void> {
-  await awaitSheetMaterialized(ctx, sheetId);
-  await ctx.computeBridge.linkChartToTable(
-    sheetId,
-    await resolveChartIdInput(ctx, sheetId, chartId),
-    tableId,
-    chartMutationOptions(ctx, sheetId, 'charts.linkToTable'),
+  const { resolvedChartId } = await requireChartTarget(ctx, sheetId, chartTarget);
+  await callNativeChartMutation(
+    chartTarget,
+    () =>
+      ctx.computeBridge.linkChartToTable(
+        sheetId,
+        resolvedChartId,
+        tableId,
+        chartMutationOptions(ctx, sheetId, 'charts.linkToTable'),
+      ),
+    resolvedChartId,
   );
 }
 
 export async function unlinkWorksheetChartFromTable(
   ctx: DocumentContext,
   sheetId: SheetId,
-  chartId: string,
+  chartTarget: ChartTarget,
 ): Promise<void> {
-  await awaitSheetMaterialized(ctx, sheetId);
-  await ctx.computeBridge.unlinkChartFromTable(
-    sheetId,
-    await resolveChartIdInput(ctx, sheetId, chartId),
-    chartMutationOptions(ctx, sheetId, 'charts.unlinkFromTable'),
+  const { resolvedChartId } = await requireChartTarget(ctx, sheetId, chartTarget);
+  await callNativeChartMutation(
+    chartTarget,
+    () =>
+      ctx.computeBridge.unlinkChartFromTable(
+        sheetId,
+        resolvedChartId,
+        chartMutationOptions(ctx, sheetId, 'charts.unlinkFromTable'),
+      ),
+    resolvedChartId,
   );
 }

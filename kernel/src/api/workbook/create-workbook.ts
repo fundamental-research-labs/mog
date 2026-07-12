@@ -16,6 +16,10 @@ import { DocumentFactory, type DocumentHandle } from '../document/document-facto
 import { resolveUserTimezone } from '../document/resolve-user-timezone';
 import { createWorkbookFromConfig } from './workbook-impl';
 import type { CreateWorkbookOptions, WorkbookConfig } from './types';
+import {
+  callWithPublicSdkErrorBoundary,
+  withPublicWorkbookErrorBoundary,
+} from '../public-sdk-error-boundary';
 
 /**
  * Create a Workbook by bootstrapping everything from a CreateWorkbookOptions.
@@ -130,24 +134,39 @@ export async function createWorkbook(
   arg?: Uint8Array | CreateWorkbookOptions | WorkbookConfig,
   importOptions?: DocumentImportOptions,
 ): Promise<Workbook> {
+  return callWithPublicSdkErrorBoundary(
+    'createWorkbook',
+    () => createWorkbookAtKernelBoundary(arg, importOptions),
+    'workbook',
+  );
+}
+
+async function createWorkbookAtKernelBoundary(
+  arg?: Uint8Array | CreateWorkbookOptions | WorkbookConfig,
+  importOptions?: DocumentImportOptions,
+): Promise<Workbook> {
   // No argument — blank workbook
   if (!arg) {
-    return createWorkbookWithBootstrap({});
+    return withPublicWorkbookErrorBoundary(await createWorkbookWithBootstrap({}));
   }
 
   // Uint8Array / Buffer — XLSX bytes
   if (arg instanceof Uint8Array) {
-    return createWorkbookWithBootstrap({
-      source: { type: 'bytes', data: arg },
-      importOptions,
-    });
+    return withPublicWorkbookErrorBoundary(
+      await createWorkbookWithBootstrap({
+        source: { type: 'bytes', data: arg },
+        importOptions,
+      }),
+    );
   }
 
   // WorkbookConfig — power-user path with pre-existing context
   if ('ctx' in arg && 'eventBus' in arg) {
-    return createWorkbookFromConfig(arg as WorkbookConfig);
+    return withPublicWorkbookErrorBoundary(await createWorkbookFromConfig(arg as WorkbookConfig));
   }
 
   // CreateWorkbookOptions — options bag
-  return createWorkbookWithBootstrap(arg as CreateWorkbookOptions);
+  return withPublicWorkbookErrorBoundary(
+    await createWorkbookWithBootstrap(arg as CreateWorkbookOptions),
+  );
 }

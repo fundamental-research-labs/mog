@@ -1,23 +1,28 @@
-import type { Chart, ChartMutationReceipt, SingleAxisConfig } from '@mog-sdk/contracts/api';
+import type {
+  Chart,
+  ChartMutationReceipt,
+  ChartTarget,
+  SingleAxisConfig,
+} from '@mog-sdk/contracts/api';
 import type { ChartAxisRole } from '@mog-sdk/contracts/data/chart-app-model';
 
 interface ChartCompatibilityMethodSource {
   getAxisItem(
-    chartId: string,
+    chartId: ChartTarget,
     type: 'category' | 'value' | 'series',
     group: 'primary' | 'secondary',
   ): Promise<SingleAxisConfig | null>;
   setAxisTitle(
-    chartId: string,
+    chartId: ChartTarget,
     axisRole: ChartAxisRole,
     title: string,
   ): Promise<ChartMutationReceipt>;
   setAxisVisible(
-    chartId: string,
+    chartId: ChartTarget,
     axisRole: ChartAxisRole,
     visible: boolean,
   ): Promise<ChartMutationReceipt>;
-  updateRaw(chartId: string, fields: Record<string, unknown>): Promise<void>;
+  updateRaw(chartId: ChartTarget, fields: Record<string, unknown>): Promise<void>;
 }
 
 export function withChartCompatibilityMethods(
@@ -34,16 +39,17 @@ export function withChartCompatibilityMethods(
         return {
           chartId: chart.id,
           axisRole,
-          getConfig: () => source.getAxisItem(chart.id, axisInput.type, axisInput.group),
-          setTitle: (title: string) => source.setAxisTitle(chart.id, axisRole, title),
-          setVisible: (visible: boolean) => source.setAxisVisible(chart.id, axisRole, visible),
+          getConfig: () => source.getAxisItem({ id: chart.id }, axisInput.type, axisInput.group),
+          setTitle: (title: string) => source.setAxisTitle({ id: chart.id }, axisRole, title),
+          setVisible: (visible: boolean) =>
+            source.setAxisVisible({ id: chart.id }, axisRole, visible),
         };
       },
     },
     updateRaw: {
       configurable: true,
       enumerable: false,
-      value: (fields: Record<string, unknown>) => source.updateRaw(chart.id, fields),
+      value: (fields: Record<string, unknown>) => source.updateRaw({ id: chart.id }, fields),
     },
   });
 

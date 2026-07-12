@@ -10,7 +10,9 @@
  * - UI interactions go through deps.commands.comment (Actor Access Layer)
  *
  * MIGRATION NOTES
- * DELETE_COMMENT: Uses ws.comments.removeNote(row, col) via unified Worksheet API.
+ * DELETE_COMMENT: Uses ws.comments.getForCell(row, col) to preserve the action's
+ * empty-cell no-op contract, then ws.comments.removeForCell(row, col) to remove
+ * both notes and threaded comments.
  * EDIT_COMMENT: Uses ws.comments.getForCell(row, col) — uses the comment's
  * own cellRef as the CellId (viewport.getCellData does not expose cellId).
  * NEXT_COMMENT / PREVIOUS_COMMENT: Uses ws.comments.list() + ws._internal.batchGetCellPositions().
@@ -21,6 +23,7 @@ import type { ActionHandler, AsyncActionHandler } from '@mog-sdk/contracts/actio
 
 import { toCellId } from '@mog-sdk/contracts/cell-identity';
 
+import { removeCommentsForCellIfPresent } from './comment-clearing';
 import { getUIStore, handled, notHandled } from './handler-utils';
 
 // =============================================================================
@@ -111,7 +114,18 @@ export const DELETE_COMMENT: AsyncActionHandler = async (deps) => {
   const sheetId = deps.getActiveSheetId();
   const activeCell = deps.accessors.selection.getActiveCell();
   const ws = deps.workbook.getSheetById(sheetId);
-  await ws.comments.removeNote(activeCell.row, activeCell.col);
+
+  // The Worksheet deletion APIs intentionally reject missing targets. The
+  // user action has a different contract: invoking Delete Comment on an empty
+  // cell (including via Alt+R,D) is a handled no-op.
+  const comments = await ws.comments.getForCell(activeCell.row, activeCell.col);
+  if (comments.length === 0) {
+    return handled();
+  }
+
+  // "Delete Comment" is the shared UI action for both legacy notes and modern
+  // threaded comments, so delete every comment attached to the active cell.
+  await removeCommentsForCellIfPresent(ws, activeCell.row, activeCell.col);
   return handled();
 };
 

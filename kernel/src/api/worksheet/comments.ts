@@ -416,17 +416,16 @@ export class WorksheetCommentsImpl implements WorksheetComments {
       row,
       col,
     );
-    if (comments.length === 0) return null;
-    const first = comments[0];
-    if (!first) return null;
-    const content = richTextToPlainText(first);
+    const note = comments.find((comment) => comment.commentType === 'note');
+    if (!note) return null;
+    const content = richTextToPlainText(note);
     return {
       content,
-      author: first.author,
+      author: note.author,
       cellAddress: toA1(row, col),
-      visible: first.visible ?? undefined,
-      height: first.noteHeight ?? undefined,
-      width: first.noteWidth ?? undefined,
+      visible: note.visible ?? undefined,
+      height: note.noteHeight ?? undefined,
+      width: note.noteWidth ?? undefined,
     };
   }
 

@@ -2408,9 +2408,24 @@ describe('WorksheetImpl', () => {
       );
     });
 
-    it('getNote("A1") returns first comment text', async () => {
+    it('getNote("A1") returns the note and ignores threaded comments', async () => {
       ctx.computeBridge.getCommentsForCellByPosition.mockResolvedValue([
-        { content: 'My note', runs: [], id: 'c1', author: 'api', cellRef: '0:0' },
+        {
+          content: 'Threaded comment',
+          runs: [],
+          id: 'thread-1',
+          author: 'reviewer',
+          cellRef: '0:0',
+          commentType: 'threadedComment',
+        },
+        {
+          content: 'My note',
+          runs: [],
+          id: 'note-1',
+          author: 'api',
+          cellRef: '0:0',
+          commentType: 'note',
+        },
       ]);
 
       const result = await ws.comments.getNote('A1');
@@ -2419,31 +2434,39 @@ describe('WorksheetImpl', () => {
       expect(result).toEqual({ content: 'My note', author: 'api', cellAddress: 'A1' });
     });
 
-    it('getNote returns null when no comments', async () => {
-      ctx.computeBridge.getCommentsForCellByPosition.mockResolvedValue([]);
+    it('getNote returns null when the cell has no legacy note', async () => {
+      ctx.computeBridge.getCommentsForCellByPosition.mockResolvedValue([
+        {
+          content: 'Threaded comment',
+          runs: [],
+          id: 'thread-1',
+          author: 'reviewer',
+          cellRef: '0:0',
+          commentType: 'threadedComment',
+        },
+      ]);
 
       const result = await ws.comments.getNote('A1');
 
       expect(result).toBeNull();
     });
 
-    it('removeNote("A1") deletes all comments at cell', async () => {
+    it('removeNote("A1") deletes only legacy notes at the cell', async () => {
       ctx.computeBridge.getCommentsForCellByPosition.mockResolvedValue([
-        { content: [{ text: 'note1' }], id: 'c1' },
-        { content: [{ text: 'note2' }], id: 'c2' },
+        { content: [{ text: 'note1' }], id: 'note-1', commentType: 'note' },
+        {
+          content: [{ text: 'threaded' }],
+          id: 'thread-1',
+          commentType: 'threadedComment',
+        },
       ]);
 
       await ws.comments.removeNote('A1');
 
-      expect(ctx.computeBridge.deleteComment).toHaveBeenCalledTimes(2);
+      expect(ctx.computeBridge.deleteComment).toHaveBeenCalledTimes(1);
       expect(ctx.computeBridge.deleteComment).toHaveBeenCalledWith(
         SHEET_ID,
-        'c1',
-        expectVersionOperationOptions('comment.removeNote', ['comments-notes']),
-      );
-      expect(ctx.computeBridge.deleteComment).toHaveBeenCalledWith(
-        SHEET_ID,
-        'c2',
+        'note-1',
         expectVersionOperationOptions('comment.removeNote', ['comments-notes']),
       );
     });

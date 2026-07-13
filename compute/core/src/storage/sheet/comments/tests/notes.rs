@@ -49,6 +49,37 @@ fn test_add_comment_note_with_parent_id_is_rejected() {
 }
 
 #[test]
+fn test_update_imported_note_synchronizes_runs_and_plain_text_content() {
+    let (storage, sheet_id) = storage_with_sheet();
+    let doc = storage.doc();
+    let sheets = &storage.sheets_ref();
+    let note = add_comment(
+        doc,
+        sheets,
+        &sheet_id,
+        "cell-001",
+        simple_runs("Fixture note"),
+        "Imported Author",
+        AddCommentOptions {
+            content: Some("Fixture note".to_string()),
+            comment_type: CommentType::Note,
+            ..Default::default()
+        },
+        &crate::storage::STORAGE_ID_ALLOC,
+    )
+    .expect("imported note add should succeed");
+
+    let updated = update_comment(doc, sheets, &sheet_id, &note.id, simple_runs("Edited note"))
+        .expect("note update should succeed");
+
+    assert_eq!(updated.content.as_deref(), Some("Edited note"));
+    assert_eq!(updated.runs[0].text, "Edited note");
+    let persisted = get_comment(doc, sheets, &sheet_id, &note.id).expect("updated note persists");
+    assert_eq!(persisted.content.as_deref(), Some("Edited note"));
+    assert_eq!(persisted.runs[0].text, "Edited note");
+}
+
+#[test]
 fn test_add_comment_threaded_keeps_thread_id() {
     let (storage, sheet_id) = storage_with_sheet();
     let doc = storage.doc();

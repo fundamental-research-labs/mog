@@ -20,6 +20,7 @@ export interface WorksheetComments {
 
   /**
    * Add a note to a cell (options object form).
+   * Replaces any existing notes or threaded comments attached to the cell.
    *
    * @param cell - A1-style cell address (e.g. "A1")
    * @param options - Note text and optional author
@@ -27,6 +28,7 @@ export interface WorksheetComments {
   addNote(cell: string, options: { text: string; author?: string }): Promise<CommentAddReceipt>;
   /**
    * Add a note to a cell (options object form).
+   * Replaces any existing notes or threaded comments attached to the cell.
    *
    * @param row - Row index (0-based)
    * @param col - Column index (0-based)
@@ -369,6 +371,7 @@ export interface WorksheetComments {
    *
    * @param address - A1-style cell address
    * @returns Number of comments removed
+   * @throws `COMMENT_NOT_FOUND` when the cell has no comments
    */
   removeForCell(address: string): Promise<number>;
   /**
@@ -377,6 +380,7 @@ export interface WorksheetComments {
    * @param row - Row index (0-based)
    * @param col - Column index (0-based)
    * @returns Number of comments removed
+   * @throws `COMMENT_NOT_FOUND` when the cell has no comments
    */
   removeForCell(row: number, col: number): Promise<number>;
 

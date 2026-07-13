@@ -133,9 +133,11 @@ pub fn update_comment(
     comment.runs = runs.clone();
     let now = now_millis();
     comment.modified_at = Some(now);
-    if comment.comment_type == CommentType::ThreadedComment {
-        comment.content = Some(runs_plain_text(&runs));
-    }
+    // `runs` is the formatted representation while `content` is its plain-text
+    // projection. Imported legacy notes populate both fields, so every text edit
+    // must update them together. Otherwise note UI (runs) and API readback
+    // (content) observe different values, including after redo.
+    comment.content = Some(runs_plain_text(&runs));
     // Update fields in-place on the existing Y.Map.
     if let Ok(json) = serde_json::to_string(&runs) {
         comment_map.insert(
@@ -144,9 +146,7 @@ pub fn update_comment(
             Any::String(Arc::from(json)),
         );
     }
-    if comment.comment_type == CommentType::ThreadedComment
-        && let Some(ref content) = comment.content
-    {
+    if let Some(ref content) = comment.content {
         comment_map.insert(
             &mut txn,
             comment_schema::KEY_CONTENT,

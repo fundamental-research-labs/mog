@@ -80,5 +80,13 @@ export async function clearCommentsInRanges(
     removals.push(removeCommentsForCellIfPresent(worksheet, position.row, position.col));
   }
 
-  await Promise.all(removals);
+  // Keep the caller's undo group open until every already-started removal has
+  // settled. Promise.all rejects on the first failure and would let sibling
+  // writes finish after the group closes, splitting one user action across
+  // multiple undo entries.
+  const results = await Promise.allSettled(removals);
+  const firstFailure = results.find(
+    (result): result is PromiseRejectedResult => result.status === 'rejected',
+  );
+  if (firstFailure) throw firstFailure.reason;
 }

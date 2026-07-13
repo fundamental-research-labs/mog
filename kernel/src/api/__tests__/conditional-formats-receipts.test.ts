@@ -40,6 +40,14 @@ function createMockCtx(bridge = createMockComputeBridge()) {
   } as any;
 }
 
+function deferredVoid() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
 function makeFormat(overrides?: Partial<ConditionalFormat>): ConditionalFormat {
   return {
     id: 'fmt-1',
@@ -230,6 +238,38 @@ describe('WorksheetConditionalFormattingImpl — mutation receipts', () => {
         expect.objectContaining({ type: 'changedRange', sheetId: SHEET_ID, range: 'A1:A10' }),
       ]),
     );
+  });
+
+  it('waits for every started clearInRanges deletion before propagating a failure', async () => {
+    const first = makeFormat({ id: 'fmt-1' });
+    const second = makeFormat({ id: 'fmt-2' });
+    bridge.getAllCfRules.mockResolvedValue([first, second] as any);
+    const pendingStarted = deferredVoid();
+    const pendingFinished = deferredVoid();
+    const failure = new Error('conditional-format transport failed');
+    bridge.deleteCfRule.mockRejectedValueOnce(failure as never).mockImplementationOnce(() => {
+      pendingStarted.resolve();
+      return pendingFinished.promise as never;
+    });
+
+    let operationSettled = false;
+    const operation = cf.clearInRanges(['A1:A10']);
+    void operation.then(
+      () => {
+        operationSettled = true;
+      },
+      () => {
+        operationSettled = true;
+      },
+    );
+    await pendingStarted.promise;
+    await Promise.resolve();
+
+    expect(operationSettled).toBe(false);
+
+    pendingFinished.resolve();
+    await expect(operation).rejects.toBe(failure);
+    expect(operationSettled).toBe(true);
   });
 
   it('includes diagnostics for unsupported preserved/imported rule shells', async () => {

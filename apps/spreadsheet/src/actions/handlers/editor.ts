@@ -63,7 +63,9 @@ import {
   notHandled,
   showProtectionFeedback,
 } from './handler-utils';
+import { clearCellMetadataInRange } from './cell-metadata-clearing';
 import { clearCommentsInRanges } from './comment-clearing';
+import { clearValidationsInRangeIfPresent } from './validation-clearing';
 import { hasMultiCellSelection } from './selection/helpers';
 
 /**
@@ -538,21 +540,13 @@ export const CLEAR_ALL: AsyncActionHandler = async (deps) => {
       for (const range of ranges) {
         const ok = await guardBridgeMutation(() => ws.clear(range, 'all'));
         if (!ok) return;
-        await clearRangeMetadata(ws, range);
+        await clearCellMetadataInRange(ws, range);
       }
     }
   });
 
   return handled();
 };
-
-async function clearRangeMetadata(ws: WorksheetWithInternals, range: CellRange): Promise<void> {
-  await Promise.all([
-    clearCommentsInRanges(ws, [range]),
-    ws.validations.clearInRange(range),
-    ws.conditionalFormats.clearInRanges([range]),
-  ]);
-}
 
 function normalizedRange(range: CellRange): CellRange {
   return {
@@ -645,9 +639,9 @@ export const CLEAR_FORMATS: AsyncActionHandler = async (deps) => {
           endCol: range.endCol,
         });
 
-        // Clear data validation (Excel parity)
-        const rangeStr = `${deps.workbook.indexToAddress(range.startRow, range.startCol)}:${deps.workbook.indexToAddress(range.endRow, range.endCol)}`;
-        await ws.validations.clear(rangeStr);
+        // Clear data validation (Excel parity). A range without validation is
+        // already in the requested state and must not fail the action.
+        await clearValidationsInRangeIfPresent(ws, range);
       }
     }
   });

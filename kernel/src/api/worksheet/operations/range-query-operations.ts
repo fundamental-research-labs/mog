@@ -111,20 +111,16 @@ export async function clearWithMode(
     n.endRow,
     n.endCol,
   );
-  const promises: Promise<unknown>[] = [];
-
   if (mode === 'all') {
     // 'all' mode: full cell deletion (values + formulas + formats + hyperlinks).
     // clearRangeByPosition wipes cell properties (including format) along with values.
-    promises.push(
-      ctx.computeBridge.clearRangeByPosition(
-        sheetId,
-        n.startRow,
-        n.startCol,
-        n.endRow,
-        n.endCol,
-        cellContentOptions,
-      ),
+    await ctx.computeBridge.clearRangeByPosition(
+      sheetId,
+      n.startRow,
+      n.startCol,
+      n.endRow,
+      n.endCol,
+      cellContentOptions,
     );
   } else if (mode === 'contents') {
     // 'contents' mode: clear values + formulas, PRESERVE formats and cell identity.
@@ -132,43 +128,35 @@ export async function clearWithMode(
     // `clear_properties = false` so the cell's property entry (bold, number format,
     // etc.) survives the wipe. Do NOT use `clearRangeByPosition` here — it drops
     // properties unconditionally.
-    promises.push(
-      ctx.computeBridge.clearRange(
-        sheetId,
-        n.startRow,
-        n.startCol,
-        n.endRow,
-        n.endCol,
-        cellContentOptions,
-      ),
+    await ctx.computeBridge.clearRange(
+      sheetId,
+      n.startRow,
+      n.startCol,
+      n.endRow,
+      n.endCol,
+      cellContentOptions,
     );
   }
 
   if (mode === 'all' || mode === 'formats') {
-    promises.push(
-      ctx.computeBridge.clearFormatForRanges(
-        sheetId,
-        [[n.startRow, n.startCol, n.endRow, n.endCol]],
-        cellContentOptions,
-      ),
+    await ctx.computeBridge.clearFormatForRanges(
+      sheetId,
+      [[n.startRow, n.startCol, n.endRow, n.endCol]],
+      cellContentOptions,
     );
   }
 
   if (mode === 'all' || mode === 'hyperlinks') {
     // Single bridge call clears all hyperlinks in the range.
-    promises.push(
-      ctx.computeBridge.clearHyperlinksInRange(
-        sheetId,
-        n.startRow,
-        n.startCol,
-        n.endRow,
-        n.endCol,
-        cellContentOptions,
-      ),
+    await ctx.computeBridge.clearHyperlinksInRange(
+      sheetId,
+      n.startRow,
+      n.startCol,
+      n.endRow,
+      n.endCol,
+      cellContentOptions,
     );
   }
-
-  await Promise.all(promises);
 
   const cellCount = (n.endRow - n.startRow + 1) * (n.endCol - n.startCol + 1);
   return { cellCount };

@@ -25,6 +25,14 @@ import type { DocumentContext } from './shared';
 type PublicCFRule = PublicConditionalFormat['rules'][number];
 type MutationAdmissionOptionsFactory = () => MutationAdmissionOptions | undefined;
 
+async function awaitStartedMutations(promises: readonly Promise<unknown>[]): Promise<void> {
+  const results = await Promise.allSettled(promises);
+  const firstFailure = results.find(
+    (result): result is PromiseRejectedResult => result.status === 'rejected',
+  );
+  if (firstFailure) throw firstFailure.reason;
+}
+
 const publicRuleTypes = new Set([
   'cellValue',
   'formula',
@@ -451,7 +459,7 @@ export async function clearCFRulesInRanges(
     }
   }
 
-  await Promise.all(
+  await awaitStartedMutations(
     toDelete.map((rule) =>
       ctx.computeBridge.deleteCfRule(sheetId, rule.id, admissionOptionsFactory?.()),
     ),
@@ -837,7 +845,7 @@ export async function getConditionalFormats(
 
 /**
  * Clear all conditional formats from a sheet.
- * Retrieves all rules from Rust and deletes them in parallel.
+ * Retrieves all rules from Rust and deletes them as one settled mutation set.
  */
 export async function clearAllConditionalFormats(
   ctx: DocumentContext,
@@ -845,7 +853,7 @@ export async function clearAllConditionalFormats(
   admissionOptionsFactory?: MutationAdmissionOptionsFactory,
 ): Promise<ConditionalFormatMutationReceipt> {
   const allRules = await ctx.computeBridge.getAllCfRules(sheetId);
-  await Promise.all(
+  await awaitStartedMutations(
     allRules.map((rule) =>
       ctx.computeBridge.deleteCfRule(sheetId, rule.id, admissionOptionsFactory?.()),
     ),

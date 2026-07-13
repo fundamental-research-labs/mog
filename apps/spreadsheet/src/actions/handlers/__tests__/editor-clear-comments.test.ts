@@ -7,6 +7,14 @@ type CommentFixture = {
   commentType: 'note' | 'threadedComment';
 };
 
+function deferredVoid() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
 function createWorksheet(
   comments: readonly CommentFixture[],
   positions: ReadonlyMap<string, { row: number; col: number }>,
@@ -158,5 +166,48 @@ describe('CLEAR_COMMENTS', () => {
 
     await expect(CLEAR_COMMENTS(deps)).resolves.toEqual({ handled: true });
     expect(sheet.removeForCell).toHaveBeenCalledWith(0, 0);
+  });
+
+  test('waits for every started removal before propagating a failure and closing the undo group', async () => {
+    const sheet = createWorksheet(
+      [
+        { cellRef: 'failing-comment', commentType: 'note' },
+        { cellRef: 'pending-comment', commentType: 'threadedComment' },
+      ],
+      new Map([
+        ['failing-comment', { row: 0, col: 0 }],
+        ['pending-comment', { row: 0, col: 1 }],
+      ]),
+    );
+    const pendingStarted = deferredVoid();
+    const pendingFinished = deferredVoid();
+    const failure = new Error('comment transport failed');
+    sheet.removeForCell.mockRejectedValueOnce(failure as never).mockImplementationOnce(() => {
+      pendingStarted.resolve();
+      return pendingFinished.promise as never;
+    });
+    const { deps, undoGroup } = createDeps({
+      activeSheetId: 'sheet-a',
+      ranges: [{ startRow: 0, startCol: 0, endRow: 0, endCol: 1 }],
+      worksheets: { 'sheet-a': sheet.worksheet },
+    });
+    let groupEnded = false;
+    undoGroup.mockImplementation(async (operation: () => Promise<void>) => {
+      try {
+        return await operation();
+      } finally {
+        groupEnded = true;
+      }
+    });
+
+    const operation = CLEAR_COMMENTS(deps);
+    await pendingStarted.promise;
+    await Promise.resolve();
+
+    expect(groupEnded).toBe(false);
+
+    pendingFinished.resolve();
+    await expect(operation).rejects.toBe(failure);
+    expect(groupEnded).toBe(true);
   });
 });

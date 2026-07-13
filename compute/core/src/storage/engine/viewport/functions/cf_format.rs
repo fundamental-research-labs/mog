@@ -102,11 +102,13 @@ pub(crate) fn merge_cf_into_format(effective: &mut CellFormat, cf_result: &CellC
     // Background color: color_scale > style.background_color
     if let Some(cs) = &cf_result.color_scale {
         effective.background_color = Some(cs.color.to_string());
+        effective.background_color_tint = None;
         effective.pattern_type = Some(ooxml_types::styles::PatternType::Solid);
     } else if let Some(style) = &cf_result.style
         && let Some(bg) = &style.background_color
     {
         effective.background_color = Some(bg.to_string());
+        effective.background_color_tint = None;
         effective.pattern_type = Some(ooxml_types::styles::PatternType::Solid);
     }
 
@@ -114,6 +116,7 @@ pub(crate) fn merge_cf_into_format(effective: &mut CellFormat, cf_result: &CellC
     if let Some(style) = &cf_result.style {
         if let Some(fc) = &style.font_color {
             effective.font_color = Some(fc.to_string());
+            effective.font_color_tint = None;
         }
         if let Some(b) = style.bold {
             effective.bold = Some(b);
@@ -161,7 +164,11 @@ mod tests {
 
     #[test]
     fn color_scale_background_materializes_solid_fill() {
-        let mut effective = CellFormat::default();
+        let mut effective = CellFormat {
+            background_color: Some("theme:accent1".to_string()),
+            background_color_tint: Some(0.4),
+            ..Default::default()
+        };
         let cf_result = CellCFResult {
             color_scale: Some(ColorScaleResult {
                 color: Color::from_hex("#63BE7B").unwrap(),
@@ -172,10 +179,32 @@ mod tests {
         merge_cf_into_format(&mut effective, &cf_result);
 
         assert_eq!(effective.background_color, Some("#63be7b".to_string()));
+        assert_eq!(effective.background_color_tint, None);
         assert_eq!(
             effective.pattern_type,
             Some(ooxml_types::styles::PatternType::Solid)
         );
+    }
+
+    #[test]
+    fn cf_font_color_clears_inherited_tint() {
+        let mut effective = CellFormat {
+            font_color: Some("theme:accent2".to_string()),
+            font_color_tint: Some(-0.25),
+            ..Default::default()
+        };
+        let cf_result = CellCFResult {
+            style: Some(CfRenderStyle {
+                font_color: Some(Color::from_hex("#112233").unwrap()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        merge_cf_into_format(&mut effective, &cf_result);
+
+        assert_eq!(effective.font_color, Some("#112233".to_string()));
+        assert_eq!(effective.font_color_tint, None);
     }
 }
 

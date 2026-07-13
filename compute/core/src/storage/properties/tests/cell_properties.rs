@@ -424,6 +424,11 @@ fn preloaded_cell_format_layers_intern_compact_palette_styles_and_materialize_de
         Some(ooxml_types::styles::HorizontalAlign::General)
     );
     assert_eq!(first.wrap_text, Some(false));
+    assert_eq!(
+        first.pattern_type,
+        Some(ooxml_types::styles::PatternType::None),
+        "bulk displayed-format reads must materialize imported fillId=0 as no-fill"
+    );
 }
 
 #[test]

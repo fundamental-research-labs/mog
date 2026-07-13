@@ -456,9 +456,18 @@ pub fn hydrate_format_ranges(storage: &YrsStorage, sheet_id: &SheetId, mirror: &
                     Some(Out::Any(Any::Number(n))) if n >= 0.0 => Some(n as u32),
                     _ => None,
                 };
-            if let Some(fmt) = yrs_schema::cell_format::from_yrs_map(&nested, &txn)
+            if let Some(mut fmt) = yrs_schema::cell_format::from_yrs_map(&nested, &txn)
                 .or_else(|| has_imported_style_id.then(CellFormat::default))
             {
+                // Imported cell styles may be promoted into rangeFormats to
+                // avoid storing one compact property record per cell. Keep
+                // their mirror representation semantically equivalent to a
+                // concrete cellXf: an absent resolved fill is fillId=0/no-fill,
+                // not permission to inherit a row or column fill. Storage stays
+                // sparse so the original XF lineage remains lossless on export.
+                if imported_style_id.is_some() {
+                    super::cascade::materialize_imported_cell_xf_defaults(&mut fmt);
+                }
                 mirror.format_ranges.push(crate::mirror::FormatRange {
                     id: range_id,
                     start_row,

@@ -251,6 +251,22 @@ pub(super) fn materialize_imported_cell_xf_defaults(format: &mut CellFormat) {
         .reading_order
         .get_or_insert_with(|| "context".to_string());
     format.auto_indent.get_or_insert(false);
+
+    // The XLSX style palette contains the fully-resolved result of a concrete
+    // cellXf. A cellXf whose effective fill is fillId=0 is intentionally sparse
+    // in that palette: all fill fields are absent. At the cell layer, however,
+    // that means "no fill", not "inherit a row/column fill". Materialize the
+    // explicit sentinel only for a truly absent fill; gradient and authored
+    // pattern fills must remain untouched.
+    if format.background_color.is_none()
+        && format.background_color_tint.is_none()
+        && format.pattern_type.is_none()
+        && format.pattern_foreground_color.is_none()
+        && format.pattern_foreground_color_tint.is_none()
+        && format.gradient_fill.is_none()
+    {
+        format.pattern_type = Some(ooxml_types::styles::PatternType::None);
+    }
 }
 
 // -------------------------------------------------------------------

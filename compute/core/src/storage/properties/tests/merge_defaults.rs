@@ -284,6 +284,71 @@ fn test_merge_formats_preserves_extended_sparse_fields() {
 }
 
 #[test]
+fn test_replacement_colors_do_not_inherit_tints_from_lower_cascade_layers() {
+    use ooxml_types::styles::BorderStyle;
+
+    let lower = CellFormat {
+        font_color: Some("accent1".to_string()),
+        font_color_tint: Some(-0.5),
+        background_color: Some("accent2".to_string()),
+        background_color_tint: Some(0.9),
+        pattern_foreground_color: Some("accent3".to_string()),
+        pattern_foreground_color_tint: Some(0.4),
+        borders: Some(CellBorders {
+            top: Some(CellBorderSide {
+                style: Some(BorderStyle::Thin),
+                color: Some("accent4".to_string()),
+                color_tint: Some(-0.25),
+            }),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let higher = CellFormat {
+        font_color: Some("light1".to_string()),
+        background_color: Some("#FFFF00".to_string()),
+        pattern_foreground_color: Some("#00FF00".to_string()),
+        borders: Some(CellBorders {
+            top: Some(CellBorderSide {
+                color: Some("#0000FF".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    let merged = merge_formats(&lower, &higher);
+
+    assert_eq!(merged.font_color_tint, None);
+    assert_eq!(merged.background_color_tint, None);
+    assert_eq!(merged.pattern_foreground_color_tint, None);
+    assert_eq!(
+        merged.borders.unwrap().top.unwrap().color_tint,
+        None,
+        "border replacement colors must also clear inherited tint metadata"
+    );
+}
+
+#[test]
+fn test_tint_only_patches_modify_inherited_colors() {
+    let lower = CellFormat {
+        font_color: Some("accent1".to_string()),
+        font_color_tint: Some(-0.5),
+        ..Default::default()
+    };
+    let higher = CellFormat {
+        font_color_tint: Some(0.25),
+        ..Default::default()
+    };
+
+    let merged = merge_formats(&lower, &higher);
+
+    assert_eq!(merged.font_color, Some("accent1".to_string()));
+    assert_eq!(merged.font_color_tint, Some(0.25));
+}
+
+#[test]
 fn test_cell_properties_serde_roundtrip() {
     let props = CellProperties {
         format: Some(CellFormat {

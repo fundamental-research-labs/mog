@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use super::value_refs::convert_color_point_to_wire;
 use crate::cf::types::{
     CFColorPointWire, CFDataBarAxisPosition, CFDataBarDirection, CFDataBarWire,
@@ -13,13 +15,18 @@ pub(super) fn normalize_data_bar_color(color: &str) -> Option<String> {
 pub(super) fn convert_data_bar_point_to_wire(
     pt: &cf::CFColorPoint,
     fallback_color: &str,
+    theme_palette: &HashMap<String, String>,
 ) -> CFColorPointWire {
-    let mut wire = convert_color_point_to_wire(pt);
-    wire.color = normalize_data_bar_color(&pt.color).unwrap_or_else(|| fallback_color.to_string());
+    let mut wire = convert_color_point_to_wire(pt, theme_palette);
+    wire.color =
+        normalize_data_bar_color(&wire.color).unwrap_or_else(|| fallback_color.to_string());
     wire
 }
 
-pub(super) fn convert_data_bar_to_wire(db: &cf::CFDataBar) -> CFDataBarWire {
+pub(super) fn convert_data_bar_to_wire(
+    db: &cf::CFDataBar,
+    theme_palette: &HashMap<String, String>,
+) -> CFDataBarWire {
     use ooxml_types::cond_format::{DataBarAxisPosition, DataBarDirection};
     let direction = match db.direction {
         Some(DataBarDirection::LeftToRight) => CFDataBarDirection::LeftToRight,
@@ -40,8 +47,8 @@ pub(super) fn convert_data_bar_to_wire(db: &cf::CFDataBar) -> CFDataBarWire {
         normalize_data_bar_color(&db.positive_color).unwrap_or_else(|| db.positive_color.clone());
 
     CFDataBarWire {
-        min_point: convert_data_bar_point_to_wire(&db.min_point, &positive_color),
-        max_point: convert_data_bar_point_to_wire(&db.max_point, &positive_color),
+        min_point: convert_data_bar_point_to_wire(&db.min_point, &positive_color, theme_palette),
+        max_point: convert_data_bar_point_to_wire(&db.max_point, &positive_color, theme_palette),
         positive_color,
         negative_color: db.negative_color.clone(),
         border_color: db.border_color.clone(),

@@ -175,11 +175,8 @@ pub(super) fn preserve_authored_color(
     if let Some(idx) = color.indexed
         && let Some(hex) = resolve_indexed_color(idx)
     {
-        if let Some(tint) = color.tint
-            && tint != 0.0
-        {
-            return Some(apply_tint(hex, tint));
-        }
+        // Static formats keep tint in their parallel color-tint field. Store
+        // the indexed base color here so display projection applies it once.
         return Some(hex.to_string());
     }
 

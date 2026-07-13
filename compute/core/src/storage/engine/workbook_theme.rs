@@ -76,7 +76,14 @@ impl YrsComputeEngine {
         // 2. Rebuild cached palette from Yrs
         self.settings.theme_palette = Self::load_theme_palette(&self.stores.storage);
 
-        // 3. Invalidate viewport format palettes (stale theme-resolved colors)
+        // 3. CF color scales are materialized to concrete colors in the cache,
+        // so a theme change must rebuild them before the next render.
+        let sheet_ids = self.stores.storage.sheet_order();
+        for sheet_id in &sheet_ids {
+            self.refresh_cf_cache(sheet_id);
+        }
+
+        // 4. Invalidate viewport format palettes (stale theme-resolved colors)
         self.viewport.clear_all_palettes();
 
         Ok((

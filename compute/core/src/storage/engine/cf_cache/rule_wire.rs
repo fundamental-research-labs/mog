@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use super::data_bar::convert_data_bar_to_wire;
 use super::icon_set::convert_icon_set_to_wire;
 use super::operators::{parse_cf_operator, parse_date_period, parse_text_operator};
@@ -9,7 +11,11 @@ use domain_types::domain::conditional_format as cf;
 
 /// Convert a single domain CF rule to the flat wire format.
 /// The `ranges` are attached from the parent ConditionalFormat.
-pub(super) fn domain_rule_to_wire(rule: &cf::CFRule, ranges: Vec<RangePos>) -> CFRuleWire {
+pub(super) fn domain_rule_to_wire(
+    rule: &cf::CFRule,
+    ranges: Vec<RangePos>,
+    theme_palette: &HashMap<String, String>,
+) -> CFRuleWire {
     match rule {
         cf::CFRule::CellValue {
             priority,
@@ -97,7 +103,7 @@ pub(super) fn domain_rule_to_wire(rule: &cf::CFRule, ranges: Vec<RangePos>) -> C
             operator: None,
             values: vec![],
             formula: None,
-            color_scale: Some(convert_color_scale_to_wire(color_scale)),
+            color_scale: Some(convert_color_scale_to_wire(color_scale, theme_palette)),
             data_bar: None,
             icon_set: None,
             text: None,
@@ -129,7 +135,7 @@ pub(super) fn domain_rule_to_wire(rule: &cf::CFRule, ranges: Vec<RangePos>) -> C
             values: vec![],
             formula: None,
             color_scale: None,
-            data_bar: Some(convert_data_bar_to_wire(data_bar)),
+            data_bar: Some(convert_data_bar_to_wire(data_bar, theme_palette)),
             icon_set: None,
             text: None,
             text_operator: None,

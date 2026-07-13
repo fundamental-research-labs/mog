@@ -17,6 +17,7 @@ impl YrsComputeEngine {
         super::super::services::cf_cache::refresh_cf_caches_after_recalc(
             &mut self.stores,
             &self.mirror,
+            &self.settings.theme_palette,
             recalc,
         )
     }
@@ -26,6 +27,7 @@ impl YrsComputeEngine {
         super::super::services::cf_cache::refresh_cf_cache(
             &mut self.stores,
             &self.mirror,
+            &self.settings.theme_palette,
             sheet_id,
         );
     }

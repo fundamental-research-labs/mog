@@ -1,4 +1,4 @@
-use super::super::components::{resolve_alignment, resolve_border};
+use super::super::components::{resolve_alignment, resolve_border, resolve_font};
 use super::super::{
     AlignmentInput, BorderInput, BorderSideInput, CellXfInput, ColorInput, FillInput, FontInput,
     GradientFillInput, GradientStopInput, StyleInput, resolve_color, resolve_styles,
@@ -186,6 +186,38 @@ fn static_styles_preserve_theme_identity_and_tint_across_color_categories() {
         resolve_color(&theme(4, None), &theme_colors).as_deref(),
         Some("#4472C4")
     );
+}
+
+#[test]
+fn indexed_static_color_preserves_base_and_applies_parallel_tint_once() {
+    let font = resolve_font(
+        &FontInput {
+            color: Some(ColorInput {
+                indexed: Some(0),
+                tint: Some(0.5),
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+        None,
+        None,
+    );
+
+    assert_eq!(font.color.as_deref(), Some("#000000"));
+    assert_eq!(font.color_tint, Some(0.5));
+
+    let mut format = crate::CellFormat {
+        font_color: font.color,
+        font_color_tint: font.color_tint,
+        ..Default::default()
+    };
+    crate::theme_color::resolve_theme_refs(&mut format, &std::collections::HashMap::new());
+    assert_eq!(format.font_color.as_deref(), Some("#808080"));
+    assert_eq!(format.font_color_tint, None);
+
+    let resolved_once = format.clone();
+    crate::theme_color::resolve_theme_refs(&mut format, &std::collections::HashMap::new());
+    assert_eq!(format, resolved_once);
 }
 
 #[test]

@@ -11,7 +11,11 @@ pub(crate) fn merge_formats(lower: &CellFormat, higher: &CellFormat) -> CellForm
         font_family: higher.font_family.clone().or(lower.font_family.clone()),
         font_size: higher.font_size.or(lower.font_size),
         font_color: higher.font_color.clone().or(lower.font_color.clone()),
-        font_color_tint: higher.font_color_tint.or(lower.font_color_tint),
+        font_color_tint: merge_color_tint(
+            lower.font_color_tint,
+            higher.font_color.as_ref(),
+            higher.font_color_tint,
+        ),
         bold: higher.bold.or(lower.bold),
         italic: higher.italic.or(lower.italic),
         underline_type: higher.underline_type.or(lower.underline_type),
@@ -36,15 +40,21 @@ pub(crate) fn merge_formats(lower: &CellFormat, higher: &CellFormat) -> CellForm
             .background_color
             .clone()
             .or(lower.background_color.clone()),
-        background_color_tint: higher.background_color_tint.or(lower.background_color_tint),
+        background_color_tint: merge_color_tint(
+            lower.background_color_tint,
+            higher.background_color.as_ref(),
+            higher.background_color_tint,
+        ),
         pattern_type: higher.pattern_type.or(lower.pattern_type),
         pattern_foreground_color: higher
             .pattern_foreground_color
             .clone()
             .or(lower.pattern_foreground_color.clone()),
-        pattern_foreground_color_tint: higher
-            .pattern_foreground_color_tint
-            .or(lower.pattern_foreground_color_tint),
+        pattern_foreground_color_tint: merge_color_tint(
+            lower.pattern_foreground_color_tint,
+            higher.pattern_foreground_color.as_ref(),
+            higher.pattern_foreground_color_tint,
+        ),
         gradient_fill: higher.gradient_fill.clone().or(lower.gradient_fill.clone()),
         borders: merge_borders(lower.borders.as_ref(), higher.borders.as_ref()),
         locked: higher.locked.or(lower.locked),
@@ -234,8 +244,25 @@ fn merge_border_side(
     Some(CellBorderSide {
         style: higher.style.or(lower.style),
         color: higher.color.clone().or(lower.color),
-        color_tint: higher.color_tint.or(lower.color_tint),
+        color_tint: merge_color_tint(lower.color_tint, higher.color.as_ref(), higher.color_tint),
     })
+}
+
+/// Merge tint metadata with its color as one semantic value.
+///
+/// A replacement color without a tint is explicitly untinted; retaining a tint
+/// from a lower cascade layer would apply that tint to the wrong color. A
+/// tint-only patch remains valid and modifies the inherited color.
+fn merge_color_tint<T>(
+    lower_tint: Option<f64>,
+    higher_color: Option<&T>,
+    higher_tint: Option<f64>,
+) -> Option<f64> {
+    if higher_color.is_some() {
+        higher_tint
+    } else {
+        higher_tint.or(lower_tint)
+    }
 }
 
 fn is_empty_borders(borders: &CellBorders) -> bool {

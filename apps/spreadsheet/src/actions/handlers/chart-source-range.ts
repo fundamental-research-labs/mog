@@ -6,6 +6,8 @@ import { expandToDataRegion } from './expand-to-data-region';
 type HiddenBitmapMethod = 'getHiddenRowsBitmap' | 'getHiddenColumnsBitmap';
 type HiddenPointMethod = 'isRowHidden' | 'isColumnHidden';
 
+type ChartHiddenDetailHandling = 'preserve' | 'trim-inferred' | 'trim-one-dimensional';
+
 async function getHiddenBitmap(ws: Worksheet, method: HiddenBitmapMethod): Promise<Set<number>> {
   const read = ws.layout?.[method];
   if (typeof read !== 'function') {
@@ -82,6 +84,10 @@ function isSingleCellRange(range: CellRange): boolean {
   return range.startRow === range.endRow && range.startCol === range.endCol;
 }
 
+function isOneDimensionalRange(range: CellRange): boolean {
+  return range.startRow === range.endRow || range.startCol === range.endCol;
+}
+
 function rangesEqual(a: CellRange, b: CellRange): boolean {
   return (
     a.startRow === b.startRow &&
@@ -141,11 +147,13 @@ async function trimTrailingBlankEdges(ws: Worksheet, range: CellRange): Promise<
  * expansion. When collapsed outline detail splits that expanded region with
  * hidden rows/columns, chart creation should use the leading visible summary
  * block instead of charting hidden detail cells or trailing visible totals.
+ * Callers choose whether that rule applies only to inferred regions or also
+ * to explicit one-dimensional sources; explicit rectangles are preserved.
  */
 export async function resolveChartSourceRange(
   ws: Worksheet,
   sourceRange: CellRange,
-  options: { trimHiddenDetail?: boolean } = {},
+  options: { hiddenDetailHandling?: ChartHiddenDetailHandling } = {},
 ): Promise<CellRange> {
   const expanded = await expandToDataRegion(ws, sourceRange);
   const range = expanded ?? sourceRange;
@@ -153,18 +161,20 @@ export async function resolveChartSourceRange(
     return range;
   }
 
-  if (!options.trimHiddenDetail) {
+  const hiddenDetailHandling = options.hiddenDetailHandling ?? 'preserve';
+  if (hiddenDetailHandling === 'preserve') {
     return range;
   }
 
-  // Hidden-detail trimming is only for inferred current-region sources. If
-  // expansion returned the exact range the user selected, preserve that
-  // explicit source even when it spans collapsed outline detail.
-  if (rangesEqual(range, sourceRange)) {
+  const isExplicitSource = rangesEqual(range, sourceRange);
+  if (isExplicitSource && hiddenDetailHandling === 'trim-inferred') {
     return range;
   }
 
-  if (sourceRange.startRow !== sourceRange.endRow) {
+  // Automatic chart shortcuts may trim an explicit row or column to its
+  // leading visible summary block. Rectangular explicit selections remain
+  // authoritative and are never rewritten by this heuristic.
+  if (!isOneDimensionalRange(sourceRange)) {
     return range;
   }
 
@@ -204,7 +214,7 @@ export async function resolveChartSourceRange(
 export async function resolveChartCreationSourceRange(
   ws: Worksheet,
   sourceRange: CellRange,
-  options: { trimHiddenDetail?: boolean } = {},
+  options: { hiddenDetailHandling?: ChartHiddenDetailHandling } = {},
 ): Promise<CellRange | null> {
   const range = await resolveChartSourceRange(ws, sourceRange, options);
   return (await isBlankSingleCellSource(ws, range)) ? null : range;

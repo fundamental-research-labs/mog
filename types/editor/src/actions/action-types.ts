@@ -1490,6 +1490,7 @@ export interface KeyboardActionPayload {
   SET_HORIZONTAL_ALIGN: SetHorizontalAlignPayload;
   SET_VERTICAL_ALIGN: SetVerticalAlignPayload;
   OPEN_PAGE_SETUP_DIALOG: OpenPageSetupDialogPayload;
+  CREATE_EMBEDDED_CHART: { sourceRangeMode: 'visible-summary' | 'selected-range' };
   TOGGLE_SHEET_PROTECTION: void;
   CONVERT_TO_RANGE: void;
   DELETE_TABLE: void;

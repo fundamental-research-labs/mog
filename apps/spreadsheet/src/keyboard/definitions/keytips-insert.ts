@@ -110,6 +110,7 @@ export const KEYTIPS_INSERT_SHORTCUTS: KeyboardShortcut[] = [
     sequence: ['KeyC'],
     description: 'Insert Column chart (Alt+N,C)',
     action: 'CREATE_EMBEDDED_CHART',
+    actionArg: { sourceRangeMode: 'selected-range' },
     enabled: true,
     priority: 'medium',
     category: 'object',

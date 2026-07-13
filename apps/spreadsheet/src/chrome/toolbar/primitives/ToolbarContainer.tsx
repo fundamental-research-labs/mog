@@ -346,7 +346,11 @@ export const ToolbarContainer = React.memo(function ToolbarContainer({
     unfreezePanes: handleUnfreeze,
 
     // Insert - using dispatch for self-sufficient InsertRibbon pattern
-    insertChart: () => dispatch('CREATE_EMBEDDED_CHART', deps, { type: 'bar' }),
+    insertChart: () =>
+      dispatch('CREATE_EMBEDDED_CHART', deps, {
+        type: 'bar',
+        sourceRangeMode: 'selected-range',
+      }),
     insertPivotTable: () => dispatch('OPEN_PIVOT_DIALOG', deps),
     insertHyperlink: () => dispatch('OPEN_HYPERLINK_DIALOG', deps),
     openInsertFunctionDialog: () => dispatch('OPEN_INSERT_FUNCTION_DIALOG', deps),

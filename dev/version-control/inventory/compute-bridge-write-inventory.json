@@ -887,6 +887,55 @@
     },
     {
       "source": "generated-bridge",
+      "method": "patchBorders",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_patch_borders"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "patchCellPropertiesBatch",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_patch_cell_properties_batch"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "patchColFormat",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_patch_col_format"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "patchColFormats",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_patch_col_formats"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "patchFormatForRanges",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_patch_format_for_ranges"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "patchRowFormat",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_patch_row_format"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "patchRowFormats",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_patch_row_formats"
+    },
+    {
+      "source": "generated-bridge",
       "method": "patchWorkbookSettings",
       "access": "write",
       "wrapper": "mutatePublic",

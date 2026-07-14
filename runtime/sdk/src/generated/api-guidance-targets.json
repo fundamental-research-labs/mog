@@ -11360,6 +11360,25 @@
     },
     {
       "schemaVersion": "1",
+      "path": "ws.formats.patchBorders",
+      "stableId": "WorksheetFormats.patchBorders",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetFormats",
+      "member": "patchBorders",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "patchBorders(patches: BorderRangePatch[]): Promise<void>;",
+      "typeText": "Promise<void>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/formats.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "ws.formats.set",
       "stableId": "WorksheetFormats.set",
       "root": "subApi",
@@ -31642,6 +31661,25 @@
       "asyncModel": "promise",
       "signature": "hasExplicit(address: string): Promise<boolean>;",
       "typeText": "Promise<boolean>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/formats.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.formats.patchBorders": {
+      "schemaVersion": "1",
+      "path": "ws.formats.patchBorders",
+      "stableId": "WorksheetFormats.patchBorders",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetFormats",
+      "member": "patchBorders",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "patchBorders(patches: BorderRangePatch[]): Promise<void>;",
+      "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/formats.ts"

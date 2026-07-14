@@ -60,19 +60,15 @@ async function worksheetFormatReadWriteContract(
   await formats.set('B1', resolved);
   await formats.set(0, 1, resolved);
   await formats.setRange('C1:D2', resolved);
-  await formats.setRange(
-    { sheetId, startRow: 0, startCol: 2, endRow: 1, endCol: 3 },
-    resolved,
-  );
-  await formats.setRanges(
-    [{ sheetId, startRow: 0, startCol: 4, endRow: 1, endCol: 5 }],
-    resolved,
-  );
-  await formats.applyPattern(
-    resolved,
-    null,
-    { sheetId, startRow: 0, startCol: 6, endRow: 1, endCol: 7 },
-  );
+  await formats.setRange({ sheetId, startRow: 0, startCol: 2, endRow: 1, endCol: 3 }, resolved);
+  await formats.setRanges([{ sheetId, startRow: 0, startCol: 4, endRow: 1, endCol: 5 }], resolved);
+  await formats.applyPattern(resolved, null, {
+    sheetId,
+    startRow: 0,
+    startCol: 6,
+    endRow: 1,
+    endCol: 7,
+  });
 
   const cells = await formats.getCellProperties('A1');
   if (cells[0]?.[0]) {

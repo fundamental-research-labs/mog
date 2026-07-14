@@ -708,7 +708,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "check-types": "tsc --noEmit",
-    "build": "node scripts/check-no-source-dts.mjs && node scripts/clean-dist.mjs && tsc -p tsconfig.build.json && node scripts/rollup-public-dts.mjs && node scripts/fix-dts-extensions.mjs && node ../tools/check-contracts-declaration-identity.mjs && node scripts/verify-runtime-exports.mjs && node ../tools/check-contracts-runtime-inventory.mjs && node ../tools/check-contract-runtime-imports.mjs",
+    "build": "pnpm --workspace-root build:contract-type-shards && node scripts/check-no-source-dts.mjs && node scripts/clean-dist.mjs && tsc -p tsconfig.build.json && node scripts/rollup-public-dts.mjs && node scripts/fix-dts-extensions.mjs && node ../tools/check-contracts-declaration-identity.mjs && node scripts/verify-runtime-exports.mjs && node ../tools/check-contracts-runtime-inventory.mjs && node ../tools/check-contract-runtime-imports.mjs",
     "check:runtime-inventory": "node ../tools/check-contracts-runtime-inventory.mjs",
     "check:runtime-imports": "node ../tools/check-contract-runtime-imports.mjs",
     "verify:runtime-exports": "node scripts/verify-runtime-exports.mjs",

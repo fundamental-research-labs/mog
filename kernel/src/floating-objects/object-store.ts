@@ -37,10 +37,7 @@ import type {
 
 import type { ComputeBridge } from '../bridges/compute/compute-bridge';
 import type { SerializedFloatingObjectGroup } from '../bridges/compute/compute-types.gen';
-import {
-  toFloatingObject,
-  toFloatingObjectGroup,
-} from '../bridges/compute/floating-object-mapper';
+import { toFloatingObject, toFloatingObjectGroup } from '../bridges/compute/floating-object-mapper';
 
 // =============================================================================
 // ComputeBridgeObjectStore — IObjectStore<FloatingObject>

@@ -171,9 +171,9 @@ describe('floating object operation admission contexts', () => {
   it('sends the Rust wire contract when creating a floating object group', async () => {
     const ctx = createMockCtx();
 
-    await expect(
-      groupFloatingObjects(ctx, SHEET_ID, ['picture-1', 'picture-2']),
-    ).resolves.toBe('group-1');
+    await expect(groupFloatingObjects(ctx, SHEET_ID, ['picture-1', 'picture-2'])).resolves.toBe(
+      'group-1',
+    );
 
     expect(ctx.computeBridge.createFloatingObjectGroup).toHaveBeenCalledWith(
       SHEET_ID,

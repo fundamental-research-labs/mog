@@ -595,6 +595,8 @@ export interface CellFormat {
  * has no value for that property. The result can be passed directly to any
  * worksheet format mutator: missing keys make no change, `null` clears the
  * target's direct property, and non-null values set it.
+ * An effective cell with no fill is canonicalized as `patternType: 'none'` so
+ * transferring the result cannot accidentally inherit a target row/column fill.
  */
 export type ResolvedCellFormat = {
   [K in keyof CellFormat]-?: CellFormat[K] | null;

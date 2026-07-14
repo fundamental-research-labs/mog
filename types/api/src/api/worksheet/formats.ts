@@ -276,7 +276,9 @@ export interface WorksheetFormats {
    * Returns a dense transferable CellFormat with all fields present (null for
    * unset properties, never undefined). Includes the effective authored cascade
    * (default → col → row → table → cell), preserves symbolic theme references,
-   * and excludes conditional-format/display overlays.
+   * and excludes conditional-format/display overlays. Effective no-fill is
+   * represented canonically as `patternType: 'none'` so the result remains
+   * appearance-preserving when written over a target with inherited fill.
    *
    * @param address - A1-style cell address
    * @returns The resolved cell format (always an object, never null)

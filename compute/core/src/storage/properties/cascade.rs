@@ -9,7 +9,7 @@ use crate::storage::YrsStorage;
 use crate::storage::properties::CellProperties;
 use cell_types::SheetId;
 use domain_types::{CellFormat, CellVerticalAlign};
-use ooxml_types::styles::HorizontalAlign;
+use ooxml_types::styles::{HorizontalAlign, PatternType};
 use yrs::{Any, Map, Out, Transact};
 
 /// Get the effective (computed) format for a cell.
@@ -149,10 +149,11 @@ pub(crate) fn get_effective_format_from_preloaded_layers(
         Some(format) => merge_formats(&after_range, format),
         None => after_range,
     };
-    match cell_format {
+    let effective = match cell_format {
         Some(format) => merge_formats(&after_table, format),
         None => after_table,
-    }
+    };
+    canonicalize_effective_fill(effective)
 }
 
 /// Resolve the cascade with an already-merged Format Range layer.
@@ -190,10 +191,30 @@ pub(crate) fn get_effective_format_from_preloaded_layers_with_range(
         Some(format) => merge_formats(&after_range, format),
         None => after_range,
     };
-    match cell_format {
+    let effective = match cell_format {
         Some(format) => merge_formats(&after_table, format),
         None => after_table,
+    };
+    canonicalize_effective_fill(effective)
+}
+
+/// Canonicalize the fully-resolved fill contract returned by effective-format
+/// reads. Sparse authored layers must remain sparse while the cascade is still
+/// being merged so that a higher background-color shorthand or complete fill
+/// can apply normally. Once every layer has resolved, however, an entirely
+/// absent fill has one unambiguous transferable representation: `none`, and
+/// the public background-color shorthand has the explicit representation
+/// `solid` that XLSX export/import also produces.
+fn canonicalize_effective_fill(mut format: CellFormat) -> CellFormat {
+    if format.gradient_fill.is_none()
+        && format.pattern_type.is_none()
+        && format.background_color.is_some()
+    {
+        format.pattern_type = Some(PatternType::Solid);
+    } else if fill_fields_are_absent(&format) {
+        format.pattern_type = Some(PatternType::None);
     }
+    format
 }
 
 /// Workbook Normal style is stored as style palette entry 0 during XLSX
@@ -258,15 +279,18 @@ pub(super) fn materialize_imported_cell_xf_defaults(format: &mut CellFormat) {
     // that means "no fill", not "inherit a row/column fill". Materialize the
     // explicit sentinel only for a truly absent fill; gradient and authored
     // pattern fills must remain untouched.
-    if format.background_color.is_none()
+    if fill_fields_are_absent(format) {
+        format.pattern_type = Some(PatternType::None);
+    }
+}
+
+fn fill_fields_are_absent(format: &CellFormat) -> bool {
+    format.background_color.is_none()
         && format.background_color_tint.is_none()
         && format.pattern_type.is_none()
         && format.pattern_foreground_color.is_none()
         && format.pattern_foreground_color_tint.is_none()
         && format.gradient_fill.is_none()
-    {
-        format.pattern_type = Some(ooxml_types::styles::PatternType::None);
-    }
 }
 
 // -------------------------------------------------------------------

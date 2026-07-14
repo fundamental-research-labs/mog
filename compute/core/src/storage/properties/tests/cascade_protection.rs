@@ -69,6 +69,159 @@ fn test_effective_format_no_overrides() {
     assert_eq!(eff.font_size, def.font_size);
     assert_eq!(eff.bold, def.bold);
     assert_eq!(eff.locked, def.locked);
+    assert_eq!(
+        eff.pattern_type,
+        Some(ooxml_types::styles::PatternType::None),
+        "a fully-resolved absent fill has an explicit transferable sentinel"
+    );
+}
+
+#[test]
+fn test_effective_format_canonicalizes_sparse_authored_no_fill_only_after_cascade() {
+    let (mut storage, sid, gi) = storage_with_sheet();
+
+    set_col_format(
+        &mut storage,
+        &sid,
+        2,
+        &CellFormat {
+            italic: Some(true),
+            ..Default::default()
+        },
+        Some(&gi),
+    )
+    .unwrap();
+    set_cell_format(
+        storage.doc(),
+        storage.workbook_map(),
+        storage.sheets(),
+        &sid,
+        "sparse-authored-cell",
+        &CellFormat {
+            bold: Some(true),
+            ..Default::default()
+        },
+    );
+
+    let eff = get_effective_format(
+        &storage,
+        &sid,
+        "sparse-authored-cell",
+        3,
+        2,
+        None,
+        Some(&gi),
+        None,
+    );
+
+    assert_eq!(eff.bold, Some(true));
+    assert_eq!(eff.italic, Some(true));
+    assert_eq!(
+        eff.pattern_type,
+        Some(ooxml_types::styles::PatternType::None)
+    );
+    assert!(eff.background_color.is_none());
+    assert!(eff.gradient_fill.is_none());
+}
+
+#[test]
+fn test_premerged_range_cascade_uses_the_same_effective_fill_contract() {
+    let base = default_format();
+
+    let no_fill = get_effective_format_from_preloaded_layers_with_range(
+        &base, None, None, 2, None, None, None, None, false,
+    );
+    assert_eq!(
+        no_fill.pattern_type,
+        Some(ooxml_types::styles::PatternType::None)
+    );
+
+    let range_fill = CellFormat {
+        background_color: Some("#70AD47".to_string()),
+        ..Default::default()
+    };
+    let shorthand = get_effective_format_from_preloaded_layers_with_range(
+        &base,
+        None,
+        None,
+        2,
+        Some(&range_fill),
+        None,
+        None,
+        None,
+        false,
+    );
+    assert_eq!(shorthand.background_color.as_deref(), Some("#70AD47"));
+    assert_eq!(
+        shorthand.pattern_type,
+        Some(ooxml_types::styles::PatternType::Solid)
+    );
+}
+
+#[test]
+fn test_higher_fill_layers_prevent_effective_no_fill_canonicalization() {
+    let (mut storage, sid, gi) = storage_with_sheet();
+
+    // A background-color-only authored layer is a supported fill shorthand.
+    // It must not encounter a prematurely seeded no-fill sentinel from the
+    // lower default layer, which would clear the higher color during merging.
+    set_row_format(
+        &mut storage,
+        &sid,
+        3,
+        &CellFormat {
+            background_color: Some("#4472C4".to_string()),
+            ..Default::default()
+        },
+        Some(&gi),
+    )
+    .unwrap();
+
+    let shorthand = get_effective_format(
+        &storage,
+        &sid,
+        "background-shorthand",
+        3,
+        2,
+        None,
+        Some(&gi),
+        None,
+    );
+    assert_eq!(shorthand.background_color.as_deref(), Some("#4472C4"));
+    assert_eq!(
+        shorthand.pattern_type,
+        Some(ooxml_types::styles::PatternType::Solid),
+        "the final effective contract must match XLSX's solid-fill lowering"
+    );
+
+    set_cell_format(
+        storage.doc(),
+        storage.workbook_map(),
+        storage.sheets(),
+        &sid,
+        "higher-solid-fill",
+        &CellFormat {
+            background_color: Some("#ED7D31".to_string()),
+            pattern_type: Some(ooxml_types::styles::PatternType::Solid),
+            ..Default::default()
+        },
+    );
+
+    let solid = get_effective_format(
+        &storage,
+        &sid,
+        "higher-solid-fill",
+        3,
+        2,
+        None,
+        Some(&gi),
+        None,
+    );
+    assert_eq!(solid.background_color.as_deref(), Some("#ED7D31"));
+    assert_eq!(
+        solid.pattern_type,
+        Some(ooxml_types::styles::PatternType::Solid)
+    );
 }
 
 #[test]

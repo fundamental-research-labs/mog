@@ -324,7 +324,23 @@ fn imported_cell_xf_lineage_survives_yrs_and_live_edits_use_generated_tail() {
     let edited = engine.build_parse_output_from_yrs();
     assert_eq!(edited.sheets[0].cells[0].style_id, Some(2));
     assert_eq!(edited.style_palette.len(), 3);
-    assert_eq!(edited.style_palette[1], edited.style_palette[2]);
+    assert_ne!(
+        edited.style_palette[1], edited.style_palette[2],
+        "edited XFs snapshot the full effective cascade instead of reusing the sparse imported semantic entry"
+    );
+    let edited_font = edited.style_palette[2]
+        .font
+        .as_ref()
+        .expect("generated effective font");
+    assert_eq!(edited_font.name.as_deref(), Some("Calibri"));
+    assert_eq!(edited_font.bold, Some(true));
+    assert_eq!(
+        edited.style_palette[2]
+            .fill
+            .as_ref()
+            .and_then(|fill| fill.pattern_type.as_deref()),
+        Some("none")
+    );
     assert_eq!(
         edited.workbook_stylesheet.as_ref().unwrap().cell_xfs,
         original_xfs,
@@ -341,6 +357,149 @@ fn imported_cell_xf_lineage_survives_yrs_and_live_edits_use_generated_tail() {
         .unwrap()
         .unwrap();
     assert!(sheet_xml.contains(r#"<c r="A1" s="2""#), "{sheet_xml}");
+}
+
+#[test]
+fn inline_cell_xfs_snapshot_inherited_row_and_column_fills_and_explicit_no_fill() {
+    let output = domain_types::ParseOutput {
+        sheets: vec![domain_types::SheetData {
+            name: "Sheet1".to_string(),
+            rows: 2,
+            cols: 3,
+            cells: vec![
+                domain_types::CellData {
+                    row: 0,
+                    col: 0,
+                    value: number(1.0),
+                    ..Default::default()
+                },
+                domain_types::CellData {
+                    row: 1,
+                    col: 1,
+                    value: number(2.0),
+                    ..Default::default()
+                },
+                domain_types::CellData {
+                    row: 0,
+                    col: 2,
+                    value: number(3.0),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let (mut engine, sheet_id) = engine_from_parse_output(&output);
+    let cell_id_at = |engine: &YrsComputeEngine, row, col| {
+        engine.stores.grid_indexes[&sheet_id]
+            .cell_id_at(row, col)
+            .expect("cell identity")
+    };
+    let a1_id = cell_id_at(&engine, 0, 0);
+    let b2_id = cell_id_at(&engine, 1, 1);
+    let c1_id = cell_id_at(&engine, 0, 2);
+
+    // A background-color shorthand is a solid fill after the cascade resolves.
+    engine
+        .set_row_format(
+            &sheet_id,
+            0,
+            CellFormat {
+                background_color: Some("#FF0000".to_string()),
+                ..Default::default()
+            },
+        )
+        .expect("set row fill");
+    engine
+        .set_col_format(
+            &sheet_id,
+            1,
+            CellFormat {
+                background_color: Some("#0000FF".to_string()),
+                ..Default::default()
+            },
+        )
+        .expect("set column fill");
+    engine
+        .set_cell_format(
+            &sheet_id,
+            &a1_id,
+            &CellFormat {
+                bold: Some(true),
+                ..Default::default()
+            },
+        )
+        .expect("set sparse A1 format");
+    engine
+        .set_cell_format(
+            &sheet_id,
+            &b2_id,
+            &CellFormat {
+                italic: Some(true),
+                ..Default::default()
+            },
+        )
+        .expect("set sparse B2 format");
+    engine
+        .set_cell_format(
+            &sheet_id,
+            &c1_id,
+            &CellFormat {
+                pattern_type: Some(ooxml_types::styles::PatternType::None),
+                ..Default::default()
+            },
+        )
+        .expect("set explicit C1 no-fill");
+
+    let exported = engine.build_parse_output_from_yrs();
+    let format_at = |row, col| {
+        let style_id = exported.sheets[0]
+            .cells
+            .iter()
+            .find(|cell| (cell.row, cell.col) == (row, col))
+            .and_then(|cell| cell.style_id)
+            .expect("generated cell style");
+        &exported.style_palette[style_id as usize]
+    };
+    let a1_fill = format_at(0, 0).fill.as_ref().expect("A1 effective fill");
+    assert_eq!(a1_fill.background_color.as_deref(), Some("#FF0000"));
+    assert_eq!(a1_fill.pattern_type.as_deref(), Some("solid"));
+    let b2_fill = format_at(1, 1).fill.as_ref().expect("B2 effective fill");
+    assert_eq!(b2_fill.background_color.as_deref(), Some("#0000FF"));
+    assert_eq!(b2_fill.pattern_type.as_deref(), Some("solid"));
+    let c1_fill = format_at(0, 2).fill.as_ref().expect("C1 explicit no-fill");
+    assert_eq!(c1_fill.background_color, None);
+    assert_eq!(c1_fill.pattern_type.as_deref(), Some("none"));
+
+    let bytes = engine.export_to_xlsx_bytes().expect("export XLSX");
+    let (reimported, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).expect("reimport XLSX");
+    let reimported_sheet_id = reimported.stores.storage.sheet_order()[0];
+    let reimported_format_at = |row, col| {
+        let cell_id = reimported.stores.grid_indexes[&reimported_sheet_id]
+            .cell_id_at(row, col)
+            .expect("reimported cell identity");
+        reimported.get_cell_format(&reimported_sheet_id, &cell_id, row, col)
+    };
+
+    let a1 = reimported_format_at(0, 0);
+    assert_eq!(a1.background_color.as_deref(), Some("#FF0000"));
+    assert_eq!(
+        a1.pattern_type,
+        Some(ooxml_types::styles::PatternType::Solid)
+    );
+    let b2 = reimported_format_at(1, 1);
+    assert_eq!(b2.background_color.as_deref(), Some("#0000FF"));
+    assert_eq!(
+        b2.pattern_type,
+        Some(ooxml_types::styles::PatternType::Solid)
+    );
+    let c1 = reimported_format_at(0, 2);
+    assert_eq!(c1.background_color, None);
+    assert_eq!(
+        c1.pattern_type,
+        Some(ooxml_types::styles::PatternType::None)
+    );
 }
 
 #[test]

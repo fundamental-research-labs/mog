@@ -527,6 +527,34 @@ function searchResultKind(entry: ApiSpecFunctionEntry): ApiSearchResultKind {
   return 'method';
 }
 
+/**
+ * Collect the effective definition of a public type, including definitions it
+ * composes through aliases, intersections, mapped types, and nested members.
+ * Generated definitions intentionally preserve those references instead of
+ * flattening them, so indexing only the root text would hide inherited fields.
+ */
+function collectTypeSearchText(typeName: string): string {
+  const definitions: string[] = [];
+  const queue = [typeName];
+  const seen = new Set<string>();
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (seen.has(current)) continue;
+    seen.add(current);
+
+    const entry = spec.types[current];
+    if (!entry?.definition) continue;
+    definitions.push(entry.definition);
+
+    for (const ref of extractTypeRefs(entry.definition)) {
+      if (!seen.has(ref) && spec.types[ref]) queue.push(ref);
+    }
+  }
+
+  return definitions.join('\n');
+}
+
 function buildSearchIndex(): SearchIndexEntry[] {
   const results = new Map<string, SearchIndexSeed>();
 
@@ -562,7 +590,7 @@ function buildSearchIndex(): SearchIndexEntry[] {
       name,
       kind: 'type',
       docstring: entry.docstring ?? '',
-      searchText: entry.definition ?? '',
+      searchText: collectTypeSearchText(name),
     });
   }
 

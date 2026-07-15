@@ -2,6 +2,7 @@ import {
   createPublicVersionDomainSupportManifest,
   type DomainSupportManifest,
 } from '@mog-sdk/contracts/versioning';
+import { MogSdkError } from './public-kernel-facade';
 
 export const MOG_SDK_SUPPORTED_VERSION_STORE_KINDS = [
   'memory',
@@ -488,15 +489,27 @@ const WORKSPACE_AUTHORITY_REQUIRED_MODE_VALUES: ReadonlySet<string> = new Set([
   'collab',
 ]);
 
-export class MogSdkVersionStoreConfigError extends Error {
+export class MogSdkVersionStoreConfigError extends MogSdkError {
   readonly diagnostic: MogSdkVersionStoreDiagnostic;
-  readonly diagnostics: readonly MogSdkVersionStoreDiagnostic[];
 
   constructor(diagnostic: MogSdkVersionStoreDiagnostic) {
-    super(diagnostic.message);
+    const diagnosticField = diagnostic.details?.field;
+    super('INVALID_ARGUMENT', diagnostic.message, {
+      operation: 'versionStore.configure',
+      path: [
+        'versionStore',
+        typeof diagnosticField === 'string' ? diagnosticField : 'kind',
+      ],
+      details: { versionStoreDiagnostic: diagnostic },
+      diagnostics: {
+        domain: 'VERSION_STORE',
+        property: typeof diagnosticField === 'string' ? diagnosticField : 'kind',
+        issueCode: diagnostic.code,
+        severity: diagnostic.severity,
+      },
+    });
     this.name = 'MogSdkVersionStoreConfigError';
     this.diagnostic = diagnostic;
-    this.diagnostics = [diagnostic];
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }

@@ -524,6 +524,15 @@ describe('SDK createWorkbook version-store validation', () => {
         versionStore: { kind: 'node-file', path: '/tmp/mog-version-store' },
       }),
     ).rejects.toMatchObject({
+      code: 'INVALID_ARGUMENT',
+      operation: 'versionStore.configure',
+      path: ['versionStore', 'kind'],
+      diagnostics: {
+        domain: 'VERSION_STORE',
+        property: 'kind',
+        issueCode: 'MOG_SDK_VERSION_STORE_UNSUPPORTED',
+        severity: 'error',
+      },
       diagnostic: {
         code: 'MOG_SDK_VERSION_STORE_UNSUPPORTED',
         runtime: 'node',
@@ -541,6 +550,15 @@ describe('SDK createWorkbook version-store validation', () => {
         versionStore: { kind: 'node-file', path: '/tmp/mog-version-store' },
       }),
     ).rejects.toMatchObject({
+      code: 'INVALID_ARGUMENT',
+      operation: 'versionStore.configure',
+      path: ['versionStore', 'kind'],
+      diagnostics: {
+        domain: 'VERSION_STORE',
+        property: 'kind',
+        issueCode: 'MOG_SDK_VERSION_STORE_UNSUPPORTED',
+        severity: 'error',
+      },
       diagnostic: {
         code: 'MOG_SDK_VERSION_STORE_UNSUPPORTED',
         runtime: 'wasm',

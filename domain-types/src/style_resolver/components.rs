@@ -3,12 +3,11 @@ use crate::{
     GradientFillFormat, GradientStopFormat,
 };
 
-use super::{color::resolve_color, input::*};
+use super::{color::preserve_authored_color, input::*};
 
 /// Resolve font input to `FontFormat`.
 pub(super) fn resolve_font(
     font: &FontInput,
-    theme_colors: &[String],
     major_font: Option<&str>,
     minor_font: Option<&str>,
 ) -> FontFormat {
@@ -55,7 +54,7 @@ pub(super) fn resolve_font(
 
     // Font color
     if let Some(ref color) = font.color {
-        if let Some(c) = resolve_color(color, theme_colors) {
+        if let Some(c) = preserve_authored_color(color, false) {
             ff.color = Some(c);
         }
         ff.color_tint = color.tint.filter(|&t| t != 0.0);
@@ -89,8 +88,8 @@ pub(super) fn resolve_font(
     ff
 }
 
-/// Resolve fill input to `FillFormat`. Returns `None` if no visible fill.
-pub(super) fn resolve_fill(fill: &FillInput, theme_colors: &[String]) -> Option<FillFormat> {
+/// Resolve fill input to `FillFormat` while preserving authored pattern semantics.
+pub(super) fn resolve_fill(fill: &FillInput) -> Option<FillFormat> {
     // Handle gradient fills
     if fill.fill_type == "gradient" {
         if let Some(ref grad) = fill.gradient {
@@ -98,7 +97,7 @@ pub(super) fn resolve_fill(fill: &FillInput, theme_colors: &[String]) -> Option<
                 .stops
                 .iter()
                 .filter_map(|s| {
-                    resolve_color(&s.color, theme_colors).map(|c| GradientStopFormat {
+                    preserve_authored_color(&s.color, true).map(|c| GradientStopFormat {
                         position: s.position,
                         color: c,
                     })
@@ -148,30 +147,27 @@ pub(super) fn resolve_fill(fill: &FillInput, theme_colors: &[String]) -> Option<
         let bg = fill
             .fg_color
             .as_ref()
-            .and_then(|c| resolve_color(c, theme_colors));
+            .and_then(|c| preserve_authored_color(c, false));
         let bg_tint = fill
             .fg_color
             .as_ref()
             .and_then(|c| c.tint)
             .filter(|&t| t != 0.0);
-        if bg.is_some() {
-            return Some(FillFormat {
-                background_color: bg,
-                background_color_tint: bg_tint,
-                pattern_type: Some("solid".to_string()),
-                pattern_foreground_color: None,
-                pattern_foreground_color_tint: None,
-                gradient_fill: None,
-            });
-        }
-        return None;
+        return Some(FillFormat {
+            background_color: bg,
+            background_color_tint: bg_tint,
+            pattern_type: Some("solid".to_string()),
+            pattern_foreground_color: None,
+            pattern_foreground_color_tint: None,
+            gradient_fill: None,
+        });
     }
 
     if fill.pattern_type != "none" {
         let fg = fill
             .fg_color
             .as_ref()
-            .and_then(|c| resolve_color(c, theme_colors));
+            .and_then(|c| preserve_authored_color(c, false));
         let fg_tint = fill
             .fg_color
             .as_ref()
@@ -180,7 +176,7 @@ pub(super) fn resolve_fill(fill: &FillInput, theme_colors: &[String]) -> Option<
         let bg = fill
             .bg_color
             .as_ref()
-            .and_then(|c| resolve_color(c, theme_colors));
+            .and_then(|c| preserve_authored_color(c, false));
         let bg_tint = fill
             .bg_color
             .as_ref()
@@ -201,15 +197,12 @@ pub(super) fn resolve_fill(fill: &FillInput, theme_colors: &[String]) -> Option<
 }
 
 /// Resolve border input to `BorderFormat`. Returns `None` if no visible borders.
-pub(super) fn resolve_border(
-    border: &BorderInput,
-    theme_colors: &[String],
-) -> Option<BorderFormat> {
-    let left = resolve_border_side(border.left.as_ref(), theme_colors);
-    let right = resolve_border_side(border.right.as_ref(), theme_colors);
-    let top = resolve_border_side(border.top.as_ref(), theme_colors);
-    let bottom = resolve_border_side(border.bottom.as_ref(), theme_colors);
-    let diagonal = resolve_border_side(border.diagonal.as_ref(), theme_colors);
+pub(super) fn resolve_border(border: &BorderInput) -> Option<BorderFormat> {
+    let left = resolve_border_side(border.left.as_ref());
+    let right = resolve_border_side(border.right.as_ref());
+    let top = resolve_border_side(border.top.as_ref());
+    let bottom = resolve_border_side(border.bottom.as_ref());
+    let diagonal = resolve_border_side(border.diagonal.as_ref());
 
     // Preserve the absent-vs-explicit-false distinction on both flags directly
     // (formerly collapsed into a `DiagonalDirection` enum). `Some(false)` must
@@ -240,10 +233,7 @@ pub(super) fn resolve_border(
 }
 
 /// Resolve a single border side. Returns `None` if style is "none" or absent.
-pub(super) fn resolve_border_side(
-    side: Option<&BorderSideInput>,
-    theme_colors: &[String],
-) -> Option<BorderSide> {
+pub(super) fn resolve_border_side(side: Option<&BorderSideInput>) -> Option<BorderSide> {
     let side = side?;
     if side.style.is_empty() || side.style == "none" {
         return None;
@@ -251,7 +241,7 @@ pub(super) fn resolve_border_side(
     let color = side
         .color
         .as_ref()
-        .and_then(|c| resolve_color(c, theme_colors));
+        .and_then(|c| preserve_authored_color(c, false));
     let color_tint = side.color.as_ref().and_then(|c| c.tint);
     Some(BorderSide {
         style: side.style.clone(),

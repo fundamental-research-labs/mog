@@ -18,9 +18,6 @@ import type {
 
 import type { KernelErrorCode } from './codes';
 import { KernelError } from './kernel-error';
-import { BridgeError } from './bridge';
-import { CapabilityError } from './capability';
-import { DocumentDisposedError } from './document';
 
 // ---------------------------------------------------------------------------
 // Exhaustive kernel-to-SDK mapping
@@ -81,10 +78,35 @@ const KERNEL_TO_SDK_MAP = {
   // Comment
   COMMENT_NOT_FOUND: 'NOT_FOUND',
 
+  // Conditional formatting
+  CONDITIONAL_FORMAT_NOT_FOUND: 'NOT_FOUND',
+  CONDITIONAL_FORMAT_RULE_NOT_FOUND: 'NOT_FOUND',
+
+  // Validation
+  VALIDATION_NOT_FOUND: 'NOT_FOUND',
+
+  // Filter
+  FILTER_NOT_FOUND: 'NOT_FOUND',
+
   // Pivot
   PIVOT_NOT_FOUND: 'NOT_FOUND',
   PIVOT_INVALID_DATA_SOURCE: 'INVALID_ARGUMENT',
   PIVOT_UNRESOLVED_FIELD_REFERENCES: 'INVALID_ARGUMENT',
+
+  // Slicer
+  SLICER_NOT_FOUND: 'NOT_FOUND',
+  SLICER_ID_EXISTS: 'CONFLICT',
+  SLICER_SHEET_MISMATCH: 'INVALID_ARGUMENT',
+
+  // Form controls
+  FORM_CONTROL_NOT_FOUND: 'NOT_FOUND',
+
+  // Sparklines
+  SPARKLINE_NOT_FOUND: 'NOT_FOUND',
+  SPARKLINE_GROUP_NOT_FOUND: 'NOT_FOUND',
+
+  // Hyperlinks
+  HYPERLINK_NOT_FOUND: 'NOT_FOUND',
 
   // Scenario
   SCENARIO_ACTIVE_STATE_READ_ONLY: 'READ_ONLY',
@@ -107,6 +129,7 @@ const KERNEL_TO_SDK_MAP = {
   OBJ_NOT_FOUND: 'NOT_FOUND',
   OBJ_INVALID_CONFIG: 'INVALID_ARGUMENT',
   OBJ_CHART_NOT_FOUND: 'NOT_FOUND',
+  OBJ_CHART_TARGET_AMBIGUOUS: 'CONFLICT',
   OBJ_CHART_INVALID_CONFIG: 'INVALID_ARGUMENT',
   OBJ_SHAPE_NOT_FOUND: 'NOT_FOUND',
   OBJ_SHAPE_INVALID_CONFIG: 'INVALID_ARGUMENT',
@@ -160,6 +183,21 @@ const KERNEL_TO_SDK_MAP = {
   NOT_IMPLEMENTED: 'INTERNAL_ERROR',
 } as const satisfies KernelToSdkRuntimeMapping;
 
+const SDK_ERROR_CODES = new Set<MogSdkErrorCode>([
+  'INVALID_ARGUMENT',
+  'NOT_FOUND',
+  'CONFLICT',
+  'AUTHORIZATION_DENIED',
+  'READ_ONLY',
+  'DISPOSED',
+  'IMPORT_ERROR',
+  'EXPORT_ERROR',
+  'COMPUTE_ERROR',
+  'TRANSPORT_ERROR',
+  'PROVIDER_ERROR',
+  'INTERNAL_ERROR',
+]);
+
 /**
  * Map a KernelErrorCode to its corresponding MogSdkErrorCode.
  * Exhaustive — every kernel code has exactly one SDK mapping.
@@ -173,6 +211,8 @@ export function mapKernelCodeToSdkCode(code: KernelErrorCode): MogSdkErrorCode {
 // ---------------------------------------------------------------------------
 
 export interface MogSdkErrorOptions {
+  path?: readonly string[];
+  suggestion?: string;
   details?: Record<string, unknown> | MogSdkSavePathErrorDetails;
   operation?: string;
   diagnostics?: MogSdkDiagnostics;
@@ -181,6 +221,8 @@ export interface MogSdkErrorOptions {
 
 export class MogSdkError extends Error implements IMogSdkError {
   readonly code: MogSdkErrorCode;
+  readonly path?: readonly string[];
+  readonly suggestion?: string;
   readonly details?: Record<string, unknown> | MogSdkSavePathErrorDetails;
   readonly operation?: string;
   readonly diagnostics?: MogSdkDiagnostics;
@@ -189,6 +231,8 @@ export class MogSdkError extends Error implements IMogSdkError {
     super(message, options?.cause != null ? { cause: options.cause } : undefined);
     this.name = 'MogSdkError';
     this.code = code;
+    this.path = options?.path;
+    this.suggestion = options?.suggestion;
     this.details = options?.details;
     this.operation = options?.operation;
     this.diagnostics = options?.diagnostics;
@@ -199,6 +243,8 @@ export class MogSdkError extends Error implements IMogSdkError {
     const json: MogSdkErrorJSON = {
       code: this.code,
       message: this.message,
+      ...(this.path != null ? { path: this.path } : {}),
+      ...(this.suggestion != null ? { suggestion: this.suggestion } : {}),
       ...(this.operation != null ? { operation: this.operation } : {}),
       ...(this.details != null ? { details: this.details } : {}),
       ...(this.diagnostics != null ? { diagnostics: this.diagnostics } : {}),
@@ -210,12 +256,16 @@ export class MogSdkError extends Error implements IMogSdkError {
   /**
    * Map a KernelError to a MogSdkError using the exhaustive mapping table.
    */
-  static fromKernelError(error: KernelError): MogSdkError {
+  static fromKernelError(error: KernelError, operation?: string): MogSdkError {
     const sdkCode = mapKernelCodeToSdkCode(error.code);
     return new MogSdkError(sdkCode, error.message, {
+      path: error.path,
+      suggestion: error.suggestion,
       details: Object.keys(error.context).length > 0 ? error.context : undefined,
+      operation,
       diagnostics: {
         domain: error.code.split('_')[0],
+        ...(error.path?.at(-1) != null ? { property: error.path.at(-1) } : {}),
         issueCode: error.code,
         severity: 'error',
       },
@@ -245,64 +295,54 @@ function isXlsxParseError(error: unknown): boolean {
   return error instanceof Error && error.name === 'XlsxParseError';
 }
 
+/** Cross-realm/cross-bundle guard for already-normalized public SDK errors. */
+function isMogSdkErrorLike(error: unknown): error is MogSdkError {
+  if (typeof error !== 'object' || error === null) return false;
+  const candidate = error as Partial<MogSdkError>;
+  return (
+    candidate.name === 'MogSdkError' &&
+    typeof candidate.message === 'string' &&
+    typeof candidate.code === 'string' &&
+    SDK_ERROR_CODES.has(candidate.code as MogSdkErrorCode) &&
+    typeof candidate.toJSON === 'function'
+  );
+}
+
+/**
+ * Kernel and host packages can be bundled into separate JavaScript realms.
+ * Recognize the lossless KernelError shape as well as local instanceof so the
+ * stable boundary does not erase structured feedback at a package seam.
+ */
+function isKernelErrorLike(error: unknown): error is KernelError {
+  if (error instanceof KernelError) return true;
+  if (typeof error !== 'object' || error === null) return false;
+  const candidate = error as Partial<KernelError>;
+  return (
+    typeof candidate.code === 'string' &&
+    Object.prototype.hasOwnProperty.call(KERNEL_TO_SDK_MAP, candidate.code) &&
+    typeof candidate.message === 'string' &&
+    typeof candidate.context === 'object' &&
+    candidate.context !== null
+  );
+}
+
 /**
  * Convert any error to a MogSdkError:
  *
  * - MogSdkError          -> return as-is
- * - KernelError          -> map via fromKernelError
- * - BridgeError          -> TRANSPORT_ERROR
- * - CapabilityError      -> AUTHORIZATION_DENIED
- * - DocumentDisposedError -> DISPOSED
+ * - KernelError/subclass -> map via fromKernelError
  * - XlsxParseError       -> IMPORT_ERROR (duck-typed)
  * - anything else        -> INTERNAL_ERROR
  */
 export function toMogSdkError(error: unknown, operation?: string): MogSdkError {
-  if (error instanceof MogSdkError) {
+  if (error instanceof MogSdkError || isMogSdkErrorLike(error)) {
     return error;
   }
 
-  // BridgeError extends KernelError, so check it first
-  if (error instanceof BridgeError) {
-    return new MogSdkError('TRANSPORT_ERROR', error.message, {
-      operation,
-      details: Object.keys(error.context).length > 0 ? error.context : undefined,
-      diagnostics: { domain: 'BRIDGE', issueCode: error.code, severity: 'error' },
-      cause: error,
-    });
-  }
-
-  // CapabilityError extends KernelError, so check before KernelError
-  if (error instanceof CapabilityError) {
-    return new MogSdkError('AUTHORIZATION_DENIED', error.message, {
-      operation,
-      details: Object.keys(error.context).length > 0 ? error.context : undefined,
-      diagnostics: { domain: 'CAP', issueCode: error.code, severity: 'error' },
-      cause: error,
-    });
-  }
-
-  // DocumentDisposedError extends KernelError, check before generic KernelError
-  if (error instanceof DocumentDisposedError) {
-    return new MogSdkError('DISPOSED', error.message, {
-      operation,
-      diagnostics: { domain: 'DOC', issueCode: 'DOC_DISPOSED', severity: 'error' },
-      cause: error,
-    });
-  }
-
-  // Generic KernelError — use the exhaustive mapping
-  if (error instanceof KernelError) {
-    const sdkError = MogSdkError.fromKernelError(error);
-    if (operation != null) {
-      // Re-create with operation attached (fromKernelError doesn't set it)
-      return new MogSdkError(sdkError.code, sdkError.message, {
-        operation,
-        details: sdkError.details,
-        diagnostics: sdkError.diagnostics,
-        cause: error,
-      });
-    }
-    return sdkError;
+  // KernelError and all subclasses — use the exhaustive mapping and preserve
+  // the complete agent-facing recovery contract.
+  if (isKernelErrorLike(error)) {
+    return MogSdkError.fromKernelError(error, operation);
   }
 
   // XlsxParseError (duck-typed to avoid cross-package import)

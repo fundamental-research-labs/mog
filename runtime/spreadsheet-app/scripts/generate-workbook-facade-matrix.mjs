@@ -39,6 +39,9 @@ const POLICY_ADMIN_INTERFACES = new Set(['WorkbookSecurity']);
 const EXPORT_NAMES = new Set(['toCSV', 'toJSON']);
 const READ_NAMES = new Set(['autoFillPreview']);
 const WRITE_NAMES = new Set(['getOrCreateSheet']);
+const METHOD_CAPABILITY_OVERRIDES = new Map([
+  ['WorksheetCellAnnotations.acceptStale', 'workbook:write'],
+]);
 const REVIEW_ID_SUPPLIED_CONDITION = {
   argumentIndex: 0,
   path: ['reviewId'],
@@ -398,6 +401,10 @@ function classify(interfaceName, methodName) {
   if (POLICY_ADMIN_INTERFACES.has(interfaceName)) {
     return { decision: 'allow', capability: 'workbook:policy-admin' };
   }
+  const capabilityOverride = METHOD_CAPABILITY_OVERRIDES.get(`${interfaceName}.${methodName}`);
+  if (capabilityOverride) {
+    return { decision: 'allow', capability: capabilityOverride };
+  }
   const versionEntry = versionInterfaceMethodEntry(interfaceName, methodName);
   if (versionEntry) {
     return { decision: 'allow', ...versionEntry };
@@ -553,6 +560,18 @@ for (const methodName of VERSION_SPEC_SUPPLEMENT_METHOD_NAMES) {
 matrix.WorkbookVersion = Object.fromEntries(
   Object.entries(matrix.WorkbookVersion).sort(([left], [right]) => left.localeCompare(right)),
 );
+
+for (const [qualifiedMethod, expectedCapability] of METHOD_CAPABILITY_OVERRIDES) {
+  const separator = qualifiedMethod.lastIndexOf('.');
+  const interfaceName = qualifiedMethod.slice(0, separator);
+  const methodName = qualifiedMethod.slice(separator + 1);
+  const entry = matrix[interfaceName]?.[methodName];
+  if (entry?.capability !== expectedCapability) {
+    throw new Error(
+      `${qualifiedMethod} must require ${expectedCapability}, got ${entry?.capability ?? 'no capability'}`,
+    );
+  }
+}
 
 function assertVersionCapabilityMatrix() {
   if (!spec.subApis.workbook.version) {

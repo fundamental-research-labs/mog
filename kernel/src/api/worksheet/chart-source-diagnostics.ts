@@ -6,6 +6,7 @@ import type {
   ChartSourceDataUpdate,
   ChartSourceRangeKind,
   ChartSourceRangeMatch,
+  ChartTarget,
   SheetId,
 } from '@mog-sdk/contracts/api';
 import type { CellRange } from '@mog-sdk/contracts/core';
@@ -20,13 +21,14 @@ import { normalizeImageExportOptions } from '@mog/charts/export';
 import type { ChartFloatingObject } from '../../bridges/compute/compute-bridge';
 import type { DocumentContext } from '../../context';
 import { chartNotFound, operationFailed } from '../../errors/api';
+import { callNativeChartMutation } from '../../errors/chart';
 import {
   chartUpdatesToInternal,
   serializedChartToChart,
 } from '../../domain/charts/chart-public-api-converters';
 import { createChartMutationOptions } from '../../domain/charts/chart-mutation-context';
 import { resolveA1ChartRange } from '../../domain/charts/chart-range-references';
-import { awaitSheetMaterialized, resolveChartIdInput } from './chart-api-helpers';
+import { requireChartTarget } from './chart-api-helpers';
 
 export interface ComparableRange {
   readonly sheetId: string;
@@ -39,11 +41,10 @@ export interface ComparableRange {
 export async function getResolvedChartSpecForWorksheetChart(
   ctx: DocumentContext,
   sheetId: SheetId,
-  chartId: string,
+  chartTarget: ChartTarget,
   options?: ImageExportOptions,
 ): Promise<ResolvedChartSpecSnapshot> {
-  await awaitSheetMaterialized(ctx, sheetId);
-  const resolvedChartId = await resolveChartIdInput(ctx, sheetId, chartId);
+  const { resolvedChartId } = await requireChartTarget(ctx, sheetId, chartTarget);
   const normalized = normalizeImageExportOptions(options);
   const snapshot = await ctx.charts.getRenderSnapshotAtSize(
     sheetId,
@@ -54,7 +55,9 @@ export async function getResolvedChartSpecForWorksheetChart(
   );
 
   if ('code' in snapshot) {
-    if (snapshot.code === 'CHART_NOT_FOUND') throw chartNotFound(chartId);
+    if (snapshot.code === 'CHART_NOT_FOUND') {
+      throw chartNotFound(chartTarget, undefined, resolvedChartId);
+    }
     throw operationFailed('describeChart', snapshot.message);
   }
 
@@ -64,20 +67,20 @@ export async function getResolvedChartSpecForWorksheetChart(
 export async function describeWorksheetChart(
   ctx: DocumentContext,
   sheetId: SheetId,
-  chartId: string,
+  chartTarget: ChartTarget,
   options?: ImageExportOptions,
 ): Promise<ChartDescription> {
-  const spec = await getResolvedChartSpecForWorksheetChart(ctx, sheetId, chartId, options);
+  const spec = await getResolvedChartSpecForWorksheetChart(ctx, sheetId, chartTarget, options);
   return describeResolvedChartSpec(spec);
 }
 
 export async function getWorksheetChartSourceData(
   ctx: DocumentContext,
   sheetId: SheetId,
-  chartId: string,
+  chartTarget: ChartTarget,
   options?: ImageExportOptions,
 ): Promise<ChartSourceData> {
-  const spec = await getResolvedChartSpecForWorksheetChart(ctx, sheetId, chartId, options);
+  const spec = await getResolvedChartSpecForWorksheetChart(ctx, sheetId, chartTarget, options);
   return spec.resolved.ranges;
 }
 
@@ -124,16 +127,10 @@ export function describeResolvedChartSpec(spec: ResolvedChartSpecSnapshot): Char
 export async function updateChartSourceData(
   ctx: DocumentContext,
   sheetId: SheetId,
-  chartId: string,
+  chartTarget: ChartTarget,
   sourceData: ChartSourceDataUpdate,
 ): Promise<void> {
-  await awaitSheetMaterialized(ctx, sheetId);
-  const resolvedChartId = await resolveChartIdInput(ctx, sheetId, chartId);
-  const raw = (await ctx.computeBridge.getChart(
-    sheetId,
-    resolvedChartId,
-  )) as ChartFloatingObject | null;
-  if (!raw) throw chartNotFound(chartId);
+  const { resolvedChartId, raw } = await requireChartTarget(ctx, sheetId, chartTarget);
 
   const chart = serializedChartToChart(raw);
   const updates: Partial<ChartConfig> = {};
@@ -157,14 +154,19 @@ export async function updateChartSourceData(
 
   const internalUpdates = { ...chartUpdatesToInternal(updates), ...identityClears };
   if (Object.keys(internalUpdates).length === 0) return;
-  await ctx.computeBridge.updateChart(
-    sheetId,
+  await callNativeChartMutation(
+    chartTarget,
+    () =>
+      ctx.computeBridge.updateChart(
+        sheetId,
+        resolvedChartId,
+        internalUpdates,
+        createChartMutationOptions(ctx, {
+          operationIdPrefix: 'charts.update',
+          sheetIds: [sheetId],
+        }),
+      ),
     resolvedChartId,
-    internalUpdates,
-    createChartMutationOptions(ctx, {
-      operationIdPrefix: 'charts.update',
-      sheetIds: [sheetId],
-    }),
   );
 }
 

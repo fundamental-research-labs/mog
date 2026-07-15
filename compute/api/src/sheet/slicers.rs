@@ -38,6 +38,17 @@ impl SheetSlicers {
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
+    /// Delete multiple slicers atomically.
+    pub fn delete_slicers(
+        &self,
+        slicer_ids: Vec<String>,
+    ) -> Result<MutationResult, ComputeApiError> {
+        let sid = self.sheet_id;
+        self.dispatch
+            .call_engine(move |e| e.delete_slicers(&sid, slicer_ids).map(|(_, r)| r))
+            .and_then(|r| r.map_err(ComputeApiError::from))
+    }
+
     /// Get all slicers on the sheet.
     pub fn get_all_slicers(&self) -> Result<Vec<StoredSlicer>, ComputeApiError> {
         let sid = self.sheet_id;
@@ -65,6 +76,22 @@ impl SheetSlicers {
         let owned_id = slicer_id.to_owned();
         self.dispatch
             .call_engine(move |e| e.toggle_slicer_item(&sid, &owned_id, value).map(|(_, r)| r))
+            .and_then(|r| r.map_err(ComputeApiError::from))
+    }
+
+    /// Replace a slicer's selected values atomically.
+    pub fn set_slicer_selection(
+        &self,
+        slicer_id: &str,
+        values: Vec<CellValue>,
+    ) -> Result<MutationResult, ComputeApiError> {
+        let sid = self.sheet_id;
+        let owned_id = slicer_id.to_owned();
+        self.dispatch
+            .call_engine(move |e| {
+                e.set_slicer_selection(&sid, &owned_id, values)
+                    .map(|(_, r)| r)
+            })
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 

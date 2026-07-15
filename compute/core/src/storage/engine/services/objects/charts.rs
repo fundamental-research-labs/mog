@@ -8,6 +8,21 @@ use domain_types::domain::floating_object::{
 };
 use value_types::ComputeError;
 
+fn chart_not_found(sheet_id: &SheetId, chart_id: &str) -> ComputeError {
+    ComputeError::ChartNotFound {
+        sheet_id: sheet_id.to_uuid_string(),
+        chart_id: chart_id.to_string(),
+    }
+}
+
+fn require_chart(
+    stores: &EngineStores,
+    sheet_id: &SheetId,
+    chart_id: &str,
+) -> Result<FloatingObject, ComputeError> {
+    get_chart(stores, sheet_id, chart_id).ok_or_else(|| chart_not_found(sheet_id, chart_id))
+}
+
 pub(in crate::storage::engine) fn create_chart(
     stores: &mut EngineStores,
     sheet_id: &SheetId,
@@ -46,6 +61,7 @@ pub(in crate::storage::engine) fn update_chart(
     chart_id: &str,
     updates: &serde_json::Value,
 ) -> Result<MutationResult, ComputeError> {
+    require_chart(stores, sheet_id, chart_id)?;
     floating_objects::update_floating_object(
         stores.storage.doc(),
         stores.storage.sheets(),
@@ -95,25 +111,23 @@ pub(in crate::storage::engine) fn delete_chart(
     sheet_id: &SheetId,
     chart_id: &str,
 ) -> Result<MutationResult, ComputeError> {
-    let pre_delete = floating_objects::get_floating_object_typed(
+    let pre_delete = require_chart(stores, sheet_id, chart_id)?;
+    let deleted = floating_objects::delete_floating_object(
         stores.storage.doc(),
         stores.storage.sheets(),
         sheet_id,
         chart_id,
     );
-    floating_objects::delete_floating_object(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        chart_id,
-    );
+    if !deleted {
+        return Err(chart_not_found(sheet_id, chart_id));
+    }
     let mut result = MutationResult::empty();
     result.floating_object_changes.push(FloatingObjectChange {
         sheet_id: sheet_id.to_uuid_string(),
         object_id: chart_id.to_string(),
         kind: FloatingObjectChangeKind::Removed,
         object_type: Some(FloatingObjectKind::Chart),
-        data: pre_delete,
+        data: Some(pre_delete),
         bounds: None,
     });
     Ok(result)
@@ -155,6 +169,7 @@ pub(in crate::storage::engine) fn bring_chart_to_front(
     sheet_id: &SheetId,
     chart_id: &str,
 ) -> Result<MutationResult, ComputeError> {
+    require_chart(stores, sheet_id, chart_id)?;
     floating_objects::bring_floating_object_to_front(
         stores.storage.doc(),
         stores.storage.sheets(),
@@ -186,6 +201,7 @@ pub(in crate::storage::engine) fn send_chart_to_back(
     sheet_id: &SheetId,
     chart_id: &str,
 ) -> Result<MutationResult, ComputeError> {
+    require_chart(stores, sheet_id, chart_id)?;
     floating_objects::send_floating_object_to_back(
         stores.storage.doc(),
         stores.storage.sheets(),
@@ -217,6 +233,7 @@ pub(in crate::storage::engine) fn bring_chart_forward(
     sheet_id: &SheetId,
     chart_id: &str,
 ) -> Result<MutationResult, ComputeError> {
+    require_chart(stores, sheet_id, chart_id)?;
     floating_objects::bring_floating_object_forward(
         stores.storage.doc(),
         stores.storage.sheets(),
@@ -248,6 +265,7 @@ pub(in crate::storage::engine) fn send_chart_backward(
     sheet_id: &SheetId,
     chart_id: &str,
 ) -> Result<MutationResult, ComputeError> {
+    require_chart(stores, sheet_id, chart_id)?;
     floating_objects::send_floating_object_backward(
         stores.storage.doc(),
         stores.storage.sheets(),
@@ -296,6 +314,7 @@ pub(in crate::storage::engine) fn link_chart_to_table(
     chart_id: &str,
     table_id: &str,
 ) -> Result<MutationResult, ComputeError> {
+    require_chart(stores, sheet_id, chart_id)?;
     let updates = serde_json::json!({ "sourceTableId": table_id });
     floating_objects::update_floating_object(
         stores.storage.doc(),
@@ -312,6 +331,7 @@ pub(in crate::storage::engine) fn unlink_chart_from_table(
     sheet_id: &SheetId,
     chart_id: &str,
 ) -> Result<MutationResult, ComputeError> {
+    require_chart(stores, sheet_id, chart_id)?;
     let updates = serde_json::json!({ "sourceTableId": null });
     floating_objects::update_floating_object(
         stores.storage.doc(),

@@ -24,12 +24,19 @@ import type {
   SlicerUpdate,
 } from '../types';
 
-/** Sub-API for slicer operations on a worksheet. */
+/**
+ * Sub-API for slicer operations on a worksheet.
+ *
+ * All `slicerId` mutation targets are stable IDs owned by this worksheet.
+ * Names are never implicit mutation targets. Resolve a name explicitly with
+ * {@link getByName}, then pass the returned slicer's `id` to the mutation.
+ */
 export interface WorksheetSlicers {
   /**
    * Create a new slicer on this worksheet.
    *
-   * @param config - Slicer configuration (table, column, position)
+   * @param config - Slicer configuration. An omitted `sheetId` is owned by this
+   * worksheet; a different explicit `sheetId` is rejected.
    * @returns Operation receipt containing the created slicer with full state
    */
   add(config: SlicerConfig): Promise<SlicerAddReceipt>;
@@ -37,7 +44,7 @@ export interface WorksheetSlicers {
   /**
    * Remove a slicer from this worksheet.
    *
-   * @param slicerId - ID of the slicer to remove
+   * @param slicerId - Stable ID of a slicer owned by this worksheet
    */
   remove(slicerId: string): Promise<SlicerRemoveReceipt>;
 
@@ -56,7 +63,7 @@ export interface WorksheetSlicers {
   /**
    * Check if a slicer exists by ID.
    *
-   * @param slicerId - ID of the slicer
+   * @param slicerId - Stable ID of a slicer owned by this worksheet
    * @returns True if the slicer exists
    */
   has(slicerId: string): Promise<boolean>;
@@ -71,7 +78,7 @@ export interface WorksheetSlicers {
   /**
    * Get a slicer by ID, including full state.
    *
-   * @param slicerId - ID of the slicer
+   * @param slicerId - Stable ID of a slicer owned by this worksheet
    * @returns Full slicer state, or null if not found
    */
   get(slicerId: string): Promise<Slicer | null>;
@@ -95,7 +102,7 @@ export interface WorksheetSlicers {
   /**
    * Get the items (values) available in a slicer.
    *
-   * @param slicerId - ID of the slicer
+   * @param slicerId - Stable ID of a slicer owned by this worksheet
    * @returns Array of slicer items with selection state
    */
   getItems(slicerId: string): Promise<SlicerItem[]>;
@@ -105,7 +112,7 @@ export interface WorksheetSlicers {
    * Throws if no item matches — use when you expect the item to exist.
    * For conditional checks, use {@link getItemOrNullObject} which returns null instead.
    *
-   * @param slicerId - ID of the slicer
+   * @param slicerId - Stable ID of a slicer owned by this worksheet
    * @param key - The value to look up (matched via string coercion)
    * @returns The matching slicer item
    * @throws KernelError if no item matches the key
@@ -116,7 +123,7 @@ export interface WorksheetSlicers {
    * Get a slicer item by its string key, or null if not found.
    * Non-throwing alternative to {@link getItem} — use for conditional checks.
    *
-   * @param slicerId - ID of the slicer
+   * @param slicerId - Stable ID of a slicer owned by this worksheet
    * @param key - The value to look up (matched via string coercion)
    * @returns The matching slicer item, or null if not found
    */
@@ -125,7 +132,7 @@ export interface WorksheetSlicers {
   /**
    * Set the selected items in a slicer, replacing any existing selection.
    *
-   * @param slicerId - ID of the slicer
+   * @param slicerId - Stable ID of a slicer owned by this worksheet
    * @param selectedItems - Array of values to select
    */
   setSelection(slicerId: string, selectedItems: CellValue[]): Promise<SlicerSelectionSetReceipt>;
@@ -133,14 +140,14 @@ export interface WorksheetSlicers {
   /**
    * Clear all selections in a slicer (show all items).
    *
-   * @param slicerId - ID of the slicer
+   * @param slicerId - Stable ID of a slicer owned by this worksheet
    */
   clearSelection(slicerId: string): Promise<SlicerSelectionClearReceipt>;
 
   /**
    * Duplicate a slicer with an optional position offset.
    *
-   * @param slicerId - ID of the slicer to duplicate
+   * @param slicerId - Stable ID of a slicer owned by this worksheet
    * @param offset - Position offset in pixels (defaults to { x: 20, y: 20 })
    * @returns Operation receipt containing the ID of the newly created slicer
    */
@@ -149,7 +156,7 @@ export interface WorksheetSlicers {
   /**
    * Update a slicer's configuration.
    *
-   * @param slicerId - ID of the slicer
+   * @param slicerId - Stable ID of a slicer owned by this worksheet
    * @param updates - Partial configuration updates
    */
   update(slicerId: string, updates: Partial<SlicerConfig>): Promise<SlicerUpdateReceipt>;
@@ -157,7 +164,7 @@ export interface WorksheetSlicers {
   /**
    * Get the enriched runtime state of a slicer.
    *
-   * @param slicerId - ID of the slicer
+   * @param slicerId - Stable ID of a slicer owned by this worksheet
    * @returns Enriched slicer state including computed items and connection status
    */
   getState(slicerId: string): Promise<SlicerState>;

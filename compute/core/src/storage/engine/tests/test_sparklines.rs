@@ -185,6 +185,36 @@ fn delete_sparkline_emits_removed_change_and_clears_patch_flag() {
 }
 
 #[test]
+fn explicit_sparkline_mutations_reject_missing_targets() {
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let sid = sheet_id();
+
+    let update_err = engine
+        .update_sparkline(&sid, "missing", SparklineUpdate::default())
+        .expect_err("missing sparkline update must fail");
+    assert!(matches!(
+        update_err,
+        value_types::ComputeError::InvalidInput { .. }
+    ));
+
+    let delete_err = engine
+        .delete_sparkline(&sid, "missing")
+        .expect_err("missing sparkline delete must fail");
+    assert!(matches!(
+        delete_err,
+        value_types::ComputeError::InvalidInput { .. }
+    ));
+
+    let group_err = engine
+        .delete_sparkline_group(&sid, "missing-group", true)
+        .expect_err("missing sparkline group delete must fail");
+    assert!(matches!(
+        group_err,
+        value_types::ComputeError::InvalidInput { .. }
+    ));
+}
+
+#[test]
 fn group_and_clear_sparkline_mutations_emit_member_changes() {
     let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();

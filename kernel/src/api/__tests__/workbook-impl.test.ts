@@ -1283,7 +1283,9 @@ describe('WorkbookImpl - Named Ranges', () => {
     (NamedRanges.getByName as jest.Mock).mockResolvedValue(undefined);
     const { wb } = await createWorkbook();
 
-    await expect(wb.names.remove('NoSuchRange')).rejects.toThrow(KernelError);
+    await expect(wb.names.remove('NoSuchRange')).rejects.toMatchObject({
+      code: 'DOMAIN_DEFINED_NAME_NOT_FOUND',
+    });
   });
 
   it('removeNamedRange() with scope resolves scope from sheet name to sheet ID', async () => {

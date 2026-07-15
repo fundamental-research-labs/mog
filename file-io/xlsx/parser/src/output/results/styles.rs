@@ -216,6 +216,8 @@ pub struct FontOutput {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub family: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub charset: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub scheme: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vert_align: Option<String>,
@@ -240,6 +242,7 @@ impl From<&FontDef> for FontOutput {
             strikethrough: f.strikethrough.unwrap_or(false),
             color: f.color.as_ref().map(ColorOutput::from),
             family: f.family,
+            charset: f.charset,
             scheme: f.scheme.map(|s| s.to_ooxml().to_string()),
             vert_align: f.vert_align.map(|v| v.to_ooxml().to_string()),
             condense: f.condense,

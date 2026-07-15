@@ -151,6 +151,10 @@ export function classifyHit({ path, line, term, heading = '' }) {
     return 'review:generated-api-identifier-or-definition';
   }
 
+  if (isGeneratedApiCompatibilityReference(normalizedPath, line)) {
+    return 'allowed:generated-api-compatibility';
+  }
+
   if (isInternalArchitectureDoc(normalizedPath)) {
     return 'review:internal-architecture-doc';
   }
@@ -246,6 +250,13 @@ function isGeneratedApiReferenceIdentifier(path, line) {
     (/"(name|signature)"\s*:/.test(line) ||
       (/"definition"\s*:/.test(line) && !line.includes('/**')) ||
       /"[^"]*(smartArt|wordArt)[^"]*"\s*:/.test(line))
+  );
+}
+
+function isGeneratedApiCompatibilityReference(path, line) {
+  return (
+    isGeneratedApiReference(path) &&
+    /\bOfficeJS(?:-compatible|\s+`?SortField`?|\s+compatibility)\b/.test(line)
   );
 }
 

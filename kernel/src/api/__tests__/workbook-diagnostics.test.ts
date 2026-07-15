@@ -479,6 +479,10 @@ describe('WorkbookDiagnosticsImpl', () => {
       },
     };
     const ctx = {
+      computeBridge: {
+        getChart: jest.fn(async () => ({ id: 'chart-1', name: 'Revenue' })),
+        getAllCharts: jest.fn(async () => [{ id: 'chart-1', name: 'Revenue' }]),
+      },
       charts: {
         getRenderSnapshotAtSize: jest.fn(async () => ({
           marks: [],
@@ -527,10 +531,26 @@ describe('WorkbookDiagnosticsImpl', () => {
         },
       }),
     );
+    await expect(
+      diagnostics.getResolvedChartSpec({
+        sheetId: 'sheet-1' as any,
+        chartTarget: 'Revenue',
+      }),
+    ).resolves.toBe(resolvedChartSpec);
+    expect(ctx.charts.getRenderSnapshotAtSize).toHaveBeenLastCalledWith(
+      'sheet-1',
+      'chart-1',
+      expect.any(Number),
+      expect.any(Number),
+      expect.any(Object),
+    );
   });
 
   it('maps chart bridge not-found diagnostics to the public chart-not-found error', async () => {
     const ctx = {
+      computeBridge: {
+        getChart: jest.fn(async () => ({ id: 'missing-chart', name: 'Missing' })),
+      },
       charts: {
         getRenderSnapshotAtSize: jest.fn(async () => ({
           code: 'CHART_NOT_FOUND',
@@ -546,6 +566,6 @@ describe('WorkbookDiagnosticsImpl', () => {
         sheetId: 'sheet-1' as any,
         chartId: 'missing-chart',
       }),
-    ).rejects.toThrow('Chart "missing-chart" not found');
+    ).rejects.toThrow('Chart target "missing-chart" not found');
   });
 });

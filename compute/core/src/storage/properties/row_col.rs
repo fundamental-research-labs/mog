@@ -2,11 +2,12 @@ use super::super::{KEY_COL_FORMATS, KEY_ROW_FORMATS, id_to_hex};
 use super::merge::{merge_formats, normalize_format_patch};
 use super::ranges::clear_col_format_ranges_in_span;
 use super::yrs::get_sheet_submap;
+use crate::border_patch::BorderPatchField;
 use crate::identity::GridIndex;
 use crate::storage::YrsStorage;
 use cell_types::{IdAllocator, SheetId};
 use compute_document::undo::ORIGIN_USER_EDIT;
-use domain_types::{CellFormat, yrs_schema};
+use domain_types::{CellBorders, CellFormat, yrs_schema};
 use value_types::ComputeError;
 use yrs::{Any, Map, MapPrelim, Origin, Out, Transact};
 
@@ -77,6 +78,72 @@ pub fn set_row_format(
         let entries = yrs_schema::cell_format::to_yrs_prelim(&merged);
         let nested: MapPrelim = entries.into_iter().collect();
         fmt_map.insert(&mut txn, &*row_id, nested);
+    }
+    Ok(())
+}
+
+/// Apply a tri-state patch to a row's stored direct format.
+pub fn patch_row_format(
+    storage: &mut YrsStorage,
+    sheet_id: &SheetId,
+    row: u32,
+    format: &CellFormat,
+    clear_fields: &[String],
+    grid_index: Option<&GridIndex>,
+) -> Result<(), ComputeError> {
+    let row_id = grid_index
+        .and_then(|gi| gi.row_id(row))
+        .map(|rid| id_to_hex(rid.as_u128()))
+        .ok_or_else(|| ComputeError::SheetNotFound {
+            sheet_id: sheet_id.to_uuid_string(),
+        })?;
+    let existing = get_row_format(storage, sheet_id, row, grid_index).unwrap_or_default();
+    let patched = super::apply_format_patch(&existing, format, clear_fields)?;
+
+    let sheets = storage.sheets_ref();
+    let mut txn = storage
+        .doc()
+        .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
+    if let Some(fmt_map) = get_sheet_submap(&txn, &sheets, sheet_id, KEY_ROW_FORMATS) {
+        fmt_map.remove(&mut txn, &row_id);
+        if patched != CellFormat::default() {
+            let entries = yrs_schema::cell_format::to_yrs_prelim(&patched);
+            let nested: MapPrelim = entries.into_iter().collect();
+            fmt_map.insert(&mut txn, &*row_id, nested);
+        }
+    }
+    Ok(())
+}
+
+/// Apply a nested border patch to a row's stored direct format.
+pub fn patch_row_borders(
+    storage: &mut YrsStorage,
+    sheet_id: &SheetId,
+    row: u32,
+    borders: &CellBorders,
+    clear_fields: &[BorderPatchField],
+    grid_index: Option<&GridIndex>,
+) -> Result<(), ComputeError> {
+    let row_id = grid_index
+        .and_then(|gi| gi.row_id(row))
+        .map(|rid| id_to_hex(rid.as_u128()))
+        .ok_or_else(|| ComputeError::SheetNotFound {
+            sheet_id: sheet_id.to_uuid_string(),
+        })?;
+    let mut patched = get_row_format(storage, sheet_id, row, grid_index).unwrap_or_default();
+    patched.borders = super::apply_borders_patch(patched.borders.as_ref(), borders, clear_fields);
+
+    let sheets = storage.sheets_ref();
+    let mut txn = storage
+        .doc()
+        .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
+    if let Some(fmt_map) = get_sheet_submap(&txn, &sheets, sheet_id, KEY_ROW_FORMATS) {
+        fmt_map.remove(&mut txn, &row_id);
+        if patched != CellFormat::default() {
+            let entries = yrs_schema::cell_format::to_yrs_prelim(&patched);
+            let nested: MapPrelim = entries.into_iter().collect();
+            fmt_map.insert(&mut txn, &*row_id, nested);
+        }
     }
     Ok(())
 }
@@ -221,6 +288,72 @@ pub fn set_col_format(
         let entries = yrs_schema::cell_format::to_yrs_prelim(&merged);
         let nested: MapPrelim = entries.into_iter().collect();
         fmt_map.insert(&mut txn, &*col_id, nested);
+    }
+    Ok(())
+}
+
+/// Apply a tri-state patch to a column's stored direct format.
+pub fn patch_col_format(
+    storage: &mut YrsStorage,
+    sheet_id: &SheetId,
+    col: u32,
+    format: &CellFormat,
+    clear_fields: &[String],
+    grid_index: Option<&GridIndex>,
+) -> Result<(), ComputeError> {
+    let col_id = grid_index
+        .and_then(|gi| gi.col_id(col))
+        .map(|cid| id_to_hex(cid.as_u128()))
+        .ok_or_else(|| ComputeError::SheetNotFound {
+            sheet_id: sheet_id.to_uuid_string(),
+        })?;
+    let existing = get_col_format(storage, sheet_id, col, grid_index).unwrap_or_default();
+    let patched = super::apply_format_patch(&existing, format, clear_fields)?;
+
+    let sheets = storage.sheets_ref();
+    let mut txn = storage
+        .doc()
+        .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
+    if let Some(fmt_map) = get_sheet_submap(&txn, &sheets, sheet_id, KEY_COL_FORMATS) {
+        fmt_map.remove(&mut txn, &col_id);
+        if patched != CellFormat::default() {
+            let entries = yrs_schema::cell_format::to_yrs_prelim(&patched);
+            let nested: MapPrelim = entries.into_iter().collect();
+            fmt_map.insert(&mut txn, &*col_id, nested);
+        }
+    }
+    Ok(())
+}
+
+/// Apply a nested border patch to a column's stored direct format.
+pub fn patch_col_borders(
+    storage: &mut YrsStorage,
+    sheet_id: &SheetId,
+    col: u32,
+    borders: &CellBorders,
+    clear_fields: &[BorderPatchField],
+    grid_index: Option<&GridIndex>,
+) -> Result<(), ComputeError> {
+    let col_id = grid_index
+        .and_then(|gi| gi.col_id(col))
+        .map(|cid| id_to_hex(cid.as_u128()))
+        .ok_or_else(|| ComputeError::SheetNotFound {
+            sheet_id: sheet_id.to_uuid_string(),
+        })?;
+    let mut patched = get_col_format(storage, sheet_id, col, grid_index).unwrap_or_default();
+    patched.borders = super::apply_borders_patch(patched.borders.as_ref(), borders, clear_fields);
+
+    let sheets = storage.sheets_ref();
+    let mut txn = storage
+        .doc()
+        .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
+    if let Some(fmt_map) = get_sheet_submap(&txn, &sheets, sheet_id, KEY_COL_FORMATS) {
+        fmt_map.remove(&mut txn, &col_id);
+        if patched != CellFormat::default() {
+            let entries = yrs_schema::cell_format::to_yrs_prelim(&patched);
+            let nested: MapPrelim = entries.into_iter().collect();
+            fmt_map.insert(&mut txn, &*col_id, nested);
+        }
     }
     Ok(())
 }

@@ -11,6 +11,7 @@
 
 import type { ActionDependencies, ActionResult } from '@mog-sdk/contracts/actions';
 import type { SheetId } from '@mog-sdk/contracts/core';
+import { sheetId } from '@mog-sdk/contracts/core';
 import type { StoreApi } from 'zustand';
 
 import type { UIState } from '../../ui-store/types';
@@ -30,6 +31,15 @@ export function getUIStore(deps: ActionDependencies): StoreApi<UIState> {
  */
 export function getActiveSheetId(deps: ActionDependencies): SheetId {
   return deps.getActiveSheetId();
+}
+
+/** Resolve grouped-sheet targets for handlers that can await the selection source. */
+export async function getAsyncTargetSheetIds(deps: ActionDependencies): Promise<SheetId[]> {
+  const selectedSheetIds = await deps.getSelectedSheetIds?.();
+  if (!selectedSheetIds?.length) {
+    return [deps.getActiveSheetId()];
+  }
+  return [...new Set(selectedSheetIds)].map(sheetId);
 }
 
 /** Return a successful handled result, optionally with receipts or other overrides. */

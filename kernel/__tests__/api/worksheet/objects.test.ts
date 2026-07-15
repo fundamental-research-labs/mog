@@ -217,13 +217,14 @@ describe('Floating object operations', () => {
       expect(count).toBe(0);
     });
 
-    it('returns partial count when some IDs do not exist', async () => {
+    it('rejects the batch before deleting when any ID does not exist', async () => {
       const objects = [makeObject('a')];
       const ctx = createMockCtx(objects);
 
-      const count = await deleteManyFloatingObjects(ctx, SHEET_ID, ['a', 'missing']);
-
-      expect(count).toBe(1);
+      await expect(
+        deleteManyFloatingObjects(ctx, SHEET_ID, ['a', 'missing']),
+      ).rejects.toMatchObject({ code: 'OBJ_NOT_FOUND' });
+      expect(ctx.computeBridge.deleteFloatingObject).not.toHaveBeenCalled();
     });
   });
 

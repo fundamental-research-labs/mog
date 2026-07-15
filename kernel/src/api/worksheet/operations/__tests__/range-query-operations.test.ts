@@ -32,6 +32,14 @@ function createMockCtx(): any {
   };
 }
 
+function deferredVoid() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
 function captureInvalidClearMode(input: unknown): KernelError {
   try {
     RangeQueryOps.validateClearApplyTo(input);
@@ -187,6 +195,30 @@ describe('clearWithMode', () => {
       1,
       captureOptions,
     );
+  });
+
+  it('does not leave later all-mode mutations in flight when an earlier mutation is pending', async () => {
+    const ctx = createMockCtx();
+    const cellClear = deferredVoid();
+    const formatClear = deferredVoid();
+    ctx.computeBridge.clearRangeByPosition.mockReturnValue(cellClear.promise);
+    ctx.computeBridge.clearFormatForRanges.mockReturnValue(formatClear.promise);
+
+    const operation = RangeQueryOps.clearWithMode(ctx, SHEET_ID, RANGE, 'all');
+
+    expect(ctx.computeBridge.clearRangeByPosition).toHaveBeenCalledTimes(1);
+    expect(ctx.computeBridge.clearFormatForRanges).not.toHaveBeenCalled();
+    expect(ctx.computeBridge.clearHyperlinksInRange).not.toHaveBeenCalled();
+
+    cellClear.resolve();
+    await Promise.resolve();
+    expect(ctx.computeBridge.clearFormatForRanges).toHaveBeenCalledTimes(1);
+    expect(ctx.computeBridge.clearHyperlinksInRange).not.toHaveBeenCalled();
+
+    formatClear.resolve();
+    await Promise.resolve();
+    expect(ctx.computeBridge.clearHyperlinksInRange).toHaveBeenCalledTimes(1);
+    await expect(operation).resolves.toEqual({ cellCount: 4 });
   });
 
   it('passes direct edit range metadata to contents clear calls', async () => {

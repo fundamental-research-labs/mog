@@ -410,6 +410,38 @@ mod tests {
     }
 
     #[test]
+    fn bridge_value_slicer_errors_pass_through_with_camel_case_fields() {
+        use bridge_types::BridgeStructuredError;
+
+        let not_found = ComputeApiError::Compute(ComputeError::SlicerNotFound {
+            sheet_id: "sheet-1".into(),
+            slicer_id: "slicer-1".into(),
+        })
+        .to_bridge_value();
+        assert_eq!(not_found["kind"], "SlicerNotFound");
+        assert_eq!(not_found["sheetId"], "sheet-1");
+        assert_eq!(not_found["slicerId"], "slicer-1");
+        assert!(not_found.get("sheet_id").is_none());
+
+        let conflict = ComputeApiError::Compute(ComputeError::SlicerIdConflict {
+            slicer_id: "slicer-1".into(),
+        })
+        .to_bridge_value();
+        assert_eq!(conflict["kind"], "SlicerIdConflict");
+        assert_eq!(conflict["slicerId"], "slicer-1");
+
+        let mismatch = ComputeApiError::Compute(ComputeError::SlicerSheetMismatch {
+            receiver_sheet_id: "sheet-1".into(),
+            requested_sheet_id: "sheet-2".into(),
+        })
+        .to_bridge_value();
+        assert_eq!(mismatch["kind"], "SlicerSheetMismatch");
+        assert_eq!(mismatch["receiverSheetId"], "sheet-1");
+        assert_eq!(mismatch["requestedSheetId"], "sheet-2");
+        assert!(mismatch.get("receiver_sheet_id").is_none());
+    }
+
+    #[test]
     fn bridge_value_invalid_address_round_trips() {
         use bridge_types::BridgeStructuredError;
         let err = ComputeApiError::InvalidAddress {

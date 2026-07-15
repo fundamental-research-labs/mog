@@ -27,7 +27,7 @@ import type { Slicer } from '../../bridges/compute/compute-types.gen';
 import type { DocumentContext } from '../../context/types';
 import * as Filters from '../sorting/filters';
 import { getTable } from '../tables/core';
-import { getSlicer, updateSlicer } from './crud';
+import { getSlicer } from './crud';
 import { storedSlicerToComputeSlicer } from './table-binding';
 
 // =============================================================================
@@ -95,22 +95,9 @@ export async function setSlicerSelection(
   if (!storedSlicer) return;
 
   if (storedSlicer.source.type === 'pivot') {
-    // Pivot slicer selection: store selectedValues on the slicer itself,
-    // then emit the event. The slicer-pivot-bridge handles the actual
-    // pivot field filter update via setPivotFieldFilter.
-    await updateSlicer(ctx, sheetId, slicerId, { selectedValues });
-
-    const now = Date.now();
-    const changeType = selectedValues.length === 0 ? 'clear' : 'select';
-    const event: SlicerSelectionChangedEvent = {
-      type: 'slicer:selectionChanged',
-      timestamp: now,
-      sheetId,
-      slicerId,
-      selectedValues,
-      changeType,
-    };
-    ctx.eventBus.emit(event);
+    // Pivot selections have no table-filter authority. Persist them natively;
+    // MutationResultHandler emits the corresponding selection event.
+    await ctx.computeBridge.setSlicerSelection(sheetId, slicerId, selectedValues);
     return;
   }
 
@@ -133,8 +120,6 @@ export async function setSlicerSelection(
   }
 
   const columnCellId = toCellId(storedSlicer.source.columnCellId);
-  const now = Date.now();
-
   if (selectedValues.length === 0) {
     // Clear filter (show all)
     await Filters.clearColumnFilter(ctx, toSheetId(table.sheetId), filter.id, columnCellId, origin);
@@ -150,16 +135,20 @@ export async function setSlicerSelection(
     );
   }
 
-  // Emit slicer selection changed event (Section 7: EventBus integration)
-  // This event triggers slicer-table-bridge to update related components
-  const changeType = selectedValues.length === 0 ? 'clear' : 'select';
+  // Table selections are owned by the table filter. Read the committed filter
+  // state back before publishing the slicer event so observers never see a
+  // selection that the filter write failed to apply.
+  const authoritativeSelection = await getSlicerSelectedValues(
+    ctx,
+    storedSlicerToComputeSlicer(storedSlicer),
+  );
   const event: SlicerSelectionChangedEvent = {
     type: 'slicer:selectionChanged',
-    timestamp: now,
+    timestamp: Date.now(),
     sheetId,
     slicerId,
-    selectedValues,
-    changeType,
+    selectedValues: authoritativeSelection,
+    changeType: authoritativeSelection.length === 0 ? 'clear' : 'select',
   };
   ctx.eventBus.emit(event);
 }

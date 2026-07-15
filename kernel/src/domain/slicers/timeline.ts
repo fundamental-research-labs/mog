@@ -5,7 +5,7 @@
  * Pure computation functions (date utilities, period generation) remain unchanged.
  *
  * Architecture:
- * - Write operations: fire-and-forget via ctx.computeBridge
+ * - Write operations: awaited so strict native failures cannot become unhandled rejections
  * - Read operations: async via ctx.computeBridge
  * - Date utilities: pure functions, no CRDT dependency
  * - Period generation: pure functions, no CRDT dependency
@@ -434,16 +434,16 @@ export function generateTimelinePeriods(
  * @param options - Optional configuration
  * @param origin - Origin of the change
  */
-export function createTimelineSlicer(
+export async function createTimelineSlicer(
   ctx: DocumentContext,
   sheetId: SheetId,
   tableId: string,
   columnCellId: CellId,
   options?: CreateSlicerOptions,
   origin: StructureChangeSource = 'user',
-): void {
+): Promise<void> {
   // Create base slicer with timeline style via CB
-  createTableSlicer(
+  await createTableSlicer(
     ctx,
     sheetId,
     tableId,
@@ -529,71 +529,69 @@ export async function getTimelinePeriods(
  * @param endDate - End date serial (inclusive)
  * @param _origin - Origin of the change (handled by Rust)
  */
-export function setTimelineSelection(
+export async function setTimelineSelection(
   ctx: DocumentContext,
   sheetId: SheetId,
   slicerId: string,
   startDate: number | undefined,
   endDate: number | undefined,
   _origin: StructureChangeSource = 'user',
-): void {
+): Promise<void> {
   // Update slicer config with timeline selection via CB
   // Timeline-specific fields — not yet in StoredSlicerUpdate typed schema.
-  void ctx.computeBridge.updateSlicerConfig(sheetId, slicerId, {
+  await ctx.computeBridge.updateSlicerConfig(sheetId, slicerId, {
     selectedStartDate: startDate,
     selectedEndDate: endDate,
   } as any);
 
   // Apply filter to underlying data
-  void (async () => {
-    const storedSlicer = await getSlicer(ctx, sheetId, slicerId);
-    if (!storedSlicer || storedSlicer.source.type !== 'table') return;
+  const storedSlicer = await getSlicer(ctx, sheetId, slicerId);
+  if (!storedSlicer || storedSlicer.source.type !== 'table') return;
 
-    const table = await getTable(ctx, storedSlicer.source.tableId);
-    if (!table) return;
+  const table = await getTable(ctx, storedSlicer.source.tableId);
+  if (!table) return;
 
-    const columnCellId = toCellId(storedSlicer.source.columnCellId);
+  const columnCellId = toCellId(storedSlicer.source.columnCellId);
 
-    let filter = await Filters.getTableFilter(ctx, toSheetId(table.sheetId), table.id);
-    if (!filter) {
-      filter = await Filters.createFilter(
-        ctx,
-        toSheetId(table.sheetId),
-        table.range,
-        'tableFilter',
-        _origin,
-        table.id,
-      );
-    }
+  let filter = await Filters.getTableFilter(ctx, toSheetId(table.sheetId), table.id);
+  if (!filter) {
+    filter = await Filters.createFilter(
+      ctx,
+      toSheetId(table.sheetId),
+      table.range,
+      'tableFilter',
+      _origin,
+      table.id,
+    );
+  }
 
-    if (startDate === undefined || endDate === undefined) {
-      await Filters.clearColumnFilter(
-        ctx,
-        toSheetId(table.sheetId),
-        filter.id,
-        columnCellId,
-        _origin,
-      );
-    } else {
-      await Filters.setColumnFilter(
-        ctx,
-        toSheetId(table.sheetId),
-        filter.id,
-        columnCellId,
-        {
-          type: 'condition',
-          conditions: [
-            {
-              operator: 'between',
-              value: startDate,
-              value2: endDate,
-            },
-          ],
-        },
-        _origin,
-      );
-    }
-  })();
+  if (startDate === undefined || endDate === undefined) {
+    await Filters.clearColumnFilter(
+      ctx,
+      toSheetId(table.sheetId),
+      filter.id,
+      columnCellId,
+      _origin,
+    );
+  } else {
+    await Filters.setColumnFilter(
+      ctx,
+      toSheetId(table.sheetId),
+      filter.id,
+      columnCellId,
+      {
+        type: 'condition',
+        conditions: [
+          {
+            operator: 'between',
+            value: startDate,
+            value2: endDate,
+          },
+        ],
+      },
+      _origin,
+    );
+  }
 }
 
 /**
@@ -607,15 +605,15 @@ export function setTimelineSelection(
  * @param level - New aggregation level
  * @param _origin - Origin of the change (handled by Rust)
  */
-export function setTimelineLevel(
+export async function setTimelineLevel(
   ctx: DocumentContext,
   sheetId: SheetId,
   slicerId: string,
   level: TimelineLevel,
   _origin: StructureChangeSource = 'user',
-): void {
+): Promise<void> {
   // Timeline-specific field — not yet in StoredSlicerUpdate typed schema.
-  void ctx.computeBridge.updateSlicerConfig(sheetId, slicerId, {
+  await ctx.computeBridge.updateSlicerConfig(sheetId, slicerId, {
     timelineLevel: level,
   } as any);
 }
@@ -628,11 +626,11 @@ export function setTimelineLevel(
  * @param slicerId - Slicer ID
  * @param origin - Origin of the change
  */
-export function clearTimelineSelection(
+export async function clearTimelineSelection(
   ctx: DocumentContext,
   sheetId: SheetId,
   slicerId: string,
   origin: StructureChangeSource = 'user',
-): void {
-  setTimelineSelection(ctx, sheetId, slicerId, undefined, undefined, origin);
+): Promise<void> {
+  await setTimelineSelection(ctx, sheetId, slicerId, undefined, undefined, origin);
 }

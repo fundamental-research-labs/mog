@@ -48,7 +48,17 @@ pub(in crate::storage::engine::viewport) fn build_viewport_render_data_inner(
     // Now intern formats into the palette (mirror borrow released above).
     let mut render_cells: Vec<ViewportRenderCell> = cells
         .into_iter()
-        .map(|cell| {
+        .map(|mut cell| {
+            // This is the final display-format boundary. Earlier cascade work
+            // resolves stored cell styles, but rich text, pivot, conditional-
+            // format, and number-format overlays are applied afterward and may
+            // introduce another authored theme reference or parallel tint.
+            // The binary palette intentionally carries only concrete colors,
+            // so enforce that contract immediately before interning.
+            domain_types::theme_color::resolve_theme_refs(
+                &mut cell.format,
+                &settings.theme_palette,
+            );
             let format_idx = palette.intern(&cell.format).unwrap_or(0);
             ViewportRenderCell {
                 row: cell.row,

@@ -315,7 +315,7 @@
         },
         "toXlsx": {
           "signature": "toXlsx(options?: WorkbookXlsxExportOptions | undefined): Promise<Uint8Array>",
-          "docstring": "Export the workbook as XLSX binary data.\n\nDefault export omits Mog-owned version metadata. Pass\n`versionMetadata: \"include\"` to write a redacted Mog sidecar with the\ncurrent version head.",
+          "docstring": "Export the workbook as XLSX binary data.\n\nDefault export omits Mog-owned version metadata. `include` writes a\nredacted sidecar when a readable version head and authority are available.",
           "usedTypes": []
         },
         "insertWorksheets": {
@@ -1408,6 +1408,11 @@
           "docstring": "Sparkline CRUD and groups",
           "usedTypes": []
         },
+        "annotations": {
+          "signature": "readonly annotations: WorksheetAnnotations;",
+          "docstring": "Review annotations anchored to cell/table content",
+          "usedTypes": []
+        },
         "comments": {
           "signature": "readonly comments: WorksheetComments;",
           "docstring": "Notes and threaded comments",
@@ -1484,7 +1489,7 @@
           "usedTypes": ["CellWriteOptions"]
         },
         "setValue": {
-          "signature": "setValue(address: string, value: CellValuePrimitive | Date, options?: Pick<CellWriteOptions, \"literal\" | \"asText\"> | undefined): Promise<void>",
+          "signature": "setValue(address: string, value: CellValuePrimitive | Date, options?: Pick<CellWriteOptions, \"literal\" | \"asText\" | \"annotation\"> | undefined): Promise<void>",
           "docstring": "Set an explicit scalar value by A1 address.\n\nUnlike {@link setCell}, this method does not accept formula intent through\nthe value string. Formula-shaped strings are rejected unless\n`options.asText` / `options.literal` is set; use {@link setFormula} for formulas.",
           "usedTypes": []
         },
@@ -1524,18 +1529,18 @@
           "usedTypes": []
         },
         "setRange": {
-          "signature": "setRange(range: string, values: (CellValuePrimitive | Date)[][]): Promise<void>",
-          "docstring": "Set a 2D array of values into a range (A1 notation).\nString values starting with \"=\" are treated as formulas.",
+          "signature": "setRange(range: string, values: WorksheetRangeValueInput[][]): Promise<void>",
+          "docstring": "Set a 2D array of values into a range (A1 notation).\nString values starting with \"=\" are treated as formulas.\nTo annotate a cell while writing, pass an entry as `{ value, annotation }`.",
           "usedTypes": []
         },
         "setFormula": {
-          "signature": "setFormula(address: string, formula: string): Promise<void>",
+          "signature": "setFormula(address: string, formula: string, options?: CellAnnotationWriteOptions | undefined): Promise<void>",
           "docstring": "Set a formula in one cell. Accepts either \"=SUM(A1:A10)\" or\n\"SUM(A1:A10)\" and stores the normalized formula with a leading \"=\".",
           "usedTypes": []
         },
         "setFormulas": {
-          "signature": "setFormulas(range: string, formulas: string[][]): Promise<void>",
-          "docstring": "Set formulas into a range, starting at the top-left cell.\nEach formula accepts either leading-\"=\" or bare expression form.",
+          "signature": "setFormulas(range: string, formulas: WorksheetRangeFormulaInput[][]): Promise<void>",
+          "docstring": "Set formulas into a range, starting at the top-left cell.\nEach formula accepts either leading-\"=\" or bare expression form.\nTo annotate a cell while writing, pass an entry as `{ formula, annotation }`.",
           "usedTypes": []
         },
         "setArrayFormula": {
@@ -1664,17 +1669,17 @@
           "usedTypes": ["Chart"]
         },
         "getChart": {
-          "signature": "getChart(chartId: string): Promise<Chart | null>",
+          "signature": "getChart(chartTarget: ChartTarget): Promise<Chart | null>",
           "docstring": "@deprecated Use `ws.charts.get(chartId)` instead.",
           "usedTypes": ["Chart"]
         },
         "updateChart": {
-          "signature": "updateChart(chartId: string, updates: Partial<ChartConfig>): Promise<ChartUpdateReceipt>",
+          "signature": "updateChart(chartTarget: ChartTarget, updates: Partial<ChartConfig>): Promise<ChartUpdateReceipt>",
           "docstring": "@deprecated Use `ws.charts.update(chartId, updates)` instead.",
           "usedTypes": []
         },
         "removeChart": {
-          "signature": "removeChart(chartId: string): Promise<ChartRemoveReceipt>",
+          "signature": "removeChart(chartTarget: ChartTarget): Promise<ChartRemoveReceipt>",
           "docstring": "@deprecated Use `ws.charts.remove(chartId)` instead.",
           "usedTypes": []
         },
@@ -1928,6 +1933,96 @@
           "docstring": "Inject the bounds reader (from the renderer's SceneGraphBoundsReader) so that\nfloating-object handles can resolve pixel bounds via `handle.getBounds()`.\n\nCalling this invalidates cached typed collections so they pick up the new reader\non their next access.",
           "usedTypes": []
         },
+        "annotations.cells.diagnostics.get": {
+          "signature": "annotations.cells.diagnostics.get(ref: WorksheetCellAnnotationRef, options?: WorksheetAnnotationDiagnosticReadOptions | undefined): Promise<WorksheetCellAnnotationRecord | null>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "annotations.cells.diagnostics.list": {
+          "signature": "annotations.cells.diagnostics.list(options?: WorksheetCellAnnotationDiagnosticListOptions | undefined): Promise<WorksheetCellAnnotationRecord[]>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "annotations.cells.set": {
+          "signature": "annotations.cells.set(ref: WorksheetCellAnnotationRef, text: string): Promise<WorksheetCellAnnotationRecord>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "annotations.cells.setMany": {
+          "signature": "annotations.cells.setMany(entries: readonly WorksheetCellAnnotationWriteEntry[]): Promise<void>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "annotations.cells.get": {
+          "signature": "annotations.cells.get(ref: WorksheetCellAnnotationRef, options?: WorksheetAnnotationReadOptions | undefined): Promise<WorksheetCellAnnotationView | null>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "annotations.cells.getText": {
+          "signature": "annotations.cells.getText(ref: WorksheetCellAnnotationRef): Promise<string | null>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "annotations.cells.list": {
+          "signature": "annotations.cells.list(options?: WorksheetCellAnnotationListOptions | undefined): Promise<WorksheetCellAnnotationView[]>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "annotations.cells.remove": {
+          "signature": "annotations.cells.remove(ref: WorksheetCellAnnotationRef): Promise<WorksheetCellAnnotationDeleteResult>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "annotations.cells.clear": {
+          "signature": "annotations.cells.clear(range?: string | CellRange | undefined): Promise<void>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "annotations.cells.acceptStale": {
+          "signature": "annotations.cells.acceptStale(ref: WorksheetCellAnnotationRef): Promise<WorksheetCellAnnotationRecord>",
+          "docstring": "Accept a stale annotation by re-anchoring it to the cell's current content.\nThis preserves the annotation text and replaces the fingerprint through the\nsame kernel-backed write path as {@link set}.",
+          "usedTypes": []
+        },
+        "annotations.setCell": {
+          "signature": "annotations.setCell(cell: string, text: string): Promise<WorksheetAnnotationRecord>",
+          "docstring": "Set or replace the annotation for a cell.\n@deprecated Use `worksheet.annotations.cells.set(...)`.\n@param - A1-style cell address\n@param - Annotation text\n@returns The stored annotation record",
+          "usedTypes": []
+        },
+        "annotations.getCell": {
+          "signature": "annotations.getCell(cell: string): Promise<WorksheetAnnotationRecord | null>",
+          "docstring": "Get the annotation for a cell.\n@deprecated Use `worksheet.annotations.cells.diagnostics.get(...)` for the\nraw record, or `worksheet.annotations.cells.get(...)` for a safe fresh-text\nview.\n@param - A1-style cell address\n@returns The annotation record, or null if none exists",
+          "usedTypes": []
+        },
+        "annotations.removeCell": {
+          "signature": "annotations.removeCell(cell: string): Promise<WorksheetAnnotationDeleteResult>",
+          "docstring": "Remove the annotation for a cell.\n@deprecated Use `worksheet.annotations.cells.remove(...)`.\n@param - A1-style cell address\n@returns Deletion status and removed record when one existed",
+          "usedTypes": []
+        },
+        "annotations.listCells": {
+          "signature": "annotations.listCells(): Promise<WorksheetAnnotationRecord[]>",
+          "docstring": "List all cell annotations on this worksheet.\n@deprecated Use `worksheet.annotations.cells.diagnostics.list(...)` for raw\nrecords, or `worksheet.annotations.cells.list(...)` for safe fresh-text\nviews.\n@returns Cell annotation records for this worksheet",
+          "usedTypes": []
+        },
+        "annotations.setTable": {
+          "signature": "annotations.setTable(tableRef: string, text: string): Promise<WorksheetAnnotationRecord>",
+          "docstring": "Set or replace the annotation for a table on this worksheet.\n@param - Table id, name, or display name\n@param - Annotation text\n@returns The stored annotation record",
+          "usedTypes": []
+        },
+        "annotations.getTable": {
+          "signature": "annotations.getTable(tableRef: string): Promise<WorksheetAnnotationRecord | null>",
+          "docstring": "Get the annotation for a table on this worksheet.\n@param - Table id, name, or display name\n@returns The annotation record, or null if none exists",
+          "usedTypes": []
+        },
+        "annotations.removeTable": {
+          "signature": "annotations.removeTable(tableRef: string): Promise<WorksheetAnnotationDeleteResult>",
+          "docstring": "Remove the annotation for a table on this worksheet.\n@param - Table id, name, or display name\n@returns Deletion status and removed record when one existed",
+          "usedTypes": []
+        },
+        "annotations.listTables": {
+          "signature": "annotations.listTables(): Promise<WorksheetAnnotationRecord[]>",
+          "docstring": "List all table annotations for tables on this worksheet.\n@returns Table annotation records scoped to this worksheet",
+          "usedTypes": []
+        },
         "bindings.list": {
           "signature": "bindings.list(): Promise<SheetDataBindingInfo[]>",
           "docstring": "List all data bindings on the sheet.\n@returns Array of binding info objects",
@@ -1984,28 +2079,33 @@
           "usedTypes": ["ChartConfig"]
         },
         "charts.get": {
-          "signature": "charts.get(chartId: string): Promise<Chart | null>",
-          "docstring": "Get a chart by ID, or null if not found.",
+          "signature": "charts.get(chartTarget: ChartTarget): Promise<Chart | null>",
+          "docstring": "Get a chart by exact ID or name, or null if not found.",
           "usedTypes": ["Chart"]
         },
         "charts.getAppModel": {
-          "signature": "charts.getAppModel(chartId: string, options?: ChartReadOptions | undefined): Promise<ChartAppModel | null>",
+          "signature": "charts.getAppModel(chartTarget: ChartTarget, options?: ChartReadOptions | undefined): Promise<ChartAppModel | null>",
           "docstring": "Get the normalized app-facing chart model used by first-party UI controls.",
           "usedTypes": []
         },
         "charts.update": {
-          "signature": "charts.update(chartId: string, updates: Partial<ChartConfig>): Promise<ChartUpdateReceipt>",
+          "signature": "charts.update(chartTarget: ChartTarget, updates: Partial<ChartConfig>): Promise<ChartUpdateReceipt>",
           "docstring": "Update a chart's configuration.",
           "usedTypes": []
         },
         "charts.remove": {
-          "signature": "charts.remove(chartId: string): Promise<ChartRemoveReceipt>",
-          "docstring": "Remove a chart by ID.",
+          "signature": "charts.remove(chartTarget: ChartTarget): Promise<ChartRemoveReceipt>",
+          "docstring": "Remove a chart by exact ID or name.",
           "usedTypes": []
         },
         "charts.list": {
           "signature": "charts.list(options?: ChartReadOptions | undefined): Promise<Chart[]>",
           "docstring": "List charts in the sheet. Pass `{ materialization: \"available\" }` for passive UI reads.",
+          "usedTypes": ["Chart"]
+        },
+        "charts.listCharts": {
+          "signature": "charts.listCharts(options?: ChartReadOptions | undefined): Promise<Chart[]>",
+          "docstring": "@deprecated Use `list()` instead. Compatibility alias for learned chart paths.",
           "usedTypes": ["Chart"]
         },
         "charts.clear": {
@@ -2014,28 +2114,28 @@
           "usedTypes": []
         },
         "charts.duplicate": {
-          "signature": "charts.duplicate(chartId: string): Promise<ChartDuplicateReceipt>",
+          "signature": "charts.duplicate(chartTarget: ChartTarget): Promise<ChartDuplicateReceipt>",
           "docstring": "Duplicate a chart, offsetting the copy by 2 rows. Returns a receipt with the copy.",
           "usedTypes": []
         },
         "charts.exportImage": {
-          "signature": "charts.exportImage(chartId: string, options?: ImageExportOptions | undefined): Promise<string>",
+          "signature": "charts.exportImage(chartTarget: ChartTarget, options?: ImageExportOptions | undefined): Promise<string>",
           "docstring": "Export a chart as an image.\n\nSupported formats are SVG, PNG, and JPEG. SVG uses the portable vector\nrenderer; PNG and JPEG require a runtime raster backend.",
           "usedTypes": []
         },
         "charts.setDataRange": {
-          "signature": "charts.setDataRange(chartId: string, range: string): Promise<void>",
+          "signature": "charts.setDataRange(chartTarget: ChartTarget, range: string): Promise<void>",
           "docstring": "Set a chart's data range (A1 notation).",
           "usedTypes": []
         },
         "charts.setType": {
-          "signature": "charts.setType(chartId: string, type: ChartType, subType?: string | undefined): Promise<void>",
+          "signature": "charts.setType(chartTarget: ChartTarget, type: ChartType, subType?: string | undefined): Promise<void>",
           "docstring": "Set a chart's type and optional sub-type.",
           "usedTypes": ["ChartType"]
         },
         "charts.has": {
-          "signature": "charts.has(chartId: string): Promise<boolean>",
-          "docstring": "Check if a chart exists by ID.",
+          "signature": "charts.has(chartTarget: ChartTarget): Promise<boolean>",
+          "docstring": "Check if a chart exists by exact ID or name.",
           "usedTypes": []
         },
         "charts.getCount": {
@@ -2049,17 +2149,17 @@
           "usedTypes": ["Chart"]
         },
         "charts.describe": {
-          "signature": "charts.describe(chartId: string, options?: ImageExportOptions | undefined): Promise<ChartDescription>",
+          "signature": "charts.describe(chartTarget: ChartTarget, options?: ImageExportOptions | undefined): Promise<ChartDescription>",
           "docstring": "Describe the chart using the same resolved spec and source data that the\nproduction chart renderer uses.",
           "usedTypes": []
         },
         "charts.getSourceData": {
-          "signature": "charts.getSourceData(chartId: string, options?: ImageExportOptions | undefined): Promise<{ dataRange: ChartRangeReferenceSnapshot | null; categoryRange: ChartRangeReferenceSnapshot | null; seriesRange: ChartRangeReferenceSnapshot | null; seriesReferences: { index: number; name?: ChartRangeReferenceSnapshot | null | undefined; values: ChartRangeReferenceSnapshot | null; categories: ChartRangeReferenceSnapshot | null; bubbleSize?: ChartRangeReferenceSnapshot | null | undefined; }[]; diagnostics: ChartRangeDiagnosticSnapshot[]; }>",
+          "signature": "charts.getSourceData(chartTarget: ChartTarget, options?: ImageExportOptions | undefined): Promise<{ dataRange: ChartRangeReferenceSnapshot | null; categoryRange: ChartRangeReferenceSnapshot | null; seriesRange: ChartRangeReferenceSnapshot | null; seriesReferences: { index: number; name?: ChartRangeReferenceSnapshot | null | undefined; values: ChartRangeReferenceSnapshot | null; categories: ChartRangeReferenceSnapshot | null; bubbleSize?: ChartRangeReferenceSnapshot | null | undefined; }[]; diagnostics: ChartRangeDiagnosticSnapshot[]; }>",
           "docstring": "Get the resolved chart source ranges and source-range diagnostics.",
           "usedTypes": []
         },
         "charts.setSourceData": {
-          "signature": "charts.setSourceData(chartId: string, sourceData: ChartSourceDataUpdate): Promise<void>",
+          "signature": "charts.setSourceData(chartTarget: ChartTarget, sourceData: ChartSourceDataUpdate): Promise<void>",
           "docstring": "Replace chart source range metadata. This does not write worksheet cell\nvalues; it changes which worksheet ranges feed the chart.",
           "usedTypes": []
         },
@@ -2074,137 +2174,137 @@
           "usedTypes": []
         },
         "charts.bringToFront": {
-          "signature": "charts.bringToFront(chartId: string): Promise<void>",
+          "signature": "charts.bringToFront(chartTarget: ChartTarget): Promise<void>",
           "docstring": "Bring a chart to the front (highest z-index).",
           "usedTypes": []
         },
         "charts.sendToBack": {
-          "signature": "charts.sendToBack(chartId: string): Promise<void>",
+          "signature": "charts.sendToBack(chartTarget: ChartTarget): Promise<void>",
           "docstring": "Send a chart to the back (lowest z-index).",
           "usedTypes": []
         },
         "charts.bringForward": {
-          "signature": "charts.bringForward(chartId: string): Promise<void>",
+          "signature": "charts.bringForward(chartTarget: ChartTarget): Promise<void>",
           "docstring": "Bring a chart forward by one layer.",
           "usedTypes": []
         },
         "charts.sendBackward": {
-          "signature": "charts.sendBackward(chartId: string): Promise<void>",
+          "signature": "charts.sendBackward(chartTarget: ChartTarget): Promise<void>",
           "docstring": "Send a chart backward by one layer.",
           "usedTypes": []
         },
         "charts.linkToTable": {
-          "signature": "charts.linkToTable(chartId: string, tableId: string): Promise<void>",
+          "signature": "charts.linkToTable(chartTarget: ChartTarget, tableId: string): Promise<void>",
           "docstring": "Link a chart to a table so it auto-updates with the table's data.",
           "usedTypes": []
         },
         "charts.unlinkFromTable": {
-          "signature": "charts.unlinkFromTable(chartId: string): Promise<void>",
+          "signature": "charts.unlinkFromTable(chartTarget: ChartTarget): Promise<void>",
           "docstring": "Unlink a chart from its source table.",
           "usedTypes": []
         },
         "charts.isLinkedToTable": {
-          "signature": "charts.isLinkedToTable(chartId: string): Promise<boolean>",
+          "signature": "charts.isLinkedToTable(chartTarget: ChartTarget): Promise<boolean>",
           "docstring": "Check whether a chart is linked to a table.",
           "usedTypes": []
         },
         "charts.addSeries": {
-          "signature": "charts.addSeries(chartId: string, config: SeriesConfig): Promise<ChartMutationReceipt>",
+          "signature": "charts.addSeries(chartTarget: ChartTarget, config: SeriesConfig): Promise<ChartMutationReceipt>",
           "docstring": "Add a data series to a chart. Returns the new series index.",
           "usedTypes": []
         },
         "charts.removeSeries": {
-          "signature": "charts.removeSeries(chartId: string, index: number): Promise<ChartMutationReceipt>",
+          "signature": "charts.removeSeries(chartTarget: ChartTarget, index: number): Promise<ChartMutationReceipt>",
           "docstring": "Remove a data series by index.",
           "usedTypes": []
         },
         "charts.getSeries": {
-          "signature": "charts.getSeries(chartId: string, index: number): Promise<SeriesConfig>",
+          "signature": "charts.getSeries(chartTarget: ChartTarget, index: number): Promise<SeriesConfig>",
           "docstring": "Get a data series by index.",
           "usedTypes": []
         },
         "charts.updateSeries": {
-          "signature": "charts.updateSeries(chartId: string, index: number, updates: Partial<SeriesConfig>): Promise<ChartMutationReceipt>",
+          "signature": "charts.updateSeries(chartTarget: ChartTarget, index: number, updates: Partial<SeriesConfig>): Promise<ChartMutationReceipt>",
           "docstring": "Update a data series at the given index.",
           "usedTypes": []
         },
         "charts.getSeriesCount": {
-          "signature": "charts.getSeriesCount(chartId: string): Promise<number>",
+          "signature": "charts.getSeriesCount(chartTarget: ChartTarget): Promise<number>",
           "docstring": "Get the number of data series in a chart.",
           "usedTypes": []
         },
         "charts.reorderSeries": {
-          "signature": "charts.reorderSeries(chartId: string, fromIndex: number, toIndex: number): Promise<ChartMutationReceipt>",
+          "signature": "charts.reorderSeries(chartTarget: ChartTarget, fromIndex: number, toIndex: number): Promise<ChartMutationReceipt>",
           "docstring": "Reorder a series from one index to another.",
           "usedTypes": []
         },
         "charts.setSeriesValues": {
-          "signature": "charts.setSeriesValues(chartId: string, index: number, range: string): Promise<ChartMutationReceipt>",
+          "signature": "charts.setSeriesValues(chartTarget: ChartTarget, index: number, range: string): Promise<ChartMutationReceipt>",
           "docstring": "Set the values range for a series (A1 notation).",
           "usedTypes": []
         },
         "charts.setSeriesCategories": {
-          "signature": "charts.setSeriesCategories(chartId: string, index: number, range: string): Promise<ChartMutationReceipt>",
+          "signature": "charts.setSeriesCategories(chartTarget: ChartTarget, index: number, range: string): Promise<ChartMutationReceipt>",
           "docstring": "Set the categories range for a series (A1 notation).",
           "usedTypes": []
         },
         "charts.getSeriesBinOptions": {
-          "signature": "charts.getSeriesBinOptions(chartId: string, seriesIndex: number): Promise<HistogramConfig | null>",
+          "signature": "charts.getSeriesBinOptions(chartTarget: ChartTarget, seriesIndex: number): Promise<HistogramConfig | null>",
           "docstring": "Get per-series histogram bin options, or null if not set (falls back to chart-level).",
           "usedTypes": []
         },
         "charts.setSeriesBinOptions": {
-          "signature": "charts.setSeriesBinOptions(chartId: string, seriesIndex: number, options: HistogramConfig): Promise<ChartMutationReceipt>",
+          "signature": "charts.setSeriesBinOptions(chartTarget: ChartTarget, seriesIndex: number, options: HistogramConfig): Promise<ChartMutationReceipt>",
           "docstring": "Set per-series histogram bin options (overrides chart-level histogram config).",
           "usedTypes": []
         },
         "charts.getSeriesBoxwhiskerOptions": {
-          "signature": "charts.getSeriesBoxwhiskerOptions(chartId: string, seriesIndex: number): Promise<BoxplotConfig | null>",
+          "signature": "charts.getSeriesBoxwhiskerOptions(chartTarget: ChartTarget, seriesIndex: number): Promise<BoxplotConfig | null>",
           "docstring": "Get per-series box/whisker options, or null if not set (falls back to chart-level).",
           "usedTypes": []
         },
         "charts.setSeriesBoxwhiskerOptions": {
-          "signature": "charts.setSeriesBoxwhiskerOptions(chartId: string, seriesIndex: number, options: BoxplotConfig): Promise<ChartMutationReceipt>",
+          "signature": "charts.setSeriesBoxwhiskerOptions(chartTarget: ChartTarget, seriesIndex: number, options: BoxplotConfig): Promise<ChartMutationReceipt>",
           "docstring": "Set per-series box/whisker options (overrides chart-level boxplot config).",
           "usedTypes": []
         },
         "charts.formatPoint": {
-          "signature": "charts.formatPoint(chartId: string, seriesIndex: number, pointIndex: number, format: { fill?: string | undefined; border?: ChartBorder | undefined; }): Promise<ChartMutationReceipt>",
+          "signature": "charts.formatPoint(chartTarget: ChartTarget, seriesIndex: number, pointIndex: number, format: { fill?: string | undefined; border?: ChartBorder | undefined; }): Promise<ChartMutationReceipt>",
           "docstring": "Format an individual data point within a series.",
           "usedTypes": []
         },
         "charts.setPointDataLabel": {
-          "signature": "charts.setPointDataLabel(chartId: string, seriesIndex: number, pointIndex: number, config: DataLabelConfig): Promise<ChartMutationReceipt>",
+          "signature": "charts.setPointDataLabel(chartTarget: ChartTarget, seriesIndex: number, pointIndex: number, config: DataLabelConfig): Promise<ChartMutationReceipt>",
           "docstring": "Set the data label configuration for an individual data point.",
           "usedTypes": []
         },
         "charts.addTrendline": {
-          "signature": "charts.addTrendline(chartId: string, seriesIndex: number, config: TrendlineConfig): Promise<ChartMutationReceipt>",
+          "signature": "charts.addTrendline(chartTarget: ChartTarget, seriesIndex: number, config: TrendlineConfig): Promise<ChartMutationReceipt>",
           "docstring": "Add a trendline to a series. Returns the new trendline index.",
           "usedTypes": []
         },
         "charts.updateTrendline": {
-          "signature": "charts.updateTrendline(chartId: string, seriesIndex: number, trendlineIndex: number, updates: Partial<TrendlineConfig>): Promise<ChartMutationReceipt>",
+          "signature": "charts.updateTrendline(chartTarget: ChartTarget, seriesIndex: number, trendlineIndex: number, updates: Partial<TrendlineConfig>): Promise<ChartMutationReceipt>",
           "docstring": "Update a trendline on a series by index.",
           "usedTypes": []
         },
         "charts.removeTrendline": {
-          "signature": "charts.removeTrendline(chartId: string, seriesIndex: number, trendlineIndex: number): Promise<ChartMutationReceipt>",
+          "signature": "charts.removeTrendline(chartTarget: ChartTarget, seriesIndex: number, trendlineIndex: number): Promise<ChartMutationReceipt>",
           "docstring": "Remove a trendline from a series by index.",
           "usedTypes": []
         },
         "charts.getTrendline": {
-          "signature": "charts.getTrendline(chartId: string, seriesIndex: number, trendlineIndex: number): Promise<TrendlineConfig | null>",
+          "signature": "charts.getTrendline(chartTarget: ChartTarget, seriesIndex: number, trendlineIndex: number): Promise<TrendlineConfig | null>",
           "docstring": "Get a trendline configuration by index, or null if not found.",
           "usedTypes": []
         },
         "charts.getTrendlineCount": {
-          "signature": "charts.getTrendlineCount(chartId: string, seriesIndex: number): Promise<number>",
+          "signature": "charts.getTrendlineCount(chartTarget: ChartTarget, seriesIndex: number): Promise<number>",
           "docstring": "Get the number of trendlines on a series.",
           "usedTypes": []
         },
         "charts.getDataTable": {
-          "signature": "charts.getDataTable(chartId: string): Promise<DataTableConfig | null>",
+          "signature": "charts.getDataTable(chartTarget: ChartTarget): Promise<DataTableConfig | null>",
           "docstring": "Get the chart's data table configuration, or null if none.",
           "usedTypes": []
         },
@@ -2214,7 +2314,7 @@
           "usedTypes": ["Chart"]
         },
         "charts.setBubbleSizes": {
-          "signature": "charts.setBubbleSizes(chartId: string, seriesIndex: number, range: string): Promise<ChartMutationReceipt>",
+          "signature": "charts.setBubbleSizes(chartTarget: ChartTarget, seriesIndex: number, range: string): Promise<ChartMutationReceipt>",
           "docstring": "Set the bubble sizes range for a series (A1 notation).",
           "usedTypes": []
         },
@@ -2229,87 +2329,87 @@
           "usedTypes": []
         },
         "charts.getAxisItem": {
-          "signature": "charts.getAxisItem(chartId: string, type: \"category\" | \"value\" | \"series\", group: \"primary\" | \"secondary\"): Promise<SingleAxisConfig | null>",
+          "signature": "charts.getAxisItem(chartTarget: ChartTarget, type: \"category\" | \"value\" | \"series\", group: \"primary\" | \"secondary\"): Promise<SingleAxisConfig | null>",
           "docstring": "Get an axis by spreadsheet special-cell typetype/group identifiers.",
           "usedTypes": []
         },
         "charts.setAxisTitle": {
-          "signature": "charts.setAxisTitle(chartId: string, axisType: ChartAxisRole, title: string): Promise<ChartMutationReceipt>",
+          "signature": "charts.setAxisTitle(chartTarget: ChartTarget, axisType: ChartAxisRole, title: string): Promise<ChartMutationReceipt>",
           "docstring": "Set axis title by semantic axis role. Title text is stored literally.",
           "usedTypes": []
         },
         "charts.setAxisVisible": {
-          "signature": "charts.setAxisVisible(chartId: string, axisRole: ChartAxisRole, visible: boolean): Promise<ChartMutationReceipt>",
+          "signature": "charts.setAxisVisible(chartTarget: ChartTarget, axisRole: ChartAxisRole, visible: boolean): Promise<ChartMutationReceipt>",
           "docstring": "Set axis visibility by semantic axis role.",
           "usedTypes": []
         },
         "charts.setLegendVisible": {
-          "signature": "charts.setLegendVisible(chartId: string, visible: boolean): Promise<ChartMutationReceipt>",
+          "signature": "charts.setLegendVisible(chartTarget: ChartTarget, visible: boolean): Promise<ChartMutationReceipt>",
           "docstring": "Set legend visibility with chart-app-model semantics.",
           "usedTypes": []
         },
         "charts.setChartTitleVisible": {
-          "signature": "charts.setChartTitleVisible(chartId: string, visible: boolean): Promise<ChartMutationReceipt>",
+          "signature": "charts.setChartTitleVisible(chartTarget: ChartTarget, visible: boolean): Promise<ChartMutationReceipt>",
           "docstring": "Set chart title visibility without requiring callers to patch raw title fields.",
           "usedTypes": []
         },
         "charts.switchSeriesOrientation": {
-          "signature": "charts.switchSeriesOrientation(chartId: string): Promise<ChartMutationReceipt>",
+          "signature": "charts.switchSeriesOrientation(chartTarget: ChartTarget): Promise<ChartMutationReceipt>",
           "docstring": "Switch source orientation when supported, otherwise return an explicit no-op/unsupported receipt.",
           "usedTypes": []
         },
         "charts.setCategoryNames": {
-          "signature": "charts.setCategoryNames(chartId: string, range: string): Promise<ChartMutationReceipt>",
+          "signature": "charts.setCategoryNames(chartTarget: ChartTarget, range: string): Promise<ChartMutationReceipt>",
           "docstring": "Set category axis labels from a cell range (A1 notation).",
           "usedTypes": []
         },
         "charts.getSeriesDimensionValues": {
-          "signature": "charts.getSeriesDimensionValues(chartId: string, seriesIndex: number, dimension: ChartSeriesDimension): Promise<(string | number)[]>",
+          "signature": "charts.getSeriesDimensionValues(chartTarget: ChartTarget, seriesIndex: number, dimension: ChartSeriesDimension): Promise<(string | number)[]>",
           "docstring": "Get computed values for a series dimension.",
           "usedTypes": []
         },
         "charts.getSeriesDimensionDataSourceString": {
-          "signature": "charts.getSeriesDimensionDataSourceString(chartId: string, seriesIndex: number, dimension: ChartSeriesDimension): Promise<string>",
+          "signature": "charts.getSeriesDimensionDataSourceString(chartTarget: ChartTarget, seriesIndex: number, dimension: ChartSeriesDimension): Promise<string>",
           "docstring": "Get the range/formula string for a series dimension.",
           "usedTypes": []
         },
         "charts.getSeriesDimensionDataSourceType": {
-          "signature": "charts.getSeriesDimensionDataSourceType(chartId: string, seriesIndex: number, dimension: ChartSeriesDimension): Promise<string>",
+          "signature": "charts.getSeriesDimensionDataSourceType(chartTarget: ChartTarget, seriesIndex: number, dimension: ChartSeriesDimension): Promise<string>",
           "docstring": "Get the data source type for a series dimension ('range' | 'literal' | 'formula').",
           "usedTypes": []
         },
         "charts.getDataLabelSubstring": {
-          "signature": "charts.getDataLabelSubstring(chartId: string, seriesIndex: number, pointIndex: number, start: number, length: number): Promise<ChartFormatString>",
+          "signature": "charts.getDataLabelSubstring(chartTarget: ChartTarget, seriesIndex: number, pointIndex: number, start: number, length: number): Promise<ChartFormatString>",
           "docstring": "Get a rich text substring from a data label.",
           "usedTypes": []
         },
         "charts.setDataLabelHeight": {
-          "signature": "charts.setDataLabelHeight(chartId: string, seriesIndex: number, pointIndex: number, value: number): Promise<ChartMutationReceipt>",
+          "signature": "charts.setDataLabelHeight(chartTarget: ChartTarget, seriesIndex: number, pointIndex: number, value: number): Promise<ChartMutationReceipt>",
           "docstring": "Set the height of a data label.",
           "usedTypes": []
         },
         "charts.setDataLabelWidth": {
-          "signature": "charts.setDataLabelWidth(chartId: string, seriesIndex: number, pointIndex: number, value: number): Promise<ChartMutationReceipt>",
+          "signature": "charts.setDataLabelWidth(chartTarget: ChartTarget, seriesIndex: number, pointIndex: number, value: number): Promise<ChartMutationReceipt>",
           "docstring": "Set the width of a data label.",
           "usedTypes": []
         },
         "charts.getDataLabelTailAnchor": {
-          "signature": "charts.getDataLabelTailAnchor(chartId: string, seriesIndex: number, pointIndex: number): Promise<{ row: number; col: number; }>",
+          "signature": "charts.getDataLabelTailAnchor(chartTarget: ChartTarget, seriesIndex: number, pointIndex: number): Promise<{ row: number; col: number; }>",
           "docstring": "Get the tail anchor point for a data label's leader line.",
           "usedTypes": []
         },
         "charts.setTitleFormula": {
-          "signature": "charts.setTitleFormula(chartId: string, formula: string): Promise<void>",
+          "signature": "charts.setTitleFormula(chartTarget: ChartTarget, formula: string): Promise<void>",
           "docstring": "Set chart title from a formula string.",
           "usedTypes": []
         },
         "charts.getTitleSubstring": {
-          "signature": "charts.getTitleSubstring(chartId: string, start: number, length: number): Promise<ChartFormatString>",
+          "signature": "charts.getTitleSubstring(chartTarget: ChartTarget, start: number, length: number): Promise<ChartFormatString>",
           "docstring": "Get a rich text substring from the chart title.",
           "usedTypes": []
         },
         "charts.activate": {
-          "signature": "charts.activate(chartId: string): Promise<ChartActivateReceipt>",
+          "signature": "charts.activate(chartTarget: ChartTarget): Promise<ChartActivateReceipt>",
           "docstring": "Activate (select + focus) a chart. Emits 'chart:selected' event and scrolls chart into view.",
           "usedTypes": []
         },
@@ -2829,39 +2929,39 @@
           "usedTypes": []
         },
         "formControls.update": {
-          "signature": "formControls.update(controlId: string, updates: Partial<Omit<FormControl, \"id\" | \"type\" | \"sheetId\">>): FormControl | undefined",
-          "docstring": "Update a control on this sheet. Returns undefined if the control is absent or on another sheet.",
+          "signature": "formControls.update(controlId: string, updates: Partial<Omit<FormControl, \"id\" | \"type\" | \"sheetId\">>): Promise<FormControl>",
+          "docstring": "Update a control on this sheet. Throws `FORM_CONTROL_NOT_FOUND` when absent.",
           "usedTypes": []
         },
         "formControls.move": {
-          "signature": "formControls.move(controlId: string, newAnchor: FormControlAnchorUpdate): Promise<FormControl | undefined>",
+          "signature": "formControls.move(controlId: string, newAnchor: FormControlAnchorUpdate): Promise<FormControl>",
           "docstring": "Move a control on this sheet to a new anchor cell.",
           "usedTypes": []
         },
         "formControls.resize": {
-          "signature": "formControls.resize(controlId: string, width: number, height: number): FormControl | undefined",
+          "signature": "formControls.resize(controlId: string, width: number, height: number): Promise<FormControl>",
           "docstring": "Resize a control on this sheet.",
           "usedTypes": []
         },
         "formControls.remove": {
-          "signature": "formControls.remove(controlId: string): boolean",
-          "docstring": "Remove a control from this sheet. Returns true when a control was removed.",
+          "signature": "formControls.remove(controlId: string): Promise<boolean>",
+          "docstring": "Remove a control from this sheet. Throws `FORM_CONTROL_NOT_FOUND` when absent.",
           "usedTypes": []
         },
         "formats.set": {
-          "signature": "formats.set(address: string, format: CellFormat): Promise<FormatChangeResult>",
+          "signature": "formats.set(address: string, format: CellFormatInput): Promise<FormatChangeResult>",
           "docstring": "Set format for a single cell.\n@param - A1-style cell address (e.g. \"A1\", \"B3\")\n@param - Format properties to apply\n@example // Bold red currency\nawait ws.formats.set('A1', { bold: true, fontColor: '#ff0000', numberFormat: '$#,##0.00' });\n// Date format\nawait ws.formats.set('B1', { numberFormat: 'YYYY-MM-DD' });\n// Header style\nawait ws.formats.set('A1', { bold: true, fontSize: 14, backgroundColor: '#4472c4', fontColor: '#ffffff' });",
-          "usedTypes": ["CellFormat"]
+          "usedTypes": []
         },
         "formats.setRange": {
-          "signature": "formats.setRange(range: string, format: CellFormat): Promise<FormatChangeResult>",
+          "signature": "formats.setRange(range: string, format: CellFormatInput): Promise<FormatChangeResult>",
           "docstring": "Set format for a contiguous range.\n@param - A1-style range string (e.g. \"A1:B2\")\n@param - Format properties to apply\n@example // Currency column\nawait ws.formats.setRange('B2:B100', { numberFormat: '$#,##0.00' });\n// Header row with borders\nawait ws.formats.setRange('A1:F1', {\n  bold: true,\n  backgroundColor: '#4472c4',\n  fontColor: '#ffffff',\n  borders: { bottom: { style: 'medium', color: '#2f5496' } }\n});",
-          "usedTypes": ["CellFormat"]
+          "usedTypes": []
         },
         "formats.setRanges": {
-          "signature": "formats.setRanges(ranges: CellRange[], format: CellFormat): Promise<void>",
+          "signature": "formats.setRanges(ranges: CellRange[], format: CellFormatInput): Promise<void>",
           "docstring": "Set format for multiple ranges, with full row/column optimization.\n@param - Array of range objects\n@param - Format properties to apply",
-          "usedTypes": ["CellFormat"]
+          "usedTypes": []
         },
         "formats.hasExplicit": {
           "signature": "formats.hasExplicit(address: string): Promise<boolean>",
@@ -2890,7 +2990,7 @@
         },
         "formats.get": {
           "signature": "formats.get(address: string): Promise<ResolvedCellFormat>",
-          "docstring": "Get the fully-resolved format of a single cell.\n\nReturns a dense CellFormat with all fields present (null for unset properties,\nnever undefined). Includes the full cascade (default → col → row → table → cell → CF)\nwith theme colors resolved to hex.\n@param - A1-style cell address\n@returns The resolved cell format (always an object, never null)",
+          "docstring": "Get the fully-resolved format of a single cell.\n\nReturns a dense transferable CellFormat with all fields present (null for\nunset properties, never undefined). Includes the effective authored cascade\n(default → col → row → table → cell), preserves symbolic theme references,\nand excludes conditional-format/display overlays.\n@param - A1-style cell address\n@returns The resolved cell format (always an object, never null)",
           "usedTypes": []
         },
         "formats.getDisplayedCellProperties": {
@@ -2934,9 +3034,9 @@
           "usedTypes": []
         },
         "formats.applyPattern": {
-          "signature": "formats.applyPattern(format: CellFormat, sourceRange: CellRange | null, targetRange: CellRange): Promise<void>",
+          "signature": "formats.applyPattern(format: CellFormatInput, sourceRange: CellRange | null, targetRange: CellRange): Promise<void>",
           "docstring": "Apply a format pattern from a source range to a target range.\n\nWhen the target range is larger than the source range, the source format\npattern is tiled to fill the target (like Excel's Format Painter with\nmulti-cell sources).\n@param - The base format to apply (used when sourceRange is null or single-cell)\n@param - Source range for pattern replication, or null for simple application\n@param - Target range to apply formats to",
-          "usedTypes": ["CellFormat"]
+          "usedTypes": []
         },
         "formats.getCellProperties": {
           "signature": "formats.getCellProperties(range: string): Promise<(CellFormat | null)[][]>",
@@ -2944,7 +3044,7 @@
           "usedTypes": ["CellFormat"]
         },
         "formats.setCellProperties": {
-          "signature": "formats.setCellProperties(updates: { row: number; col: number; format: Partial<CellFormat>; }[]): Promise<void>",
+          "signature": "formats.setCellProperties(updates: { row: number; col: number; format: Partial<CellFormatInput>; }[]): Promise<void>",
           "docstring": "Set cell formats for a batch of individual cells with heterogeneous formats.\n\nUnlike setRange (which applies one format to all cells), this allows each\ncell to receive a different format. Formats merge with existing cell formats\non a per-property basis.\n@param - Array of {row, col, format} entries",
           "usedTypes": []
         },
@@ -2954,7 +3054,7 @@
           "usedTypes": ["CellFormat"]
         },
         "formats.setRowProperties": {
-          "signature": "formats.setRowProperties(updates: Map<number, Partial<CellFormat>>): Promise<void>",
+          "signature": "formats.setRowProperties(updates: Map<number, Partial<CellFormatInput>>): Promise<void>",
           "docstring": "Set row-level formats for multiple rows.\n\nFormats merge with existing row formats on a per-property basis.\n@param - Map of row index to format properties",
           "usedTypes": []
         },
@@ -2964,7 +3064,7 @@
           "usedTypes": ["CellFormat"]
         },
         "formats.setColumnProperties": {
-          "signature": "formats.setColumnProperties(updates: Map<number, Partial<CellFormat>>): Promise<void>",
+          "signature": "formats.setColumnProperties(updates: Map<number, Partial<CellFormatInput>>): Promise<void>",
           "docstring": "Set column-level formats for multiple columns.\n\nFormats merge with existing column formats on a per-property basis.\n@param - Map of column index to format properties",
           "usedTypes": []
         },
@@ -2985,7 +3085,7 @@
         },
         "hyperlinks.remove": {
           "signature": "hyperlinks.remove(address: string): Promise<void>",
-          "docstring": "Remove a hyperlink from a cell.\n@param - A1-style cell address",
+          "docstring": "Remove a hyperlink from a cell.\n@param - A1-style cell address\n@throws `HYPERLINK_NOT_FOUND` when the cell has no hyperlink",
           "usedTypes": []
         },
         "hyperlinks.list": {
@@ -3009,43 +3109,43 @@
           "usedTypes": []
         },
         "layout.getColumnWidth": {
-          "signature": "layout.getColumnWidth(col: number): Promise<number>",
-          "docstring": "Get the width of a column in pixels.\n@param - Column index (0-based)\n@returns Column width in pixels",
+          "signature": "layout.getColumnWidth(col: WorksheetLayoutColumnSelector): Promise<number>",
+          "docstring": "Get the width of a column in pixels.\n@param - One column: a 0-based index, column name, or single-column reference\n@returns Column width in pixels",
           "usedTypes": []
         },
         "layout.setColumnWidth": {
-          "signature": "layout.setColumnWidth(col: number, widthPx: number): Promise<void>",
-          "docstring": "Set the width of a column in pixels.\n@param - Column index (0-based)\n@param - Width in pixels (must be > 0)",
+          "signature": "layout.setColumnWidth(col: WorksheetLayoutColumnSelector, widthPx: number): Promise<void>",
+          "docstring": "Set the width of a column in pixels.\n@param - Columns selected by 0-based index, column name, or whole-column reference\n@param - Width in pixels (must be > 0)",
           "usedTypes": []
         },
         "layout.getColumnWidthChars": {
-          "signature": "layout.getColumnWidthChars(col: number): Promise<number>",
-          "docstring": "Get the width of a column in character-width units\n(relative to the Normal style font's maximum digit width, matching OOXML/Excel convention).\n@param - Column index (0-based)\n@returns Column width in character-width units",
+          "signature": "layout.getColumnWidthChars(col: WorksheetLayoutColumnSelector): Promise<number>",
+          "docstring": "Get the width of a column in character-width units\n(relative to the Normal style font's maximum digit width, matching OOXML/Excel convention).\n@param - One column: a 0-based index, column name, or single-column reference\n@returns Column width in character-width units",
           "usedTypes": []
         },
         "layout.setColumnWidthChars": {
-          "signature": "layout.setColumnWidthChars(col: number, widthChars: number): Promise<void>",
-          "docstring": "Set the width of a column in character-width units\n(relative to the Normal style font's maximum digit width, matching OOXML/Excel convention).\n@param - Column index (0-based)\n@param - Width in character-width units (must be > 0)",
+          "signature": "layout.setColumnWidthChars(col: WorksheetLayoutColumnSelector, widthChars: number): Promise<void>",
+          "docstring": "Set the width of a column in character-width units\n(relative to the Normal style font's maximum digit width, matching OOXML/Excel convention).\n@param - Columns selected by 0-based index, column name, or whole-column reference\n@param - Width in character-width units (must be > 0)",
           "usedTypes": []
         },
         "layout.setColumnWidths": {
-          "signature": "layout.setColumnWidths(widths: [number, number][]): Promise<void>",
-          "docstring": "Set multiple column widths in pixels.\n@param - Array of [columnIndex, widthPx] pairs",
+          "signature": "layout.setColumnWidths(widths: [WorksheetLayoutColumnSelector, number][]): Promise<void>",
+          "docstring": "Set multiple column widths in pixels.\n@param - Array of [columnSelector, widthPx] pairs",
           "usedTypes": []
         },
         "layout.setColumnWidthsChars": {
-          "signature": "layout.setColumnWidthsChars(widths: [number, number][]): Promise<void>",
-          "docstring": "Set multiple column widths in character-width units.\n@param - Array of [columnIndex, widthChars] pairs",
+          "signature": "layout.setColumnWidthsChars(widths: [WorksheetLayoutColumnSelector, number][]): Promise<void>",
+          "docstring": "Set multiple column widths in character-width units.\n@param - Array of [columnSelector, widthChars] pairs",
           "usedTypes": []
         },
         "layout.autoFitColumn": {
-          "signature": "layout.autoFitColumn(col: number): Promise<void>",
-          "docstring": "Auto-fit a column width to its content.\n@param - Column index (0-based)",
+          "signature": "layout.autoFitColumn(col: WorksheetLayoutColumnSelector): Promise<void>",
+          "docstring": "Auto-fit selected column widths to their content.\n@param - Columns selected by 0-based index, column name, or whole-column reference",
           "usedTypes": []
         },
         "layout.autoFitColumns": {
-          "signature": "layout.autoFitColumns(cols: number[]): Promise<void>",
-          "docstring": "Auto-fit multiple columns to their content in a single batch call.\n@param - Array of column indices (0-based)",
+          "signature": "layout.autoFitColumns(cols: WorksheetLayoutColumnSelector | readonly WorksheetLayoutColumnSelector[]): Promise<void>",
+          "docstring": "Auto-fit multiple columns to their content in a single batch call.\n@param - A column selector or array of selectors",
           "usedTypes": []
         },
         "layout.autoFitRow": {
@@ -3064,13 +3164,13 @@
           "usedTypes": []
         },
         "layout.getColWidthsBatch": {
-          "signature": "layout.getColWidthsBatch(startCol: number, endCol: number): Promise<[number, number][]>",
-          "docstring": "Get column widths for a range of columns in pixels.\n@param - Start column index (0-based, inclusive)\n@param - End column index (0-based, inclusive)\n@returns Array of [colIndex, widthPx] pairs",
+          "signature": "layout.getColWidthsBatch(startCol: WorksheetLayoutColumnSelector, endCol?: WorksheetLayoutColumnSelector | undefined): Promise<[number, number][]>",
+          "docstring": "Get column widths for a range of columns in pixels.\n\nPass a single range selector such as `\"B:D\"`, or separate inclusive start\nand end selectors. Separate selectors must each identify exactly one column.\n@param - Range selector or inclusive start column\n@param - Inclusive end column when startCol is not a range selector\n@returns Array of [colIndex, widthPx] pairs",
           "usedTypes": []
         },
         "layout.getColWidthsBatchChars": {
-          "signature": "layout.getColWidthsBatchChars(startCol: number, endCol: number): Promise<[number, number][]>",
-          "docstring": "Get column widths for a range of columns in character-width units\n(relative to the Normal style font's maximum digit width, matching OOXML/Excel convention).\n@param - Start column index (0-based, inclusive)\n@param - End column index (0-based, inclusive)\n@returns Array of [colIndex, charWidth] pairs",
+          "signature": "layout.getColWidthsBatchChars(startCol: WorksheetLayoutColumnSelector, endCol?: WorksheetLayoutColumnSelector | undefined): Promise<[number, number][]>",
+          "docstring": "Get column widths for a range of columns in character-width units\n(relative to the Normal style font's maximum digit width, matching OOXML/Excel convention).\n\nPass a single range selector such as `\"B:D\"`, or separate inclusive start\nand end selectors. Separate selectors must each identify exactly one column.\n@param - Range selector or inclusive start column\n@param - Inclusive end column when startCol is not a range selector\n@returns Array of [colIndex, charWidth] pairs",
           "usedTypes": []
         },
         "layout.setRowVisible": {
@@ -3079,8 +3179,8 @@
           "usedTypes": []
         },
         "layout.setColumnVisible": {
-          "signature": "layout.setColumnVisible(col: number, visible: boolean): Promise<void>",
-          "docstring": "Set the visibility of a single column.\n@param - Column index (0-based)\n@param - True to show, false to hide",
+          "signature": "layout.setColumnVisible(col: WorksheetLayoutColumnSelector, visible: boolean): Promise<void>",
+          "docstring": "Set the visibility of selected columns.\n@param - Columns selected by 0-based index, column name, or whole-column reference\n@param - True to show, false to hide",
           "usedTypes": []
         },
         "layout.isRowHidden": {
@@ -3089,8 +3189,8 @@
           "usedTypes": []
         },
         "layout.isColumnHidden": {
-          "signature": "layout.isColumnHidden(col: number): Promise<boolean>",
-          "docstring": "Check whether a column is hidden.\n@param - Column index (0-based)\n@returns True if the column is hidden",
+          "signature": "layout.isColumnHidden(col: WorksheetLayoutColumnSelector): Promise<boolean>",
+          "docstring": "Check whether a column is hidden.\n@param - One column: a 0-based index, column name, or single-column reference\n@returns True if the column is hidden",
           "usedTypes": []
         },
         "layout.unhideRows": {
@@ -3099,8 +3199,8 @@
           "usedTypes": []
         },
         "layout.unhideColumns": {
-          "signature": "layout.unhideColumns(startCol: number, endCol: number): Promise<void>",
-          "docstring": "Unhide all columns in a range.\n@param - Start column index (0-based, inclusive)\n@param - End column index (0-based, inclusive)",
+          "signature": "layout.unhideColumns(startCol: WorksheetLayoutColumnSelector, endCol?: WorksheetLayoutColumnSelector | undefined): Promise<void>",
+          "docstring": "Unhide all columns in a range.\n\nPass a single range selector such as `\"B:D\"`, or separate inclusive start\nand end selectors. Separate selectors must each identify exactly one column.\n@param - Range selector or inclusive start column\n@param - Inclusive end column when startCol is not a range selector",
           "usedTypes": []
         },
         "layout.hideRows": {
@@ -3109,8 +3209,8 @@
           "usedTypes": []
         },
         "layout.hideColumns": {
-          "signature": "layout.hideColumns(cols: number[]): Promise<void>",
-          "docstring": "Hide multiple columns by index.\n@param - Array of column indices to hide (0-based)",
+          "signature": "layout.hideColumns(cols: WorksheetLayoutColumnSelector | readonly WorksheetLayoutColumnSelector[]): Promise<void>",
+          "docstring": "Hide multiple columns by index.\n@param - A column selector or array of selectors",
           "usedTypes": []
         },
         "layout.getHiddenRowsBitmap": {
@@ -3134,8 +3234,8 @@
           "usedTypes": []
         },
         "layout.resetColumnWidth": {
-          "signature": "layout.resetColumnWidth(col: number): Promise<void>",
-          "docstring": "Reset a column's width to the sheet default.\n@param - Column index (0-based)",
+          "signature": "layout.resetColumnWidth(col: WorksheetLayoutColumnSelector): Promise<void>",
+          "docstring": "Reset selected column widths to the sheet default.\n@param - Columns selected by 0-based index, column name, or whole-column reference",
           "usedTypes": []
         },
         "layout.getRowPosition": {
@@ -3144,8 +3244,8 @@
           "usedTypes": []
         },
         "layout.getColPosition": {
-          "signature": "layout.getColPosition(col: number): Promise<number>",
-          "docstring": "Get the pixel offset of a column's left edge from the worksheet origin.\n@param - Column index (0-based)\n@returns Pixel offset from the left of the worksheet",
+          "signature": "layout.getColPosition(col: WorksheetLayoutColumnSelector): Promise<number>",
+          "docstring": "Get the pixel offset of a column's left edge from the worksheet origin.\n@param - One column: a 0-based index, column name, or single-column reference\n@returns Pixel offset from the left of the worksheet",
           "usedTypes": []
         },
         "layout.getRangePosition": {
@@ -3745,12 +3845,12 @@
         },
         "slicers.add": {
           "signature": "slicers.add(config: SlicerConfig): Promise<SlicerAddReceipt>",
-          "docstring": "Create a new slicer on this worksheet.\n@param - Slicer configuration (table, column, position)\n@returns Operation receipt containing the created slicer with full state",
+          "docstring": "Create a new slicer on this worksheet.\n@param - Slicer configuration. An omitted `sheetId` is owned by this\nworksheet; a different explicit `sheetId` is rejected.\n@returns Operation receipt containing the created slicer with full state",
           "usedTypes": ["SlicerConfig"]
         },
         "slicers.remove": {
           "signature": "slicers.remove(slicerId: string): Promise<SlicerRemoveReceipt>",
-          "docstring": "Remove a slicer from this worksheet.\n@param - ID of the slicer to remove",
+          "docstring": "Remove a slicer from this worksheet.\n@param - Stable ID of a slicer owned by this worksheet",
           "usedTypes": []
         },
         "slicers.clear": {
@@ -3765,7 +3865,7 @@
         },
         "slicers.has": {
           "signature": "slicers.has(slicerId: string): Promise<boolean>",
-          "docstring": "Check if a slicer exists by ID.\n@param - ID of the slicer\n@returns True if the slicer exists",
+          "docstring": "Check if a slicer exists by ID.\n@param - Stable ID of a slicer owned by this worksheet\n@returns True if the slicer exists",
           "usedTypes": []
         },
         "slicers.getCount": {
@@ -3775,7 +3875,7 @@
         },
         "slicers.get": {
           "signature": "slicers.get(slicerId: string): Promise<Slicer | null>",
-          "docstring": "Get a slicer by ID, including full state.\n@param - ID of the slicer\n@returns Full slicer state, or null if not found",
+          "docstring": "Get a slicer by ID, including full state.\n@param - Stable ID of a slicer owned by this worksheet\n@returns Full slicer state, or null if not found",
           "usedTypes": []
         },
         "slicers.getByName": {
@@ -3790,42 +3890,42 @@
         },
         "slicers.getItems": {
           "signature": "slicers.getItems(slicerId: string): Promise<SlicerItem[]>",
-          "docstring": "Get the items (values) available in a slicer.\n@param - ID of the slicer\n@returns Array of slicer items with selection state",
+          "docstring": "Get the items (values) available in a slicer.\n@param - Stable ID of a slicer owned by this worksheet\n@returns Array of slicer items with selection state",
           "usedTypes": ["SlicerItem"]
         },
         "slicers.getItem": {
           "signature": "slicers.getItem(slicerId: string, key: CellValue): Promise<SlicerItem>",
-          "docstring": "Get a slicer item by its string key.\nThrows if no item matches — use when you expect the item to exist.\nFor conditional checks, use {@link getItemOrNullObject} which returns null instead.\n@param - ID of the slicer\n@param - The value to look up (matched via string coercion)\n@returns The matching slicer item\n@throws KernelError if no item matches the key",
+          "docstring": "Get a slicer item by its string key.\nThrows if no item matches — use when you expect the item to exist.\nFor conditional checks, use {@link getItemOrNullObject} which returns null instead.\n@param - Stable ID of a slicer owned by this worksheet\n@param - The value to look up (matched via string coercion)\n@returns The matching slicer item\n@throws KernelError if no item matches the key",
           "usedTypes": ["SlicerItem"]
         },
         "slicers.getItemOrNullObject": {
           "signature": "slicers.getItemOrNullObject(slicerId: string, key: CellValue): Promise<SlicerItem | null>",
-          "docstring": "Get a slicer item by its string key, or null if not found.\nNon-throwing alternative to {@link getItem} — use for conditional checks.\n@param - ID of the slicer\n@param - The value to look up (matched via string coercion)\n@returns The matching slicer item, or null if not found",
+          "docstring": "Get a slicer item by its string key, or null if not found.\nNon-throwing alternative to {@link getItem} — use for conditional checks.\n@param - Stable ID of a slicer owned by this worksheet\n@param - The value to look up (matched via string coercion)\n@returns The matching slicer item, or null if not found",
           "usedTypes": ["SlicerItem"]
         },
         "slicers.setSelection": {
           "signature": "slicers.setSelection(slicerId: string, selectedItems: CellValue[]): Promise<SlicerSelectionSetReceipt>",
-          "docstring": "Set the selected items in a slicer, replacing any existing selection.\n@param - ID of the slicer\n@param - Array of values to select",
+          "docstring": "Set the selected items in a slicer, replacing any existing selection.\n@param - Stable ID of a slicer owned by this worksheet\n@param - Array of values to select",
           "usedTypes": []
         },
         "slicers.clearSelection": {
           "signature": "slicers.clearSelection(slicerId: string): Promise<SlicerSelectionClearReceipt>",
-          "docstring": "Clear all selections in a slicer (show all items).\n@param - ID of the slicer",
+          "docstring": "Clear all selections in a slicer (show all items).\n@param - Stable ID of a slicer owned by this worksheet",
           "usedTypes": []
         },
         "slicers.duplicate": {
           "signature": "slicers.duplicate(slicerId: string, offset?: { x?: number | undefined; y?: number | undefined; } | undefined): Promise<SlicerDuplicateReceipt>",
-          "docstring": "Duplicate a slicer with an optional position offset.\n@param - ID of the slicer to duplicate\n@param - Position offset in pixels (defaults to { x: 20, y: 20 })\n@returns Operation receipt containing the ID of the newly created slicer",
+          "docstring": "Duplicate a slicer with an optional position offset.\n@param - Stable ID of a slicer owned by this worksheet\n@param - Position offset in pixels (defaults to { x: 20, y: 20 })\n@returns Operation receipt containing the ID of the newly created slicer",
           "usedTypes": []
         },
         "slicers.update": {
           "signature": "slicers.update(slicerId: string, updates: Partial<SlicerConfig>): Promise<SlicerUpdateReceipt>",
-          "docstring": "Update a slicer's configuration.\n@param - ID of the slicer\n@param - Partial configuration updates",
+          "docstring": "Update a slicer's configuration.\n@param - Stable ID of a slicer owned by this worksheet\n@param - Partial configuration updates",
           "usedTypes": []
         },
         "slicers.getState": {
           "signature": "slicers.getState(slicerId: string): Promise<SlicerState>",
-          "docstring": "Get the enriched runtime state of a slicer.\n@param - ID of the slicer\n@returns Enriched slicer state including computed items and connection status",
+          "docstring": "Get the enriched runtime state of a slicer.\n@param - Stable ID of a slicer owned by this worksheet\n@returns Enriched slicer state including computed items and connection status",
           "usedTypes": ["SlicerState"]
         },
         "sparklines.add": {
@@ -3865,22 +3965,22 @@
         },
         "sparklines.update": {
           "signature": "sparklines.update(sparklineId: string, updates: Partial<Sparkline>): Promise<void>",
-          "docstring": "Update a sparkline's settings.\n@param - Sparkline identifier\n@param - Partial sparkline properties to update",
+          "docstring": "Update a sparkline's settings.\n@param - Sparkline identifier\n@param - Partial sparkline properties to update\n@throws `SPARKLINE_NOT_FOUND` when the ID is absent from this worksheet",
           "usedTypes": []
         },
         "sparklines.updateGroup": {
           "signature": "sparklines.updateGroup(groupId: string, updates: Partial<SparklineGroup>): Promise<void>",
-          "docstring": "Update a sparkline group's settings (applies to all members).\n@param - Group identifier\n@param - Partial group properties to update",
+          "docstring": "Update a sparkline group's settings (applies to all members).\n@param - Group identifier\n@param - Partial group properties to update\n@throws `SPARKLINE_GROUP_NOT_FOUND` when the group is absent",
           "usedTypes": []
         },
         "sparklines.remove": {
           "signature": "sparklines.remove(sparklineId: string): Promise<void>",
-          "docstring": "Remove a sparkline.\n@param - Sparkline identifier",
+          "docstring": "Remove a sparkline.\n@param - Sparkline identifier\n@throws `SPARKLINE_NOT_FOUND` when the ID is absent",
           "usedTypes": []
         },
         "sparklines.removeGroup": {
           "signature": "sparklines.removeGroup(groupId: string): Promise<void>",
-          "docstring": "Remove a sparkline group and all its member sparklines.\n@param - Group identifier",
+          "docstring": "Remove a sparkline group and all its member sparklines.\n@param - Group identifier\n@throws `SPARKLINE_GROUP_NOT_FOUND` when the group is absent",
           "usedTypes": []
         },
         "sparklines.clearInRange": {
@@ -3900,17 +4000,17 @@
         },
         "sparklines.addToGroup": {
           "signature": "sparklines.addToGroup(sparklineId: string, groupId: string): Promise<void>",
-          "docstring": "Add a sparkline to a group.\n@param - Sparkline identifier\n@param - Group identifier",
+          "docstring": "Add a sparkline to a group.\n@param - Sparkline identifier\n@param - Group identifier\n@throws `SPARKLINE_NOT_FOUND` or `SPARKLINE_GROUP_NOT_FOUND` for stale IDs",
           "usedTypes": []
         },
         "sparklines.removeFromGroup": {
           "signature": "sparklines.removeFromGroup(sparklineId: string): Promise<void>",
-          "docstring": "Remove a sparkline from its group (becomes standalone).\n@param - Sparkline identifier",
+          "docstring": "Remove a sparkline from its group (becomes standalone).\n@param - Sparkline identifier\n@throws `SPARKLINE_NOT_FOUND` when the ID is absent; `SPARKLINE_GROUP_NOT_FOUND` for dangling membership",
           "usedTypes": []
         },
         "sparklines.ungroupAll": {
           "signature": "sparklines.ungroupAll(groupId: string): Promise<string[]>",
-          "docstring": "Ungroup all sparklines in a group (members become standalone).\n@param - Group identifier\n@returns IDs of sparklines that were ungrouped",
+          "docstring": "Ungroup all sparklines in a group (members become standalone).\n@param - Group identifier\n@returns IDs of sparklines that were ungrouped\n@throws `SPARKLINE_GROUP_NOT_FOUND` when the group is absent",
           "usedTypes": []
         },
         "sparklines.has": {
@@ -4000,7 +4100,7 @@
         },
         "tables.add": {
           "signature": "tables.add(range: string | CellRange, options?: TableOptions | undefined): Promise<TableAddReceipt>",
-          "docstring": "Create a new table from a cell range.\n@param - A1-style range string (e.g. \"A1:D10\") or CellRange object\n@param - Optional table creation settings (name, headers, style)\n@returns A receipt containing the created table information.",
+          "docstring": "Create a new table from a cell range.\n@param - A1-style range string (e.g. \"A1:D10\") or CellRange object\n@param - Optional table creation settings (name, headers, style). A name must start\nwith a letter or underscore, contain only letters, digits, and underscores, and must not\nparse as a cell reference such as A1, T1, or Q3.\n@returns A receipt containing the created table information.",
           "usedTypes": ["TableOptions"]
         },
         "tables.get": {
@@ -4424,7 +4524,7 @@
   "types": {
     "CellFormat": {
       "name": "CellFormat",
-      "definition": "{\n  /** Spreadsheet number format code string.\n\nCommon format codes:\n- Currency:    '$#,##0.00'\n- Accounting:  '_($* #,##0.00_);_($* (#,##0.00);_($* \"-\"??_);_(@_)'\n- Percentage:  '0.00%'\n- Date:        'M/D/YYYY', 'YYYY-MM-DD', 'MMM D, YYYY'\n- Time:        'h:mm AM/PM', 'HH:mm:ss'\n- Number:      '#,##0.00', '0.00'\n- Scientific:  '0.00E+00'\n- Text:        '@'\n- Fraction:    '# ?/?'\n\nSee the `formatPresets` section in api-spec.json for the full catalog\nof 85+ pre-defined format codes with examples.\n@example // Currency\n{ numberFormat: '$#,##0.00' }\n// Percentage with 1 decimal\n{ numberFormat: '0.0%' }\n// ISO date\n{ numberFormat: 'YYYY-MM-DD' } */\n  numberFormat?: string | undefined;\n  /** Number format category hint. Auto-detected from numberFormat when not set.\nValid values: 'general' | 'number' | 'currency' | 'accounting' | 'date' |\n             'time' | 'percentage' | 'fraction' | 'scientific' | 'text' |\n             'special' | 'custom' */\n  numberFormatType?: NumberFormatType | undefined;\n  fontFamily?: string | undefined;\n  fontSize?: number | undefined;\n  /** Theme font reference for \"+Headings\" / \"+Body\" workbook theme fonts.\n\nWhen set, the cell uses the theme's majorFont (headings) or minorFont (body)\ninstead of fontFamily. Theme fonts are resolved at render time, allowing cells\nto automatically update when the workbook theme changes.\n\nBehavior:\n- 'major': Uses theme.fonts.majorFont\n- 'minor': Uses theme.fonts.minorFont\n- undefined: Uses fontFamily property (or default font if not set)\n\nWhen fontTheme is set, fontFamily is ignored for rendering but may still be\nstored for fallback purposes. This matches Excel's behavior where \"+Headings\"\ncells can have a fontFamily that's used when the theme is unavailable.\n@see in theme.ts for resolution\n@see for theme font pair definition */\n  fontTheme?: \"major\" | \"minor\" | undefined;\n  /** Font color. Can be:\n- Absolute hex: '#4472c4' or '#ff0000'\n- Theme reference: 'theme:accent1' (uses current theme's accent1 color)\n- Theme with tint: 'theme:accent1:0.4' (40% lighter) or 'theme:accent1:-0.25' (25% darker)\n\nTheme references are resolved at render time via resolveThemeColors().\nThis enables cells to automatically update when the workbook theme changes.\n@see in theme.ts for resolution\n@see for valid slot names (dark1, light1, accent1-6, etc.) */\n  fontColor?: string | undefined;\n  /** Font color tint modifier (-1.0 to +1.0). Applied on top of fontColor. */\n  fontColorTint?: number | undefined;\n  bold?: boolean | undefined;\n  italic?: boolean | undefined;\n  /** Underline type. Excel supports 4 underline styles:\n- 'none': No underline (default)\n- 'single': Standard underline under all characters\n- 'double': Two parallel lines under all characters\n- 'singleAccounting': Underline under text only (not spaces), for column alignment\n- 'doubleAccounting': Double underline under text only (not spaces), for column alignment */\n  underlineType?: \"none\" | \"single\" | \"double\" | \"singleAccounting\" | \"doubleAccounting\" | undefined;\n  strikethrough?: boolean | undefined;\n  /** Superscript text (vertAlign = 'superscript' in Excel).\nText is rendered smaller and raised above the baseline. */\n  superscript?: boolean | undefined;\n  /** Subscript text (vertAlign = 'subscript' in Excel).\nText is rendered smaller and lowered below the baseline. */\n  subscript?: boolean | undefined;\n  /** Font outline effect.\nDraws only the outline of each character (hollow text).\nRare in modern spreadsheets but supported by Excel. */\n  fontOutline?: boolean | undefined;\n  /** Font shadow effect.\nAdds a shadow behind the text.\nRare in modern spreadsheets but supported by Excel. */\n  fontShadow?: boolean | undefined;\n  /** Horizontal text alignment.\n- 'general': Context-based (left for text, right for numbers) - Excel default\n- 'left': Left-align text\n- 'center': Center text\n- 'right': Right-align text\n- 'fill': Repeat content to fill cell width\n- 'justify': Justify text (distribute evenly)\n- 'centerContinuous': Center across selection without merging\n- 'distributed': Distribute text evenly with indent support */\n  horizontalAlign?: \"left\" | \"right\" | \"general\" | \"center\" | \"fill\" | \"justify\" | \"centerContinuous\" | \"distributed\" | undefined;\n  /** Vertical text alignment. The TypeScript/API contract uses `middle`\nfor centered vertical alignment.\n- 'top': Align to top of cell\n- 'middle': Center vertically\n- 'bottom': Align to bottom of cell - Excel default\n- 'justify': Justify vertically (distribute lines evenly)\n- 'distributed': Distribute text evenly with vertical spacing */\n  verticalAlign?: \"bottom\" | \"justify\" | \"distributed\" | \"top\" | \"middle\" | undefined;\n  wrapText?: boolean | undefined;\n  /** Text rotation angle in degrees.\n- 0-90: Counter-clockwise rotation\n- 91-180: Clockwise rotation (180 - value)\n- 255: Vertical text (stacked characters, read top-to-bottom) */\n  textRotation?: number | undefined;\n  /** Indent level (0-15).\nEach level adds approximately 8 pixels of indent from the cell edge.\nWorks with left and right horizontal alignment. */\n  indent?: number | undefined;\n  /** Shrink text to fit cell width.\nReduces font size to fit all text within the cell width.\nMutually exclusive with wrapText in Excel behavior. */\n  shrinkToFit?: boolean | undefined;\n  /** Text reading order for bidirectional text support.\n- 'context': Determined by first character with strong directionality\n- 'ltr': Left-to-right (forced)\n- 'rtl': Right-to-left (forced) */\n  readingOrder?: \"context\" | \"ltr\" | \"rtl\" | undefined;\n  /** Auto-indent flag (ECMA-376 CT_CellAlignment/@autoIndent). */\n  autoIndent?: boolean | undefined;\n  /** Background color. Can be:\n- Absolute hex: '#ffffff' or '#c6efce'\n- Theme reference: 'theme:accent1' (uses current theme's accent1 color)\n- Theme with tint: 'theme:accent1:0.4' (40% lighter) or 'theme:accent1:-0.25' (25% darker)\n\nTheme references are resolved at render time via resolveThemeColors().\nThis enables cells to automatically update when the workbook theme changes.\n\nFor solid fills, this is the only color needed.\nFor pattern fills, this is the background color behind the pattern.\n@see in theme.ts for resolution\n@see for valid slot names (dark1, light1, accent1-6, etc.) */\n  backgroundColor?: string | undefined;\n  /** Background color tint modifier (-1.0 to +1.0). Applied on top of backgroundColor. */\n  backgroundColorTint?: number | undefined;\n  /** Pattern fill type.\nXLSX supports 18 pattern types for cell backgrounds.\nWhen set (and not 'none' or 'solid'), the cell uses a pattern fill. */\n  patternType?: PatternType | undefined;\n  /** Pattern foreground color.\nThe color of the pattern itself (dots, lines, etc.).\nOnly used when patternType is set to a non-solid pattern. */\n  patternForegroundColor?: string | undefined;\n  /** Pattern foreground color tint modifier (-1.0 to +1.0). */\n  patternForegroundColorTint?: number | undefined;\n  /** Gradient fill configuration.\nWhen set, overrides backgroundColor and pattern fill.\nExcel supports linear and path (radial) gradients. */\n  gradientFill?: GradientFill | undefined;\n  /** Cell borders (top, right, bottom, left, diagonal) */\n  borders?: CellBorders | undefined;\n  /** Cell is locked when sheet protection is enabled.\nDefault is true in Excel (all cells locked by default).\nOnly effective when the sheet's isProtected flag is true. */\n  locked?: boolean | undefined;\n  /** Formula is hidden when sheet protection is enabled.\nWhen true, the cell's formula is not shown in the formula bar.\nThe computed value is still displayed in the cell.\nOnly effective when the sheet's isProtected flag is true. */\n  hidden?: boolean | undefined;\n  /** Cell value is forced to text mode (apostrophe prefix).\nWhen true:\n- Raw value includes the leading apostrophe\n- Display value strips the apostrophe\n- Formula bar shows the apostrophe\n- Value is NOT coerced to date/number/etc.\n\nSet when user types ' as first character.\nFollows cell on sort/move (keyed by CellId, Cell Identity Model). */\n  forcedTextMode?: boolean | undefined;\n  /** Arbitrary extension data for future features.\nUse namespaced keys: \"myfeature.mykey\"\nExample: { ignoreError: true } to suppress error indicators. */\n  extensions?: Record<string, unknown> | undefined;\n}",
+      "definition": "{\n  /** Spreadsheet number format code string.\n\nCommon format codes:\n- Currency:    '$#,##0.00'\n- Accounting:  '_($* #,##0.00_);_($* (#,##0.00);_($* \"-\"??_);_(@_)'\n- Percentage:  '0.00%'\n- Date:        'M/D/YYYY', 'YYYY-MM-DD', 'MMM D, YYYY'\n- Time:        'h:mm AM/PM', 'HH:mm:ss'\n- Number:      '#,##0.00', '0.00'\n- Scientific:  '0.00E+00'\n- Text:        '@'\n- Fraction:    '# ?/?'\n\nSee the `formatPresets` section in api-spec.json for the full catalog\nof 85+ pre-defined format codes with examples.\n@example // Currency\n{ numberFormat: '$#,##0.00' }\n// Percentage with 1 decimal\n{ numberFormat: '0.0%' }\n// ISO date\n{ numberFormat: 'YYYY-MM-DD' } */\n  numberFormat?: string | undefined;\n  /** Derived number-format category. This is projected from `numberFormat` on\nreads and validated (but not independently persisted) on writes. */\n  numberFormatType?: NumberFormatType | undefined;\n  fontFamily?: string | undefined;\n  fontSize?: number | undefined;\n  /** Theme font reference for \"+Headings\" / \"+Body\" workbook theme fonts.\n\nWhen set, the cell uses the theme's majorFont (headings) or minorFont (body)\ninstead of fontFamily. Theme fonts are resolved at render time, allowing cells\nto automatically update when the workbook theme changes.\n\nBehavior:\n- 'major': Uses theme.fonts.majorFont\n- 'minor': Uses theme.fonts.minorFont\n- undefined: Uses fontFamily property (or default font if not set)\n\nWhen fontTheme is set, fontFamily is ignored for rendering but may still be\nstored for fallback purposes. This matches Excel's behavior where \"+Headings\"\ncells can have a fontFamily that's used when the theme is unavailable.\n@see in theme.ts for resolution\n@see for theme font pair definition */\n  fontTheme?: \"major\" | \"minor\" | undefined;\n  /** OOXML font character-set identifier, preserved for XLSX fidelity. */\n  fontCharset?: number | undefined;\n  /** OOXML font pitch/family classification, preserved for XLSX fidelity. */\n  fontFamilyType?: number | undefined;\n  /** Font color. Can be:\n- Absolute hex: '#4472c4' or '#ff0000'\n- Theme reference: 'theme:accent1' (uses current theme's accent1 color)\n- Theme with tint: 'theme:accent1:0.4' (40% lighter) or 'theme:accent1:-0.25' (25% darker)\n\nTheme references are resolved at render time via resolveThemeColors().\nThis enables cells to automatically update when the workbook theme changes.\n@see in theme.ts for resolution\n@see for valid slot names (dark1, light1, accent1-6, etc.) */\n  fontColor?: string | undefined;\n  /** Font color tint modifier (-1.0 to +1.0). Applied on top of fontColor. */\n  fontColorTint?: number | undefined;\n  bold?: boolean | undefined;\n  italic?: boolean | undefined;\n  /** Underline type. Excel supports 4 underline styles:\n- 'none': No underline (default)\n- 'single': Standard underline under all characters\n- 'double': Two parallel lines under all characters\n- 'singleAccounting': Underline under text only (not spaces), for column alignment\n- 'doubleAccounting': Double underline under text only (not spaces), for column alignment */\n  underlineType?: \"none\" | \"single\" | \"double\" | \"singleAccounting\" | \"doubleAccounting\" | undefined;\n  strikethrough?: boolean | undefined;\n  /** Superscript text (vertAlign = 'superscript' in Excel).\nText is rendered smaller and raised above the baseline. */\n  superscript?: boolean | undefined;\n  /** Subscript text (vertAlign = 'subscript' in Excel).\nText is rendered smaller and lowered below the baseline. */\n  subscript?: boolean | undefined;\n  /** Font outline effect.\nDraws only the outline of each character (hollow text).\nRare in modern spreadsheets but supported by Excel. */\n  fontOutline?: boolean | undefined;\n  /** Font shadow effect.\nAdds a shadow behind the text.\nRare in modern spreadsheets but supported by Excel. */\n  fontShadow?: boolean | undefined;\n  /** Horizontal text alignment.\n- 'general': Context-based (left for text, right for numbers) - Excel default\n- 'left': Left-align text\n- 'center': Center text\n- 'right': Right-align text\n- 'fill': Repeat content to fill cell width\n- 'justify': Justify text (distribute evenly)\n- 'centerContinuous': Center across selection without merging\n- 'distributed': Distribute text evenly with indent support */\n  horizontalAlign?: \"left\" | \"right\" | \"general\" | \"center\" | \"fill\" | \"justify\" | \"centerContinuous\" | \"distributed\" | undefined;\n  /** Vertical text alignment. The TypeScript/API contract uses `middle`\nfor centered vertical alignment.\n- 'top': Align to top of cell\n- 'middle': Center vertically\n- 'bottom': Align to bottom of cell - Excel default\n- 'justify': Justify vertically (distribute lines evenly)\n- 'distributed': Distribute text evenly with vertical spacing */\n  verticalAlign?: \"bottom\" | \"justify\" | \"distributed\" | \"top\" | \"middle\" | undefined;\n  wrapText?: boolean | undefined;\n  /** Text rotation angle in degrees.\n- 0-90: Counter-clockwise rotation\n- 91-180: Clockwise rotation (180 - value)\n- 255: Vertical text (stacked characters, read top-to-bottom) */\n  textRotation?: number | undefined;\n  /** Indent level (0-15).\nEach level adds approximately 8 pixels of indent from the cell edge.\nWorks with left and right horizontal alignment. */\n  indent?: number | undefined;\n  /** Shrink text to fit cell width.\nReduces font size to fit all text within the cell width.\nMutually exclusive with wrapText in Excel behavior. */\n  shrinkToFit?: boolean | undefined;\n  /** Text reading order for bidirectional text support.\n- 'context': Determined by first character with strong directionality\n- 'ltr': Left-to-right (forced)\n- 'rtl': Right-to-left (forced) */\n  readingOrder?: \"context\" | \"ltr\" | \"rtl\" | undefined;\n  /** Auto-indent flag (ECMA-376 CT_CellAlignment/@autoIndent). */\n  autoIndent?: boolean | undefined;\n  /** Background color. Can be:\n- Absolute hex: '#ffffff' or '#c6efce'\n- Theme reference: 'theme:accent1' (uses current theme's accent1 color)\n- Theme with tint: 'theme:accent1:0.4' (40% lighter) or 'theme:accent1:-0.25' (25% darker)\n\nTheme references are resolved at render time via resolveThemeColors().\nThis enables cells to automatically update when the workbook theme changes.\n\nFor solid fills, this is the only color needed.\nFor pattern fills, this is the background color behind the pattern.\n@see in theme.ts for resolution\n@see for valid slot names (dark1, light1, accent1-6, etc.) */\n  backgroundColor?: string | undefined;\n  /** Background color tint modifier (-1.0 to +1.0). Applied on top of backgroundColor. */\n  backgroundColorTint?: number | undefined;\n  /** Pattern fill type.\nXLSX supports 18 pattern types for cell backgrounds.\nWhen set (and not 'none' or 'solid'), the cell uses a pattern fill. */\n  patternType?: PatternType | undefined;\n  /** Pattern foreground color.\nThe color of the pattern itself (dots, lines, etc.).\nOnly used when patternType is set to a non-solid pattern. */\n  patternForegroundColor?: string | undefined;\n  /** Pattern foreground color tint modifier (-1.0 to +1.0). */\n  patternForegroundColorTint?: number | undefined;\n  /** Gradient fill configuration.\nWhen set, overrides backgroundColor and pattern fill.\nExcel supports linear and path (radial) gradients. */\n  gradientFill?: GradientFill | undefined;\n  /** Cell borders (top, right, bottom, left, diagonal) */\n  borders?: CellBorders | undefined;\n  /** Cell is locked when sheet protection is enabled.\nDefault is true in Excel (all cells locked by default).\nOnly effective when the sheet's isProtected flag is true. */\n  locked?: boolean | undefined;\n  /** Formula is hidden when sheet protection is enabled.\nWhen true, the cell's formula is not shown in the formula bar.\nThe computed value is still displayed in the cell.\nOnly effective when the sheet's isProtected flag is true. */\n  hidden?: boolean | undefined;\n  /** OOXML pivot-button style flag, preserved for XLSX fidelity. */\n  pivotButton?: boolean | undefined;\n  /** Cell value is forced to text mode (apostrophe prefix).\nWhen true:\n- Raw value includes the leading apostrophe\n- Display value strips the apostrophe\n- Formula bar shows the apostrophe\n- Value is NOT coerced to date/number/etc.\n\nSet when user types ' as first character.\nFollows cell on sort/move (keyed by CellId, Cell Identity Model). */\n  forcedTextMode?: boolean | undefined;\n  /** Arbitrary extension data for future features.\nUse namespaced keys: \"myfeature.mykey\"\nExample: { ignoreError: true } to suppress error indicators. */\n  extensions?: Record<string, unknown> | undefined;\n}",
       "docstring": "Cell formatting options\n\nThis interface defines the Excel/OOXML format properties that can be applied to cells.\nThe implementation status of each property is tracked in format-registry.ts.\n@see in format-registry.ts for implementation status"
     },
     "CellBorders": {
@@ -4479,13 +4579,13 @@
     },
     "SortOptions": {
       "name": "SortOptions",
-      "definition": "{\n  /** Columns to sort by, in priority order */\n  columns: SortColumn[];\n  /** Whether the first row of the range contains headers (default: false) */\n  hasHeaders?: boolean | undefined;\n  /** Sort only currently visible row slots, preserving hidden row positions. */\n  visibleRowsOnly?: boolean | undefined;\n}",
+      "definition": "{\n  /** Columns to sort by, in priority order */\n  columns: SortColumn[];\n  /** Whether the first row of the range contains headers (default: false) */\n  hasHeaders?: boolean | undefined;\n  /** Sort only currently visible row slots, preserving hidden row positions. */\n  visibleRowsOnly?: boolean | undefined;\n  /** OfficeJS-compatible matchCase option, applied when a column omits caseSensitive. */\n  matchCase?: boolean | undefined;\n  /** OfficeJS-compatible orientation. Only row sorting is currently supported. */\n  orientation?: \"Rows\" | \"rows\" | undefined;\n  /** OfficeJS-compatible collation method. Explicit methods are not currently supported. */\n  method?: undefined;\n}",
       "docstring": "Options for sorting a range of cells."
     },
     "SortColumn": {
       "name": "SortColumn",
-      "definition": "{\n  /** Column index (0-based, relative to the sort range) */\n  column: number;\n  /** Sort direction: 'asc' (default) or 'desc'. */\n  direction?: 'asc' | 'desc';\n  /** Case sensitive comparison (default: false) */\n  caseSensitive?: boolean;\n} & (\n  | {\n      /** What to sort by (default: 'value' if omitted) */\n      sortBy?: 'value';\n      /**\n       * Optional Excel custom-list sort: values present in the list\n       * sort by their list position; values not in the list sort\n       * *after* list members (Excel compatibility).\n       */\n      customList?: CellValue[];\n    }\n  | {\n      sortBy: 'cellColor' | 'fontColor';\n      /** Hex color to match (e.g. '#FFFF00'). */\n      targetColor: string;\n      /** Whether matched rows go to top or bottom of the sorted range. */\n      colorPosition: 'top' | 'bottom';\n    }\n)",
-      "docstring": "A single column sort specification.\n\nDiscriminated on `sortBy`. The default ('value') accepts an optional\nWorkbook `customList`. Color sorts (`cellColor` / `fontColor`)\nrequire a `targetColor` and `colorPosition` so invalid combinations\ncannot be expressed."
+      "definition": "SortColumnSelector & {\n  /** Sort direction: 'asc' (default) or 'desc'. */\n  direction?: 'asc' | 'desc';\n  /** OfficeJS-compatible direction flag. `false` maps to descending. */\n  ascending?: boolean;\n  /** Case sensitive comparison (default: false) */\n  caseSensitive?: boolean;\n  /** OfficeJS-compatible sort mode. Value sorts are supported. */\n  sortOn?: string;\n  /** OfficeJS-compatible color target for color sorts. */\n  color?: string;\n  /** OfficeJS-compatible text/numeric sort hint. */\n  dataOption?: string;\n  /** OfficeJS-compatible icon target. Icon sorts are not currently supported. */\n  icon?: unknown;\n  /** OfficeJS rich-value subfield target. Rich-value subfield sorts are not currently supported. */\n  subField?: string;\n} & (\n    | {\n        /** What to sort by (default: 'value' if omitted) */\n        sortBy?: 'value';\n        /**\n         * Optional Excel custom-list sort: values present in the list\n         * sort by their list position; values not in the list sort\n         * *after* list members (Excel compatibility).\n         */\n        customList?: CellValue[];\n      }\n    | {\n        sortBy: 'cellColor' | 'fontColor';\n        /** Hex color to match (e.g. '#FFFF00'). */\n        targetColor: string;\n        /** Whether matched rows go to top or bottom of the sorted range. */\n        colorPosition: 'top' | 'bottom';\n      }\n  )",
+      "docstring": "A single column sort specification.\n\nAccepts Mog's `column`/`direction` shape, the historical `columnIndex`/\n`ascending` shape used by SDK guidance, and OfficeJS `SortField` value-sort\nshape (`key`/`ascending`). Color/icon OfficeJS fields are structurally\naccepted for compatibility but unsupported combinations fail at runtime\ninstead of silently no-oping."
     },
     "MergedRegion": {
       "name": "MergedRegion",
@@ -4509,7 +4609,7 @@
     },
     "TableOptions": {
       "name": "TableOptions",
-      "definition": "{\n  /** Table name (auto-generated if omitted) */\n  name?: string | undefined;\n  /** Whether the first row of the range contains headers (default: true) */\n  hasHeaders?: boolean | undefined;\n  /** Table style preset name */\n  style?: string | undefined;\n  /** Whether the table automatically expands when adjacent user input is entered (default: true) */\n  autoExpand?: boolean | undefined;\n  /** Whether formulas entered in table data columns automatically create/fill calculated columns (default: true) */\n  autoCalculatedColumns?: boolean | undefined;\n}",
+      "definition": "{\n  /** Table name (auto-generated if omitted).\nMust start with a letter or underscore, contain only letters, digits, and\nunderscores, and must not parse as a cell reference such as A1, T1, or Q3. */\n  name?: string | undefined;\n  /** Whether the first row of the range contains headers (default: true) */\n  hasHeaders?: boolean | undefined;\n  /** Table style preset name */\n  style?: string | undefined;\n  /** Whether the table automatically expands when adjacent user input is entered (default: true) */\n  autoExpand?: boolean | undefined;\n  /** Whether formulas entered in table data columns automatically create/fill calculated columns (default: true) */\n  autoCalculatedColumns?: boolean | undefined;\n}",
       "docstring": "Options for creating a new table."
     },
     "NamedRangeInfo": {
@@ -4626,7 +4726,7 @@
       "docstring": "A single item in a slicer's value list."
     }
   },
-  "generated": "2026-06-28T05:34:07.481Z",
+  "generated": "2026-07-12T03:14:27.150Z",
   "formatPresets": {
     "general": {
       "default": {

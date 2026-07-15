@@ -1,5 +1,7 @@
+use crate::border_patch::BorderPatchField;
 use domain_types::{CellBorderSide, CellBorders, CellFormat};
 use ooxml_types::styles::PatternType;
+use value_types::ComputeError;
 
 /// Merge two `CellFormat` objects with property-level precedence.
 /// For each field: if `higher` has `Some`, use it; otherwise keep `lower`.
@@ -9,7 +11,11 @@ pub(crate) fn merge_formats(lower: &CellFormat, higher: &CellFormat) -> CellForm
         font_family: higher.font_family.clone().or(lower.font_family.clone()),
         font_size: higher.font_size.or(lower.font_size),
         font_color: higher.font_color.clone().or(lower.font_color.clone()),
-        font_color_tint: higher.font_color_tint.or(lower.font_color_tint),
+        font_color_tint: merge_color_tint(
+            lower.font_color_tint,
+            higher.font_color.as_ref(),
+            higher.font_color_tint,
+        ),
         bold: higher.bold.or(lower.bold),
         italic: higher.italic.or(lower.italic),
         underline_type: higher.underline_type.or(lower.underline_type),
@@ -34,27 +40,168 @@ pub(crate) fn merge_formats(lower: &CellFormat, higher: &CellFormat) -> CellForm
             .background_color
             .clone()
             .or(lower.background_color.clone()),
-        background_color_tint: higher.background_color_tint.or(lower.background_color_tint),
+        background_color_tint: merge_color_tint(
+            lower.background_color_tint,
+            higher.background_color.as_ref(),
+            higher.background_color_tint,
+        ),
         pattern_type: higher.pattern_type.or(lower.pattern_type),
         pattern_foreground_color: higher
             .pattern_foreground_color
             .clone()
             .or(lower.pattern_foreground_color.clone()),
-        pattern_foreground_color_tint: higher
-            .pattern_foreground_color_tint
-            .or(lower.pattern_foreground_color_tint),
+        pattern_foreground_color_tint: merge_color_tint(
+            lower.pattern_foreground_color_tint,
+            higher.pattern_foreground_color.as_ref(),
+            higher.pattern_foreground_color_tint,
+        ),
         gradient_fill: higher.gradient_fill.clone().or(lower.gradient_fill.clone()),
         borders: merge_borders(lower.borders.as_ref(), higher.borders.as_ref()),
         locked: higher.locked.or(lower.locked),
         hidden: higher.hidden.or(lower.hidden),
         quote_prefix: higher.quote_prefix.or(lower.quote_prefix),
         pivot_button: higher.pivot_button.or(lower.pivot_button),
+        extensions: higher.extensions.clone().or(lower.extensions.clone()),
     };
 
     // Clean up any invalid legacy lower layer that already carries both flags.
     enforce_wrap_shrink_exclusive(&mut merged);
     clear_fill_fields_for_no_fill(&mut merged);
     merged
+}
+
+/// Apply a tri-state public format patch to a stored sparse format.
+///
+/// Values in `format` are merged, names in `clear_fields` are removed, and
+/// omitted properties remain unchanged. Clear names use the Rust/persisted JSON
+/// vocabulary (`quotePrefix`, not the public alias `forcedTextMode`).
+pub(crate) fn apply_format_patch(
+    lower: &CellFormat,
+    format: &CellFormat,
+    clear_fields: &[String],
+) -> Result<CellFormat, ComputeError> {
+    let mut merged = merge_formats(lower, format);
+
+    // Public tri-state patches operate on top-level CellFormat properties.
+    // Unlike the legacy formatting merge path, a supplied composite value is
+    // therefore a replacement, not a recursive patch. Borders are the only
+    // CellFormat composite for which merge_formats performs a deep merge;
+    // gradient_fill and extensions already replace atomically via Option::or.
+    if let Some(borders) = &format.borders {
+        merged.borders = Some(borders.clone());
+    }
+
+    for field in clear_fields {
+        match field.as_str() {
+            "fontFamily" => merged.font_family = None,
+            "fontSize" => merged.font_size = None,
+            "fontColor" => merged.font_color = None,
+            "fontColorTint" => merged.font_color_tint = None,
+            "bold" => merged.bold = None,
+            "italic" => merged.italic = None,
+            "underlineType" => merged.underline_type = None,
+            "strikethrough" => merged.strikethrough = None,
+            "superscript" => merged.superscript = None,
+            "subscript" => merged.subscript = None,
+            "fontOutline" => merged.font_outline = None,
+            "fontShadow" => merged.font_shadow = None,
+            "fontTheme" => merged.font_theme = None,
+            "fontCharset" => merged.font_charset = None,
+            "fontFamilyType" => merged.font_family_type = None,
+            "horizontalAlign" => merged.horizontal_align = None,
+            "verticalAlign" => merged.vertical_align = None,
+            "wrapText" => merged.wrap_text = None,
+            "indent" => merged.indent = None,
+            "textRotation" => merged.text_rotation = None,
+            "shrinkToFit" => merged.shrink_to_fit = None,
+            "readingOrder" => merged.reading_order = None,
+            "autoIndent" => merged.auto_indent = None,
+            "numberFormat" => merged.number_format = None,
+            "backgroundColor" => merged.background_color = None,
+            "backgroundColorTint" => merged.background_color_tint = None,
+            "patternType" => merged.pattern_type = None,
+            "patternForegroundColor" => merged.pattern_foreground_color = None,
+            "patternForegroundColorTint" => merged.pattern_foreground_color_tint = None,
+            "gradientFill" => merged.gradient_fill = None,
+            "borders" => merged.borders = None,
+            "locked" => merged.locked = None,
+            "hidden" => merged.hidden = None,
+            "quotePrefix" => merged.quote_prefix = None,
+            "pivotButton" => merged.pivot_button = None,
+            "extensions" => merged.extensions = None,
+            unknown => {
+                return Err(ComputeError::InvalidInput {
+                    message: format!("Unsupported cell format clear field: {unknown}"),
+                });
+            }
+        }
+    }
+    Ok(merged)
+}
+
+/// Apply a tri-state patch to the nested `CellBorders` value.
+///
+/// This is intentionally separate from [`apply_format_patch`]. Public cell-format
+/// patches treat a supplied `borders` object as one complete top-level value so
+/// formats returned by read APIs can be transferred losslessly. Spreadsheet UI
+/// commands, however, are edge operations: adding a bottom border must preserve
+/// an existing top border. Values in `patch` replace one complete edge/flag,
+/// names in `clear_fields` remove that direct edge/flag, and omitted members are
+/// left unchanged.
+pub(crate) fn apply_borders_patch(
+    lower: Option<&CellBorders>,
+    patch: &CellBorders,
+    clear_fields: &[BorderPatchField],
+) -> Option<CellBorders> {
+    let mut merged = lower.cloned().unwrap_or_default();
+
+    if let Some(value) = &patch.top {
+        merged.top = Some(value.clone());
+    }
+    if let Some(value) = &patch.right {
+        merged.right = Some(value.clone());
+    }
+    if let Some(value) = &patch.bottom {
+        merged.bottom = Some(value.clone());
+    }
+    if let Some(value) = &patch.left {
+        merged.left = Some(value.clone());
+    }
+    if let Some(value) = &patch.diagonal {
+        merged.diagonal = Some(value.clone());
+    }
+    if let Some(value) = patch.diagonal_up {
+        merged.diagonal_up = Some(value);
+    }
+    if let Some(value) = patch.diagonal_down {
+        merged.diagonal_down = Some(value);
+    }
+    if let Some(value) = &patch.vertical {
+        merged.vertical = Some(value.clone());
+    }
+    if let Some(value) = &patch.horizontal {
+        merged.horizontal = Some(value.clone());
+    }
+    if let Some(value) = patch.outline {
+        merged.outline = Some(value);
+    }
+
+    for field in clear_fields {
+        match field {
+            BorderPatchField::Top => merged.top = None,
+            BorderPatchField::Right => merged.right = None,
+            BorderPatchField::Bottom => merged.bottom = None,
+            BorderPatchField::Left => merged.left = None,
+            BorderPatchField::Diagonal => merged.diagonal = None,
+            BorderPatchField::DiagonalUp => merged.diagonal_up = None,
+            BorderPatchField::DiagonalDown => merged.diagonal_down = None,
+            BorderPatchField::Vertical => merged.vertical = None,
+            BorderPatchField::Horizontal => merged.horizontal = None,
+            BorderPatchField::Outline => merged.outline = None,
+        }
+    }
+
+    (merged != CellBorders::default()).then_some(merged)
 }
 
 fn merge_borders(lower: Option<&CellBorders>, higher: Option<&CellBorders>) -> Option<CellBorders> {
@@ -97,8 +244,25 @@ fn merge_border_side(
     Some(CellBorderSide {
         style: higher.style.or(lower.style),
         color: higher.color.clone().or(lower.color),
-        color_tint: higher.color_tint.or(lower.color_tint),
+        color_tint: merge_color_tint(lower.color_tint, higher.color.as_ref(), higher.color_tint),
     })
+}
+
+/// Merge tint metadata with its color as one semantic value.
+///
+/// A replacement color without a tint is explicitly untinted; retaining a tint
+/// from a lower cascade layer would apply that tint to the wrong color. A
+/// tint-only patch remains valid and modifies the inherited color.
+fn merge_color_tint<T>(
+    lower_tint: Option<f64>,
+    higher_color: Option<&T>,
+    higher_tint: Option<f64>,
+) -> Option<f64> {
+    if higher_color.is_some() {
+        higher_tint
+    } else {
+        higher_tint.or(lower_tint)
+    }
 }
 
 fn is_empty_borders(borders: &CellBorders) -> bool {

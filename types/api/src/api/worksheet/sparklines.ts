@@ -130,6 +130,7 @@ export interface WorksheetSparklines {
    *
    * @param sparklineId - Sparkline identifier
    * @param updates - Partial sparkline properties to update
+   * @throws `SPARKLINE_NOT_FOUND` when the ID is absent from this worksheet
    */
   update(sparklineId: string, updates: Partial<Sparkline>): Promise<void>;
 
@@ -138,6 +139,7 @@ export interface WorksheetSparklines {
    *
    * @param groupId - Group identifier
    * @param updates - Partial group properties to update
+   * @throws `SPARKLINE_GROUP_NOT_FOUND` when the group is absent
    */
   updateGroup(groupId: string, updates: Partial<SparklineGroup>): Promise<void>;
 
@@ -145,6 +147,7 @@ export interface WorksheetSparklines {
    * Remove a sparkline.
    *
    * @param sparklineId - Sparkline identifier
+   * @throws `SPARKLINE_NOT_FOUND` when the ID is absent
    */
   remove(sparklineId: string): Promise<void>;
 
@@ -152,6 +155,7 @@ export interface WorksheetSparklines {
    * Remove a sparkline group and all its member sparklines.
    *
    * @param groupId - Group identifier
+   * @throws `SPARKLINE_GROUP_NOT_FOUND` when the group is absent
    */
   removeGroup(groupId: string): Promise<void>;
 
@@ -178,6 +182,7 @@ export interface WorksheetSparklines {
    *
    * @param sparklineId - Sparkline identifier
    * @param groupId - Group identifier
+   * @throws `SPARKLINE_NOT_FOUND` or `SPARKLINE_GROUP_NOT_FOUND` for stale IDs
    */
   addToGroup(sparklineId: string, groupId: string): Promise<void>;
 
@@ -185,6 +190,7 @@ export interface WorksheetSparklines {
    * Remove a sparkline from its group (becomes standalone).
    *
    * @param sparklineId - Sparkline identifier
+   * @throws `SPARKLINE_NOT_FOUND` when the ID is absent; `SPARKLINE_GROUP_NOT_FOUND` for dangling membership
    */
   removeFromGroup(sparklineId: string): Promise<void>;
 
@@ -193,6 +199,7 @@ export interface WorksheetSparklines {
    *
    * @param groupId - Group identifier
    * @returns IDs of sparklines that were ungrouped
+   * @throws `SPARKLINE_GROUP_NOT_FOUND` when the group is absent
    */
   ungroupAll(groupId: string): Promise<string[]>;
 

@@ -61,6 +61,16 @@ describe('Zero-ceremony headless construction', () => {
     await wb.close('skipSave');
   });
 
+  it('createWorkbook() accepts Office-style column selectors on the production layout path', async () => {
+    const wb = await createWorkbook();
+    const ws = wb.activeSheet;
+
+    await ws.layout.setColumnWidth('B:B', 120);
+
+    await expect(ws.layout.getColumnWidth('B')).resolves.toBeCloseTo(120);
+    await wb.close('skipSave');
+  });
+
   it('MogDocumentFactory.create() with no options works', async () => {
     const doc = await MogDocumentFactory.create();
     expect(doc).toBeDefined();

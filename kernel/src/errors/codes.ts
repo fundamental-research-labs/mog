@@ -41,10 +41,28 @@ export type KernelErrorCode =
   | 'EXEC_REQUIRES_SHEET'
   // === Comment (COMMENT_*) ===
   | 'COMMENT_NOT_FOUND'
+  // === Conditional formatting (CONDITIONAL_FORMAT_*) ===
+  | 'CONDITIONAL_FORMAT_NOT_FOUND'
+  | 'CONDITIONAL_FORMAT_RULE_NOT_FOUND'
+  // === Validation (VALIDATION_*) ===
+  | 'VALIDATION_NOT_FOUND'
+  // === Filter (FILTER_*) ===
+  | 'FILTER_NOT_FOUND'
   // === Pivot (PIVOT_*) ===
   | 'PIVOT_NOT_FOUND'
   | 'PIVOT_INVALID_DATA_SOURCE'
   | 'PIVOT_UNRESOLVED_FIELD_REFERENCES'
+  // === Slicer (SLICER_*) ===
+  | 'SLICER_NOT_FOUND'
+  | 'SLICER_ID_EXISTS'
+  | 'SLICER_SHEET_MISMATCH'
+  // === Form controls (FORM_CONTROL_*) ===
+  | 'FORM_CONTROL_NOT_FOUND'
+  // === Sparklines (SPARKLINE_*) ===
+  | 'SPARKLINE_NOT_FOUND'
+  | 'SPARKLINE_GROUP_NOT_FOUND'
+  // === Hyperlinks (HYPERLINK_*) ===
+  | 'HYPERLINK_NOT_FOUND'
   // === Scenario (SCENARIO_*) ===
   | 'SCENARIO_ACTIVE_STATE_READ_ONLY'
   // === Domain (DOMAIN_*) ===
@@ -62,6 +80,7 @@ export type KernelErrorCode =
   | 'OBJ_NOT_FOUND'
   | 'OBJ_INVALID_CONFIG'
   | 'OBJ_CHART_NOT_FOUND'
+  | 'OBJ_CHART_TARGET_AMBIGUOUS'
   | 'OBJ_CHART_INVALID_CONFIG'
   | 'OBJ_SHAPE_NOT_FOUND'
   | 'OBJ_SHAPE_INVALID_CONFIG'

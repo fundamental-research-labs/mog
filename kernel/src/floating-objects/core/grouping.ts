@@ -110,7 +110,14 @@ export async function groupObjects<T extends CanvasObject, TGroup extends Canvas
     locked: false,
   } as TGroup;
 
-  await deps.groupStore.create(containerId, group);
+  const created = await deps.groupStore.create(containerId, group);
+  if (!created) {
+    throw new FloatingObjectError(
+      'OBJ_INVALID_CONFIG',
+      'group',
+      'Failed to persist floating object group',
+    );
+  }
 
   return groupId;
 }

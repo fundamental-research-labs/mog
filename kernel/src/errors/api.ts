@@ -196,16 +196,79 @@ export function notImplemented(feature: string): KernelError {
   });
 }
 
-/**
- * Create a chart not found error
- */
-export function chartNotFound(chartId: string): KernelError {
-  return new KernelError('OBJ_CHART_NOT_FOUND', `Chart "${chartId}" not found`, {
-    path: ['chartId'],
+export interface ChartTargetCandidate {
+  readonly id: string;
+  readonly name: string;
+  readonly matchedBy: readonly string[];
+}
+
+function chartTargetLabel(target: unknown): string {
+  if (typeof target === 'string') return JSON.stringify(target);
+  try {
+    return JSON.stringify(target);
+  } catch {
+    return JSON.stringify(String(target));
+  }
+}
+
+function chartTargetResourceId(target: unknown): string {
+  if (typeof target === 'string') return target;
+  if (target && typeof target === 'object') {
+    const selector = target as { id?: unknown; name?: unknown };
+    if (typeof selector.id === 'string') return selector.id;
+    if (typeof selector.name === 'string') return selector.name;
+  }
+  return chartTargetLabel(target);
+}
+
+/** Create an error for a chart target that matched no chart. */
+export function chartNotFound(
+  chartTarget: unknown,
+  cause?: unknown,
+  resolvedChartId?: string,
+): KernelError {
+  const label = chartTargetLabel(chartTarget);
+  return new KernelError('OBJ_CHART_NOT_FOUND', `Chart target ${label} not found`, {
+    path: ['chartTarget'],
     suggestion:
-      'Use ws.charts.list() to list available charts, or api.describe("ws.charts") for chart API discovery',
-    context: { resourceType: 'chart', resourceId: chartId },
+      'Use ws.charts.list() to inspect available chart IDs and names, or api.describe("ws.charts") for chart API discovery',
+    context: {
+      resourceType: 'chart',
+      resourceId: chartTargetResourceId(chartTarget),
+      received: chartTarget,
+      reason: 'not-found',
+      ...(resolvedChartId ? { resolvedChartId } : {}),
+    },
+    cause,
   });
+}
+
+/** Create an actionable error when a chart target resolves to multiple charts. */
+export function chartTargetAmbiguous(
+  chartTarget: unknown,
+  candidates: readonly ChartTargetCandidate[],
+): KernelError {
+  const candidateSummary = candidates
+    .map(
+      (candidate) =>
+        `{ id: ${JSON.stringify(candidate.id)}, name: ${JSON.stringify(candidate.name)} }`,
+    )
+    .join(', ');
+  const exampleId = candidates[0]?.id ?? '';
+  return new KernelError(
+    'OBJ_CHART_TARGET_AMBIGUOUS',
+    `Chart target ${chartTargetLabel(chartTarget)} is ambiguous; matched ${candidates.length} charts`,
+    {
+      path: ['chartTarget'],
+      suggestion: `Candidates: ${candidateSummary}. Pass an explicit selector such as { id: ${JSON.stringify(exampleId)} } to choose one.`,
+      context: {
+        resourceType: 'chart',
+        received: chartTarget,
+        reason: 'ambiguous-target',
+        candidates,
+      },
+    },
+  );
 }
 
 /**

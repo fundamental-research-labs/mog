@@ -16,6 +16,7 @@
 import type { ActionHandler, AsyncActionHandler } from '@mog-sdk/contracts/actions';
 
 import { getSelectionContext, handled } from './shared';
+import { clearValidationsInRangeIfPresent } from '../validation-clearing';
 
 // =============================================================================
 // Clear Operations
@@ -40,18 +41,14 @@ export const CLEAR_HYPERLINKS: AsyncActionHandler = async (deps) => {
 
   const ws = deps.workbook.getSheetById(sheetId);
 
-  // Remove hyperlinks for all cells in all ranges in parallel.
-  // removeHyperlink on a cell without a hyperlink is a no-op,
-  // so we skip the per-cell getHyperlink check to avoid extra IPC.
-  const removals: Promise<void>[] = [];
-  for (const range of ranges) {
-    for (let row = range.startRow; row <= range.endRow; row++) {
-      for (let col = range.startCol; col <= range.endCol; col++) {
-        removals.push(ws.hyperlinks.remove(row, col));
-      }
+  await deps.workbook.undoGroup(async () => {
+    // Use the sparse range primitive instead of issuing one bridge mutation per
+    // cell. This keeps the user action atomic and scales with selected ranges,
+    // not their area.
+    for (const range of ranges) {
+      await ws.clear(range, 'hyperlinks');
     }
-  }
-  await Promise.all(removals);
+  });
 
   return handled();
 };
@@ -80,7 +77,9 @@ export const CLEAR_CONDITIONAL_FORMATTING: AsyncActionHandler = async (deps) => 
 
   // Use Unified Worksheet API
   const ws = deps.workbook.getSheetById(sheetId);
-  await ws.conditionalFormats.clearInRanges(cfRanges);
+  await deps.workbook.undoGroup(async () => {
+    await ws.conditionalFormats.clearInRanges(cfRanges);
+  });
 
   return handled();
 };
@@ -101,11 +100,13 @@ export const CLEAR_DATA_VALIDATION: AsyncActionHandler = async (deps) => {
 
   const ws = deps.workbook.getSheetById(sheetId);
 
-  // For each selection range, clear overlapping validation rules
-  for (const selRange of ranges) {
-    const rangeStr = `${deps.workbook.indexToAddress(selRange.startRow, selRange.startCol)}:${deps.workbook.indexToAddress(selRange.endRow, selRange.endCol)}`;
-    await ws.validations.clear(rangeStr);
-  }
+  await deps.workbook.undoGroup(async () => {
+    // For each selection range, clear overlapping validation rules. Missing
+    // rules are an idempotent no-op for the user-facing Clear command.
+    for (const selRange of ranges) {
+      await clearValidationsInRangeIfPresent(ws, selRange);
+    }
+  });
 
   return handled();
 };

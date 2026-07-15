@@ -127,7 +127,7 @@ await wb.properties.setCustomProperty("owner", "Finance");
 // Formatting, merging, layout.
 await ws.formats.setRange("A1:C1", { font: { bold: true }, fill: { color: "#D9EAF7" } });
 await ws.structure.merge("A1:C1");
-await ws.layout.autoFitColumns([0, 1, 2]);
+await ws.layout.autoFitColumns("A:C");
 await ws.view.freezeRows(1);
 
 // Calculate.
@@ -153,7 +153,7 @@ Known sharp edges:
 - Use `ws.structure.merge(...)`, not `mergeCells`.
 - Use `wb.properties.setDocumentProperties(...)`, not `properties.set`.
 - Get a sheet handle; do not call `setActiveSheet`.
-- `ws.layout.autoFitColumns(...)` takes zero-based column indices like
-  `[0, 1, 2]`, not an A1 range string like `"A:C"`.
+- Column layout selectors accept zero-based indices or Office-style column
+  addresses such as `"B"`, `"B:B"`, and `"B:D"`. Width values are pixels.
 - Conditional-format color-scale/data-bar points require `type`, `color`, and a
   `value` field in practice. Include `value` even for `min` and `max` points.

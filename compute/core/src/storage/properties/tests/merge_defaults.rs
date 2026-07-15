@@ -1,4 +1,5 @@
 use super::*;
+use crate::border_patch::BorderPatchField;
 
 #[test]
 fn test_merge_formats_merges_partial_borders_per_edge_and_side_field() {
@@ -82,6 +83,132 @@ fn test_merge_formats_empty_borders_patch_clears_all_borders() {
 }
 
 #[test]
+fn test_apply_borders_patch_preserves_omitted_edges_and_replaces_supplied_edge() {
+    use ooxml_types::styles::BorderStyle;
+
+    let lower = CellBorders {
+        top: Some(CellBorderSide {
+            style: Some(BorderStyle::Thin),
+            color: Some("#111111".to_string()),
+            ..Default::default()
+        }),
+        right: Some(CellBorderSide {
+            style: Some(BorderStyle::Medium),
+            color: Some("#222222".to_string()),
+            ..Default::default()
+        }),
+        bottom: Some(CellBorderSide {
+            style: Some(BorderStyle::Dashed),
+            color: Some("#AAAAAA".to_string()),
+            color_tint: Some(0.5),
+        }),
+        ..Default::default()
+    };
+    let patch = CellBorders {
+        bottom: Some(CellBorderSide {
+            color: Some("#333333".to_string()),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    let patched = apply_borders_patch(Some(&lower), &patch, &[])
+        .expect("patched borders should remain explicit");
+
+    assert_eq!(patched.top, lower.top);
+    assert_eq!(patched.right, lower.right);
+    assert_eq!(patched.bottom, patch.bottom);
+    assert!(patched.bottom.as_ref().unwrap().style.is_none());
+    assert!(patched.bottom.as_ref().unwrap().color_tint.is_none());
+}
+
+#[test]
+fn test_apply_borders_patch_sets_all_persisted_members() {
+    use ooxml_types::styles::BorderStyle;
+
+    let side = |style| CellBorderSide {
+        style: Some(style),
+        color: Some("#123456".to_string()),
+        color_tint: Some(-0.25),
+    };
+    let patch = CellBorders {
+        top: Some(side(BorderStyle::Thin)),
+        right: Some(side(BorderStyle::Medium)),
+        bottom: Some(side(BorderStyle::Thick)),
+        left: Some(side(BorderStyle::Double)),
+        diagonal: Some(side(BorderStyle::Dashed)),
+        diagonal_up: Some(true),
+        diagonal_down: Some(false),
+        vertical: Some(side(BorderStyle::Dotted)),
+        horizontal: Some(side(BorderStyle::Hair)),
+        outline: Some(false),
+    };
+
+    let patched = apply_borders_patch(None, &patch, &[])
+        .expect("complete border patch should remain explicit");
+
+    assert_eq!(patched, patch);
+}
+
+#[test]
+fn test_apply_borders_patch_clears_only_named_edge() {
+    use ooxml_types::styles::BorderStyle;
+
+    let border = CellBorderSide {
+        style: Some(BorderStyle::Thin),
+        color: Some("#111111".to_string()),
+        ..Default::default()
+    };
+    let lower = CellBorders {
+        top: Some(border.clone()),
+        bottom: Some(border),
+        ..Default::default()
+    };
+
+    let patched = apply_borders_patch(
+        Some(&lower),
+        &CellBorders::default(),
+        &[BorderPatchField::Top],
+    )
+    .expect("bottom border should remain explicit");
+
+    assert!(patched.top.is_none());
+    assert_eq!(patched.bottom, lower.bottom);
+}
+
+#[test]
+fn test_apply_borders_patch_clears_all_persisted_members() {
+    let lower = CellBorders {
+        top: Some(CellBorderSide::default()),
+        right: Some(CellBorderSide::default()),
+        bottom: Some(CellBorderSide::default()),
+        left: Some(CellBorderSide::default()),
+        diagonal: Some(CellBorderSide::default()),
+        diagonal_up: Some(true),
+        diagonal_down: Some(true),
+        vertical: Some(CellBorderSide::default()),
+        horizontal: Some(CellBorderSide::default()),
+        outline: Some(true),
+    };
+    let clear_fields = [
+        BorderPatchField::Top,
+        BorderPatchField::Right,
+        BorderPatchField::Bottom,
+        BorderPatchField::Left,
+        BorderPatchField::Diagonal,
+        BorderPatchField::DiagonalUp,
+        BorderPatchField::DiagonalDown,
+        BorderPatchField::Vertical,
+        BorderPatchField::Horizontal,
+        BorderPatchField::Outline,
+    ];
+
+    let patched = apply_borders_patch(Some(&lower), &CellBorders::default(), &clear_fields);
+
+    assert!(patched.is_none());
+}
+
+#[test]
 fn test_merge_formats_no_fill_pattern_clears_lower_fill_fields() {
     use ooxml_types::styles::PatternType;
 
@@ -154,6 +281,71 @@ fn test_merge_formats_preserves_extended_sparse_fields() {
     assert_eq!(merged.background_color_tint, Some(-0.4));
     assert_eq!(merged.pattern_foreground_color_tint, Some(0.5));
     assert_eq!(merged.pivot_button, Some(true));
+}
+
+#[test]
+fn test_replacement_colors_do_not_inherit_tints_from_lower_cascade_layers() {
+    use ooxml_types::styles::BorderStyle;
+
+    let lower = CellFormat {
+        font_color: Some("accent1".to_string()),
+        font_color_tint: Some(-0.5),
+        background_color: Some("accent2".to_string()),
+        background_color_tint: Some(0.9),
+        pattern_foreground_color: Some("accent3".to_string()),
+        pattern_foreground_color_tint: Some(0.4),
+        borders: Some(CellBorders {
+            top: Some(CellBorderSide {
+                style: Some(BorderStyle::Thin),
+                color: Some("accent4".to_string()),
+                color_tint: Some(-0.25),
+            }),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let higher = CellFormat {
+        font_color: Some("light1".to_string()),
+        background_color: Some("#FFFF00".to_string()),
+        pattern_foreground_color: Some("#00FF00".to_string()),
+        borders: Some(CellBorders {
+            top: Some(CellBorderSide {
+                color: Some("#0000FF".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    let merged = merge_formats(&lower, &higher);
+
+    assert_eq!(merged.font_color_tint, None);
+    assert_eq!(merged.background_color_tint, None);
+    assert_eq!(merged.pattern_foreground_color_tint, None);
+    assert_eq!(
+        merged.borders.unwrap().top.unwrap().color_tint,
+        None,
+        "border replacement colors must also clear inherited tint metadata"
+    );
+}
+
+#[test]
+fn test_tint_only_patches_modify_inherited_colors() {
+    let lower = CellFormat {
+        font_color: Some("accent1".to_string()),
+        font_color_tint: Some(-0.5),
+        ..Default::default()
+    };
+    let higher = CellFormat {
+        font_color_tint: Some(0.25),
+        ..Default::default()
+    };
+
+    let merged = merge_formats(&lower, &higher);
+
+    assert_eq!(merged.font_color, Some("accent1".to_string()));
+    assert_eq!(merged.font_color_tint, Some(0.25));
 }
 
 #[test]

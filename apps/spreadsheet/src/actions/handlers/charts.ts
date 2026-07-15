@@ -950,7 +950,9 @@ export const CREATE_CHART_SHEET: AsyncActionHandler = async (deps): Promise<Acti
     // Excel parity: expand single-cell / single-row selections to the
     // surrounding data region. expandToDataRegion is a no-op for multi-row
     // selections and returns null for empty cells (we keep ranges[0] then).
-    const range = await resolveChartSourceRange(ws, ranges[0], { trimHiddenDetail: true });
+    const range = await resolveChartSourceRange(ws, ranges[0], {
+      hiddenDetailHandling: 'trim-one-dimensional',
+    });
     // Include sheet reference in data range for cross-sheet reference
     const sheetName = (await ws.getName()) || 'Sheet1';
     dataRange = `'${sheetName}'!${rangeToA1Notation(range)}`;
@@ -976,7 +978,7 @@ export const CREATE_CHART_SHEET: AsyncActionHandler = async (deps): Promise<Acti
 /**
  * CREATE_EMBEDDED_CHART - Create an embedded chart on the current sheet from selection.
  * Used by Alt+F1 key or Insert -> Charts menu.
- * Payload: { type?: ChartType, subType?: string }
+ * Payload: { type?: ChartType, subType?: string, sourceRangeMode?: ChartSourceRangeMode }
  *
  * Uses Mutations layer for chart creation.
  * Uses smart positioning to ensure chart is visible when created.
@@ -995,6 +997,8 @@ export const CREATE_EMBEDDED_CHART: AsyncActionHandler = async (
   // Default chart configuration
   const chartType = payload?.type || 'column';
   const chartSubType = payload?.subType;
+  const sourceRangeMode: 'visible-summary' | 'selected-range' =
+    payload?.sourceRangeMode ?? 'visible-summary';
 
   const DEFAULT_WIDTH_PT = 480;
   const DEFAULT_HEIGHT_PT = 225;
@@ -1024,7 +1028,8 @@ export const CREATE_EMBEDDED_CHART: AsyncActionHandler = async (
     // Excel parity: expand single-cell / single-row selections to the
     // surrounding data region. Multi-row selections pass through unchanged.
     const range = await resolveChartCreationSourceRange(ws, ranges[0], {
-      trimHiddenDetail: true,
+      hiddenDetailHandling:
+        sourceRangeMode === 'selected-range' ? 'trim-inferred' : 'trim-one-dimensional',
     });
     if (!range) return handled();
     const dataRange = rangeToA1Notation(range);

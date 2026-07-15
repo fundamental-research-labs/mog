@@ -30,6 +30,8 @@ import type {
 } from '@mog-sdk/contracts/sdk';
 
 export interface MogSdkErrorOptions {
+  path?: readonly string[];
+  suggestion?: string;
   details?: Record<string, unknown> | MogSdkSavePathErrorDetails;
   operation?: string;
   diagnostics?: MogSdkDiagnostics;

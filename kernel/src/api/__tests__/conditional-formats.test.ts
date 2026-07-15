@@ -724,7 +724,7 @@ describe('WorksheetConditionalFormattingImpl — changeRuleType', () => {
     expect(rules[2]).toEqual(format.rules[2]);
   });
 
-  it('non-existent formatId — no-op, bridge NOT called', async () => {
+  it('non-existent formatId — throws before the bridge is called', async () => {
     mockBridgeFormats(bridge, []);
 
     const newRule = {
@@ -733,12 +733,15 @@ describe('WorksheetConditionalFormattingImpl — changeRuleType', () => {
       style: {},
     } as CFRuleInput;
 
-    await cf.changeRuleType('no-such-format', 'rule-1', newRule);
+    await expect(cf.changeRuleType('no-such-format', 'rule-1', newRule)).rejects.toMatchObject({
+      code: 'CONDITIONAL_FORMAT_NOT_FOUND',
+      context: expect.objectContaining({ resourceId: 'no-such-format' }),
+    });
 
     expect(bridge.updateCfRule).not.toHaveBeenCalled();
   });
 
-  it('non-existent ruleId — returns a no-op receipt without writing original rules back', async () => {
+  it('non-existent ruleId — throws without writing original rules back', async () => {
     const format = makeFormat({
       rules: [
         {
@@ -759,16 +762,12 @@ describe('WorksheetConditionalFormattingImpl — changeRuleType', () => {
       style: {},
     } as CFRuleInput;
 
-    const receipt = await cf.changeRuleType('fmt-1', 'no-such-rule', newRule);
+    await expect(cf.changeRuleType('fmt-1', 'no-such-rule', newRule)).rejects.toMatchObject({
+      code: 'CONDITIONAL_FORMAT_RULE_NOT_FOUND',
+      context: expect.objectContaining({ resourceId: 'no-such-rule', formatId: 'fmt-1' }),
+    });
 
     expect(bridge.updateCfRule).not.toHaveBeenCalled();
-    expect(receipt).toMatchObject({
-      kind: 'conditionalFormat.changeRuleType',
-      status: 'noOp',
-      formatCount: 0,
-      ruleCount: 0,
-      effects: [{ type: 'worksheetUnchanged', sheetId: SHEET_ID }],
-    });
   });
 
   it('change rule type to same type with different config — config-only change works', async () => {

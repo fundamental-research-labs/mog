@@ -2,7 +2,13 @@ import { jest } from '@jest/globals';
 
 import { sheetId } from '@mog-sdk/contracts/core';
 
-import { copyToSheet, updateFloatingObject, updatePicture } from '../floating-object-operations';
+import {
+  copyToSheet,
+  deleteManyFloatingObjects,
+  groupFloatingObjects,
+  updateFloatingObject,
+  updatePicture,
+} from '../floating-object-operations';
 
 const SHEET_ID = sheetId('sheet-1');
 const TARGET_SHEET_ID = sheetId('sheet-2');
@@ -34,11 +40,15 @@ function createMockCtx() {
       getFloatingObjectTyped: jest.fn(async (sheet: string, objectId: string) =>
         pictureWire(objectId, sheetId(sheet)),
       ),
+      deleteFloatingObject: jest.fn().mockResolvedValue({ floatingObjectChanges: [] }),
       updateFloatingObject: jest.fn().mockResolvedValue({ floatingObjectChanges: [] }),
       resizeFloatingObjectTyped: jest.fn().mockResolvedValue({ floatingObjectChanges: [] }),
       moveFloatingObjectTyped: jest.fn().mockResolvedValue({ floatingObjectChanges: [] }),
       duplicateFloatingObjectTyped: jest.fn().mockResolvedValue({
         floatingObjectChanges: [{ objectId: 'picture-copy-1', kind: { type: 'created' } }],
+      }),
+      createFloatingObjectGroup: jest.fn().mockResolvedValue({
+        floatingObjectGroupChanges: [{ objectId: 'group-1', kind: { type: 'created' } }],
       }),
       computeAllObjectBounds: jest
         .fn()
@@ -142,6 +152,33 @@ describe('floating object operation admission contexts', () => {
         [SHEET_ID, TARGET_SHEET_ID],
         groupId,
       ),
+    );
+  });
+
+  it('preflights every removeMany target before deleting any object', async () => {
+    const ctx = createMockCtx();
+    ctx.computeBridge.getFloatingObjectTyped.mockImplementation(
+      async (sheet: string, objectId: string) =>
+        objectId === 'missing' ? null : pictureWire(objectId, sheetId(sheet)),
+    );
+
+    await expect(
+      deleteManyFloatingObjects(ctx, SHEET_ID, ['picture-1', 'missing']),
+    ).rejects.toMatchObject({ code: 'OBJ_NOT_FOUND' });
+    expect(ctx.computeBridge.deleteFloatingObject).not.toHaveBeenCalled();
+  });
+
+  it('sends the Rust wire contract when creating a floating object group', async () => {
+    const ctx = createMockCtx();
+
+    await expect(groupFloatingObjects(ctx, SHEET_ID, ['picture-1', 'picture-2'])).resolves.toBe(
+      'group-1',
+    );
+
+    expect(ctx.computeBridge.createFloatingObjectGroup).toHaveBeenCalledWith(
+      SHEET_ID,
+      { children: ['picture-1', 'picture-2'] },
+      expectFloatingObjectAdmissionOptions('floatingObjects.group'),
     );
   });
 });

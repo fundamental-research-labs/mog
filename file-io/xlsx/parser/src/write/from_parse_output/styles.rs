@@ -33,11 +33,17 @@ pub(super) fn build_styles(palette: &[DocumentFormat]) -> StylesWriter {
     writer.cell_xfs[0] = cell_xf_from_components(normal_fmt, &normal_components, Some(0), true);
 
     for doc_fmt in remaining_palette {
-        let components = add_style_components(&mut writer, doc_fmt);
-        writer.add_cell_xf(cell_xf_from_components(doc_fmt, &components, Some(0), true));
+        append_generated_cell_xf(&mut writer, doc_fmt);
     }
 
     writer
+}
+
+/// Append a live/generated cell XF without disturbing any imported style-table
+/// indices already present in `writer`.
+pub(super) fn append_generated_cell_xf(writer: &mut StylesWriter, doc_fmt: &DocumentFormat) -> u32 {
+    let components = add_style_components(writer, doc_fmt);
+    writer.add_cell_xf(cell_xf_from_components(doc_fmt, &components, Some(0), true))
 }
 
 #[derive(Clone)]
@@ -56,10 +62,13 @@ fn cell_xf_from_components(
     xf_id: Option<u32>,
     include_apply_flags: bool,
 ) -> CellXfDef {
-    let has_font = components.font_id != 0;
-    let has_fill = components.fill_id != 0;
-    let has_border = components.border_id != 0;
-    let has_num_fmt = components.num_fmt_id != 0;
+    // Component IDs are table positions, not authored-intent flags. A live
+    // format may intentionally apply the Normal font, explicit no-fill, or an
+    // empty border and deduplicate to slot 0; its apply flag must still be set.
+    let has_font = doc_fmt.font.is_some();
+    let has_fill = doc_fmt.fill.is_some();
+    let has_border = doc_fmt.border.is_some();
+    let has_num_fmt = doc_fmt.number_format.is_some();
     let has_alignment = components.alignment.is_some();
     let has_protection = components.protection.is_some();
 
@@ -261,7 +270,7 @@ fn convert_font(font: &FontFormat) -> FontDef {
         color: font
             .color
             .as_deref()
-            .map(|c| hex_to_color_def_with_tint(c, font.color_tint)),
+            .map(|c| semantic_color_to_def(c, font.color_tint)),
         family: font.family,
         charset: font.charset,
         scheme: font.scheme.as_deref().map(|s| match s {
@@ -295,47 +304,6 @@ fn convert_font(font: &FontFormat) -> FontDef {
 
 /// Convert a `FillFormat` to a `FillDef`.
 fn convert_fill(fill: &FillFormat) -> FillDef {
-    let pattern_type = fill
-        .pattern_type
-        .as_deref()
-        .map(|s| match s {
-            "solid" => PatternType::Solid,
-            "gray125" => PatternType::Gray125,
-            "darkGray" => PatternType::DarkGray,
-            "mediumGray" => PatternType::MediumGray,
-            "lightGray" => PatternType::LightGray,
-            "gray0625" => PatternType::Gray0625,
-            "darkHorizontal" => PatternType::DarkHorizontal,
-            "darkVertical" => PatternType::DarkVertical,
-            "darkDown" => PatternType::DarkDown,
-            "darkUp" => PatternType::DarkUp,
-            "darkGrid" => PatternType::DarkGrid,
-            "darkTrellis" => PatternType::DarkTrellis,
-            "lightHorizontal" => PatternType::LightHorizontal,
-            "lightVertical" => PatternType::LightVertical,
-            "lightDown" => PatternType::LightDown,
-            "lightUp" => PatternType::LightUp,
-            "lightGrid" => PatternType::LightGrid,
-            "lightTrellis" => PatternType::LightTrellis,
-            _ => PatternType::Solid,
-        })
-        .unwrap_or(PatternType::Solid);
-
-    let fg_color = if let Some(ref pfg) = fill.pattern_foreground_color {
-        Some(hex_to_color_def_with_tint(
-            pfg,
-            fill.pattern_foreground_color_tint,
-        ))
-    } else {
-        fill.background_color
-            .as_ref()
-            .map(|bg| hex_to_color_def_with_tint(bg, fill.background_color_tint))
-    };
-    let bg_color = fill
-        .background_color
-        .as_deref()
-        .map(|c| hex_to_color_def_with_tint(c, fill.background_color_tint));
-
     if let Some(gradient) = &fill.gradient_fill {
         return FillDef::Gradient {
             gradient_type: match gradient.gradient_type.as_str() {
@@ -348,7 +316,7 @@ fn convert_fill(fill: &FillFormat) -> FillDef {
                 .iter()
                 .map(|stop| GradientStop {
                     position: stop.position,
-                    color: hex_to_color_def(&stop.color),
+                    color: semantic_color_to_def(&stop.color, None),
                 })
                 .collect(),
             left: gradient.center.as_ref().map(|c| c.left),
@@ -358,10 +326,62 @@ fn convert_fill(fill: &FillFormat) -> FillDef {
         };
     }
 
-    FillDef::Pattern {
-        pattern_type: Some(pattern_type),
-        fg_color,
-        bg_color,
+    let background_color = fill
+        .background_color
+        .as_deref()
+        .map(|color| semantic_color_to_def(color, fill.background_color_tint));
+    let pattern_foreground_color = fill
+        .pattern_foreground_color
+        .as_deref()
+        .map(|color| semantic_color_to_def(color, fill.pattern_foreground_color_tint));
+
+    let Some(pattern_token) = fill.pattern_type.as_deref() else {
+        // `backgroundColor` is also the public shorthand for a solid cell
+        // fill. Infer solid only when the caller did not provide an explicit
+        // pattern token; malformed explicit tokens must not become solid.
+        return match background_color {
+            Some(fg_color) => FillDef::Solid { fg_color },
+            None if pattern_foreground_color.is_some() => FillDef::Pattern {
+                pattern_type: None,
+                fg_color: pattern_foreground_color,
+                bg_color: None,
+            },
+            None => FillDef::None,
+        };
+    };
+
+    let Some(pattern_type) = PatternType::from_ooxml_token(pattern_token) else {
+        tracing::warn!(
+            token = %pattern_token,
+            "unknown PatternType on FillFormat → FillDef conversion; omitting patternType"
+        );
+        return FillDef::Pattern {
+            pattern_type: None,
+            fg_color: pattern_foreground_color,
+            bg_color: background_color,
+        };
+    };
+
+    match pattern_type {
+        // An explicit no-fill marker must win over any stale color fields.
+        PatternType::None => FillDef::None,
+        // DocumentFormat uses `backgroundColor` for a cell's visible solid
+        // color. OOXML stores that same color in patternFill/fgColor.
+        PatternType::Solid => match background_color {
+            Some(fg_color) => FillDef::Solid { fg_color },
+            None => FillDef::Pattern {
+                pattern_type: Some(PatternType::Solid),
+                fg_color: None,
+                bg_color: None,
+            },
+        },
+        // For real patterns the two domain color roles map directly to the
+        // OOXML foreground/background children.
+        pattern_type => FillDef::Pattern {
+            pattern_type: Some(pattern_type),
+            fg_color: pattern_foreground_color,
+            bg_color: background_color,
+        },
     }
 }
 
@@ -376,7 +396,7 @@ fn convert_border(border: &BorderFormat) -> BorderDef {
             let color = s
                 .color
                 .as_deref()
-                .map(|color| hex_to_color_def_with_tint(color, s.color_tint));
+                .map(|color| semantic_color_to_def(color, s.color_tint));
             BorderSideDef { style, color }
         })
     };
@@ -464,24 +484,79 @@ fn convert_underline(s: &str) -> UnderlineStyle {
     }
 }
 
-/// Convert a "#RRGGBB" hex string to a `ColorDef`.
+/// Convert a semantic cell-format color to its OOXML representation.
 ///
-/// If the string starts with '#', strips it and prepends "FF" for full alpha.
-/// Otherwise passes it through as-is (assumes "AARRGGBB" format).
-pub(super) fn hex_to_color_def(hex: &str) -> ColorDef {
-    hex_to_color_def_with_tint(hex, None)
+/// In addition to RGB/ARGB strings, the cell-format domain carries symbolic
+/// theme colors as `theme:<slot-or-index>[:tint]`. Keeping those symbolic on
+/// export is what lets a workbook continue to follow its theme after a
+/// save/reload cycle.
+pub(super) fn hex_to_color_def(color: &str) -> ColorDef {
+    semantic_color_to_def(color, None)
 }
 
-/// Convert a "#RRGGBB" hex string to a `ColorDef`, optionally attaching a tint.
-fn hex_to_color_def_with_tint(hex: &str, tint: Option<f64>) -> ColorDef {
-    let argb = if let Some(stripped) = hex.strip_prefix('#') {
+/// Lower one semantic color. A separate typed tint is authoritative when it
+/// is present (including `0.0`, which explicitly removes an inline tint);
+/// otherwise a tint embedded in the theme reference is used.
+fn semantic_color_to_def(color: &str, explicit_tint: Option<f64>) -> ColorDef {
+    if let Some((id, inline_tint)) = parse_theme_color_ref(color) {
+        return ColorDef::Theme {
+            id,
+            tint: serialize_tint(explicit_tint.or(inline_tint)),
+        };
+    }
+
+    let argb = if let Some(stripped) = color.strip_prefix('#') {
         format!("FF{}", stripped.to_uppercase())
     } else {
-        hex.to_uppercase()
+        color.to_uppercase()
     };
-    let tint_str = tint.filter(|&t| t != 0.0).map(|t| t.to_string());
     ColorDef::Rgb {
         val: argb,
-        tint: tint_str,
+        tint: serialize_tint(explicit_tint),
+    }
+}
+
+fn serialize_tint(tint: Option<f64>) -> Option<String> {
+    tint.filter(|t| t.is_finite() && *t != 0.0)
+        .map(|t| t.to_string())
+}
+
+/// Parse the public symbolic theme-color vocabulary into the numeric indices
+/// used by `<color theme="…">` (§18.8.3). The first four indices deliberately
+/// follow the OOXML color-reference order (light1, dark1, light2, dark2), not
+/// the `<a:clrScheme>` child order.
+fn parse_theme_color_ref(color: &str) -> Option<(u32, Option<f64>)> {
+    let mut parts = color.strip_prefix("theme:")?.split(':');
+    let theme = theme_slot_to_index(parts.next()?)?;
+    let tint = match parts.next() {
+        Some(raw) if !raw.is_empty() => {
+            let tint = raw.parse::<f64>().ok()?;
+            (tint.is_finite() && (-1.0..=1.0).contains(&tint)).then_some(tint)?
+        }
+        Some(_) => return None,
+        None => return Some((theme, None)),
+    };
+    parts.next().is_none().then_some((theme, Some(tint)))
+}
+
+fn theme_slot_to_index(slot: &str) -> Option<u32> {
+    if let Ok(index) = slot.parse::<u32>() {
+        return (index <= 11).then_some(index);
+    }
+
+    match slot.to_ascii_lowercase().as_str() {
+        "light1" | "lt1" => Some(0),
+        "dark1" | "dk1" => Some(1),
+        "light2" | "lt2" => Some(2),
+        "dark2" | "dk2" => Some(3),
+        "accent1" => Some(4),
+        "accent2" => Some(5),
+        "accent3" => Some(6),
+        "accent4" => Some(7),
+        "accent5" => Some(8),
+        "accent6" => Some(9),
+        "hyperlink" | "hlink" => Some(10),
+        "followedhyperlink" | "folhlink" | "fol_hlink" => Some(11),
+        _ => None,
     }
 }

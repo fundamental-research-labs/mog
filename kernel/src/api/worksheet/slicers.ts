@@ -22,13 +22,20 @@ import type {
 import { sheetId as toSheetId, type CellValue } from '@mog-sdk/contracts/core';
 import type {
   FloatingObjectAnchor,
+  MutationResult,
+  SlicerChange,
   StoredSlicer,
   StoredSlicerUpdate,
   Table as CanonicalTable,
 } from '../../bridges/compute/compute-types.gen';
 import type { DocumentContext } from '../../context';
 import * as Filters from '../../domain/sorting/filters';
-import { KernelError } from '../../errors';
+import {
+  KernelError,
+  slicerNotFoundError,
+  slicerSheetMismatchError,
+  translateNativeSlicerError,
+} from '../../errors';
 import { columnFilterCriteriaToCompute } from '../../bridges/compute/compute-wire-converters';
 import { extractMutationData } from '../../bridges/compute/compute-core';
 import {
@@ -136,6 +143,14 @@ function validateSlicerId(slicerId: string, operation: string): void {
   }
 }
 
+function canonicalSheetId(value: string): string {
+  return value.replaceAll('-', '').toLowerCase();
+}
+
+function sameSheetId(left: string, right: string): boolean {
+  return canonicalSheetId(left) === canonicalSheetId(right);
+}
+
 type ResolvedTableSlicerColumn = {
   columnId: string;
   absCol: number;
@@ -166,6 +181,79 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
     private readonly sheetId: SheetId,
   ) {}
 
+  private async getOwnedStoredSlicer(slicerId: string): Promise<StoredSlicer | null> {
+    const stored = await this.ctx.computeBridge.getSlicerState(this.sheetId, slicerId);
+    if (!stored || !sameSheetId(stored.sheetId, String(this.sheetId))) return null;
+    return stored;
+  }
+
+  private async requireOwnedStoredSlicer(
+    slicerId: string,
+    operation: string,
+  ): Promise<StoredSlicer> {
+    validateSlicerId(slicerId, operation);
+    const stored = await this.getOwnedStoredSlicer(slicerId);
+    if (!stored) throw slicerNotFoundError(this.sheetId, slicerId);
+    return stored;
+  }
+
+  private async callNativeSlicerMutation(
+    slicerId: string | undefined,
+    call: () => Promise<MutationResult>,
+  ): Promise<MutationResult> {
+    try {
+      return await call();
+    } catch (error) {
+      throw translateNativeSlicerError(error, this.sheetId, slicerId);
+    }
+  }
+
+  private requireSlicerChange(
+    result: MutationResult,
+    slicerId: string | undefined,
+    kind: SlicerChange['kind'],
+    operation: string,
+  ): SlicerChange & { data: StoredSlicer } {
+    const change = result.slicerChanges?.find(
+      (candidate) =>
+        candidate.kind === kind &&
+        (slicerId === undefined || candidate.slicerId === slicerId) &&
+        sameSheetId(candidate.sheetId, String(this.sheetId)),
+    );
+    if (!change?.data) {
+      throw new KernelError(
+        'OPERATION_FAILED',
+        `${operation}: native mutation returned no matching authoritative slicer change`,
+        {
+          context: {
+            operation,
+            slicerId,
+            expectedKind: kind,
+            sheetId: this.sheetId,
+          },
+        },
+      );
+    }
+    return change as SlicerChange & { data: StoredSlicer };
+  }
+
+  private async projectStoredSlicer(stored: StoredSlicer): Promise<Slicer> {
+    const sourceProjection =
+      stored.source.type === 'table'
+        ? await this.resolvePublicTableSource(stored.source)
+        : { tableName: '', columnName: '' };
+    return {
+      id: stored.id,
+      name: stored.name ?? stored.caption,
+      caption: stored.caption,
+      tableName: sourceProjection.tableName,
+      columnName: sourceProjection.columnName,
+      source: stored.source,
+      selectedItems: stored.selectedValues,
+      position: anchorToPixelBounds(stored.position),
+    };
+  }
+
   /**
    * Validate that the given slicer name is unique across the workbook.
    * Throws KernelError if a slicer with the same name already exists.
@@ -186,6 +274,9 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
   }
 
   async add(config: SlicerConfig): Promise<SlicerAddReceipt> {
+    if (config.sheetId !== undefined && !sameSheetId(config.sheetId, String(this.sheetId))) {
+      throw slicerSheetMismatchError(this.sheetId, config.sheetId);
+    }
     await assertSlicerObjectTopologyAllowed(
       this.ctx,
       this.sheetId,
@@ -207,7 +298,6 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
     };
     let source: StoredSlicer['source'] = sourceInput;
     let tableColumnIndex: number | undefined;
-    let publicTableName = '';
     let publicColumnName = '';
     if (sourceInput.type === 'table') {
       const table = config.source
@@ -231,7 +321,6 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
         columnCellId: resolvedColumn.columnId,
       };
       tableColumnIndex = resolvedColumn.tableColumnIndex;
-      publicTableName = this.publicTableName(table, sourceInput.tableId);
       publicColumnName = resolvedColumn.columnName;
     }
     const defaultStyle: StoredSlicer['style'] = {
@@ -245,7 +334,7 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
     };
     const storedConfig: StoredSlicer = {
       id: config.id ?? '',
-      sheetId: config.sheetId ?? this.sheetId,
+      sheetId: this.sheetId,
       source,
       cacheName:
         source.type === 'table' ? `Slicer_${publicColumnName || caption || 'Slicer'}` : undefined,
@@ -261,57 +350,28 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
       multiSelect: config.multiSelect ?? true,
       selectedValues: config.selectedValues ?? [],
     };
-    const result = await this.ctx.computeBridge.createSlicer(this.sheetId, storedConfig);
-    const created = result ? extractMutationData<StoredSlicer>(result) : undefined;
-    const slicerId = created?.id ?? storedConfig.id;
-
-    // Read back the full slicer entity.
-    const full = await this.get(slicerId);
-    if (full) {
-      return buildSlicerAddReceipt({
-        sheetId: this.sheetId,
-        slicer: full,
-      });
-    }
-
-    // Fallback: construct from config if read-back fails.
-    const pos = config.position as
-      | {
-          x?: number;
-          y?: number;
-          width?: number;
-          height?: number;
-        }
-      | undefined;
-    const slicer: Slicer = {
-      id: slicerId,
-      name: config.name ?? caption,
-      caption,
-      tableName: publicTableName,
-      columnName: publicColumnName,
-      source,
-      selectedItems: config.selectedValues ?? [],
-      position: {
-        x: pos?.x ?? 0,
-        y: pos?.y ?? 0,
-        width: pos?.width ?? 200,
-        height: pos?.height ?? 300,
-      },
-    };
+    const result = await this.callNativeSlicerMutation(storedConfig.id || undefined, () =>
+      this.ctx.computeBridge.createSlicer(this.sheetId, storedConfig),
+    );
+    const createdId = extractMutationData<StoredSlicer>(result)?.id || storedConfig.id || undefined;
+    const change = this.requireSlicerChange(result, createdId, 'created', 'slicers.add');
+    const slicer = await this.projectStoredSlicer(change.data);
     return buildSlicerAddReceipt({
-      sheetId: this.sheetId,
+      sheetId: toSheetId(change.sheetId),
       slicer,
     });
   }
 
   async remove(slicerId: string): Promise<SlicerRemoveReceipt> {
-    validateSlicerId(slicerId, 'deleteSlicer');
+    await this.requireOwnedStoredSlicer(slicerId, 'slicers.remove');
     await assertSlicerObjectTopologyAllowed(this.ctx, this.sheetId, 'slicers.remove', slicerId);
-    const slicer = await this.get(slicerId);
-    await this.ctx.computeBridge.deleteSlicer(this.sheetId, slicerId);
+    const result = await this.callNativeSlicerMutation(slicerId, () =>
+      this.ctx.computeBridge.deleteSlicer(this.sheetId, slicerId),
+    );
+    const change = this.requireSlicerChange(result, slicerId, 'deleted', 'slicers.remove');
+    const slicer = await this.projectStoredSlicer(change.data);
     return buildSlicerRemoveReceipt({
-      sheetId: this.sheetId,
-      slicerId,
+      sheetId: toSheetId(change.sheetId),
       slicer,
     });
   }
@@ -328,22 +388,35 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
     for (const slicer of slicers) {
       await assertSlicerObjectTopologyAllowed(this.ctx, this.sheetId, 'slicers.clear', slicer.name);
     }
-    const removedSlicers = (await Promise.all(slicers.map((slicer) => this.get(slicer.id)))).filter(
-      (slicer): slicer is Slicer => slicer !== null,
-    );
-    for (const slicer of slicers) {
-      await this.ctx.computeBridge.deleteSlicer(this.sheetId, slicer.id);
+    if (slicers.length === 0) {
+      return buildSlicerClearReceipt({
+        sheetId: this.sheetId,
+        slicers: [],
+      });
     }
+    const slicerIds = slicers.map((slicer) => slicer.id);
+    const result = await this.callNativeSlicerMutation(undefined, () =>
+      this.ctx.computeBridge.deleteSlicers(this.sheetId, slicerIds),
+    );
+    const removedSlicers = await Promise.all(
+      slicerIds.map((slicerId) => {
+        const change = this.requireSlicerChange(result, slicerId, 'deleted', 'slicers.clear');
+        return this.projectStoredSlicer(change.data);
+      }),
+    );
     return buildSlicerClearReceipt({
       sheetId: this.sheetId,
-      slicerIds: slicers.map((slicer) => slicer.id),
       slicers: removedSlicers,
     });
   }
 
   async list(): Promise<SlicerInfo[]> {
     const slicers = await this.ctx.computeBridge.getAllSlicers(this.sheetId);
-    return Promise.all(slicers.map((s) => this.projectSlicerInfo(s)));
+    return Promise.all(
+      slicers
+        .filter((slicer) => sameSheetId(slicer.sheetId, String(this.sheetId)))
+        .map((s) => this.projectSlicerInfo(s)),
+    );
   }
 
   async getItemAt(index: number): Promise<SlicerInfo | null> {
@@ -360,33 +433,18 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
   }
 
   async get(slicerId: string): Promise<Slicer | null> {
-    const state = await this.ctx.computeBridge.getSlicerState(this.sheetId, slicerId);
-    if (!state) {
-      return null;
-    }
-    const sourceProjection =
-      state.source.type === 'table'
-        ? await this.resolvePublicTableSource(state.source)
-        : { tableName: '', columnName: '' };
-    return {
-      id: slicerId,
-      name: state.name ?? state.caption,
-      caption: state.caption,
-      tableName: sourceProjection.tableName,
-      columnName: sourceProjection.columnName,
-      source: state.source,
-      selectedItems: state.selectedValues,
-      position: anchorToPixelBounds(state.position),
-    };
+    const state = await this.getOwnedStoredSlicer(slicerId);
+    return state ? this.projectStoredSlicer(state) : null;
   }
 
   async getItems(slicerId: string): Promise<SlicerItem[]> {
     validateSlicerId(slicerId, 'getItems');
-
-    // 1. Get stored slicer state
-    const stored = await this.ctx.computeBridge.getSlicerState(this.sheetId, slicerId);
+    const stored = await this.getOwnedStoredSlicer(slicerId);
     if (!stored) return [];
+    return this.getItemsForStored(stored);
+  }
 
+  private async getItemsForStored(stored: StoredSlicer): Promise<SlicerItem[]> {
     // Dispatch to pivot-specific logic for pivot slicers
     if (stored.source.type === 'pivot') {
       return this.getPivotSlicerItems(stored);
@@ -449,7 +507,10 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
   }
 
   async getItem(slicerId: string, key: CellValue): Promise<SlicerItem> {
-    const item = await this.getItemOrNullObject(slicerId, key);
+    const stored = await this.requireOwnedStoredSlicer(slicerId, 'slicers.getItem');
+    const items = await this.getItemsForStored(stored);
+    const keyStr = String(key ?? '');
+    const item = items.find((candidate) => String(candidate.value ?? '') === keyStr) ?? null;
     if (!item) {
       throw new KernelError(
         'COMPUTE_ERROR',
@@ -461,7 +522,9 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
 
   async getItemOrNullObject(slicerId: string, key: CellValue): Promise<SlicerItem | null> {
     validateSlicerId(slicerId, 'getItem');
-    const items = await this.getItems(slicerId);
+    const stored = await this.getOwnedStoredSlicer(slicerId);
+    if (!stored) return null;
+    const items = await this.getItemsForStored(stored);
     const keyStr = String(key ?? '');
     return items.find((item) => String(item.value ?? '') === keyStr) ?? null;
   }
@@ -470,37 +533,79 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
     slicerId: string,
     selectedItems: CellValue[],
   ): Promise<SlicerSelectionSetReceipt> {
-    validateSlicerId(slicerId, 'setSelection');
-    await assertSlicerFilteringAllowed(this.ctx, this.sheetId, 'slicers.setSelection', slicerId);
-    // Clear existing selection first, then toggle each desired item
-    await this.ctx.computeBridge.clearSlicerSelection(this.sheetId, slicerId);
-    for (const item of selectedItems) {
-      await this.ctx.computeBridge.toggleSlicerItem(this.sheetId, slicerId, item);
+    const existing = await this.requireOwnedStoredSlicer(slicerId, 'slicers.setSelection');
+    const resolvedSource =
+      existing.source.type === 'table'
+        ? await this.resolveTableSlicerSource(existing.source)
+        : null;
+    if (resolvedSource) {
+      await assertSlicerFilteringAllowed(this.ctx, this.sheetId, 'slicers.setSelection', slicerId, {
+        sheetId: resolvedSource.tableSheetId,
+        tableId: resolvedSource.table.id,
+        tableName: resolvedSource.tableName,
+        range: tableRangeToA1(resolvedSource.table),
+      });
     }
 
-    // Propagate selection to table autofilter
-    const projection = await this.propagateToAutofilter(slicerId, selectedItems);
-    const slicer = await this.get(slicerId);
-    return buildSlicerSelectionSetReceipt({
-      sheetId: this.sheetId,
+    const result = await this.callNativeSlicerMutation(slicerId, () =>
+      this.ctx.computeBridge.setSlicerSelection(this.sheetId, slicerId, selectedItems),
+    );
+    const change = this.requireSlicerChange(
+      result,
       slicerId,
-      selectedItems,
+      'selectionChanged',
+      'slicers.setSelection',
+    );
+    const projection = await this.propagateToAutofilter(
+      change.data,
+      change.data.selectedValues,
+      resolvedSource,
+    );
+    const slicer = await this.projectStoredSlicer(change.data);
+    return buildSlicerSelectionSetReceipt({
+      sheetId: toSheetId(change.sheetId),
       slicer,
       projection,
     });
   }
 
   async clearSelection(slicerId: string): Promise<SlicerSelectionClearReceipt> {
-    validateSlicerId(slicerId, 'clearSlicerSelection');
-    await assertSlicerFilteringAllowed(this.ctx, this.sheetId, 'slicers.clearSelection', slicerId);
-    await this.ctx.computeBridge.clearSlicerSelection(this.sheetId, slicerId);
-
-    // Propagate clear to table autofilter
-    const projection = await this.propagateToAutofilter(slicerId, []);
-    const slicer = await this.get(slicerId);
-    return buildSlicerSelectionClearReceipt({
-      sheetId: this.sheetId,
+    const existing = await this.requireOwnedStoredSlicer(slicerId, 'slicers.clearSelection');
+    const resolvedSource =
+      existing.source.type === 'table'
+        ? await this.resolveTableSlicerSource(existing.source)
+        : null;
+    if (resolvedSource) {
+      await assertSlicerFilteringAllowed(
+        this.ctx,
+        this.sheetId,
+        'slicers.clearSelection',
+        slicerId,
+        {
+          sheetId: resolvedSource.tableSheetId,
+          tableId: resolvedSource.table.id,
+          tableName: resolvedSource.tableName,
+          range: tableRangeToA1(resolvedSource.table),
+        },
+      );
+    }
+    const result = await this.callNativeSlicerMutation(slicerId, () =>
+      this.ctx.computeBridge.setSlicerSelection(this.sheetId, slicerId, []),
+    );
+    const change = this.requireSlicerChange(
+      result,
       slicerId,
+      'selectionChanged',
+      'slicers.clearSelection',
+    );
+    const projection = await this.propagateToAutofilter(
+      change.data,
+      change.data.selectedValues,
+      resolvedSource,
+    );
+    const slicer = await this.projectStoredSlicer(change.data);
+    return buildSlicerSelectionClearReceipt({
+      sheetId: toSheetId(change.sheetId),
       slicer,
       projection,
     });
@@ -511,13 +616,14 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
    * Mirrors the pattern from domain/slicers/selection.ts setSlicerSelection.
    */
   private async propagateToAutofilter(
-    slicerId: string,
+    stored: StoredSlicer,
     selectedValues: CellValue[],
+    preResolvedSource?: ResolvedTableSlicerSource | null,
   ): Promise<SlicerFilterProjectionReceiptInput | null> {
-    const stored = await this.ctx.computeBridge.getSlicerState(this.sheetId, slicerId);
-    if (!stored || stored.source.type !== 'table') return null;
+    if (stored.source.type !== 'table') return null;
 
-    const resolvedSource = await this.resolveTableSlicerSource(stored.source);
+    const resolvedSource =
+      preResolvedSource ?? (await this.resolveTableSlicerSource(stored.source));
     if (!resolvedSource?.column) return null;
     const { table, tableSheetId, column: resolvedColumn } = resolvedSource;
 
@@ -586,12 +692,8 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
     slicerId: string,
     offset?: { x?: number; y?: number },
   ): Promise<SlicerDuplicateReceipt> {
-    validateSlicerId(slicerId, 'duplicateSlicer');
+    const existing = await this.requireOwnedStoredSlicer(slicerId, 'slicers.duplicate');
     await assertSlicerObjectTopologyAllowed(this.ctx, this.sheetId, 'slicers.duplicate', slicerId);
-    const existing = await this.ctx.computeBridge.getSlicerState(this.sheetId, slicerId);
-    if (!existing) {
-      throw new KernelError('COMPUTE_ERROR', `Slicer "${slicerId}" not found`);
-    }
     const xOffsetPx = offset?.x ?? 20;
     const yOffsetPx = offset?.y ?? 20;
     const existingAnchor = existing.position ?? defaultAnchor();
@@ -600,48 +702,49 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
       anchorColOffsetEmu: existingAnchor.anchorColOffsetEmu + Math.round(xOffsetPx * EMU_PER_PX),
       anchorRowOffsetEmu: existingAnchor.anchorRowOffsetEmu + Math.round(yOffsetPx * EMU_PER_PX),
     };
-    const result = await this.ctx.computeBridge.createSlicer(this.sheetId, {
-      id: '',
-      sheetId: '',
-      source: existing.source,
-      cacheName: existing.cacheName,
-      cacheUid: existing.cacheUid,
-      caption: existing.caption,
-      name: existing.name,
-      style: existing.style,
-      tableColumnIndex: existing.tableColumnIndex,
-      pivotCacheId: existing.pivotCacheId,
-      pivotTableTabId: existing.pivotTableTabId,
-      pivotTabularItems: existing.pivotTabularItems,
-      rowHeight: existing.rowHeight,
-      position: newPosition,
-      level: existing.level,
-      uid: existing.uid,
-      extLstXml: existing.extLstXml,
-      cacheExtLstXml: existing.cacheExtLstXml,
-      anchorObjectId: existing.anchorObjectId,
-      anchorMacroName: existing.anchorMacroName,
-      anchorNvExtLstXml: existing.anchorNvExtLstXml,
-      zIndex: existing.zIndex,
-      locked: existing.locked,
-      showHeader: existing.showHeader,
-      startItem: existing.startItem,
-      multiSelect: true,
-      selectedValues: [],
-    });
-    const newSlicerId = extractMutationData<StoredSlicer>(result)?.id ?? '';
-    const slicer = newSlicerId ? await this.get(newSlicerId) : null;
+    const result = await this.callNativeSlicerMutation(undefined, () =>
+      this.ctx.computeBridge.createSlicer(this.sheetId, {
+        id: '',
+        sheetId: this.sheetId,
+        source: existing.source,
+        cacheName: existing.cacheName,
+        cacheUid: existing.cacheUid,
+        caption: existing.caption,
+        name: existing.name,
+        style: existing.style,
+        tableColumnIndex: existing.tableColumnIndex,
+        pivotCacheId: existing.pivotCacheId,
+        pivotTableTabId: existing.pivotTableTabId,
+        pivotTabularItems: existing.pivotTabularItems,
+        rowHeight: existing.rowHeight,
+        position: newPosition,
+        level: existing.level,
+        uid: existing.uid,
+        extLstXml: existing.extLstXml,
+        cacheExtLstXml: existing.cacheExtLstXml,
+        anchorObjectId: existing.anchorObjectId,
+        anchorMacroName: existing.anchorMacroName,
+        anchorNvExtLstXml: existing.anchorNvExtLstXml,
+        zIndex: existing.zIndex,
+        locked: existing.locked,
+        showHeader: existing.showHeader,
+        startItem: existing.startItem,
+        multiSelect: true,
+        selectedValues: [],
+      }),
+    );
+    const newSlicerId = extractMutationData<StoredSlicer>(result)?.id;
+    const change = this.requireSlicerChange(result, newSlicerId, 'created', 'slicers.duplicate');
+    const slicer = await this.projectStoredSlicer(change.data);
     return buildSlicerDuplicateReceipt({
-      sheetId: this.sheetId,
+      sheetId: toSheetId(change.sheetId),
       sourceSlicerId: slicerId,
-      slicerId: newSlicerId,
       slicer,
-      source: existing.source,
     });
   }
 
   async update(slicerId: string, updates: Partial<SlicerConfig>): Promise<SlicerUpdateReceipt> {
-    validateSlicerId(slicerId, 'updateSlicerConfig');
+    const existing = await this.requireOwnedStoredSlicer(slicerId, 'slicers.update');
     await assertSlicerObjectEditAllowed(this.ctx, this.sheetId, 'slicers.update', slicerId);
 
     // Validate name uniqueness if name is being changed.
@@ -659,19 +762,20 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
     }
     if (updates.showHeader !== undefined) bridgeUpdate.showHeader = updates.showHeader;
     if (Object.keys(bridgeUpdate).length === 0) {
-      const slicer = await this.get(slicerId);
+      const slicer = await this.projectStoredSlicer(existing);
       return buildSlicerUpdateReceipt({
         sheetId: this.sheetId,
-        slicerId,
         slicer,
         noOp: true,
       });
     }
-    await this.ctx.computeBridge.updateSlicerConfig(this.sheetId, slicerId, bridgeUpdate);
-    const slicer = await this.get(slicerId);
+    const result = await this.callNativeSlicerMutation(slicerId, () =>
+      this.ctx.computeBridge.updateSlicerConfig(this.sheetId, slicerId, bridgeUpdate),
+    );
+    const change = this.requireSlicerChange(result, slicerId, 'updated', 'slicers.update');
+    const slicer = await this.projectStoredSlicer(change.data);
     return buildSlicerUpdateReceipt({
-      sheetId: this.sheetId,
-      slicerId,
+      sheetId: toSheetId(change.sheetId),
       slicer,
     });
   }
@@ -854,16 +958,13 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
   }
 
   async getState(slicerId: string): Promise<SlicerState> {
-    const state = await this.ctx.computeBridge.getSlicerState(this.sheetId, slicerId);
-    if (!state) {
-      throw new KernelError('COMPUTE_ERROR', `Slicer "${slicerId}" not found`);
-    }
+    const state = await this.requireOwnedStoredSlicer(slicerId, 'slicers.getState');
 
     // Get real items based on slicer source type
     const items =
       state.source.type === 'pivot'
         ? await this.getPivotSlicerItems(state)
-        : await this.getItems(slicerId);
+        : await this.getItemsForStored(state);
 
     // Check real connectivity
     const isConnected = await this.checkSlicerConnectivity(state);

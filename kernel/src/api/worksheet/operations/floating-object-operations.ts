@@ -412,22 +412,21 @@ export async function deleteManyFloatingObjects(
   objectIds: string[],
   admissionOptions?: MutationAdmissionOptions,
 ): Promise<number> {
-  let count = 0;
+  const uniqueObjectIds = [...new Set(objectIds)];
+  // Validate the complete batch before the first mutation so a stale ID cannot
+  // produce a partially-applied delete.
+  await Promise.all(uniqueObjectIds.map((id) => requireObject(ctx.computeBridge, sheetId, id)));
+
   const nextMutationOptions = createGroupedFloatingObjectMutationOptions(
     ctx,
     'floatingObjects.delete',
     sheetId,
     admissionOptions,
   );
-  for (const id of objectIds) {
-    try {
-      await ctx.computeBridge.deleteFloatingObject(sheetId, id, nextMutationOptions());
-      count++;
-    } catch {
-      // Object may not exist; count only successful deletes
-    }
+  for (const id of uniqueObjectIds) {
+    await ctx.computeBridge.deleteFloatingObject(sheetId, id, nextMutationOptions());
   }
-  return count;
+  return uniqueObjectIds.length;
 }
 
 // =============================================================================
@@ -513,7 +512,7 @@ export async function groupFloatingObjects(
   const options = floatingObjectOptions(ctx, 'floatingObjects.group', sheetId, admissionOptions);
   const result = await ctx.computeBridge.createFloatingObjectGroup(
     sheetId,
-    { memberIds: objectIds },
+    { children: objectIds },
     options,
   );
   const groupId = result.floatingObjectGroupChanges?.[0]?.objectId;
@@ -533,6 +532,10 @@ export async function ungroupFloatingObjects(
   groupId: string,
   admissionOptions?: MutationAdmissionOptions,
 ): Promise<void> {
+  const group = await ctx.computeBridge.getFloatingObjectGroupTyped(sheetId, groupId);
+  if (!group) {
+    throw objectNotFound(groupId);
+  }
   const options = floatingObjectOptions(ctx, 'floatingObjects.ungroup', sheetId, admissionOptions);
   await ctx.computeBridge.deleteFloatingObjectGroup(sheetId, groupId, options);
 }

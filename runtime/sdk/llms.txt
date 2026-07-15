@@ -1,141 +1,131 @@
 # @mog-sdk/sdk
 
-Headless spreadsheet engine for Node.js. 582 spreadsheet formula functions, XLSX import/export, charts, tables, pivots, and conditional formatting, all powered by a native Rust engine.
+Concise guide to the headless spreadsheet SDK. For code generation, trust the
+API bundled with the installed package version over remembered or web examples.
 
-## API Discovery
+## Find the current API
 
-This SDK includes a built-in introspection API. Use it to explore the full API surface programmatically — no need to read type definitions:
+Node entries provide version-matched search and introspection:
 
 ```typescript
 import { api } from '@mog-sdk/sdk';
 
-// Overview: list all methods and sub-APIs
-api.describe()
-// → { workbook: { methods: [...], subApis: ['sheets','history','names',...] },
-//     worksheet: { methods: [...], subApis: ['charts','formats','tables',...] } }
-
-// Drill into a sub-API
-api.describe('ws.charts')
-// → { name: 'WorksheetCharts', methods: [{ name: 'add', signature: '...', tags: ['action'] }, ...] }
-
-// Get a specific method with full type info
-api.describe('ws.charts.add')
-// → { name: 'add', signature: '...', tags: ['action'], types: { ChartConfig: { definition: '...' } } }
-
-// Direct methods on root interfaces
-api.describe('ws.setCell')
-api.describe('wb.batch')
-
-// Look up a type definition
-api.describe('type:ChartType')
+api.describe();                              // Current roots and sub-APIs
+const hits = api.search('column width');     // Ranked paths, signatures, and docs
+api.describe(hits[0].path);                  // Full details for a search result
+api.describe('ws.layout');                   // Methods in one sub-API
+api.describe('type:CellFormatInput');        // Exact accepted type shape
 ```
 
-Paths use `wb.*` for workbook and `ws.*` for worksheet. Sub-APIs are accessed as `ws.{subApi}.{method}`.
+Search is case-insensitive, camelCase-aware, and ANDs its terms. Exact
+`api.describe(...)` paths are case-sensitive and return `null` when unknown.
+If code cannot run yet, search the installed `dist/*.d.ts` declarations.
 
-## Agent API Guidance
-
-When generating Mog code, use `api.describe(...)` for valid Mog methods and
-`api.guidance` for source preflight and wrong-dialect explanations:
+## Check generated code
 
 ```typescript
-api.describe('ws.tables.add')
-api.describe('ws.filters.setColumnFilter')
-api.guidance.analyze(source)
-api.guidance.explain('context.workbook.worksheets.getActiveWorksheet')
-api.guidance.explain('wb.activeSheet')
-api.guidance.preflight(source)
+api.guidance.explain('context.workbook.worksheets.getActiveWorksheet');
+api.guidance.explain('wb.activeSheet');
+api.guidance.preflight(source);
 ```
 
-For each diagnostic, inspect `diagnostic.mogReplacements` for replacement
-paths/snippets and `diagnostic.references` for follow-up `api.guidance.explain`
-queries.
+Do not use the Microsoft Office JavaScript proxy/sync model (`Excel.run`,
+`context.sync()`, `.load(...)`, `range.values = ...`). Search for Mog-native
+methods, describe the exact result, then preflight generated source.
 
-Code shaped like the Microsoft Office JavaScript spreadsheet API is diagnosed,
-not supported. Do not use `Excel.run`, `Office.context`, `context.sync()`,
-`.load(...)`, `.isNullObject`, Range proxy assignment such as
-`range.values = data`, or `range.format.fill.color`. Use Mog-native APIs such
-as the injected `wb` object, `const ws = wb.activeSheet`,
-`await wb.getSheet(name)`, `await ws.setRange(range, data)`, and
-`await ws.formats.setRange(range, format)`.
-
-## Quick Start
+## Quick start
 
 ```typescript
 import { createWorkbook } from '@mog-sdk/sdk';
 
 const wb = await createWorkbook();
 const ws = wb.activeSheet;
-
-// Write cells (formulas auto-recalc)
 await ws.setCell('A1', 100);
 await ws.setCell('A2', 200);
 await ws.setCell('A3', '=SUM(A1:A2)');
 console.log(await ws.getValue('A3')); // 300
 
-// Bulk write
-await ws.setRange('B1', [['Name', 'Score'], ['Alice', 92], ['Bob', 85]]);
+await ws.setRange('B1', [
+  ['Name', 'Score'],
+  ['Alice', 92],
+  ['Bob', 85],
+]);
+console.log(await ws.toJSON({ range: 'B1:C3' }));
+// [{ Name: 'Alice', Score: 92 }, { Name: 'Bob', Score: 85 }]
 
-// Read
-const data = await ws.getData();           // CellValue[][]
-const csv = await ws.toCSV();              // RFC 4180 CSV string
-const json = await ws.toJSON();            // [{ Name: 'Alice', Score: 92 }, ...]
-await ws.describeRange('A1:B3');           // LLM-friendly text summary
-
-// Always dispose when done
-await wb.dispose();
+wb.dispose();
 ```
 
-## Open & Save XLSX
+## Open and save XLSX
 
 ```typescript
+import { readFile } from 'node:fs/promises';
 import { createWorkbook } from '@mog-sdk/sdk';
 
-// Open from file path or buffer
-const wb = await createWorkbook('data.xlsx');
-const wb = await createWorkbook(readFileSync('data.xlsx'));
-const wb = await createWorkbook('data.xlsx', { valuesOnly: true });
-
-// Save to file path or buffer
-await wb.save('output.xlsx');         // writes file, returns buffer
-await wb.save('./outputs/model.xlsx'); // Node SDK creates missing parent dirs
-const buf = await wb.save();          // buffer only, no file write
-const buf = await wb.toXlsx();        // same as save() without side effects
-
-// save(path) failures throw MogSdkError with details.issue, requestedPath, cwd,
-// and when available absolutePath/filesystemCode. Empty string is not a path.
+const wb = await createWorkbook(await readFile('data.xlsx'), { valuesOnly: true });
+await wb.save('./outputs/model.xlsx');
+const output = await wb.toXlsx();
+wb.dispose();
 ```
 
-## Sub-API Examples
+In Node, `save(path)` creates missing parent directories. Use `toXlsx()` or
+`save()` for a buffer without a file write.
+
+## High-signal API contracts
+
+Generated from the public API spec; do not edit this section by hand.
+
+<!-- BEGIN GENERATED:API-CONTRACTS -->
+
+### Layout selectors and units
 
 ```typescript
-// Sheets
-await wb.sheets.add('Sheet2');
-await wb.sheets.rename('Sheet1', 'Sales');
-await wb.getOrCreateSheet('Data');          // idempotent sheet access
-
-// Tables
-await ws.tables.add('A1:C10', { name: 'Sales', hasHeaders: true });
-
-// Filters
-await ws.filters.add('A1:C10');
-await ws.filters.setColumnFilter(0, { type: 'value', values: ['Widget'] });
-
-// Charts
-await ws.charts.add({ type: 'bar', dataRange: 'A1:B5' });
-
-// Formatting
-await ws.formats.set('A1', { bold: true, fontColor: '#FF0000' });
-
-// Structure
-await ws.structure.insertRows(5, 3);
-await ws.structure.merge('A1:B1');
-
-// History
-await wb.history.undo();
-await wb.history.redo();
-
-// LLM helpers
-await ws.summarize();                      // LLM-friendly sheet overview
-await ws.describe('A1');                   // cell description with formula
-await ws.describeRange('A1:D5');           // tabular text summary
+setColumnWidth(col: WorksheetLayoutColumnSelector, widthPx: number): Promise<void>;
 ```
+
+Set the width of a column in pixels.
+
+@param col - Columns selected by 0-based index, column name, or whole-column reference
+@param widthPx - Width in pixels (must be > 0)
+
+### Chart placement and units
+
+```typescript
+add(config: ChartConfig): Promise<ChartAddReceipt>;
+```
+
+- `anchorRow: number;` — Anchor row (0-based).
+- `anchorCol: number;` — Anchor column (0-based).
+- `width: number;` — Chart width in points.
+- `height: number;` — Chart height in points.
+
+A complete minimal chart call is:
+
+```typescript
+await ws.charts.add({
+  type: 'bar',
+  dataRange: 'A1:B5',
+  anchorRow: 0,
+  anchorCol: 3,
+  width: 480,
+  height: 288,
+});
+```
+
+### Cell formatting keys
+
+Canonical flat `CellFormat` keys:
+
+`numberFormat`, `numberFormatType`, `fontFamily`, `fontSize`, `fontTheme`, `fontCharset`, `fontFamilyType`, `fontColor`, `fontColorTint`, `bold`, `italic`, `underlineType`, `strikethrough`, `superscript`, `subscript`, `fontOutline`, `fontShadow`, `horizontalAlign`, `verticalAlign`, `wrapText`, `textRotation`, `indent`, `shrinkToFit`, `readingOrder`, `autoIndent`, `backgroundColor`, `backgroundColorTint`, `patternType`, `patternForegroundColor`, `patternForegroundColorTint`, `gradientFill`, `borders`, `locked`, `hidden`, `pivotButton`, `forcedTextMode`, `extensions`
+
+`CellFormatInput` also accepts write-only compatibility aliases: `fillColor` → `backgroundColor`, `horizontalAlignment` → `horizontalAlign`, `verticalAlignment` → `verticalAlign`. Aliases are normalized before persistence; format reads expose only the canonical keys.
+
+`CellFormatInput` also accepts compatibility containers: `font`, `fill`, `alignment`, `protection`, `border`. Prefer the flat keys for Mog-native code.
+
+Inspect `api.describe('type:CellFormatInput')` before generating format objects; do not invent keys.
+
+### Table names
+
+`TableOptions.name`: Table name (auto-generated if omitted). Must start with a letter or underscore, contain only letters, digits, and underscores, and must not parse as a cell reference such as A1, T1, or Q3.
+
+<!-- END GENERATED:API-CONTRACTS -->

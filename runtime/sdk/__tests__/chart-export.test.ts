@@ -52,7 +52,7 @@ describe('SDK chart image export', () => {
     await sheet.setCell('A3', 'Feb');
     await sheet.setCell('B3', 28);
 
-    const chart = await sheet.charts.add({
+    const { chart } = await sheet.charts.add({
       type: 'bar',
       anchorRow: 0,
       anchorCol: 3,
@@ -98,7 +98,7 @@ describe('SDK chart image export', () => {
       ['Feb', 28],
     ]);
 
-    const chart = await sheet.charts.add({
+    const { chart } = await sheet.charts.add({
       type: 'bar',
       dataRange: 'A1:B3',
       anchorRow: 0,
@@ -136,7 +136,7 @@ describe('SDK chart image export', () => {
     await sheet.setCell('A5', 'Apr');
     await sheet.setCell('B5', 35);
 
-    const chart = await sheet.charts.add({
+    const { chart } = await sheet.charts.add({
       type: 'bar',
       anchorRow: 0,
       anchorCol: 3,
@@ -193,7 +193,7 @@ describe('SDK chart image export', () => {
     await sheet.setCell('A3', 'B');
     await sheet.setCell('B3', 20);
 
-    const chart = await sheet.charts.add({
+    const { chart } = await sheet.charts.add({
       type: 'bar',
       anchorRow: 0,
       anchorCol: 3,
@@ -246,7 +246,7 @@ describe('SDK chart image export', () => {
     await sheet.setCell('A3', 'B');
     await sheet.setCell('B3', 20);
 
-    const chart = await sheet.charts.add({
+    const { chart } = await sheet.charts.add({
       type: 'bar',
       anchorRow: 0,
       anchorCol: 3,

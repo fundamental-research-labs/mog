@@ -855,6 +855,25 @@ describe('WorksheetImpl Extended Methods', () => {
   describe('Group 5: Slicer Config Updates', () => {
     it('updateSlicerConfig delegates to computeBridge.updateSlicerConfig', async () => {
       const updates = { caption: 'New Caption' };
+      const existing = {
+        id: 'slicer-1',
+        sheetId: String(SHEET_ID),
+        caption: 'Slicer 1',
+        source: { type: 'table', tableId: 'T1', columnCellId: 'C1' },
+        selectedValues: [],
+      };
+      const updated = { ...existing, caption: updates.caption };
+      ctx.computeBridge.getSlicerState.mockResolvedValue(existing);
+      ctx.computeBridge.updateSlicerConfig.mockResolvedValue({
+        slicerChanges: [
+          {
+            sheetId: String(SHEET_ID),
+            slicerId: existing.id,
+            kind: 'updated',
+            data: updated,
+          },
+        ],
+      });
 
       await ws.slicers.update('slicer-1', updates as any);
 
@@ -867,6 +886,8 @@ describe('WorksheetImpl Extended Methods', () => {
 
     it('getSlicerState delegates to computeBridge.getSlicerState', async () => {
       const mockState = {
+        id: 'slicer-1',
+        sheetId: String(SHEET_ID),
         caption: 'Slicer 1',
         source: { type: 'table', tableId: 'T1', columnCellId: 'C1' },
         selectedValues: ['A'],
@@ -894,6 +915,7 @@ describe('WorksheetImpl Extended Methods', () => {
       const mockSlicers = [
         {
           id: 'slicer-1',
+          sheetId: String(SHEET_ID),
           caption: 'Slicer 1',
           source: { type: 'table', tableId: 'Table1', columnCellId: 'Col1' },
         },
@@ -1151,6 +1173,22 @@ describe('WorksheetImpl Extended Methods', () => {
         'Table1',
         expectVersionOperationOptions('tables.applyAutoExpansion', ['tables']),
       );
+    });
+
+    it('applyAutoExpansion rejects a missing table before detection or mutation', async () => {
+      ctx.computeBridge.getTableByName.mockResolvedValue(null);
+
+      await expect(ws.tables.applyAutoExpansion('MissingTable')).rejects.toMatchObject({
+        code: 'TABLE_NOT_FOUND',
+        context: expect.objectContaining({
+          resourceType: 'Table',
+          resourceId: 'MissingTable',
+          operation: 'tables.applyAutoExpansion',
+          sheetId: SHEET_ID,
+        }),
+      });
+      expect(ctx.computeBridge.detectAutoExpansion).not.toHaveBeenCalled();
+      expect(ctx.computeBridge.applyAutoExpansion).not.toHaveBeenCalled();
     });
 
     it('resizeTable delegates to computeBridge.resizeTable', async () => {

@@ -40,12 +40,12 @@ pub(super) fn get_cell_format_with_cf(
     fmt
 }
 
-pub(super) fn get_resolved_format(
+fn get_transferable_cell_format(
     engine: &YrsComputeEngine,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
-) -> ResolvedCellFormat {
+) -> (CellFormat, bool) {
     // Use grid_indexes (the in-memory position→id allocator) to find cell IDs.
     // This reflects the latest state including recent mutations from
     // set_format_for_ranges, unlike the Yrs CRDT which may lag.
@@ -57,7 +57,7 @@ pub(super) fn get_resolved_format(
         .and_then(|grid| grid.cell_id_at(row, col))
         .or_else(|| engine.mirror.resolve_cell_id(sheet_id, pos));
 
-    let mut fmt = if let Some(cid) = cell_id {
+    let fmt = if let Some(cid) = cell_id {
         // Cell exists: full cascade (default -> col -> row -> Format Range -> table -> cell)
         let cell_hex = id_to_hex(cid.as_u128());
         let table_fmt =
@@ -84,14 +84,34 @@ pub(super) fn get_resolved_format(
         )
     };
 
-    // Theme resolution BEFORE CF (matches viewport pipeline order).
-    // No formula format inheritance: a formula cell uses its OWN format.
-    // Excel applies operand-format inheritance at edit time (the format is
-    // baked into the formula cell), not at display time.
-    domain_types::theme_color::resolve_theme_refs(&mut fmt, &engine.settings.theme_palette);
+    (fmt, cell_id.is_some())
+}
 
-    // CF as 6th layer (only if a cell exists — CF rules are cell-bound)
-    if cell_id.is_some()
+pub(super) fn get_transferable_format(
+    engine: &YrsComputeEngine,
+    sheet_id: &SheetId,
+    row: u32,
+    col: u32,
+) -> ResolvedCellFormat {
+    // Keep symbolic theme references and exclude conditional-format/display
+    // overlays so this dense result can be transferred back into a mutator.
+    let (format, _) = get_transferable_cell_format(engine, sheet_id, row, col);
+    ResolvedCellFormat::from(format)
+}
+
+pub(super) fn get_resolved_format(
+    engine: &YrsComputeEngine,
+    sheet_id: &SheetId,
+    row: u32,
+    col: u32,
+) -> ResolvedCellFormat {
+    let (mut fmt, cell_exists) = get_transferable_cell_format(engine, sheet_id, row, col);
+
+    // Preserve the historical internal resolved path: theme refs and CF are
+    // projected for consumers that need rendered appearance rather than a
+    // transferable format snapshot.
+    domain_types::theme_color::resolve_theme_refs(&mut fmt, &engine.settings.theme_palette);
+    if cell_exists
         && let Some(cache_entry) = engine.stores.cf_cache.get(sheet_id)
         && let Some(cf_result) = cache_entry.results.get(&(row, col))
     {

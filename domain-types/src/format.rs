@@ -5,7 +5,8 @@ use crate::cell_format::{CellBorderSide, CellBorders, CellFormat, FontSize};
 /// A fully-resolved cell format — the shared representation across parser, Yrs, and writer.
 ///
 /// Replaces `ResolvedFormat` (import-only) and adds borders (currently dropped).
-/// Colors are always resolved to "#RRGGBB" strings — no theme indices, no auto flag.
+/// Static colors are either concrete `#RRGGBB` values or symbolic
+/// `theme:<slot>` references. Indexed and auto colors are resolved on import.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DocumentFormat {
@@ -36,7 +37,7 @@ pub struct FontFormat {
     /// Font size in millipoints (11pt = 11_000).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub size: Option<u32>,
-    /// Resolved RGB color as "#RRGGBB".
+    /// Concrete `#RRGGBB` or symbolic `theme:<slot>` color.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
     /// Raw tint modifier (-1.0 to +1.0) for font color.
@@ -78,7 +79,7 @@ pub struct FontFormat {
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FillFormat {
-    /// Resolved RGB background color as "#RRGGBB".
+    /// Concrete `#RRGGBB` or symbolic `theme:<slot>` background color.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub background_color: Option<String>,
     /// Raw tint modifier (-1.0 to +1.0) for background color.
@@ -87,7 +88,7 @@ pub struct FillFormat {
     /// Pattern type: "solid", "gray125", etc.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pattern_type: Option<String>,
-    /// Resolved RGB pattern foreground color as "#RRGGBB".
+    /// Concrete `#RRGGBB` or symbolic `theme:<slot>` pattern color.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pattern_foreground_color: Option<String>,
     /// Raw tint modifier (-1.0 to +1.0) for pattern foreground color.
@@ -98,7 +99,8 @@ pub struct FillFormat {
     pub gradient_fill: Option<GradientFillFormat>,
 }
 
-/// Resolved gradient fill format with all colors as "#RRGGBB".
+/// Gradient fill format. Theme-stop tints are stored inline because gradient
+/// stops have no parallel tint property.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GradientFillFormat {
@@ -158,7 +160,7 @@ impl std::hash::Hash for GradientCenter {
 pub struct GradientStopFormat {
     /// Position along gradient (0.0 to 1.0).
     pub position: f64,
-    /// Resolved color as "#RRGGBB".
+    /// Concrete `#RRGGBB` or symbolic `theme:<slot>[:tint]` color.
     pub color: String,
 }
 
@@ -249,7 +251,7 @@ pub struct BorderSide {
     /// "hair", "mediumDashed", "dashDot", "mediumDashDot", "dashDotDot",
     /// "mediumDashDotDot", "slantDashDot".
     pub style: String,
-    /// Resolved RGB color as "#RRGGBB".
+    /// Concrete `#RRGGBB` or symbolic `theme:<slot>` color.
     pub color: Option<String>,
     /// Raw tint modifier (-1.0 to +1.0) for border color.
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -5,7 +5,11 @@ use super::helpers::*;
 use crate::snapshot::ChangeKind;
 use cell_types::CellId;
 use compute_document::hex::hex_to_id;
-use domain_types::domain::comment::CommentType;
+use domain_types::{
+    ParseOutput, SheetData,
+    domain::comment::{Comment, CommentType, RichTextRun},
+};
+use value_types::CellValue;
 
 #[test]
 fn set_thread_resolved_emits_comment_change_for_thread_cell() {
@@ -182,6 +186,68 @@ fn sdk_authored_note_exports_as_legacy_note_without_person_identity() {
             .as_deref()
             .is_some_and(|content| content.contains("SDK legacy note survives export"))
     );
+}
+
+#[test]
+fn imported_note_edit_stays_consistent_through_undo_and_redo() {
+    let input = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Notes".to_string(),
+            rows: 1,
+            cols: 1,
+            cells: vec![domain_types::CellData {
+                row: 0,
+                col: 0,
+                value: CellValue::Text("note owner".into()),
+                ..Default::default()
+            }],
+            comments: vec![Comment {
+                cell_ref: "A1".to_string(),
+                author: "Imported Author".to_string(),
+                content: Some("Fixture note".to_string()),
+                runs: vec![RichTextRun {
+                    text: "Fixture note".to_string(),
+                    ..Default::default()
+                }],
+                comment_type: CommentType::Note,
+                ..Default::default()
+            }],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let mut engine = engine_from_parse_output_normal(&input);
+    let sid =
+        SheetId::from_uuid_str(&engine.get_all_sheet_ids()[0]).expect("valid hydrated sheet id");
+    let note_id = engine
+        .get_comments_for_cell_by_position(&sid, 0, 0)
+        .into_iter()
+        .next()
+        .expect("imported note should exist")
+        .id;
+
+    engine
+        .update_comment(&sid, &note_id, "Edited note")
+        .expect("edit imported note");
+    let edited = engine
+        .get_comment(&sid, &note_id)
+        .expect("edited note should exist");
+    assert_eq!(edited.content.as_deref(), Some("Edited note"));
+    assert_eq!(edited.runs[0].text, "Edited note");
+
+    engine.undo().expect("undo imported note edit");
+    let undone = engine
+        .get_comment(&sid, &note_id)
+        .expect("undone note should exist");
+    assert_eq!(undone.content.as_deref(), Some("Fixture note"));
+    assert_eq!(undone.runs[0].text, "Fixture note");
+
+    engine.redo().expect("redo imported note edit");
+    let redone = engine
+        .get_comment(&sid, &note_id)
+        .expect("redone note should exist");
+    assert_eq!(redone.content.as_deref(), Some("Edited note"));
+    assert_eq!(redone.runs[0].text, "Edited note");
 }
 
 #[test]

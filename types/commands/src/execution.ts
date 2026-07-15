@@ -113,6 +113,16 @@ export interface CodeExecutionDiagnostic {
   message: string;
   /** Actionable correction text */
   suggestion?: string;
+  /** SDK or kernel operation that failed during execution */
+  operation?: string;
+  /** Structured path to the invalid argument or target, when available */
+  path?: readonly string[];
+  /** Public SDK error details, preserved for agent recovery */
+  details?: Readonly<Record<string, unknown>>;
+  /** Kernel error context, preserved when the public error exposes it */
+  context?: Readonly<Record<string, unknown>>;
+  /** Domain-specific diagnostics attached to the runtime error */
+  diagnostics?: Readonly<Record<string, unknown>> | readonly unknown[];
   /** Suggested Mog replacements */
   mogReplacements?: readonly CodeExecutionDiagnosticReplacement[];
   /** Follow-up references, such as `api.guidance.explain("wb.activeSheet")` */

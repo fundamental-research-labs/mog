@@ -154,6 +154,7 @@ pub fn cell_format_json_fields() -> Vec<String> {
         hidden: Some(false),
         quote_prefix: Some(false),
         pivot_button: Some(false),
+        extensions: Some(std::collections::BTreeMap::new()),
     };
     let val = serde_json::to_value(full).expect("CellFormat must serialize");
     let obj = val

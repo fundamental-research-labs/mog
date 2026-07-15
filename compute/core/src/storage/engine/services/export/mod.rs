@@ -3,6 +3,7 @@ mod chart_sources;
 mod comment_package_metadata;
 mod dimensions;
 mod named_ranges;
+mod palette;
 mod pivot_cache_reconciliation;
 mod print_defined_names;
 mod sheet_metadata;
@@ -19,6 +20,7 @@ pub(in crate::storage::engine) use dimensions::{
     ExportedTableProjectionInput, TableExportProjection, export_dimensions_for_sheet,
     export_tables_for_sheet, finalize_table_export_projection,
 };
+pub(crate) use palette::{LocalPalette, PaletteOps};
 pub(in crate::storage::engine) use sheet_metadata::{
     export_auto_filter_for_sheet, export_conditional_formats_for_sheet,
     export_data_validations_for_sheet, export_dv_declared_count, export_dv_disable_prompts,
@@ -41,7 +43,7 @@ use crate::storage::sheet::{dimensions as dims_mod, get_meta_for_export, merges,
 use cell_types::SheetId;
 use compute_document::schema::{KEY_COLS, KEY_ROWS};
 use domain_types::{
-    DataTableRegion, DocumentFormat, FrozenPane, MergeRegion, ParseOutput, SheetData, SheetView,
+    DataTableRegion, FrozenPane, MergeRegion, ParseOutput, SheetData, SheetView,
     domain::comment::{Comment, CommentType},
     domain::conditional_format::ConditionalFormat as DomainConditionalFormat,
     domain::print::PrintSettings,
@@ -50,6 +52,8 @@ use domain_types::{
 use yrs::{Any, Map, Out, Transact};
 
 use named_ranges::export_workbook_named_ranges;
+#[cfg(feature = "native")]
+use palette::SharedPalette;
 use sheet_metadata::resolve_hydrated_comment_position;
 use workbook::{
     export_calculation_properties, export_custom_workbook_views_xml, export_document_properties,
@@ -58,103 +62,6 @@ use workbook::{
     export_workbook_table_styles,
 };
 use workbook_views::export_workbook_views_for_sheets;
-
-pub(crate) trait PaletteOps {
-    fn get_or_insert(&self, fmt: DocumentFormat) -> u32;
-}
-
-pub(crate) struct LocalPalette {
-    palette: std::cell::RefCell<Vec<DocumentFormat>>,
-    index: std::cell::RefCell<rustc_hash::FxHashMap<DocumentFormat, u32>>,
-}
-
-impl LocalPalette {
-    #[cfg(not(feature = "native"))]
-    fn new() -> Self {
-        Self {
-            palette: std::cell::RefCell::new(Vec::new()),
-            index: std::cell::RefCell::new(rustc_hash::FxHashMap::default()),
-        }
-    }
-
-    pub(crate) fn from_vec(existing: &mut Vec<DocumentFormat>) -> Self {
-        if existing.is_empty() {
-            existing.push(DocumentFormat::default());
-        }
-        let index = existing
-            .iter()
-            .enumerate()
-            .map(|(i, fmt)| (fmt.clone(), i as u32))
-            .collect();
-        Self {
-            palette: std::cell::RefCell::new(std::mem::take(existing)),
-            index: std::cell::RefCell::new(index),
-        }
-    }
-
-    pub(crate) fn into_vec(self) -> Vec<DocumentFormat> {
-        self.palette.into_inner()
-    }
-}
-
-impl PaletteOps for LocalPalette {
-    fn get_or_insert(&self, fmt: DocumentFormat) -> u32 {
-        let mut index = self.index.borrow_mut();
-        if let Some(&idx) = index.get(&fmt) {
-            return idx;
-        }
-        let mut palette = self.palette.borrow_mut();
-        let idx = palette.len() as u32;
-        index.insert(fmt.clone(), idx);
-        palette.push(fmt);
-        idx
-    }
-}
-
-#[cfg(feature = "native")]
-struct SharedPalette {
-    inner: parking_lot::Mutex<(
-        Vec<DocumentFormat>,
-        rustc_hash::FxHashMap<DocumentFormat, u32>,
-    )>,
-}
-
-#[cfg(feature = "native")]
-impl SharedPalette {
-    fn from_vec(existing: Vec<DocumentFormat>) -> Self {
-        let mut existing = existing;
-        if existing.is_empty() {
-            existing.push(DocumentFormat::default());
-        }
-        let index = existing
-            .iter()
-            .enumerate()
-            .map(|(i, fmt)| (fmt.clone(), i as u32))
-            .collect();
-        Self {
-            inner: parking_lot::Mutex::new((existing, index)),
-        }
-    }
-
-    fn into_vec(self) -> Vec<DocumentFormat> {
-        self.inner.into_inner().0
-    }
-}
-
-#[cfg(feature = "native")]
-impl PaletteOps for SharedPalette {
-    fn get_or_insert(&self, fmt: DocumentFormat) -> u32 {
-        let mut guard = self.inner.lock();
-        let (palette, index) = &mut *guard;
-        if let Some(&idx) = index.get(&fmt) {
-            return idx;
-        }
-        let idx = palette.len() as u32;
-        index.insert(fmt.clone(), idx);
-        palette.push(fmt);
-        idx
-    }
-}
 
 struct ExportedSheetData {
     sheet: SheetData,
@@ -852,11 +759,18 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
     mirror: &CellMirror,
 ) -> ParseOutput {
     let sheet_ids = stores.storage.sheet_order();
+    let mut workbook_stylesheet = export_workbook_stylesheet(stores);
+    let mut seeded_style_palette = export_workbook_style_palette(stores);
+    let imported_style_prefix_len =
+        palette::rebind_imported_xf_prefix(&mut seeded_style_palette, workbook_stylesheet.as_ref());
 
     #[cfg(feature = "native")]
     let (mut output_sheets, table_projection_inputs, style_palette) = {
         use rayon::prelude::*;
-        let palette = SharedPalette::from_vec(export_workbook_style_palette(stores));
+        let palette = SharedPalette::from_vec_with_imported_prefix(
+            seeded_style_palette,
+            imported_style_prefix_len,
+        );
         let exported_sheets: Vec<ExportedSheetData> = sheet_ids
             .par_iter()
             .enumerate()
@@ -877,8 +791,10 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
 
     #[cfg(not(feature = "native"))]
     let (mut output_sheets, table_projection_inputs, style_palette) = {
-        let mut seeded_palette = export_workbook_style_palette(stores);
-        let palette = LocalPalette::from_vec(&mut seeded_palette);
+        let palette = LocalPalette::from_vec_with_imported_prefix(
+            &mut seeded_style_palette,
+            imported_style_prefix_len,
+        );
         let exported_sheets: Vec<ExportedSheetData> = sheet_ids
             .iter()
             .enumerate()
@@ -908,7 +824,6 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
     let timeline_caches = workbook::export_workbook_timeline_caches(stores);
     let (custom_table_styles, default_table_style, default_pivot_style, generated_table_style_dxfs) =
         export_workbook_table_styles(stores);
-    let mut workbook_stylesheet = export_workbook_stylesheet(stores);
     if !generated_table_style_dxfs.is_empty() {
         let stylesheet = workbook_stylesheet.get_or_insert_with(Default::default);
         stylesheet.dxf_registry.extend(generated_table_style_dxfs);

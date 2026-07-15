@@ -21,13 +21,13 @@ export interface WorksheetObjectCollection {
   getFullObject(id: string): Promise<FloatingObject | null>;
   /** List all floating objects on the sheet. */
   list(): Promise<FloatingObjectHandle[]>;
-  /** Remove multiple floating objects. Returns count of successfully removed. */
+  /** Remove multiple floating objects atomically. Throws if any ID is absent. */
   removeMany(ids: string[]): Promise<number>;
 
   // ── Single-ID convenience methods ──────────────────────────
   // Thin wrappers over get→handle.method() for fire-and-forget callers.
 
-  /** Remove a single floating object by ID. */
+  /** Remove a single floating object by ID. Throws `OBJ_NOT_FOUND` when absent. */
   remove(id: string): Promise<boolean>;
   /** Bring a floating object to the front (highest z-order). */
   bringToFront(id: string): Promise<void>;
@@ -59,7 +59,7 @@ export interface WorksheetObjectCollection {
 
   // ── Grouping (type-agnostic — any floating object can be grouped) ──
 
-  /** Group multiple floating objects. Returns the group ID. */
+  /** Group at least two existing floating objects. Returns the group ID. */
   group(ids: string[]): Promise<string>;
   /** Ungroup a floating object group. */
   ungroup(groupId: string): Promise<void>;

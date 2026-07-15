@@ -51,7 +51,7 @@ import {
   makePlacementId,
   pivotPlacementId,
 } from '../../../domain/pivots/identifiers';
-import { findPivotByName, requirePivot } from '../../../domain/pivots/lookup';
+import { findPivotByName, requirePivot, resolvePivotName } from '../../../domain/pivots/lookup';
 import {
   placementFieldName,
   placementReadout,
@@ -193,11 +193,8 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
    */
   private async resolveNameToId(name: string, operation: string): Promise<string> {
     this._assertLive(operation);
-    const pivot = await findPivotByName(this.ctx, this.sheetId, name);
-    if (!pivot) {
-      throw new KernelError('COMPUTE_ERROR', `${operation}: Pivot table "${name}" not found`);
-    }
-    return pivot.id ?? pivot.name;
+    const { pivotId } = await resolvePivotName(this.ctx, this.sheetId, name, operation);
+    return pivotId;
   }
 
   /** Monotonic counter to ensure unique pivot IDs within the same millisecond. */

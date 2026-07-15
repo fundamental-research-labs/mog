@@ -13,6 +13,7 @@ import type {
   ChartConfig,
   ChartReadOptions,
   ChartRemoveReceipt,
+  ChartTarget,
   ChartUpdateReceipt,
   CellData,
   CellRange,
@@ -98,15 +99,15 @@ export abstract class WorksheetImplQueryApi extends WorksheetImplCellReadApi {
     return this.charts.list(options);
   }
 
-  getChart(chartId: string): Promise<Chart | null> {
+  getChart(chartId: ChartTarget): Promise<Chart | null> {
     return this.charts.get(chartId);
   }
 
-  updateChart(chartId: string, updates: Partial<ChartConfig>): Promise<ChartUpdateReceipt> {
+  updateChart(chartId: ChartTarget, updates: Partial<ChartConfig>): Promise<ChartUpdateReceipt> {
     return this.charts.update(chartId, updates);
   }
 
-  removeChart(chartId: string): Promise<ChartRemoveReceipt> {
+  removeChart(chartId: ChartTarget): Promise<ChartRemoveReceipt> {
     return this.charts.remove(chartId);
   }
 

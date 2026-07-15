@@ -56,12 +56,16 @@ import { guardBridgeMutation } from './bridge-error-guard';
 import { beginEditSessionFromAction } from './edit-entry';
 import { requestFormulaBarRefresh } from '../../infra/events/formula-bar-refresh';
 import {
+  getAsyncTargetSheetIds,
   getUIStore,
   handled,
   isProtectionRejection,
   notHandled,
   showProtectionFeedback,
 } from './handler-utils';
+import { clearCellMetadataInRange } from './cell-metadata-clearing';
+import { clearCommentsInRanges } from './comment-clearing';
+import { clearValidationsInRangeIfPresent } from './validation-clearing';
 import { hasMultiCellSelection } from './selection/helpers';
 
 /**
@@ -536,49 +540,13 @@ export const CLEAR_ALL: AsyncActionHandler = async (deps) => {
       for (const range of ranges) {
         const ok = await guardBridgeMutation(() => ws.clear(range, 'all'));
         if (!ok) return;
-        await clearRangeMetadata(ws, range);
+        await clearCellMetadataInRange(ws, range);
       }
     }
   });
 
   return handled();
 };
-
-async function clearRangeMetadata(ws: WorksheetWithInternals, range: CellRange): Promise<void> {
-  await Promise.all([
-    clearCommentsInRange(ws, range),
-    ws.validations.clearInRange(range),
-    ws.conditionalFormats.clearInRanges([range]),
-  ]);
-}
-
-async function clearCommentsInRange(ws: WorksheetWithInternals, range: CellRange): Promise<void> {
-  const comments = await ws.comments.list();
-  if (comments.length === 0) return;
-
-  const positions = await ws._internal.batchGetCellPositions(
-    comments.map((comment) => comment.cellRef),
-  );
-  const removals: Promise<void>[] = [];
-  const seenCells = new Set<string>();
-  for (const comment of comments) {
-    const position = positions.get(comment.cellRef);
-    if (!position) continue;
-    if (
-      position.row < range.startRow ||
-      position.row > range.endRow ||
-      position.col < range.startCol ||
-      position.col > range.endCol
-    ) {
-      continue;
-    }
-    const key = `${position.row},${position.col}`;
-    if (seenCells.has(key)) continue;
-    seenCells.add(key);
-    removals.push(ws.comments.removeForCell(position.row, position.col).then(() => undefined));
-  }
-  await Promise.all(removals);
-}
 
 function normalizedRange(range: CellRange): CellRange {
   return {
@@ -671,9 +639,9 @@ export const CLEAR_FORMATS: AsyncActionHandler = async (deps) => {
           endCol: range.endCol,
         });
 
-        // Clear data validation (Excel parity)
-        const rangeStr = `${deps.workbook.indexToAddress(range.startRow, range.startCol)}:${deps.workbook.indexToAddress(range.endRow, range.endCol)}`;
-        await ws.validations.clear(rangeStr);
+        // Clear data validation (Excel parity). A range without validation is
+        // already in the requested state and must not fail the action.
+        await clearValidationsInRangeIfPresent(ws, range);
       }
     }
   });
@@ -684,27 +652,20 @@ export const CLEAR_FORMATS: AsyncActionHandler = async (deps) => {
 /**
  * Clear comments from selected cells.
  *
- * Uses ws.comments.removeNote(row, col) via unified Worksheet API.
+ * Enumerates comment-backed cells and removes every comment type through the
+ * unified Worksheet API. Blank selected cells are never submitted for removal.
  *
  * Multi-Sheet Support
  * - Broadcasts to all selected sheets when multiple sheets are selected
  */
 export const CLEAR_COMMENTS: AsyncActionHandler = async (deps) => {
-  const targetSheetIds = getTargetSheetIds(deps);
+  const targetSheetIds = await getAsyncTargetSheetIds(deps);
   const { ranges } = getSelectionContext(deps);
 
   await deps.workbook.undoGroup(async () => {
     for (const sheetId of targetSheetIds) {
       const ws = getWorksheet(deps, sheetId);
-      const removals: Promise<unknown>[] = [];
-      for (const range of ranges) {
-        for (let row = range.startRow; row <= range.endRow; row++) {
-          for (let col = range.startCol; col <= range.endCol; col++) {
-            removals.push(ws.comments.removeNote(row, col));
-          }
-        }
-      }
-      await Promise.all(removals);
+      await clearCommentsInRanges(ws, ranges);
     }
   });
 

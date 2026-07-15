@@ -408,5 +408,7 @@ pub(super) fn read_format_record(
         auto_indent: None,
         background_color_tint: None,
         pattern_foreground_color_tint: None,
+        // Extension metadata is not part of the rendering wire format.
+        extensions: None,
     })
 }

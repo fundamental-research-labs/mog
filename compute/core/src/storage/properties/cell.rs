@@ -1,12 +1,13 @@
-use super::super::KEY_CELL_PROPERTIES;
+use super::super::{KEY_CELL_PROPERTIES, KEY_STYLE_PALETTE};
 use super::merge::{merge_formats, normalize_format_patch};
 use super::yrs::{get_sheet_submap, resolve_compact_props};
+use crate::border_patch::BorderPatchField;
 use crate::engine_types::formatting::*;
 use cell_types::{CellId, SheetId};
 use compute_document::hex::{id_to_hex, parse_cell_id};
 use compute_document::undo::ORIGIN_USER_EDIT;
-use domain_types::CellFormat;
 use domain_types::yrs_schema::cell_properties as props_schema;
+use domain_types::{CellBorders, CellFormat};
 use yrs::{Any, Doc, Map, MapPrelim, MapRef, Origin, Out, Transact};
 
 /// Get all properties for a cell by cell_id.
@@ -57,7 +58,13 @@ pub fn get_all_properties(
         None => return std::collections::HashMap::new(),
     };
 
-    let mut result = std::collections::HashMap::new();
+    let palette_map = match workbook.get(&txn, KEY_STYLE_PALETTE) {
+        Some(Out::YMap(map)) => Some(map),
+        _ => None,
+    };
+    let mut palette_cache: std::collections::HashMap<u32, Option<CellFormat>> =
+        std::collections::HashMap::new();
+    let mut result = std::collections::HashMap::with_capacity(props_map.len(&txn) as usize);
     for (key, value) in props_map.iter(&txn) {
         let cell_id = match parse_cell_id(key) {
             Some(id) => id,
@@ -65,7 +72,31 @@ pub fn get_all_properties(
         };
         let props_opt = match value {
             Out::YMap(nested) => props_schema::from_yrs_map(&nested, &txn).map(Into::into),
-            Out::Any(Any::String(ref json_str)) => resolve_compact_props(json_str, workbook, &txn),
+            Out::Any(Any::String(ref json_str)) => {
+                // Imported XLSX properties are compact `{"s": N, ...}` records.
+                // Resolve each palette entry once for the whole sheet instead of
+                // reparsing the same full CellFormat JSON for every styled cell.
+                let mut props: CellProperties = match serde_json::from_str(json_str) {
+                    Ok(props) => props,
+                    Err(_) => continue,
+                };
+                if let Some(style_id) = props.style_id {
+                    let format = palette_cache.entry(style_id).or_insert_with(|| {
+                        let palette = palette_map.as_ref()?;
+                        let key = style_id.to_string();
+                        let Out::Any(Any::String(json)) = palette.get(&txn, &key)? else {
+                            return None;
+                        };
+                        serde_json::from_str::<CellFormat>(&json).ok()
+                    });
+                    props.format.clone_from(format);
+                }
+                if props.format.is_none() && props.metadata_is_empty() {
+                    None
+                } else {
+                    Some(props)
+                }
+            }
             _ => None,
         };
         if let Some(props) = props_opt {
@@ -73,6 +104,135 @@ pub fn get_all_properties(
         }
     }
     result
+}
+
+/// Palette-compressed cell-format layers loaded for a selected set of cells.
+///
+/// Imported compact properties retain only a small `CellId -> format ID` map;
+/// each workbook style-palette entry is deserialized and materialized once.
+/// Inline property formats are content-interned as well. Non-format metadata is
+/// intentionally omitted because displayed-format resolution does not consume it.
+pub(crate) struct PreloadedCellFormatLayers {
+    formats: Vec<CellFormat>,
+    format_ids: std::collections::HashMap<CellId, u32>,
+}
+
+impl PreloadedCellFormatLayers {
+    pub(crate) fn get(&self, cell_id: &CellId) -> Option<&CellFormat> {
+        let format_id = *self.format_ids.get(cell_id)?;
+        self.formats.get(format_id as usize)
+    }
+}
+
+/// Read format layers for selected cell IDs in one Yrs transaction.
+///
+/// This is the large-sheet displayed-format path. Unlike `get_all_properties`,
+/// it neither walks unrelated cells nor clones a full `CellFormat` per cell.
+pub(crate) fn get_cell_format_layers_for_ids(
+    doc: &Doc,
+    workbook: &MapRef,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    cell_ids: &[CellId],
+) -> PreloadedCellFormatLayers {
+    let txn = doc.transact();
+    let Some(props_map) = get_sheet_submap(&txn, sheets, sheet_id, KEY_CELL_PROPERTIES) else {
+        return PreloadedCellFormatLayers {
+            formats: Vec::new(),
+            format_ids: std::collections::HashMap::new(),
+        };
+    };
+    let palette_map = match workbook.get(&txn, KEY_STYLE_PALETTE) {
+        Some(Out::YMap(map)) => Some(map),
+        _ => None,
+    };
+
+    let mut formats = Vec::new();
+    let mut interned: std::collections::HashMap<CellFormat, u32> = std::collections::HashMap::new();
+    let mut palette_format_ids: std::collections::HashMap<u32, u32> =
+        std::collections::HashMap::new();
+    let mut format_ids = std::collections::HashMap::with_capacity(cell_ids.len());
+
+    for cell_id in cell_ids {
+        let cell_hex = id_to_hex(cell_id.as_u128());
+        let format_id = match props_map.get(&txn, &cell_hex) {
+            Some(Out::YMap(nested)) => {
+                let props: CellProperties =
+                    match props_schema::from_yrs_map(&nested, &txn).map(Into::into) {
+                        Some(props) => props,
+                        None => continue,
+                    };
+                let Some(format) = materialized_format_from_properties(props) else {
+                    continue;
+                };
+                intern_format(format, &mut formats, &mut interned)
+            }
+            Some(Out::Any(Any::String(ref json_str))) => {
+                let props: CellProperties = match serde_json::from_str(json_str) {
+                    Ok(props) => props,
+                    Err(_) => continue,
+                };
+                if let Some(style_id) = props.style_id {
+                    if let Some(format_id) = palette_format_ids.get(&style_id) {
+                        *format_id
+                    } else {
+                        let mut format = palette_map
+                            .as_ref()
+                            .and_then(|palette| {
+                                let key = style_id.to_string();
+                                let Out::Any(Any::String(json)) = palette.get(&txn, &key)? else {
+                                    return None;
+                                };
+                                serde_json::from_str::<CellFormat>(&json).ok()
+                            })
+                            .or(props.format)
+                            .unwrap_or_default();
+                        super::cascade::materialize_imported_cell_xf_defaults(&mut format);
+                        let format_id = intern_format(format, &mut formats, &mut interned);
+                        palette_format_ids.insert(style_id, format_id);
+                        format_id
+                    }
+                } else {
+                    let Some(format) = props.format else {
+                        continue;
+                    };
+                    intern_format(format, &mut formats, &mut interned)
+                }
+            }
+            _ => continue,
+        };
+        format_ids.insert(*cell_id, format_id);
+    }
+
+    PreloadedCellFormatLayers {
+        formats,
+        format_ids,
+    }
+}
+
+fn materialized_format_from_properties(props: CellProperties) -> Option<CellFormat> {
+    if props.format.is_none() && props.style_id.is_none() {
+        return None;
+    }
+    let mut format = props.format.unwrap_or_default();
+    if props.style_id.is_some() {
+        super::cascade::materialize_imported_cell_xf_defaults(&mut format);
+    }
+    Some(format)
+}
+
+fn intern_format(
+    format: CellFormat,
+    formats: &mut Vec<CellFormat>,
+    interned: &mut std::collections::HashMap<CellFormat, u32>,
+) -> u32 {
+    if let Some(format_id) = interned.get(&format) {
+        return *format_id;
+    }
+    let format_id = u32::try_from(formats.len()).expect("cell format palette exceeds u32::MAX");
+    interned.insert(format.clone(), format_id);
+    formats.push(format);
+    format_id
 }
 
 /// Set (replace) all properties for a cell.
@@ -298,6 +458,29 @@ pub fn set_cell_format(
     set_properties(doc, sheets, sheet_id, cell_id, &props);
 }
 
+/// Apply a tri-state format patch to one cell's direct format.
+pub fn patch_cell_format(
+    doc: &Doc,
+    workbook: &MapRef,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    cell_id: &str,
+    format: &CellFormat,
+    clear_fields: &[String],
+) -> Result<(), value_types::ComputeError> {
+    let mut props = get_properties(doc, workbook, sheets, sheet_id, cell_id).unwrap_or_default();
+    let existing = props.format.as_ref().cloned().unwrap_or_default();
+    let patched = super::apply_format_patch(&existing, format, clear_fields)?;
+    props.format = (patched != CellFormat::default()).then_some(patched);
+    props.style_id = None;
+    if props.format.is_none() && props.metadata_is_empty() {
+        clear_properties(doc, sheets, sheet_id, cell_id);
+    } else {
+        set_properties(doc, sheets, sheet_id, cell_id, &props);
+    }
+    Ok(())
+}
+
 /// Replace the format portion of a cell's properties.
 ///
 /// Copy/paste and autofill replicate a source format snapshot. Unlike toolbar
@@ -398,6 +581,91 @@ pub fn set_cell_formats_with_origin(
             props_map.insert(&mut txn, *cid, nested);
         }
     }
+}
+
+/// Apply one tri-state format patch to multiple cells in a single Yrs transaction.
+pub fn patch_cell_formats_with_origin(
+    doc: &Doc,
+    workbook: &MapRef,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    cell_ids: &[&str],
+    format: &CellFormat,
+    clear_fields: &[String],
+    origin: &'static [u8],
+) -> Result<(), value_types::ComputeError> {
+    let existing: Vec<CellProperties> = cell_ids
+        .iter()
+        .map(|cid| get_properties(doc, workbook, sheets, sheet_id, cid).unwrap_or_default())
+        .collect();
+    let patched = existing
+        .iter()
+        .map(|props| {
+            let lower = props.format.clone().unwrap_or_default();
+            super::apply_format_patch(&lower, format, clear_fields)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let mut txn = doc.transact_mut_with(Origin::from(origin));
+    if let Some(props_map) = get_sheet_submap(&txn, sheets, sheet_id, KEY_CELL_PROPERTIES) {
+        for (i, cid) in cell_ids.iter().enumerate() {
+            let mut props = existing[i].clone();
+            props.format = (patched[i] != CellFormat::default()).then(|| patched[i].clone());
+            props.style_id = None;
+            props_map.remove(&mut txn, cid);
+            if props.format.is_some() || !props.metadata_is_empty() {
+                let dt_props: domain_types::CellProperties = props.into();
+                let entries = props_schema::to_yrs_prelim(&dt_props);
+                let nested: MapPrelim = entries.into_iter().collect();
+                props_map.insert(&mut txn, *cid, nested);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Apply one tri-state border-edge patch to multiple cells in a single Yrs
+/// transaction. Other format properties and omitted border edges are preserved.
+pub fn patch_cell_borders_with_origin(
+    doc: &Doc,
+    workbook: &MapRef,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    cell_ids: &[&str],
+    borders: &CellBorders,
+    clear_fields: &[BorderPatchField],
+    origin: &'static [u8],
+) -> Result<(), value_types::ComputeError> {
+    let existing: Vec<CellProperties> = cell_ids
+        .iter()
+        .map(|cid| get_properties(doc, workbook, sheets, sheet_id, cid).unwrap_or_default())
+        .collect();
+    let patched = existing
+        .iter()
+        .map(|props| {
+            let mut format = props.format.clone().unwrap_or_default();
+            format.borders =
+                super::apply_borders_patch(format.borders.as_ref(), borders, clear_fields);
+            format
+        })
+        .collect::<Vec<_>>();
+
+    let mut txn = doc.transact_mut_with(Origin::from(origin));
+    if let Some(props_map) = get_sheet_submap(&txn, sheets, sheet_id, KEY_CELL_PROPERTIES) {
+        for (i, cid) in cell_ids.iter().enumerate() {
+            let mut props = existing[i].clone();
+            props.format = (patched[i] != CellFormat::default()).then(|| patched[i].clone());
+            props.style_id = None;
+            props_map.remove(&mut txn, *cid);
+            if props.format.is_some() || !props.metadata_is_empty() {
+                let dt_props: domain_types::CellProperties = props.into();
+                let entries = props_schema::to_yrs_prelim(&dt_props);
+                let nested: MapPrelim = entries.into_iter().collect();
+                props_map.insert(&mut txn, *cid, nested);
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Clear format on multiple cells in a single Yrs transaction.

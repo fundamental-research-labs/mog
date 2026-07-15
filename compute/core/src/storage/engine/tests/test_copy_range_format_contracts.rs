@@ -289,3 +289,179 @@ fn test_copy_range_all_replaces_target_format_with_source_snapshot() {
         "Copy All should clear target-only number format"
     );
 }
+
+#[test]
+fn transferable_format_read_patch_preserves_fidelity_clears_target_and_excludes_display_overlays() {
+    use compute_cf::types::{CellCFResult, CfRenderStyle as CFStyle};
+    use domain_types::CellFormat;
+    use domain_types::domain::theme::{ThemeColor, ThemeData};
+    use ooxml_types::styles::BorderStyle;
+    use std::collections::BTreeMap;
+    use value_types::Color;
+
+    fn theme(accent1: &str) -> ThemeData {
+        ThemeData {
+            colors: vec![ThemeColor {
+                name: "accent1".to_string(),
+                color: accent1.to_string(),
+                source: None,
+            }],
+            ..Default::default()
+        }
+    }
+
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let sid = sheet_id();
+    engine.set_workbook_theme(theme("#123456")).unwrap();
+
+    let extensions = BTreeMap::from([
+        ("ignoreError".to_string(), serde_json::json!(true)),
+        (
+            "test.owner".to_string(),
+            serde_json::json!("format-contract"),
+        ),
+    ]);
+    engine
+        .set_format_for_ranges(
+            &sid,
+            &[(0, 0, 0, 0)],
+            &CellFormat {
+                font_color: Some("theme:accent1".to_string()),
+                font_charset: Some(128),
+                font_family_type: Some(2),
+                quote_prefix: Some(true),
+                pivot_button: Some(true),
+                extensions: Some(extensions.clone()),
+                borders: Some(domain_types::CellBorders {
+                    bottom: Some(domain_types::CellBorderSide {
+                        style: Some(BorderStyle::Dashed),
+                        color: Some("#112233".to_string()),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    engine
+        .set_format_for_ranges(
+            &sid,
+            &[(0, 1, 0, 1)],
+            &CellFormat {
+                background_color: Some("#FFF2CC".to_string()),
+                borders: Some(domain_types::CellBorders {
+                    top: Some(domain_types::CellBorderSide {
+                        style: Some(BorderStyle::Thin),
+                        color: Some("#445566".to_string()),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+    // A displayed-only CF overlay must never leak into the transferable source.
+    let mut cf_results = rustc_hash::FxHashMap::default();
+    cf_results.insert(
+        (0u32, 1u32),
+        CellCFResult {
+            row: 0,
+            col: 1,
+            style: Some(CFStyle {
+                italic: Some(true),
+                background_color: Some(Color::from_hex("#FF0000").unwrap()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+    );
+    engine.stores.cf_cache.insert(
+        sid,
+        super::super::stores::CFCacheEntry {
+            results: cf_results,
+            dirty: false,
+        },
+    );
+
+    let source = engine.get_transferable_format(&sid, 0, 0);
+    assert_eq!(source.font_color.as_deref(), Some("theme:accent1"));
+    assert_eq!(source.font_charset, Some(128));
+    assert_eq!(source.font_family_type, Some(2));
+    assert_eq!(source.quote_prefix, Some(true));
+    assert_eq!(source.pivot_button, Some(true));
+    assert_eq!(source.extensions.as_ref(), Some(&extensions));
+    let source_borders = source.borders.as_ref().expect("source borders");
+    assert!(source_borders.top.is_none());
+    assert_eq!(
+        source_borders.bottom.as_ref().and_then(|side| side.style),
+        Some(BorderStyle::Dashed)
+    );
+
+    // Reproduce the public dense-read -> tri-state-write lowering: null fields
+    // become explicit clears, while non-null fields become the patch payload.
+    let source_json = serde_json::to_value(&source).unwrap();
+    let clear_fields = source_json
+        .as_object()
+        .unwrap()
+        .iter()
+        .filter(|(_, value)| value.is_null())
+        .map(|(key, _)| key.clone())
+        .collect::<Vec<_>>();
+    let patch: CellFormat = serde_json::from_value(source_json).unwrap();
+    engine
+        .patch_format_for_ranges(&sid, &[(0, 1, 0, 1)], &patch, &clear_fields)
+        .unwrap();
+
+    let target = engine.get_transferable_format(&sid, 0, 1);
+    assert_eq!(target.font_color.as_deref(), Some("theme:accent1"));
+    assert_eq!(target.font_charset, Some(128));
+    assert_eq!(target.font_family_type, Some(2));
+    assert_eq!(target.quote_prefix, Some(true));
+    assert_eq!(target.pivot_button, Some(true));
+    assert_eq!(target.extensions.as_ref(), Some(&extensions));
+    let target_borders = target.borders.as_ref().expect("transferred borders");
+    assert!(
+        target_borders.top.is_none(),
+        "a supplied top-level borders value must replace target-only sides"
+    );
+    assert_eq!(
+        target_borders.bottom.as_ref().and_then(|side| side.style),
+        Some(BorderStyle::Dashed)
+    );
+    assert_eq!(
+        target.background_color, None,
+        "a source null must clear the target-only direct fill"
+    );
+    assert_ne!(
+        target.italic,
+        Some(true),
+        "conditional-format overlays are displayed state, not transferable state"
+    );
+
+    let displayed_before_theme_change = engine.get_displayed_cell_properties(&sid, 0, 1);
+    assert_eq!(
+        displayed_before_theme_change.font_color.as_deref(),
+        Some("#123456")
+    );
+    assert_eq!(displayed_before_theme_change.italic, Some(true));
+    assert_eq!(
+        displayed_before_theme_change.background_color.as_deref(),
+        Some("#ff0000")
+    );
+
+    engine.set_workbook_theme(theme("#654321")).unwrap();
+    let transferable_after_theme_change = engine.get_transferable_format(&sid, 0, 1);
+    let displayed_after_theme_change = engine.get_displayed_cell_properties(&sid, 0, 1);
+    assert_eq!(
+        transferable_after_theme_change.font_color.as_deref(),
+        Some("theme:accent1"),
+        "read->set must retain symbolic theme linkage"
+    );
+    assert_eq!(
+        displayed_after_theme_change.font_color.as_deref(),
+        Some("#654321")
+    );
+}

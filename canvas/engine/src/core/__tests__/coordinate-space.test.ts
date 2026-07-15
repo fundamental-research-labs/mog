@@ -2,7 +2,7 @@
  * Coordinate-Space Conversion Tests
  *
  * Tests for docToCanvas, canvasToDoc, docToCanvasXY, canvasToDocXY,
- * canvasToLocal, canvasToPhysical. Uses non-zero scroll offsets,
+ * canvasToRegionLocal, canvasToPhysical. Uses non-zero scroll offsets,
  * non-zero viewportOrigin, and zoom to verify that conversions are
  * correct and that the identity case (origin=scroll=0, zoom=1) is a
  * degenerate case, not the only case that works.
@@ -17,13 +17,14 @@
 import {
   canvasToDoc,
   canvasToDocXY,
-  canvasToLocal,
+  canvasToRegionLocal,
   canvasToPhysical,
   docToCanvas,
   docToCanvasXY,
+  regionLocalToCanvas,
   regionLocalVisibleRect,
 } from '../coordinate-space';
-import { canvasSpaceRect, docSpaceRect } from '../types';
+import { canvasSpaceRect, docSpaceRect, regionLocalRect } from '../types';
 
 describe('coordinate-space conversions', () => {
   const region = {
@@ -306,31 +307,73 @@ describe('coordinate-space conversions', () => {
   });
 
   // ===========================================================================
-  // canvasToLocal
+  // canvasToRegionLocal
   // ===========================================================================
 
-  describe('canvasToLocal', () => {
-    it('subtracts region bounds origin', () => {
+  describe('canvasToRegionLocal', () => {
+    it('reverses the render loop translate-and-scale transform', () => {
       const canvas = canvasSpaceRect(250, 230, 200, 100);
-      const local = canvasToLocal(canvas, region);
-      expect(local.x).toBe(200); // 250 - 50
-      expect(local.y).toBe(200); // 230 - 30
-      expect(local.width).toBe(200);
-      expect(local.height).toBe(100);
+      const local = canvasToRegionLocal(canvas, region);
+      expect(local.x).toBe(100); // (250 - 50) / 2
+      expect(local.y).toBe(100); // (230 - 30) / 2
+      expect(local.width).toBe(100);
+      expect(local.height).toBe(50);
     });
 
-    it('preserves width and height', () => {
+    it('unscales width and height', () => {
       const canvas = canvasSpaceRect(100, 100, 50, 30);
-      const local = canvasToLocal(canvas, region);
-      expect(local.width).toBe(50);
-      expect(local.height).toBe(30);
+      const local = canvasToRegionLocal(canvas, region);
+      expect(local.width).toBe(25);
+      expect(local.height).toBe(15);
     });
 
     it('produces zero origin when canvas position equals region bounds', () => {
       const canvas = canvasSpaceRect(50, 30, 200, 100);
-      const local = canvasToLocal(canvas, region);
+      const local = canvasToRegionLocal(canvas, region);
       expect(local.x).toBe(0);
       expect(local.y).toBe(0);
+    });
+  });
+
+  // ===========================================================================
+  // regionLocalToCanvas
+  // ===========================================================================
+
+  describe('regionLocalToCanvas', () => {
+    it('matches the render loop translate-and-scale transform', () => {
+      const canvas = regionLocalToCanvas(regionLocalRect(20, 30, 16, 18), region);
+
+      expect(canvas).toEqual({ x: 90, y: 90, width: 32, height: 36 });
+    });
+
+    it('does not apply viewport origin or scroll twice', () => {
+      const transformed = regionLocalToCanvas(regionLocalRect(-8, 40, 20, 10), {
+        bounds: { x: 250, y: 100 },
+        viewportOrigin: { x: 800, y: 400 },
+        scrollOffset: { x: 300, y: 150 },
+        zoom: 1.25,
+      });
+
+      expect(transformed).toEqual({ x: 240, y: 150, width: 25, height: 12.5 });
+    });
+
+    it.each([0.85, 1, 1.25])('round-trips region-local bounds at zoom %s', (zoom) => {
+      const targetRegion = {
+        bounds: { x: 250, y: 100 },
+        viewportOrigin: { x: 800, y: 400 },
+        scrollOffset: { x: 300, y: 150 },
+        zoom,
+      };
+      const local = regionLocalRect(-8, 40, 20, 10);
+      const roundTripped = canvasToRegionLocal(
+        regionLocalToCanvas(local, targetRegion),
+        targetRegion,
+      );
+
+      expect(roundTripped.x).toBeCloseTo(local.x);
+      expect(roundTripped.y).toBeCloseTo(local.y);
+      expect(roundTripped.width).toBeCloseTo(local.width);
+      expect(roundTripped.height).toBeCloseTo(local.height);
     });
   });
 

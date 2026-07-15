@@ -8,6 +8,45 @@ const WORKSHEET_METHOD_GUIDANCE = 'api-compatibility:mog-api/worksheet-method-gu
 
 export const apiCompatibilityRegistry = [
   {
+    id: 'mog-api.layout.office-column-selector.input-alias',
+    observedPath: 'ws.layout.setColumnWidth("B", width)',
+    canonicalPath: 'ws.layout.setColumnWidth',
+    status: 'input_alias',
+    appliesTo: 'argument',
+    ownerTheme: 'api-compatibility/layout-column-addressing',
+    ownerPackage: '@mog-sdk/kernel',
+    firstObservedVersion: '0.10.4',
+    canonicalSince: '0.10.5',
+    deprecatedSince: null,
+    removeAfter: null,
+    evidence: [
+      {
+        source: 'trace',
+        reference: 'https://github.com/fundamental-research-labs/mog/issues/326#issue-1',
+      },
+      {
+        source: 'source',
+        reference: 'api-compatibility:layout/office-style-column-selectors',
+      },
+    ],
+    behavior:
+      'Worksheet layout column inputs accept zero-based numeric indexes plus Excel/Office-style bare names and whole-column references such as B, $B, B:B, and B:D. Multi-column selectors expand only on mutation and batch APIs; scalar reads require exactly one column. Pixel-width methods remain pixels, and character-width methods remain explicit.',
+    runtimeSurfaces: ['typescript', 'kernel', 'api-describe', 'agent-guidance', 'docs'],
+    surfaceDisposition: {
+      typescript: 'input_alias',
+      kernel: 'input_alias',
+      'api-describe': 'input_alias',
+      'agent-guidance': 'input_alias',
+      docs: 'input_alias',
+      python: 'structured_diagnostic',
+    },
+    verification: [
+      'pnpm --filter @mog-sdk/kernel test -- worksheet-layout-column-selectors address-resolver sdk-runtime-node',
+      'pnpm --filter @mog/types-api typecheck',
+      'pnpm --filter @mog-sdk/sdk test -- api-spec api-compatibility',
+    ],
+  },
+  {
     id: 'mog-api.worksheet.describeRange.no-range',
     observedPath: 'ws.describeRange()',
     canonicalPath: 'ws.describeRange',
@@ -96,7 +135,7 @@ export const apiCompatibilityRegistry = [
   {
     id: 'mog-api.chart.imported-short-id.input-alias',
     observedPath: 'chart-import-N',
-    canonicalPath: 'ws.charts.*(chartId)',
+    canonicalPath: 'ws.charts.*(chartTarget)',
     status: 'input_alias',
     appliesTo: 'argument',
     ownerTheme: 'api-compatibility/chart-id-compatibility',
@@ -116,7 +155,7 @@ export const apiCompatibilityRegistry = [
       },
     ],
     behavior:
-      'Worksheet-scoped chart ID inputs first try the exact ID, then resolve numeric imported aliases such as chart-import-0 to the current sheet-qualified canonical ID. Returned IDs and persisted state remain canonical.',
+      'Worksheet-scoped chart targets accept an exact stable ID or exact display name as a bare string. Explicit { id } and { name } selectors disambiguate collisions and duplicate names. ID selectors also resolve numeric imported aliases such as chart-import-0 to the current sheet-qualified canonical ID. Returned IDs and persisted state remain canonical.',
     runtimeSurfaces: ['typescript', 'kernel', 'docs', 'api-eval'],
     surfaceDisposition: {
       typescript: 'input_alias',
@@ -555,7 +594,7 @@ export const apiCompatibilityRegistry = [
     deprecatedSince: '0.9.1',
     removeAfter: 'none',
     evidence: [{ source: 'prior_version', reference: NAMESPACED_SUB_API_PLAN }],
-    behavior: 'Deprecated root chart getter delegates to ws.charts.get(chartId).',
+    behavior: 'Deprecated root chart getter delegates to ws.charts.get(chartTarget).',
     runtimeSurfaces: ['typescript', 'kernel', 'api-describe', 'agent-guidance', 'docs'],
     surfaceDisposition: {
       typescript: 'deprecated_alias',
@@ -569,7 +608,7 @@ export const apiCompatibilityRegistry = [
     },
     diagnostics: {
       code: 'MOG002_MOG_API_USAGE',
-      message: 'ws.getChart(id) is deprecated. Use ws.charts.get(id).',
+      message: 'ws.getChart(target) is deprecated. Use ws.charts.get(target).',
       replacements: ['ws.charts.get'],
     },
     verification: ['pnpm --filter @mog-sdk/kernel test -- worksheet-charts worksheet-impl'],
@@ -587,7 +626,7 @@ export const apiCompatibilityRegistry = [
     deprecatedSince: '0.9.1',
     removeAfter: 'none',
     evidence: [{ source: 'prior_version', reference: NAMESPACED_SUB_API_PLAN }],
-    behavior: 'Deprecated root chart updater delegates to ws.charts.update(chartId, updates).',
+    behavior: 'Deprecated root chart updater delegates to ws.charts.update(chartTarget, updates).',
     runtimeSurfaces: ['typescript', 'kernel', 'api-describe', 'agent-guidance', 'docs'],
     surfaceDisposition: {
       typescript: 'deprecated_alias',
@@ -601,7 +640,8 @@ export const apiCompatibilityRegistry = [
     },
     diagnostics: {
       code: 'MOG002_MOG_API_USAGE',
-      message: 'ws.updateChart(id, updates) is deprecated. Use ws.charts.update(id, updates).',
+      message:
+        'ws.updateChart(target, updates) is deprecated. Use ws.charts.update(target, updates).',
       replacements: ['ws.charts.update'],
     },
     verification: ['pnpm --filter @mog-sdk/kernel test -- worksheet-charts worksheet-impl'],
@@ -619,7 +659,7 @@ export const apiCompatibilityRegistry = [
     deprecatedSince: '0.9.1',
     removeAfter: 'none',
     evidence: [{ source: 'prior_version', reference: NAMESPACED_SUB_API_PLAN }],
-    behavior: 'Deprecated root chart remover delegates to ws.charts.remove(chartId).',
+    behavior: 'Deprecated root chart remover delegates to ws.charts.remove(chartTarget).',
     runtimeSurfaces: ['typescript', 'kernel', 'api-describe', 'agent-guidance', 'docs'],
     surfaceDisposition: {
       typescript: 'deprecated_alias',
@@ -633,7 +673,7 @@ export const apiCompatibilityRegistry = [
     },
     diagnostics: {
       code: 'MOG002_MOG_API_USAGE',
-      message: 'ws.removeChart(id) is deprecated. Use ws.charts.remove(id).',
+      message: 'ws.removeChart(target) is deprecated. Use ws.charts.remove(target).',
       replacements: ['ws.charts.remove'],
     },
     verification: ['pnpm --filter @mog-sdk/kernel test -- worksheet-charts worksheet-impl'],
@@ -740,7 +780,7 @@ export const apiCompatibilityRegistry = [
       },
     ],
     behavior:
-      'Chart records returned by ws.charts.get/list are data records; use ws.charts.getAxisItem(chartId, ...) or ws.charts.setAxisTitle(chartId, ...) for axis reads and mutations.',
+      'Chart records returned by ws.charts.get/list are data records; use ws.charts.getAxisItem(chartTarget, ...) or ws.charts.setAxisTitle(chartTarget, ...) for axis reads and mutations. Targets accept exact IDs or names; use { id: chart.id } when selecting a known record.',
     runtimeSurfaces: ['executeCode-preflight', 'agent-guidance', 'docs', 'api-eval'],
     surfaceDisposition: {
       typescript: 'structured_diagnostic',
@@ -755,7 +795,7 @@ export const apiCompatibilityRegistry = [
     diagnostics: {
       code: 'MOG002_MOG_API_USAGE',
       message:
-        'chart.getAxisItem(...) is a stale chart-record path. Use ws.charts.getAxisItem(chart.id, ...) or ws.charts.setAxisTitle(chart.id, axisRole, title).',
+        'chart.getAxisItem(...) is a stale chart-record path. Use ws.charts.getAxisItem({ id: chart.id }, ...) or ws.charts.setAxisTitle({ id: chart.id }, axisRole, title).',
       replacements: ['ws.charts.getAxisItem', 'ws.charts.setAxisTitle', 'ws.charts.getAppModel'],
     },
     verification: [

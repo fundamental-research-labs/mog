@@ -155,6 +155,7 @@ const CellOps = await import('../worksheet/operations/cell-operations');
 const RangeOps = await import('../worksheet/operations/range-operations');
 
 const SHEET_ID = sheetId('sheet-1');
+const INPUTS_SHEET_ID = sheetId('sheet-2');
 
 function expectVersionOperationOptions(operationIdPrefix: string, domainIds: readonly string[]) {
   return expect.objectContaining({
@@ -463,5 +464,38 @@ describe('Worksheet formula API ergonomics', () => {
 
     expect(ctx.computeBridge.evaluateExpression).toHaveBeenNthCalledWith(1, SHEET_ID, 'SUM(A1:A3)');
     expect(ctx.computeBridge.evaluateExpression).toHaveBeenNthCalledWith(2, SHEET_ID, '1+6');
+  });
+
+  it('evaluateFormula resolves sheet options by name or SheetId', async () => {
+    const inputs = { sheetId: INPUTS_SHEET_ID, name: 'Inputs' };
+    const workbook = {
+      findSheet: jest.fn(async (name: string) =>
+        name.toLowerCase() === inputs.name.toLowerCase() ? inputs : null,
+      ),
+      getSheets: jest.fn().mockResolvedValue([{ sheetId: SHEET_ID, name: 'Sheet1' }, inputs]),
+    };
+    const boundWorksheet = new WorksheetImpl(SHEET_ID, ctx, {
+      workbook: workbook as any,
+      name: 'Sheet1',
+    });
+    ctx.computeBridge.evaluateExpression.mockResolvedValue(12);
+
+    await expect(boundWorksheet.evaluateFormula('=SUM(A1:A2)', { sheet: 'inputs' })).resolves.toBe(
+      12,
+    );
+    await expect(
+      boundWorksheet.evaluateFormula('=SUM(A1:A2)', { sheet: INPUTS_SHEET_ID }),
+    ).resolves.toBe(12);
+
+    expect(ctx.computeBridge.evaluateExpression).toHaveBeenNthCalledWith(
+      1,
+      INPUTS_SHEET_ID,
+      'SUM(A1:A2)',
+    );
+    expect(ctx.computeBridge.evaluateExpression).toHaveBeenNthCalledWith(
+      2,
+      INPUTS_SHEET_ID,
+      'SUM(A1:A2)',
+    );
   });
 });

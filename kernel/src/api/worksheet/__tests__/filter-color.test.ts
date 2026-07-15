@@ -581,6 +581,9 @@ describe('WorksheetFiltersImpl.applyAdvanced', () => {
   });
 
   it('forwards in-place advanced filters to the Rust bridge and returns the receipt', async () => {
+    ctx.computeBridge.getFiltersInSheet.mockResolvedValueOnce([
+      advancedFilter({ id: 'existing-advanced-filter' }),
+    ]);
     const receipt = await filters.applyAdvanced({
       listRange: '$A$1:$B$6',
       criteriaRange: '$D$1:$D$2',
@@ -670,5 +673,71 @@ describe('WorksheetFiltersImpl.applyAdvanced', () => {
         }),
       }),
     );
+  });
+});
+
+describe('WorksheetFiltersImpl invalid mutation targets', () => {
+  let ctx: any;
+  let filters: WorksheetFiltersImpl;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    ctx = createMockCtx({ existingFilters: [] });
+    filters = new WorksheetFiltersImpl(ctx, SHEET_ID);
+  });
+
+  const missingTargetCases: Array<[string, (filters: WorksheetFiltersImpl) => Promise<unknown>]> = [
+    ['remove', (api) => api.remove('missing-filter')],
+    [
+      'setColumnFilter',
+      (api) => api.setColumnFilter(0, { type: 'value', values: ['East'] }, 'missing-filter'),
+    ],
+    ['applyDynamicFilter', (api) => api.applyDynamicFilter(0, 'aboveAverage', 'missing-filter')],
+    ['clearColumnFilter', (api) => api.clearColumnFilter(0, 'missing-filter')],
+    [
+      'setCriteria',
+      (api) => api.setCriteria('missing-filter', 0, { type: 'value', values: ['East'] }),
+    ],
+    ['clearCriteria', (api) => api.clearCriteria('missing-filter', 0)],
+    ['clearAllCriteria', (api) => api.clearAllCriteria('missing-filter')],
+    ['apply', (api) => api.apply('missing-filter')],
+    ['reapply', (api) => api.reapply('missing-filter')],
+    [
+      'setSortState',
+      (api) =>
+        api.setSortState('missing-filter', {
+          column: 'missing-column' as any,
+          direction: 'ascending',
+        }),
+    ],
+    [
+      'byColor',
+      (api) =>
+        api.byColor(0, {
+          colorType: 'fill',
+          color: '#FFFF00',
+          filterId: 'missing-filter',
+        }),
+    ],
+    [
+      'applyAdvanced',
+      (api) =>
+        api.applyAdvanced({
+          listRange: 'A1:B6',
+          mode: 'inPlace',
+          filterId: 'missing-filter',
+        }),
+    ],
+  ];
+
+  it.each(missingTargetCases)('%s rejects a missing explicit filter ID', async (_name, action) => {
+    await expect(action(filters)).rejects.toMatchObject({ code: 'FILTER_NOT_FOUND' });
+  });
+
+  it('retains no-op semantics when an optional default target is omitted', async () => {
+    await expect(
+      filters.setColumnFilter(0, { type: 'value', values: ['East'] }),
+    ).resolves.toMatchObject({ status: 'noOp' });
+    await expect(filters.clearColumnFilter(0)).resolves.toMatchObject({ status: 'noOp' });
   });
 });

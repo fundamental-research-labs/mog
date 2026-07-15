@@ -34,7 +34,8 @@ fn classify_name_fallback(raw: &str) -> ResolvedName {
     // a canonical form because:
     //
     // - The evaluator reparses `raw_expression` via
-    //   `compute_parser::parse_formula` with a live [`CoreResolver`]; the
+    //   `compute_parser::parse_formula` with a live
+    //   [`MirrorCellRefResolver`](super::MirrorCellRefResolver); the
     //   canonical form may drop / reorder sheet qualifiers that the resolver
     //   relies on (e.g. `Inputs!$A$1` canonicalizes to `$A$1` which loses
     //   the sheet).

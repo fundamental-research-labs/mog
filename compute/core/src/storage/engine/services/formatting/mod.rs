@@ -7,7 +7,9 @@ mod row_col_formats;
 mod schema_map;
 mod schema_storage;
 
-pub(in crate::storage::engine) use cell_properties::{clear_cell_format, set_cell_format};
+pub(in crate::storage::engine) use cell_properties::{
+    clear_cell_format, patch_cell_format, set_cell_format,
+};
 pub(in crate::storage::engine) use cf_geometry::{
     cf_intersect_ranges, cf_is_valid_range, cf_range_contains, cf_ranges_overlap,
     cf_subtract_range, get_cf_preset_by_id, get_icon_set_presets,
@@ -19,11 +21,12 @@ pub(in crate::storage::engine) use conditional_formats::{
     has_cf_for_cell, reorder_cf_rules, update_cf_ranges, update_cf_rule, update_rule_in_cf,
 };
 pub(in crate::storage::engine) use range_formats::{
-    clear_format_for_ranges, set_format_for_ranges, set_format_for_ranges_with_origin,
-    toggle_format_property,
+    clear_format_for_ranges, patch_borders_for_ranges, patch_format_for_ranges,
+    set_format_for_ranges, set_format_for_ranges_with_origin, toggle_format_property,
 };
 pub(in crate::storage::engine) use row_col_formats::{
-    clear_col_format, set_col_format, set_col_format_range, set_row_format,
+    clear_col_format, patch_col_borders, patch_col_format, patch_row_borders, patch_row_format,
+    set_col_format, set_col_format_range, set_row_format,
 };
 pub(in crate::storage::engine) use schema_map::{
     clear_schemas, remove_schema, set_schema_map, update_schema,

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use super::ranges::resolve_format_ranges;
 use super::rule_wire::domain_rule_to_wire;
 use crate::cf::types::CFRule;
@@ -20,6 +22,7 @@ pub(crate) fn convert_cf_formats_to_rules(
     formats: &[ConditionalFormat],
     resolve_cell_id: impl Fn(&str, &str) -> Option<(u32, u32)>,
     fallback_sheet_id: Option<SheetId>,
+    theme_palette: &HashMap<String, String>,
 ) -> Vec<CFRule> {
     let mut result = Vec::new();
 
@@ -30,7 +33,7 @@ pub(crate) fn convert_cf_formats_to_rules(
         };
 
         for rule in &format.rules {
-            let wire = domain_rule_to_wire(rule, ranges.clone());
+            let wire = domain_rule_to_wire(rule, ranges.clone(), theme_palette);
             match CFRule::try_from(wire) {
                 Ok(cf_rule) => result.push(cf_rule),
                 Err(e) => {

@@ -7,6 +7,7 @@ import { toA1 } from '@mog/spreadsheet-utils/a1';
 
 import type { ChartFloatingObject } from '../../bridges/compute/compute-bridge';
 import type { DocumentContext } from '../../context/types';
+import { callNativeChartMutation } from '../../errors/chart';
 import {
   createChartMutationOptions,
   createGroupedChartMutationOptions,
@@ -57,11 +58,13 @@ export async function linkChartToTable(
   // Use the bridge's native linkChartToTable which properly persists the link
   // in the Rust engine. The manual sourceTableId update via updateChart does
   // not round-trip through the floating-object mapper correctly.
-  await ctx.computeBridge.linkChartToTable(
-    sheetId,
-    chartId,
-    tableId,
-    nextChartMutationOptions(nextOptions),
+  await callNativeChartMutation(chartId, () =>
+    ctx.computeBridge.linkChartToTable(
+      sheetId,
+      chartId,
+      tableId,
+      nextChartMutationOptions(nextOptions),
+    ),
   );
 
   // Also store optional column mapping metadata via update
@@ -104,14 +107,16 @@ export async function unlinkChartFromTable(
   if (!chart) return;
 
   // Use the bridge's native unlinkChartFromTable for proper persistence
-  await ctx.computeBridge.unlinkChartFromTable(
-    sheetId,
-    chartId,
-    nextChartMutationOptions(admissionOptions) ??
-      createChartMutationOptions(ctx, {
-        operationIdPrefix: 'charts.unlinkFromTable',
-        sheetIds: [sheetId],
-      }),
+  await callNativeChartMutation(chartId, () =>
+    ctx.computeBridge.unlinkChartFromTable(
+      sheetId,
+      chartId,
+      nextChartMutationOptions(admissionOptions) ??
+        createChartMutationOptions(ctx, {
+          operationIdPrefix: 'charts.unlinkFromTable',
+          sheetIds: [sheetId],
+        }),
+    ),
   );
 }
 

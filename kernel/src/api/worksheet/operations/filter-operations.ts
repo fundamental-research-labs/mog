@@ -22,9 +22,10 @@ import { invalidRange, operationFailed } from './shared';
 import { KernelError } from '../../../errors';
 import { resolveFilterRange } from '../filter-range-resolution';
 import {
+  assertFilterMutationTargetResult,
   buildFilterMutationReceipt,
   columnFilterIsClear,
-  getFilterById,
+  requireFilterById,
 } from '../filters/mutation-receipts';
 import {
   assertFilterMutationAllowed,
@@ -117,12 +118,14 @@ export async function deleteFilter(
 ): Promise<OperationResult<void>> {
   try {
     await ctx.awaitMaterialized?.('allSheets');
+    await requireFilterById(ctx, sheetId, filterId, 'filters.remove');
     await assertFilterMutationAllowed(ctx, sheetId, 'filters.remove', filterId);
-    await ctx.computeBridge.deleteFilter(
+    const result = await ctx.computeBridge.deleteFilter(
       sheetId,
       filterId,
       createFilterMutationOptions(ctx, sheetId, 'filters.remove'),
     );
+    assertFilterMutationTargetResult(result, sheetId, filterId, 'filters.remove');
     return { success: true, data: undefined };
   } catch (e) {
     return {
@@ -158,19 +161,7 @@ export async function setColumnFilter(
 ): Promise<OperationResult<FilterMutationReceipt>> {
   try {
     await ctx.awaitMaterialized?.('allSheets');
-    const filter = await getFilterById(ctx, sheetId, filterId);
-    if (!filter) {
-      return {
-        success: true,
-        data: buildFilterMutationReceipt({
-          kind: 'filter.columnFilter.set',
-          status: 'noOp',
-          sheetId,
-          filterId,
-          column: headerCol,
-        }),
-      };
-    }
+    const filter = await requireFilterById(ctx, sheetId, filterId, 'filters.setColumnFilter');
     await assertFilterMutationAllowed(ctx, sheetId, 'filters.setColumnFilter', filterId);
     const range = await resolveFilterRange(ctx, sheetId, filter);
     const result = await ctx.computeBridge.setColumnFilter(
@@ -180,6 +171,7 @@ export async function setColumnFilter(
       columnFilterCriteriaToCompute(criteria),
       createFilterMutationOptions(ctx, sheetId, 'filters.setColumnFilter'),
     );
+    assertFilterMutationTargetResult(result, sheetId, filterId, 'filters.setColumnFilter');
     return {
       success: true,
       data: buildFilterMutationReceipt({
@@ -217,20 +209,7 @@ export async function clearColumnFilter(
 ): Promise<OperationResult<FilterMutationReceipt>> {
   try {
     await ctx.awaitMaterialized?.('allSheets');
-    const filter = await getFilterById(ctx, sheetId, filterId);
-    if (!filter) {
-      return {
-        success: true,
-        data: buildFilterMutationReceipt({
-          kind: 'filter.columnFilter.clear',
-          status: 'noOp',
-          sheetId,
-          filterId,
-          column: headerCol,
-          filter,
-        }),
-      };
-    }
+    const filter = await requireFilterById(ctx, sheetId, filterId, 'filters.clearColumnFilter');
     const range = await resolveFilterRange(ctx, sheetId, filter);
     if (await columnFilterIsClear(ctx, sheetId, filter, range, headerCol)) {
       return {
@@ -253,6 +232,7 @@ export async function clearColumnFilter(
       headerCol,
       createFilterMutationOptions(ctx, sheetId, 'filters.clearColumnFilter'),
     );
+    assertFilterMutationTargetResult(result, sheetId, filterId, 'filters.clearColumnFilter');
     return {
       success: true,
       data: buildFilterMutationReceipt({
@@ -290,18 +270,7 @@ export async function clearAllColumnFilters(
 ): Promise<OperationResult<FilterMutationReceipt>> {
   try {
     await ctx.awaitMaterialized?.('allSheets');
-    const filter = await getFilterById(ctx, sheetId, filterId);
-    if (!filter) {
-      return {
-        success: true,
-        data: buildFilterMutationReceipt({
-          kind: 'filter.criteria.clearAll',
-          status: 'noOp',
-          sheetId,
-          filterId,
-        }),
-      };
-    }
+    const filter = await requireFilterById(ctx, sheetId, filterId, 'filters.clearAllCriteria');
     const range = await resolveFilterRange(ctx, sheetId, filter);
     if (Object.keys(filter.columnFilters ?? {}).length === 0) {
       return {
@@ -322,6 +291,7 @@ export async function clearAllColumnFilters(
       filterId,
       createFilterMutationOptions(ctx, sheetId, 'filters.clearAllColumnFilters'),
     );
+    assertFilterMutationTargetResult(result, sheetId, filterId, 'filters.clearAllCriteria');
     return {
       success: true,
       data: buildFilterMutationReceipt({
@@ -370,18 +340,7 @@ export async function applyFilter(
 ): Promise<OperationResult<FilterMutationReceipt>> {
   try {
     await ctx.awaitMaterialized?.('allSheets');
-    const filter = await getFilterById(ctx, sheetId, filterId);
-    if (!filter) {
-      return {
-        success: true,
-        data: buildFilterMutationReceipt({
-          kind: 'filter.apply',
-          status: 'noOp',
-          sheetId,
-          filterId,
-        }),
-      };
-    }
+    const filter = await requireFilterById(ctx, sheetId, filterId, 'filters.apply');
     await assertFilterMutationAllowed(ctx, sheetId, 'filters.apply', filterId);
     const range = await resolveFilterRange(ctx, sheetId, filter);
     const result = await ctx.computeBridge.applyFilter(
@@ -389,6 +348,7 @@ export async function applyFilter(
       filterId,
       createFilterMutationOptions(ctx, sheetId, 'filters.apply'),
     );
+    assertFilterMutationTargetResult(result, sheetId, filterId, 'filters.apply');
     return {
       success: true,
       data: buildFilterMutationReceipt({
@@ -418,18 +378,7 @@ export async function reapplyFilter(
 ): Promise<OperationResult<FilterMutationReceipt>> {
   try {
     await ctx.awaitMaterialized?.('allSheets');
-    const filter = await getFilterById(ctx, sheetId, filterId);
-    if (!filter) {
-      return {
-        success: true,
-        data: buildFilterMutationReceipt({
-          kind: 'filter.reapply',
-          status: 'noOp',
-          sheetId,
-          filterId,
-        }),
-      };
-    }
+    const filter = await requireFilterById(ctx, sheetId, filterId, 'filters.reapply');
     await assertFilterMutationAllowed(ctx, sheetId, 'filters.reapply', filterId);
     const range = await resolveFilterRange(ctx, sheetId, filter);
     const result = await ctx.computeBridge.reapplyFilter(
@@ -437,6 +386,7 @@ export async function reapplyFilter(
       filterId,
       createFilterMutationOptions(ctx, sheetId, 'filters.reapply'),
     );
+    assertFilterMutationTargetResult(result, sheetId, filterId, 'filters.reapply');
     return {
       success: true,
       data: buildFilterMutationReceipt({
@@ -592,6 +542,7 @@ export async function setFilterSortState(
 ): Promise<OperationResult<void>> {
   try {
     await ctx.awaitMaterialized?.('allSheets');
+    await requireFilterById(ctx, sheetId, filterId, 'filters.setSortState');
     await assertFilterMutationAllowed(ctx, sheetId, 'filters.setSortState', filterId);
     await ctx.computeBridge.setFilterSortState(
       sheetId,
@@ -599,6 +550,7 @@ export async function setFilterSortState(
       state,
       createFilterMutationOptions(ctx, sheetId, 'filters.setSortState'),
     );
+    await requireFilterById(ctx, sheetId, filterId, 'filters.setSortState');
     return { success: true, data: undefined };
   } catch (e) {
     return {

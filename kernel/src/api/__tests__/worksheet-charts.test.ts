@@ -231,7 +231,7 @@ describe('WorksheetChartsImpl materialization scopes', () => {
       expect.objectContaining({ name: 'Updated chart' }),
       expect.any(Object),
     );
-    expect(calls).toEqual([`await:${SHEET_ID}`, 'getChart', 'getChart', 'updateChart', 'getChart']);
+    expect(calls).toEqual([`await:${SHEET_ID}`, 'getChart', 'updateChart', 'getChart']);
   });
 
   it('accepts worksheet-scoped short imported chart IDs but returns canonical IDs', async () => {

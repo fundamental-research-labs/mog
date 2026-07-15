@@ -7,6 +7,15 @@
 
 import type { CellRange } from '../types';
 
+/**
+ * Selects one or more worksheet columns for a layout operation.
+ *
+ * Numbers are zero-based Mog column indexes. Strings use Excel/Office-style
+ * column addressing and may be a bare column name (`"B"`), an absolute name
+ * (`"$B"`), or an inclusive whole-column range (`"B:B"`, `"B:D"`).
+ */
+export type WorksheetLayoutColumnSelector = number | string;
+
 /** Pixel bounds of a range (top/left offset from worksheet origin, height, width). */
 export interface RangePixelPosition {
   /** Pixel offset of the range's top edge from the worksheet origin */
@@ -40,64 +49,66 @@ export interface WorksheetLayout {
   /**
    * Get the width of a column in pixels.
    *
-   * @param col - Column index (0-based)
+   * @param col - One column: a 0-based index, column name, or single-column reference
    * @returns Column width in pixels
    */
-  getColumnWidth(col: number): Promise<number>;
+  getColumnWidth(col: WorksheetLayoutColumnSelector): Promise<number>;
 
   /**
    * Set the width of a column in pixels.
    *
-   * @param col - Column index (0-based)
+   * @param col - Columns selected by 0-based index, column name, or whole-column reference
    * @param widthPx - Width in pixels (must be > 0)
    */
-  setColumnWidth(col: number, widthPx: number): Promise<void>;
+  setColumnWidth(col: WorksheetLayoutColumnSelector, widthPx: number): Promise<void>;
 
   /**
    * Get the width of a column in character-width units
    * (relative to the Normal style font's maximum digit width, matching OOXML/Excel convention).
    *
-   * @param col - Column index (0-based)
+   * @param col - One column: a 0-based index, column name, or single-column reference
    * @returns Column width in character-width units
    */
-  getColumnWidthChars(col: number): Promise<number>;
+  getColumnWidthChars(col: WorksheetLayoutColumnSelector): Promise<number>;
 
   /**
    * Set the width of a column in character-width units
    * (relative to the Normal style font's maximum digit width, matching OOXML/Excel convention).
    *
-   * @param col - Column index (0-based)
+   * @param col - Columns selected by 0-based index, column name, or whole-column reference
    * @param widthChars - Width in character-width units (must be > 0)
    */
-  setColumnWidthChars(col: number, widthChars: number): Promise<void>;
+  setColumnWidthChars(col: WorksheetLayoutColumnSelector, widthChars: number): Promise<void>;
 
   /**
    * Set multiple column widths in pixels.
    *
-   * @param widths - Array of [columnIndex, widthPx] pairs
+   * @param widths - Array of [columnSelector, widthPx] pairs
    */
-  setColumnWidths(widths: Array<[number, number]>): Promise<void>;
+  setColumnWidths(widths: Array<[WorksheetLayoutColumnSelector, number]>): Promise<void>;
 
   /**
    * Set multiple column widths in character-width units.
    *
-   * @param widths - Array of [columnIndex, widthChars] pairs
+   * @param widths - Array of [columnSelector, widthChars] pairs
    */
-  setColumnWidthsChars(widths: Array<[number, number]>): Promise<void>;
+  setColumnWidthsChars(widths: Array<[WorksheetLayoutColumnSelector, number]>): Promise<void>;
 
   /**
-   * Auto-fit a column width to its content.
+   * Auto-fit selected column widths to their content.
    *
-   * @param col - Column index (0-based)
+   * @param col - Columns selected by 0-based index, column name, or whole-column reference
    */
-  autoFitColumn(col: number): Promise<void>;
+  autoFitColumn(col: WorksheetLayoutColumnSelector): Promise<void>;
 
   /**
    * Auto-fit multiple columns to their content in a single batch call.
    *
-   * @param cols - Array of column indices (0-based)
+   * @param cols - A column selector or array of selectors
    */
-  autoFitColumns(cols: number[]): Promise<void>;
+  autoFitColumns(
+    cols: WorksheetLayoutColumnSelector | readonly WorksheetLayoutColumnSelector[],
+  ): Promise<void>;
 
   /**
    * Auto-fit a row height to its content.
@@ -125,21 +136,33 @@ export interface WorksheetLayout {
   /**
    * Get column widths for a range of columns in pixels.
    *
-   * @param startCol - Start column index (0-based, inclusive)
-   * @param endCol - End column index (0-based, inclusive)
+   * Pass a single range selector such as `"B:D"`, or separate inclusive start
+   * and end selectors. Separate selectors must each identify exactly one column.
+   *
+   * @param startCol - Range selector or inclusive start column
+   * @param endCol - Inclusive end column when startCol is not a range selector
    * @returns Array of [colIndex, widthPx] pairs
    */
-  getColWidthsBatch(startCol: number, endCol: number): Promise<Array<[number, number]>>;
+  getColWidthsBatch(
+    startCol: WorksheetLayoutColumnSelector,
+    endCol?: WorksheetLayoutColumnSelector,
+  ): Promise<Array<[number, number]>>;
 
   /**
    * Get column widths for a range of columns in character-width units
    * (relative to the Normal style font's maximum digit width, matching OOXML/Excel convention).
    *
-   * @param startCol - Start column index (0-based, inclusive)
-   * @param endCol - End column index (0-based, inclusive)
+   * Pass a single range selector such as `"B:D"`, or separate inclusive start
+   * and end selectors. Separate selectors must each identify exactly one column.
+   *
+   * @param startCol - Range selector or inclusive start column
+   * @param endCol - Inclusive end column when startCol is not a range selector
    * @returns Array of [colIndex, charWidth] pairs
    */
-  getColWidthsBatchChars(startCol: number, endCol: number): Promise<Array<[number, number]>>;
+  getColWidthsBatchChars(
+    startCol: WorksheetLayoutColumnSelector,
+    endCol?: WorksheetLayoutColumnSelector,
+  ): Promise<Array<[number, number]>>;
 
   /**
    * Set the visibility of a single row.
@@ -150,12 +173,12 @@ export interface WorksheetLayout {
   setRowVisible(row: number, visible: boolean): Promise<void>;
 
   /**
-   * Set the visibility of a single column.
+   * Set the visibility of selected columns.
    *
-   * @param col - Column index (0-based)
+   * @param col - Columns selected by 0-based index, column name, or whole-column reference
    * @param visible - True to show, false to hide
    */
-  setColumnVisible(col: number, visible: boolean): Promise<void>;
+  setColumnVisible(col: WorksheetLayoutColumnSelector, visible: boolean): Promise<void>;
 
   /**
    * Check whether a row is hidden.
@@ -168,10 +191,10 @@ export interface WorksheetLayout {
   /**
    * Check whether a column is hidden.
    *
-   * @param col - Column index (0-based)
+   * @param col - One column: a 0-based index, column name, or single-column reference
    * @returns True if the column is hidden
    */
-  isColumnHidden(col: number): Promise<boolean>;
+  isColumnHidden(col: WorksheetLayoutColumnSelector): Promise<boolean>;
 
   /**
    * Unhide all rows in a range.
@@ -184,10 +207,16 @@ export interface WorksheetLayout {
   /**
    * Unhide all columns in a range.
    *
-   * @param startCol - Start column index (0-based, inclusive)
-   * @param endCol - End column index (0-based, inclusive)
+   * Pass a single range selector such as `"B:D"`, or separate inclusive start
+   * and end selectors. Separate selectors must each identify exactly one column.
+   *
+   * @param startCol - Range selector or inclusive start column
+   * @param endCol - Inclusive end column when startCol is not a range selector
    */
-  unhideColumns(startCol: number, endCol: number): Promise<void>;
+  unhideColumns(
+    startCol: WorksheetLayoutColumnSelector,
+    endCol?: WorksheetLayoutColumnSelector,
+  ): Promise<void>;
 
   /**
    * Hide multiple rows by index.
@@ -199,9 +228,11 @@ export interface WorksheetLayout {
   /**
    * Hide multiple columns by index.
    *
-   * @param cols - Array of column indices to hide (0-based)
+   * @param cols - A column selector or array of selectors
    */
-  hideColumns(cols: number[]): Promise<void>;
+  hideColumns(
+    cols: WorksheetLayoutColumnSelector | readonly WorksheetLayoutColumnSelector[],
+  ): Promise<void>;
 
   /**
    * Get the set of all hidden row indices.
@@ -235,11 +266,11 @@ export interface WorksheetLayout {
   resetRowHeight(row: number): Promise<void>;
 
   /**
-   * Reset a column's width to the sheet default.
+   * Reset selected column widths to the sheet default.
    *
-   * @param col - Column index (0-based)
+   * @param col - Columns selected by 0-based index, column name, or whole-column reference
    */
-  resetColumnWidth(col: number): Promise<void>;
+  resetColumnWidth(col: WorksheetLayoutColumnSelector): Promise<void>;
 
   // ===========================================================================
   // Pixel position queries (spreadsheet special-cell typeRange.top / .left / .height / .width)
@@ -256,10 +287,10 @@ export interface WorksheetLayout {
   /**
    * Get the pixel offset of a column's left edge from the worksheet origin.
    *
-   * @param col - Column index (0-based)
+   * @param col - One column: a 0-based index, column name, or single-column reference
    * @returns Pixel offset from the left of the worksheet
    */
-  getColPosition(col: number): Promise<number>;
+  getColPosition(col: WorksheetLayoutColumnSelector): Promise<number>;
 
   /**
    * Get the pixel bounds of a range (top, left, height, width).

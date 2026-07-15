@@ -3,7 +3,7 @@
 import type { BridgeTransport } from '@rust-bridge/client';
 import type { ComputeCore } from './compute-core';
 import type { MutationAdmissionOptions } from './mutation-admission';
-import type { A1CellRef, A1RangeRef, AnnotationRecord, AutoExpansionResult, BatchCellInput, BatchRangeRequest, BatchRangeResponse, BridgeAutoFillPreviewResult, BridgeAutoFillRequest, BridgeFlashFillRequest, BridgeSortOptions, CFColorScale, CFDataBar, CFIconSetName, CFIconSetPreset, CFPresetCategory, CFRule, CacheInvalidationEventReason, Table as CanonicalTable, CellCFResult, CalculationSettings, ChartStatistics, Comment, CommentMention, CommentType, CellEdit, CellInput, CellPosition, CellPositionResult, CellInfo, CellStyleDef, CellMergeInfo, SheetPos, CellValidationResult, ColumnEdge, ColumnFilter, AdvancedFilterRequest, DynamicFilterRule, ConditionalFormat, CopyType, CreateBindingInput, CreateShapeConfig, DefaultFont, DefinedName, DefinedNameInput, DefinedNameWire, DisconnectionEventReason, DocumentProperties, FilterHeaderInfo, FilterRecordCount, FilterSortState, FilterState, FormulaReferenceDiagnosticsOptions, FormulaReferenceDiagnosticsPage, RuntimeDiagnosticsOptions, RuntimeDiagnosticsPage, FloatingObjectBounds, FlipAxis, FrozenPanes, GroupDefinition, Hyperlink, IdentityCell, ImportDiagnostic, MergeRegion, MoveTarget, MutationResult, SyncApplyMutationMetadataWire, SyncApplyOperationContextWire, NameValidationResult, NamedRangeUpdate, OutlineLevel, OutlineLevelButton, OutlineRenderData, OutlineSettingsUpdate, OutlineSymbol, ProjectionData, ProtectedWorkbookOperation, RawCellData, RangeQueryResult, RangeSchema, RectBounds, RowEdge, RegexSearchOptions, RegexSearchResult, ResolvedMergedRegion, ResizeConfig, Scenario, ScenarioActiveState, ScenarioCreateInput, ScenarioUpdateInput, SelectionAggregates, SetCellsBatchResult, FloatingObject, SerializedFloatingObjectGroup, ShapeStyleUpdate, SheetDataBinding, FindInRangeOptions, FindInRangeResult, WorkbookSearchResult, SignCheckOptions, SignCheckResult, SheetGroupingConfig, SheetMeta, SheetProtectionConfig, SheetProtectionOptions, SheetScrollPosition, SheetSettings, SheetSnapshot, SheetViewOptions, SplitViewConfig, SlicerItem, StoredSlicer, StoredSlicerUpdate, SlicerCustomStyle, NamedSlicerStyle, CsvImportOptions, PivotFieldItems, ImportedPivotViewRecord, PivotTableConfig, PivotTableResult, PivotField, HeaderFooterImageInfo, HfImagePosition, PrintRange, PrintSettings, PrintTitles, Sparkline, SparklineGroup, SparklineUpdate, SubtotalOptions, CustomTableStyleConfig, TableBoolOption, TableColumn, TableHitRegion, TableNameValidationResult, TableTopBottomFilter, TextToColumnsOptions, ThemeData, Transform, TotalsFunction, UndoState, UpdateBindingFields, RustWorkbookSettingsPatch, SemanticWorkbookDiff, SemanticWorkbookState, SemanticWorkbookStateEnvelope, Viewport, WorkbookProtectionOptions, WorkbookComment, WorkbookPivotTable, WorkbookSettings, WorkbookTable, ZOrderEntry } from './compute-types.gen';
+import type { A1CellRef, A1RangeRef, AnnotationRecord, AutoExpansionResult, BatchCellInput, BatchRangeRequest, BatchRangeResponse, BridgeAutoFillPreviewResult, BridgeAutoFillRequest, BridgeFlashFillRequest, BridgeSortOptions, BorderPatchOperation, CFColorScale, CFDataBar, CFIconSetName, CFIconSetPreset, CFPresetCategory, CFRule, CacheInvalidationEventReason, Table as CanonicalTable, CellCFResult, CalculationSettings, ChartStatistics, Comment, CommentMention, CommentType, CellEdit, CellInput, CellPosition, CellPositionResult, CellInfo, CellStyleDef, CellMergeInfo, SheetPos, CellValidationResult, ColumnEdge, ColumnFilter, AdvancedFilterRequest, DynamicFilterRule, ConditionalFormat, CopyType, CreateBindingInput, CreateShapeConfig, DefaultFont, DefinedName, DefinedNameInput, DefinedNameWire, DisconnectionEventReason, DocumentProperties, FilterHeaderInfo, FilterRecordCount, FilterSortState, FilterState, FormulaReferenceDiagnosticsOptions, FormulaReferenceDiagnosticsPage, RuntimeDiagnosticsOptions, RuntimeDiagnosticsPage, FloatingObjectBounds, FlipAxis, FrozenPanes, GroupDefinition, Hyperlink, IdentityCell, ImportDiagnostic, MergeRegion, MoveTarget, MutationResult, SyncApplyMutationMetadataWire, SyncApplyOperationContextWire, NameValidationResult, NamedRangeUpdate, OutlineLevel, OutlineLevelButton, OutlineRenderData, OutlineSettingsUpdate, OutlineSymbol, ProjectionData, ProtectedWorkbookOperation, RawCellData, RangeQueryResult, RangeSchema, RectBounds, RowEdge, RegexSearchOptions, RegexSearchResult, ResolvedMergedRegion, ResizeConfig, Scenario, ScenarioActiveState, ScenarioCreateInput, ScenarioUpdateInput, SelectionAggregates, SetCellsBatchResult, FloatingObject, SerializedFloatingObjectGroup, ShapeStyleUpdate, SheetDataBinding, FindInRangeOptions, FindInRangeResult, WorkbookSearchResult, SignCheckOptions, SignCheckResult, SheetGroupingConfig, SheetMeta, SheetProtectionConfig, SheetProtectionOptions, SheetScrollPosition, SheetSettings, SheetSnapshot, SheetViewOptions, SplitViewConfig, SlicerItem, StoredSlicer, StoredSlicerUpdate, SlicerCustomStyle, NamedSlicerStyle, CsvImportOptions, PivotFieldItems, ImportedPivotViewRecord, PivotTableConfig, PivotTableResult, PivotField, HeaderFooterImageInfo, HfImagePosition, PrintRange, PrintSettings, PrintTitles, Sparkline, SparklineGroup, SparklineUpdate, SubtotalOptions, CustomTableStyleConfig, TableBoolOption, TableColumn, TableHitRegion, TableNameValidationResult, TableTopBottomFilter, TextToColumnsOptions, ThemeData, Transform, TotalsFunction, UndoState, UpdateBindingFields, RustWorkbookSettingsPatch, SemanticWorkbookDiff, SemanticWorkbookState, SemanticWorkbookStateEnvelope, Viewport, WorkbookProtectionOptions, WorkbookComment, WorkbookPivotTable, WorkbookSettings, WorkbookTable, ZOrderEntry } from './compute-types.gen';
 import type { IdentityFormulaWire as IdentityFormula, ColumnSchemaWire as ColumnSchema, SchemaTypeWire as SchemaType, ValidationResultWire as ValidationResult, EditorTypeResolutionInputWire as EditorTypeResolutionInput, EditorTypeResolutionResultWire as EditorTypeResolutionResult, InferredSchemaWire as InferredSchema, NamedRangeDef, DataRow, Point, RegressionMethod, RegressionOptions, RegressionOutput, DensityResult, HistogramBin, StackInput, StackMode, StackOutput, FormatEntry, DateValueResult, ParsedDateInput, FormulaCircularReferenceValidation, CFRuleWire, CfPresets, GoalSeekParams, GoalSeekResult, CreateDataTableInput, DataTableParams, DataTableResult, SchemaMapEntryWire, PageBreaks, TableRange, SlicerSortOrder, CFCellRange } from './types';
 import type { Table, FilterCriteria, Slicer, SlicerCache, SortSpec, RowVisibility, TableCellFormat, TableStyleDef, StructuredRef, DynamicFilter, FilterDropdownData, TableStructureChange } from '@mog/table-engine';
 import type { CellFormat, CellValue, SheetId } from '@mog-sdk/contracts/core';
@@ -363,13 +363,17 @@ export interface GeneratedBridgeMethods {
   getCellFormat(sheetId: SheetId, cellId: CellId, row: number, col: number): Promise<CellFormat>;
   getCellFormatWithCf(sheetId: SheetId, cellId: CellId, row: number, col: number): Promise<CellFormat>;
   getResolvedFormat(sheetId: SheetId, row: number, col: number): Promise<ResolvedCellFormat>;
+  getTransferableFormat(sheetId: SheetId, row: number, col: number): Promise<ResolvedCellFormat>;
   setCellFormat(sheetId: SheetId, cellId: CellId, format: CellFormat, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   clearCellFormat(sheetId: SheetId, cellId: CellId, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   toggleFormatProperty(sheetId: SheetId, ranges: [number, number, number, number][], property: string, activeRow: number, activeCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   setFormatForRanges(sheetId: SheetId, ranges: [number, number, number, number][], format: CellFormat, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  patchFormatForRanges(sheetId: SheetId, ranges: [number, number, number, number][], format: CellFormat, clearFields: string[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  patchBorders(sheetId: SheetId, operations: BorderPatchOperation[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   setFormatForRangesUiState(sheetId: SheetId, ranges: [number, number, number, number][], format: CellFormat, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   clearFormatForRanges(sheetId: SheetId, ranges: [number, number, number, number][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   setCellPropertiesBatch(sheetId: SheetId, updates: [number, number, CellFormat][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  patchCellPropertiesBatch(sheetId: SheetId, updates: [number, number, CellFormat, string[]][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   addCfRule(sheetId: SheetId, rule: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   updateCfRule(sheetId: SheetId, ruleId: string, updates: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   deleteCfRule(sheetId: SheetId, ruleId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
@@ -391,13 +395,17 @@ export interface GeneratedBridgeMethods {
   getIconSetPresets(): Promise<CFIconSetPreset[]>;
   getCfPresetById(id: string): Promise<CFPresetCategory | null>;
   setRowFormat(sheetId: SheetId, row: number, format: CellFormat, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  patchRowFormat(sheetId: SheetId, row: number, format: CellFormat, clearFields: string[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   setColFormat(sheetId: SheetId, col: number, format: CellFormat, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  patchColFormat(sheetId: SheetId, col: number, format: CellFormat, clearFields: string[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   clearColFormat(sheetId: SheetId, col: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   setColFormatRange(sheetId: SheetId, startCol: number, endCol: number, format: CellFormat, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getRowFormats(sheetId: SheetId, rows: number[]): Promise<[number, CellFormat | null][]>;
   setRowFormats(sheetId: SheetId, updates: [number, CellFormat][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  patchRowFormats(sheetId: SheetId, updates: [number, CellFormat, string[]][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getColFormats(sheetId: SheetId, cols: number[]): Promise<[number, CellFormat | null][]>;
   setColFormats(sheetId: SheetId, updates: [number, CellFormat][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  patchColFormats(sheetId: SheetId, updates: [number, CellFormat, string[]][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   queryRangeProperties(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<(CellFormat | null)[][]>;
   getDisplayedCellProperties(sheetId: SheetId, row: number, col: number): Promise<CellFormat>;
   getDisplayedRangeProperties(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<CellFormat[][]>;
@@ -476,11 +484,13 @@ export interface GeneratedBridgeMethods {
   getGroups(sheetId: SheetId, axis: string): Promise<GroupDefinition[]>;
   createSlicer(sheetId: SheetId, config: StoredSlicer, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   deleteSlicer(sheetId: SheetId, slicerId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  deleteSlicers(sheetId: SheetId, slicerIds: string[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   updateSlicerConfig(sheetId: SheetId, slicerId: string, update: StoredSlicerUpdate, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getAllSlicers(sheetId: SheetId): Promise<StoredSlicer[]>;
   getAllSlicersWorkbook(): Promise<StoredSlicer[]>;
   getSlicerState(sheetId: SheetId, slicerId: string): Promise<StoredSlicer | null>;
   toggleSlicerItem(sheetId: SheetId, slicerId: string, value: CellValue, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setSlicerSelection(sheetId: SheetId, slicerId: string, values: CellValue[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   clearSlicerSelection(sheetId: SheetId, slicerId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   mapSlicerInvalidationReason(reason: string): Promise<CacheInvalidationEventReason>;
   mapSlicerDisconnectionReason(reason: string): Promise<DisconnectionEventReason>;
@@ -2073,6 +2083,10 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<ResolvedCellFormat>('compute_get_resolved_format', { docId: this.core.docId, sheetId, row, col }));
   }
 
+  getTransferableFormat(sheetId: SheetId, row: number, col: number): Promise<ResolvedCellFormat> {
+    return this.core.query(this.core.transport.call<ResolvedCellFormat>('compute_get_transferable_format', { docId: this.core.docId, sheetId, row, col }));
+  }
+
   setCellFormat(sheetId: SheetId, cellId: CellId, format: CellFormat, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
     return this.core.mutatePublic('compute_set_cell_format', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_cell_format', { docId: this.core.docId, sheetId, cellId, format }), undefined, admissionOptions);
   }
@@ -2089,6 +2103,14 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.mutatePublic('compute_set_format_for_ranges', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_format_for_ranges', { docId: this.core.docId, sheetId, ranges, format }), undefined, admissionOptions);
   }
 
+  patchFormatForRanges(sheetId: SheetId, ranges: [number, number, number, number][], format: CellFormat, clearFields: string[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_patch_format_for_ranges', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_patch_format_for_ranges', { docId: this.core.docId, sheetId, ranges, format, clearFields }), undefined, admissionOptions);
+  }
+
+  patchBorders(sheetId: SheetId, operations: BorderPatchOperation[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_patch_borders', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_patch_borders', { docId: this.core.docId, sheetId, operations }), undefined, admissionOptions);
+  }
+
   setFormatForRangesUiState(sheetId: SheetId, ranges: [number, number, number, number][], format: CellFormat, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
     return this.core.mutateSystem('compute_set_format_for_ranges_ui_state', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_format_for_ranges_ui_state', { docId: this.core.docId, sheetId, ranges, format }), undefined, admissionOptions);
   }
@@ -2099,6 +2121,10 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
 
   setCellPropertiesBatch(sheetId: SheetId, updates: [number, number, CellFormat][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
     return this.core.mutatePublic('compute_set_cell_properties_batch', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_cell_properties_batch', { docId: this.core.docId, sheetId, updates }), undefined, admissionOptions);
+  }
+
+  patchCellPropertiesBatch(sheetId: SheetId, updates: [number, number, CellFormat, string[]][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_patch_cell_properties_batch', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_patch_cell_properties_batch', { docId: this.core.docId, sheetId, updates }), undefined, admissionOptions);
   }
 
   addCfRule(sheetId: SheetId, rule: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
@@ -2185,8 +2211,16 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.mutatePublic('compute_set_row_format', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_row_format', { docId: this.core.docId, sheetId, row, format }), undefined, admissionOptions);
   }
 
+  patchRowFormat(sheetId: SheetId, row: number, format: CellFormat, clearFields: string[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_patch_row_format', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_patch_row_format', { docId: this.core.docId, sheetId, row, format, clearFields }), undefined, admissionOptions);
+  }
+
   setColFormat(sheetId: SheetId, col: number, format: CellFormat, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
     return this.core.mutatePublic('compute_set_col_format', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_col_format', { docId: this.core.docId, sheetId, col, format }), undefined, admissionOptions);
+  }
+
+  patchColFormat(sheetId: SheetId, col: number, format: CellFormat, clearFields: string[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_patch_col_format', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_patch_col_format', { docId: this.core.docId, sheetId, col, format, clearFields }), undefined, admissionOptions);
   }
 
   clearColFormat(sheetId: SheetId, col: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
@@ -2205,12 +2239,20 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.mutatePublic('compute_set_row_formats', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_row_formats', { docId: this.core.docId, sheetId, updates }), undefined, admissionOptions);
   }
 
+  patchRowFormats(sheetId: SheetId, updates: [number, CellFormat, string[]][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_patch_row_formats', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_patch_row_formats', { docId: this.core.docId, sheetId, updates }), undefined, admissionOptions);
+  }
+
   getColFormats(sheetId: SheetId, cols: number[]): Promise<[number, CellFormat | null][]> {
     return this.core.query(this.core.transport.call<[number, CellFormat | null][]>('compute_get_col_formats', { docId: this.core.docId, sheetId, cols }));
   }
 
   setColFormats(sheetId: SheetId, updates: [number, CellFormat][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
     return this.core.mutatePublic('compute_set_col_formats', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_col_formats', { docId: this.core.docId, sheetId, updates }), undefined, admissionOptions);
+  }
+
+  patchColFormats(sheetId: SheetId, updates: [number, CellFormat, string[]][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_patch_col_formats', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_patch_col_formats', { docId: this.core.docId, sheetId, updates }), undefined, admissionOptions);
   }
 
   queryRangeProperties(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<(CellFormat | null)[][]> {
@@ -2525,6 +2567,10 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.mutatePublic('compute_delete_slicer', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_slicer', { docId: this.core.docId, sheetId, slicerId }), undefined, admissionOptions);
   }
 
+  deleteSlicers(sheetId: SheetId, slicerIds: string[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_delete_slicers', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_slicers', { docId: this.core.docId, sheetId, slicerIds }), undefined, admissionOptions);
+  }
+
   updateSlicerConfig(sheetId: SheetId, slicerId: string, update: StoredSlicerUpdate, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
     return this.core.mutatePublic('compute_update_slicer_config', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_slicer_config', { docId: this.core.docId, sheetId, slicerId, update }), undefined, admissionOptions);
   }
@@ -2543,6 +2589,10 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
 
   toggleSlicerItem(sheetId: SheetId, slicerId: string, value: CellValue, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
     return this.core.mutatePublic('compute_toggle_slicer_item', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_toggle_slicer_item', { docId: this.core.docId, sheetId, slicerId, value }), undefined, admissionOptions);
+  }
+
+  setSlicerSelection(sheetId: SheetId, slicerId: string, values: CellValue[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_slicer_selection', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_slicer_selection', { docId: this.core.docId, sheetId, slicerId, values }), undefined, admissionOptions);
   }
 
   clearSlicerSelection(sheetId: SheetId, slicerId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {

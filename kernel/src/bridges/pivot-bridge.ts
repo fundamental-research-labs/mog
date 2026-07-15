@@ -50,6 +50,7 @@ import {
   valuePlacementWithAggregate,
 } from '../domain/pivots/value-labels';
 import { createMutationReceipt } from '../domain/pivots/receipts';
+import { createPivotNotFoundError } from '../errors';
 import { extractMutationData } from './compute/compute-core';
 import {
   toComputePivotConfig,
@@ -206,7 +207,7 @@ export class PivotBridge implements IPivotBridge {
     // Fetch existing config so we can merge partial updates into a full config
     const existingCompute = await this.ctx.computeBridge.pivotGet(sheetId, pivotId);
     if (!existingCompute) {
-      return null;
+      throw createPivotNotFoundError({ pivotName: pivotId, sheetId: String(sheetId) });
     }
 
     const existing = toPublicPivotConfig(existingCompute);
@@ -238,6 +239,9 @@ export class PivotBridge implements IPivotBridge {
           );
 
       const result = materialized.config ?? null;
+      if (!result && !(await this.ctx.computeBridge.pivotGet(sheetId, pivotId))) {
+        throw createPivotNotFoundError({ pivotName: pivotId, sheetId: String(sheetId) });
+      }
       if (result) {
         const currentVersion = this.configVersions.get(pivotId) ?? 0;
         this.configVersions.set(pivotId, currentVersion + 1);
@@ -261,6 +265,9 @@ export class PivotBridge implements IPivotBridge {
         )
       : await this.ctx.computeBridge.pivotUpdate(sheetId, pivotId, computeConfig);
     const result = extractMutationData<ComputePivotTableConfig | null>(mutationResult) ?? null;
+    if (!result && !(await this.ctx.computeBridge.pivotGet(sheetId, pivotId))) {
+      throw createPivotNotFoundError({ pivotName: pivotId, sheetId: String(sheetId) });
+    }
     if (result) {
       // Bump config version for cache invalidation
       const currentVersion = this.configVersions.get(pivotId) ?? 0;

@@ -3,6 +3,7 @@ import type {
   ChartConfig,
   ChartMutationReceipt,
   ChartMutationReceiptKind,
+  ChartTarget,
   SheetId,
 } from '@mog-sdk/contracts/api';
 import type {
@@ -20,7 +21,7 @@ import {
   chartTitleVisibilityUpdate,
   legendVisibilityUpdate,
 } from '../../domain/charts/chart-update-normalizer';
-import { applyUpdate } from './chart-api-helpers';
+import { applyResolvedChartUpdate } from './chart-api-helpers';
 import {
   buildAppliedChartMutationReceipt,
   buildUnsupportedChartMutationReceipt,
@@ -63,15 +64,22 @@ async function applyChartAppModelUpdateAndReceipt(
   ctx: DocumentContext,
   sheetId: SheetId,
   kind: ChartMutationReceiptKind,
-  chartId: string,
+  chartTarget: ChartTarget,
   updateForChart: (chart: Chart) => Partial<ChartConfig>,
   target: ChartMutationTarget = {},
 ): Promise<ChartMutationReceipt> {
-  const read = await readChartForMutation(ctx, sheetId, kind, chartId, target);
-  if ('receipt' in read) return read.receipt;
+  const read = await readChartForMutation(ctx, sheetId, chartTarget);
 
   const appModelBefore = chartToAppModel(read.chart);
-  await applyUpdate(ctx, sheetId, read.resolvedChartId, updateForChart(read.chart));
+  await applyResolvedChartUpdate(
+    ctx,
+    sheetId,
+    read.resolvedChartId,
+    read.raw,
+    updateForChart(read.chart),
+    undefined,
+    read.chartTarget,
+  );
   const chart = await readResolvedChart(ctx, sheetId, read.resolvedChartId);
   const appModelAfter = chart ? chartToAppModel(chart) : undefined;
 
@@ -87,14 +95,14 @@ async function applyChartAppModelUpdateAndReceipt(
 export async function setChartLegendVisibleMutation(
   ctx: DocumentContext,
   sheetId: SheetId,
-  chartId: string,
+  chartTarget: ChartTarget,
   visible: boolean,
 ): Promise<ChartMutationReceipt> {
   return applyChartAppModelUpdateAndReceipt(
     ctx,
     sheetId,
     'chart.legend.setVisible',
-    chartId,
+    chartTarget,
     (chart) => legendVisibilityUpdate(chart, visible),
     { visible },
   );
@@ -103,7 +111,7 @@ export async function setChartLegendVisibleMutation(
 export async function setChartAxisVisibleMutation(
   ctx: DocumentContext,
   sheetId: SheetId,
-  chartId: string,
+  chartTarget: ChartTarget,
   axisRole: ChartAxisRole,
   visible: boolean,
 ): Promise<ChartMutationReceipt> {
@@ -111,7 +119,7 @@ export async function setChartAxisVisibleMutation(
     ctx,
     sheetId,
     'chart.axis.setVisible',
-    chartId,
+    chartTarget,
     (chart) => axisVisibilityUpdate(chart, axisRole, visible),
     { axisRole, axisType: axisTypeForRole(axisRole), visible },
   );
@@ -120,7 +128,7 @@ export async function setChartAxisVisibleMutation(
 export async function setChartAxisTitleAppModelMutation(
   ctx: DocumentContext,
   sheetId: SheetId,
-  chartId: string,
+  chartTarget: ChartTarget,
   axisRole: ChartAxisRole,
   title: string,
 ): Promise<ChartMutationReceipt> {
@@ -128,7 +136,7 @@ export async function setChartAxisTitleAppModelMutation(
     ctx,
     sheetId,
     'chart.axis.setTitle',
-    chartId,
+    chartTarget,
     (chart) => axisTitleUpdate(chart, axisRole, title),
     {
       axisRole,
@@ -141,14 +149,14 @@ export async function setChartAxisTitleAppModelMutation(
 export async function setChartTitleVisibleMutation(
   ctx: DocumentContext,
   sheetId: SheetId,
-  chartId: string,
+  chartTarget: ChartTarget,
   visible: boolean,
 ): Promise<ChartMutationReceipt> {
   return applyChartAppModelUpdateAndReceipt(
     ctx,
     sheetId,
     'chart.title.setVisible',
-    chartId,
+    chartTarget,
     (chart) => chartTitleVisibilityUpdate(chart, visible),
     { visible },
   );
@@ -157,11 +165,10 @@ export async function setChartTitleVisibleMutation(
 export async function switchChartSeriesOrientationMutation(
   ctx: DocumentContext,
   sheetId: SheetId,
-  chartId: string,
+  chartTarget: ChartTarget,
 ): Promise<ChartMutationReceipt> {
   const kind: ChartMutationReceiptKind = 'chart.source.switchSeriesOrientation';
-  const read = await readChartForMutation(ctx, sheetId, kind, chartId);
-  if ('receipt' in read) return read.receipt;
+  const read = await readChartForMutation(ctx, sheetId, chartTarget);
 
   const appModelBefore = chartToAppModel(read.chart);
   if (!appModelBefore.source.supportsOrientationSwitch) {
@@ -189,14 +196,22 @@ export async function switchChartSeriesOrientationMutation(
     );
   }
 
-  await applyUpdate(ctx, sheetId, read.resolvedChartId, {
-    seriesOrientation: toggleSeriesOrientation(appModelBefore.source.orientation),
-    ...(appModelBefore.source.renderableSeriesCount &&
-    appModelBefore.source.renderableSeriesCount > 0 &&
-    appModelBefore.source.dataRange
-      ? { series: [] }
-      : {}),
-  });
+  await applyResolvedChartUpdate(
+    ctx,
+    sheetId,
+    read.resolvedChartId,
+    read.raw,
+    {
+      seriesOrientation: toggleSeriesOrientation(appModelBefore.source.orientation),
+      ...(appModelBefore.source.renderableSeriesCount &&
+      appModelBefore.source.renderableSeriesCount > 0 &&
+      appModelBefore.source.dataRange
+        ? { series: [] }
+        : {}),
+    },
+    undefined,
+    read.chartTarget,
+  );
   const chart = await readResolvedChart(ctx, sheetId, read.resolvedChartId);
   const appModelAfter = chart ? chartToAppModel(chart) : undefined;
   const sourceAfter = appModelAfter?.source ?? appModelBefore.source;

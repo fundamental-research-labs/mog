@@ -17,6 +17,7 @@ import type { DocumentSecurityConfig } from '@mog-sdk/contracts/security';
 import { DocumentFactory } from './document-factory';
 import { mapDocumentImportWarningToMogImportWarning } from './import-diagnostics';
 import { createMogDocument } from './mog-document-impl';
+import { callWithPublicSdkErrorBoundary } from '../public-sdk-error-boundary';
 
 // ---------------------------------------------------------------------------
 // Option mapping helpers
@@ -38,7 +39,7 @@ function mapSecurity(
 // MogDocumentFactory
 // ---------------------------------------------------------------------------
 
-export const MogDocumentFactory: IMogDocumentFactory = {
+const mogDocumentFactory: IMogDocumentFactory = {
   async create(options?: MogDocumentCreateOptions) {
     const handle = await DocumentFactory.create({
       documentId: options?.documentId,
@@ -207,3 +208,15 @@ export const MogDocumentFactory: IMogDocumentFactory = {
     };
   },
 };
+
+const create: IMogDocumentFactory['create'] = (options) =>
+  callWithPublicSdkErrorBoundary(
+    'MogDocumentFactory.create',
+    () => mogDocumentFactory.create(options),
+    'MogDocument',
+  );
+
+const open: IMogDocumentFactory['open'] = (options) =>
+  callWithPublicSdkErrorBoundary('MogDocumentFactory.open', () => mogDocumentFactory.open(options));
+
+export const MogDocumentFactory: IMogDocumentFactory = Object.freeze({ create, open });

@@ -672,21 +672,10 @@ describe('WorksheetPivotsImpl', () => {
       );
     });
 
-    it('returns a failed receipt when pivot not found', async () => {
-      const receipt = await ws.pivots.rename('nonexistent', 'NewName');
-
-      expect(receipt).toEqual(
-        expect.objectContaining({
-          kind: 'pivot.rename',
-          status: 'failed',
-          diagnostics: expect.arrayContaining([
-            expect.objectContaining({
-              code: 'COMPUTE_ERROR',
-              message: expect.stringMatching(/not found/i),
-            }),
-          ]),
-        }),
-      );
+    it('rejects with PIVOT_NOT_FOUND when the pivot target is missing', async () => {
+      await expect(ws.pivots.rename('nonexistent', 'NewName')).rejects.toMatchObject({
+        code: 'PIVOT_NOT_FOUND',
+      });
     });
   });
 

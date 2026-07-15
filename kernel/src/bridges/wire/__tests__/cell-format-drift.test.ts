@@ -39,6 +39,8 @@ const TS_CELL_FORMAT_KEY_MAP: { [K in keyof Required<CellFormat>]: true } = {
   fontTheme: true,
   fontColor: true,
   fontColorTint: true,
+  fontCharset: true,
+  fontFamilyType: true,
   bold: true,
   italic: true,
   underlineType: true,
@@ -69,6 +71,7 @@ const TS_CELL_FORMAT_KEY_MAP: { [K in keyof Required<CellFormat>]: true } = {
   locked: true,
   hidden: true,
   forcedTextMode: true,
+  pivotButton: true,
   // Extensible
   extensions: true,
 };
@@ -88,28 +91,15 @@ const RUST_FIELDS: Set<string> = new Set(RUST_CELL_FORMAT_FIELDS as readonly str
 const TS_ONLY_ALLOWED: Record<string, string> = {
   numberFormatType:
     'Derived/cached classification (e.g. "date", "currency") — computed by TS format engine, not stored in Rust',
-  forcedTextMode:
-    'TS-only editing state for apostrophe prefix — Rust uses quotePrefix for the OOXML attribute',
-  extensions:
-    'TS-only extensibility bag — Rust has no equivalent (typed fields are added directly)',
 };
 
 /** Fields in Rust CellFormat that intentionally have no TS counterpart. */
-const RUST_ONLY_ALLOWED: Record<string, string> = {
-  fontCharset:
-    'ECMA-376 charset attribute — preserved for XLSX round-trip fidelity, not exposed to TS UI',
-  fontFamilyType:
-    'ECMA-376 font family type / pitch — preserved for XLSX round-trip fidelity, not exposed to TS UI',
-  pivotButton:
-    'ECMA-376 pivotButton attribute — preserved for XLSX round-trip fidelity, not exposed to TS UI',
-  quotePrefix:
-    'ECMA-376 quotePrefix attribute — TS uses forcedTextMode for the same concept (different name)',
-};
+const RUST_ONLY_ALLOWED: Record<string, string> = {};
 
 /** Fields in TS that map to a differently-named Rust field (semantic equivalents). */
 const FIELD_RENAMES: Record<string, string> = {
   // TS name -> Rust name
-  // (none currently — textRotation was unified in both TS and Rust)
+  forcedTextMode: 'quotePrefix',
 };
 
 describe('CellFormat drift detection', () => {

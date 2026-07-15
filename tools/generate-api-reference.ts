@@ -106,6 +106,9 @@ const WORKSHEET_SUB_APIS: Record<string, string> = {
   WorksheetDiagrams: 'diagrams',
   WorksheetNames: 'names',
   WorksheetFormControls: 'formControls',
+  WorksheetAnnotations: 'annotations',
+  WorksheetCellAnnotations: 'annotations.cells',
+  WorksheetCellAnnotationDiagnostics: 'annotations.cells.diagnostics',
 };
 
 // Workbook sub-APIs. Nested workbook APIs can use dotted prefixes so the

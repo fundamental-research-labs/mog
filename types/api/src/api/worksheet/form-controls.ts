@@ -66,15 +66,15 @@ export interface WorksheetFormControls {
   /** Get form controls at a specific cell position (for hit testing). */
   getAtPosition(row: number, col: number): FormControl[];
 
-  /** Update a control on this sheet. Returns undefined if the control is absent or on another sheet. */
-  update(controlId: string, updates: FormControlUpdate): FormControl | undefined;
+  /** Update a control on this sheet. Throws `FORM_CONTROL_NOT_FOUND` when absent. */
+  update(controlId: string, updates: FormControlUpdate): Promise<FormControl>;
 
   /** Move a control on this sheet to a new anchor cell. */
-  move(controlId: string, newAnchor: FormControlAnchorUpdate): Promise<FormControl | undefined>;
+  move(controlId: string, newAnchor: FormControlAnchorUpdate): Promise<FormControl>;
 
   /** Resize a control on this sheet. */
-  resize(controlId: string, width: number, height: number): FormControl | undefined;
+  resize(controlId: string, width: number, height: number): Promise<FormControl>;
 
-  /** Remove a control from this sheet. Returns true when a control was removed. */
-  remove(controlId: string): boolean;
+  /** Remove a control from this sheet. Throws `FORM_CONTROL_NOT_FOUND` when absent. */
+  remove(controlId: string): Promise<boolean>;
 }

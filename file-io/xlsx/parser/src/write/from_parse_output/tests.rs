@@ -33,13 +33,16 @@ mod charts;
 mod context_removal_gates;
 mod data_tables;
 mod drawing_pictures;
+mod fill_lowering;
 mod package_graph_ownership;
 mod pivot_package;
 mod printer_settings;
 mod smoke_and_formulas;
 mod sparklines;
+mod style_lineage;
 mod styles;
 mod theme;
+mod theme_color_roundtrip;
 
 fn make_cell(row: u32, col: u32, value: DomainValue) -> DomainCellData {
     DomainCellData {

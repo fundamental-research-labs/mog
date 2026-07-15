@@ -22,7 +22,7 @@ import { toA1 } from '@mog/spreadsheet-utils/a1';
 import type { MutationAdmissionOptions } from '../../bridges/compute';
 import { extractMutationData } from '../../bridges/compute/compute-core';
 import type { DocumentContext } from '../../context';
-import { KernelError } from '../../errors';
+import { KernelError, targetNotFoundError } from '../../errors';
 import { resolveCell, resolveCellArgs } from '../internal/address-resolver';
 import { createVersionOperationContext } from '../internal/version-operation-context';
 import {
@@ -103,6 +103,37 @@ export class WorksheetCommentsImpl implements WorksheetComments {
 
   private _ensureWritable(op: string): void {
     this.ctx.writeGate.assertWritable(op);
+  }
+
+  private _commentNotFound(
+    commentId: string,
+    operation: string,
+    resourceType = 'Comment',
+  ): KernelError {
+    return targetNotFoundError({
+      code: 'COMMENT_NOT_FOUND',
+      resourceType,
+      resourceId: commentId,
+      operation,
+      sheetId: this.sheetId,
+      path: [resourceType === 'Comment thread' ? 'threadId' : 'commentId'],
+      suggestion: 'Use worksheet.comments.list() to resolve an existing comment target.',
+    });
+  }
+
+  private _noteNotFound(row: number, col: number, operation: string): KernelError {
+    const address = toA1(row, col);
+    return targetNotFoundError({
+      code: 'COMMENT_NOT_FOUND',
+      resourceType: 'Note',
+      resourceId: address,
+      operation,
+      sheetId: this.sheetId,
+      path: ['address'],
+      message: `Note at "${address}" not found`,
+      suggestion: 'Use worksheet.comments.getNote() or listNotes() to resolve an existing note.',
+      context: { address, row, col },
+    });
   }
 
   private _commentMutationOptions(
@@ -385,17 +416,16 @@ export class WorksheetCommentsImpl implements WorksheetComments {
       row,
       col,
     );
-    if (comments.length === 0) return null;
-    const first = comments[0];
-    if (!first) return null;
-    const content = richTextToPlainText(first);
+    const note = comments.find((comment) => comment.commentType === 'note');
+    if (!note) return null;
+    const content = richTextToPlainText(note);
     return {
       content,
-      author: first.author,
+      author: note.author,
       cellAddress: toA1(row, col),
-      visible: first.visible ?? undefined,
-      height: first.noteHeight ?? undefined,
-      width: first.noteWidth ?? undefined,
+      visible: note.visible ?? undefined,
+      height: note.noteHeight ?? undefined,
+      width: note.noteWidth ?? undefined,
     };
   }
 
@@ -407,7 +437,14 @@ export class WorksheetCommentsImpl implements WorksheetComments {
       row,
       col,
     );
-    const commentIds = comments.map((comment) => comment.id).filter(isNonEmptyString);
+    const notes = comments.filter((comment) => comment.commentType === 'note');
+    if (notes.length === 0) {
+      throw this._noteNotFound(row, col, 'comment.removeNote');
+    }
+    const commentIds = notes.map((comment) => comment.id).filter(isNonEmptyString);
+    if (commentIds.length === 0) {
+      throw this._noteNotFound(row, col, 'comment.removeNote');
+    }
     const nextMutationOptions =
       commentIds.length > 1
         ? this._groupedCommentMutationOptions('comment.removeNote')
@@ -415,7 +452,7 @@ export class WorksheetCommentsImpl implements WorksheetComments {
     for (const commentId of commentIds) {
       await this.ctx.computeBridge.deleteComment(this.sheetId, commentId, nextMutationOptions());
     }
-    return this._removeReceipt('comment.removeNote', { target, comments });
+    return this._removeReceipt('comment.removeNote', { target, comments: notes });
   }
 
   // ===========================================================================
@@ -516,7 +553,10 @@ export class WorksheetCommentsImpl implements WorksheetComments {
     }
     const existing = await this.ctx.computeBridge.getComment(this.sheetId, commentId);
     const target = existing ? await this._targetForComment(existing) : undefined;
-    if (!existing || (text === undefined && (!updates.mentions || updates.mentions.length === 0))) {
+    if (!existing) {
+      throw this._commentNotFound(commentId, 'comment.update');
+    }
+    if (text === undefined && (!updates.mentions || updates.mentions.length === 0)) {
       return this._noOpUpdateReceipt('comment.update', {
         commentId,
         threadId: existing?.threadId,
@@ -554,7 +594,7 @@ export class WorksheetCommentsImpl implements WorksheetComments {
   async remove(commentId: string): Promise<CommentRemoveReceipt> {
     const existing = await this.ctx.computeBridge.getComment(this.sheetId, commentId);
     if (!existing) {
-      return this._removeReceipt('comment.remove', { comments: [], commentId });
+      throw this._commentNotFound(commentId, 'comment.remove');
     }
     const target = await this._targetForComment(existing);
     await this.ctx.computeBridge.deleteComment(
@@ -573,10 +613,7 @@ export class WorksheetCommentsImpl implements WorksheetComments {
   async resolveThread(threadId: string, resolved: boolean): Promise<CommentUpdateReceipt> {
     const before = await this.ctx.computeBridge.getCommentThread(this.sheetId, threadId);
     if (before.length === 0) {
-      return this._noOpUpdateReceipt('comment.resolveThread', {
-        threadId,
-        resolved,
-      });
+      throw this._commentNotFound(threadId, 'comment.resolveThread', 'Comment thread');
     }
     await this.ctx.computeBridge.setThreadResolved(
       this.sheetId,
@@ -659,7 +696,6 @@ export class WorksheetCommentsImpl implements WorksheetComments {
     c?: boolean,
   ): Promise<CommentUpdateReceipt> {
     const { row, col, value: visible } = resolveCellArgs<boolean>(a, b, c);
-    const target = targetFromPosition(this.sheetId, row, col);
     // Find the note at the given position
     const comments = await this.ctx.computeBridge.getCommentsForCellByPosition(
       this.sheetId,
@@ -683,12 +719,11 @@ export class WorksheetCommentsImpl implements WorksheetComments {
         noteProperty: 'visible',
       });
     }
-    return this._noOpUpdateReceipt('comment.updateNote', { target });
+    throw this._noteNotFound(row, col, 'comment.updateNote');
   }
 
   async setNoteHeight(a: string | number, b: number, c?: number): Promise<CommentUpdateReceipt> {
     const { row, col, value: height } = resolveCellArgs<number>(a, b, c);
-    const target = targetFromPosition(this.sheetId, row, col);
     const comments = await this.ctx.computeBridge.getCommentsForCellByPosition(
       this.sheetId,
       row,
@@ -711,12 +746,11 @@ export class WorksheetCommentsImpl implements WorksheetComments {
         noteProperty: 'height',
       });
     }
-    return this._noOpUpdateReceipt('comment.updateNote', { target });
+    throw this._noteNotFound(row, col, 'comment.updateNote');
   }
 
   async setNoteWidth(a: string | number, b: number, c?: number): Promise<CommentUpdateReceipt> {
     const { row, col, value: width } = resolveCellArgs<number>(a, b, c);
-    const target = targetFromPosition(this.sheetId, row, col);
     const comments = await this.ctx.computeBridge.getCommentsForCellByPosition(
       this.sheetId,
       row,
@@ -739,7 +773,7 @@ export class WorksheetCommentsImpl implements WorksheetComments {
         noteProperty: 'width',
       });
     }
-    return this._noOpUpdateReceipt('comment.updateNote', { target });
+    throw this._noteNotFound(row, col, 'comment.updateNote');
   }
 
   async list(): Promise<Comment[]> {
@@ -760,7 +794,7 @@ export class WorksheetCommentsImpl implements WorksheetComments {
   async addReply(commentId: string, text: string, author: string): Promise<CommentAddReceipt> {
     const parent = await this.ctx.computeBridge.getComment(this.sheetId, commentId);
     if (!parent) {
-      throw new KernelError('COMMENT_NOT_FOUND', `Comment not found: ${commentId}`);
+      throw this._commentNotFound(commentId, 'comment.addReply');
     }
     if (!text || text.trim().length === 0) {
       throw new KernelError('COMPUTE_ERROR', 'Comment text cannot be empty');
@@ -821,6 +855,9 @@ export class WorksheetCommentsImpl implements WorksheetComments {
     mutationOptions?: CommentMutationOptions,
   ): Promise<CommentUpdateReceipt> {
     const before = await this.ctx.computeBridge.getComment(this.sheetId, commentId);
+    if (!before) {
+      throw this._commentNotFound(commentId, 'comment.convertNoteToThread');
+    }
     if (before?.commentType === 'threadedComment') {
       const target = await this._targetForComment(before);
       return this._noOpUpdateReceipt('comment.convertNoteToThread', {
@@ -935,6 +972,9 @@ export class WorksheetCommentsImpl implements WorksheetComments {
       row,
       col,
     );
+    if (comments.length === 0) {
+      throw this._commentNotFound(toA1(row, col), 'comment.removeForCell', 'Comment cell');
+    }
     const result = await this.ctx.computeBridge.deleteCommentsForCellByPosition(
       this.sheetId,
       row,

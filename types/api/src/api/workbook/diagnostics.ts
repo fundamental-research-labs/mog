@@ -1,5 +1,6 @@
 import type { CellValuePrimitive } from '@mog/types-core/core';
 import type { ImageExportOptions, LinkId, ResolvedChartSpecSnapshot, SheetId } from '../types';
+import type { ChartTarget } from '../worksheet/charts';
 import type {
   ImportDiagnosticDto,
   RuntimeDiagnosticsOptions,
@@ -258,11 +259,20 @@ export interface MaterializationState {
   };
 }
 
-export interface ResolvedChartSpecDiagnosticsOptions {
+interface ResolvedChartSpecDiagnosticsOptionsBase {
   readonly sheetId: SheetId;
-  readonly chartId: string;
   readonly exportOptions?: ImageExportOptions;
 }
+
+export type ResolvedChartSpecDiagnosticsOptions = ResolvedChartSpecDiagnosticsOptionsBase &
+  (
+    | { readonly chartTarget: ChartTarget; readonly chartId?: never }
+    | {
+        /** @deprecated Use `chartTarget`; retained as an ID-only compatibility alias. */
+        readonly chartId: string;
+        readonly chartTarget?: never;
+      }
+  );
 
 export interface FormulaReferenceDiagnosticsOptions {
   readonly sheetId?: SheetId;

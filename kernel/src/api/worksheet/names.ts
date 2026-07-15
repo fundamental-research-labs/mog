@@ -100,7 +100,7 @@ export class WorksheetNamesImpl implements WorksheetNames {
     const defined = await NamedRanges.getByName(this.ctx, name, this.sheetId);
     if (!defined) {
       throw new KernelError(
-        'COMPUTE_ERROR',
+        'DOMAIN_DEFINED_NAME_NOT_FOUND',
         `Named range "${name}" not found in this sheet's scope.`,
       );
     }
@@ -111,7 +111,7 @@ export class WorksheetNamesImpl implements WorksheetNames {
     const defined = await NamedRanges.getByName(this.ctx, name, this.sheetId);
     if (!defined) {
       throw new KernelError(
-        'COMPUTE_ERROR',
+        'DOMAIN_DEFINED_NAME_NOT_FOUND',
         `Named range "${name}" not found in this sheet's scope.`,
       );
     }

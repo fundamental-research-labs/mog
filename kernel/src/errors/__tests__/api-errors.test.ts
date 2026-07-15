@@ -65,12 +65,17 @@ describe('API error factories', () => {
     const err = chartNotFound('chart-7');
     expect(err).toBeInstanceOf(KernelError);
     expect(err.code).toBe('OBJ_CHART_NOT_FOUND');
-    expect(err.message).toBe('Chart "chart-7" not found');
-    expect(err.path).toEqual(['chartId']);
+    expect(err.message).toBe('Chart target "chart-7" not found');
+    expect(err.path).toEqual(['chartTarget']);
     expect(err.suggestion).toBe(
-      'Use ws.charts.list() to list available charts, or api.describe("ws.charts") for chart API discovery',
+      'Use ws.charts.list() to inspect available chart IDs and names, or api.describe("ws.charts") for chart API discovery',
     );
-    expect(err.context).toEqual({ resourceType: 'chart', resourceId: 'chart-7' });
+    expect(err.context).toEqual({
+      resourceType: 'chart',
+      resourceId: 'chart-7',
+      received: 'chart-7',
+      reason: 'not-found',
+    });
   });
 
   it('operationFailed returns KernelError without path or suggestion', () => {

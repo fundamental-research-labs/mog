@@ -10,6 +10,16 @@
   "type": "module",
   "exports": {
     ".": {
+      "workerd": {
+        "development": "./src/index.wasm.ts",
+        "types": "./dist/index.wasm.d.ts",
+        "import": "./dist/index.wasm.js"
+      },
+      "browser": {
+        "development": "./src/index.browser.ts",
+        "types": "./dist/index.browser.d.ts",
+        "import": "./dist/index.browser.js"
+      },
       "node": {
         "development": "./src/index.ts",
         "types": "./dist/index.d.ts",
@@ -28,6 +38,11 @@
       "development": "./src/index.wasm.ts",
       "types": "./dist/index.wasm.d.ts",
       "import": "./dist/index.wasm.js"
+    },
+    "./bridge-error": {
+      "development": "./src/bridge-error.ts",
+      "types": "./dist/bridge-error.d.ts",
+      "import": "./dist/bridge-error.js"
     }
   },
   "scripts": {

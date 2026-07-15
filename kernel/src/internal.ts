@@ -195,6 +195,14 @@ export type {
 
 export { getFunctionCatalog, getFunctionInfo, getWorkbookSnapshot } from './api';
 
+// Stable SDK facade adapters. Runtime packages apply these after trusted
+// internal construction; they are not part of the public kernel root barrel.
+export {
+  callWithPublicSdkErrorBoundary,
+  withPublicSdkErrorBoundary,
+  withPublicWorkbookErrorBoundary,
+} from './api/public-sdk-error-boundary';
+
 export {
   SnapshotRootCaptureError,
   WORKBOOK_SNAPSHOT_ROOT_OBJECT_TYPE,

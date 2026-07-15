@@ -68,6 +68,25 @@ const bridgeTable = {
 
 function createCtx(optionOverrides: Partial<typeof protectedOptions> | null = {}) {
   const options = optionOverrides === null ? null : { ...protectedOptions, ...optionOverrides };
+  const storedSlicer = {
+    id: 'slicer-1',
+    sheetId: String(SHEET_ID),
+    caption: 'Region',
+    name: 'Region',
+    source: { type: 'table' as const, tableId: 'table-1', columnCellId: 'Region' },
+    selectedValues: [],
+  };
+  const slicerMutation = (kind: string, selectedValues: unknown[] = []) => ({
+    slicerChanges: [
+      {
+        sheetId: String(SHEET_ID),
+        slicerId: 'slicer-1',
+        kind,
+        selectedValues,
+        data: { ...storedSlicer, selectedValues },
+      },
+    ],
+  });
   const bridge = {
     getSheetProtectionOptions: jest.fn().mockResolvedValue(options),
     canEditCell: jest.fn().mockResolvedValue(true),
@@ -123,16 +142,15 @@ function createCtx(optionOverrides: Partial<typeof protectedOptions> | null = {}
     setFilterSortState: jest.fn().mockResolvedValue(undefined),
     getAllSlicersWorkbook: jest.fn().mockResolvedValue([]),
     getAllSlicers: jest.fn().mockResolvedValue([]),
-    getSlicerState: jest.fn().mockResolvedValue({
-      id: 'slicer-1',
-      caption: 'Region',
-      name: 'Region',
-      source: { type: 'table', tableId: 'Sales', columnCellId: 'Region' },
-      selectedValues: [],
-    }),
+    getSlicerState: jest.fn().mockResolvedValue(storedSlicer),
     createSlicer: jest.fn().mockResolvedValue({ data: { id: 'slicer-2' } }),
     deleteSlicer: jest.fn().mockResolvedValue(undefined),
-    updateSlicerConfig: jest.fn().mockResolvedValue(undefined),
+    updateSlicerConfig: jest.fn().mockResolvedValue(slicerMutation('updated')),
+    setSlicerSelection: jest
+      .fn()
+      .mockImplementation((_sheet: unknown, _id: unknown, values: unknown[]) =>
+        Promise.resolve(slicerMutation('selectionChanged', values)),
+      ),
     clearSlicerSelection: jest.fn().mockResolvedValue(undefined),
     toggleSlicerItem: jest.fn().mockResolvedValue(undefined),
   };
@@ -292,7 +310,7 @@ describe('protected sheet table operation policy', () => {
     await expect(slicers.update('slicer-1', { caption: 'Region Filter' })).rejects.toThrow(
       KernelError,
     );
-    expect(deniedCtx.computeBridge.clearSlicerSelection).not.toHaveBeenCalled();
+    expect(deniedCtx.computeBridge.setSlicerSelection).not.toHaveBeenCalled();
     expect(deniedCtx.computeBridge.updateSlicerConfig).not.toHaveBeenCalled();
 
     const allowedCtx = createCtx({ useAutoFilter: true, editObjects: true });
@@ -300,5 +318,64 @@ describe('protected sheet table operation policy', () => {
       caption: 'Region Filter',
     });
     expect(allowedCtx.computeBridge.updateSlicerConfig).toHaveBeenCalled();
+  });
+
+  it('checks filtering protection on the resolved cross-sheet source, not the slicer owner', async () => {
+    const sourceSheetId = sheetId('source-sheet');
+    const sourceTable = { ...bridgeTable, sheetId: sourceSheetId };
+    const crossSheetSlicer = {
+      id: 'slicer-1',
+      sheetId: String(SHEET_ID),
+      caption: 'Region',
+      name: 'Region',
+      source: { type: 'table' as const, tableId: 'table-1', columnCellId: 'Region' },
+      selectedValues: [],
+    };
+
+    const protectedSourceCtx = createCtx(null);
+    protectedSourceCtx.computeBridge.getSlicerState.mockResolvedValue(crossSheetSlicer);
+    protectedSourceCtx.computeBridge.getAllTablesInSheet.mockResolvedValue([]);
+    protectedSourceCtx.computeBridge.getAllTablesWorkbook.mockResolvedValue([
+      { sheetId: String(sourceSheetId), table: sourceTable },
+    ]);
+    protectedSourceCtx.computeBridge.getSheetProtectionOptions.mockImplementation((id: string) =>
+      Promise.resolve(id === String(sourceSheetId) ? protectedOptions : null),
+    );
+
+    await expect(
+      new WorksheetSlicersImpl(protectedSourceCtx, SHEET_ID).setSelection('slicer-1', ['East']),
+    ).rejects.toMatchObject({ code: 'API_PROTECTED_SHEET' });
+    expect(protectedSourceCtx.computeBridge.setSlicerSelection).not.toHaveBeenCalled();
+
+    const protectedOwnerCtx = createCtx();
+    protectedOwnerCtx.computeBridge.getSlicerState.mockResolvedValue(crossSheetSlicer);
+    protectedOwnerCtx.computeBridge.getAllTablesInSheet.mockResolvedValue([]);
+    protectedOwnerCtx.computeBridge.getAllTablesWorkbook.mockResolvedValue([
+      { sheetId: String(sourceSheetId), table: sourceTable },
+    ]);
+    protectedOwnerCtx.computeBridge.getSheetProtectionOptions.mockImplementation((id: string) =>
+      Promise.resolve(id === String(SHEET_ID) ? protectedOptions : null),
+    );
+    protectedOwnerCtx.computeBridge.setSlicerSelection.mockResolvedValue({
+      slicerChanges: [
+        {
+          sheetId: String(SHEET_ID),
+          slicerId: 'slicer-1',
+          kind: 'selectionChanged',
+          selectedValues: ['East'],
+          data: { ...crossSheetSlicer, selectedValues: ['East'] },
+        },
+      ],
+    });
+
+    await expect(
+      new WorksheetSlicersImpl(protectedOwnerCtx, SHEET_ID).setSelection('slicer-1', ['East']),
+    ).resolves.toMatchObject({ status: 'applied' });
+    expect(protectedOwnerCtx.computeBridge.setColumnFilter).toHaveBeenCalledWith(
+      sourceSheetId,
+      'filter-1',
+      0,
+      expect.anything(),
+    );
   });
 });

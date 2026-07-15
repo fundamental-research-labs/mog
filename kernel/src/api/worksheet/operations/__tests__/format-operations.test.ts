@@ -22,12 +22,13 @@ function createMockCtx(): any {
     computeBridge: {
       canDoStructureOp: jest.fn().mockResolvedValue(true),
       setFormatForRanges: jest.fn().mockResolvedValue({}),
+      patchFormatForRanges: jest.fn().mockResolvedValue({}),
       clearFormatForRanges: jest.fn().mockResolvedValue({}),
-      setRowFormat: jest.fn().mockResolvedValue({}),
-      setColFormat: jest.fn().mockResolvedValue({}),
-      setRowFormats: jest.fn().mockResolvedValue({}),
-      setColFormats: jest.fn().mockResolvedValue({}),
-      setCellPropertiesBatch: jest.fn().mockResolvedValue({}),
+      patchRowFormat: jest.fn().mockResolvedValue({}),
+      patchColFormat: jest.fn().mockResolvedValue({}),
+      patchRowFormats: jest.fn().mockResolvedValue({}),
+      patchColFormats: jest.fn().mockResolvedValue({}),
+      patchCellPropertiesBatch: jest.fn().mockResolvedValue({}),
       queryRange: jest.fn().mockResolvedValue({ cells: [], merges: [] }),
     },
   };
@@ -71,17 +72,18 @@ function escapeRegExp(value: string): string {
 }
 
 describe('format operations admission options', () => {
-  it('passes provided admission options through representative set and clear operations', async () => {
+  it('passes provided admission options through representative patch and clear operations', async () => {
     const ctx = createMockCtx();
     const options = mutationOptions();
 
     await setFormat(ctx, SHEET_ID, 0, 1, { bold: true }, options);
     await clearFormat(ctx, SHEET_ID, 2, 3, options);
 
-    expect(ctx.computeBridge.setFormatForRanges).toHaveBeenCalledWith(
+    expect(ctx.computeBridge.patchFormatForRanges).toHaveBeenCalledWith(
       SHEET_ID,
       [[0, 1, 0, 1]],
       { bold: true },
+      [],
       options,
     );
     expect(ctx.computeBridge.clearFormatForRanges).toHaveBeenCalledWith(
@@ -122,28 +124,31 @@ describe('format operations admission options', () => {
       options,
     );
 
-    expect(ctx.computeBridge.setColFormat).toHaveBeenCalledWith(
+    expect(ctx.computeBridge.patchColFormat).toHaveBeenCalledWith(
       SHEET_ID,
       1,
       format,
+      [],
       expectFormatAdmission(),
     );
-    expect(ctx.computeBridge.setRowFormat).toHaveBeenCalledWith(
+    expect(ctx.computeBridge.patchRowFormat).toHaveBeenCalledWith(
       SHEET_ID,
       4,
       format,
+      [],
       expectFormatAdmission('formats.setRanges'),
     );
-    expect(ctx.computeBridge.setFormatForRanges).toHaveBeenCalledWith(
+    expect(ctx.computeBridge.patchFormatForRanges).toHaveBeenCalledWith(
       SHEET_ID,
       [[5, 5, 6, 6]],
       format,
+      [],
       expectFormatAdmission('formats.setRanges'),
     );
 
-    const colOptions = ctx.computeBridge.setColFormat.mock.calls[0][3];
-    const rowOptions = ctx.computeBridge.setRowFormat.mock.calls[0][3];
-    const rangeOptions = ctx.computeBridge.setFormatForRanges.mock.calls[0][3];
+    const colOptions = ctx.computeBridge.patchColFormat.mock.calls[0][4];
+    const rowOptions = ctx.computeBridge.patchRowFormat.mock.calls[0][4];
+    const rangeOptions = ctx.computeBridge.patchFormatForRanges.mock.calls[0][4];
     expect(colOptions.operationContext.groupId).toBe(options.operationContext?.operationId);
     expect(rowOptions.operationContext.groupId).toBe(colOptions.operationContext.groupId);
     expect(rangeOptions.operationContext.groupId).toBe(colOptions.operationContext.groupId);
@@ -167,19 +172,19 @@ describe('format operations admission options', () => {
       cellOptions,
     );
 
-    expect(ctx.computeBridge.setRowFormats).toHaveBeenCalledWith(
+    expect(ctx.computeBridge.patchRowFormats).toHaveBeenCalledWith(
       SHEET_ID,
-      [[2, { bold: true }]],
+      [[2, { bold: true }, []]],
       rowOptions,
     );
-    expect(ctx.computeBridge.setColFormats).toHaveBeenCalledWith(
+    expect(ctx.computeBridge.patchColFormats).toHaveBeenCalledWith(
       SHEET_ID,
-      [[3, { italic: true }]],
+      [[3, { italic: true }, []]],
       colOptions,
     );
-    expect(ctx.computeBridge.setCellPropertiesBatch).toHaveBeenCalledWith(
+    expect(ctx.computeBridge.patchCellPropertiesBatch).toHaveBeenCalledWith(
       SHEET_ID,
-      [[4, 5, { underlineType: 'single' }]],
+      [[4, 5, { underlineType: 'single' }, []]],
       cellOptions,
     );
   });

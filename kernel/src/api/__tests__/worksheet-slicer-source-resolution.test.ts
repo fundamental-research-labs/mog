@@ -63,10 +63,17 @@ describe('WorksheetSlicersImpl table source resolution', () => {
       hasTotalsRow: false,
     };
     bridge.getAllSlicers.mockResolvedValue([
-      { id: 'slicer-imported', caption: 'Region', name: 'RegionSlicer', source },
+      {
+        id: 'slicer-imported',
+        sheetId: String(SHEET_ID),
+        caption: 'Region',
+        name: 'RegionSlicer',
+        source,
+      },
     ]);
     bridge.getSlicerState.mockResolvedValue({
       id: 'slicer-imported',
+      sheetId: String(SHEET_ID),
       caption: 'Region',
       name: 'RegionSlicer',
       source,
@@ -104,6 +111,7 @@ describe('WorksheetSlicersImpl table source resolution', () => {
     const slicers = new WorksheetSlicersImpl(createMockCtx(bridge), SHEET_ID);
     bridge.getSlicerState.mockResolvedValue({
       id: 'slicer-imported',
+      sheetId: String(SHEET_ID),
       caption: 'Region',
       source: {
         type: 'table',
@@ -157,10 +165,17 @@ describe('WorksheetSlicersImpl table source resolution', () => {
       columnCellId: 'Region',
     };
     bridge.getAllSlicers.mockResolvedValue([
-      { id: 'slicer-legacy', caption: 'Region', name: 'LegacyRegion', source },
+      {
+        id: 'slicer-legacy',
+        sheetId: String(SHEET_ID),
+        caption: 'Region',
+        name: 'LegacyRegion',
+        source,
+      },
     ]);
     bridge.getSlicerState.mockResolvedValue({
       id: 'slicer-legacy',
+      sheetId: String(SHEET_ID),
       caption: 'Region',
       name: 'LegacyRegion',
       source,
@@ -199,6 +214,7 @@ describe('WorksheetSlicersImpl table source resolution', () => {
     const slicers = new WorksheetSlicersImpl(createMockCtx(bridge), SHEET_ID);
     bridge.getSlicerState.mockResolvedValue({
       id: 'slicer-collision',
+      sheetId: String(SHEET_ID),
       caption: 'RealColumn',
       source: {
         type: 'table',
@@ -250,6 +266,7 @@ describe('WorksheetSlicersImpl table source resolution', () => {
     const slicers = new WorksheetSlicersImpl(createMockCtx(bridge), SHEET_ID);
     bridge.getSlicerState.mockResolvedValue({
       id: 'slicer-cross-sheet',
+      sheetId: String(SHEET_ID),
       caption: 'Region',
       source: {
         type: 'table',

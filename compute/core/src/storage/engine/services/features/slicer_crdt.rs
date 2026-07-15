@@ -8,7 +8,7 @@ use domain_types::domain::slicer::{
 };
 use domain_types::yrs_schema::slicer as slicer_yrs;
 use value_types::{CellValue, ComputeError};
-use yrs::{Map, MapPrelim, Origin, Transact};
+use yrs::{Map, MapPrelim, MapRef, Origin, ReadTxn, Transact, TransactionMut};
 
 fn slicer_source_metadata(source: &SlicerSource) -> (SlicerSourceType, String) {
     match source {
@@ -36,6 +36,44 @@ fn slicer_change(
         selection_change_type,
         data: Some(slicer.clone()),
     }
+}
+
+fn canonical_sheet_id(sheet_id: &SheetId) -> String {
+    sheet_id.to_uuid_string()
+}
+
+/// Resolve a workbook-level slicer key only when it belongs to the receiver
+/// worksheet. Stored ownership is compared as a parsed identity so imported
+/// dashed/uppercase UUID spellings cannot bypass or fail worksheet scoping.
+fn resolve_owned_slicer<T: ReadTxn>(
+    slicers_map: &MapRef,
+    txn: &T,
+    sheet_id: &SheetId,
+    slicer_id: &str,
+) -> Option<StoredSlicer> {
+    let mut slicer = slicers_map
+        .get(txn, slicer_id)
+        .and_then(|value| slicer_yrs::from_yrs_out(value, txn))?;
+    let stored_sheet_id = SheetId::from_uuid_str(&slicer.sheet_id).ok()?;
+    if stored_sheet_id != *sheet_id {
+        return None;
+    }
+    slicer.sheet_id = canonical_sheet_id(sheet_id);
+    Some(slicer)
+}
+
+fn slicer_not_found(sheet_id: &SheetId, slicer_id: &str) -> ComputeError {
+    ComputeError::SlicerNotFound {
+        sheet_id: canonical_sheet_id(sheet_id),
+        slicer_id: slicer_id.to_string(),
+    }
+}
+
+fn replace_slicer(slicers_map: &MapRef, txn: &mut TransactionMut<'_>, slicer: &StoredSlicer) {
+    slicers_map.remove(txn, &slicer.id);
+    let entries = slicer_yrs::to_yrs_prelim(slicer);
+    let nested: MapPrelim = entries.into_iter().collect();
+    slicers_map.insert(txn, &*slicer.id, nested);
 }
 
 fn changed_slicer_update_fields(update: &StoredSlicerUpdate) -> Vec<String> {
@@ -67,9 +105,6 @@ fn changed_slicer_update_fields(update: &StoredSlicerUpdate) -> Vec<String> {
     if update.multi_select.is_some() {
         fields.push("multiSelect".to_string());
     }
-    if update.selected_values.is_some() {
-        fields.push("selectedValues".to_string());
-    }
     fields
 }
 
@@ -80,27 +115,41 @@ pub(in crate::storage::engine) fn create_slicer(
 ) -> Result<MutationResult, ComputeError> {
     let mut slicer = config;
 
+    let receiver_sheet_id = canonical_sheet_id(sheet_id);
+    let requested_owner = SheetId::from_uuid_str(&slicer.sheet_id).ok();
+    if slicer.sheet_id.is_empty() || requested_owner != Some(*sheet_id) {
+        return Err(ComputeError::SlicerSheetMismatch {
+            receiver_sheet_id,
+            requested_sheet_id: slicer.sheet_id,
+        });
+    }
+    slicer.sheet_id = canonical_sheet_id(sheet_id);
+
+    let workbook = stores.storage.workbook_map().clone();
+    let mut txn = stores
+        .storage
+        .doc()
+        .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
+    let slicers_map = crate::storage::ensure_workbook_child_map(&workbook, &mut txn, KEY_SLICERS);
+
     if slicer.id.is_empty() {
-        slicer.id = uuid::Uuid::from_u128(stores.grid_id_alloc.next_u128()).to_string();
+        loop {
+            let candidate = uuid::Uuid::from_u128(stores.id_alloc.next_u128()).to_string();
+            if slicers_map.get(&txn, &candidate).is_none() {
+                slicer.id = candidate;
+                break;
+            }
+        }
+    } else if slicers_map.get(&txn, &slicer.id).is_some() {
+        return Err(ComputeError::SlicerIdConflict {
+            slicer_id: slicer.id,
+        });
     }
 
-    slicer.sheet_id = format!("{:032x}", sheet_id.as_u128());
-
-    let slicer_id = slicer.id.clone();
-
-    {
-        let workbook = stores.storage.workbook_map().clone();
-        let mut txn = stores
-            .storage
-            .doc()
-            .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-        let slicers_map =
-            crate::storage::ensure_workbook_child_map(&workbook, &mut txn, KEY_SLICERS);
-        slicers_map.remove(&mut txn, &slicer_id);
-        let entries = slicer_yrs::to_yrs_prelim(&slicer);
-        let nested: MapPrelim = entries.into_iter().collect();
-        slicers_map.insert(&mut txn, &*slicer_id, nested);
-    }
+    let entries = slicer_yrs::to_yrs_prelim(&slicer);
+    let nested: MapPrelim = entries.into_iter().collect();
+    slicers_map.insert(&mut txn, &*slicer.id, nested);
+    drop(txn);
 
     let mut result = MutationResult::empty().with_data(&slicer)?;
     result.slicer_changes.push(slicer_change(
@@ -115,18 +164,77 @@ pub(in crate::storage::engine) fn create_slicer(
 
 pub(in crate::storage::engine) fn delete_slicer(
     stores: &EngineStores,
+    sheet_id: &SheetId,
     slicer_id: &str,
 ) -> Result<MutationResult, ComputeError> {
-    let existing = get_slicer_state(stores, slicer_id);
     let workbook = stores.storage.workbook_map().clone();
     let mut txn = stores
         .storage
         .doc()
         .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let slicers_map = crate::storage::ensure_workbook_child_map(&workbook, &mut txn, KEY_SLICERS);
+    let slicers_map = match workbook.get(&txn, KEY_SLICERS) {
+        Some(yrs::Out::YMap(map)) => map,
+        _ => return Err(slicer_not_found(sheet_id, slicer_id)),
+    };
+    let existing = resolve_owned_slicer(&slicers_map, &txn, sheet_id, slicer_id)
+        .ok_or_else(|| slicer_not_found(sheet_id, slicer_id))?;
     slicers_map.remove(&mut txn, slicer_id);
+    drop(txn);
+    let mut result = MutationResult::empty().with_data(&existing)?;
+    result.slicer_changes.push(slicer_change(
+        &existing,
+        SlicerChangeKind::Deleted,
+        Vec::new(),
+        None,
+        None,
+    ));
+    Ok(result)
+}
+
+pub(in crate::storage::engine) fn delete_slicers(
+    stores: &EngineStores,
+    sheet_id: &SheetId,
+    slicer_ids: &[String],
+) -> Result<MutationResult, ComputeError> {
+    if slicer_ids.is_empty() {
+        return Ok(MutationResult::empty());
+    }
+
+    // Treat repeated IDs as one requested entity while preserving the caller's
+    // order for deterministic mutation evidence.
+    let mut unique_ids = Vec::with_capacity(slicer_ids.len());
+    for slicer_id in slicer_ids {
+        if !unique_ids.iter().any(|existing| *existing == slicer_id) {
+            unique_ids.push(slicer_id);
+        }
+    }
+
+    let workbook = stores.storage.workbook_map().clone();
+    let mut txn = stores
+        .storage
+        .doc()
+        .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
+    let slicers_map = match workbook.get(&txn, KEY_SLICERS) {
+        Some(yrs::Out::YMap(map)) => map,
+        _ => return Err(slicer_not_found(sheet_id, unique_ids[0])),
+    };
+
+    // Resolve the complete request before the first write so a stale or
+    // wrong-sheet ID cannot turn a bulk delete into a partial delete.
+    let mut existing = Vec::with_capacity(unique_ids.len());
+    for slicer_id in &unique_ids {
+        let slicer = resolve_owned_slicer(&slicers_map, &txn, sheet_id, slicer_id)
+            .ok_or_else(|| slicer_not_found(sheet_id, slicer_id))?;
+        existing.push(slicer);
+    }
+
+    for slicer_id in unique_ids {
+        slicers_map.remove(&mut txn, slicer_id);
+    }
+    drop(txn);
+
     let mut result = MutationResult::empty();
-    if let Some(slicer) = existing {
+    for slicer in existing {
         result.slicer_changes.push(slicer_change(
             &slicer,
             SlicerChangeKind::Deleted,
@@ -140,6 +248,7 @@ pub(in crate::storage::engine) fn delete_slicer(
 
 pub(in crate::storage::engine) fn update_slicer_config(
     stores: &EngineStores,
+    sheet_id: &SheetId,
     slicer_id: &str,
     update: &StoredSlicerUpdate,
 ) -> Result<MutationResult, ComputeError> {
@@ -149,39 +258,43 @@ pub(in crate::storage::engine) fn update_slicer_config(
         .storage
         .doc()
         .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let slicers_map = crate::storage::ensure_workbook_child_map(&workbook, &mut txn, KEY_SLICERS);
-    let slicer_opt = slicers_map
-        .get(&txn, slicer_id)
-        .and_then(|value| slicer_yrs::from_yrs_out(value, &txn));
-    let mut result = MutationResult::empty();
-    if let Some(mut slicer) = slicer_opt {
-        slicer.apply_update(update);
-        slicers_map.remove(&mut txn, slicer_id);
-        let entries = slicer_yrs::to_yrs_prelim(&slicer);
-        let nested: MapPrelim = entries.into_iter().collect();
-        slicers_map.insert(&mut txn, slicer_id, nested);
-        if update.selected_values.is_some() {
-            let selection_change_type = if slicer.selected_values.is_empty() {
-                SlicerSelectionChangeType::Clear
-            } else {
-                SlicerSelectionChangeType::Select
-            };
-            result.slicer_changes.push(slicer_change(
-                &slicer,
-                SlicerChangeKind::SelectionChanged,
-                Vec::new(),
-                Some(slicer.selected_values.clone()),
-                Some(selection_change_type),
-            ));
-        } else if !updated_fields.is_empty() {
-            result.slicer_changes.push(slicer_change(
-                &slicer,
-                SlicerChangeKind::Updated,
-                updated_fields,
-                None,
-                None,
-            ));
-        }
+    let slicers_map = match workbook.get(&txn, KEY_SLICERS) {
+        Some(yrs::Out::YMap(map)) => map,
+        _ => return Err(slicer_not_found(sheet_id, slicer_id)),
+    };
+    let mut slicer = resolve_owned_slicer(&slicers_map, &txn, sheet_id, slicer_id)
+        .ok_or_else(|| slicer_not_found(sheet_id, slicer_id))?;
+    slicer.apply_update(update);
+
+    if updated_fields.is_empty() && update.selected_values.is_none() {
+        return Ok(MutationResult::empty().with_data(&slicer)?);
+    }
+
+    replace_slicer(&slicers_map, &mut txn, &slicer);
+    drop(txn);
+    let mut result = MutationResult::empty().with_data(&slicer)?;
+    if !updated_fields.is_empty() {
+        result.slicer_changes.push(slicer_change(
+            &slicer,
+            SlicerChangeKind::Updated,
+            updated_fields,
+            None,
+            None,
+        ));
+    }
+    if update.selected_values.is_some() {
+        let selection_change_type = if slicer.selected_values.is_empty() {
+            SlicerSelectionChangeType::Clear
+        } else {
+            SlicerSelectionChangeType::Select
+        };
+        result.slicer_changes.push(slicer_change(
+            &slicer,
+            SlicerChangeKind::SelectionChanged,
+            Vec::new(),
+            Some(slicer.selected_values.clone()),
+            Some(selection_change_type),
+        ));
     }
     Ok(result)
 }
@@ -190,7 +303,7 @@ pub(in crate::storage::engine) fn get_all_slicers(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> Vec<StoredSlicer> {
-    let sheet_hex = format!("{:032x}", sheet_id.as_u128());
+    let sheet_hex = canonical_sheet_id(sheet_id);
     let workbook = stores.storage.workbook_map();
     let txn = stores.storage.doc().transact();
     let mut results = Vec::new();
@@ -198,9 +311,12 @@ pub(in crate::storage::engine) fn get_all_slicers(
         for (_key, value) in slicers_map.iter(&txn) {
             let slicer_opt = slicer_yrs::from_yrs_out(value, &txn);
             if let Some(slicer) = slicer_opt
-                && slicer.sheet_id == sheet_hex
+                && SheetId::from_uuid_str(&slicer.sheet_id).ok() == Some(*sheet_id)
             {
-                results.push(slicer);
+                results.push(StoredSlicer {
+                    sheet_id: sheet_hex.clone(),
+                    ..slicer
+                });
             }
         }
     }
@@ -227,20 +343,20 @@ pub(in crate::storage::engine) fn get_all_slicers_workbook(
 
 pub(in crate::storage::engine) fn get_slicer_state(
     stores: &EngineStores,
+    sheet_id: &SheetId,
     slicer_id: &str,
 ) -> Option<StoredSlicer> {
     let workbook = stores.storage.workbook_map();
     let txn = stores.storage.doc().transact();
     if let Some(yrs::Out::YMap(slicers_map)) = workbook.get(&txn, KEY_SLICERS) {
-        return slicers_map
-            .get(&txn, slicer_id)
-            .and_then(|value| slicer_yrs::from_yrs_out(value, &txn));
+        return resolve_owned_slicer(&slicers_map, &txn, sheet_id, slicer_id);
     }
     None
 }
 
 pub(in crate::storage::engine) fn toggle_slicer_item(
     stores: &EngineStores,
+    sheet_id: &SheetId,
     slicer_id: &str,
     value: &CellValue,
 ) -> Result<MutationResult, ComputeError> {
@@ -249,59 +365,77 @@ pub(in crate::storage::engine) fn toggle_slicer_item(
         .storage
         .doc()
         .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let slicers_map = crate::storage::ensure_workbook_child_map(&workbook, &mut txn, KEY_SLICERS);
-    let slicer_opt = slicers_map
-        .get(&txn, slicer_id)
-        .and_then(|value| slicer_yrs::from_yrs_out(value, &txn));
-    let mut result = MutationResult::empty();
-    if let Some(mut slicer) = slicer_opt {
-        if let Some(pos) = slicer.selected_values.iter().position(|v| v == value) {
-            slicer.selected_values.remove(pos);
-        } else {
-            slicer.selected_values.push(value.clone());
-        }
-        slicers_map.remove(&mut txn, slicer_id);
-        let entries = slicer_yrs::to_yrs_prelim(&slicer);
-        let nested: MapPrelim = entries.into_iter().collect();
-        slicers_map.insert(&mut txn, slicer_id, nested);
-        result.slicer_changes.push(slicer_change(
-            &slicer,
-            SlicerChangeKind::SelectionChanged,
-            Vec::new(),
-            Some(slicer.selected_values.clone()),
-            Some(SlicerSelectionChangeType::Toggle),
-        ));
+    let slicers_map = match workbook.get(&txn, KEY_SLICERS) {
+        Some(yrs::Out::YMap(map)) => map,
+        _ => return Err(slicer_not_found(sheet_id, slicer_id)),
+    };
+    let mut slicer = resolve_owned_slicer(&slicers_map, &txn, sheet_id, slicer_id)
+        .ok_or_else(|| slicer_not_found(sheet_id, slicer_id))?;
+    if let Some(pos) = slicer.selected_values.iter().position(|v| v == value) {
+        slicer.selected_values.remove(pos);
+    } else {
+        slicer.selected_values.push(value.clone());
     }
+    replace_slicer(&slicers_map, &mut txn, &slicer);
+    drop(txn);
+    let mut result = MutationResult::empty().with_data(&slicer)?;
+    result.slicer_changes.push(slicer_change(
+        &slicer,
+        SlicerChangeKind::SelectionChanged,
+        Vec::new(),
+        Some(slicer.selected_values.clone()),
+        Some(SlicerSelectionChangeType::Toggle),
+    ));
     Ok(result)
 }
 
-pub(in crate::storage::engine) fn clear_slicer_selection(
+pub(in crate::storage::engine) fn set_slicer_selection(
     stores: &EngineStores,
+    sheet_id: &SheetId,
     slicer_id: &str,
+    values: &[CellValue],
 ) -> Result<MutationResult, ComputeError> {
     let workbook = stores.storage.workbook_map().clone();
     let mut txn = stores
         .storage
         .doc()
         .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let slicers_map = crate::storage::ensure_workbook_child_map(&workbook, &mut txn, KEY_SLICERS);
-    let slicer_opt = slicers_map
-        .get(&txn, slicer_id)
-        .and_then(|value| slicer_yrs::from_yrs_out(value, &txn));
-    let mut result = MutationResult::empty();
-    if let Some(mut slicer) = slicer_opt {
-        slicer.selected_values.clear();
-        slicers_map.remove(&mut txn, slicer_id);
-        let entries = slicer_yrs::to_yrs_prelim(&slicer);
-        let nested: MapPrelim = entries.into_iter().collect();
-        slicers_map.insert(&mut txn, slicer_id, nested);
-        result.slicer_changes.push(slicer_change(
-            &slicer,
-            SlicerChangeKind::SelectionChanged,
-            Vec::new(),
-            Some(Vec::new()),
-            Some(SlicerSelectionChangeType::Clear),
-        ));
+    let slicers_map = match workbook.get(&txn, KEY_SLICERS) {
+        Some(yrs::Out::YMap(map)) => map,
+        _ => return Err(slicer_not_found(sheet_id, slicer_id)),
+    };
+    let mut slicer = resolve_owned_slicer(&slicers_map, &txn, sheet_id, slicer_id)
+        .ok_or_else(|| slicer_not_found(sheet_id, slicer_id))?;
+    let mut normalized_values = Vec::with_capacity(values.len());
+    for value in values {
+        if !normalized_values.iter().any(|existing| existing == value) {
+            normalized_values.push(value.clone());
+        }
     }
+    slicer.selected_values = normalized_values;
+    replace_slicer(&slicers_map, &mut txn, &slicer);
+    drop(txn);
+
+    let selection_change_type = if slicer.selected_values.is_empty() {
+        SlicerSelectionChangeType::Clear
+    } else {
+        SlicerSelectionChangeType::Select
+    };
+    let mut result = MutationResult::empty().with_data(&slicer)?;
+    result.slicer_changes.push(slicer_change(
+        &slicer,
+        SlicerChangeKind::SelectionChanged,
+        Vec::new(),
+        Some(slicer.selected_values.clone()),
+        Some(selection_change_type),
+    ));
     Ok(result)
+}
+
+pub(in crate::storage::engine) fn clear_slicer_selection(
+    stores: &EngineStores,
+    sheet_id: &SheetId,
+    slicer_id: &str,
+) -> Result<MutationResult, ComputeError> {
+    set_slicer_selection(stores, sheet_id, slicer_id, &[])
 }

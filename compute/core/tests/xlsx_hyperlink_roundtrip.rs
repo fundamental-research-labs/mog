@@ -123,3 +123,18 @@ fn xlsx_remove_hyperlink_clears_on_export() {
         sheet.hyperlinks
     );
 }
+
+#[test]
+fn remove_missing_hyperlink_is_an_error() {
+    let (mut engine, _) =
+        YrsComputeEngine::from_snapshot(one_cell_fixture()).expect("from_snapshot");
+    let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
+
+    let err = engine
+        .remove_hyperlink(&sid, 4, 4)
+        .expect_err("missing hyperlink removal must fail");
+    assert!(matches!(
+        err,
+        value_types::ComputeError::InvalidInput { .. }
+    ));
+}

@@ -4,8 +4,140 @@
  * Provides methods to get, set, and clear cell formats, as well as
  * apply format patterns across ranges (Format Painter).
  */
-import type { CellFormat, CellRange, FormatChangeResult, ResolvedCellFormat } from '../types';
+import type {
+  CellBorders,
+  CellFormat,
+  CellRange,
+  FormatChangeResult,
+  ResolvedCellFormat,
+} from '../types';
 import type { NumberFormatType } from '@mog/types-core/core';
+
+type CellFormatBorderSideInput = NonNullable<NonNullable<CellFormat['borders']>['top']>;
+
+/** Compatibility font container accepted by worksheet format mutators. */
+export interface CellFormatFontInput {
+  name?: string | null;
+  fontFamily?: CellFormat['fontFamily'] | null;
+  size?: CellFormat['fontSize'] | null;
+  fontSize?: CellFormat['fontSize'] | null;
+  color?: CellFormat['fontColor'] | null;
+  fontColor?: CellFormat['fontColor'] | null;
+  tintAndShade?: CellFormat['fontColorTint'] | null;
+  colorTint?: CellFormat['fontColorTint'] | null;
+  fontColorTint?: CellFormat['fontColorTint'] | null;
+  bold?: CellFormat['bold'] | null;
+  italic?: CellFormat['italic'] | null;
+  underline?: boolean | CellFormat['underlineType'] | null;
+  underlineType?: CellFormat['underlineType'] | null;
+  strikethrough?: CellFormat['strikethrough'] | null;
+  superscript?: CellFormat['superscript'] | null;
+  subscript?: CellFormat['subscript'] | null;
+  outline?: CellFormat['fontOutline'] | null;
+  fontOutline?: CellFormat['fontOutline'] | null;
+  shadow?: CellFormat['fontShadow'] | null;
+  fontShadow?: CellFormat['fontShadow'] | null;
+  fontTheme?: CellFormat['fontTheme'] | null;
+  fontCharset?: CellFormat['fontCharset'] | null;
+  fontFamilyType?: CellFormat['fontFamilyType'] | null;
+}
+
+/** Compatibility fill container accepted by worksheet format mutators. */
+export interface CellFormatFillInput {
+  color?: CellFormat['backgroundColor'] | null;
+  backgroundColor?: CellFormat['backgroundColor'] | null;
+  tintAndShade?: CellFormat['backgroundColorTint'] | null;
+  backgroundColorTint?: CellFormat['backgroundColorTint'] | null;
+  pattern?: CellFormat['patternType'] | null;
+  patternType?: CellFormat['patternType'] | null;
+  patternColor?: CellFormat['patternForegroundColor'] | null;
+  patternForegroundColor?: CellFormat['patternForegroundColor'] | null;
+  patternTintAndShade?: CellFormat['patternForegroundColorTint'] | null;
+  patternForegroundColorTint?: CellFormat['patternForegroundColorTint'] | null;
+  gradientFill?: CellFormat['gradientFill'] | null;
+}
+
+/** Compatibility alignment container accepted by worksheet format mutators. */
+export interface CellFormatAlignmentInput {
+  horizontalAlignment?: CellFormat['horizontalAlign'] | null;
+  horizontalAlign?: CellFormat['horizontalAlign'] | null;
+  verticalAlignment?: CellFormat['verticalAlign'] | 'center' | null;
+  verticalAlign?: CellFormat['verticalAlign'] | 'center' | null;
+  wrapText?: CellFormat['wrapText'] | null;
+  indent?: CellFormat['indent'] | null;
+  indentLevel?: CellFormat['indent'] | null;
+  textRotation?: CellFormat['textRotation'] | null;
+  textOrientation?: CellFormat['textRotation'] | null;
+  shrinkToFit?: CellFormat['shrinkToFit'] | null;
+  readingOrder?: CellFormat['readingOrder'] | null;
+  autoIndent?: CellFormat['autoIndent'] | null;
+}
+
+/** Compatibility protection container accepted by worksheet format mutators. */
+export interface CellFormatProtectionInput {
+  locked?: CellFormat['locked'] | null;
+  hidden?: CellFormat['hidden'] | null;
+}
+
+/** Compatibility border container accepted by worksheet format mutators. */
+export type CellFormatBorderInput = NonNullable<CellFormat['borders']> & {
+  style?: CellFormatBorderSideInput['style'];
+  color?: CellFormatBorderSideInput['color'];
+  colorTint?: CellFormatBorderSideInput['colorTint'];
+};
+
+/** Canonical tri-state patch: missing=no change, null=clear, value=set. */
+export type CellFormatPatch = {
+  [K in keyof CellFormat]?: CellFormat[K] | null;
+};
+
+/**
+ * Public worksheet format mutators accept canonical patches plus write-only
+ * compatibility aliases and containers.
+ *
+ * Compatibility aliases are normalized to canonical `CellFormat` keys before
+ * persistence. Format read APIs return only the canonical keys.
+ */
+export type CellFormatInput = CellFormatPatch & {
+  /** Write-only alias for `backgroundColor`; reads return `backgroundColor`. */
+  fillColor?: CellFormat['backgroundColor'] | null;
+  /** Write-only alias for `horizontalAlign`; reads return `horizontalAlign`. */
+  horizontalAlignment?: CellFormat['horizontalAlign'] | null;
+  /**
+   * Write-only alias for `verticalAlign`; `center` normalizes to `middle`, and
+   * reads return `verticalAlign`.
+   */
+  verticalAlignment?: CellFormat['verticalAlign'] | 'center' | null;
+  font?: CellFormatFontInput;
+  fill?: CellFormatFillInput;
+  alignment?: CellFormatAlignmentInput;
+  protection?: CellFormatProtectionInput;
+  border?: CellFormatBorderInput;
+};
+
+/**
+ * Nested border patch over the ten persisted ECMA-376 border members.
+ * Missing members are preserved, values replace one complete member, and
+ * `null` clears that direct override.
+ */
+export interface CellBordersPatch {
+  top?: CellBorders['top'] | null;
+  right?: CellBorders['right'] | null;
+  bottom?: CellBorders['bottom'] | null;
+  left?: CellBorders['left'] | null;
+  diagonal?: CellBorders['diagonal'] | null;
+  diagonalUp?: CellBorders['diagonalUp'] | null;
+  diagonalDown?: CellBorders['diagonalDown'] | null;
+  vertical?: CellBorders['vertical'] | null;
+  horizontal?: CellBorders['horizontal'] | null;
+  outline?: CellBorders['outline'] | null;
+}
+
+/** One ordered border patch applied to one or more ranges. */
+export interface BorderRangePatch {
+  ranges: CellRange[];
+  borders: CellBordersPatch;
+}
 
 /** Sub-API for cell formatting operations on a worksheet. */
 export interface WorksheetFormats {
@@ -23,7 +155,7 @@ export interface WorksheetFormats {
    * // Header style
    * await ws.formats.set('A1', { bold: true, fontSize: 14, backgroundColor: '#4472c4', fontColor: '#ffffff' });
    */
-  set(address: string, format: CellFormat): Promise<FormatChangeResult>;
+  set(address: string, format: CellFormatInput): Promise<FormatChangeResult>;
   /**
    * Set format for a single cell.
    *
@@ -31,7 +163,7 @@ export interface WorksheetFormats {
    * @param col - Column index (0-based)
    * @param format - Format properties to apply
    */
-  set(row: number, col: number, format: CellFormat): Promise<FormatChangeResult>;
+  set(row: number, col: number, format: CellFormatInput): Promise<FormatChangeResult>;
 
   /**
    * Set format for a contiguous range.
@@ -50,14 +182,14 @@ export interface WorksheetFormats {
    *   borders: { bottom: { style: 'medium', color: '#2f5496' } }
    * });
    */
-  setRange(range: string, format: CellFormat): Promise<FormatChangeResult>;
+  setRange(range: string, format: CellFormatInput): Promise<FormatChangeResult>;
   /**
    * Set format for a contiguous range.
    *
    * @param range - Range object with start/end row and column
    * @param format - Format properties to apply
    */
-  setRange(range: CellRange, format: CellFormat): Promise<FormatChangeResult>;
+  setRange(range: CellRange, format: CellFormatInput): Promise<FormatChangeResult>;
 
   /**
    * Set format for multiple ranges, with full row/column optimization.
@@ -65,7 +197,16 @@ export interface WorksheetFormats {
    * @param ranges - Array of range objects
    * @param format - Format properties to apply
    */
-  setRanges(ranges: CellRange[], format: CellFormat): Promise<void>;
+  setRanges(ranges: CellRange[], format: CellFormatInput): Promise<void>;
+
+  /**
+   * Apply ordered nested border patches as one undoable command.
+   *
+   * Unlike `setRanges(..., { borders })`, which replaces the complete borders
+   * composite for transferable-format fidelity, this method preserves omitted
+   * border members. Overlapping patches are applied in array order.
+   */
+  patchBorders(patches: BorderRangePatch[]): Promise<void>;
 
   /**
    * Check if a cell has explicit formatting applied (not just inherited from row/column/sheet).
@@ -132,9 +273,12 @@ export interface WorksheetFormats {
   /**
    * Get the fully-resolved format of a single cell.
    *
-   * Returns a dense CellFormat with all fields present (null for unset properties,
-   * never undefined). Includes the full cascade (default → col → row → table → cell → CF)
-   * with theme colors resolved to hex.
+   * Returns a dense transferable CellFormat with all fields present (null for
+   * unset properties, never undefined). Includes the effective authored cascade
+   * (default → col → row → table → cell), preserves symbolic theme references,
+   * and excludes conditional-format/display overlays. Effective no-fill is
+   * represented canonically as `patternType: 'none'` so the result remains
+   * appearance-preserving when written over a target with inherited fill.
    *
    * @param address - A1-style cell address
    * @returns The resolved cell format (always an object, never null)
@@ -294,7 +438,7 @@ export interface WorksheetFormats {
    * @param targetRange - Target range to apply formats to
    */
   applyPattern(
-    format: CellFormat,
+    format: CellFormatInput,
     sourceRange: CellRange | null,
     targetRange: CellRange,
   ): Promise<void>;
@@ -340,7 +484,7 @@ export interface WorksheetFormats {
    * @param updates - Array of {row, col, format} entries
    */
   setCellProperties(
-    updates: Array<{ row: number; col: number; format: Partial<CellFormat> }>,
+    updates: Array<{ row: number; col: number; format: Partial<CellFormatInput> }>,
   ): Promise<void>;
 
   /**
@@ -361,7 +505,7 @@ export interface WorksheetFormats {
    *
    * @param updates - Map of row index to format properties
    */
-  setRowProperties(updates: Map<number, Partial<CellFormat>>): Promise<void>;
+  setRowProperties(updates: Map<number, Partial<CellFormatInput>>): Promise<void>;
 
   /**
    * Get column-level formats for the specified columns.
@@ -381,5 +525,5 @@ export interface WorksheetFormats {
    *
    * @param updates - Map of column index to format properties
    */
-  setColumnProperties(updates: Map<number, Partial<CellFormat>>): Promise<void>;
+  setColumnProperties(updates: Map<number, Partial<CellFormatInput>>): Promise<void>;
 }

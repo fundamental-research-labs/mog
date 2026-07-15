@@ -35,6 +35,7 @@ import {
   importHostBackedDocument,
   type DocumentSyncCapableHandle,
 } from '@mog/kernel-host-internal';
+import { callWithPublicSdkErrorBoundary } from '@mog-sdk/kernel/internal';
 import {
   createNodeHeadlessClock,
   createNodeHeadlessHost,
@@ -46,6 +47,7 @@ import {
   writeNodeFileBytes,
 } from './host-adapters/native-node-runtime';
 import { createPortableRandomUUID } from './host-adapters/portable-host-crypto';
+import { invalidCreateWorkbookArgument } from './create-workbook-errors';
 import {
   createChartImageExporterFactory,
   createNodeChartImageExporterFactory,
@@ -301,6 +303,17 @@ export async function createWorkbook(
   arg?: string | Uint8Array | CreateWorkbookOptions | WorkbookConfig,
   importOptions?: DocumentImportOptions,
 ): Promise<Workbook> {
+  return callWithPublicSdkErrorBoundary(
+    'createWorkbook',
+    () => createWorkbookAtSdkBoundary(arg, importOptions),
+    'workbook',
+  );
+}
+
+async function createWorkbookAtSdkBoundary(
+  arg?: string | Uint8Array | CreateWorkbookOptions | WorkbookConfig,
+  importOptions?: DocumentImportOptions,
+): Promise<Workbook> {
   // WorkbookConfig power-user path — bypass host adapter, delegate directly.
   if (arg && typeof arg === 'object' && 'ctx' in arg && 'eventBus' in arg) {
     return (_kernelCreateWorkbook as unknown as KernelCreateWorkbook)(arg);
@@ -309,12 +322,19 @@ export async function createWorkbook(
   if (arg && typeof arg === 'object' && !(arg instanceof Uint8Array)) {
     const runtimeOption = (arg as { readonly runtime?: unknown }).runtime;
     if (runtimeOption !== undefined) {
-      throw new Error(
+      throw invalidCreateWorkbookArgument(
+        'runtime',
         '[createWorkbook] runtime is selected by @mog-sdk/sdk package exports; use @mog-sdk/sdk/wasm for WASM',
+        'Remove runtime and select the desired SDK entrypoint through the package import path.',
+        runtimeOption,
       );
     }
     if ((arg as { readonly wasmModule?: unknown }).wasmModule !== undefined) {
-      throw new Error('[createWorkbook] wasmModule is only valid from the @mog-sdk/sdk/wasm entry');
+      throw invalidCreateWorkbookArgument(
+        'wasmModule',
+        '[createWorkbook] wasmModule is only valid from the @mog-sdk/sdk/wasm entry',
+        'Import createWorkbook from @mog-sdk/sdk/wasm, or remove wasmModule from the native Node call.',
+      );
     }
   }
 
@@ -339,16 +359,6 @@ export async function createWorkbook(
     }
   } else {
     opts = {};
-  }
-
-  const runtimeOption = (opts as { readonly runtime?: unknown }).runtime;
-  if (runtimeOption !== undefined) {
-    throw new Error(
-      '[createWorkbook] runtime is selected by @mog-sdk/sdk package exports; use @mog-sdk/sdk/wasm for WASM',
-    );
-  }
-  if ((opts as { readonly wasmModule?: unknown }).wasmModule !== undefined) {
-    throw new Error('[createWorkbook] wasmModule is only valid from the @mog-sdk/sdk/wasm entry');
   }
 
   // Normalize the `principal` shorthand into `security.resolvePrincipal` so
@@ -876,8 +886,10 @@ function createSdkChartImageExporterFactory(
   const hasRasterBackend = chartRendering.rasterBackend !== undefined;
   const hasRasterModule = chartRendering.rasterModule !== undefined;
   if (hasRasterBackend && hasRasterModule) {
-    throw new Error(
+    throw invalidCreateWorkbookArgument(
+      'chartRendering',
       '[createWorkbook] chartRendering cannot provide both rasterBackend and rasterModule',
+      'Provide exactly one of chartRendering.rasterBackend or chartRendering.rasterModule.',
     );
   }
 

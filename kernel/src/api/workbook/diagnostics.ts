@@ -1,5 +1,6 @@
 import type {
   CheckErrorsOptions,
+  ChartTarget,
   FormulaReferenceDiagnosticsOptions,
   FormulaReferenceDiagnosticsPage,
   ImportDiagnosticDto,
@@ -40,6 +41,7 @@ import {
   checkWorkbookStaleCachedValues,
   validateWorkbookDiagnostics,
 } from './diagnostics-validation-checks';
+import { requireChartTarget } from '../worksheet/chart-api-helpers';
 
 export type { WorkbookDiagnosticsDeps } from './diagnostics-deps';
 
@@ -142,17 +144,29 @@ export class WorkbookDiagnosticsImpl implements WorkbookDiagnostics {
   async getResolvedChartSpec(
     options: ResolvedChartSpecDiagnosticsOptions,
   ): Promise<ResolvedChartSpecSnapshot> {
+    const receivedTarget = options.chartTarget ?? options.chartId;
+    const chartTarget: ChartTarget =
+      options.chartTarget !== undefined ? options.chartTarget : { id: options.chartId };
+    const sheetId = toSheetId(options.sheetId);
+    const { resolvedChartId } = await requireChartTarget(
+      this.ctx,
+      sheetId,
+      chartTarget,
+      receivedTarget,
+    );
     const normalized = normalizeImageExportOptions(options.exportOptions);
     const snapshot = await this.ctx.charts.getRenderSnapshotAtSize(
-      toSheetId(options.sheetId),
-      options.chartId,
+      sheetId,
+      resolvedChartId,
       normalized.width,
       normalized.height,
       toChartExportOptionsSnapshot(normalized),
     );
 
     if ('code' in snapshot) {
-      if (snapshot.code === 'CHART_NOT_FOUND') throw chartNotFound(options.chartId);
+      if (snapshot.code === 'CHART_NOT_FOUND') {
+        throw chartNotFound(receivedTarget, undefined, resolvedChartId);
+      }
       throw operationFailed('getResolvedChartSpec', snapshot.message);
     }
 

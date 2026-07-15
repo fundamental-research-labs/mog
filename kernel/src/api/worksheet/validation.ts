@@ -25,7 +25,7 @@ import type { RangeSchemaCreatedEvent, RangeSchemaDeletedEvent } from '@mog-sdk/
 import type { RangeSchema } from '../../bridges/compute/compute-bridge';
 import type { MutationAdmissionOptions } from '../../bridges/compute';
 import type { DocumentContext } from '../../context';
-import { KernelError } from '../../errors';
+import { KernelError, targetNotFoundError } from '../../errors';
 import type { HandleLiveness } from '../lifecycle/handle-liveness';
 import { createVersionOperationContext } from '../internal/version-operation-context';
 import { resolveCell, resolveRange } from '../internal/address-resolver';
@@ -292,6 +292,23 @@ export class WorksheetValidationImpl implements WorksheetValidation {
     this.ctx.writeGate.assertWritable(op);
   }
 
+  private _validationNotFound(
+    resourceId: string,
+    operation: string,
+    context?: Record<string, unknown>,
+  ): KernelError {
+    return targetNotFoundError({
+      code: 'VALIDATION_NOT_FOUND',
+      resourceType: 'Validation',
+      resourceId,
+      operation,
+      sheetId: this.sheetId,
+      path: [operation === 'validation.removeById' ? 'id' : 'range'],
+      suggestion: 'Use worksheet.validations.list() to resolve an existing validation target.',
+      context,
+    });
+  }
+
   private _versionAdmissionOptions(
     operationIdPrefix: string,
     groupId?: string,
@@ -510,11 +527,14 @@ export class WorksheetValidationImpl implements WorksheetValidation {
         this.sheetId,
         a,
       );
+      const address = rangeToA1(a);
+      if (schemas.length === 0) {
+        throw this._validationNotFound(address, 'validation.remove', { range: address });
+      }
       const groupId = schemas.length > 1 ? this._validationGroupId('validation.remove') : undefined;
       for (const schema of schemas) {
         await this.deleteSchemaAndEmit(schema, 'validation.remove', groupId);
       }
-      const address = rangeToA1(a);
       return validationRemoveReceipt({
         sheetId: this.sheetId,
         address,
@@ -541,6 +561,10 @@ export class WorksheetValidationImpl implements WorksheetValidation {
       this.sheetId,
       range,
     );
+    const resolvedRange = rangeToA1(range);
+    if (schemas.length === 0) {
+      throw this._validationNotFound(address, 'validation.remove', { range: resolvedRange });
+    }
     const groupId = schemas.length > 1 ? this._validationGroupId('validation.remove') : undefined;
     for (const schema of schemas) {
       await this.deleteSchemaAndEmit(schema, 'validation.remove', groupId);
@@ -549,7 +573,7 @@ export class WorksheetValidationImpl implements WorksheetValidation {
       sheetId: this.sheetId,
       address,
       schemas,
-      noOpRange: rangeToA1(range),
+      noOpRange: resolvedRange,
     });
   }
 
@@ -687,6 +711,12 @@ export class WorksheetValidationImpl implements WorksheetValidation {
       this.sheetId,
       bounds,
     );
+    const resolvedRange = rangeToA1(bounds);
+    if (schemas.length === 0) {
+      throw this._validationNotFound(resolvedRange, 'validation.clearInRange', {
+        range: resolvedRange,
+      });
+    }
     const groupId =
       schemas.length > 1 ? this._validationGroupId('validation.clearInRange') : undefined;
     for (const schema of schemas) {
@@ -697,7 +727,7 @@ export class WorksheetValidationImpl implements WorksheetValidation {
       sheetId: this.sheetId,
       address,
       schemas,
-      noOpRange: rangeToA1(bounds),
+      noOpRange: resolvedRange,
     });
   }
 
@@ -705,20 +735,12 @@ export class WorksheetValidationImpl implements WorksheetValidation {
     this._ensureWritable('validation.removeById');
     const schemas = await this.ctx.computeBridge.getRangeSchemasForSheet(this.sheetId);
     const target = schemas.find((s) => s.id === id);
-    if (target) {
-      await this.deleteSchemaAndEmit(target, 'validation.removeById');
-    } else {
-      await deleteRangeSchema(
-        this.ctx,
-        this.sheetId,
-        id,
-        this._versionAdmissionOptions('validation.removeById'),
-      );
-    }
+    if (!target) throw this._validationNotFound(id, 'validation.removeById');
+    await this.deleteSchemaAndEmit(target, 'validation.removeById');
     return validationRemoveReceipt({
       sheetId: this.sheetId,
       address: id,
-      schemas: target ? [target] : [],
+      schemas: [target],
       requestedId: id,
     });
   }

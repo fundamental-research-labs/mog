@@ -69,6 +69,159 @@ fn test_effective_format_no_overrides() {
     assert_eq!(eff.font_size, def.font_size);
     assert_eq!(eff.bold, def.bold);
     assert_eq!(eff.locked, def.locked);
+    assert_eq!(
+        eff.pattern_type,
+        Some(ooxml_types::styles::PatternType::None),
+        "a fully-resolved absent fill has an explicit transferable sentinel"
+    );
+}
+
+#[test]
+fn test_effective_format_canonicalizes_sparse_authored_no_fill_only_after_cascade() {
+    let (mut storage, sid, gi) = storage_with_sheet();
+
+    set_col_format(
+        &mut storage,
+        &sid,
+        2,
+        &CellFormat {
+            italic: Some(true),
+            ..Default::default()
+        },
+        Some(&gi),
+    )
+    .unwrap();
+    set_cell_format(
+        storage.doc(),
+        storage.workbook_map(),
+        storage.sheets(),
+        &sid,
+        "sparse-authored-cell",
+        &CellFormat {
+            bold: Some(true),
+            ..Default::default()
+        },
+    );
+
+    let eff = get_effective_format(
+        &storage,
+        &sid,
+        "sparse-authored-cell",
+        3,
+        2,
+        None,
+        Some(&gi),
+        None,
+    );
+
+    assert_eq!(eff.bold, Some(true));
+    assert_eq!(eff.italic, Some(true));
+    assert_eq!(
+        eff.pattern_type,
+        Some(ooxml_types::styles::PatternType::None)
+    );
+    assert!(eff.background_color.is_none());
+    assert!(eff.gradient_fill.is_none());
+}
+
+#[test]
+fn test_premerged_range_cascade_uses_the_same_effective_fill_contract() {
+    let base = default_format();
+
+    let no_fill = get_effective_format_from_preloaded_layers_with_range(
+        &base, None, None, 2, None, None, None, None, false,
+    );
+    assert_eq!(
+        no_fill.pattern_type,
+        Some(ooxml_types::styles::PatternType::None)
+    );
+
+    let range_fill = CellFormat {
+        background_color: Some("#70AD47".to_string()),
+        ..Default::default()
+    };
+    let shorthand = get_effective_format_from_preloaded_layers_with_range(
+        &base,
+        None,
+        None,
+        2,
+        Some(&range_fill),
+        None,
+        None,
+        None,
+        false,
+    );
+    assert_eq!(shorthand.background_color.as_deref(), Some("#70AD47"));
+    assert_eq!(
+        shorthand.pattern_type,
+        Some(ooxml_types::styles::PatternType::Solid)
+    );
+}
+
+#[test]
+fn test_higher_fill_layers_prevent_effective_no_fill_canonicalization() {
+    let (mut storage, sid, gi) = storage_with_sheet();
+
+    // A background-color-only authored layer is a supported fill shorthand.
+    // It must not encounter a prematurely seeded no-fill sentinel from the
+    // lower default layer, which would clear the higher color during merging.
+    set_row_format(
+        &mut storage,
+        &sid,
+        3,
+        &CellFormat {
+            background_color: Some("#4472C4".to_string()),
+            ..Default::default()
+        },
+        Some(&gi),
+    )
+    .unwrap();
+
+    let shorthand = get_effective_format(
+        &storage,
+        &sid,
+        "background-shorthand",
+        3,
+        2,
+        None,
+        Some(&gi),
+        None,
+    );
+    assert_eq!(shorthand.background_color.as_deref(), Some("#4472C4"));
+    assert_eq!(
+        shorthand.pattern_type,
+        Some(ooxml_types::styles::PatternType::Solid),
+        "the final effective contract must match XLSX's solid-fill lowering"
+    );
+
+    set_cell_format(
+        storage.doc(),
+        storage.workbook_map(),
+        storage.sheets(),
+        &sid,
+        "higher-solid-fill",
+        &CellFormat {
+            background_color: Some("#ED7D31".to_string()),
+            pattern_type: Some(ooxml_types::styles::PatternType::Solid),
+            ..Default::default()
+        },
+    );
+
+    let solid = get_effective_format(
+        &storage,
+        &sid,
+        "higher-solid-fill",
+        3,
+        2,
+        None,
+        Some(&gi),
+        None,
+    );
+    assert_eq!(solid.background_color.as_deref(), Some("#ED7D31"));
+    assert_eq!(
+        solid.pattern_type,
+        Some(ooxml_types::styles::PatternType::Solid)
+    );
 }
 
 #[test]
@@ -405,6 +558,199 @@ fn test_imported_cell_xf_blocks_row_col_alignment_defaults() {
     assert_eq!(eff.shrink_to_fit, Some(false));
     assert_eq!(eff.reading_order.as_deref(), Some("context"));
     assert_eq!(eff.auto_indent, Some(false));
+}
+
+#[test]
+fn test_imported_cell_xf_no_fill_clears_row_fill_while_unstyled_cell_inherits() {
+    let (mut storage, sid, gi) = storage_with_sheet();
+    insert_style_palette_entry(
+        storage.doc(),
+        storage.workbook_map(),
+        7,
+        &CellFormat {
+            bold: Some(true),
+            ..Default::default()
+        },
+    );
+    insert_compact_cell_properties(&storage, &sid, "imported-no-fill", r#"{"s":7}"#);
+
+    set_row_format(
+        &mut storage,
+        &sid,
+        3,
+        &CellFormat {
+            background_color: Some("#4472C4".to_string()),
+            pattern_type: Some(ooxml_types::styles::PatternType::Solid),
+            pattern_foreground_color: Some("#ED7D31".to_string()),
+            pattern_foreground_color_tint: Some(0.25),
+            ..Default::default()
+        },
+        Some(&gi),
+    )
+    .unwrap();
+
+    let imported = get_effective_format(
+        &storage,
+        &sid,
+        "imported-no-fill",
+        3,
+        2,
+        None,
+        Some(&gi),
+        None,
+    );
+    assert_eq!(
+        imported.pattern_type,
+        Some(ooxml_types::styles::PatternType::None)
+    );
+    assert!(imported.background_color.is_none());
+    assert!(imported.pattern_foreground_color.is_none());
+    assert!(imported.pattern_foreground_color_tint.is_none());
+
+    let unstyled = get_effective_format(&storage, &sid, "unstyled", 3, 2, None, Some(&gi), None);
+    assert_eq!(
+        unstyled.pattern_type,
+        Some(ooxml_types::styles::PatternType::Solid)
+    );
+    assert_eq!(unstyled.background_color.as_deref(), Some("#4472C4"));
+    assert_eq!(
+        unstyled.pattern_foreground_color.as_deref(),
+        Some("#ED7D31")
+    );
+}
+
+#[test]
+fn test_imported_cell_xf_no_fill_clears_column_fill_while_user_cell_inherits() {
+    let (mut storage, sid, gi) = storage_with_sheet();
+    insert_style_palette_entry(
+        storage.doc(),
+        storage.workbook_map(),
+        7,
+        &CellFormat {
+            italic: Some(true),
+            ..Default::default()
+        },
+    );
+    insert_compact_cell_properties(&storage, &sid, "imported-no-fill", r#"{"s":7}"#);
+
+    set_col_format(
+        &mut storage,
+        &sid,
+        2,
+        &CellFormat {
+            background_color: Some("#70AD47".to_string()),
+            pattern_type: Some(ooxml_types::styles::PatternType::Solid),
+            ..Default::default()
+        },
+        Some(&gi),
+    )
+    .unwrap();
+
+    let imported = get_effective_format(
+        &storage,
+        &sid,
+        "imported-no-fill",
+        3,
+        2,
+        None,
+        Some(&gi),
+        None,
+    );
+    assert_eq!(
+        imported.pattern_type,
+        Some(ooxml_types::styles::PatternType::None)
+    );
+    assert!(imported.background_color.is_none());
+
+    set_cell_format(
+        storage.doc(),
+        storage.workbook_map(),
+        storage.sheets(),
+        &sid,
+        "user-sparse-cell",
+        &CellFormat {
+            bold: Some(true),
+            ..Default::default()
+        },
+    );
+    let user = get_effective_format(
+        &storage,
+        &sid,
+        "user-sparse-cell",
+        3,
+        2,
+        None,
+        Some(&gi),
+        None,
+    );
+    assert_eq!(
+        user.pattern_type,
+        Some(ooxml_types::styles::PatternType::Solid)
+    );
+    assert_eq!(user.background_color.as_deref(), Some("#70AD47"));
+}
+
+#[test]
+fn test_imported_cell_xf_materialization_preserves_direct_pattern_and_gradient_fills() {
+    let (storage, sid, gi) = storage_with_sheet();
+    let gradient = domain_types::GradientFillFormat {
+        gradient_type: "linear".to_string(),
+        degree: Some(45.0),
+        center: None,
+        stops: Vec::new(),
+    };
+    insert_style_palette_entry(
+        storage.doc(),
+        storage.workbook_map(),
+        8,
+        &CellFormat {
+            background_color: Some("#FFF2CC".to_string()),
+            pattern_type: Some(ooxml_types::styles::PatternType::DarkGrid),
+            pattern_foreground_color: Some("#BF9000".to_string()),
+            ..Default::default()
+        },
+    );
+    insert_style_palette_entry(
+        storage.doc(),
+        storage.workbook_map(),
+        9,
+        &CellFormat {
+            gradient_fill: Some(gradient.clone()),
+            ..Default::default()
+        },
+    );
+    insert_compact_cell_properties(&storage, &sid, "imported-pattern", r#"{"s":8}"#);
+    insert_compact_cell_properties(&storage, &sid, "imported-gradient", r#"{"s":9}"#);
+
+    let pattern = get_effective_format(
+        &storage,
+        &sid,
+        "imported-pattern",
+        1,
+        1,
+        None,
+        Some(&gi),
+        None,
+    );
+    assert_eq!(
+        pattern.pattern_type,
+        Some(ooxml_types::styles::PatternType::DarkGrid)
+    );
+    assert_eq!(pattern.background_color.as_deref(), Some("#FFF2CC"));
+    assert_eq!(pattern.pattern_foreground_color.as_deref(), Some("#BF9000"));
+
+    let gradient_format = get_effective_format(
+        &storage,
+        &sid,
+        "imported-gradient",
+        2,
+        2,
+        None,
+        Some(&gi),
+        None,
+    );
+    assert_eq!(gradient_format.gradient_fill, Some(gradient));
+    assert!(gradient_format.pattern_type.is_none());
 }
 
 #[test]

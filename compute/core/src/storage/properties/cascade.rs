@@ -9,7 +9,7 @@ use crate::storage::YrsStorage;
 use crate::storage::properties::CellProperties;
 use cell_types::SheetId;
 use domain_types::{CellFormat, CellVerticalAlign};
-use ooxml_types::styles::HorizontalAlign;
+use ooxml_types::styles::{HorizontalAlign, PatternType};
 use yrs::{Any, Map, Out, Transact};
 
 /// Get the effective (computed) format for a cell.
@@ -33,24 +33,9 @@ pub fn get_effective_format(
     grid_index: Option<&GridIndex>,
     sheet_mirror: Option<&SheetMirror>,
 ) -> CellFormat {
-    let base = workbook_base_format(storage);
-
-    let after_col_range = apply_col_format_range_layer(&base, col, sheet_mirror, false);
-
-    let col_fmt = get_col_format(storage, sheet_id, col, grid_index).unwrap_or_default();
-    let after_col = merge_formats(&after_col_range, &col_fmt);
-
-    let row_fmt = get_row_format(storage, sheet_id, row, grid_index).unwrap_or_default();
-    let after_row = merge_formats(&after_col, &row_fmt);
-
-    // Format Range layer: between row and table.
-    let after_range = apply_format_range_layer(&after_row, row, col, sheet_mirror);
-
-    let after_table = match table_format {
-        Some(tf) => merge_formats(&after_range, tf),
-        None => after_range,
-    };
-
+    let base = get_workbook_base_format(storage);
+    let col_format = get_col_format(storage, sheet_id, col, grid_index);
+    let row_format = get_row_format(storage, sheet_id, row, grid_index);
     let cell_props = get_properties(
         storage.doc(),
         storage.workbook_map(),
@@ -58,8 +43,18 @@ pub fn get_effective_format(
         sheet_id,
         cell_id,
     );
-    let cell_fmt = materialize_cell_layer_format(cell_props.as_ref());
-    merge_formats(&after_table, &cell_fmt)
+    let cell_format = materialize_cell_layer_format(cell_props.as_ref());
+    get_effective_format_from_preloaded_layers(
+        &base,
+        col_format.as_ref(),
+        row_format.as_ref(),
+        row,
+        col,
+        table_format,
+        Some(&cell_format),
+        sheet_mirror,
+        false,
+    )
 }
 
 /// Same cascade as `get_effective_format`, but accepts pre-fetched cell properties
@@ -75,26 +70,21 @@ pub fn get_effective_format_preloaded(
     grid_index: Option<&GridIndex>,
     sheet_mirror: Option<&SheetMirror>,
 ) -> CellFormat {
-    let base = workbook_base_format(storage);
-
-    let after_col_range = apply_col_format_range_layer(&base, col, sheet_mirror, false);
-
-    let col_fmt = get_col_format(storage, sheet_id, col, grid_index).unwrap_or_default();
-    let after_col = merge_formats(&after_col_range, &col_fmt);
-
-    let row_fmt = get_row_format(storage, sheet_id, row, grid_index).unwrap_or_default();
-    let after_row = merge_formats(&after_col, &row_fmt);
-
-    // Format Range layer: between row and table.
-    let after_range = apply_format_range_layer(&after_row, row, col, sheet_mirror);
-
-    let after_table = match table_format {
-        Some(tf) => merge_formats(&after_range, tf),
-        None => after_range,
-    };
-
-    let cell_fmt = materialize_cell_layer_format(cell_properties);
-    merge_formats(&after_table, &cell_fmt)
+    let base = get_workbook_base_format(storage);
+    let col_format = get_col_format(storage, sheet_id, col, grid_index);
+    let row_format = get_row_format(storage, sheet_id, row, grid_index);
+    let cell_format = materialize_cell_layer_format(cell_properties);
+    get_effective_format_from_preloaded_layers(
+        &base,
+        col_format.as_ref(),
+        row_format.as_ref(),
+        row,
+        col,
+        table_format,
+        Some(&cell_format),
+        sheet_mirror,
+        false,
+    )
 }
 
 /// Positional format for cells with no cell_id:
@@ -111,24 +101,126 @@ pub fn get_positional_format(
     grid_index: Option<&GridIndex>,
     sheet_mirror: Option<&SheetMirror>,
 ) -> CellFormat {
-    let base = workbook_base_format(storage);
+    let base = get_workbook_base_format(storage);
+    let col_format = get_col_format(storage, sheet_id, col, grid_index);
+    let row_format = get_row_format(storage, sheet_id, row, grid_index);
+    get_effective_format_from_preloaded_layers(
+        &base,
+        col_format.as_ref(),
+        row_format.as_ref(),
+        row,
+        col,
+        None,
+        None,
+        sheet_mirror,
+        true,
+    )
+}
 
-    let after_col_range = apply_col_format_range_layer(&base, col, sheet_mirror, true);
+/// Resolve the cascade from layers that were loaded once for a batch read.
+///
+/// This is the transaction-free core shared by scalar and bulk displayed
+/// formatting. `include_imported_xlsx_col_ranges` is true only for positions
+/// without an allocated cell, matching [`get_positional_format`].
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn get_effective_format_from_preloaded_layers(
+    base: &CellFormat,
+    col_format: Option<&CellFormat>,
+    row_format: Option<&CellFormat>,
+    row: u32,
+    col: u32,
+    table_format: Option<&CellFormat>,
+    cell_format: Option<&CellFormat>,
+    sheet_mirror: Option<&SheetMirror>,
+    include_imported_xlsx_col_ranges: bool,
+) -> CellFormat {
+    let after_col_range =
+        apply_col_format_range_layer(base, col, sheet_mirror, include_imported_xlsx_col_ranges);
+    let after_col = match col_format {
+        Some(format) => merge_formats(&after_col_range, format),
+        None => after_col_range,
+    };
+    let after_row = match row_format {
+        Some(format) => merge_formats(&after_col, format),
+        None => after_col,
+    };
+    let after_range = apply_format_range_layer(&after_row, row, col, sheet_mirror);
+    let after_table = match table_format {
+        Some(format) => merge_formats(&after_range, format),
+        None => after_range,
+    };
+    let effective = match cell_format {
+        Some(format) => merge_formats(&after_table, format),
+        None => after_table,
+    };
+    canonicalize_effective_fill(effective)
+}
 
-    let col_fmt = get_col_format(storage, sheet_id, col, grid_index).unwrap_or_default();
-    let after_col = merge_formats(&after_col_range, &col_fmt);
+/// Resolve the cascade with an already-merged Format Range layer.
+///
+/// Bulk callers use this to avoid a spatial-index query and temporary match
+/// vector for every cell. `format_range` must already reflect ascending
+/// `RangeId` precedence, exactly like [`apply_format_range_layer`].
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn get_effective_format_from_preloaded_layers_with_range(
+    base: &CellFormat,
+    col_format: Option<&CellFormat>,
+    row_format: Option<&CellFormat>,
+    col: u32,
+    format_range: Option<&CellFormat>,
+    table_format: Option<&CellFormat>,
+    cell_format: Option<&CellFormat>,
+    sheet_mirror: Option<&SheetMirror>,
+    include_imported_xlsx_col_ranges: bool,
+) -> CellFormat {
+    let after_col_range =
+        apply_col_format_range_layer(base, col, sheet_mirror, include_imported_xlsx_col_ranges);
+    let after_col = match col_format {
+        Some(format) => merge_formats(&after_col_range, format),
+        None => after_col_range,
+    };
+    let after_row = match row_format {
+        Some(format) => merge_formats(&after_col, format),
+        None => after_col,
+    };
+    let after_range = match format_range {
+        Some(format) => merge_formats(&after_row, format),
+        None => after_row,
+    };
+    let after_table = match table_format {
+        Some(format) => merge_formats(&after_range, format),
+        None => after_range,
+    };
+    let effective = match cell_format {
+        Some(format) => merge_formats(&after_table, format),
+        None => after_table,
+    };
+    canonicalize_effective_fill(effective)
+}
 
-    let row_fmt = get_row_format(storage, sheet_id, row, grid_index).unwrap_or_default();
-    let after_row = merge_formats(&after_col, &row_fmt);
-
-    // Format Range layer: between row and table (no table/cell layer in positional format).
-    apply_format_range_layer(&after_row, row, col, sheet_mirror)
+/// Canonicalize the fully-resolved fill contract returned by effective-format
+/// reads. Sparse authored layers must remain sparse while the cascade is still
+/// being merged so that a higher background-color shorthand or complete fill
+/// can apply normally. Once every layer has resolved, however, an entirely
+/// absent fill has one unambiguous transferable representation: `none`, and
+/// the public background-color shorthand has the explicit representation
+/// `solid` that XLSX export/import also produces.
+fn canonicalize_effective_fill(mut format: CellFormat) -> CellFormat {
+    if format.gradient_fill.is_none()
+        && format.pattern_type.is_none()
+        && format.background_color.is_some()
+    {
+        format.pattern_type = Some(PatternType::Solid);
+    } else if fill_fields_are_absent(&format) {
+        format.pattern_type = Some(PatternType::None);
+    }
+    format
 }
 
 /// Workbook Normal style is stored as style palette entry 0 during XLSX
 /// hydration. It sits above Mog's built-in fallback defaults and below every
 /// positional or authored style layer.
-fn workbook_base_format(storage: &YrsStorage) -> CellFormat {
+pub(crate) fn get_workbook_base_format(storage: &YrsStorage) -> CellFormat {
     let base = default_format();
     let Some(normal) = workbook_normal_format(storage) else {
         return base;
@@ -162,7 +254,7 @@ fn materialize_cell_layer_format(cell_properties: Option<&CellProperties>) -> Ce
     format
 }
 
-fn materialize_imported_cell_xf_defaults(format: &mut CellFormat) {
+pub(super) fn materialize_imported_cell_xf_defaults(format: &mut CellFormat) {
     format
         .number_format
         .get_or_insert_with(|| "General".to_string());
@@ -180,6 +272,25 @@ fn materialize_imported_cell_xf_defaults(format: &mut CellFormat) {
         .reading_order
         .get_or_insert_with(|| "context".to_string());
     format.auto_indent.get_or_insert(false);
+
+    // The XLSX style palette contains the fully-resolved result of a concrete
+    // cellXf. A cellXf whose effective fill is fillId=0 is intentionally sparse
+    // in that palette: all fill fields are absent. At the cell layer, however,
+    // that means "no fill", not "inherit a row/column fill". Materialize the
+    // explicit sentinel only for a truly absent fill; gradient and authored
+    // pattern fills must remain untouched.
+    if fill_fields_are_absent(format) {
+        format.pattern_type = Some(PatternType::None);
+    }
+}
+
+fn fill_fields_are_absent(format: &CellFormat) -> bool {
+    format.background_color.is_none()
+        && format.background_color_tint.is_none()
+        && format.pattern_type.is_none()
+        && format.pattern_foreground_color.is_none()
+        && format.pattern_foreground_color_tint.is_none()
+        && format.gradient_fill.is_none()
 }
 
 // -------------------------------------------------------------------

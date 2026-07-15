@@ -47,7 +47,6 @@ const nativeExternals = [
 
 function applyWorkspaceAliases(
   options: NonNullable<Parameters<NonNullable<Options['esbuildOptions']>>[0]>,
-  transportEntry: string,
 ): void {
   options.alias = {
     ...options.alias,
@@ -55,9 +54,9 @@ function applyWorkspaceAliases(
       __dirname,
       '../../kernel/src/host-lifecycle-internal.ts',
     ),
+    '@mog-sdk/kernel/internal': resolve(__dirname, '../../kernel/src/internal.ts'),
     '@mog-sdk/kernel/storage': resolve(__dirname, '../../kernel/src/storage/index.ts'),
     '@mog-sdk/kernel': resolve(__dirname, '../../kernel/src/index.ts'),
-    '@mog/transport': resolve(__dirname, transportEntry),
     '@rust-bridge/client': resolve(__dirname, '../../infra/rust-bridge/client/src/index.ts'),
   };
 }
@@ -79,7 +78,7 @@ export default defineConfig([
     esbuildOptions(options) {
       options.conditions = ['development', 'node', 'import', 'default'];
       options.sourcesContent = false;
-      applyWorkspaceAliases(options, '../../infra/transport/src/index.ts');
+      applyWorkspaceAliases(options);
     },
     noExternal: bundledWorkspacePackages,
     external: nativeExternals,
@@ -99,7 +98,7 @@ export default defineConfig([
     esbuildOptions(options) {
       options.conditions = ['development', 'workerd', 'browser', 'import', 'default'];
       options.sourcesContent = false;
-      applyWorkspaceAliases(options, '../../infra/transport/src/index.wasm.ts');
+      applyWorkspaceAliases(options);
     },
     esbuildPlugins: [
       {

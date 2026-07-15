@@ -399,7 +399,7 @@ impl ComputeCore {
             compute_parser::normalize_formula_input(formula, &sheet_names)
         };
 
-        let resolver = CoreResolver {
+        let resolver = MirrorCellRefResolver {
             mirror,
             current_sheet: *sheet_id,
         };
@@ -493,7 +493,7 @@ impl ComputeCore {
 
         // Step 1: Parse to AST with immutable resolver (resolves existing CellIds)
         let ast = {
-            let resolver = CoreResolver {
+            let resolver = MirrorCellRefResolver {
                 mirror: &*mirror,
                 current_sheet: sheet_id,
             };
@@ -821,7 +821,7 @@ impl ComputeCore {
             compute_parser::normalize_formula_input(&formula_str, &sheet_names)
         };
 
-        let resolver = CoreResolver {
+        let resolver = MirrorCellRefResolver {
             mirror,
             current_sheet: sheet_id,
         };

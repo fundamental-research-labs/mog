@@ -3,6 +3,7 @@ import type { IChartBridge } from '@mog-sdk/contracts/bridges';
 import type { DocumentImportOptions } from '@mog-sdk/contracts/document';
 import type { DocumentSecurityConfig } from '@mog-sdk/contracts/security';
 import { createHostBackedDocument, importHostBackedDocument } from '@mog/kernel-host-internal';
+import { callWithPublicSdkErrorBoundary } from '@mog-sdk/kernel/internal';
 import {
   createChartImageExporterFactory,
   type ChartRasterWasmGlueLoader,
@@ -17,6 +18,7 @@ export {
 export type * from './control-plane';
 import { createNodeHeadlessHost } from './host-adapters/node-headless-host';
 import { createPortableRandomUUID } from './host-adapters/portable-host-crypto';
+import { invalidCreateWorkbookArgument } from './create-workbook-errors';
 import type {
   ChartRenderingConfig,
   CreateWorkbookOptions as NativeCreateWorkbookOptions,
@@ -125,9 +127,23 @@ export async function createWorkbook(
   arg?: Uint8Array | CreateWorkbookOptions | string,
   importOptions?: DocumentImportOptions,
 ): Promise<Workbook> {
+  return callWithPublicSdkErrorBoundary(
+    'createWorkbook',
+    () => createWorkbookAtSdkBoundary(arg, importOptions),
+    'workbook',
+  );
+}
+
+async function createWorkbookAtSdkBoundary(
+  arg?: Uint8Array | CreateWorkbookOptions | string,
+  importOptions?: DocumentImportOptions,
+): Promise<Workbook> {
   if (typeof arg === 'string') {
-    throw new Error(
+    throw invalidCreateWorkbookArgument(
+      'source',
       'File-path workbook sources are not supported by the WASM SDK entry; pass XLSX bytes instead',
+      'Read the file in the host and pass its Uint8Array bytes to createWorkbook.',
+      arg,
     );
   }
 
@@ -143,8 +159,11 @@ export async function createWorkbook(
     if (opts.source?.type === 'bytes') {
       xlsxBytes = opts.source.data;
     } else if (opts.source !== undefined) {
-      throw new Error(
+      throw invalidCreateWorkbookArgument(
+        'source',
         'File-path workbook sources are not supported by the WASM SDK entry; pass XLSX bytes instead',
+        'Read the file in the host and pass source: { type: "bytes", data }.',
+        opts.source.type,
       );
     }
   } else {
@@ -152,8 +171,11 @@ export async function createWorkbook(
   }
 
   if ((opts as { readonly runtime?: unknown }).runtime !== undefined) {
-    throw new Error(
+    throw invalidCreateWorkbookArgument(
+      'runtime',
       '[createWorkbook] runtime is selected by @mog-sdk/sdk package exports; remove runtime or import @mog-sdk/sdk/node for native Node',
+      'Remove runtime and select the desired SDK entrypoint through the package import path.',
+      (opts as { readonly runtime?: unknown }).runtime,
     );
   }
 
@@ -253,8 +275,10 @@ function createWasmSdkChartImageExporterFactory(
   const hasRasterBackend = chartRendering.rasterBackend !== undefined;
   const hasRasterModule = chartRendering.rasterModule !== undefined;
   if (hasRasterBackend && hasRasterModule) {
-    throw new Error(
+    throw invalidCreateWorkbookArgument(
+      'chartRendering',
       '[createWorkbook] chartRendering cannot provide both rasterBackend and rasterModule',
+      'Provide exactly one of chartRendering.rasterBackend or chartRendering.rasterModule.',
     );
   }
 

@@ -59,6 +59,7 @@ export type {
   ChartSourceDataUpdate,
   ChartSourceRangeKind,
   ChartSourceRangeMatch,
+  ChartTarget,
   WorksheetCharts,
 } from './charts';
 export type { ChartMutationReceipt } from '../mutation-receipt';
@@ -91,10 +92,21 @@ export type {
   FillSeriesApplyReceipt,
   WorksheetFill,
 } from './fill';
-export type { WorksheetFormats } from './formats';
+export type {
+  BorderRangePatch,
+  CellBordersPatch,
+  CellFormatAlignmentInput,
+  CellFormatBorderInput,
+  CellFormatFillInput,
+  CellFormatFontInput,
+  CellFormatInput,
+  CellFormatPatch,
+  CellFormatProtectionInput,
+  WorksheetFormats,
+} from './formats';
 export type { WorksheetHyperlink, WorksheetHyperlinks } from './hyperlinks';
 export type { WorksheetInternal, WorksheetInternalChart } from './internal';
-export type { RangePixelPosition, WorksheetLayout } from './layout';
+export type { RangePixelPosition, WorksheetLayout, WorksheetLayoutColumnSelector } from './layout';
 export type { WorksheetNames } from './names';
 /** @internal — kept for kernel WorksheetObjectsImpl; not part of the public Worksheet interface. */
 export type { WorksheetObjects } from './objects';
@@ -131,6 +143,7 @@ export type {
   TableRowCollection,
   WorksheetTableEvents,
   WorksheetTableSort,
+  WorksheetTableSortField,
   WorksheetTables,
 } from './tables';
 export type {

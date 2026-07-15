@@ -3,7 +3,8 @@
 use crate::dispatch::Dispatch;
 use crate::error::ComputeApiError;
 use cell_types::{CellId, SheetId};
-use domain_types::CellFormat;
+use compute_core::bridge_types::BorderPatchOperation;
+use domain_types::{CellFormat, ResolvedCellFormat};
 use snapshot_types::MutationResult;
 
 /// Sub-API for formatting operations on a single sheet.
@@ -43,6 +44,18 @@ impl SheetFormats {
                 .unwrap_or_else(|| CellId::from_raw(0));
             e.get_cell_format(&sid, &cell_id, row, col)
         })
+    }
+
+    /// Get the dense effective format without resolving themes or applying CF.
+    /// The result is safe to feed into the tri-state patch APIs.
+    pub fn get_transferable_format(
+        &self,
+        row: u32,
+        col: u32,
+    ) -> Result<ResolvedCellFormat, ComputeApiError> {
+        let sid = self.sheet_id;
+        self.dispatch
+            .query_engine(move |e| e.get_transferable_format(&sid, row, col))
     }
 
     /// Set the format for a cell at a position.
@@ -133,6 +146,30 @@ impl SheetFormats {
             .and_then(|r| r.map(|(_vp, m)| m).map_err(ComputeApiError::from))
     }
 
+    /// Apply a tri-state format patch to ranges.
+    pub fn patch_format_for_ranges(
+        &self,
+        ranges: Vec<(u32, u32, u32, u32)>,
+        format: CellFormat,
+        clear_fields: Vec<String>,
+    ) -> Result<MutationResult, ComputeApiError> {
+        let sid = self.sheet_id;
+        self.dispatch
+            .call_engine(move |e| e.patch_format_for_ranges(&sid, &ranges, &format, &clear_fields))
+            .and_then(|r| r.map(|(_vp, m)| m).map_err(ComputeApiError::from))
+    }
+
+    /// Apply an ordered batch of nested border patches as one undoable command.
+    pub fn patch_borders(
+        &self,
+        operations: Vec<BorderPatchOperation>,
+    ) -> Result<MutationResult, ComputeApiError> {
+        let sid = self.sheet_id;
+        self.dispatch
+            .call_engine(move |e| e.patch_borders(&sid, operations))
+            .and_then(|r| r.map(|(_vp, m)| m).map_err(ComputeApiError::from))
+    }
+
     /// Clear formatting for all cells in the given ranges.
     pub fn clear_format_for_ranges(
         &self,
@@ -160,6 +197,22 @@ impl SheetFormats {
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
+    /// Apply a tri-state patch to an entire row.
+    pub fn patch_row_format(
+        &self,
+        row: u32,
+        format: CellFormat,
+        clear_fields: Vec<String>,
+    ) -> Result<MutationResult, ComputeApiError> {
+        let sid = self.sheet_id;
+        self.dispatch
+            .call_engine(move |e| {
+                e.patch_row_format(&sid, row, format, clear_fields)
+                    .map(|(_, r)| r)
+            })
+            .and_then(|r| r.map_err(ComputeApiError::from))
+    }
+
     /// Set format for an entire column.
     pub fn set_col_format(
         &self,
@@ -169,6 +222,22 @@ impl SheetFormats {
         let sid = self.sheet_id;
         self.dispatch
             .call_engine(move |e| e.set_col_format(&sid, col, format).map(|(_, r)| r))
+            .and_then(|r| r.map_err(ComputeApiError::from))
+    }
+
+    /// Apply a tri-state patch to an entire column.
+    pub fn patch_col_format(
+        &self,
+        col: u32,
+        format: CellFormat,
+        clear_fields: Vec<String>,
+    ) -> Result<MutationResult, ComputeApiError> {
+        let sid = self.sheet_id;
+        self.dispatch
+            .call_engine(move |e| {
+                e.patch_col_format(&sid, col, format, clear_fields)
+                    .map(|(_, r)| r)
+            })
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 

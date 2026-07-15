@@ -45,7 +45,7 @@ fn test_convert_cell_value_rule() {
         text: None,
     };
     let formats = vec![make_format(vec![rule])];
-    let result = convert_cf_formats_to_rules(&formats, no_resolve, None);
+    let result = convert_cf_formats_to_rules(&formats, no_resolve, None, &Default::default());
     assert_eq!(result.len(), 1);
     assert_eq!(result[0].priority, 1);
     assert!(matches!(
@@ -65,7 +65,7 @@ fn test_convert_formula_rule() {
         text: None,
     };
     let formats = vec![make_format(vec![rule])];
-    let result = convert_cf_formats_to_rules(&formats, no_resolve, None);
+    let result = convert_cf_formats_to_rules(&formats, no_resolve, None, &Default::default());
     assert_eq!(result.len(), 1);
     assert!(result[0].stop_if_true);
     assert!(matches!(
@@ -98,7 +98,7 @@ fn test_convert_multiple_rules_in_format() {
         },
     ];
     let formats = vec![make_format(rules)];
-    let result = convert_cf_formats_to_rules(&formats, no_resolve, None);
+    let result = convert_cf_formats_to_rules(&formats, no_resolve, None, &Default::default());
     assert_eq!(result.len(), 2);
 }
 
@@ -119,7 +119,7 @@ fn test_skip_format_with_no_ranges() {
             formula: None,
         }],
     };
-    let result = convert_cf_formats_to_rules(&[format], no_resolve, None);
+    let result = convert_cf_formats_to_rules(&[format], no_resolve, None, &Default::default());
     assert!(result.is_empty());
 }
 
@@ -154,7 +154,7 @@ fn test_convert_between_cell_value() {
         text: None,
     };
     let formats = vec![make_format(vec![rule])];
-    let result = convert_cf_formats_to_rules(&formats, no_resolve, None);
+    let result = convert_cf_formats_to_rules(&formats, no_resolve, None, &Default::default());
     assert_eq!(result.len(), 1);
     assert!(matches!(
         result[0].kind,
@@ -196,12 +196,115 @@ fn test_convert_color_scale_rule() {
         },
     };
     let formats = vec![make_format(vec![rule])];
-    let result = convert_cf_formats_to_rules(&formats, no_resolve, None);
+    let result = convert_cf_formats_to_rules(&formats, no_resolve, None, &Default::default());
     assert_eq!(result.len(), 1);
     assert!(matches!(
         result[0].kind,
         crate::cf::types::CFRuleKind::ColorScale(_)
     ));
+}
+
+fn color_point(color: &str) -> cf::CFColorPoint {
+    cf::CFColorPoint {
+        value: cf::CFValueRef::Min,
+        color: color.to_string(),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn test_resolve_cf_color_point_rgb_with_tint() {
+    let mut point = color_point("FF000000");
+    point.color_tint = Some(0.5);
+
+    assert_eq!(
+        super::value_refs::resolve_color_point_color(&point, &Default::default()).as_deref(),
+        Some("#808080")
+    );
+}
+
+#[test]
+fn test_resolve_cf_color_point_theme_only_with_tint_and_short_palette_key() {
+    use std::collections::HashMap;
+
+    let mut point = color_point("");
+    point.color_theme = Some(1); // OOXML theme index 1 = dark1/dk1.
+    point.color_tint = Some(-0.5);
+    let palette = HashMap::from([("dk1".to_string(), "#0F9ED5".to_string())]);
+
+    assert_eq!(
+        super::value_refs::resolve_color_point_color(&point, &palette).as_deref(),
+        Some("#074F69")
+    );
+}
+
+#[test]
+fn test_resolve_cf_color_point_theme_only_uses_office_fallback_without_palette() {
+    let mut point = color_point("");
+    point.color_theme = Some(4); // accent1
+
+    assert_eq!(
+        super::value_refs::resolve_color_point_color(&point, &Default::default()).as_deref(),
+        Some("#4472C4")
+    );
+}
+
+#[test]
+fn test_resolve_cf_color_point_indexed_with_tint() {
+    let mut point = color_point("");
+    point.color_indexed = Some(2); // red
+    point.color_tint = Some(0.5);
+
+    assert_eq!(
+        super::value_refs::resolve_color_point_color(&point, &Default::default()).as_deref(),
+        Some("#FF8080")
+    );
+}
+
+#[test]
+fn test_theme_only_color_scale_survives_conversion_and_interpolates() {
+    use crate::cf::types::CFRuleKind;
+    use chrono::NaiveDate;
+    use std::collections::HashMap;
+    use value_types::CellValue;
+
+    let mut min_point = color_point("");
+    min_point.color_theme = Some(7); // accent4
+    let mut max_point = color_point("#FFFFFF");
+    max_point.value = cf::CFValueRef::Max;
+    let rule = cf::CFRule::ColorScale {
+        id: "theme-scale".to_string(),
+        priority: 1,
+        stop_if_true: None,
+        color_scale: cf::CFColorScale {
+            points: Vec::new(),
+            min_point,
+            mid_point: None,
+            max_point,
+        },
+    };
+    let palette = HashMap::from([("accent4".to_string(), "#000000".to_string())]);
+    let rules = convert_cf_formats_to_rules(&[make_format(vec![rule])], no_resolve, None, &palette);
+
+    assert_eq!(rules.len(), 1, "theme-only points must not drop the rule");
+    let CFRuleKind::ColorScale(scale) = &rules[0].kind else {
+        panic!("expected color scale");
+    };
+    assert_eq!(scale.min_point.color.to_string(), "#000000");
+    assert_eq!(scale.max_point.color.to_string(), "#ffffff");
+
+    let mut stats = crate::cf::stats::RangeStatistics::default();
+    stats.min = 0.0;
+    stats.max = 100.0;
+    let evaluated = crate::cf::evaluator::evaluate_rule(
+        &CellValue::from(50.0),
+        &rules[0],
+        &stats,
+        None,
+        NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
+    )
+    .expect("numeric color-scale rule should evaluate");
+    assert_eq!(evaluated.color_scale.unwrap().color.to_string(), "#808080");
 }
 
 #[test]
@@ -253,7 +356,7 @@ fn test_convert_data_bar_rule_accepts_ooxml_blank_threshold_colors() {
         rules: vec![rule],
     };
 
-    let result = convert_cf_formats_to_rules(&[format], no_resolve, None);
+    let result = convert_cf_formats_to_rules(&[format], no_resolve, None, &Default::default());
 
     assert_eq!(result.len(), 1);
     assert_eq!(result[0].ranges[0].start_row(), 1);
@@ -284,7 +387,7 @@ fn test_convert_contains_text_rule() {
         formula: None,
     };
     let formats = vec![make_format(vec![rule])];
-    let result = convert_cf_formats_to_rules(&formats, no_resolve, None);
+    let result = convert_cf_formats_to_rules(&formats, no_resolve, None, &Default::default());
     assert_eq!(result.len(), 1);
     assert!(matches!(
         result[0].kind,
@@ -304,7 +407,7 @@ fn test_convert_time_period_rule() {
         formula: None,
     };
     let formats = vec![make_format(vec![rule])];
-    let result = convert_cf_formats_to_rules(&formats, no_resolve, None);
+    let result = convert_cf_formats_to_rules(&formats, no_resolve, None, &Default::default());
     assert_eq!(result.len(), 1);
     assert!(matches!(
         result[0].kind,
@@ -333,7 +436,7 @@ fn test_fallback_to_position_ranges() {
             formula: None,
         }],
     };
-    let result = convert_cf_formats_to_rules(&[format], no_resolve, None);
+    let result = convert_cf_formats_to_rules(&[format], no_resolve, None, &Default::default());
     assert_eq!(result.len(), 1);
 
     let expected_sheet_id = cell_types::SheetId::from_uuid_str(TEST_SHEET_UUID).unwrap();
@@ -380,7 +483,7 @@ fn test_range_identities_resolved_via_closure() {
         }
     };
 
-    let result = convert_cf_formats_to_rules(&[format], resolver, None);
+    let result = convert_cf_formats_to_rules(&[format], resolver, None, &Default::default());
     assert_eq!(result.len(), 1);
 
     let expected_sheet_id = cell_types::SheetId::from_uuid_str(TEST_SHEET_UUID).unwrap();
@@ -429,7 +532,7 @@ fn test_range_identities_preferred_over_position_ranges() {
         }
     };
 
-    let result = convert_cf_formats_to_rules(&[format], resolver, None);
+    let result = convert_cf_formats_to_rules(&[format], resolver, None, &Default::default());
     assert_eq!(result.len(), 1);
     // Should use range_identities (0,0)->(5,3), NOT position ranges (99,99)->(100,100)
     assert_eq!(result[0].ranges[0].start_row(), 0);

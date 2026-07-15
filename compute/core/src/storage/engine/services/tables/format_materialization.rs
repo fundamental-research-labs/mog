@@ -171,6 +171,7 @@ fn diff_cell_format(before: &CellFormat, after: &CellFormat) -> CellFormat {
         hidden: diff_copy(before.hidden, after.hidden),
         quote_prefix: diff_copy(before.quote_prefix, after.quote_prefix),
         pivot_button: diff_copy(before.pivot_button, after.pivot_button),
+        extensions: diff_clone(&before.extensions, &after.extensions),
     }
 }
 

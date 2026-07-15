@@ -100,6 +100,35 @@ fn test_format_cascade_all_layers() {
 }
 
 #[test]
+fn updating_imported_format_range_clears_xlsx_style_lineage() {
+    let (mut storage, sid, _gi, mut mirror) = storage_with_sheet_and_mirror();
+    let range_id = crate::mirror::RangeId::from_raw(1_001);
+    let sheet_mirror = mirror.get_sheet_mut(&sid).unwrap();
+    sheet_mirror.range_xlsx_style_id_cache.insert(range_id, 17);
+
+    add_format_range(
+        &mut storage,
+        &sid,
+        sheet_mirror,
+        range_id,
+        0,
+        0,
+        2,
+        2,
+        &CellFormat {
+            bold: Some(true),
+            ..Default::default()
+        },
+    );
+
+    assert_eq!(
+        sheet_mirror.range_xlsx_style_id_cache().get(&range_id),
+        None,
+        "a live range edit must not reacquire imported XF provenance"
+    );
+}
+
+#[test]
 fn col_format_ranges_are_column_defaults_below_explicit_col_and_row_formats() {
     let (mut storage, sid, gi, mut mirror) = storage_with_sheet_and_mirror();
 
@@ -401,12 +430,28 @@ fn test_format_range_cold_load() {
     let fmt = fresh_mirror.range_format_cache().get(&range_id).unwrap();
     assert_eq!(fmt.bold, Some(true));
     assert_eq!(fmt.font_color, Some("#0000FF".to_string()));
+    assert!(
+        fmt.pattern_type.is_none(),
+        "user-authored range formats must remain sparse"
+    );
 
     // Verify the cascade works with the hydrated mirror
     let base = default_format();
     let result = apply_format_range_layer(&base, 5, 5, Some(&fresh_mirror));
     assert_eq!(result.bold, Some(true));
     assert_eq!(result.font_color, Some("#0000FF".to_string()));
+
+    let lower_fill = CellFormat {
+        background_color: Some("#4472C4".to_string()),
+        pattern_type: Some(ooxml_types::styles::PatternType::Solid),
+        ..default_format()
+    };
+    let inherits_fill = apply_format_range_layer(&lower_fill, 5, 5, Some(&fresh_mirror));
+    assert_eq!(
+        inherits_fill.pattern_type,
+        Some(ooxml_types::styles::PatternType::Solid)
+    );
+    assert_eq!(inherits_fill.background_color.as_deref(), Some("#4472C4"));
 
     // Outside the range — no effect
     let result_outside = apply_format_range_layer(&base, 0, 0, Some(&fresh_mirror));
@@ -712,12 +757,26 @@ fn test_format_range_cold_load_hydrates_imported_style_only_range() {
     assert_eq!(range.start_col, 2);
     assert_eq!(range.end_row, 3);
     assert_eq!(range.end_col, 4);
+    let imported = fresh_mirror.range_format_cache().get(&range_id).unwrap();
     assert_eq!(
-        fresh_mirror.range_format_cache().get(&range_id),
-        Some(&CellFormat::default())
+        imported.pattern_type,
+        Some(ooxml_types::styles::PatternType::None)
     );
+    assert_eq!(imported.number_format.as_deref(), Some("General"));
     assert_eq!(
         fresh_mirror.range_xlsx_style_id_cache().get(&range_id),
         Some(&44)
     );
+
+    let lower_fill = CellFormat {
+        background_color: Some("#4472C4".to_string()),
+        pattern_type: Some(ooxml_types::styles::PatternType::Solid),
+        ..default_format()
+    };
+    let effective = apply_format_range_layer(&lower_fill, 2, 3, Some(&fresh_mirror));
+    assert_eq!(
+        effective.pattern_type,
+        Some(ooxml_types::styles::PatternType::None)
+    );
+    assert!(effective.background_color.is_none());
 }

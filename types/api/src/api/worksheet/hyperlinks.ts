@@ -72,6 +72,7 @@ export interface WorksheetHyperlinks {
    * Remove a hyperlink from a cell.
    *
    * @param address - A1-style cell address
+   * @throws `HYPERLINK_NOT_FOUND` when the cell has no hyperlink
    */
   remove(address: string): Promise<void>;
   /**
@@ -79,6 +80,7 @@ export interface WorksheetHyperlinks {
    *
    * @param row - Row index (0-based)
    * @param col - Column index (0-based)
+   * @throws `HYPERLINK_NOT_FOUND` when the cell has no hyperlink
    */
   remove(row: number, col: number): Promise<void>;
 

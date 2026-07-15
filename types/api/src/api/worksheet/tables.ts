@@ -62,6 +62,36 @@ export interface TableRowCollection {
   getRange(index: number): Promise<string>;
 }
 
+/**
+ * A table sort field.
+ *
+ * `columnIndex` is Mog's table-relative column index. `key` is accepted for
+ * OfficeJS compatibility and has the same table-relative meaning.
+ */
+export type WorksheetTableSortField =
+  | {
+      /** Column index (0-based, relative to the table). */
+      columnIndex: number;
+      /** Sort ascending unless explicitly false. */
+      ascending?: boolean;
+    }
+  | {
+      /** OfficeJS SortField key (0-based offset from the first table column). */
+      key: number;
+      /** Sort ascending unless explicitly false. */
+      ascending?: boolean;
+      /** OfficeJS-compatible sort mode. Value sorts are supported. */
+      sortOn?: string;
+      /** OfficeJS-compatible color target for color sorts. */
+      color?: string;
+      /** OfficeJS-compatible text/numeric sort hint. */
+      dataOption?: string;
+      /** OfficeJS-compatible icon target. Icon sorts are not currently supported. */
+      icon?: unknown;
+      /** OfficeJS rich-value subfield target. Rich-value subfield sorts are not currently supported. */
+      subField?: string;
+    };
+
 /** Sub-namespace for table sort operations. */
 export interface WorksheetTableSort {
   /**
@@ -71,7 +101,9 @@ export interface WorksheetTableSort {
    */
   apply(
     tableName: string,
-    fields: Array<{ columnIndex: number; ascending?: boolean }>,
+    fields: WorksheetTableSortField[],
+    matchCase?: boolean,
+    method?: never,
   ): Promise<void>;
 
   /**
@@ -119,7 +151,9 @@ export interface WorksheetTables {
    * Create a new table from a cell range.
    *
    * @param range - A1-style range string (e.g. "A1:D10") or CellRange object
-   * @param options - Optional table creation settings (name, headers, style)
+   * @param options - Optional table creation settings (name, headers, style). A name must start
+   * with a letter or underscore, contain only letters, digits, and underscores, and must not
+   * parse as a cell reference such as A1, T1, or Q3.
    * @returns A receipt containing the created table information.
    */
   add(range: string | CellRange, options?: TableOptions): Promise<TableAddReceipt>;

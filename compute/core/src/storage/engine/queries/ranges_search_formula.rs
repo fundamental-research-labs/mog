@@ -9,7 +9,7 @@ use crate::engine_types::{
 };
 use crate::eval::Evaluator;
 use crate::eval::sync_block_on;
-use crate::eval_bridge::MirrorContext;
+use crate::eval_bridge::{MirrorCellRefResolver, MirrorContext};
 use crate::mirror::MirrorPositionLookup;
 use crate::range_manager::{self, A1CellRef, A1RangeRef};
 use crate::snapshot::{
@@ -459,7 +459,11 @@ pub(in crate::storage::engine) fn evaluate_expression(
         format!("={}", expression)
     };
 
-    let ast = compute_parser::parse_formula(&formula_str, None)
+    let resolver = MirrorCellRefResolver {
+        mirror: &engine.mirror,
+        current_sheet: *sheet_id,
+    };
+    let ast = compute_parser::parse_formula(&formula_str, Some(&resolver))
         .map_err(|e| ComputeError::Eval {
             message: format!("Failed to parse expression: {}", e),
         })?

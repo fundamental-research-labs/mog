@@ -326,10 +326,8 @@ export interface CellFormat {
    */
   numberFormat?: string;
   /**
-   * Number format category hint. Auto-detected from numberFormat when not set.
-   * Valid values: 'general' | 'number' | 'currency' | 'accounting' | 'date' |
-   *              'time' | 'percentage' | 'fraction' | 'scientific' | 'text' |
-   *              'special' | 'custom'
+   * Derived number-format category. This is projected from `numberFormat` on
+   * reads and validated (but not independently persisted) on writes.
    */
   numberFormatType?: NumberFormatType;
 
@@ -359,6 +357,10 @@ export interface CellFormat {
    * @see ThemeFonts for theme font pair definition
    */
   fontTheme?: 'major' | 'minor';
+  /** OOXML font character-set identifier, preserved for XLSX fidelity. */
+  fontCharset?: number;
+  /** OOXML font pitch/family classification, preserved for XLSX fidelity. */
+  fontFamilyType?: number;
   /**
    * Font color. Can be:
    * - Absolute hex: '#4472c4' or '#ff0000'
@@ -557,6 +559,9 @@ export interface CellFormat {
    */
   hidden?: boolean;
 
+  /** OOXML pivot-button style flag, preserved for XLSX fidelity. */
+  pivotButton?: boolean;
+
   /**
    * Cell value is forced to text mode (apostrophe prefix).
    * When true:
@@ -583,7 +588,16 @@ export interface CellFormat {
   extensions?: Record<string, unknown>;
 }
 
-/** Dense cell format where every property is explicitly present (null when unset). Returned by formats.get(). */
+/**
+ * Dense transferable cell format returned by `formats.get()`.
+ *
+ * Every canonical property is present. `null` means the effective source format
+ * has no value for that property. The result can be passed directly to any
+ * worksheet format mutator: missing keys make no change, `null` clears the
+ * target's direct property, and non-null values set it.
+ * An effective cell with no fill is canonicalized as `patternType: 'none'` so
+ * transferring the result cannot accidentally inherit a target row/column fill.
+ */
 export type ResolvedCellFormat = {
   [K in keyof CellFormat]-?: CellFormat[K] | null;
 };

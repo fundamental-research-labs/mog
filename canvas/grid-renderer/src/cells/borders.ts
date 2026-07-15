@@ -142,15 +142,22 @@ function renderStaticBorders(
 
   // Diagonal borders
   if (borders.diagonal && borders.diagonal.style !== 'none') {
-    const direction = borders.diagonal.direction ?? 'both';
+    const hasCanonicalDirection =
+      borders.diagonalUp !== undefined || borders.diagonalDown !== undefined;
+    const diagonalUp = hasCanonicalDirection
+      ? borders.diagonalUp === true
+      : borders.diagonal.direction !== 'down';
+    const diagonalDown = hasCanonicalDirection
+      ? borders.diagonalDown === true
+      : borders.diagonal.direction !== 'up';
 
     // Diagonal up: bottom-left to top-right
-    if (direction === 'up' || direction === 'both') {
+    if (diagonalUp) {
       drawBorder(borders.diagonal.style, borders.diagonal.color, x, y + height, x + width, y);
     }
 
     // Diagonal down: top-left to bottom-right
-    if (direction === 'down' || direction === 'both') {
+    if (diagonalDown) {
       drawBorder(borders.diagonal.style, borders.diagonal.color, x, y, x + width, y + height);
     }
   }

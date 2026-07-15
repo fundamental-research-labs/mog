@@ -247,21 +247,47 @@ describe('WorksheetValidationImpl sheet cache', () => {
     });
   });
 
-  it('returns a no-op clear receipt when no validation overlaps the range', async () => {
+  it('rejects clearInRange when no validation overlaps the explicit target', async () => {
     const ctx = createCtx();
     const validations = new WorksheetValidationImpl(ctx, SHEET_ID);
 
-    await expect(validations.clearInRange('C3:D4')).resolves.toMatchObject({
+    await expect(validations.clearInRange('C3:D4')).rejects.toMatchObject({
+      code: 'VALIDATION_NOT_FOUND',
+      context: expect.objectContaining({
+        resourceType: 'Validation',
+        resourceId: 'C3:D4',
+        range: 'C3:D4',
+      }),
+    });
+    expect(ctx.computeBridge.deleteRangeSchema).not.toHaveBeenCalled();
+  });
+
+  it('rejects all explicit missing validation targets before mutation', async () => {
+    const actions = [
+      (validations: WorksheetValidationImpl) => validations.remove('Z99'),
+      (validations: WorksheetValidationImpl) => validations.clear('Z90:Z99'),
+      (validations: WorksheetValidationImpl) => validations.removeById('missing-validation'),
+    ];
+
+    for (const action of actions) {
+      const ctx = createCtx();
+      const validations = new WorksheetValidationImpl(ctx, SHEET_ID);
+      await expect(action(validations)).rejects.toMatchObject({
+        code: 'VALIDATION_NOT_FOUND',
+      });
+      expect(ctx.computeBridge.deleteRangeSchema).not.toHaveBeenCalled();
+    }
+  });
+
+  it('preserves no-op semantics for collection-wide clear on an empty sheet', async () => {
+    const ctx = createCtx();
+    const validations = new WorksheetValidationImpl(ctx, SHEET_ID);
+
+    await expect(validations.clear()).resolves.toMatchObject({
       kind: 'validationClear',
       status: 'noOp',
-      address: 'C3:D4',
-      removed: {
-        ids: [],
-        ranges: [],
-        count: 0,
-      },
-      effects: [{ type: 'worksheetUnchanged', sheetId: SHEET_ID, range: 'C3:D4' }],
-      diagnostics: [],
+      removed: { ids: [], ranges: [], count: 0 },
+      effects: [{ type: 'worksheetUnchanged', sheetId: SHEET_ID }],
     });
   });
 

@@ -645,6 +645,312 @@ fn test_get_displayed_range_properties_with_cf_on_truly_blank_cells() {
     }
 }
 
+#[test]
+fn displayed_format_projection_preserves_order_duplicates_and_scalar_semantics() {
+    use compute_cf::types::{CellCFResult, CfRenderStyle};
+    use domain_types::CellFormat;
+    use value_types::Color;
+
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let sid = sheet_id();
+
+    engine
+        .set_row_formats(
+            &sid,
+            vec![(
+                0,
+                CellFormat {
+                    bold: Some(true),
+                    ..Default::default()
+                },
+            )],
+        )
+        .unwrap();
+    engine
+        .set_col_formats(
+            &sid,
+            vec![(
+                0,
+                CellFormat {
+                    italic: Some(true),
+                    ..Default::default()
+                },
+            )],
+        )
+        .unwrap();
+    engine
+        .set_format_for_ranges(
+            &sid,
+            &[(0, 0, 0, 1)],
+            &CellFormat {
+                number_format: Some("[Red]0".to_string()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    {
+        let (stores, mirror) = (&mut engine.stores, &mut engine.mirror);
+        let sheet_mirror = mirror.get_sheet_mut(&sid).unwrap();
+        crate::storage::properties::add_format_range(
+            &mut stores.storage,
+            &sid,
+            sheet_mirror,
+            crate::mirror::RangeId::from_raw(100),
+            0,
+            0,
+            0,
+            1,
+            &CellFormat {
+                background_color: Some("#AAAAAA".to_string()),
+                strikethrough: Some(true),
+                ..Default::default()
+            },
+        );
+        crate::storage::properties::add_format_range(
+            &mut stores.storage,
+            &sid,
+            sheet_mirror,
+            crate::mirror::RangeId::from_raw(200),
+            0,
+            0,
+            0,
+            1,
+            &CellFormat {
+                background_color: Some("#BBBBBB".to_string()),
+                ..Default::default()
+            },
+        );
+    }
+
+    let mut cf_results = rustc_hash::FxHashMap::default();
+    cf_results.insert(
+        (0, 1),
+        CellCFResult {
+            row: 0,
+            col: 1,
+            style: Some(CfRenderStyle {
+                font_color: Some(Color::from_hex("#00FF00").unwrap()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+    );
+    cf_results.insert(
+        (5, 5),
+        CellCFResult {
+            row: 5,
+            col: 5,
+            style: Some(CfRenderStyle {
+                background_color: Some(Color::from_hex("#FFA500").unwrap()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+    );
+    engine.stores.cf_cache.insert(
+        sid,
+        super::super::stores::CFCacheEntry {
+            results: cf_results,
+            dirty: false,
+        },
+    );
+
+    let positions = [(5, 5), (0, 0), (0, 1), (0, 0)];
+    let projection = engine.get_displayed_formats_for_cells(&sid, &positions);
+    assert_eq!(projection.format_ids.len(), positions.len());
+    assert_eq!(projection.format_ids[1], projection.format_ids[3]);
+    assert!(
+        projection
+            .format_ids
+            .iter()
+            .all(|&format_id| (format_id as usize) < projection.palette.len())
+    );
+
+    for (index, &(row, col)) in positions.iter().enumerate() {
+        let batch = &projection.palette[projection.format_ids[index] as usize];
+        let scalar = engine.get_displayed_cell_properties(&sid, row, col);
+        assert_eq!(batch, &scalar, "batch/scalar mismatch at ({row}, {col})");
+    }
+
+    let a1 = &projection.palette[projection.format_ids[1] as usize];
+    assert_eq!(a1.bold, Some(true), "row layer must survive the cascade");
+    assert_eq!(
+        a1.italic,
+        Some(true),
+        "column layer must survive the cascade"
+    );
+    assert_eq!(a1.strikethrough, Some(true));
+    assert_eq!(a1.background_color.as_deref(), Some("#BBBBBB"));
+    assert_eq!(
+        a1.font_color.as_deref(),
+        Some("#FF0000"),
+        "number-format section color must be part of displayed formatting"
+    );
+    let b1 = &projection.palette[projection.format_ids[2] as usize];
+    assert_eq!(
+        b1.font_color.as_deref(),
+        Some("#00ff00"),
+        "CF font color must override number-format section color"
+    );
+    let blank = &projection.palette[projection.format_ids[0] as usize];
+    assert_eq!(blank.background_color.as_deref(), Some("#ffa500"));
+
+    let range = engine
+        .get_displayed_range_properties(&sid, 0, 0, 0, 1)
+        .unwrap();
+    assert_eq!(
+        range[0][0],
+        engine.get_displayed_cell_properties(&sid, 0, 0)
+    );
+    assert_eq!(
+        range[0][1],
+        engine.get_displayed_cell_properties(&sid, 0, 1)
+    );
+}
+
+#[test]
+fn displayed_format_projection_empty_input_is_empty() {
+    let (engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let projection = engine.get_displayed_formats_for_cells(&sheet_id(), &[]);
+    assert!(projection.palette.is_empty());
+    assert!(projection.format_ids.is_empty());
+}
+
+#[test]
+fn displayed_format_projection_resolves_compact_imported_style_and_theme_color() {
+    use domain_types::CellFormat;
+    use domain_types::domain::theme::{ThemeColor, ThemeData};
+    use yrs::{Any, Map, MapPrelim, Out, Transact};
+
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let sid = sheet_id();
+    engine
+        .set_workbook_theme(ThemeData {
+            colors: vec![ThemeColor {
+                name: "accent1".to_string(),
+                color: "#123456".to_string(),
+                source: None,
+            }],
+            ..Default::default()
+        })
+        .unwrap();
+
+    let imported_format = CellFormat {
+        bold: Some(true),
+        font_color: Some("theme:accent1:0".to_string()),
+        ..Default::default()
+    };
+    let imported_json = serde_json::to_string(&imported_format).unwrap();
+    {
+        let doc = engine.stores.storage.doc();
+        let workbook = engine.stores.storage.workbook_map();
+        let sheets = engine.stores.storage.sheets();
+        let mut txn = doc.transact_mut();
+        let palette: MapPrelim = vec![(
+            "9",
+            Any::String(std::sync::Arc::from(imported_json.as_str())),
+        )]
+        .into_iter()
+        .collect();
+        workbook.insert(
+            &mut txn,
+            compute_document::schema::KEY_STYLE_PALETTE,
+            palette,
+        );
+        let sheet_hex = id_to_hex(sid.as_u128());
+        let sheet_map = match sheets.get(&txn, &sheet_hex) {
+            Some(Out::YMap(map)) => map,
+            _ => panic!("sheet map not found"),
+        };
+        let props_map = match sheet_map.get(&txn, compute_document::schema::KEY_CELL_PROPERTIES) {
+            Some(Out::YMap(map)) => map,
+            _ => panic!("cell properties map not found"),
+        };
+        props_map.insert(
+            &mut txn,
+            id_to_hex(cell_id_a1().as_u128()),
+            Any::String(std::sync::Arc::from(r#"{"s":9}"#)),
+        );
+    }
+
+    let projection = engine.get_displayed_formats_for_cells(&sid, &[(0, 0)]);
+    let batch = &projection.palette[projection.format_ids[0] as usize];
+    let scalar = engine.get_displayed_cell_properties(&sid, 0, 0);
+    assert_eq!(batch, &scalar);
+    assert_eq!(batch.bold, Some(true));
+    assert_eq!(batch.font_color.as_deref(), Some("#123456"));
+    assert_eq!(batch.number_format.as_deref(), Some("General"));
+}
+
+#[test]
+fn displayed_format_projection_matches_scalar_for_table_and_pivot_layers() {
+    use crate::snapshot::PivotTableDef;
+    use domain_types::domain::pivot::PivotTableStyle;
+
+    let sid = sheet_id();
+    let (mut table_engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    table_engine
+        .create_table(
+            &sid,
+            "Table1".to_string(),
+            0,
+            0,
+            1,
+            1,
+            vec!["Left".to_string(), "Right".to_string()],
+            true,
+        )
+        .unwrap();
+    let table_projection = table_engine.get_displayed_formats_for_cells(&sid, &[(0, 0), (1, 0)]);
+    for (index, (row, col)) in [(0, 0), (1, 0)].into_iter().enumerate() {
+        let batch = &table_projection.palette[table_projection.format_ids[index] as usize];
+        assert_eq!(
+            batch,
+            &table_engine.get_displayed_cell_properties(&sid, row, col)
+        );
+    }
+    let table_header = &table_projection.palette[table_projection.format_ids[0] as usize];
+    assert!(
+        table_header.background_color.is_some(),
+        "table header must include the structured table format layer"
+    );
+
+    let mut pivot_snapshot = simple_snapshot();
+    pivot_snapshot.pivot_tables.push(PivotTableDef {
+        id: "pivot-1".to_string(),
+        name: "PivotTable1".to_string(),
+        sheet: sid.to_uuid_string(),
+        start_row: 0,
+        start_col: 0,
+        end_row: 1,
+        end_col: 1,
+        rendered_rows: Some(2),
+        rendered_cols: Some(2),
+        first_data_row: 1,
+        first_data_col: 1,
+        style: Some(PivotTableStyle {
+            style_name: Some("PivotStyleLight16".to_string()),
+            show_row_headers: Some(true),
+            show_column_headers: Some(true),
+            show_row_stripes: Some(false),
+            show_column_stripes: Some(false),
+            show_last_column: Some(false),
+        }),
+        show_row_grand_totals: Some(true),
+        show_column_grand_totals: Some(true),
+        ..Default::default()
+    });
+    let (pivot_engine, _) = YrsComputeEngine::from_snapshot(pivot_snapshot).unwrap();
+    let pivot_projection = pivot_engine.get_displayed_formats_for_cells(&sid, &[(0, 0)]);
+    let pivot_batch = &pivot_projection.palette[pivot_projection.format_ids[0] as usize];
+    assert_eq!(
+        pivot_batch,
+        &pivot_engine.get_displayed_cell_properties(&sid, 0, 0)
+    );
+    assert_eq!(pivot_batch.bold, Some(true));
+    assert_eq!(pivot_batch.background_color.as_deref(), Some("#d9e1f2"));
+}
+
 // -------------------------------------------------------------------
 // Format-aware input — format-aware input parser end-to-end
 // -------------------------------------------------------------------

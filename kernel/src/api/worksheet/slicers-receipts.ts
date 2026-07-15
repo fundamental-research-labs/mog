@@ -10,6 +10,7 @@ import type {
   SlicerUpdateReceipt,
 } from '@mog-sdk/contracts/api';
 import type { CellValue, SheetId } from '@mog-sdk/contracts/core';
+import { KernelError } from '../../errors';
 
 export type SlicerSourceLike =
   | ({ type: 'table'; tableId?: string; columnCellId?: string } & Record<string, unknown>)
@@ -161,8 +162,7 @@ export function buildSlicerAddReceipt(input: {
 
 export function buildSlicerUpdateReceipt(input: {
   sheetId: SheetId;
-  slicerId: string;
-  slicer?: Slicer | null;
+  slicer: Slicer;
   noOp?: boolean;
 }): SlicerUpdateReceipt {
   const source = sourceFor(input.slicer);
@@ -170,34 +170,32 @@ export function buildSlicerUpdateReceipt(input: {
     kind: 'slicer.update',
     status: input.noOp ? 'noOp' : 'applied',
     effects: input.noOp
-      ? [worksheetUnchangedEffect(input.sheetId, input.slicerId)]
+      ? [worksheetUnchangedEffect(input.sheetId, input.slicer.id)]
       : [
           slicerObjectEffect({
             type: 'updatedObject',
             sheetId: input.sheetId,
-            slicerId: input.slicerId,
+            slicerId: input.slicer.id,
             source,
           }),
           invalidatedSlicerCacheEffect({
             sheetId: input.sheetId,
-            slicerId: input.slicerId,
+            slicerId: input.slicer.id,
             source,
           }),
         ],
     diagnostics: [],
-    slicerId: input.slicerId,
-    slicer: input.slicer ?? null,
+    slicerId: input.slicer.id,
+    slicer: input.slicer,
     ...sourceFieldsFor(input.slicer),
   };
 }
 
 export function buildSlicerRemoveReceipt(input: {
   sheetId: SheetId;
-  slicerId: string;
-  slicer?: Slicer | null;
-  source?: SlicerSourceLike;
+  slicer: Slicer;
 }): SlicerRemoveReceipt {
-  const source = sourceFor(input.slicer, input.source);
+  const source = sourceFor(input.slicer);
   return {
     kind: 'slicer.remove',
     status: 'applied',
@@ -205,28 +203,34 @@ export function buildSlicerRemoveReceipt(input: {
       slicerObjectEffect({
         type: 'removedObject',
         sheetId: input.sheetId,
-        slicerId: input.slicerId,
+        slicerId: input.slicer.id,
         source,
       }),
       invalidatedSlicerCacheEffect({
         sheetId: input.sheetId,
-        slicerId: input.slicerId,
+        slicerId: input.slicer.id,
         source,
       }),
     ],
     diagnostics: [],
-    slicerId: input.slicerId,
-    slicer: input.slicer ?? null,
-    ...sourceFieldsFor(input.slicer, input.source),
+    slicerId: input.slicer.id,
+    slicer: input.slicer,
+    ...sourceFieldsFor(input.slicer),
   };
 }
 
 export function buildSlicerClearReceipt(input: {
   sheetId: SheetId;
-  slicerIds: readonly string[];
   slicers: readonly Slicer[];
 }): SlicerClearReceipt {
-  if (input.slicerIds.length === 0) {
+  const slicerIds = input.slicers.map((slicer) => slicer.id);
+  if (new Set(slicerIds).size !== slicerIds.length) {
+    throw new KernelError(
+      'OPERATION_FAILED',
+      'slicers.clear: duplicate authoritative delete evidence',
+    );
+  }
+  if (slicerIds.length === 0) {
     return {
       kind: 'slicer.clear',
       status: 'noOp',
@@ -245,28 +249,26 @@ export function buildSlicerClearReceipt(input: {
       slicerObjectEffect({
         type: 'removedObject',
         sheetId: input.sheetId,
-        count: input.slicerIds.length,
+        count: slicerIds.length,
       }),
       invalidatedSlicerCacheEffect({
         sheetId: input.sheetId,
-        count: input.slicerIds.length,
+        count: slicerIds.length,
       }),
     ],
     diagnostics: [],
-    slicerIds: input.slicerIds,
+    slicerIds,
     slicers: input.slicers,
-    removedCount: input.slicerIds.length,
+    removedCount: slicerIds.length,
   };
 }
 
 export function buildSlicerDuplicateReceipt(input: {
   sheetId: SheetId;
   sourceSlicerId: string;
-  slicerId: string;
-  slicer?: Slicer | null;
-  source?: SlicerSourceLike;
+  slicer: Slicer;
 }): SlicerDuplicateReceipt {
-  const source = sourceFor(input.slicer, input.source);
+  const source = sourceFor(input.slicer);
   return {
     kind: 'slicer.duplicate',
     status: 'applied',
@@ -274,21 +276,21 @@ export function buildSlicerDuplicateReceipt(input: {
       slicerObjectEffect({
         type: 'createdObject',
         sheetId: input.sheetId,
-        slicerId: input.slicerId,
+        slicerId: input.slicer.id,
         source,
         details: { sourceSlicerId: input.sourceSlicerId },
       }),
       invalidatedSlicerCacheEffect({
         sheetId: input.sheetId,
-        slicerId: input.slicerId,
+        slicerId: input.slicer.id,
         source,
       }),
     ],
     diagnostics: [],
-    slicerId: input.slicerId,
+    slicerId: input.slicer.id,
     sourceSlicerId: input.sourceSlicerId,
-    slicer: input.slicer ?? null,
-    ...sourceFieldsFor(input.slicer, input.source),
+    slicer: input.slicer,
+    ...sourceFieldsFor(input.slicer),
   };
 }
 
@@ -318,53 +320,54 @@ function selectionEffects(input: {
 
 export function buildSlicerSelectionSetReceipt(input: {
   sheetId: SheetId;
-  slicerId: string;
-  selectedItems: readonly CellValue[];
-  slicer?: Slicer | null;
-  source?: SlicerSourceLike;
+  slicer: Slicer;
   projection?: SlicerFilterProjectionReceiptInput | null;
 }): SlicerSelectionSetReceipt {
-  const source = sourceFor(input.slicer, input.source);
+  const source = sourceFor(input.slicer);
   return {
     kind: 'slicer.selection.set',
     status: 'applied',
     effects: selectionEffects({
       sheetId: input.sheetId,
-      slicerId: input.slicerId,
-      selectedItems: input.selectedItems,
+      slicerId: input.slicer.id,
+      selectedItems: input.slicer.selectedItems,
       source,
       projection: input.projection,
     }),
     diagnostics: [],
-    slicerId: input.slicerId,
-    selectedItems: input.selectedItems,
-    slicer: input.slicer ?? null,
-    ...sourceFieldsFor(input.slicer, input.source, input.projection),
+    slicerId: input.slicer.id,
+    selectedItems: input.slicer.selectedItems,
+    slicer: input.slicer,
+    ...sourceFieldsFor(input.slicer, undefined, input.projection),
   };
 }
 
 export function buildSlicerSelectionClearReceipt(input: {
   sheetId: SheetId;
-  slicerId: string;
-  slicer?: Slicer | null;
-  source?: SlicerSourceLike;
+  slicer: Slicer;
   projection?: SlicerFilterProjectionReceiptInput | null;
 }): SlicerSelectionClearReceipt {
-  const source = sourceFor(input.slicer, input.source);
+  if (input.slicer.selectedItems.length !== 0) {
+    throw new KernelError(
+      'OPERATION_FAILED',
+      'slicers.clearSelection: authoritative state still contains selected items',
+    );
+  }
+  const source = sourceFor(input.slicer);
   return {
     kind: 'slicer.selection.clear',
     status: 'applied',
     effects: selectionEffects({
       sheetId: input.sheetId,
-      slicerId: input.slicerId,
+      slicerId: input.slicer.id,
       selectedItems: [],
       source,
       projection: input.projection,
     }),
     diagnostics: [],
-    slicerId: input.slicerId,
+    slicerId: input.slicer.id,
     selectedItems: [] as const,
-    slicer: input.slicer ?? null,
-    ...sourceFieldsFor(input.slicer, input.source, input.projection),
+    slicer: input.slicer,
+    ...sourceFieldsFor(input.slicer, undefined, input.projection),
   };
 }

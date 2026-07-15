@@ -203,10 +203,8 @@ export {
 // Interactive elements
 export {
   InteractiveElementCollectorImpl,
-  collectInteractiveElements,
   createInteractiveElementCollector,
-} from './cells/interactive-elements';
-export type { InteractiveCellInfo } from './cells/interactive-elements';
+} from './cells/interactive-element-collector';
 
 // Data bars (conditional formatting)
 export { renderDataBar, renderDataBarWithAxis } from './cells/data-bars';

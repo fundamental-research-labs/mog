@@ -50,7 +50,7 @@ pub(super) fn build_cell_data_for_cell_id(
         });
 
     let cell_props = all_props.get(cell_id);
-    let style_id = cell_style_id(cell_props, palette);
+    let style_id = cell_style_id(stores, mirror, sheet_id, row, col, cell_props, palette);
 
     let cell_metadata_index = cell_props.and_then(|props| props.cell_metadata_index);
     let vm = cell_props.and_then(|props| props.vm);
@@ -162,16 +162,50 @@ fn is_imported_style_only_blank(
         && date_lexical_value.is_none()
 }
 
-fn cell_style_id(cell_props: Option<&CellProperties>, palette: &impl PaletteOps) -> Option<u32> {
-    cell_props.and_then(|props| {
-        if let Some(cell_fmt) = props.format.as_ref() {
-            let doc_fmt = cell_format_to_document_format(cell_fmt);
-            if doc_fmt != DocumentFormat::default() {
-                return Some(palette.get_or_insert(doc_fmt));
-            }
-        }
-        props.style_id
-    })
+#[allow(clippy::too_many_arguments)]
+fn cell_style_id(
+    stores: &EngineStores,
+    mirror: &CellMirror,
+    sheet_id: &SheetId,
+    row: u32,
+    col: u32,
+    cell_props: Option<&CellProperties>,
+    palette: &impl PaletteOps,
+) -> Option<u32> {
+    let props = cell_props?;
+
+    // A compact imported property keeps its original cellXf index. Preserve
+    // that lineage verbatim; only edited/inline formats (whose mutators clear
+    // `style_id`) belong in the generated palette tail.
+    if let Some(style_id) = props.style_id {
+        return Some(style_id);
+    }
+
+    let direct_format = props.format.as_ref()?;
+    if cell_format_to_document_format(direct_format) == DocumentFormat::default() {
+        return None;
+    }
+
+    // An XLSX cellXf is a complete style at the cell layer; it does not retain
+    // Mog's property-level inheritance from row, column, authored range, or
+    // structured/table layers. Generated XFs must therefore snapshot the full
+    // authored cascade. Conditional formatting is deliberately excluded: it is
+    // exported independently and must remain dynamic.
+    let table_format = crate::storage::engine::services::resolve_structured_format_at_cell(
+        mirror, sheet_id, row, col,
+    );
+    let effective = crate::storage::properties::get_effective_format_preloaded(
+        &stores.storage,
+        sheet_id,
+        row,
+        col,
+        table_format.as_ref(),
+        Some(props),
+        stores.grid_indexes.get(sheet_id),
+        mirror.get_sheet(sheet_id),
+    );
+    let doc_fmt = cell_format_to_document_format(&effective);
+    Some(palette.get_or_insert(doc_fmt))
 }
 
 pub(super) fn range_payload_cell(row: u32, col: u32, value: CellValue) -> CellData {

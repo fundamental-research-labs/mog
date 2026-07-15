@@ -25,9 +25,9 @@
  *
  * ## Coordinate System
  *
- * The overlay container is positioned relative to the grid viewport (after headers).
- * Element bounds from the capability are in viewport-relative coordinates,
- * so they can be directly used as CSS left/top positions.
+ * The overlay container shares the renderer container's origin. Element bounds
+ * from the capability are already positioned and clipped in that coordinate
+ * space, so they can be used directly as CSS left/top positions.
  *
  * @module components/canvas-overlays/CanvasInteractiveOverlay
  * @see CANVAS-INTERACTIVE-ELEMENT-LAYER.md
@@ -46,8 +46,6 @@ import { ValidationDropdownOverlay } from './ValidationDropdownOverlay';
 export interface CanvasInteractiveOverlayProps {
   /** The interactive elements capability from SheetView */
   interactiveElements: ISheetViewInteractiveElements | null | undefined;
-  /** Offset to account for row/column headers */
-  headerOffset: { x: number; y: number };
 }
 
 /**
@@ -63,14 +61,12 @@ export interface CanvasInteractiveOverlayProps {
  * <ScrollContainer ... />
  * <CanvasInteractiveOverlay
  * interactiveElements={rendererActions.getInteractiveElements}
- * headerOffset={{ x: rowHeaderWidth, y: colHeaderHeight }}
  * />
  * <OverlayLayers />
  * ```
  */
 export const CanvasInteractiveOverlay = memo(function CanvasInteractiveOverlay({
   interactiveElements,
-  headerOffset,
 }: CanvasInteractiveOverlayProps) {
   const elements = useInteractiveElementPositions(interactiveElements);
 
@@ -82,12 +78,9 @@ export const CanvasInteractiveOverlay = memo(function CanvasInteractiveOverlay({
     <div
       className="absolute inset-0 pointer-events-none"
       style={{
-        // Position relative to grid viewport (after headers)
-        left: headerOffset.x,
-        top: headerOffset.y,
-        // Don't extend beyond the grid viewport
-        right: 0,
-        bottom: 0,
+        // Element bounds are renderer-container coordinates. Keeping this
+        // layer at the container origin preserves per-pane positioning and
+        // clipping across frozen and split viewports.
         // Canvas layers are appended imperatively after React renders. Keep
         // DOM input triggers above those canvases for real pointer hit-testing.
         zIndex: 1,

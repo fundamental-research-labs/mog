@@ -1494,28 +1494,9 @@ export function createConsoleAPI(
         return;
       }
 
-      // Alias fillColor ↔ backgroundColor so callers can use either name
+      // Copy before applying devtools-only coercions. Cell-format aliases and
+      // tri-state patch semantics are normalized by the worksheet API.
       const normalized = { ...format };
-      if ('fillColor' in normalized && !('backgroundColor' in normalized)) {
-        normalized.backgroundColor = normalized.fillColor;
-      } else if ('backgroundColor' in normalized && !('fillColor' in normalized)) {
-        normalized.fillColor = normalized.backgroundColor;
-      }
-      // Alias horizontalAlignment → horizontalAlign (internal key)
-      if ('horizontalAlignment' in normalized) {
-        normalized['horizontalAlign'] = normalized['horizontalAlignment'];
-        delete normalized['horizontalAlignment'];
-      }
-      // Alias verticalAlignment → verticalAlign (internal key)
-      if ('verticalAlignment' in normalized) {
-        normalized['verticalAlign'] = normalized['verticalAlignment'];
-        delete normalized['verticalAlignment'];
-      }
-      // Backwards-compat: callers/data may still pass the old raw `center`.
-      // The canonical TS/API CellFormat token is now `middle`.
-      if (normalized['verticalAlign'] === 'center') {
-        normalized['verticalAlign'] = 'middle';
-      }
       // Clamp indent to >= 0 (WASM expects u32; Excel clamps negatives to 0)
       if (typeof normalized['indent'] === 'number' && normalized['indent'] < 0) {
         normalized['indent'] = 0;
@@ -1523,55 +1504,18 @@ export function createConsoleAPI(
 
       const ws = wb.activeSheet;
       const targetRange = [{ startRow: row, startCol: col, endRow: row, endCol: col }];
-
-      // Separate null/undefined properties (explicit clears) from non-null properties (sets).
-      // When a property is explicitly null, the caller wants it cleared back to default.
-      const nullKeys = Object.keys(normalized).filter(
-        (k) => normalized[k] === null || normalized[k] === undefined,
-      );
-      const nonNullFormat = Object.fromEntries(
-        Object.entries(normalized).filter(([, v]) => v !== null && v !== undefined),
-      );
-
-      if (nullKeys.length > 0) {
-        // Read current format, strip the null'd keys, then clear-all + re-apply survivors.
-        // This is the only way to "unset" a specific property since setFormatForRanges
-        // ignores null values rather than clearing them.
-        try {
-          const currentFmt = await ws.formats.get(row, col);
-          const survivingFmt: Record<string, unknown> = {};
-          for (const [k, v] of Object.entries(currentFmt as Record<string, unknown>)) {
-            if (!nullKeys.includes(k) && v !== null && v !== undefined) {
-              survivingFmt[k] = v;
-            }
-          }
-          // Merge with non-null values from the caller's format object
-          Object.assign(survivingFmt, nonNullFormat);
-
-          await ws.formats.clearRanges(targetRange);
-          if (Object.keys(survivingFmt).length > 0) {
-            await ws.formats.setRanges(targetRange, survivingFmt as Record<string, unknown>);
-          }
-        } catch {
-          // Fallback: just apply non-null properties (best-effort if get() fails)
-          if (Object.keys(nonNullFormat).length > 0) {
-            await ws.formats.setRanges(targetRange, nonNullFormat);
-          }
-        }
-      } else {
-        await ws.formats.setRanges(targetRange, nonNullFormat);
-      }
+      await ws.formats.setRanges(targetRange, normalized);
 
       // Auto-fit affected row when font-size or wrap-text changes (Excel behavior).
       // Disabling wrap should clear the explicit wrapped row height instead of
       // measuring and persisting a custom single-line height.
-      if (nonNullFormat['wrapText'] === false) {
+      if (normalized['wrapText'] === false) {
         try {
           await ws.layout.resetRowHeight(row);
         } catch {
           // Non-fatal: row height reset is best-effort
         }
-      } else if ('fontSize' in nonNullFormat || nonNullFormat['wrapText'] === true) {
+      } else if (normalized['fontSize'] != null || normalized['wrapText'] === true) {
         try {
           await ws.layout.autoFitRows([row]);
         } catch {

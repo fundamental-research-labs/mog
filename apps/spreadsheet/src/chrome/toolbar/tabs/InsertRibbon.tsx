@@ -134,7 +134,12 @@ export function InsertRibbon() {
   );
   const insertChart = useCallback(
     (type: ChartType, subType?: string, config?: Record<string, unknown>) => {
-      dispatchAction('CREATE_EMBEDDED_CHART', { type, subType, config });
+      dispatchAction('CREATE_EMBEDDED_CHART', {
+        type,
+        subType,
+        config,
+        sourceRangeMode: 'selected-range',
+      });
     },
     [dispatchAction],
   );

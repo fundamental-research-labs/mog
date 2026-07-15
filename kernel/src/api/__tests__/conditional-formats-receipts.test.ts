@@ -40,6 +40,14 @@ function createMockCtx(bridge = createMockComputeBridge()) {
   } as any;
 }
 
+function deferredVoid() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
 function makeFormat(overrides?: Partial<ConditionalFormat>): ConditionalFormat {
   return {
     id: 'fmt-1',
@@ -232,6 +240,38 @@ describe('WorksheetConditionalFormattingImpl — mutation receipts', () => {
     );
   });
 
+  it('waits for every started clearInRanges deletion before propagating a failure', async () => {
+    const first = makeFormat({ id: 'fmt-1' });
+    const second = makeFormat({ id: 'fmt-2' });
+    bridge.getAllCfRules.mockResolvedValue([first, second] as any);
+    const pendingStarted = deferredVoid();
+    const pendingFinished = deferredVoid();
+    const failure = new Error('conditional-format transport failed');
+    bridge.deleteCfRule.mockRejectedValueOnce(failure as never).mockImplementationOnce(() => {
+      pendingStarted.resolve();
+      return pendingFinished.promise as never;
+    });
+
+    let operationSettled = false;
+    const operation = cf.clearInRanges(['A1:A10']);
+    void operation.then(
+      () => {
+        operationSettled = true;
+      },
+      () => {
+        operationSettled = true;
+      },
+    );
+    await pendingStarted.promise;
+    await Promise.resolve();
+
+    expect(operationSettled).toBe(false);
+
+    pendingFinished.resolve();
+    await expect(operation).rejects.toBe(failure);
+    expect(operationSettled).toBe(true);
+  });
+
   it('includes diagnostics for unsupported preserved/imported rule shells', async () => {
     const format = makeFormat({
       rules: [
@@ -266,5 +306,79 @@ describe('WorksheetConditionalFormattingImpl — mutation receipts', () => {
         }),
       }),
     ]);
+  });
+
+  describe('missing mutation targets', () => {
+    const replacementRule = {
+      type: 'formula' as const,
+      formula: '=A1>0',
+      style: {},
+    };
+
+    it('rejects missing conditional-format IDs before mutation', async () => {
+      mockFormatReads(bridge, []);
+
+      const actions = [
+        () => cf.update('missing-format', { stopIfTrue: true }),
+        () => cf.remove('missing-format'),
+        () => cf.removeRule('missing-format', 'rule-1'),
+        () => cf.clearRuleStyle('missing-format', 'rule-1'),
+        () => cf.changeRuleType('missing-format', 'rule-1', replacementRule),
+      ];
+      for (const action of actions) {
+        await expect(action()).rejects.toMatchObject({
+          code: 'CONDITIONAL_FORMAT_NOT_FOUND',
+          context: expect.objectContaining({ resourceId: 'missing-format' }),
+        });
+      }
+
+      expect(bridge.updateCfRule).not.toHaveBeenCalled();
+      expect(bridge.updateCfRanges).not.toHaveBeenCalled();
+      expect(bridge.deleteCfRule).not.toHaveBeenCalled();
+      expect(bridge.deleteRuleFromCf).not.toHaveBeenCalled();
+    });
+
+    it('rejects missing rule IDs before mutation', async () => {
+      mockFormatReads(bridge, [makeFormat()]);
+
+      const actions = [
+        () => cf.removeRule('fmt-1', 'missing-rule'),
+        () => cf.clearRuleStyle('fmt-1', 'missing-rule'),
+        () => cf.changeRuleType('fmt-1', 'missing-rule', replacementRule),
+      ];
+      for (const action of actions) {
+        await expect(action()).rejects.toMatchObject({
+          code: 'CONDITIONAL_FORMAT_RULE_NOT_FOUND',
+          context: expect.objectContaining({
+            resourceId: 'missing-rule',
+            formatId: 'fmt-1',
+          }),
+        });
+      }
+
+      expect(bridge.updateCfRule).not.toHaveBeenCalled();
+      expect(bridge.deleteRuleFromCf).not.toHaveBeenCalled();
+    });
+
+    it('rejects both wholly missing and partially stale reorder targets', async () => {
+      mockFormatReads(bridge, [makeFormat()]);
+
+      await expect(cf.reorder(['missing-format'])).rejects.toMatchObject({
+        code: 'CONDITIONAL_FORMAT_NOT_FOUND',
+        context: expect.objectContaining({
+          resourceId: 'missing-format',
+          missingFormatIds: ['missing-format'],
+        }),
+      });
+      await expect(cf.reorder(['fmt-1', 'stale-format'])).rejects.toMatchObject({
+        code: 'CONDITIONAL_FORMAT_NOT_FOUND',
+        context: expect.objectContaining({
+          resourceId: 'stale-format',
+          missingFormatIds: ['stale-format'],
+        }),
+      });
+
+      expect(bridge.reorderCfRules).not.toHaveBeenCalled();
+    });
   });
 });

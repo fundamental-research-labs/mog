@@ -57,7 +57,7 @@ describe('resolveChartSourceRange', () => {
       resolveChartSourceRange(
         ws,
         { startRow: 20, startCol: 27, endRow: 20, endCol: 27 },
-        { trimHiddenDetail: true },
+        { hiddenDetailHandling: 'trim-inferred' },
       ),
     ).resolves.toEqual({ startRow: 20, startCol: 11, endRow: 20, endCol: 13 });
   });
@@ -78,7 +78,7 @@ describe('resolveChartSourceRange', () => {
     await expect(resolveChartSourceRange(ws, range)).resolves.toEqual(range);
   });
 
-  it('preserves explicit single-row chart sources when hidden-detail trimming is requested', async () => {
+  it('preserves explicit single-row chart sources for inferred-only hidden-detail trimming', async () => {
     const range = { startRow: 20, startCol: 11, endRow: 20, endCol: 27 };
     const ws = createWorksheet({
       expandedRegion: range,
@@ -92,9 +92,47 @@ describe('resolveChartSourceRange', () => {
       },
     });
 
-    await expect(resolveChartSourceRange(ws, range, { trimHiddenDetail: true })).resolves.toEqual(
-      range,
-    );
+    await expect(
+      resolveChartSourceRange(ws, range, { hiddenDetailHandling: 'trim-inferred' }),
+    ).resolves.toEqual(range);
+  });
+
+  it('uses the leading visible summary span for automatic charts from an explicit row', async () => {
+    const range = { startRow: 20, startCol: 11, endRow: 20, endCol: 27 };
+    const ws = createWorksheet({
+      expandedRegion: range,
+      hiddenCols: [15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26],
+      cellValues: {
+        '20,11': 'Total',
+        '20,12': 34500,
+        '20,13': 45000,
+        '20,14': null,
+        '20,27': 6732,
+      },
+    });
+
+    await expect(
+      resolveChartSourceRange(ws, range, { hiddenDetailHandling: 'trim-one-dimensional' }),
+    ).resolves.toEqual({ startRow: 20, startCol: 11, endRow: 20, endCol: 13 });
+  });
+
+  it('uses the leading visible summary span for automatic charts from an explicit column', async () => {
+    const range = { startRow: 2, startCol: 4, endRow: 9, endCol: 4 };
+    const ws = createWorksheet({
+      expandedRegion: range,
+      hiddenRows: [6, 7, 8],
+      cellValues: {
+        '2,4': 'Total',
+        '3,4': 34500,
+        '4,4': 45000,
+        '5,4': null,
+        '9,4': 6732,
+      },
+    });
+
+    await expect(
+      resolveChartSourceRange(ws, range, { hiddenDetailHandling: 'trim-one-dimensional' }),
+    ).resolves.toEqual({ startRow: 2, startCol: 4, endRow: 4, endCol: 4 });
   });
 
   it('preserves explicit multi-row chart sources even when hidden detail columns split the range', async () => {
@@ -110,7 +148,9 @@ describe('resolveChartSourceRange', () => {
       },
     });
 
-    await expect(resolveChartSourceRange(ws, range)).resolves.toEqual(range);
+    await expect(
+      resolveChartSourceRange(ws, range, { hiddenDetailHandling: 'trim-one-dimensional' }),
+    ).resolves.toEqual(range);
   });
 
   it('falls back to point visibility checks when the bulk hidden-column bitmap is stale', async () => {
@@ -131,7 +171,7 @@ describe('resolveChartSourceRange', () => {
       resolveChartSourceRange(
         ws,
         { startRow: 20, startCol: 27, endRow: 20, endCol: 27 },
-        { trimHiddenDetail: true },
+        { hiddenDetailHandling: 'trim-inferred' },
       ),
     ).resolves.toEqual({ startRow: 20, startCol: 11, endRow: 20, endCol: 13 });
   });

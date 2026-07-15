@@ -3,6 +3,8 @@
 //! Handles re-evaluation of conditional formatting rules and cache management.
 //! The original methods on `YrsComputeEngine` delegate to these free functions.
 
+use std::collections::HashMap;
+
 use crate::mirror::CellMirror;
 use crate::snapshot::RecalcResult;
 use crate::storage::engine::CFCacheEntry;
@@ -24,6 +26,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 pub(in crate::storage::engine) fn refresh_cf_caches_after_recalc(
     stores: &mut EngineStores,
     mirror: &CellMirror,
+    theme_palette: &HashMap<String, String>,
     recalc: &RecalcResult,
 ) -> FxHashMap<SheetId, Vec<(u32, u32)>> {
     if stores.cf_cache.is_empty() {
@@ -72,7 +75,7 @@ pub(in crate::storage::engine) fn refresh_cf_caches_after_recalc(
             .map(|e| e.results.clone())
             .unwrap_or_default();
 
-        refresh_cf_cache(stores, mirror, sheet_id);
+        refresh_cf_cache(stores, mirror, theme_palette, sheet_id);
 
         // Snapshot new results (clone to avoid borrow overlap).
         let new_results: FxHashMap<(u32, u32), crate::cf::types::CellCFResult> = stores
@@ -120,6 +123,7 @@ pub(in crate::storage::engine) fn refresh_cf_caches_after_recalc(
 pub(in crate::storage::engine) fn refresh_cf_cache(
     stores: &mut EngineStores,
     mirror: &CellMirror,
+    theme_palette: &HashMap<String, String>,
     sheet_id: &SheetId,
 ) {
     // 1. Read CF formats from Yrs storage
@@ -142,6 +146,7 @@ pub(in crate::storage::engine) fn refresh_cf_cache(
             Some((pos.row(), pos.col()))
         },
         Some(*sheet_id),
+        theme_palette,
     );
 
     // 3. If no rules, remove cache entry and return

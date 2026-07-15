@@ -15,6 +15,7 @@ import {
   ComputeBridgeGroupStore,
   ComputeBridgeObjectStore,
 } from '../../src/floating-objects/object-store';
+import { SpreadsheetObjectManager } from '../../src/floating-objects/spreadsheet-object-manager';
 
 // =============================================================================
 // Mock ComputeBridge backed by in-memory Maps
@@ -75,8 +76,17 @@ function createMockComputeBridge(): ComputeBridge {
     setFloatingObjectGroup: jest.fn(
       async (sheetId: string, groupId: string, json: any): Promise<any> => {
         const sheet = getOrCreateSheet(sheetId);
-        // Store with both memberIds and children for wire/domain format compatibility
-        const stored = { ...json, children: json.children ?? json.memberIds };
+        // Mirror the canonical typed wire value returned by Rust. Keeping this
+        // distinct from CanvasObjectGroup ensures store tests exercise the seam.
+        const stored = {
+          id: groupId,
+          sheetId,
+          children: json.children ?? [],
+          zIndex: json.zIndex,
+          name: json.name,
+          locked: json.locked,
+          extra: {},
+        };
         sheet.floatingObjectGroups.set(groupId, stored);
         return { success: true };
       },
@@ -152,9 +162,6 @@ function createMockComputeBridge(): ComputeBridge {
         const existing = sheet.floatingObjectGroups.get(groupId);
         if (!existing) return { success: false };
         const merged = { ...existing, ...updates };
-        // Keep memberIds and children in sync
-        if (updates.children) merged.memberIds = updates.children;
-        if (updates.memberIds) merged.children = updates.memberIds;
         sheet.floatingObjectGroups.set(groupId, merged);
         return { success: true };
       },
@@ -284,6 +291,16 @@ describe('FloatingObjectStore', () => {
       const read = await groupStore.read('group-1');
       expect(read).toBeDefined();
       expect(read!.memberIds).toEqual(['obj-1', 'obj-2']);
+      expect(read!.containerId).toBe('sheet-1');
+      expect(read).not.toHaveProperty('children');
+      expect(mockBridge.setFloatingObjectGroup).toHaveBeenCalledWith('sheet-1', 'group-1', {
+        id: 'group-1',
+        sheetId: 'sheet-1',
+        children: ['obj-1', 'obj-2'],
+        zIndex: 0,
+        name: undefined,
+        locked: undefined,
+      });
     });
 
     it('should fail for non-existent sheet', async () => {
@@ -371,6 +388,21 @@ describe('FloatingObjectStore', () => {
 
       const groups = await groupStore.readInDocument('sheet-1');
       expect(groups).toHaveLength(2);
+      expect(groups).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: 'g1',
+            containerId: 'sheet-1',
+            memberIds: ['a', 'b'],
+          }),
+          expect.objectContaining({
+            id: 'g2',
+            containerId: 'sheet-1',
+            memberIds: ['c', 'd'],
+          }),
+        ]),
+      );
+      expect(groups.every((group) => !('children' in group))).toBe(true);
     });
 
     it('should return empty array when no groups exist', async () => {
@@ -668,6 +700,26 @@ describe('FloatingObjectStore', () => {
     it('should return false for non-existent group', async () => {
       const success = await groupStore.delete('no-such-group');
       expect(success).toBe(false);
+    });
+
+    it('should let the spreadsheet manager ungroup canonical wire groups', async () => {
+      const eventBus = {
+        emit: jest.fn(),
+        emitBatch: jest.fn(),
+        on: jest.fn(() => () => {}),
+      };
+      const manager = new SpreadsheetObjectManager({ computeBridge: mockBridge, eventBus });
+      await groupStore.create('sheet-1', createTestGroup('g1', ['a', 'b']));
+
+      await expect(manager.ungroupObjects('g1')).resolves.toBe(true);
+
+      await expect(groupStore.read('g1')).resolves.toBeUndefined();
+      expect(eventBus.emit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'canvasObject:ungrouped',
+          containerId: 'sheet-1',
+        }),
+      );
     });
   });
 

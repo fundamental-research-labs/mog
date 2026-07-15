@@ -8,6 +8,14 @@ use crate::storage::properties;
 use super::super::PaletteOps;
 use super::style_ids::style_id_for_cell_format;
 
+fn imported_or_generated_style_id(
+    xlsx_style_id: Option<u32>,
+    format: Option<&domain_types::CellFormat>,
+    palette: &impl PaletteOps,
+) -> Option<u32> {
+    xlsx_style_id.or_else(|| format.and_then(|fmt| style_id_for_cell_format(fmt, palette)))
+}
+
 pub(in crate::storage::engine) fn export_row_col_styles_for_sheet(
     stores: &EngineStores,
     sheet_id: &SheetId,
@@ -23,9 +31,9 @@ pub(in crate::storage::engine) fn export_row_col_styles_for_sheet(
     let all_row_fmts = properties::get_all_row_formats(&stores.storage, sheet_id, Some(grid_index));
     let mut row_styles = Vec::with_capacity(all_row_fmts.len());
     for entry in all_row_fmts {
-        if let Some(fmt) = entry.format
-            && let Some(style_id) = style_id_for_cell_format(&fmt, palette)
-        {
+        let style_id =
+            imported_or_generated_style_id(entry.xlsx_style_id, entry.format.as_ref(), palette);
+        if let Some(style_id) = style_id {
             row_styles.push(RowStyleEntry {
                 row: entry.row,
                 style_id,
@@ -37,9 +45,9 @@ pub(in crate::storage::engine) fn export_row_col_styles_for_sheet(
     let all_col_fmts = properties::get_all_col_formats(&stores.storage, sheet_id, Some(grid_index));
     let mut col_styles = Vec::with_capacity(all_col_fmts.len());
     for entry in all_col_fmts {
-        if let Some(fmt) = entry.format
-            && let Some(style_id) = style_id_for_cell_format(&fmt, palette)
-        {
+        let style_id =
+            imported_or_generated_style_id(entry.xlsx_style_id, entry.format.as_ref(), palette);
+        if let Some(style_id) = style_id {
             col_styles.push(ColStyleEntry {
                 col: entry.col,
                 style_id,
@@ -84,4 +92,37 @@ pub(in crate::storage::engine) fn export_col_style_ranges_for_sheet(
     ranges.sort_by_key(|r| (r.start_col, r.end_col, r.style_id));
     ranges.dedup();
     ranges
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::storage::engine::services::export::LocalPalette;
+    use domain_types::{CellFormat, DocumentFormat, FontFormat};
+
+    #[test]
+    fn pristine_row_or_column_prefers_imported_xf_but_edit_uses_generated_tail() {
+        let imported = DocumentFormat {
+            font: Some(FontFormat {
+                bold: Some(true),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let mut entries = vec![DocumentFormat::default(), imported];
+        let palette = LocalPalette::from_vec_with_imported_prefix(&mut entries, 2);
+        let format = CellFormat {
+            bold: Some(true),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            imported_or_generated_style_id(Some(1), Some(&format), &palette),
+            Some(1)
+        );
+        assert_eq!(
+            imported_or_generated_style_id(None, Some(&format), &palette),
+            Some(2)
+        );
+    }
 }

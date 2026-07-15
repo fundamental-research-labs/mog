@@ -37,7 +37,7 @@ import type {
 
 import type { ComputeBridge } from '../bridges/compute/compute-bridge';
 import type { SerializedFloatingObjectGroup } from '../bridges/compute/compute-types.gen';
-import { toFloatingObject } from '../bridges/compute/floating-object-mapper';
+import { toFloatingObject, toFloatingObjectGroup } from '../bridges/compute/floating-object-mapper';
 
 // =============================================================================
 // ComputeBridgeObjectStore — IObjectStore<FloatingObject>
@@ -257,7 +257,14 @@ export class ComputeBridgeGroupStore implements IGroupStore<CanvasObjectGroup> {
   async create(containerId: string, group: CanvasObjectGroup): Promise<boolean> {
     const sheet = toSheetId(containerId);
     try {
-      await this.computeBridge.setFloatingObjectGroup(sheet, group.id, group);
+      await this.computeBridge.setFloatingObjectGroup(sheet, group.id, {
+        id: group.id,
+        sheetId: sheet,
+        children: group.memberIds,
+        zIndex: group.zIndex,
+        name: group.name,
+        locked: group.locked,
+      });
       return true;
     } catch {
       return false;
@@ -274,7 +281,7 @@ export class ComputeBridgeGroupStore implements IGroupStore<CanvasObjectGroup> {
 
     for (const group of results) {
       if (group) {
-        return group as unknown as CanvasObjectGroup;
+        return toFloatingObjectGroup(group);
       }
     }
 
@@ -284,7 +291,7 @@ export class ComputeBridgeGroupStore implements IGroupStore<CanvasObjectGroup> {
   async readInDocument(containerId: string): Promise<CanvasObjectGroup[]> {
     const sheet = toSheetId(containerId);
     const groups = await this.computeBridge.getAllFloatingObjectGroupsTyped(sheet);
-    return groups as unknown as CanvasObjectGroup[];
+    return groups.map(toFloatingObjectGroup);
   }
 
   async delete(groupId: string): Promise<boolean> {

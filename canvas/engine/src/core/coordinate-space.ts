@@ -112,14 +112,39 @@ export function canvasToDocXY(
   };
 }
 
-/** Convert canvas-space rect to region-local space (after translate to region origin) */
-export function canvasToLocal(rect: CanvasSpaceRect, region: RegionTransform): RegionLocalRect {
+/** Reverse the render loop transform from canvas CSS pixels to unzoomed region-local space. */
+export function canvasToRegionLocal(
+  rect: CanvasSpaceRect,
+  region: RegionTransform,
+): RegionLocalRect {
   return {
-    x: rect.x - region.bounds.x,
-    y: rect.y - region.bounds.y,
-    width: rect.width,
-    height: rect.height,
+    x: (rect.x - region.bounds.x) / region.zoom,
+    y: (rect.y - region.bounds.y) / region.zoom,
+    width: rect.width / region.zoom,
+    height: rect.height / region.zoom,
   } as RegionLocalRect;
+}
+
+/**
+ * Convert an unzoomed region-local rect to canvas-space CSS pixels.
+ *
+ * Per-region layer contexts receive the equivalent `translate(bounds)` then
+ * `scale(zoom)` transform before painting. Keeping the inverse placement here
+ * gives canvas-adjacent DOM overlays the exact same transform without
+ * reimplementing coordinate math in feature modules. `viewportOrigin` and
+ * `scrollOffset` are intentionally absent: callers have already converted the
+ * rect into region-local space.
+ */
+export function regionLocalToCanvas(
+  rect: RegionLocalRect,
+  region: RegionTransform,
+): CanvasSpaceRect {
+  return {
+    x: region.bounds.x + rect.x * region.zoom,
+    y: region.bounds.y + rect.y * region.zoom,
+    width: rect.width * region.zoom,
+    height: rect.height * region.zoom,
+  } as CanvasSpaceRect;
 }
 
 /**

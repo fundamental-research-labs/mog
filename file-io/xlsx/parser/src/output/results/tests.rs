@@ -346,6 +346,7 @@ fn test_styles_output_camel_case() {
                 raw_tint: None,
             }),
             family: Some(2),
+            charset: Some(128),
             scheme: Some("minor".to_string()),
             vert_align: None,
             condense: None,
@@ -428,6 +429,7 @@ fn test_styles_output_camel_case() {
     assert!(json.contains("\"fgColor\""));
     // Font: camelCase
     assert!(json.contains("\"name\":\"Calibri\""));
+    assert!(json.contains("\"charset\":128"));
     // Border: camelCase
     assert!(json.contains("\"left\":{\"style\":\"thin\""));
 }
@@ -440,7 +442,7 @@ fn test_styles_output_from_parsed_styles() {
         <numFmt numFmtId="164" formatCode="yyyy-mm-dd"/>
     </numFmts>
     <fonts count="1">
-        <font><b/><sz val="11"/><name val="Calibri"/></font>
+        <font><b/><sz val="11"/><name val="Calibri"/><charset val="128"/></font>
     </fonts>
     <fills count="1">
         <fill><patternFill patternType="solid"><fgColor rgb="FFFFFF00"/></patternFill></fill>
@@ -463,6 +465,7 @@ fn test_styles_output_from_parsed_styles() {
     assert_eq!(output.fonts.len(), 1);
     assert!(output.fonts[0].bold);
     assert_eq!(output.fonts[0].name, "Calibri");
+    assert_eq!(output.fonts[0].charset, Some(128));
 
     assert_eq!(output.fills.len(), 1);
     assert_eq!(output.fills[0].fill_type, "pattern");

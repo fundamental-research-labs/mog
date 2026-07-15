@@ -50,30 +50,24 @@ export class WorksheetObjectCollectionImpl implements WorksheetObjectCollection 
   // ── Single-ID convenience methods ──────────────────────────
 
   async remove(id: string): Promise<boolean> {
-    const handle = await this.get(id);
-    if (!handle) return false;
-    await handle.delete();
+    await this.objectsImpl.remove(id);
     return true;
   }
 
   async bringToFront(id: string): Promise<void> {
-    const handle = await this.get(id);
-    if (handle) await handle.bringToFront();
+    await this.objectsImpl.bringToFront(id);
   }
 
   async sendToBack(id: string): Promise<void> {
-    const handle = await this.get(id);
-    if (handle) await handle.sendToBack();
+    await this.objectsImpl.sendToBack(id);
   }
 
   async bringForward(id: string): Promise<void> {
-    const handle = await this.get(id);
-    if (handle) await handle.bringForward();
+    await this.objectsImpl.bringForward(id);
   }
 
   async sendBackward(id: string): Promise<void> {
-    const handle = await this.get(id);
-    if (handle) await handle.sendBackward();
+    await this.objectsImpl.sendBackward(id);
   }
 
   async update(

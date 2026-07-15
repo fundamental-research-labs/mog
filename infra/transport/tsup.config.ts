@@ -14,7 +14,7 @@ export default defineConfig([
     external: ['@mog-sdk/wasm', '@tauri-apps/api', '@tauri-apps/api/core', '@rust-bridge/client'],
   },
   {
-    entry: { index: 'src/index.ts' },
+    entry: { index: 'src/index.ts', 'bridge-error': 'src/bridge-error.ts' },
     format: 'esm',
     target: 'node18',
     platform: 'node',

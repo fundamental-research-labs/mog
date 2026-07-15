@@ -49,11 +49,13 @@ import {
 } from './filter-selection';
 import { resolveFilterRange } from './filter-range-resolution';
 import {
+  assertFilterMutationTargetResult,
   applyDynamicFilterWithReceipt,
   applyFilterWithReceipt,
   clearAllCriteriaWithReceipt,
   clearColumnFilterWithReceipt,
   reapplyFilterWithReceipt,
+  requireFilterById,
   setColumnFilterWithReceipt,
 } from './filters/mutation-receipts';
 import {
@@ -348,7 +350,10 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
    * to the first auto-filter in the sheet.
    */
   private async resolveFilterId(filterId?: string): Promise<string> {
-    if (filterId) return filterId;
+    if (filterId) {
+      await requireFilterById(this.ctx, this.sheetId, filterId, 'filters.byColor');
+      return filterId;
+    }
     const filter = await resolveDefaultFilter(this.ctx, this.sheetId);
     if (!filter)
       throw new KernelError('COMPUTE_ERROR', 'No auto-filter set. Call setAutoFilter() first.');
@@ -372,6 +377,9 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
   async applyAdvanced(options: AdvancedFilterOptions): Promise<AdvancedFilterResult> {
     this._ensureWritable('filters.applyAdvanced');
     await this.awaitAllMaterialized();
+    if (options.mode === 'inPlace' && options.filterId) {
+      await requireFilterById(this.ctx, this.sheetId, options.filterId, 'filters.applyAdvanced');
+    }
     const result = await this.ctx.computeBridge.applyAdvancedFilter(this.sheetId, {
       listRange: options.listRange,
       criteriaRange: options.criteriaRange ?? undefined,
@@ -570,8 +578,10 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
 
   async remove(filterId: string): Promise<void> {
     await this.awaitAllMaterialized();
+    await requireFilterById(this.ctx, this.sheetId, filterId, 'filters.remove');
     await assertFilterMutationAllowed(this.ctx, this.sheetId, 'filters.remove', filterId);
-    await this.ctx.computeBridge.deleteFilter(this.sheetId, filterId);
+    const result = await this.ctx.computeBridge.deleteFilter(this.sheetId, filterId);
+    assertFilterMutationTargetResult(result, this.sheetId, filterId, 'filters.remove');
   }
 
   async setColumnFilter(
@@ -674,25 +684,29 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
   /** @deprecated Use {@link setColumnFilter} instead. */
   async setCriteria(filterId: string, col: number, criteria: ColumnFilterCriteria): Promise<void> {
     await this.awaitAllMaterialized();
+    await requireFilterById(this.ctx, this.sheetId, filterId, 'filters.setCriteria');
     await assertFilterMutationAllowed(this.ctx, this.sheetId, 'filters.setColumnFilter', filterId);
-    await this.ctx.computeBridge.setColumnFilter(
+    const result = await this.ctx.computeBridge.setColumnFilter(
       this.sheetId,
       filterId,
       col,
       columnFilterCriteriaToCompute(criteria),
     );
+    assertFilterMutationTargetResult(result, this.sheetId, filterId, 'filters.setCriteria');
   }
 
   /** @deprecated Use {@link clearColumnFilter} instead. */
   async clearCriteria(filterId: string, col: number): Promise<void> {
     await this.awaitAllMaterialized();
+    await requireFilterById(this.ctx, this.sheetId, filterId, 'filters.clearCriteria');
     await assertFilterMutationAllowed(
       this.ctx,
       this.sheetId,
       'filters.clearColumnFilter',
       filterId,
     );
-    await this.ctx.computeBridge.clearColumnFilter(this.sheetId, filterId, col);
+    const result = await this.ctx.computeBridge.clearColumnFilter(this.sheetId, filterId, col);
+    assertFilterMutationTargetResult(result, this.sheetId, filterId, 'filters.clearCriteria');
   }
 
   async clearAllCriteria(filterId: string): Promise<FilterMutationReceipt> {
@@ -813,12 +827,14 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
 
   async setSortState(filterId: string, state: FilterSortState): Promise<void> {
     await this.awaitAllMaterialized();
+    await requireFilterById(this.ctx, this.sheetId, filterId, 'filters.setSortState');
     await assertFilterMutationAllowed(this.ctx, this.sheetId, 'filters.setSortState', filterId);
     await this.ctx.computeBridge.setFilterSortState(this.sheetId, filterId, {
       columnCellId: String(state.column),
       order: state.direction,
       sortBy: 'value',
     });
+    await requireFilterById(this.ctx, this.sheetId, filterId, 'filters.setSortState');
   }
 
   private async resolveHeaderCellIdForColumn(

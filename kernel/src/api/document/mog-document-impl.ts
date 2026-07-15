@@ -34,6 +34,7 @@ import type { DocumentHandle } from './document-factory';
 import { MogSdkEventFacade } from './mog-sdk-event-facade';
 import { CollaborationFirstJoinRequiresHostBootstrapError } from '../../errors/document';
 import { MogSdkError } from '../../errors/mog-sdk-error';
+import { withPublicSdkErrorBoundary } from '../public-sdk-error-boundary';
 
 // =============================================================================
 // Phase → MogDocumentStatus mapping
@@ -350,7 +351,7 @@ class MogDocumentImpl implements MogDocument {
  * or any other kernel-internal surface.
  */
 export function createMogDocument(handle: DocumentHandle): MogDocument {
-  return new MogDocumentImpl(handle);
+  return withPublicSdkErrorBoundary(new MogDocumentImpl(handle), 'MogDocument');
 }
 
 export type { MogDocument };

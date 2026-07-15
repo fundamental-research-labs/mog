@@ -508,28 +508,45 @@ export async function assertNoProtectedTableFilterCreation(
 
 export async function assertSlicerFilteringAllowed(
   ctx: DocumentContext,
-  sheetId: SheetId,
+  ownerSheetId: SheetId,
   operation: 'slicers.setSelection' | 'slicers.clearSelection',
   slicerId: string,
+  resolvedSource?: {
+    readonly sheetId: SheetId;
+    readonly tableId: string;
+    readonly tableName: string;
+    readonly range: string;
+  },
 ): Promise<void> {
-  const options = await getActiveProtectionOptions(ctx, sheetId);
+  let source = resolvedSource;
+  if (!source) {
+    const stored = await ctx.computeBridge.getSlicerState(ownerSheetId, slicerId);
+    if (!stored || stored.source.type !== 'table') return;
+    const table = await findTableByIdOrName(ctx, ownerSheetId, stored.source.tableId);
+    source = {
+      sheetId: ownerSheetId,
+      tableId: table?.id ?? stored.source.tableId,
+      tableName: table?.name ?? stored.source.tableId,
+      range: table ? bridgeRangeToA1(table.range) : '',
+    };
+  }
+
+  const options = await getActiveProtectionOptions(ctx, source.sheetId);
   if (!options) return;
-  const stored = await ctx.computeBridge.getSlicerState(sheetId, slicerId);
-  if (!stored || stored.source.type !== 'table') return;
-  const table = await findTableByIdOrName(ctx, sheetId, stored.source.tableId);
   if (!options.useAutoFilter) {
     throw protectedSheetError({
       operation,
-      tableName: table?.name ?? stored.source.tableId,
-      targetRange: table ? bridgeRangeToA1(table.range) : undefined,
+      tableName: source.tableName,
+      targetRange: source.range || undefined,
       reason: 'Sheet protection does not allow filtering this table.',
     });
   }
-  const filter = table ? await findFilterForTable(ctx, sheetId, table.id) : null;
+  const filter = await findFilterForTable(ctx, source.sheetId, source.tableId);
   if (!filter) {
     throw protectedSheetError({
       operation,
-      tableName: table?.name ?? stored.source.tableId,
+      tableName: source.tableName,
+      targetRange: source.range || undefined,
       reason: 'Sheet protection requires an existing table AutoFilter for slicer filtering.',
     });
   }

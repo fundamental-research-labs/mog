@@ -40,6 +40,13 @@ export {
   HydrationError,
 } from './document';
 export { FloatingObjectError } from './floating-object';
+export { callNativeChartMutation, translateNativeChartError } from './chart';
+export {
+  slicerIdExistsError,
+  slicerNotFoundError,
+  slicerSheetMismatchError,
+  translateNativeSlicerError,
+} from './slicer';
 export {
   createPivotInvalidDataSourceError,
   createPivotAmbiguousPlacementError,
@@ -53,6 +60,11 @@ export {
   type PivotStaleHandleContext,
   type PivotUnresolvedFieldReferencesContext,
 } from './pivot';
+export {
+  targetNotFoundError,
+  type TargetNotFoundCode,
+  type TargetNotFoundErrorOptions,
+} from './target-not-found';
 export { failResult, mapResult, okResult, unwrap, type OperationResult } from './operation';
 export { type KernelWarningCode } from './warning-codes';
 export { createWarning, type OperationWarning } from './warning';

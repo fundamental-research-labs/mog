@@ -352,6 +352,7 @@ function createMockCtx(): any {
       setColFormat: jest.fn(),
       setCellFormatForRanges: jest.fn(),
       setFormatForRanges: jest.fn().mockResolvedValue({ propertyChanges: [] }),
+      patchFormatForRanges: jest.fn().mockResolvedValue({ propertyChanges: [] }),
       clearFormatForRanges: jest.fn().mockResolvedValue(undefined),
       getFrozenPanes: jest.fn().mockResolvedValue({ rows: 0, cols: 0 }),
       getFrozenPanesQuery: jest.fn().mockResolvedValue({ rows: 0, cols: 0 }),
@@ -382,6 +383,8 @@ function createMockCtx(): any {
         endCol: 0,
       }),
       getResolvedFormat: jest.fn().mockResolvedValue({}),
+      getTransferableFormat: jest.fn().mockResolvedValue({}),
+      getHyperlink: jest.fn().mockResolvedValue('https://example.com'),
       addComment: jest.fn().mockResolvedValue(undefined),
       addCommentByPosition: jest.fn().mockResolvedValue(undefined),
       getCommentsForCell: jest.fn().mockResolvedValue([]),
@@ -1161,14 +1164,15 @@ describe('WorksheetImpl', () => {
   // =========================================================================
 
   describe('Formatting', () => {
-    it('setFormat("A1", format) resolves A1 and calls computeBridge.setFormatForRanges', async () => {
+    it('setFormat("A1", format) resolves A1 and calls computeBridge.patchFormatForRanges', async () => {
       const format = { bold: true };
       await ws.formats.set('A1', format);
 
-      expect(ctx.computeBridge.setFormatForRanges).toHaveBeenCalledWith(
+      expect(ctx.computeBridge.patchFormatForRanges).toHaveBeenCalledWith(
         SHEET_ID,
         [[0, 0, 0, 0]],
         format,
+        [],
         expectVersionOperationOptions('formats.set', ['cells.formats.direct']),
       );
     });
@@ -1177,10 +1181,11 @@ describe('WorksheetImpl', () => {
       const format = { italic: true };
       await ws.formats.set('C5', format);
 
-      expect(ctx.computeBridge.setFormatForRanges).toHaveBeenCalledWith(
+      expect(ctx.computeBridge.patchFormatForRanges).toHaveBeenCalledWith(
         SHEET_ID,
         [[4, 2, 4, 2]],
         format,
+        [],
         expectVersionOperationOptions('formats.set', ['cells.formats.direct']),
       );
     });
@@ -1189,10 +1194,11 @@ describe('WorksheetImpl', () => {
       const format = { bold: true, fontColor: '#FF0000' };
       await ws.formats.set(0, 0, format);
 
-      expect(ctx.computeBridge.setFormatForRanges).toHaveBeenCalledWith(
+      expect(ctx.computeBridge.patchFormatForRanges).toHaveBeenCalledWith(
         SHEET_ID,
         [[0, 0, 0, 0]],
         format,
+        [],
         expectVersionOperationOptions('formats.set', ['cells.formats.direct']),
       );
     });
@@ -1201,28 +1207,30 @@ describe('WorksheetImpl', () => {
       const format = { backgroundColor: '#00FF00' };
       await ws.formats.set(3, 2, format);
 
-      expect(ctx.computeBridge.setFormatForRanges).toHaveBeenCalledWith(
+      expect(ctx.computeBridge.patchFormatForRanges).toHaveBeenCalledWith(
         SHEET_ID,
         [[3, 2, 3, 2]],
         format,
+        [],
         expectVersionOperationOptions('formats.set', ['cells.formats.direct']),
       );
     });
 
     it('setFormat throws when computeBridge rejects', async () => {
-      ctx.computeBridge.setFormatForRanges.mockRejectedValue(new Error('format failed'));
+      ctx.computeBridge.patchFormatForRanges.mockRejectedValue(new Error('format failed'));
 
       await expect(ws.formats.set('A1', { bold: true })).rejects.toThrow('format failed');
     });
 
-    it('setRangeFormat("A1:B2", format) calls computeBridge.setFormatForRanges', async () => {
+    it('setRangeFormat("A1:B2", format) calls computeBridge.patchFormatForRanges', async () => {
       const format = { bold: true };
       await ws.formats.setRange('A1:B2', format);
 
-      expect(ctx.computeBridge.setFormatForRanges).toHaveBeenCalledWith(
+      expect(ctx.computeBridge.patchFormatForRanges).toHaveBeenCalledWith(
         SHEET_ID,
         [[0, 0, 1, 1]],
         format,
+        [],
         expectVersionOperationOptions('formats.setRange', ['cells.formats.direct']),
       );
     });
@@ -1252,20 +1260,21 @@ describe('WorksheetImpl', () => {
     });
 
     it('getFormat("B2") resolves and returns format from computeBridge', async () => {
-      ctx.computeBridge.getResolvedFormat.mockResolvedValue({ bold: true, italic: false });
+      ctx.computeBridge.getTransferableFormat.mockResolvedValue({ bold: true, italic: false });
 
       const result = await ws.formats.get('B2');
 
-      expect(ctx.computeBridge.getResolvedFormat).toHaveBeenCalledWith(SHEET_ID, 1, 1);
-      expect(result).toEqual({ bold: true, italic: false });
+      expect(ctx.computeBridge.getTransferableFormat).toHaveBeenCalledWith(SHEET_ID, 1, 1);
+      expect(ctx.computeBridge.getResolvedFormat).not.toHaveBeenCalled();
+      expect(result).toEqual(expect.objectContaining({ bold: true, italic: false }));
     });
 
     it('getFormat returns resolved format for unformatted cell', async () => {
-      ctx.computeBridge.getResolvedFormat.mockResolvedValue({ bold: null, italic: null });
+      ctx.computeBridge.getTransferableFormat.mockResolvedValue({ bold: null, italic: null });
 
       const result = await ws.formats.get('A1');
 
-      expect(result).toEqual({ bold: null, italic: null });
+      expect(result).toEqual(expect.objectContaining({ bold: null, italic: null }));
     });
   });
 
@@ -2343,6 +2352,7 @@ describe('WorksheetImpl', () => {
 
       await ws.hyperlinks.remove('A1');
 
+      expect(ctx.computeBridge.getHyperlink).toHaveBeenCalledWith(SHEET_ID, 0, 0);
       expect(HyperlinkOps.removeHyperlink).toHaveBeenCalledWith(ctx, SHEET_ID, 0, 0);
     });
   });
@@ -2408,9 +2418,24 @@ describe('WorksheetImpl', () => {
       );
     });
 
-    it('getNote("A1") returns first comment text', async () => {
+    it('getNote("A1") returns the note and ignores threaded comments', async () => {
       ctx.computeBridge.getCommentsForCellByPosition.mockResolvedValue([
-        { content: 'My note', runs: [], id: 'c1', author: 'api', cellRef: '0:0' },
+        {
+          content: 'Threaded comment',
+          runs: [],
+          id: 'thread-1',
+          author: 'reviewer',
+          cellRef: '0:0',
+          commentType: 'threadedComment',
+        },
+        {
+          content: 'My note',
+          runs: [],
+          id: 'note-1',
+          author: 'api',
+          cellRef: '0:0',
+          commentType: 'note',
+        },
       ]);
 
       const result = await ws.comments.getNote('A1');
@@ -2419,31 +2444,39 @@ describe('WorksheetImpl', () => {
       expect(result).toEqual({ content: 'My note', author: 'api', cellAddress: 'A1' });
     });
 
-    it('getNote returns null when no comments', async () => {
-      ctx.computeBridge.getCommentsForCellByPosition.mockResolvedValue([]);
+    it('getNote returns null when the cell has no legacy note', async () => {
+      ctx.computeBridge.getCommentsForCellByPosition.mockResolvedValue([
+        {
+          content: 'Threaded comment',
+          runs: [],
+          id: 'thread-1',
+          author: 'reviewer',
+          cellRef: '0:0',
+          commentType: 'threadedComment',
+        },
+      ]);
 
       const result = await ws.comments.getNote('A1');
 
       expect(result).toBeNull();
     });
 
-    it('removeNote("A1") deletes all comments at cell', async () => {
+    it('removeNote("A1") deletes only legacy notes at the cell', async () => {
       ctx.computeBridge.getCommentsForCellByPosition.mockResolvedValue([
-        { content: [{ text: 'note1' }], id: 'c1' },
-        { content: [{ text: 'note2' }], id: 'c2' },
+        { content: [{ text: 'note1' }], id: 'note-1', commentType: 'note' },
+        {
+          content: [{ text: 'threaded' }],
+          id: 'thread-1',
+          commentType: 'threadedComment',
+        },
       ]);
 
       await ws.comments.removeNote('A1');
 
-      expect(ctx.computeBridge.deleteComment).toHaveBeenCalledTimes(2);
+      expect(ctx.computeBridge.deleteComment).toHaveBeenCalledTimes(1);
       expect(ctx.computeBridge.deleteComment).toHaveBeenCalledWith(
         SHEET_ID,
-        'c1',
-        expectVersionOperationOptions('comment.removeNote', ['comments-notes']),
-      );
-      expect(ctx.computeBridge.deleteComment).toHaveBeenCalledWith(
-        SHEET_ID,
-        'c2',
+        'note-1',
         expectVersionOperationOptions('comment.removeNote', ['comments-notes']),
       );
     });

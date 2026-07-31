@@ -325,33 +325,41 @@ impl YrsStorage {
     #[tracing::instrument(name = "hydrate_from_parse_output_with_ranges", skip_all)]
     pub(crate) fn hydrate_from_parse_output_with_ranges(
         &mut self,
-        output: &ParseOutput,
+        output: &mut ParseOutput,
         allocations: &[SheetIdAllocation],
         ranged_positions: &[std::collections::HashSet<(u32, u32)>],
         range_style_positions: &[std::collections::HashSet<(u32, u32)>],
         range_data_per_sheet: &[Vec<snapshot_types::RangeData>],
         range_styles_per_sheet: &[Vec<ImportedRangeStyle>],
+        release_hydrated_cells: bool,
         allocator: &mut impl IdAllocator,
     ) -> Result<HydrationIdMap, ComputeError> {
         let _span = tracing::info_span!("hydrate_yrs_from_parse_output_with_ranges").entered();
-        tracing::info!(target: "deferred_hydration", "hydrate: transact_mut");
-        let mut txn = self.doc.transact_mut();
-        tracing::info!(target: "deferred_hydration", "hydrate: transact_mut done");
-
         let mut id_map = HydrationIdMap::default();
-        let order_arr = self.ensure_sheet_order_array(&mut txn);
-        tracing::info!(target: "deferred_hydration", "hydrate: style palette");
-        hydrate_style_palette(&mut txn, &self.workbook, &output.style_palette);
-        hydrate_workbook_stylesheet(&mut txn, &self.workbook, &output.workbook_stylesheet);
+        let order_arr = {
+            tracing::info!(target: "deferred_hydration", "hydrate: workbook transaction");
+            let mut txn = self.doc.transact_mut();
+            let order_arr = self.ensure_sheet_order_array(&mut txn);
+            tracing::info!(target: "deferred_hydration", "hydrate: style palette");
+            hydrate_style_palette(&mut txn, &self.workbook, &output.style_palette);
+            hydrate_workbook_stylesheet(&mut txn, &self.workbook, &output.workbook_stylesheet);
+            order_arr
+        };
         let theme = output.theme.as_ref();
         let indexed_colors = output
             .workbook_stylesheet
             .as_ref()
             .and_then(|stylesheet| stylesheet.indexed_colors.as_ref());
         tracing::info!(target: "deferred_hydration", "hydrate: sheets start, count={}", output.sheets.len());
+        let mut formula_pool = release_hydrated_cells.then(rustc_hash::FxHashSet::default);
 
-        for (sheet_idx, sheet_data) in output.sheets.iter().enumerate() {
+        for sheet_idx in 0..output.sheets.len() {
             tracing::info!(target: "deferred_hydration", "hydrate: sheet {sheet_idx} start");
+            // Commit each sheet independently. The storage is staged and cannot
+            // escape this method on failure, so this preserves import atomicity
+            // while bounding Yrs transaction-local integration state to one
+            // worksheet instead of the entire workbook.
+            let mut txn = self.doc.transact_mut();
             let alloc = &allocations[sheet_idx];
             let ranged = &ranged_positions[sheet_idx];
             let range_style_positions_for_sheet = &range_style_positions[sheet_idx];
@@ -360,21 +368,25 @@ impl YrsStorage {
                 .map(Vec::as_slice)
                 .unwrap_or(&[]);
 
-            let (phantom_cells, identity_only_cells) = hydrate_sheet_with_allocation(
-                &mut txn,
-                &self.sheets,
-                &order_arr,
-                sheet_data,
-                &output.style_palette,
-                &output.persons,
-                theme,
-                indexed_colors,
-                alloc,
-                ranged,
-                range_style_positions_for_sheet,
-                range_styles,
-                allocator,
-            )?;
+            let (phantom_cells, identity_only_cells) = {
+                let sheet_data = &mut output.sheets[sheet_idx];
+                hydrate_sheet_with_allocation(
+                    &mut txn,
+                    &self.sheets,
+                    &order_arr,
+                    sheet_data,
+                    &output.style_palette,
+                    &output.persons,
+                    theme,
+                    indexed_colors,
+                    alloc,
+                    ranged,
+                    range_style_positions_for_sheet,
+                    range_styles,
+                    formula_pool.as_mut(),
+                    allocator,
+                )?
+            };
             tracing::info!(target: "deferred_hydration", "hydrate: sheet {sheet_idx} hydrated");
 
             // Write Range data to the sheet's canonical Yrs sub-maps.
@@ -451,20 +463,27 @@ impl YrsStorage {
 
             let sheet_id = alloc.sheet_id;
             id_map.sheet_ids.push(sheet_id);
-            id_map.cell_ids.push(alloc.cell_ids.clone());
-            id_map.row_ids.push(alloc.row_ids.clone());
-            id_map.col_ids.push(alloc.col_ids.clone());
             for (cell_id, row, col) in phantom_cells {
                 id_map.phantom_cells.push((sheet_id, cell_id, row, col));
             }
-            for (cell_id, row, col) in identity_only_cells {
-                id_map
-                    .identity_only_cells
-                    .push((sheet_id, cell_id, row, col));
+            if !release_hydrated_cells {
+                id_map.cell_ids.push(alloc.cell_ids.clone());
+                id_map.row_ids.push(alloc.row_ids.clone());
+                id_map.col_ids.push(alloc.col_ids.clone());
+                for (cell_id, row, col) in identity_only_cells {
+                    id_map
+                        .identity_only_cells
+                        .push((sheet_id, cell_id, row, col));
+                }
+            }
+            drop(txn);
+            if release_hydrated_cells {
+                drop(std::mem::take(&mut output.sheets[sheet_idx].cells));
             }
         }
 
         tracing::info!(target: "deferred_hydration", "hydrate: all sheets done, workbook-level data");
+        let mut txn = self.doc.transact_mut();
         // Workbook-level data (identical to hydrate_from_parse_output)
         hydrate_workbook_print_defined_names(
             &self.sheets,

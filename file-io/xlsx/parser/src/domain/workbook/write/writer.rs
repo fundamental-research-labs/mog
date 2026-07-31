@@ -4,6 +4,11 @@ use domain_types::domain::workbook::{
 
 use super::{CalcSettings, DefinedNameDef, SheetDef, SheetState, WorkbookView};
 
+pub(crate) fn next_available_sheet_id(used: impl IntoIterator<Item = u32>) -> Option<u32> {
+    let used: std::collections::BTreeSet<_> = used.into_iter().collect();
+    (1..=u32::MAX).find(|candidate| !used.contains(candidate))
+}
+
 /// The workbook writer.
 ///
 /// Generates `xl/workbook.xml` content for XLSX files.
@@ -49,18 +54,23 @@ impl WorkbookWriter {
         Self::default()
     }
 
+    fn next_sheet_id(&self) -> u32 {
+        next_available_sheet_id(self.sheets.iter().map(|sheet| sheet.sheet_id))
+            .expect("workbook has no available sheetId")
+    }
+
     /// Add a sheet definition.
     ///
-    /// The sheet ID is auto-assigned based on the number of sheets.
+    /// The sheet ID is the lowest positive value not already in use.
     pub fn add_sheet(&mut self, name: &str, r_id: &str) -> &mut Self {
-        let sheet_id = self.sheets.len() as u32 + 1;
+        let sheet_id = self.next_sheet_id();
         self.sheets.push(SheetDef::new(name, sheet_id, r_id));
         self
     }
 
     /// Add a sheet definition with specific state.
     pub fn add_sheet_with_state(&mut self, name: &str, r_id: &str, state: SheetState) -> &mut Self {
-        let sheet_id = self.sheets.len() as u32 + 1;
+        let sheet_id = self.next_sheet_id();
         self.sheets
             .push(SheetDef::with_state(name, sheet_id, r_id, state));
         self

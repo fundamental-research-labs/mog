@@ -104,7 +104,7 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
         parsed
     };
     let import_report = parsed.import_report;
-    let parse_output = parsed.output;
+    let mut parse_output = parsed.output;
     let diagnostics = parsed.diagnostics;
     if !diagnostics.errors.is_empty() {
         tracing::warn!(
@@ -166,7 +166,7 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
         let mut profile =
             crate::xlsx_profile::PhaseTimer::new("import", "parse_output_to_workbook_snapshot");
         let snap = import::parse_output_to_snapshot::parse_output_to_workbook_snapshot(
-            &parse_output,
+            &mut parse_output,
             Some(&id_map),
             &mut allocator,
         );
@@ -302,12 +302,13 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
             crate::xlsx_profile::PhaseTimer::new("import", "hydrate_from_parse_output_with_ranges");
         let mut storage = YrsStorage::new();
         let id_map = storage.hydrate_from_parse_output_with_ranges(
-            &parse_output,
+            &mut parse_output,
             &allocations,
             &ranged_positions,
             &range_style_positions,
             &range_data_per_sheet,
             &range_styles_per_sheet,
+            false,
             &mut allocator,
         )?;
         storage.hydrate_imported_external_links(&parse_output.external_links)?;

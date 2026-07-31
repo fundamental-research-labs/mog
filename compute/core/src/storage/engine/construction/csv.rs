@@ -28,7 +28,7 @@ pub(in crate::storage::engine) fn parse_and_hydrate_csv(
             message: format!("CSV parse error: {}", e),
         }
     })?;
-    let parse_output = parsed.output;
+    let mut parse_output = parsed.output;
     eprintln!("[construction] csv parse: {}ms", t0.elapsed().as_millis());
 
     if !parsed.warnings.is_empty() {
@@ -116,12 +116,13 @@ pub(in crate::storage::engine) fn parse_and_hydrate_csv(
     let (storage, id_map) = {
         let mut storage = YrsStorage::new();
         let id_map = storage.hydrate_from_parse_output_with_ranges(
-            &parse_output,
+            &mut parse_output,
             &allocations,
             &ranged_positions,
             &range_style_positions,
             &range_data_per_sheet,
             &range_styles_per_sheet,
+            false,
             &mut allocator,
         )?;
         (storage, id_map)

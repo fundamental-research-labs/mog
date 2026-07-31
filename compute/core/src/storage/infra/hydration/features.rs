@@ -11,8 +11,10 @@ use compute_document::hex::{SmallHex, id_to_hex};
 use cell_types::CellId;
 
 use compute_document::cell_serde::{
-    build_cell_prelim, write_array_ref_to_yrs, write_rich_string_to_yrs,
+    build_cell_prelim, cell_value_to_any, write_array_ref_to_yrs, write_rich_string_to_yrs,
 };
+use compute_document::schema::{KEY_FORMULA, KEY_VALUE};
+use rustc_hash::FxHashSet;
 
 use super::IdAllocator;
 use super::form_controls::normalize_form_control_references_for_hydration;
@@ -95,17 +97,21 @@ pub(super) fn hydrate_cells(
 pub(super) fn hydrate_cells_with_ids(
     txn: &mut yrs::TransactionMut,
     cells_map: &MapRef,
-    cells: &[CellData],
+    cells: &mut [CellData],
     cell_ids: &[CellId],
     ranged_positions: &std::collections::HashSet<(u32, u32)>,
     range_style_positions: &std::collections::HashSet<(u32, u32)>,
+    formula_pool: Option<&mut FxHashSet<Arc<str>>>,
 ) -> PositionMap {
     let mut pos_map = PositionMap::with_capacity(cells.len() / 2);
-    for (i, cell) in cells.iter().enumerate() {
+    let mut formula_pool = formula_pool;
+    for (i, cell) in cells.iter_mut().enumerate() {
         if cell.projection_role == ImportedCellProjectionRole::DynamicArraySpillTarget {
             continue;
         }
-        let is_empty = cell.formula.is_none() && cell.value.is_null() && cell.rich_string.is_none();
+        // These decisions must be made before consuming the formula string.
+        let has_formula = cell.formula.is_some();
+        let is_empty = !has_formula && cell.value.is_null() && cell.rich_string.is_none();
         let style_is_range_backed = range_style_positions.contains(&(cell.row, cell.col));
         let has_cell_properties = (cell.style_id.is_some() && !style_is_range_backed)
             || cell.cell_metadata_index.is_some()
@@ -125,8 +131,7 @@ pub(super) fn hydrate_cells_with_ids(
         }
 
         let is_ranged = ranged_positions.contains(&(cell.row, cell.col));
-        let requires_explicit_identity =
-            !is_ranged || cell.formula.is_some() || has_cell_properties;
+        let requires_explicit_identity = !is_ranged || has_formula || has_cell_properties;
         if !requires_explicit_identity {
             continue;
         }
@@ -145,7 +150,18 @@ pub(super) fn hydrate_cells_with_ids(
             continue;
         }
 
-        let cell_prelim = build_cell_prelim(&cell.value, cell.formula.as_deref(), None);
+        let cell_prelim = if let Some(pool) = formula_pool.as_deref_mut() {
+            let value = cell_value_to_any(&cell.value);
+            match cell.formula.take() {
+                Some(formula) => {
+                    let formula = intern_formula(pool, formula);
+                    MapPrelim::from([(KEY_VALUE, value), (KEY_FORMULA, Any::String(formula))])
+                }
+                None => MapPrelim::from([(KEY_VALUE, value)]),
+            }
+        } else {
+            build_cell_prelim(&cell.value, cell.formula.as_deref(), None)
+        };
         let cell_map: MapRef = cells_map.insert(txn, &*cell_hex, cell_prelim);
         if let Some(array_ref) = cell.array_ref.as_deref() {
             write_array_ref_to_yrs(&cell_map, txn, array_ref);
@@ -158,6 +174,16 @@ pub(super) fn hydrate_cells_with_ids(
         }
     }
     pos_map
+}
+
+fn intern_formula(pool: &mut FxHashSet<Arc<str>>, formula: String) -> Arc<str> {
+    if let Some(existing) = pool.get(formula.as_str()) {
+        return Arc::clone(existing);
+    }
+
+    let formula: Arc<str> = Arc::from(formula);
+    pool.insert(Arc::clone(&formula));
+    formula
 }
 
 fn write_formula_metadata_to_yrs(
@@ -850,7 +876,7 @@ fn is_parser_local_floating_object_id(id: &str) -> bool {
 mod tests {
     use super::*;
     use value_types::CellValue;
-    use yrs::{Doc, Map, Transact};
+    use yrs::{Doc, Map, Out, Transact};
 
     fn cell(row: u32, col: u32, value: CellValue) -> CellData {
         CellData {
@@ -866,7 +892,7 @@ mod tests {
         let doc = Doc::new();
         let cells_map = doc.get_or_insert_map("cells");
         let mut txn = doc.transact_mut();
-        let cells = vec![cell(0, 0, CellValue::from(1.0))];
+        let mut cells = vec![cell(0, 0, CellValue::from(1.0))];
         let cell_ids = vec![CellId::from_raw(1)];
         let ranged_positions = std::collections::HashSet::from([(0, 0)]);
 
@@ -874,10 +900,11 @@ mod tests {
         let pos_map = hydrate_cells_with_ids(
             &mut txn,
             &cells_map,
-            &cells,
+            &mut cells,
             &cell_ids,
             &ranged_positions,
             &range_style_positions,
+            None,
         );
 
         assert!(pos_map.is_empty());
@@ -891,7 +918,7 @@ mod tests {
         let mut txn = doc.transact_mut();
         let mut styled = cell(4, 2, CellValue::from(9.0));
         styled.style_id = Some(7);
-        let cells = vec![styled];
+        let mut cells = vec![styled];
         let cell_ids = vec![CellId::from_raw(0xA)];
         let ranged_positions = std::collections::HashSet::from([(4, 2)]);
 
@@ -899,14 +926,61 @@ mod tests {
         let pos_map = hydrate_cells_with_ids(
             &mut txn,
             &cells_map,
-            &cells,
+            &mut cells,
             &cell_ids,
             &ranged_positions,
             &range_style_positions,
+            None,
         );
 
         assert_eq!(pos_map.get(&(4, 2)), Some(&id_to_hex(0xA).to_string()));
         assert_eq!(cells_map.len(&txn), 0);
+    }
+
+    #[test]
+    fn consuming_hydration_takes_and_interns_duplicate_formulas() {
+        let doc = Doc::new();
+        let cells_map = doc.get_or_insert_map("cells");
+        let mut txn = doc.transact_mut();
+        let mut first = cell(0, 0, CellValue::from(1.0));
+        first.formula = Some("=SUM(A1:A10)".to_owned());
+        let mut second = cell(1, 0, CellValue::from(2.0));
+        second.formula = Some("=SUM(A1:A10)".to_owned());
+        let mut cells = vec![first, second];
+        let cell_ids = vec![CellId::from_raw(1), CellId::from_raw(2)];
+        let mut formula_pool = FxHashSet::default();
+
+        let pos_map = hydrate_cells_with_ids(
+            &mut txn,
+            &cells_map,
+            &mut cells,
+            &cell_ids,
+            &std::collections::HashSet::new(),
+            &std::collections::HashSet::new(),
+            Some(&mut formula_pool),
+        );
+
+        assert!(cells.iter().all(|cell| cell.formula.is_none()));
+        assert_eq!(formula_pool.len(), 1);
+        assert_eq!(pos_map.len(), 2);
+
+        let formula_for = |cell_id: u128| {
+            let cell_hex = id_to_hex(cell_id);
+            let Out::YMap(cell_map) = cells_map
+                .get(&txn, &*cell_hex)
+                .expect("hydrated cell should exist")
+            else {
+                panic!("hydrated cell entry should be a Y.Map");
+            };
+            let Some(Out::Any(Any::String(formula))) = cell_map.get(&txn, KEY_FORMULA) else {
+                panic!("hydrated cell should retain its formula");
+            };
+            formula
+        };
+        let first_formula = formula_for(1);
+        let second_formula = formula_for(2);
+        assert_eq!(&*first_formula, "=SUM(A1:A10)");
+        assert!(Arc::ptr_eq(&first_formula, &second_formula));
     }
 
     #[test]

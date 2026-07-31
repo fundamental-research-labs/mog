@@ -155,6 +155,14 @@ impl DefaultIdAllocator {
     pub fn alloc_range_id(&mut self) -> cell_types::RangeId {
         self.inner.next_range_id()
     }
+
+    /// Return the next unused low counter value.
+    ///
+    /// Callers that hand off to another allocator can use this as its seed
+    /// without reusing any identity allocated during hydration.
+    pub fn high_water_mark(&self) -> u64 {
+        self.inner.high_water_mark()
+    }
 }
 
 impl Default for DefaultIdAllocator {

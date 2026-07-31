@@ -916,6 +916,7 @@ fn engine_from_parse_output_with_ranges(output: &ParseOutput) -> YrsComputeEngin
         DefaultIdAllocator, HydrationIdMap, allocate_sheet_ids,
     };
 
+    let mut output = output.clone();
     let mut allocator = DefaultIdAllocator::new();
     let allocations: Vec<_> = output
         .sheets
@@ -940,7 +941,7 @@ fn engine_from_parse_output_with_ranges(output: &ParseOutput) -> YrsComputeEngin
     }
 
     let workbook_snap = crate::import::parse_output_to_snapshot::parse_output_to_workbook_snapshot(
-        output,
+        &output,
         Some(&id_map),
         &mut allocator,
     );
@@ -964,12 +965,13 @@ fn engine_from_parse_output_with_ranges(output: &ParseOutput) -> YrsComputeEngin
     let mut storage = crate::storage::YrsStorage::new();
     storage
         .hydrate_from_parse_output_with_ranges(
-            output,
+            &mut output,
             &allocations,
             &ranged_positions,
             &range_style_positions,
             &range_data_per_sheet,
             &range_styles_per_sheet,
+            false,
             &mut allocator,
         )
         .expect("hydrate ranged parse output");

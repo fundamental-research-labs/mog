@@ -11,6 +11,58 @@ fn test_empty_workbook() {
 }
 
 #[test]
+fn generated_workbook_sheet_ids_do_not_collide_with_retained_ids() {
+    let output = make_parse_output(vec![
+        SheetData {
+            name: "Imported".to_string(),
+            sheet_id: Some(2),
+            ..Default::default()
+        },
+        SheetData {
+            name: "Added".to_string(),
+            sheet_id: None,
+            ..Default::default()
+        },
+    ]);
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let workbook_xml = String::from_utf8(archive.read_file("xl/workbook.xml").unwrap()).unwrap();
+
+    assert!(workbook_xml.contains(r#"name="Imported" sheetId="2""#));
+    assert!(workbook_xml.contains(r#"name="Added" sheetId="1""#));
+}
+
+#[test]
+fn duplicate_retained_sheet_ids_are_normalized_on_export() {
+    let output = make_parse_output(vec![
+        SheetData {
+            name: "First Seven".to_string(),
+            sheet_id: Some(7),
+            ..Default::default()
+        },
+        SheetData {
+            name: "Duplicate Seven".to_string(),
+            sheet_id: Some(7),
+            ..Default::default()
+        },
+        SheetData {
+            name: "Added".to_string(),
+            sheet_id: None,
+            ..Default::default()
+        },
+    ]);
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let workbook_xml = String::from_utf8(archive.read_file("xl/workbook.xml").unwrap()).unwrap();
+
+    assert!(workbook_xml.contains(r#"name="First Seven" sheetId="7""#));
+    assert!(workbook_xml.contains(r#"name="Duplicate Seven" sheetId="1""#));
+    assert!(workbook_xml.contains(r#"name="Added" sheetId="2""#));
+}
+
+#[test]
 fn test_number_cells() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

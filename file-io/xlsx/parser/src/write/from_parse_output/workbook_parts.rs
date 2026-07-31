@@ -2,6 +2,7 @@ use domain_types::{ParseOutput, WorkbookSheetKind};
 
 use super::WriteError;
 use super::external_links;
+use crate::domain::workbook::write::next_available_sheet_id;
 use crate::infra::xml_namespaces::NamespaceMap;
 use crate::write::package_graph::{PackageOwner, ResolvedPackageGraph};
 use crate::write::pivot_writer;
@@ -200,6 +201,12 @@ fn add_generated_sheet_defs(
     package_graph: &ResolvedPackageGraph,
     workbook_writer: &mut WorkbookWriter,
 ) -> Result<(), WriteError> {
+    let mut used_sheet_ids: std::collections::BTreeSet<u32> = output
+        .sheets
+        .iter()
+        .filter_map(|sheet| sheet.sheet_id)
+        .collect();
+    let mut emitted_sheet_ids = std::collections::BTreeSet::new();
     for (idx, sheet_data) in output.sheets.iter().enumerate() {
         let sheet_target = format!("worksheets/sheet{}.xml", idx + 1);
         let r_id = package_graph
@@ -211,7 +218,20 @@ fn add_generated_sheet_defs(
                 ))
             })?
             .to_string();
-        let sheet_id = sheet_data.sheet_id.unwrap_or(idx as u32 + 1);
+        let sheet_id = match sheet_data.sheet_id {
+            Some(sheet_id) if emitted_sheet_ids.insert(sheet_id) => sheet_id,
+            Some(_) | None => {
+                let sheet_id =
+                    next_available_sheet_id(used_sheet_ids.iter().copied()).ok_or_else(|| {
+                        WriteError::PackageIntegrity(
+                            "workbook has no available positive sheetId".to_string(),
+                        )
+                    })?;
+                used_sheet_ids.insert(sheet_id);
+                emitted_sheet_ids.insert(sheet_id);
+                sheet_id
+            }
+        };
         workbook_writer.add_sheet_def(SheetDef::with_state(
             &sheet_data.name,
             sheet_id,

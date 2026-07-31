@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
+use rustc_hash::FxHashSet;
 use yrs::{Any, Array, ArrayPrelim, ArrayRef, Map, MapPrelim, MapRef, Out};
 
 use domain_types::{DocumentFormat, SheetData};
@@ -518,7 +519,7 @@ pub(crate) fn hydrate_sheet_with_allocation(
     txn: &mut yrs::TransactionMut,
     sheets_map: &MapRef,
     order_arr: &yrs::ArrayRef,
-    sheet: &SheetData,
+    sheet: &mut SheetData,
     style_palette: &[DocumentFormat],
     persons: &[domain_types::domain::comment::PersonInfo],
     theme: Option<&domain_types::ThemeData>,
@@ -527,6 +528,7 @@ pub(crate) fn hydrate_sheet_with_allocation(
     ranged_positions: &std::collections::HashSet<(u32, u32)>,
     range_style_positions: &std::collections::HashSet<(u32, u32)>,
     imported_range_styles: &[ImportedRangeStyle],
+    formula_pool: Option<&mut FxHashSet<Arc<str>>>,
     allocator: &mut impl IdAllocator,
 ) -> Result<(Vec<(CellId, u32, u32)>, Vec<(CellId, u32, u32)>), ComputeError> {
     let sheet_hex = &alloc.sheet_hex;
@@ -624,10 +626,11 @@ pub(crate) fn hydrate_sheet_with_allocation(
     let mut pos_map = hydrate_cells_with_ids(
         txn,
         &cells_map,
-        &sheet.cells,
+        &mut sheet.cells,
         &alloc.cell_ids,
         ranged_positions,
         range_style_positions,
+        formula_pool,
     );
 
     // Create remaining per-sheet sub-maps

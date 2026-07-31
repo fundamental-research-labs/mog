@@ -24,3 +24,4 @@ pub use calc::{
 };
 pub use types::DefinedNameDef;
 pub use writer::WorkbookWriter;
+pub(crate) use writer::next_available_sheet_id;

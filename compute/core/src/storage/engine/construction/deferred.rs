@@ -30,7 +30,7 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
         parsed
     };
     let import_report = parsed.import_report;
-    let parse_output = parsed.output;
+    let mut parse_output = parsed.output;
     let diagnostics = parsed.diagnostics;
     if !diagnostics.errors.is_empty() {
         tracing::warn!(
@@ -171,12 +171,13 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
             .stores
             .storage
             .hydrate_from_parse_output_with_ranges(
-                &parse_output,
+                &mut parse_output,
                 &allocations,
                 &critical_ranged_positions,
                 &critical_range_style_positions,
                 &critical_range_data_per_sheet,
                 &critical_range_styles_per_sheet,
+                false,
                 &mut critical_allocator,
             )?;
         engine
@@ -337,7 +338,7 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
         // guard installed until every fallible full-hydration step has staged
         // successfully; a failed hydrate must remain retryable/protected.
         dh_log!("phase 0: re-parse XLSX");
-        let (full_parse_output, mut import_report) = {
+        let (mut full_parse_output, mut import_report) = {
             let mut profile =
                 crate::xlsx_profile::PhaseTimer::new("complete_deferred_hydration", "parse");
             let (parsed, report) = if let Some(raw_bytes) = &data.raw_xlsx_bytes {
@@ -397,6 +398,9 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
             );
             allocations
         };
+        let snapshot_seed = seed_after_allocations(&allocations);
+        let mut planning_allocator =
+            crate::storage::infra::hydration::DefaultIdAllocator::with_seed(snapshot_seed);
 
         let id_map_full = {
             use crate::storage::infra::hydration::HydrationIdMap;
@@ -418,16 +422,19 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
             m
         };
 
-        let full_snap = {
+        // Build the runtime snapshot before Yrs. Reconstructing the same
+        // workbook-sized snapshot from fully hydrated Yrs can exhaust wasm32
+        // memory before ComputeCore gets a chance to consume it.
+        let planning_snap = {
             use crate::import;
             let mut profile = crate::xlsx_profile::PhaseTimer::new(
                 "complete_deferred_hydration",
-                "parse_output_to_workbook_snapshot",
+                "planning_snapshot",
             );
             let snap = import::parse_output_to_snapshot::parse_output_to_workbook_snapshot(
-                &full_parse_output,
+                &mut full_parse_output,
                 Some(&id_map_full),
-                &mut allocator,
+                &mut planning_allocator,
             );
             profile.counter("sheets", snap.sheets.len() as u64);
             profile.counter(
@@ -446,6 +453,7 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
             );
             snap
         };
+        drop(id_map_full);
 
         let mut ranged_positions: Vec<std::collections::HashSet<(u32, u32)>> =
             Vec::with_capacity(full_parse_output.sheets.len());
@@ -462,7 +470,7 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
                 "ranged_positions",
             );
             for (sheet_idx, sheet_data) in full_parse_output.sheets.iter().enumerate() {
-                let snap_sheet = &full_snap.sheets[sheet_idx];
+                let snap_sheet = &planning_snap.sheets[sheet_idx];
                 let snap_positions: std::collections::HashSet<(u32, u32)> =
                     snap_sheet.cells.iter().map(|c| (c.row, c.col)).collect();
                 let ranged: std::collections::HashSet<(u32, u32)> = sheet_data
@@ -487,8 +495,49 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
             );
         }
 
-        dh_log!("phase 1 done: IDs allocated, snapshot built");
+        // The classified RangeData now owns the values and formula text for
+        // ranged cells. Keep only a zero-sized formula marker where hydration
+        // still needs to persist an explicit formula-cell identity. Retaining
+        // the original payload here would leave three copies of a dense formula
+        // sheet live during Yrs hydration (ParseOutput, CellMirror, and Yrs),
+        // which can exceed wasm32 linear memory before the sheet transaction
+        // commits.
+        for (sheet, ranged) in full_parse_output.sheets.iter_mut().zip(&ranged_positions) {
+            for cell in &mut sheet.cells {
+                if !ranged.contains(&(cell.row, cell.col)) {
+                    continue;
+                }
+                cell.value = value_types::CellValue::Null;
+                if cell.formula.is_some() {
+                    cell.formula = Some(String::new());
+                }
+            }
+        }
+        dh_log!("phase 1 done: IDs allocated, range plan built");
 
+        let snapshot_seed = snapshot_id_high_water_mark(&planning_snap);
+        let layout_metrics = engine.stores.layout_metrics;
+        let index_snapshot = WorkbookSnapshot {
+            sheets: planning_snap
+                .sheets
+                .iter()
+                .map(|sheet| snapshot_types::SheetSnapshot {
+                    id: sheet.id.clone(),
+                    name: sheet.name.clone(),
+                    rows: sheet.rows,
+                    cols: sheet.cols,
+                    cells: Vec::new(),
+                    ranges: Vec::new(),
+                })
+                .collect(),
+            ..WorkbookSnapshot::default()
+        };
+        let full_snap_sheet_count = planning_snap.sheets.len() as u64;
+        let full_snap_cell_count = planning_snap
+            .sheets
+            .iter()
+            .map(|sheet| sheet.cells.len() as u64)
+            .sum::<u64>();
         dh_log!("phase 2a: YrsStorage::new()");
         let mut new_storage = YrsStorage::new();
         dh_log!("phase 2b: hydrate_from_parse_output_with_ranges start");
@@ -498,13 +547,14 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
                 "hydrate_from_parse_output_with_ranges",
             );
             let id_map = new_storage.hydrate_from_parse_output_with_ranges(
-                &full_parse_output,
+                &mut full_parse_output,
                 &allocations,
                 &ranged_positions,
                 &range_style_positions,
                 &range_data_per_sheet,
                 &range_styles_per_sheet,
-                &mut allocator,
+                true,
+                &mut planning_allocator,
             )?;
             new_storage.hydrate_imported_external_links(&full_parse_output.external_links)?;
             profile.counter("sheets", full_parse_output.sheets.len() as u64);
@@ -520,20 +570,43 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
 
         dh_log!("phase 2 done: YrsStorage hydrated");
 
-        let seed = snapshot_id_high_water_mark(&full_snap);
+        // Workbook-level hydration can allocate identities that do not appear
+        // in the planning snapshot (for example named ranges and tables).
+        // Resume after both sources so subsequent edits cannot reuse one.
+        let seed = snapshot_seed.max(planning_allocator.high_water_mark());
         let shared_alloc = std::sync::Arc::new(cell_types::IdAllocator::with_seed(seed));
+
+        // Hydration has copied the parse-owned state into Yrs. Preserve only the
+        // completion outputs that are not reconstructible from storage, then
+        // release every parse/planning representation before building indexes.
+        let calculation = full_parse_output.calculation.clone();
+        let crate::storage::infra::hydration::HydrationIdMap { phantom_cells, .. } = id_map;
+        drop(ranged_positions);
+        drop(range_data_per_sheet);
+        drop(range_style_positions);
+        drop(range_styles_per_sheet);
+        drop(allocations);
+        drop(full_parse_output);
+
+        // Build the Yrs-derived indexes while only the compact planning
+        // snapshot remains. Building them after CellMirror + ComputeCore makes
+        // the index construction peak coexist with every expanded runtime
+        // representation and exhausts wasm32 on the 1.57M-cell workbook.
+        dh_log!("phase 3a: grid indexes start");
         let grid_indexes =
-            build_grid_indexes_from_yrs(&new_storage, &full_snap, shared_alloc.clone())?;
-        let merge_indexes = build_merge_indexes(&new_storage, &full_snap, &grid_indexes)?;
-        let layout_metrics = engine.stores.layout_metrics;
+            build_grid_indexes_from_yrs(&new_storage, &index_snapshot, shared_alloc.clone())?;
+        dh_log!("phase 3b: grid indexes done, merge indexes start");
+        let merge_indexes = build_merge_indexes(&new_storage, &index_snapshot, &grid_indexes)?;
+        dh_log!("phase 3c: merge indexes done, layout indexes start");
         let layout_indexes =
-            build_layout_indexes(&new_storage, &full_snap, &grid_indexes, layout_metrics)?;
+            build_layout_indexes(&new_storage, &index_snapshot, &grid_indexes, layout_metrics)?;
 
         dh_log!("phase 3 done: grid/merge/layout indexes built");
 
-        // Rebuild ComputeCore and CellMirror against the staged full snapshot
-        // before committing them to the live engine.
-        let (new_compute, mut new_mirror) = {
+        // Keep the compact snapshot through Yrs hydration and index
+        // construction, then consume it only after the parse-owned cells,
+        // range plans, and index-building temporaries have been released.
+        let (mut new_compute, mut new_mirror) = {
             let mut profile = crate::xlsx_profile::PhaseTimer::new(
                 "complete_deferred_hydration",
                 "mirror_compute_rebuild",
@@ -542,24 +615,17 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
             let mut new_mirror = CellMirror::new();
             #[cfg(target_arch = "wasm32")]
             {
-                new_compute.init_from_snapshot_minimal(&mut new_mirror, full_snap.clone())?;
+                new_compute.init_from_snapshot_minimal(&mut new_mirror, planning_snap)?;
             }
             #[cfg(not(target_arch = "wasm32"))]
             {
-                new_compute.init_from_snapshot_no_recalc(&mut new_mirror, full_snap.clone())?;
+                new_compute.init_from_snapshot_no_recalc(&mut new_mirror, planning_snap)?;
             }
-            profile.counter("sheets", full_snap.sheets.len() as u64);
-            profile.counter(
-                "snapshot_cells",
-                full_snap
-                    .sheets
-                    .iter()
-                    .map(|sheet| sheet.cells.len() as u64)
-                    .sum::<u64>(),
-            );
-            new_compute.set_id_alloc(shared_alloc.clone());
+            profile.counter("sheets", full_snap_sheet_count);
+            profile.counter("snapshot_cells", full_snap_cell_count);
             (new_compute, new_mirror)
         };
+        new_compute.set_id_alloc(shared_alloc.clone());
 
         dh_log!("phase 4 done: ComputeCore init_from_snapshot_minimal");
 
@@ -572,7 +638,6 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
         new_mirror.finalize_range_hydration();
 
         let settings = derive_settings(&new_storage);
-        let calculation = full_parse_output.calculation.clone();
         let id_alloc = std::sync::Arc::new(crate::storage::metadata_id_allocator_for_doc_client(
             new_storage.doc().client_id(),
         ));
@@ -605,7 +670,7 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
             stores,
             mirror: new_mirror,
             settings,
-            phantom_cells: id_map.phantom_cells,
+            phantom_cells,
             calculation,
             import_report,
         }

@@ -53,6 +53,21 @@ fn test_multiple_sheets() {
 }
 
 #[test]
+fn test_auto_assigned_sheet_ids_avoid_retained_imported_ids() {
+    let mut writer = WorkbookWriter::new();
+    writer
+        .add_sheet_def(SheetDef::new("Imported", 2, "rId1"))
+        .add_sheet("Added", "rId2")
+        .add_sheet_with_state("Added Hidden", "rId3", SheetState::Hidden);
+
+    let xml = String::from_utf8(writer.to_xml()).unwrap();
+
+    assert!(xml.contains("name=\"Imported\" sheetId=\"2\" r:id=\"rId1\""));
+    assert!(xml.contains("name=\"Added\" sheetId=\"1\" r:id=\"rId2\""));
+    assert!(xml.contains("name=\"Added Hidden\" sheetId=\"3\" state=\"hidden\" r:id=\"rId3\""));
+}
+
+#[test]
 fn test_sheet_name_with_special_characters() {
     let mut writer = WorkbookWriter::new();
     writer.add_sheet("Sales & Marketing <2024>", "rId1");

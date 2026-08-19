@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use domain_types::{ParseOutput, WorkbookSheetKind};
 
 use super::WriteError;
@@ -200,7 +202,8 @@ fn add_generated_sheet_defs(
     package_graph: &ResolvedPackageGraph,
     workbook_writer: &mut WorkbookWriter,
 ) -> Result<(), WriteError> {
-    for (idx, sheet_data) in output.sheets.iter().enumerate() {
+    let sheet_ids = allocate_generated_sheet_ids(output)?;
+    for (idx, (sheet_data, sheet_id)) in output.sheets.iter().zip(sheet_ids).enumerate() {
         let sheet_target = format!("worksheets/sheet{}.xml", idx + 1);
         let r_id = package_graph
             .relationship_id(&PackageOwner::Workbook, REL_WORKSHEET, &sheet_target)
@@ -211,7 +214,6 @@ fn add_generated_sheet_defs(
                 ))
             })?
             .to_string();
-        let sheet_id = sheet_data.sheet_id.unwrap_or(idx as u32 + 1);
         workbook_writer.add_sheet_def(SheetDef::with_state(
             &sheet_data.name,
             sheet_id,
@@ -220,6 +222,49 @@ fn add_generated_sheet_defs(
         ));
     }
     Ok(())
+}
+
+fn allocate_generated_sheet_ids(output: &ParseOutput) -> Result<Vec<u32>, WriteError> {
+    let mut used = BTreeSet::new();
+    for sheet in &output.sheets {
+        let Some(sheet_id) = sheet.sheet_id else {
+            continue;
+        };
+        if sheet_id == 0 {
+            return Err(WriteError::PackageIntegrity(format!(
+                "worksheet {:?} has invalid sheetId 0",
+                sheet.name
+            )));
+        }
+        if !used.insert(sheet_id) {
+            return Err(WriteError::PackageIntegrity(format!(
+                "duplicate worksheet sheetId {sheet_id}"
+            )));
+        }
+    }
+
+    let mut allocated = Vec::with_capacity(output.sheets.len());
+    for sheet in &output.sheets {
+        if let Some(sheet_id) = sheet.sheet_id {
+            allocated.push(sheet_id);
+            continue;
+        }
+
+        let sheet_id = used
+            .last()
+            .copied()
+            .unwrap_or(0)
+            .checked_add(1)
+            .ok_or_else(|| {
+                WriteError::PackageIntegrity(
+                    "cannot allocate a positive worksheet sheetId".to_string(),
+                )
+            })?;
+        used.insert(sheet_id);
+        allocated.push(sheet_id);
+    }
+
+    Ok(allocated)
 }
 
 fn add_inventory_sheet_defs(
@@ -280,4 +325,42 @@ fn workbook_relative_target(path: &str) -> String {
         .unwrap_or(path)
         .trim_start_matches('/')
         .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use domain_types::SheetData;
+
+    use super::*;
+
+    fn output_with_sheet_ids(sheet_ids: &[Option<u32>]) -> ParseOutput {
+        ParseOutput {
+            sheets: sheet_ids
+                .iter()
+                .enumerate()
+                .map(|(index, sheet_id)| SheetData {
+                    name: format!("Sheet {}", index + 1),
+                    sheet_id: *sheet_id,
+                    ..Default::default()
+                })
+                .collect(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn generated_sheet_ids_reject_zero() {
+        let error = allocate_generated_sheet_ids(&output_with_sheet_ids(&[Some(0)]))
+            .expect_err("sheetId 0 must fail export");
+
+        assert!(error.to_string().contains("invalid sheetId 0"));
+    }
+
+    #[test]
+    fn generated_sheet_ids_reject_preserved_duplicates() {
+        let error = allocate_generated_sheet_ids(&output_with_sheet_ids(&[Some(4), Some(4)]))
+            .expect_err("duplicate preserved sheet IDs must fail export");
+
+        assert!(error.to_string().contains("duplicate worksheet sheetId 4"));
+    }
 }

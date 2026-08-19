@@ -169,39 +169,45 @@ fn render_merge_text(canvas: &mut SheetCanvas, merge_text: MergeText<'_>) {
         })
         .unwrap_or(colors::BLACK);
 
-    let text_w = text::measure_text_advance(&buzz_face, font_size, merge_text.text);
+    let lines = text::hard_lines(merge_text.text);
+    let line_widths: Vec<f32> = lines
+        .iter()
+        .map(|line| text::measure_text_advance(&buzz_face, font_size, line))
+        .collect();
     let ascender = text::ascender_px(&buzz_face, font_size);
     let line_h = text::line_height_px(&buzz_face, font_size);
+    let text_h = line_h * lines.len() as f32;
 
     use domain_types::CellVerticalAlign;
     use ooxml_types::styles::HorizontalAlign;
     let h_align = format.horizontal_align.unwrap_or(HorizontalAlign::Center);
-    let text_x = match h_align {
-        HorizontalAlign::Left | HorizontalAlign::General => rect.x + CELL_PADDING,
-        HorizontalAlign::Right => rect.x + rect.w - text_w - CELL_PADDING,
-        _ => rect.x + (rect.w - text_w) / 2.0, // center for merges by default
-    };
-
     let v_align = format.vertical_align.unwrap_or(CellVerticalAlign::Middle);
-    let text_y = match v_align {
+    let first_baseline_y = match v_align {
         CellVerticalAlign::Top => rect.y + ascender + 2.0,
-        CellVerticalAlign::Bottom => rect.y + rect.h - (line_h - ascender) - 2.0,
-        _ => rect.y + (rect.h - line_h) / 2.0 + ascender, // center
+        CellVerticalAlign::Bottom => rect.y + rect.h - (text_h - ascender) - 2.0,
+        _ => rect.y + (rect.h - text_h) / 2.0 + ascender,
     };
 
     canvas.set_clip(rect.x, rect.y, rect.w, rect.h);
-    text::render_text(
-        canvas,
-        &buzz_face,
-        &ttf_face,
-        text::TextRun {
-            font_size,
-            text: merge_text.text,
-            x: text_x,
-            y: text_y,
-            color: text_color,
-        },
-    );
+    for (index, (line, line_width)) in lines.iter().zip(line_widths).enumerate() {
+        let text_x = match h_align {
+            HorizontalAlign::Left | HorizontalAlign::General => rect.x + CELL_PADDING,
+            HorizontalAlign::Right => rect.x + rect.w - line_width - CELL_PADDING,
+            _ => rect.x + (rect.w - line_width) / 2.0,
+        };
+        text::render_text(
+            canvas,
+            &buzz_face,
+            &ttf_face,
+            text::TextRun {
+                font_size,
+                text: line,
+                x: text_x,
+                y: first_baseline_y + index as f32 * line_h,
+                color: text_color,
+            },
+        );
+    }
     canvas.clear_clip();
 }
 
@@ -343,6 +349,27 @@ mod tests {
             text_center_y.abs_diff(20) <= 5,
             "text center_y={text_center_y}, expected near 20 (merge center)"
         );
+    }
+
+    #[test]
+    fn merge_hard_line_breaks_render_as_separate_physical_lines() {
+        let db = shared_font_db();
+        let mut data = make_merge_data();
+        data.cells[0].formatted = Some("First\nSecond".to_string());
+        let mut canvas = SheetCanvas::new(320, 100, 1.0);
+
+        render_merges(
+            &mut canvas,
+            &data,
+            &data.row_positions,
+            &data.col_positions,
+            0.0,
+            0.0,
+            db,
+        );
+
+        assert!(find_text_horizontal_bounds(&canvas, 3, 20, 0, 192, 200).is_some());
+        assert!(find_text_horizontal_bounds(&canvas, 20, 37, 0, 192, 200).is_some());
     }
 
     #[test]

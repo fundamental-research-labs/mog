@@ -13,6 +13,15 @@ pub struct TextRun<'a> {
     pub color: Color,
 }
 
+/// Split spreadsheet text into physical lines, accepting both LF and CRLF.
+/// Empty segments are retained so consecutive and trailing hard breaks still
+/// consume line height.
+pub fn hard_lines(text: &str) -> Vec<&str> {
+    text.split('\n')
+        .map(|line| line.strip_suffix('\r').unwrap_or(line))
+        .collect()
+}
+
 /// Outline builder adapter: converts ttf-parser glyph outlines to tiny-skia paths.
 struct OutlineAdapter {
     builder: PathBuilder,
@@ -164,6 +173,33 @@ mod tests {
         let (_, entry) = db.resolve("Carlito").unwrap();
         let face = entry.face().unwrap();
         assert_eq!(measure_text_advance(&face, 11.0, ""), 0.0);
+    }
+
+    #[test]
+    fn hard_lines_preserve_physical_line_count() {
+        assert_eq!(hard_lines("A\nB\r\n\n"), vec!["A", "B", "", ""]);
+
+        let synthetic_repro_cases = [
+            (
+                "Workforce/Source Data: service, operating and admin roles.\nNo dedicated sales function.\nQoE commissions lack a service-vs-acquisition split.\nConclusion: retain 0% special S&M\npending role-level confirmation.",
+                5,
+            ),
+            (
+                "62-person roster:\nno dedicated sales or\ntechnology team.",
+                3,
+            ),
+            (
+                "#2 QoE column DU;\n#1 standalone base\nforecast.\nRevenue: QoE share.\nBAG overhead:\nQoE share.\nEBITDA scaled\nannually.",
+                8,
+            ),
+            (
+                "QoE PF-adjusted TTM\ncontext.\nForecast revenue and\nEBITDA reconcile to\nmanagement forecast.\nUS$000s.",
+                6,
+            ),
+        ];
+        for (text, expected_lines) in synthetic_repro_cases {
+            assert_eq!(hard_lines(text).len(), expected_lines);
+        }
     }
 
     #[test]

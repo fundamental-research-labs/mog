@@ -514,6 +514,58 @@ fn roundtrip_many_sheets() {
 }
 
 #[test]
+fn generated_sheet_ids_are_unique_for_sparse_imports_at_every_insertion_position() {
+    for insertion_index in [0, 2, 3] {
+        let mut sheets = vec![
+            SheetData {
+                name: "Imported 4".to_string(),
+                sheet_id: Some(4),
+                ..Default::default()
+            },
+            SheetData {
+                name: "Imported 3".to_string(),
+                sheet_id: Some(3),
+                ..Default::default()
+            },
+            SheetData {
+                name: "Imported 1".to_string(),
+                sheet_id: Some(1),
+                ..Default::default()
+            },
+        ];
+        sheets.insert(
+            insertion_index,
+            SheetData {
+                name: "Inserted".to_string(),
+                sheet_id: None,
+                ..Default::default()
+            },
+        );
+
+        let round_tripped = roundtrip(&ParseOutput {
+            sheets,
+            ..Default::default()
+        });
+        let sheet_ids: Vec<u32> = round_tripped
+            .sheets
+            .iter()
+            .map(|sheet| sheet.sheet_id.expect("exported worksheet has a sheetId"))
+            .collect();
+
+        assert_eq!(sheet_ids[insertion_index], 5);
+        assert_eq!(
+            sheet_ids
+                .iter()
+                .copied()
+                .collect::<std::collections::BTreeSet<_>>()
+                .len(),
+            sheet_ids.len(),
+            "sheet IDs must stay unique when inserting at position {insertion_index}"
+        );
+    }
+}
+
+#[test]
 fn roundtrip_sheet_name_special_chars() {
     let output = make_single_sheet(
         "My Sheet (1)",

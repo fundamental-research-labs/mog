@@ -264,6 +264,102 @@ fn test_complete_workbook_xml() {
 }
 
 #[test]
+fn fidelity_merge_emits_generated_and_preserved_children_in_schema_order() {
+    use domain_types::{
+        WorkbookXmlChildKind, WorkbookXmlChildSlot, WorkbookXmlFallbackAction, WorkbookXmlFidelity,
+        WorkbookXmlOwnerPolicy, WorkbookXmlProvenanceStatus, WorkbookXmlRawChild,
+    };
+
+    let regenerated = |kind| WorkbookXmlChildSlot {
+        kind,
+        owner_policy: WorkbookXmlOwnerPolicy::TypedRegenerated,
+        provenance_status: WorkbookXmlProvenanceStatus::Current,
+        fallback_action: WorkbookXmlFallbackAction::Regenerate,
+        payload_id: None,
+        reason: None,
+    };
+    let function_groups_payload = "function-groups".to_string();
+    let function_groups = WorkbookXmlChildSlot {
+        kind: WorkbookXmlChildKind::FunctionGroups,
+        owner_policy: WorkbookXmlOwnerPolicy::InertDirectChildPayload,
+        provenance_status: WorkbookXmlProvenanceStatus::SafeInert,
+        fallback_action: WorkbookXmlFallbackAction::Preserve,
+        payload_id: Some(function_groups_payload.clone()),
+        reason: None,
+    };
+    let mut writer = WorkbookWriter::new();
+    writer.set_file_version(domain_types::domain::workbook::FileVersion {
+        app_name: Some("Mog".to_string()),
+        ..Default::default()
+    });
+    writer.set_workbook_xml_fidelity(WorkbookXmlFidelity {
+        // Deliberately omit bookViews, put functionGroups before sheets, and
+        // place fileVersion last to model malformed imported ordering.
+        slots: vec![
+            function_groups,
+            regenerated(WorkbookXmlChildKind::Sheets),
+            regenerated(WorkbookXmlChildKind::CalcPr),
+            WorkbookXmlChildSlot {
+                kind: WorkbookXmlChildKind::FileVersion,
+                owner_policy: WorkbookXmlOwnerPolicy::TypedWithValidatedProvenance,
+                provenance_status: WorkbookXmlProvenanceStatus::Current,
+                fallback_action: WorkbookXmlFallbackAction::Regenerate,
+                payload_id: None,
+                reason: None,
+            },
+        ],
+        raw_children: vec![WorkbookXmlRawChild {
+            payload_id: function_groups_payload,
+            kind: WorkbookXmlChildKind::FunctionGroups,
+            q_name: "functionGroups".to_string(),
+            local_name: "functionGroups".to_string(),
+            xml: br#"<functionGroups builtInGroupCount="16"/>"#.to_vec(),
+            relationship_ids: Vec::new(),
+        }],
+        diagnostics: Vec::new(),
+    });
+
+    let xml = String::from_utf8(writer.to_xml()).unwrap();
+    let file_version_pos = xml.find("<fileVersion").unwrap();
+    let book_views_pos = xml.find("<bookViews>").unwrap();
+    let sheets_pos = xml.find("<sheets>").unwrap();
+    let function_groups_pos = xml.find("<functionGroups").unwrap();
+    let calc_pos = xml.find("<calcPr").unwrap();
+
+    assert!(file_version_pos < book_views_pos);
+    assert!(book_views_pos < sheets_pos);
+    assert!(sheets_pos < function_groups_pos);
+    assert!(function_groups_pos < calc_pos);
+    assert_eq!(xml.matches("<bookViews>").count(), 1);
+}
+
+#[test]
+fn fidelity_book_views_slot_emits_one_default_view() {
+    use domain_types::{
+        WorkbookXmlChildKind, WorkbookXmlChildSlot, WorkbookXmlFallbackAction, WorkbookXmlFidelity,
+        WorkbookXmlOwnerPolicy, WorkbookXmlProvenanceStatus,
+    };
+
+    let mut writer = WorkbookWriter::new();
+    writer.set_workbook_xml_fidelity(WorkbookXmlFidelity {
+        slots: vec![WorkbookXmlChildSlot {
+            kind: WorkbookXmlChildKind::BookViews,
+            owner_policy: WorkbookXmlOwnerPolicy::TypedRegenerated,
+            provenance_status: WorkbookXmlProvenanceStatus::Current,
+            fallback_action: WorkbookXmlFallbackAction::Regenerate,
+            payload_id: None,
+            reason: None,
+        }],
+        ..Default::default()
+    });
+
+    let xml = String::from_utf8(writer.to_xml()).unwrap();
+
+    assert_eq!(xml.matches("<bookViews>").count(), 1);
+    assert_eq!(xml.matches("<workbookView").count(), 1);
+}
+
+#[test]
 fn test_no_defined_names() {
     let mut writer = WorkbookWriter::new();
     writer.add_sheet("Sheet1", "rId1");

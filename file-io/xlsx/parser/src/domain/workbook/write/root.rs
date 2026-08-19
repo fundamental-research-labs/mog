@@ -1,5 +1,4 @@
 use crate::write::xml_writer::XmlWriter;
-use std::collections::HashSet;
 
 use super::attrs::{RELATIONSHIPS_NS, SPREADSHEET_NS};
 use super::writer::WorkbookWriter;
@@ -52,65 +51,36 @@ pub(super) fn write_workbook(writer: &WorkbookWriter) -> Vec<u8> {
 }
 
 fn write_workbook_children(w: &mut XmlWriter, writer: &WorkbookWriter) {
-    let mut emitted = HashSet::new();
-
-    if let Some(fidelity) = writer.workbook_xml_fidelity.as_ref() {
-        for slot in &fidelity.slots {
-            if !matches!(
-                slot.fallback_action,
-                WorkbookXmlFallbackAction::Regenerate | WorkbookXmlFallbackAction::Preserve
-            ) {
-                continue;
-            }
-            if emitted.contains(&slot.kind) && is_singleton_child(slot.kind) {
-                continue;
-            }
-
-            let did_emit = match slot.kind {
-                WorkbookXmlChildKind::FunctionGroups
-                | WorkbookXmlChildKind::OleSize
-                | WorkbookXmlChildKind::SmartTagPr
-                | WorkbookXmlChildKind::SmartTagTypes
-                | WorkbookXmlChildKind::FileRecoveryPr
-                | WorkbookXmlChildKind::WebPublishObjects => slot
-                    .payload_id
-                    .as_deref()
-                    .and_then(|payload_id| raw_child_xml(fidelity, payload_id))
-                    .map(|xml| {
-                        let xml = String::from_utf8_lossy(xml);
-                        w.raw_str(&xml);
-                    })
-                    .is_some(),
-                WorkbookXmlChildKind::ExtLst => {
-                    if writer.ext_lst_entries.is_empty() {
-                        slot.payload_id
-                            .as_deref()
-                            .and_then(|payload_id| raw_child_xml(fidelity, payload_id))
-                            .map(|xml| {
-                                let xml = String::from_utf8_lossy(xml);
-                                w.raw_str(&xml);
-                            })
-                            .is_some()
-                    } else {
-                        write_generated_ext_lst(w, writer);
-                        true
-                    }
-                }
-                kind => write_modeled_child(w, writer, kind),
-            };
-
-            if did_emit && is_singleton_child(slot.kind) {
-                emitted.insert(slot.kind);
-            }
-        }
-    }
-
     for kind in CANONICAL_CHILD_ORDER {
-        if emitted.contains(kind) && is_singleton_child(*kind) {
-            continue;
-        }
-        if write_modeled_child(w, writer, *kind) && is_singleton_child(*kind) {
-            emitted.insert(*kind);
+        let emitted_from_fidelity = writer
+            .workbook_xml_fidelity
+            .as_ref()
+            .and_then(|fidelity| {
+                fidelity
+                    .slots
+                    .iter()
+                    .find(|slot| {
+                        slot.kind == *kind
+                            && matches!(
+                                slot.fallback_action,
+                                WorkbookXmlFallbackAction::Regenerate
+                                    | WorkbookXmlFallbackAction::Preserve
+                            )
+                    })
+                    .map(|slot| {
+                        write_fidelity_child(
+                            w,
+                            writer,
+                            fidelity,
+                            slot.kind,
+                            slot.payload_id.as_deref(),
+                        )
+                    })
+            })
+            .unwrap_or(false);
+
+        if !emitted_from_fidelity {
+            write_modeled_child(w, writer, *kind);
         }
     }
 }
@@ -119,17 +89,48 @@ const CANONICAL_CHILD_ORDER: &[WorkbookXmlChildKind] = &[
     WorkbookXmlChildKind::FileVersion,
     WorkbookXmlChildKind::FileSharing,
     WorkbookXmlChildKind::WorkbookPr,
-    WorkbookXmlChildKind::BookViews,
-    WorkbookXmlChildKind::CustomWorkbookViews,
-    WorkbookXmlChildKind::Sheets,
     WorkbookXmlChildKind::WorkbookProtection,
+    WorkbookXmlChildKind::BookViews,
+    WorkbookXmlChildKind::Sheets,
+    WorkbookXmlChildKind::FunctionGroups,
     WorkbookXmlChildKind::ExternalReferences,
     WorkbookXmlChildKind::DefinedNames,
     WorkbookXmlChildKind::CalcPr,
+    WorkbookXmlChildKind::OleSize,
+    WorkbookXmlChildKind::CustomWorkbookViews,
     WorkbookXmlChildKind::PivotCaches,
+    WorkbookXmlChildKind::SmartTagPr,
+    WorkbookXmlChildKind::SmartTagTypes,
     WorkbookXmlChildKind::WebPublishing,
+    WorkbookXmlChildKind::FileRecoveryPr,
+    WorkbookXmlChildKind::WebPublishObjects,
     WorkbookXmlChildKind::ExtLst,
 ];
+
+fn write_fidelity_child(
+    w: &mut XmlWriter,
+    writer: &WorkbookWriter,
+    fidelity: &domain_types::WorkbookXmlFidelity,
+    kind: WorkbookXmlChildKind,
+    payload_id: Option<&str>,
+) -> bool {
+    match kind {
+        WorkbookXmlChildKind::FunctionGroups
+        | WorkbookXmlChildKind::OleSize
+        | WorkbookXmlChildKind::SmartTagPr
+        | WorkbookXmlChildKind::SmartTagTypes
+        | WorkbookXmlChildKind::FileRecoveryPr
+        | WorkbookXmlChildKind::WebPublishObjects => payload_id
+            .and_then(|payload_id| raw_child_xml(fidelity, payload_id))
+            .map(|xml| w.raw_str(&String::from_utf8_lossy(xml)))
+            .is_some(),
+        WorkbookXmlChildKind::ExtLst if writer.ext_lst_entries.is_empty() => payload_id
+            .and_then(|payload_id| raw_child_xml(fidelity, payload_id))
+            .map(|xml| w.raw_str(&String::from_utf8_lossy(xml)))
+            .is_some(),
+        kind => write_modeled_child(w, writer, kind),
+    }
+}
 
 fn write_modeled_child(
     w: &mut XmlWriter,
@@ -153,9 +154,8 @@ fn write_modeled_child(
             present
         }
         WorkbookXmlChildKind::BookViews => {
-            let present = !writer.workbook_views.is_empty();
             super::views::write_book_views(w, &writer.workbook_views);
-            present
+            true
         }
         WorkbookXmlChildKind::CustomWorkbookViews => {
             if let Some(xml) = writer.custom_workbook_views_xml.as_ref() {
@@ -236,10 +236,6 @@ fn raw_child_xml<'a>(
         .iter()
         .find(|raw| raw.payload_id == payload_id)
         .map(|raw| raw.xml.as_slice())
-}
-
-fn is_singleton_child(kind: WorkbookXmlChildKind) -> bool {
-    !matches!(kind, WorkbookXmlChildKind::Unknown)
 }
 
 fn workbook_conformance_to_emit(writer: &WorkbookWriter) -> Option<&str> {

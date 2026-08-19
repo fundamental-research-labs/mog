@@ -221,44 +221,49 @@ fn render_cell_text(canvas: &mut SheetCanvas, cell_text: CellText<'_>) {
         })
         .unwrap_or(colors::BLACK);
 
-    let text_w = text::measure_text_advance(&buzz_face, font_size, cell_text.text);
+    let lines = text::hard_lines(cell_text.text);
+    let line_widths: Vec<f32> = lines
+        .iter()
+        .map(|line| text::measure_text_advance(&buzz_face, font_size, line))
+        .collect();
+    let text_w = line_widths.iter().copied().fold(0.0, f32::max);
     let ascender = text::ascender_px(&buzz_face, font_size);
     let line_h = text::line_height_px(&buzz_face, font_size);
+    let text_h = line_h * lines.len() as f32;
     let clip_rect = text_clip_rect(&cell_text, text_w);
 
-    // Horizontal alignment
     use domain_types::CellVerticalAlign;
     use ooxml_types::styles::HorizontalAlign;
     let h_align = format.horizontal_align.unwrap_or(HorizontalAlign::General);
-    let text_x = match h_align {
-        HorizontalAlign::Center | HorizontalAlign::CenterContinuous => {
-            rect.x + (rect.w - text_w) / 2.0
-        }
-        HorizontalAlign::Right => rect.x + rect.w - text_w - CELL_PADDING,
-        _ => rect.x + CELL_PADDING, // Left, General, Fill, Justify, Distributed
-    };
-
-    // Vertical alignment
     let v_align = format.vertical_align.unwrap_or(CellVerticalAlign::Bottom);
-    let text_y = match v_align {
+    let first_baseline_y = match v_align {
         CellVerticalAlign::Top => rect.y + ascender + 2.0,
-        CellVerticalAlign::Middle => rect.y + (rect.h - line_h) / 2.0 + ascender,
-        _ => rect.y + rect.h - (line_h - ascender) - 2.0, // Bottom default, Justify, Distributed
+        CellVerticalAlign::Middle => rect.y + (rect.h - text_h) / 2.0 + ascender,
+        _ => rect.y + rect.h - (text_h - ascender) - 2.0,
     };
 
     canvas.set_clip(clip_rect.x, clip_rect.y, clip_rect.w, clip_rect.h);
-    text::render_text(
-        canvas,
-        &buzz_face,
-        &ttf_face,
-        text::TextRun {
-            font_size,
-            text: cell_text.text,
-            x: text_x,
-            y: text_y,
-            color: text_color,
-        },
-    );
+    for (index, (line, line_width)) in lines.iter().zip(line_widths).enumerate() {
+        let text_x = match h_align {
+            HorizontalAlign::Center | HorizontalAlign::CenterContinuous => {
+                rect.x + (rect.w - line_width) / 2.0
+            }
+            HorizontalAlign::Right => rect.x + rect.w - line_width - CELL_PADDING,
+            _ => rect.x + CELL_PADDING,
+        };
+        text::render_text(
+            canvas,
+            &buzz_face,
+            &ttf_face,
+            text::TextRun {
+                font_size,
+                text: line,
+                x: text_x,
+                y: first_baseline_y + index as f32 * line_h,
+                color: text_color,
+            },
+        );
+    }
     canvas.clear_clip();
 }
 
@@ -270,6 +275,7 @@ fn text_clip_rect(cell_text: &CellText<'_>, text_w: f32) -> CssRect {
         || !cell_value_can_overflow(cell_text.cell)
         || cell_text.format.wrap_text.unwrap_or(false)
         || cell_text.format.shrink_to_fit.unwrap_or(false)
+        || cell_text.text.contains(['\n', '\r'])
         || cell_in_merge(cell_text.data, cell_text.cell.row, cell_text.cell.col)
     {
         return rect;
@@ -563,6 +569,37 @@ mod tests {
             find_text_horizontal_bounds(&canvas, 0, 20, 66, 128, 200).is_none(),
             "no text should leak into cell B1"
         );
+    }
+
+    #[test]
+    fn hard_line_breaks_render_as_separate_physical_lines() {
+        let db = shared_font_db();
+        let format = CellFormat {
+            vertical_align: Some(domain_types::CellVerticalAlign::Top),
+            ..Default::default()
+        };
+        let mut data =
+            make_viewport_data(vec![make_cell_with_format(0, 0, "Alpha\nBeta\r\nGamma", 1)]);
+        data.format_palette.push(format);
+        data.row_positions = vec![0.0, 60.0, 80.0, 100.0, 120.0, 140.0];
+        let mut canvas = SheetCanvas::new(320, 140, 1.0);
+
+        render_cells(
+            &mut canvas,
+            &data,
+            &data.row_positions,
+            &data.col_positions,
+            0.0,
+            0.0,
+            db,
+        );
+
+        for (top, bottom) in [(0, 15), (15, 30), (30, 45)] {
+            assert!(
+                find_text_horizontal_bounds(&canvas, top, bottom, 0, 64, 200).is_some(),
+                "expected a rendered line in y={top}..{bottom}"
+            );
+        }
     }
 
     #[test]

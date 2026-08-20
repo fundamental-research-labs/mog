@@ -19,13 +19,12 @@ fn sdk_authored_chart_palette_exports_chart_color_style_part() {
     let cases = [
         (
             serde_json::json!({ "colors": ["#4472C4"] }),
-            r#"id="0""#,
+            None,
             Some(r#"<a:srgbClr val="4472C4"/>"#),
         ),
-        (serde_json::json!({ "colorScheme": 1 }), r#"id="1""#, None),
         (
             serde_json::json!({ "colors": ["#4472C4"], "colorScheme": 1 }),
-            r#"id="1""#,
+            Some(r#"id="1""#),
             Some(r#"<a:srgbClr val="4472C4"/>"#),
         ),
     ];
@@ -41,7 +40,7 @@ fn sdk_authored_chart_palette_exports_chart_color_style_part() {
 
 fn assert_sdk_authored_chart_color_style_export(
     appearance_config: serde_json::Value,
-    expected_scheme: &str,
+    expected_scheme: Option<&str>,
     expected_color: Option<&str>,
 ) {
     let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
@@ -84,10 +83,42 @@ fn assert_sdk_authored_chart_color_style_export(
             .contains("http://schemas.microsoft.com/office/2011/relationships/chartColorStyle")
     );
     assert!(chart_rels.contains(r#"Target="colors1.xml""#));
-    assert!(color_style.contains(expected_scheme));
+    if let Some(expected_scheme) = expected_scheme {
+        assert!(color_style.contains(expected_scheme));
+    } else {
+        assert!(!color_style.contains(r#" id="#));
+    }
     if let Some(expected_color) = expected_color {
         assert!(color_style.contains(expected_color));
     }
+}
+
+#[test]
+fn sdk_authored_chart_color_scheme_without_palette_omits_invalid_sidecar() {
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let sheet_id = sheet_id();
+    engine
+        .create_chart(
+            &sheet_id,
+            &serde_json::json!({
+                "type": "area",
+                "name": "Scheme-only Contract",
+                "dataRange": "A1:B2",
+                "anchorRow": 7,
+                "anchorCol": 1,
+                "width": 480.0,
+                "height": 320.0,
+                "colorScheme": 1
+            }),
+        )
+        .expect("chart creation should succeed");
+
+    let exported_bytes = engine.export_to_xlsx_bytes().expect("export xlsx bytes");
+    assert!(archive_text(&exported_bytes, "xl/charts/colors1.xml").is_none());
+    let chart_rels = archive_text(&exported_bytes, "xl/charts/_rels/chart1.xml.rels");
+    assert!(chart_rels.as_deref().is_none_or(|rels| {
+        !rels.contains("http://schemas.microsoft.com/office/2011/relationships/chartColorStyle")
+    }));
 }
 
 #[test]
@@ -163,6 +194,49 @@ fn imported_standard_chart_metadata_survives_yrs_with_current_package_replay() {
     assert!(archive.contains("xl/charts/_rels/chart2.xml.rels"));
     assert!(archive.contains("xl/charts/style2.xml"));
     assert!(archive.contains("xl/charts/colors2.xml"));
+}
+
+#[test]
+fn historical_nested_chart_palette_is_regenerated_during_current_replay() {
+    let mut chart = imported_current_standard_chart2();
+    chart.colors = Some(vec!["AAD7E2".to_string()]);
+    chart.color_scheme = None;
+    chart.chart_auxiliary_files[1].1 = br#"<cs:colorStyle xmlns:cs="http://schemas.microsoft.com/office/drawing/2012/chartStyle" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" meth="cycle" id="0"><cs:variation><a:srgbClr val="AAD7E2"/></cs:variation></cs:colorStyle>"#.to_vec();
+    let fingerprint = standard_chart_projection_fingerprint(&chart);
+    chart
+        .standard_chart_provenance
+        .as_mut()
+        .expect("import provenance")
+        .projection_fingerprint = Some(fingerprint.clone());
+    chart
+        .standard_chart_export_authority
+        .as_mut()
+        .expect("export authority")
+        .projection_fingerprint = Some(fingerprint);
+
+    let input = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Data".to_string(),
+            rows: 20,
+            cols: 8,
+            charts: vec![chart],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let engine = engine_from_parse_output_normal(&input);
+    let exported_bytes = engine.export_to_xlsx_bytes().expect("export xlsx bytes");
+    let color_style = archive_text(&exported_bytes, "xl/charts/colors2.xml")
+        .expect("repaired chart color style should exist");
+    let chart_rels = archive_text(&exported_bytes, "xl/charts/_rels/chart2.xml.rels")
+        .expect("chart relationships should exist");
+
+    assert!(color_style.contains(r#"<a:srgbClr val="AAD7E2"/><cs:variation/>"#));
+    assert!(!color_style.contains(r#"id="0""#));
+    assert!(!color_style.contains(r#"<cs:variation><a:srgbClr"#));
+    assert!(chart_rels.contains(r#"Id="rId2""#));
+    assert!(chart_rels.contains(r#"Target="colors2.xml""#));
+    assert!(archive_text(&exported_bytes, "xl/charts/style2.xml").is_some());
 }
 
 #[test]
@@ -419,7 +493,7 @@ fn imported_current_standard_chart2() -> ChartSpec {
         ),
         (
             "xl/charts/colors2.xml".to_string(),
-            br#"<cs:colorStyle xmlns:cs="http://schemas.microsoft.com/office/drawing/2012/chartStyle"/>"#
+            br#"<cs:colorStyle xmlns:cs="http://schemas.microsoft.com/office/drawing/2012/chartStyle" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" meth="cycle"><a:schemeClr val="accent1"/><cs:variation/></cs:colorStyle>"#
                 .to_vec(),
         ),
     ];

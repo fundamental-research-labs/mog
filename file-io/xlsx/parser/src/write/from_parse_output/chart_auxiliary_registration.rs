@@ -9,14 +9,20 @@ pub(super) fn register_generated_chart_color_style(
     chart_auxiliary_relationships: &mut Vec<ChartAuxiliaryRelationshipGraphEntry>,
     chart_spec: &domain_types::ChartSpec,
     chart_path: &str,
-) -> Result<bool, WriteError> {
-    if chart_replay::chart_allows_current_auxiliary_replay(chart_spec, chart_path) {
-        return Ok(false);
+) -> Result<(), WriteError> {
+    let allows_current_auxiliary_replay =
+        chart_replay::chart_allows_current_auxiliary_replay(chart_spec, chart_path);
+    if !chart_auxiliary::should_generate_chart_color_style(
+        chart_spec,
+        chart_path,
+        allows_current_auxiliary_replay,
+    ) {
+        return Ok(());
     }
     let Some(color_style) =
         chart_auxiliary::generated_chart_color_style_data(chart_spec, chart_path)
     else {
-        return Ok(false);
+        return Ok(());
     };
     if registered_chart_auxiliary_parts.insert(color_style.path.clone()) {
         crate::write::package_graph::register_chart_auxiliary_part(
@@ -28,7 +34,7 @@ pub(super) fn register_generated_chart_color_style(
         chart_path: chart_path.to_string(),
         rel_type: color_style.relationship_type.to_string(),
         target_path: color_style.path,
-        relationship_id_hint: color_style.relationship_id_hint.to_string(),
+        relationship_id_hint: color_style.relationship_id_hint,
     });
-    Ok(true)
+    Ok(())
 }

@@ -34,7 +34,7 @@ pub(super) struct GeneratedChartColorStyle {
     pub(super) path: String,
     pub(super) data: Vec<u8>,
     pub(super) relationship_type: &'static str,
-    pub(super) relationship_id_hint: &'static str,
+    pub(super) relationship_id_hint: String,
 }
 
 pub(super) fn chart_auxiliary_data(chart_spec: &ChartSpec) -> Option<ChartAuxiliaryDataRef<'_>> {
@@ -131,12 +131,34 @@ pub(super) fn generated_chart_color_style_data(
         chart_spec.color_scheme,
     )?;
     let number = chart_number(chart_path)?;
+    let imported_identity = imported_chart_color_style(chart_spec, chart_path)
+        .map(|(relationship, path, _)| (relationship.r_id.clone(), path));
+    let (relationship_id_hint, path) = imported_identity.unwrap_or_else(|| {
+        (
+            "rIdChartColorStyle".to_string(),
+            format!("xl/charts/colors{number}.xml"),
+        )
+    });
     Some(GeneratedChartColorStyle {
-        path: format!("xl/charts/colors{number}.xml"),
+        path,
         data,
         relationship_type: REL_CHART_COLOR_STYLE,
-        relationship_id_hint: "rIdChartColorStyle",
+        relationship_id_hint,
     })
+}
+
+pub(super) fn should_generate_chart_color_style(
+    chart_spec: &ChartSpec,
+    chart_path: &str,
+    allows_current_auxiliary_replay: bool,
+) -> bool {
+    !allows_current_auxiliary_replay
+        || matches!(
+            imported_chart_color_style(chart_spec, chart_path).map(|(_, _, data)| {
+                crate::domain::charts::color_style::chart_color_style_xml_is_replay_safe(data)
+            }),
+            Some(false)
+        )
 }
 
 pub(super) fn standard_chart_number(aux: &ChartAuxiliaryDataRef<'_>) -> Option<usize> {
@@ -162,7 +184,20 @@ pub(super) fn supported_auxiliary_file_paths(
         .iter()
         .map(|(path, _)| normalize_path(path))
         .filter(|path| relationship_targets.contains(path))
+        .filter(|path| auxiliary_file_is_replay_safe(aux, path))
         .collect()
+}
+
+fn auxiliary_file_is_replay_safe(aux: &ChartAuxiliaryDataRef<'_>, path: &str) -> bool {
+    if !matches!(auxiliary_kind(path), Some(AuxiliaryKind::ColorStyle)) {
+        return true;
+    }
+    aux.auxiliary_files
+        .iter()
+        .find(|(candidate, _)| normalize_path(candidate) == path)
+        .is_some_and(|(_, data)| {
+            crate::domain::charts::color_style::chart_color_style_xml_is_replay_safe(data)
+        })
 }
 
 pub(super) fn supported_auxiliary_relationship_targets<'a>(
@@ -189,6 +224,27 @@ pub(super) fn is_supported_auxiliary_relationship(rel_type: &str, target_path: &
         Some(AuxiliaryKind::UserShapes) => rel_type == REL_CHART_USER_SHAPES,
         None => false,
     }
+}
+
+fn imported_chart_color_style<'a>(
+    chart_spec: &'a ChartSpec,
+    chart_path: &str,
+) -> Option<(&'a ChartRelationshipData, String, &'a [u8])> {
+    let relationship = chart_spec.chart_relationships.iter().find(|relationship| {
+        relationship.relationship_type.as_deref() == Some(REL_CHART_COLOR_STYLE)
+            && !crate::write::package_graph::is_external_target_mode(
+                relationship.target_mode.as_deref(),
+            )
+    })?;
+    let target = relationship.target.as_deref()?;
+    let path = crate::infra::opc::resolve_relationship_target(Some(chart_path), target)
+        .ok()
+        .map(|path| normalize_path(&path))?;
+    let (_, data) = chart_spec
+        .chart_auxiliary_files
+        .iter()
+        .find(|(candidate, _)| normalize_path(candidate) == path)?;
+    Some((relationship, path, data.as_slice()))
 }
 
 fn chart_identity_path(chart_spec: &ChartSpec) -> Option<String> {

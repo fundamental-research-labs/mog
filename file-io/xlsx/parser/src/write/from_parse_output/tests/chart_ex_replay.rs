@@ -57,7 +57,7 @@ fn imported_rich_title_chart_ex(original_number: usize, family_marker: &str) -> 
         (
             color_path,
             format!(
-                r#"<cs:colorStyle xmlns:cs="http://schemas.microsoft.com/office/drawing/2012/chartStyle"><!--COLOR-{family_marker}--></cs:colorStyle>"#
+                r#"<cs:colorStyle xmlns:cs="http://schemas.microsoft.com/office/drawing/2012/chartStyle" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" meth="cycle"><a:schemeClr val="accent1"/><cs:variation/><!--COLOR-{family_marker}--></cs:colorStyle>"#
             )
             .into_bytes(),
         ),

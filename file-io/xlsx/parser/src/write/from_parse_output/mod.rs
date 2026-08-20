@@ -1415,13 +1415,14 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                 entry.global_idx,
             )?;
             let chart_spec = &output.sheets[sheet_idx].charts[entry.source_idx];
-            if !chart_auxiliary_registration::register_generated_chart_color_style(
+            chart_auxiliary_registration::register_generated_chart_color_style(
                 &mut package_graph_builder,
                 &mut registered_chart_auxiliary_parts,
                 &mut chart_auxiliary_relationships,
                 chart_spec,
                 &chart_path,
-            )? && chart_replay::chart_allows_current_auxiliary_replay(chart_spec, &chart_path)
+            )?;
+            if chart_replay::chart_allows_current_auxiliary_replay(chart_spec, &chart_path)
                 && let Some(aux) = chart_auxiliary::chart_auxiliary_data(chart_spec)
             {
                 let auxiliary_paths =
@@ -1479,13 +1480,14 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                 entry.global_idx,
             )?;
             let chart_spec = &output.sheets[sheet_idx].charts[entry.source_idx];
-            if !chart_auxiliary_registration::register_generated_chart_color_style(
+            chart_auxiliary_registration::register_generated_chart_color_style(
                 &mut package_graph_builder,
                 &mut registered_chart_auxiliary_parts,
                 &mut chart_auxiliary_relationships,
                 chart_spec,
                 &chart_path,
-            )? && chart_replay::chart_allows_current_auxiliary_replay(chart_spec, &chart_path)
+            )?;
+            if chart_replay::chart_allows_current_auxiliary_replay(chart_spec, &chart_path)
                 && let Some(aux) = chart_auxiliary::chart_auxiliary_data(chart_spec)
             {
                 let auxiliary_paths =

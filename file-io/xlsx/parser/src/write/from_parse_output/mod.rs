@@ -929,6 +929,10 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                         .or(chart_spec.anchor_edit_as.as_deref())
                         .map(ooxml_types::drawings::EditAs::from_ooxml);
                     let chart_object = DrawingObject::ChartEx(cx_ref);
+                    if chart_frame.is_some_and(|frame| frame.nested_in_group) {
+                        cx_local_idx += 1;
+                        continue;
+                    }
                     let raw_alternate_content = chart_replay::chart_ex_raw_anchor_replay_xml(
                         chart_spec,
                         &cx_path,
@@ -1072,6 +1076,10 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                         xfrm_flip_h: frame_transform.flip_h,
                         xfrm_flip_v: frame_transform.flip_v,
                     };
+                    if chart_frame.is_some_and(|frame| frame.nested_in_group) {
+                        regular_local_idx += 1;
+                        continue;
+                    }
                     if let (Some(x), Some(y)) = (
                         chart_spec.position.absolute_x,
                         chart_spec.position.absolute_y,

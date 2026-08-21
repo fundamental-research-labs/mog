@@ -539,6 +539,38 @@ fn imported_chart_allocates_new_relationship_id_when_preferred_id_is_taken() {
 }
 
 #[test]
+fn grouped_chart_is_not_promoted_to_a_second_top_level_anchor() {
+    let mut chart = with_chart_identity(
+        make_chart(ChartType::Column, "Data!A1:B2"),
+        "../charts/chart1.xml",
+    );
+    chart.chart_frame.as_mut().unwrap().anchor_index = Some(0);
+    chart.chart_frame.as_mut().unwrap().nested_in_group = true;
+    let chart = with_current_standard_chart_authority(chart);
+
+    let output = make_parse_output(vec![SheetData {
+        name: "Data".to_string(),
+        cells: vec![
+            make_cell(0, 0, DomainValue::Text(Arc::from("Quarter"))),
+            make_cell(0, 1, DomainValue::Text(Arc::from("Revenue"))),
+            make_cell(1, 0, DomainValue::Text(Arc::from("Q1"))),
+            make_cell(1, 1, DomainValue::Number(FiniteF64::new(100.0).unwrap())),
+        ],
+        charts: vec![chart],
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let drawing_xml =
+        String::from_utf8(archive.read_file("xl/drawings/drawing1.xml").unwrap()).unwrap();
+
+    assert!(!drawing_xml.contains("<xdr:graphicFrame"), "{drawing_xml}");
+    assert!(archive.contains("xl/charts/chart1.xml"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn imported_chart_with_modeled_chart_property_does_not_replay_stale_raw_chart_xml() {
     let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
     imported_chart.title = None;

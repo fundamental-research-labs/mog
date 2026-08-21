@@ -781,6 +781,7 @@ impl ChartSpec {
             client_data_prints_with_sheet: self.client_data_prints_with_sheet,
             relationship_id: None,
             relationship_target: None,
+            nested_in_group: false,
             raw_alternate_content: None,
         })
     }

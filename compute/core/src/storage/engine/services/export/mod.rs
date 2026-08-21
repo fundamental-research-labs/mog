@@ -835,7 +835,8 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
     let persons = export_workbook_threaded_comment_persons(stores);
     let has_persons_part = !persons.is_empty()
         || workbook::export_workbook_threaded_comment_persons_part_present(stores);
-    let pivot_tables = export_workbook_parsed_pivot_tables(stores);
+    let pivot_tables =
+        export_workbook_parsed_pivot_tables(stores, mirror, default_pivot_style.as_deref());
 
     let output = ParseOutput {
         sheets: output_sheets,

@@ -382,7 +382,11 @@ impl YrsComputeEngine {
     fn export_workbook_parsed_pivot_tables(
         &self,
     ) -> Vec<domain_types::domain::pivot::ParsedPivotTable> {
-        super::services::export::export_workbook_parsed_pivot_tables(&self.stores)
+        super::services::export::export_workbook_parsed_pivot_tables(
+            &self.stores,
+            &self.mirror,
+            None,
+        )
     }
 }
 

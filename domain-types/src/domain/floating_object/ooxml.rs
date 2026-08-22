@@ -128,6 +128,12 @@ pub struct ConnectorOoxmlProps {
     pub client_data_prints_with_sheet: Option<bool>,
     /// Raw XML for mc:AlternateContent.
     pub mc_alternate_content_raw_xml: Option<String>,
+    /// Whether the connector is owned by a group shape rather than by the
+    /// worksheet drawing anchor directly. Group-owned connectors remain
+    /// available to the runtime model, but must not be emitted as additional
+    /// top-level drawing anchors during export.
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub nested_in_group: bool,
 }
 
 /// OOXML round-trip properties for drawing objects that are not projected into

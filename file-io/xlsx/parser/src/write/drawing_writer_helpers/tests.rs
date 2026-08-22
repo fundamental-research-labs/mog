@@ -684,6 +684,28 @@ fn connector_anchor_index_is_carried_without_anchor_level_ooxml_restoration() {
 }
 
 #[test]
+fn group_owned_connector_is_not_emitted_as_a_top_level_anchor() {
+    let conn = FloatingObject {
+        common: make_common("Grouped line"),
+        data: FloatingObjectData::Connector(ConnectorData {
+            shape_type: "line".to_string(),
+            fill: None,
+            outline: None,
+            start_connection: None,
+            end_connection: None,
+            adjustments: None,
+            ooxml: Some(ConnectorOoxmlProps {
+                nested_in_group: true,
+                ..Default::default()
+            }),
+        }),
+    };
+
+    let result = build_sheet_drawing_data(&[conn]);
+    assert!(result.anchors.is_empty());
+}
+
+#[test]
 fn unknown_mime_type_defaults_to_png_extension() {
     let parsed = parse_data_url("data:application/octet-stream;base64,AQIDBA==")
         .expect("unknown mime should still decode");

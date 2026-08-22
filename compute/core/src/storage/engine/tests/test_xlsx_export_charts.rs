@@ -197,6 +197,41 @@ fn imported_standard_chart_metadata_survives_yrs_with_current_package_replay() {
 }
 
 #[test]
+fn reconstructed_standard_chart_retains_imported_style_and_color_companions() {
+    let mut chart = imported_current_standard_chart2();
+    chart.title = Some("Edited Revenue".to_string());
+    let input = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Data".to_string(),
+            rows: 20,
+            cols: 8,
+            charts: vec![chart],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let engine = engine_from_parse_output_normal(&input);
+    let exported_bytes = engine.export_to_xlsx_bytes().expect("export xlsx bytes");
+    let archive =
+        xlsx_parser::zip::XlsxArchive::new(&exported_bytes).expect("exported XLSX is readable");
+    let chart_rels = archive_text(&exported_bytes, "xl/charts/_rels/chart1.xml.rels")
+        .expect("reconstructed chart relationships should exist");
+    let content_types =
+        archive_text(&exported_bytes, "[Content_Types].xml").expect("content types should exist");
+
+    assert!(archive.contains("xl/charts/chart1.xml"));
+    assert!(archive.contains("xl/charts/style2.xml"));
+    assert!(archive.contains("xl/charts/colors2.xml"));
+    assert!(chart_rels.contains(xlsx_parser::infra::opc::REL_CHART_STYLE));
+    assert!(chart_rels.contains(r#"Target="style2.xml""#));
+    assert!(chart_rels.contains(xlsx_parser::infra::opc::REL_CHART_COLOR_STYLE));
+    assert!(chart_rels.contains(r#"Target="colors2.xml""#));
+    assert!(content_types.contains(r#"PartName="/xl/charts/style2.xml""#));
+    assert!(content_types.contains(r#"PartName="/xl/charts/colors2.xml""#));
+}
+
+#[test]
 fn historical_nested_chart_palette_is_regenerated_during_current_replay() {
     let mut chart = imported_current_standard_chart2();
     chart.colors = Some(vec!["AAD7E2".to_string()]);

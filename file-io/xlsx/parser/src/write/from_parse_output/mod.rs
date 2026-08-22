@@ -302,7 +302,18 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
     // Global VML drawing counter for archive paths (xl/drawings/vmlDrawing{N}.vml).
     // Excel numbers VML drawings sequentially across all sheets (1, 2, 3...),
     // NOT by sheet index. This counter mirrors the pattern used by global_table_idx.
-    let mut global_vml_idx: usize = 0;
+    let mut global_vml_idx = sheet_extras
+        .iter()
+        .flat_map(|extras| {
+            extras
+                .original_vml_path
+                .as_deref()
+                .into_iter()
+                .chain(extras.hf_vml.as_ref().map(|hf| hf.vml_path.as_str()))
+        })
+        .filter_map(extract_vml_drawing_number)
+        .max()
+        .unwrap_or(0);
 
     // Global drawing counter for archive paths (xl/drawings/drawing{N}.xml).
     // Excel numbers drawings sequentially across sheets that have drawings (1, 2, 3...),
@@ -312,10 +323,20 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
     // Global comment counter for archive paths (xl/comments{N}.xml).
     // Excel numbers comment files sequentially across sheets that have comments (1, 2, 3...),
     // NOT by sheet index. Same pattern as VML drawings and tables.
-    let mut global_comment_idx: usize = 0;
+    let mut global_comment_idx = sheet_extras
+        .iter()
+        .filter_map(|extras| extras.original_comment_path.as_deref())
+        .filter_map(extract_comment_number)
+        .max()
+        .unwrap_or(0);
 
     // Global threaded comment counter (xl/threadedComments/threadedComment{N}.xml).
-    let mut global_tc_idx: usize = 0;
+    let mut global_tc_idx = sheet_extras
+        .iter()
+        .filter_map(|extras| extras.original_threaded_comments_path.as_deref())
+        .filter_map(extract_threaded_comment_number)
+        .max()
+        .unwrap_or(0);
 
     // Global ctrlProp counter for archive paths (xl/ctrlProps/ctrlProp{N}.xml).
     let mut global_ctrl_prop_idx: usize = 0;
@@ -467,15 +488,13 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
 
         // Comment rels
         if has_comments {
-            global_vml_idx += 1;
-            global_comment_idx += 1;
             let comments_path = sheet_extras[sheet_idx]
                 .original_comment_path
                 .clone()
-                .unwrap_or_else(|| format!("xl/comments{}.xml", global_comment_idx));
-            if let Some(n) = extract_comment_number(&comments_path) {
-                global_comment_idx = global_comment_idx.max(n);
-            }
+                .unwrap_or_else(|| {
+                    global_comment_idx += 1;
+                    format!("xl/comments{}.xml", global_comment_idx)
+                });
             let comments_target = worksheet_relative_target(&comments_path);
             let generated_comments_r_id = rels.add(REL_COMMENTS, &comments_target);
             let comments_relationship_id_hint = sheet_extras[sheet_idx]
@@ -485,10 +504,10 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             let vml_path = sheet_extras[sheet_idx]
                 .original_vml_path
                 .clone()
-                .unwrap_or_else(|| format!("xl/drawings/vmlDrawing{}.vml", global_vml_idx));
-            if let Some(n) = extract_vml_drawing_number(&vml_path) {
-                global_vml_idx = global_vml_idx.max(n);
-            }
+                .unwrap_or_else(|| {
+                    global_vml_idx += 1;
+                    format!("xl/drawings/vmlDrawing{}.vml", global_vml_idx)
+                });
             let vml_target = worksheet_relative_target(&vml_path);
             let generated_vml_r_id = rels.add(REL_VML_DRAWING, &vml_target);
             let vml_relationship_id_hint = sheet_extras[sheet_idx]
@@ -559,14 +578,13 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
 
             // Add VML drawing relationship for form controls (separate from comment VML)
             if !has_comments {
-                global_vml_idx += 1;
                 let path = sheet_extras[sheet_idx]
                     .original_vml_path
                     .clone()
-                    .unwrap_or_else(|| format!("xl/drawings/vmlDrawing{}.vml", global_vml_idx));
-                if let Some(n) = extract_vml_drawing_number(&path) {
-                    global_vml_idx = global_vml_idx.max(n);
-                }
+                    .unwrap_or_else(|| {
+                        global_vml_idx += 1;
+                        format!("xl/drawings/vmlDrawing{}.vml", global_vml_idx)
+                    });
                 let target = worksheet_relative_target(&path);
                 let relationship_id_hint = Some(rels.add(REL_VML_DRAWING, &target));
                 worksheet_form_control_vml_relationships.push(WorksheetFormControlVmlGraphEntry {
@@ -597,14 +615,13 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             }
 
             if !has_comments && !has_form_controls {
-                global_vml_idx += 1;
                 let path = sheet_extras[sheet_idx]
                     .original_vml_path
                     .clone()
-                    .unwrap_or_else(|| format!("xl/drawings/vmlDrawing{}.vml", global_vml_idx));
-                if let Some(n) = extract_vml_drawing_number(&path) {
-                    global_vml_idx = global_vml_idx.max(n);
-                }
+                    .unwrap_or_else(|| {
+                        global_vml_idx += 1;
+                        format!("xl/drawings/vmlDrawing{}.vml", global_vml_idx)
+                    });
                 let target = worksheet_relative_target(&path);
                 let relationship_id_hint = Some(rels.add(REL_VML_DRAWING, &target));
                 worksheet_ole_vml_relationships.push(WorksheetOleVmlGraphEntry {
@@ -618,13 +635,11 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
 
         // Threaded comment rels (must come after legacy comment rels)
         if has_threaded_comments {
-            global_tc_idx += 1;
-            if let Some(path) = sheet_extras[sheet_idx]
+            if sheet_extras[sheet_idx]
                 .original_threaded_comments_path
-                .as_deref()
-                && let Some(n) = extract_threaded_comment_number(path)
+                .is_none()
             {
-                global_tc_idx = global_tc_idx.max(n);
+                global_tc_idx += 1;
             }
             worksheet_threaded_comments_relationships.push(
                 threaded_comments::add_relationship_for_export(
@@ -1430,11 +1445,14 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                 chart_spec,
                 &chart_path,
             )?;
-            if chart_replay::chart_allows_current_auxiliary_replay(chart_spec, &chart_path)
-                && let Some(aux) = chart_auxiliary::chart_auxiliary_data(chart_spec)
-            {
-                let auxiliary_paths =
-                    chart_auxiliary::supported_auxiliary_file_paths(&aux, &chart_path);
+            if let Some(aux) = chart_auxiliary::chart_auxiliary_data(chart_spec) {
+                let allows_current_auxiliary_replay =
+                    chart_replay::chart_allows_current_auxiliary_replay(chart_spec, &chart_path);
+                let auxiliary_paths = chart_auxiliary::auxiliary_file_paths_for_export(
+                    chart_spec,
+                    &chart_path,
+                    allows_current_auxiliary_replay,
+                );
                 for (path, _) in aux.auxiliary_files {
                     if !auxiliary_paths.contains(path.trim_start_matches('/')) {
                         continue;
@@ -1495,11 +1513,14 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                 chart_spec,
                 &chart_path,
             )?;
-            if chart_replay::chart_allows_current_auxiliary_replay(chart_spec, &chart_path)
-                && let Some(aux) = chart_auxiliary::chart_auxiliary_data(chart_spec)
-            {
-                let auxiliary_paths =
-                    chart_auxiliary::supported_auxiliary_file_paths(&aux, &chart_path);
+            if let Some(aux) = chart_auxiliary::chart_auxiliary_data(chart_spec) {
+                let allows_current_auxiliary_replay =
+                    chart_replay::chart_allows_current_auxiliary_replay(chart_spec, &chart_path);
+                let auxiliary_paths = chart_auxiliary::auxiliary_file_paths_for_export(
+                    chart_spec,
+                    &chart_path,
+                    allows_current_auxiliary_replay,
+                );
                 for (path, _) in aux.auxiliary_files {
                     if !auxiliary_paths.contains(path.trim_start_matches('/')) {
                         continue;

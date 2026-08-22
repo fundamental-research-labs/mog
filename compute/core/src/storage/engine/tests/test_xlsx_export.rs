@@ -214,6 +214,109 @@ fn xlsx_export_preserves_imported_form_control_order_through_yrs_storage() {
     );
 }
 
+#[test]
+fn grouped_connector_ownership_survives_yrs_without_duplicate_top_level_anchor() {
+    use domain_types::domain::{
+        drawings::{DrawingContent, GroupShapeData},
+        floating_object::{
+            AnchorMode, ConnectorData, ConnectorOoxmlProps, FloatingObject, FloatingObjectAnchor,
+            FloatingObjectCommon, FloatingObjectData, ShapeData, ShapeOoxmlProps,
+        },
+    };
+
+    let grouped_connector = ooxml_types::drawings::SpreadsheetConnector::default();
+    let group = FloatingObject {
+        common: FloatingObjectCommon {
+            id: "group-1".to_string(),
+            name: "Group 1".to_string(),
+            width: 240.0,
+            height: 120.0,
+            anchor: FloatingObjectAnchor {
+                anchor_mode: AnchorMode::TwoCell,
+                end_row: Some(8),
+                end_col: Some(5),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        data: FloatingObjectData::Shape(ShapeData {
+            shape_type: "group".to_string(),
+            ooxml: Some(ShapeOoxmlProps {
+                anchor_index: Some(0),
+                group_shape: Some(GroupShapeData {
+                    children: vec![DrawingContent::Connector(grouped_connector.clone())],
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }),
+    };
+    let projected_connector = FloatingObject {
+        common: FloatingObjectCommon {
+            id: "connector-1".to_string(),
+            name: "Grouped line".to_string(),
+            width: 120.0,
+            height: 40.0,
+            anchor: FloatingObjectAnchor {
+                anchor_mode: AnchorMode::TwoCell,
+                end_row: Some(4),
+                end_col: Some(3),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        data: FloatingObjectData::Connector(ConnectorData {
+            shape_type: "line".to_string(),
+            fill: None,
+            outline: None,
+            start_connection: None,
+            end_connection: None,
+            adjustments: None,
+            ooxml: Some(ConnectorOoxmlProps {
+                connector: grouped_connector,
+                anchor_index: Some(0),
+                nested_in_group: true,
+                ..Default::default()
+            }),
+        }),
+    };
+    let input = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Grouped connector".to_string(),
+            rows: 10,
+            cols: 8,
+            floating_objects: vec![group, projected_connector],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let engine = engine_from_parse_output_normal(&input);
+    let hydrated = engine
+        .export_to_parse_output()
+        .expect("Yrs export should succeed")
+        .parse_output;
+    let connector_ooxml = hydrated.sheets[0]
+        .floating_objects
+        .iter()
+        .find_map(|object| match &object.data {
+            FloatingObjectData::Connector(connector) => connector.ooxml.as_ref(),
+            _ => None,
+        })
+        .expect("projected connector should survive Yrs hydration");
+    assert!(connector_ooxml.nested_in_group);
+
+    let exported_bytes = engine.export_to_xlsx_bytes().expect("export xlsx bytes");
+    let drawing_xml = archive_text(&exported_bytes, "xl/drawings/drawing1.xml")
+        .expect("drawing XML should exist");
+    assert_eq!(
+        drawing_xml.matches("<xdr:twoCellAnchor").count(),
+        1,
+        "the connector already owned by the group must not be duplicated as a worksheet anchor"
+    );
+}
+
 fn ole_owner_parse_output() -> ParseOutput {
     use domain_types::domain::floating_object::{
         AnchorMode, FloatingObject, FloatingObjectAnchor, FloatingObjectCommon, FloatingObjectData,

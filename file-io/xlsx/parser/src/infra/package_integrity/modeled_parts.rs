@@ -12,8 +12,9 @@ use crate::infra::opc::{
     REL_WORKSHEET, relationship_owner_from_rels_path, resolve_relationship_target,
 };
 use crate::write::{
-    CT_CHART, CT_COMMENTS, CT_CORE_PROPERTIES, CT_CUSTOM_PROPERTIES, CT_DRAWING,
-    CT_EXTENDED_PROPERTIES, CT_SHARED_STRINGS, CT_STYLES, CT_TABLE, CT_THEME, CT_WORKSHEET,
+    CT_CHART, CT_CHART_USER_SHAPES, CT_COMMENTS, CT_CORE_PROPERTIES, CT_CUSTOM_PROPERTIES,
+    CT_DRAWING, CT_EXTENDED_PROPERTIES, CT_SHARED_STRINGS, CT_STYLES, CT_TABLE, CT_THEME,
+    CT_WORKSHEET,
 };
 use crate::zip::XlsxArchive;
 
@@ -156,7 +157,9 @@ pub(super) fn validate_modeled_part_invariants(
             );
             require_content_type(archive, path, CT_THREADED_COMMENTS, errors);
         } else if is_drawing_part(path) {
-            if has_any_relationship_to_path(relationships_by_part, REL_CHART_USER_SHAPES, path) {
+            let is_chart_user_shapes =
+                has_any_relationship_to_path(relationships_by_part, REL_CHART_USER_SHAPES, path);
+            if is_chart_user_shapes {
                 require_any_relationship_to_path(
                     relationships_by_part,
                     REL_CHART_USER_SHAPES,
@@ -166,7 +169,16 @@ pub(super) fn validate_modeled_part_invariants(
             } else {
                 require_any_relationship_to_path(relationships_by_part, REL_DRAWING, path, errors);
             }
-            require_content_type(archive, path, CT_DRAWING, errors);
+            require_content_type(
+                archive,
+                path,
+                if is_chart_user_shapes {
+                    CT_CHART_USER_SHAPES
+                } else {
+                    CT_DRAWING
+                },
+                errors,
+            );
         } else if is_chart_ex_part(path) {
             require_any_relationship_to_path(relationships_by_part, REL_CHART_EX, path, errors);
             require_content_type(archive, path, CT_CHART_EX, errors);

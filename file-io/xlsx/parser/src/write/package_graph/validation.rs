@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashSet};
 
 use super::{
     CONTENT_TYPE_CTRL_PROP, CT_CHART, CT_CHART_COLOR_STYLE, CT_CHART_EX, CT_CHART_STYLE,
-    CT_COMMENTS, CT_CONNECTIONS, CT_CORE_PROPERTIES, CT_CUSTOM_PROPERTIES,
+    CT_CHART_USER_SHAPES, CT_COMMENTS, CT_CONNECTIONS, CT_CORE_PROPERTIES, CT_CUSTOM_PROPERTIES,
     CT_DOC_METADATA_LABEL_INFO, CT_DRAWING, CT_EXTENDED_PROPERTIES, CT_METADATA, CT_OLE_OBJECT,
     CT_PIVOT_CACHE, CT_PIVOT_CACHE_RECORDS, CT_PIVOT_TABLE, CT_QUERY_TABLE, CT_SHARED_STRINGS,
     CT_SLICER, CT_SLICER_CACHE, CT_STYLES, CT_TABLE, CT_TABLE_SINGLE_CELLS, CT_THEME,
@@ -31,7 +31,13 @@ pub(super) fn validate_required_content_type(
     if !matches!(part.kind, PackagePartKind::Modeled) {
         return;
     }
-    let Some(expected) = required_content_type_for_modeled_part(&part.path) else {
+    let expected = if part.semantic_kind == Some(domain_types::XlsxPackagePartKind::ChartUserShapes)
+    {
+        Some(CT_CHART_USER_SHAPES)
+    } else {
+        required_content_type_for_modeled_part(&part.path)
+    };
+    let Some(expected) = expected else {
         return;
     };
     if part.content_type.as_deref() != Some(expected) {

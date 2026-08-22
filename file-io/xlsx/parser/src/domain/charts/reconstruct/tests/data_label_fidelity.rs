@@ -297,6 +297,56 @@ fn imported_group_explicit_false_data_label_flags_survive_reconstruction() {
 }
 
 #[test]
+fn imported_series_explicit_false_data_label_flags_survive_reconstruction() {
+    let mut spec = minimal_chart_spec(DomainChartType::Pie, None);
+    spec.series = vec![modeled_series(0, None, "Composition", "Data!$B$2:$B$4")];
+    spec.definition = Some(ChartDefinition::Chart(ChartSpace {
+        chart: Chart {
+            plot_area: PlotArea {
+                chart_groups: vec![ChartGroup {
+                    chart_type: OoxmlChartType::Pie,
+                    config: ChartTypeConfig::Pie(PieChartConfig::default()),
+                    series: vec![ChartSeries {
+                        idx: 0,
+                        order: 0,
+                        d_lbls: Some(imported_explicit_false_data_label_options()),
+                        ..Default::default()
+                    }],
+                    d_lbls: None,
+                    ax_id: Vec::new(),
+                    raw_chart_type_attr: None,
+                    raw_chart_element_name: None,
+                    raw_chart_group_xml: None,
+                }],
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        ..Default::default()
+    }));
+
+    let xml = chart_xml(&spec);
+    let series_xml = xml
+        .split_once("<c:ser>")
+        .and_then(|(_, remainder)| remainder.split_once("</c:ser>"))
+        .map(|(series, _)| series)
+        .expect("reconstructed series XML");
+
+    assert!(series_xml.contains(r#"<c:showVal val="0"/>"#), "{xml}");
+    assert!(series_xml.contains(r#"<c:showCatName val="0"/>"#), "{xml}");
+    assert!(series_xml.contains(r#"<c:showSerName val="0"/>"#), "{xml}");
+    assert!(series_xml.contains(r#"<c:showPercent val="0"/>"#), "{xml}");
+    assert!(
+        series_xml.contains(r#"<c:showLegendKey val="0"/>"#),
+        "{xml}"
+    );
+    assert!(
+        series_xml.contains(r#"<c:showBubbleSize val="0"/>"#),
+        "{xml}"
+    );
+}
+
+#[test]
 fn series_leader_line_alias_reconstructs_data_label_leader_lines() {
     let mut spec = minimal_chart_spec(DomainChartType::Pie, None);
     let mut series = modeled_series(0, None, "Composition", "Data!$B$2:$B$4");

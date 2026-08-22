@@ -148,6 +148,13 @@ pub fn build_sheet_drawing_data(floating_objects: &[FloatingObject]) -> SheetDra
                 }
             }
             FloatingObjectData::Connector(conn_data) => {
+                if conn_data
+                    .ooxml
+                    .as_ref()
+                    .is_some_and(|ooxml| ooxml.nested_in_group)
+                {
+                    continue;
+                }
                 let mut anchor =
                     connectors::convert_unified_connector_to_anchor(&obj.common, conn_data);
                 hyperlinks::register_anchor_hyperlink_relationships(

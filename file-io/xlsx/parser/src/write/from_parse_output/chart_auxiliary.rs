@@ -188,6 +188,33 @@ pub(super) fn supported_auxiliary_file_paths(
         .collect()
 }
 
+pub(super) fn auxiliary_file_paths_for_export(
+    chart_spec: &ChartSpec,
+    chart_path: &str,
+    allows_current_auxiliary_replay: bool,
+) -> BTreeSet<String> {
+    let Some(aux) = chart_auxiliary_data(chart_spec) else {
+        return BTreeSet::new();
+    };
+    let supported = supported_auxiliary_file_paths(&aux, chart_path);
+    if allows_current_auxiliary_replay {
+        return supported;
+    }
+    if chart_spec.is_chart_ex {
+        return BTreeSet::new();
+    }
+
+    let generated_color_style = generated_chart_color_style_data(chart_spec, chart_path).is_some();
+    supported
+        .into_iter()
+        .filter(|path| match auxiliary_kind(path) {
+            Some(AuxiliaryKind::Style) => true,
+            Some(AuxiliaryKind::ColorStyle) => !generated_color_style,
+            Some(AuxiliaryKind::UserShapes) | None => false,
+        })
+        .collect()
+}
+
 fn auxiliary_file_is_replay_safe(aux: &ChartAuxiliaryDataRef<'_>, path: &str) -> bool {
     if !matches!(auxiliary_kind(path), Some(AuxiliaryKind::ColorStyle)) {
         return true;

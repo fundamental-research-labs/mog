@@ -20,7 +20,7 @@ use super::{
     formatting::{build_drawing_color, build_outline, build_shape_properties, build_text_body},
     text_body_fidelity::{
         preserve_imported_data_label_text_properties,
-        preserve_imported_optional_data_label_options_text_properties,
+        preserve_imported_optional_data_label_options_fidelity,
     },
 };
 
@@ -208,7 +208,7 @@ pub(super) fn preserve_imported_series_text_body_properties(
     target: &mut charts::ChartSeries,
     imported: &charts::ChartSeries,
 ) {
-    preserve_imported_optional_data_label_options_text_properties(
+    preserve_imported_optional_data_label_options_fidelity(
         &mut target.d_lbls,
         imported.d_lbls.as_ref(),
     );

@@ -200,23 +200,30 @@ fn append_standard_chart_export_diagnostics(
 
     append_standard_chart_source_cache_diagnostics(chart, chart_path, diagnostics);
     if let Some(aux) = super::chart_auxiliary::chart_auxiliary_data(chart) {
-        if !super::chart_replay::chart_allows_current_auxiliary_replay(chart, &aux.original_path) {
+        let allows_current_auxiliary_replay =
+            super::chart_replay::chart_allows_current_auxiliary_replay(chart, chart_path);
+        let exported_paths = super::chart_auxiliary::auxiliary_file_paths_for_export(
+            chart,
+            chart_path,
+            allows_current_auxiliary_replay,
+        );
+        let supported_paths =
+            super::chart_auxiliary::supported_auxiliary_file_paths(&aux, chart_path);
+        if !allows_current_auxiliary_replay && exported_paths != supported_paths {
             push_chart_diagnostic(
                 diagnostics,
                 ExportDiagnosticCode::ChartAuxiliaryReplaySuppressed,
                 "chartAuxiliary",
-                Some(&aux.original_path),
+                Some(chart_path),
                 ExportSemanticImpact::PackagePreservationDropped,
-                "Imported chart auxiliary package replay was suppressed because authority is not current."
+                "Opaque imported chart auxiliary replay was suppressed because authority is not current; safe style/color companions remain eligible for export."
                     .to_string(),
             );
         }
 
-        let supported_paths =
-            super::chart_auxiliary::supported_auxiliary_file_paths(&aux, &aux.original_path);
         for (path, _) in aux.auxiliary_files {
             let normalized = path.trim_start_matches('/');
-            if !supported_paths.contains(normalized) {
+            if !exported_paths.contains(normalized) {
                 push_chart_diagnostic(
                     diagnostics,
                     ExportDiagnosticCode::ChartAuxiliaryPartDropped,

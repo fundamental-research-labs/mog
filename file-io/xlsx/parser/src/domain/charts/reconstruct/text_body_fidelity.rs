@@ -33,13 +33,49 @@ pub(super) fn preserve_imported_text_body_properties(
     }
 }
 
-pub(super) fn preserve_imported_data_label_options_text_properties(
+pub(super) fn preserve_imported_data_label_options_fidelity(
     target: &mut DataLabelOptions,
     imported: Option<&DataLabelOptions>,
 ) {
     let Some(imported) = imported else {
         return;
     };
+    preserve_imported_display_flag(
+        &mut target.show_value,
+        &mut target.show_value_present,
+        imported.show_value,
+        imported.show_value_present,
+    );
+    preserve_imported_display_flag(
+        &mut target.show_category,
+        &mut target.show_category_present,
+        imported.show_category,
+        imported.show_category_present,
+    );
+    preserve_imported_display_flag(
+        &mut target.show_series_name,
+        &mut target.show_series_name_present,
+        imported.show_series_name,
+        imported.show_series_name_present,
+    );
+    preserve_imported_display_flag(
+        &mut target.show_percent,
+        &mut target.show_percent_present,
+        imported.show_percent,
+        imported.show_percent_present,
+    );
+    preserve_imported_display_flag(
+        &mut target.show_legend_key,
+        &mut target.show_legend_key_present,
+        imported.show_legend_key,
+        imported.show_legend_key_present,
+    );
+    preserve_imported_display_flag(
+        &mut target.show_bubble_size,
+        &mut target.show_bubble_size_present,
+        imported.show_bubble_size,
+        imported.show_bubble_size_present,
+    );
     preserve_imported_text_body_properties(&mut target.tx_pr, imported.tx_pr.as_ref());
 
     for label in &mut target.d_lbl {
@@ -51,18 +87,38 @@ pub(super) fn preserve_imported_data_label_options_text_properties(
     }
 }
 
-pub(super) fn preserve_imported_optional_data_label_options_text_properties(
+pub(super) fn preserve_imported_optional_data_label_options_fidelity(
     target: &mut Option<DataLabelOptions>,
     imported: Option<&DataLabelOptions>,
 ) {
     let Some(imported) = imported else {
         return;
     };
-    if target.is_none() && imported.tx_pr.is_some() {
+    if target.is_none()
+        && (imported.tx_pr.is_some()
+            || imported.show_value_present
+            || imported.show_category_present
+            || imported.show_series_name_present
+            || imported.show_percent_present
+            || imported.show_legend_key_present
+            || imported.show_bubble_size_present)
+    {
         *target = Some(DataLabelOptions::default());
     }
     if let Some(target) = target.as_mut() {
-        preserve_imported_data_label_options_text_properties(target, Some(imported));
+        preserve_imported_data_label_options_fidelity(target, Some(imported));
+    }
+}
+
+fn preserve_imported_display_flag(
+    target_value: &mut bool,
+    target_present: &mut bool,
+    imported_value: bool,
+    imported_present: bool,
+) {
+    if !*target_present && imported_present {
+        *target_value = imported_value;
+        *target_present = true;
     }
 }
 

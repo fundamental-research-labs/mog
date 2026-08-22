@@ -334,7 +334,7 @@ pub const PACKAGE_OWNERSHIP_MATRIX: &[PackageOwnershipContract] = &[
             "chart -> chartColorStyle",
             "chart -> chartUserShapes",
         ],
-        content_types: &["chartStyle", "chartColorStyle", "drawing"],
+        content_types: &["chartStyle", "chartColorStyle", "chartShapes"],
         relationship_id_hints: &["chart-owned auxiliary r:id"],
         dirty_invalidation_triggers: &[
             "chart style/color mutation",

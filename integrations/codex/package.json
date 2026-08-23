@@ -1,7 +1,7 @@
 {
   "name": "@mog/codex-plugin-build",
   "private": true,
-  "version": "0.10.7",
+  "version": "0.10.8-dev.197ea3a6f",
   "type": "module",
   "scripts": {
     "build": "node scripts/build-plugin-dist.mjs",

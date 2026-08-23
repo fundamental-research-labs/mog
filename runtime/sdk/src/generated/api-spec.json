@@ -2,7 +2,7 @@
   "schemaVersion": "1",
   "package": {
     "name": "@mog-sdk/sdk",
-    "version": "0.10.7"
+    "version": "0.10.8-dev.197ea3a6f"
   },
   "compatibility": {
     "schemaVersion": "1",

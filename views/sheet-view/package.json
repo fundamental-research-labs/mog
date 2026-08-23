@@ -1,6 +1,6 @@
 {
   "name": "@mog-sdk/sheet-view",
-  "version": "0.10.7",
+  "version": "0.10.8-dev.197ea3a6f",
   "license": "Apache-2.0",
   "files": [
     "dist"

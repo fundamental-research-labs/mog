@@ -13,6 +13,7 @@ import {
   wireToSeriesConfig,
   wireToSizeRepresents,
 } from '../chart-type-converters';
+import type { ChartColorData } from '../../../bridges/compute/compute-types.gen';
 
 describe('chart-type-converters', () => {
   it('narrows canonical and aliased chart type strings at the wire boundary', () => {
@@ -156,6 +157,12 @@ describe('chart-type-converters', () => {
   });
 
   it('converts nested chart format colors between wire tint_shade and contract tintShade', () => {
+    const runtimeColor = {
+      theme: 'accent1',
+      tintShade: 0.86,
+    } as ChartColorData & { tintShade: number };
+    expect(wireToChartColor(runtimeColor)).toEqual({ theme: 'accent1', tintShade: 0.86 });
+
     expect(
       wireToChartFormat({
         fill: { type: 'solid', color: { theme: 'accent1', tint_shade: 0.25 } },

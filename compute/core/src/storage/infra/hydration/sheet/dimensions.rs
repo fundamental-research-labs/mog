@@ -40,7 +40,6 @@ pub(crate) fn hydrate_dimensions(
         maps.col_widths_map,
         col_id_hexes,
         &sheet.dimensions.col_widths,
-        default_col_width_cw,
     );
 
     if (sheet_default_row_height_pt - 15.0).abs() > 0.01 {

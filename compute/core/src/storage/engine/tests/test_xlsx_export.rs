@@ -7,7 +7,8 @@ use crate::snapshot::{
 };
 use cell_types::{ColId, PayloadEncoding, RangeAnchor, RangeId, RangeKind, RowId};
 use domain_types::{
-    AutoFilter, ParseOutput, SheetData, SheetDimensions, SortCondition, SortConditionBy, SortState,
+    AutoFilter, ColDimension, ColStyleRange, DocumentFormat, ParseOutput, SheetData,
+    SheetDimensions, SortCondition, SortConditionBy, SortState,
     domain::comment::{Comment, CommentType, PersonInfo},
     domain::external_link::{ExternalLink, ImportedExternalLinkIdentity},
     domain::workbook::{WorkbookView, WorkbookViewVisibility, WorkbookWebPublishing},
@@ -72,6 +73,60 @@ fn archive_entry_names(bytes: &[u8]) -> Vec<String> {
         .iter()
         .map(|entry| entry.name.clone())
         .collect()
+}
+
+#[test]
+fn imported_explicit_default_width_survives_l2_export_with_column_style() {
+    let explicit_default_width = 8.83203125;
+    let input = ParseOutput {
+        style_palette: vec![DocumentFormat {
+            number_format: Some("0.00".to_string()),
+            ..Default::default()
+        }],
+        sheets: vec![SheetData {
+            name: "ValGraph".to_string(),
+            rows: 1,
+            cols: 8,
+            col_style_ranges: vec![ColStyleRange {
+                start_col: 1,
+                end_col: 7,
+                style_id: 0,
+            }],
+            dimensions: SheetDimensions {
+                default_col_width: Some(explicit_default_width),
+                col_widths: (1..=7)
+                    .map(|col| ColDimension {
+                        col,
+                        width: explicit_default_width,
+                        width_str: Some("8.83203125".to_string()),
+                        width_present: Some(true),
+                        custom_width: false,
+                        custom_width_attr: None,
+                        ..Default::default()
+                    })
+                    .collect(),
+                ..Default::default()
+            },
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let engine = engine_from_parse_output_normal(&input);
+    let exported = engine
+        .export_to_parse_output()
+        .expect("export parse output")
+        .parse_output;
+    let widths = &exported.sheets[0].dimensions.col_widths;
+    assert_eq!(widths.len(), 7, "authored widths must survive hydration");
+    assert!(widths.iter().all(|width| width.width_present == Some(true)));
+
+    let bytes = engine.export_to_xlsx_bytes().expect("export xlsx bytes");
+    let sheet_xml = archive_text(&bytes, "xl/worksheets/sheet1.xml").expect("sheet XML");
+    assert!(
+        sheet_xml.contains(r#"<col min="2" max="8" width="8.83203125""#),
+        "explicit default-width span must not become a widthless <col>: {sheet_xml}"
+    );
 }
 
 fn assert_substrings_in_order(haystack: &str, needles: &[&str]) {

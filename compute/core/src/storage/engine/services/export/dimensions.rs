@@ -397,40 +397,33 @@ pub(in crate::storage::engine) fn export_dimensions_for_sheet(
         let is_best_fit = best_fit_cols.contains(&col);
         let is_phonetic = phonetic_cols.contains(&col);
 
-        // Only emit a <col> entry if there's an explicit stored width, or the
-        // column is hidden/bestFit. Columns with no stored width inherit the
-        // sheet's defaultColWidth and need no explicit entry.
+        // A stored width represents an authored width and must be emitted even
+        // when it equals defaultColWidth. Dropping it can leave a width-less
+        // <col> created by column style metadata, which Excel renders as a
+        // collapsed column span.
         match explicit_width {
             Some(width) => {
                 let is_custom_width = custom_width_cols.contains(&col);
                 let width_differs = (width.0 - default_col_width.0).abs() > 0.01;
                 let custom = is_custom_width || width_differs;
                 let is_collapsed = collapsed_cols.contains(&col);
-                if custom
-                    || width_differs
-                    || is_hidden
-                    || is_best_fit
-                    || is_collapsed
-                    || is_phonetic
-                {
-                    col_widths.push(ColDimension {
-                        col,
-                        width: width.0,
-                        width_str: None,
-                        width_present: Some(true),
-                        custom_width: custom,
-                        custom_width_attr: custom.then_some(true),
-                        hidden: is_hidden,
-                        hidden_attr: is_hidden.then_some(true),
-                        best_fit: is_best_fit,
-                        best_fit_attr: is_best_fit.then_some(true),
-                        outline_level: None,
-                        collapsed: is_collapsed,
-                        collapsed_attr: is_collapsed.then_some(true),
-                        phonetic: is_phonetic,
-                        phonetic_attr: is_phonetic.then_some(true),
-                    });
-                }
+                col_widths.push(ColDimension {
+                    col,
+                    width: width.0,
+                    width_str: None,
+                    width_present: Some(true),
+                    custom_width: custom,
+                    custom_width_attr: custom.then_some(true),
+                    hidden: is_hidden,
+                    hidden_attr: is_hidden.then_some(true),
+                    best_fit: is_best_fit,
+                    best_fit_attr: is_best_fit.then_some(true),
+                    outline_level: None,
+                    collapsed: is_collapsed,
+                    collapsed_attr: is_collapsed.then_some(true),
+                    phonetic: is_phonetic,
+                    phonetic_attr: is_phonetic.then_some(true),
+                });
             }
             None => {
                 // No explicit width stored — only emit if hidden, bestFit, or collapsed

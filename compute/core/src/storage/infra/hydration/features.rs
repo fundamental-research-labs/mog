@@ -265,10 +265,13 @@ pub(super) fn hydrate_row_heights(
     }
 }
 
-/// Hydrate column widths into the Yrs colWidths map.
+/// Hydrate authored column widths into the Yrs colWidths map.
 ///
-/// Column widths are keyed by ColId (stable identity). We allocate ColIds
-/// for each column that has a custom width via the IdAllocator.
+/// Column widths are keyed by ColId (stable identity). An explicit OOXML
+/// `width` remains authored even when it equals the sheet's default width and
+/// `customWidth` is absent. Retaining those widths is necessary when the same
+/// `<col>` also owns style metadata: otherwise export can leave a width-less
+/// style span that Excel renders as collapsed.
 ///
 /// Values are stored in **character-width units** (canonical OOXML units).
 /// The LayoutIndex converts to pixels on construction.
@@ -277,10 +280,9 @@ pub(super) fn hydrate_col_widths(
     col_widths_map: &MapRef,
     col_id_hexes: &[SmallHex],
     col_widths: &[ColDimension],
-    default_col_width_cw: f64,
 ) {
     for cw in col_widths {
-        if (cw.custom_width || (cw.width - default_col_width_cw).abs() > 0.01)
+        if cw.width_present.unwrap_or(true)
             && let Some(col_id) = col_id_hexes.get(cw.col as usize)
         {
             col_widths_map.insert(txn, col_id.as_str(), Any::Number(cw.width));

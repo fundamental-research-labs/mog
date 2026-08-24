@@ -3,7 +3,7 @@ use super::data_refs::{
     extract_cat_ref_formula, extract_num_ref_formula, reconstruct_data_range,
     reconstruct_data_range_from_chart_groups,
 };
-use super::formatting::extract_fill_color;
+use super::formatting::{extract_chart_format, extract_fill_color};
 use super::labels::{extract_data_label_data, extract_data_label_data_from_chart_type_config};
 use super::markers::extract_marker_config;
 use super::series::extract_single_series;
@@ -183,7 +183,7 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
                 y_error_bars,
                 idx: Some(s.idx),
                 order: Some(s.order),
-                format: None,
+                format: extract_chart_format(s.sp_pr.as_ref(), None),
                 bar_shape: None,
                 invert_color: None,
                 marker_background_color: marker_config.background_color,
@@ -206,6 +206,47 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
             }
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::extract_chart_series;
+    use domain_types::chart::{ChartColorData, ChartFillData};
+
+    #[test]
+    fn flat_series_preserves_theme_tint_in_mutable_chart_format() {
+        let chart = crate::domain::charts::Chart {
+            series: vec![ooxml_types::charts::ChartSeries {
+                idx: 0,
+                order: 0,
+                sp_pr: Some(crate::domain::charts::parse_shape_properties(
+                    br#"<c:spPr xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                               xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                        <a:solidFill>
+                            <a:schemeClr val="accent1"><a:tint val="86000"/></a:schemeClr>
+                        </a:solidFill>
+                    </c:spPr>"#,
+                )),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let series = extract_chart_series(&chart);
+        let tint_shade = series[0]
+            .format
+            .as_ref()
+            .and_then(|format| format.fill.as_ref())
+            .and_then(|fill| match fill {
+                ChartFillData::Solid {
+                    color: ChartColorData::Theme { tint_shade, .. },
+                    ..
+                } => *tint_shade,
+                _ => None,
+            });
+
+        assert_eq!(tint_shade, Some(0.86));
+    }
 }
 
 fn extract_error_bars_typed(

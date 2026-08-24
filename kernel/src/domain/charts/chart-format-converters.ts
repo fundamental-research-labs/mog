@@ -54,9 +54,11 @@ export function directHexPaletteToWire(colors: string[] | undefined): string[] |
 export function wireToChartColor(color: ChartColorData | undefined): ChartColor | undefined {
   if (typeof color === 'string') return wireToDirectHexColor(color);
   if (!color || typeof color !== 'object') return undefined;
+  const tintShade =
+    color.tint_shade ?? (color as ChartColorData & { tintShade?: number }).tintShade;
   return {
     theme: color.theme,
-    ...(color.tint_shade !== undefined ? { tintShade: color.tint_shade } : {}),
+    ...(tintShade !== undefined ? { tintShade } : {}),
   };
 }
 

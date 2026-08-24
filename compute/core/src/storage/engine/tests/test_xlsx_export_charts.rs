@@ -10,9 +10,232 @@ use domain_types::chart::{
 };
 use domain_types::domain::floating_object::ChartDrawingFrameOoxmlProps;
 use domain_types::{CellData, ChartSpec, ParseOutput, SheetData};
+use ooxml_types::charts::{
+    AxisCrosses, AxisType, Chart, ChartAxis, ChartAxisPosition, ChartGroup, ChartSpace,
+    ChartType as OoxmlChartType, ChartTypeConfig, DataLabelOptions, PlotArea, Scaling, TickMark,
+};
 use value_types::{CellValue, FiniteF64};
 
 const STANDARD_CHART_PROJECTION_SCHEMA_VERSION: u32 = 6;
+
+#[test]
+fn imported_axis_visibility_and_formatting_survive_yrs_and_xlsx_export() {
+    std::thread::Builder::new()
+        .stack_size(16 * 1024 * 1024)
+        .spawn(assert_imported_axis_visibility_and_formatting_survive_yrs_and_xlsx_export)
+        .expect("spawn chart roundtrip test")
+        .join()
+        .expect("chart roundtrip test");
+}
+
+fn assert_imported_axis_visibility_and_formatting_survive_yrs_and_xlsx_export() {
+    let mut chart = bounded_source_range_chart();
+    chart.axes = Some(domain_types::chart::AxisData {
+        category_axis: Some(domain_types::chart::SingleAxisData {
+            visible: true,
+            visible_explicit: true,
+            ..Default::default()
+        }),
+        value_axis: Some(domain_types::chart::SingleAxisData {
+            visible: true,
+            visible_explicit: true,
+            ..Default::default()
+        }),
+        secondary_category_axis: None,
+        secondary_value_axis: None,
+        series_axis: None,
+    });
+
+    let mut category_axis = imported_axis(AxisType::Category, 10, 20);
+    category_axis.sp_pr = Some(xlsx_parser::domain::charts::parse_shape_properties(
+        br#"<c:spPr xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                         xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+              <a:noFill/><a:ln><a:solidFill><a:srgbClr val="123456"/></a:solidFill></a:ln>
+            </c:spPr>"#,
+    ));
+    category_axis.tx_pr = Some(xlsx_parser::domain::charts::parse_text_body(
+        br#"<c:txPr xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                         xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+              <a:bodyPr rot="-60000000"/><a:lstStyle/><a:p><a:endParaRPr lang="en-US"/></a:p>
+            </c:txPr>"#,
+    ));
+    chart.definition = Some(domain_types::ChartDefinition::Chart(ChartSpace {
+        chart: Chart {
+            plot_area: PlotArea {
+                axes: vec![category_axis, imported_axis(AxisType::Value, 20, 10)],
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        ..Default::default()
+    }));
+
+    let input = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Data".to_string(),
+            rows: 16,
+            cols: 10,
+            charts: vec![chart],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let engine = engine_from_parse_output_normal(&input);
+    let exported_bytes = engine.export_to_xlsx_bytes().expect("export xlsx bytes");
+    let chart_xml = archive_text(&exported_bytes, "xl/charts/chart1.xml").expect("chart XML");
+    let category_axis_xml = chart_xml
+        .split_once("<c:catAx>")
+        .and_then(|(_, rest)| rest.split_once("</c:catAx>"))
+        .map(|(axis, _)| axis)
+        .expect("category axis XML");
+
+    assert!(category_axis_xml.contains(r#"<c:delete val="0"/>"#));
+    assert!(category_axis_xml.contains(r#"<a:srgbClr val="123456"/>"#));
+    assert!(category_axis_xml.contains(r#"<a:bodyPr rot="-60000000"/>"#));
+    assert!(category_axis_xml.contains(r#"<a:endParaRPr lang="en-US"/>"#));
+}
+
+#[test]
+fn imported_group_and_series_false_data_label_flags_survive_yrs_and_xlsx_export() {
+    std::thread::Builder::new()
+        .stack_size(16 * 1024 * 1024)
+        .spawn(assert_imported_group_and_series_false_data_label_flags_survive_yrs_and_xlsx_export)
+        .expect("spawn chart roundtrip test")
+        .join()
+        .expect("chart roundtrip test");
+}
+
+fn assert_imported_group_and_series_false_data_label_flags_survive_yrs_and_xlsx_export() {
+    let mut chart = bounded_source_range_chart();
+    chart.series[0].idx = Some(0);
+    let false_labels = imported_explicit_false_data_labels();
+    chart.definition = Some(domain_types::ChartDefinition::Chart(ChartSpace {
+        chart: Chart {
+            plot_area: PlotArea {
+                chart_groups: vec![ChartGroup {
+                    chart_type: OoxmlChartType::Bar,
+                    config: ChartTypeConfig::Bar(Default::default()),
+                    series: vec![ooxml_types::charts::ChartSeries {
+                        idx: 0,
+                        order: 0,
+                        d_lbls: Some(false_labels.clone()),
+                        ..Default::default()
+                    }],
+                    d_lbls: Some(false_labels),
+                    ax_id: vec![10, 20],
+                    raw_chart_type_attr: None,
+                    raw_chart_element_name: None,
+                    raw_chart_group_xml: None,
+                }],
+                axes: vec![
+                    imported_axis(AxisType::Category, 10, 20),
+                    imported_axis(AxisType::Value, 20, 10),
+                ],
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        ..Default::default()
+    }));
+
+    let input = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Data".to_string(),
+            rows: 16,
+            cols: 10,
+            charts: vec![chart],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let engine = engine_from_parse_output_normal(&input);
+    let hydrated_sheet_id =
+        SheetId::from_uuid_str(&engine.get_all_sheet_ids()[0]).expect("valid hydrated sheet id");
+    let stored_chart = engine
+        .get_all_floating_objects_typed(&hydrated_sheet_id)
+        .into_iter()
+        .next()
+        .expect("stored chart");
+    let domain_types::domain::floating_object::FloatingObjectData::Chart(stored_chart) =
+        stored_chart.data
+    else {
+        panic!("expected stored chart");
+    };
+    let stored_definition = stored_chart
+        .ooxml
+        .and_then(|ooxml| ooxml.definition)
+        .expect("stored imported definition");
+    let domain_types::ChartDefinition::Chart(stored_definition) = stored_definition else {
+        panic!("expected standard chart definition");
+    };
+    let stored_group = &stored_definition.chart.plot_area.chart_groups[0];
+    assert!(
+        stored_group
+            .d_lbls
+            .as_ref()
+            .is_some_and(|labels| labels.show_value_present)
+    );
+    assert!(
+        stored_group.series[0]
+            .d_lbls
+            .as_ref()
+            .is_some_and(|labels| labels.show_value_present)
+    );
+    let exported_bytes = engine.export_to_xlsx_bytes().expect("export xlsx bytes");
+    let chart_xml = archive_text(&exported_bytes, "xl/charts/chart1.xml").expect("chart XML");
+
+    for flag in [
+        "showVal",
+        "showCatName",
+        "showSerName",
+        "showPercent",
+        "showLegendKey",
+        "showBubbleSize",
+    ] {
+        assert_eq!(
+            chart_xml
+                .matches(&format!(r#"<c:{flag} val="0"/>"#))
+                .count(),
+            2,
+            "expected explicit false {flag} at group and series level: {chart_xml}"
+        );
+    }
+}
+
+fn imported_axis(axis_type: AxisType, ax_id: u32, cross_ax: u32) -> ChartAxis {
+    ChartAxis {
+        axis_type,
+        ax_id,
+        scaling: Scaling::default(),
+        delete: false,
+        delete_explicit: true,
+        ax_pos: if axis_type == AxisType::Category {
+            ChartAxisPosition::Left
+        } else {
+            ChartAxisPosition::Bottom
+        },
+        major_tick_mark: TickMark::None,
+        major_tick_mark_explicit: true,
+        minor_tick_mark: TickMark::None,
+        minor_tick_mark_explicit: true,
+        cross_ax,
+        crosses: AxisCrosses::AutoZero,
+        crosses_explicit: true,
+        ..Default::default()
+    }
+}
+
+fn imported_explicit_false_data_labels() -> DataLabelOptions {
+    DataLabelOptions {
+        show_value_present: true,
+        show_category_present: true,
+        show_series_name_present: true,
+        show_percent_present: true,
+        show_legend_key_present: true,
+        show_bubble_size_present: true,
+        ..Default::default()
+    }
+}
 
 #[test]
 fn sdk_authored_chart_palette_exports_chart_color_style_part() {

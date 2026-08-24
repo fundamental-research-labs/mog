@@ -335,6 +335,11 @@ fn apply_imported_axis_fidelity(
     if let (Some(title), Some(imported_title)) = (rebuilt.title.as_mut(), original.title.as_ref()) {
         preserve_imported_title_text_properties(title, Some(imported_title));
     }
+    // Modeled formatting takes precedence; imported OOXML fills properties
+    // that the public axis model does not represent.
+    if rebuilt.sp_pr.is_none() {
+        rebuilt.sp_pr = original.sp_pr.clone();
+    }
     preserve_imported_text_body_properties(&mut rebuilt.tx_pr, original.tx_pr.as_ref());
     rebuilt.raw_axis_type_attr = original.raw_axis_type_attr.clone();
 }

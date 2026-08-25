@@ -822,6 +822,12 @@ export interface DataLabelOptions {
   show_percent: boolean;
   show_legend_key: boolean;
   show_bubble_size: boolean;
+  show_value_present?: boolean;
+  show_category_present?: boolean;
+  show_series_name_present?: boolean;
+  show_percent_present?: boolean;
+  show_legend_key_present?: boolean;
+  show_bubble_size_present?: boolean;
   position: DataLabelPosition;
   separator: string | null;
   num_fmt: string | null;

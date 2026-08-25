@@ -100,22 +100,22 @@ pub struct DataLabelOptions {
     /// Show bubble size (bubble charts)
     pub show_bubble_size: bool,
     /// Round-trip metadata: whether `showVal` was present in source XML.
-    #[serde(default, skip)]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub show_value_present: bool,
     /// Round-trip metadata: whether `showCatName` was present in source XML.
-    #[serde(default, skip)]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub show_category_present: bool,
     /// Round-trip metadata: whether `showSerName` was present in source XML.
-    #[serde(default, skip)]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub show_series_name_present: bool,
     /// Round-trip metadata: whether `showPercent` was present in source XML.
-    #[serde(default, skip)]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub show_percent_present: bool,
     /// Round-trip metadata: whether `showLegendKey` was present in source XML.
-    #[serde(default, skip)]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub show_legend_key_present: bool,
     /// Round-trip metadata: whether `showBubbleSize` was present in source XML.
-    #[serde(default, skip)]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub show_bubble_size_present: bool,
     /// Label position
     pub position: DataLabelPosition,

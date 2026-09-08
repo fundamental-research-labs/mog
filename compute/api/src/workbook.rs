@@ -75,6 +75,40 @@ impl Workbook {
         })
     }
 
+    /// Load a workbook from an xlsx file on disk.
+    pub fn from_xlsx_path(path: &str) -> Result<(Self, RecalcResult), ComputeApiError> {
+        let data = std::fs::read(path).map_err(|e| {
+            ComputeApiError::InvalidOperation(format!("read {path}: {e}"))
+        })?;
+        use compute_core::storage::engine::YrsComputeEngine;
+        let (engine, recalc) = YrsComputeEngine::from_xlsx_bytes(&data)?;
+
+        #[cfg(feature = "native")]
+        let dispatch = Dispatch::spawn(engine)?;
+
+        #[cfg(not(feature = "native"))]
+        let dispatch = Dispatch::new(engine);
+
+        Ok((Workbook { dispatch }, recalc))
+    }
+
+    /// Export the workbook as xlsx bytes.
+    pub fn to_xlsx_bytes(&self) -> Result<Vec<u8>, ComputeApiError> {
+        Ok(self.dispatch.call_engine(|e| e.export_to_xlsx_bytes())??)
+    }
+
+    /// Export the workbook to an xlsx file on disk.
+    pub fn to_xlsx_path(&self, path: &str) -> Result<(), ComputeApiError> {
+        let bytes = self.to_xlsx_bytes()?;
+        if let Some(parent) = std::path::Path::new(path).parent() {
+            std::fs::create_dir_all(parent).map_err(|e| {
+                ComputeApiError::InvalidOperation(format!("create {parent:?}: {e}"))
+            })?;
+        }
+        std::fs::write(path, bytes)
+            .map_err(|e| ComputeApiError::InvalidOperation(format!("write {path}: {e}")))
+    }
+
     // -----------------------------------------------------------------
     // Sheet access
     // -----------------------------------------------------------------

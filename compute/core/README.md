@@ -1,23 +1,9 @@
 # compute-core
 
-Native Rust compute engine for the Shortcut spreadsheet OS. All formula parsing,
-evaluation, dependency tracking, recalculation, and data transforms run in this
-crate (or its extracted sub-crates). TypeScript owns storage (Yrs CRDT), UI, and
-structural operations; Rust owns compute. Communication crosses the IPC boundary
-via Tauri commands (desktop) or WASM bindings (web).
-
-```
-TypeScript (owns storage + UI)              Rust (owns compute)
-+---------------------------------+        +----------------------------------+
-| Yjs Document (source of truth)  |        | compute-core crate               |
-| Cell Identity Model             | -IPC-> | Cell Mirror (identity-keyed)     |
-| UndoManager, EventBus          |        | Formula Parser (winnow)          |
-| Structural ops, Canvas         | <-res- | AST Evaluator                    |
-| React UI, Selection            |        | Function Library (508+)          |
-| Formatting, Number display     |        | Dependency Graph (CellId)        |
-+---------------------------------+        | Recalc Scheduler (rayon)         |
-                                           +----------------------------------+
-```
+Native Rust compute engine. All formula parsing, evaluation, dependency
+tracking, recalculation, and data transforms run in this crate (or its
+extracted sub-crates). Document state is Yrs-backed and local. The Office.js
+scripting host in `compute/officejs` evaluates Excel JS against this engine.
 
 The compute-core workspace slice contains the root crate plus 28 extracted
 sub-crates.

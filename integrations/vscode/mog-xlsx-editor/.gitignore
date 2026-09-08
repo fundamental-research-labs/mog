@@ -1,6 +1,0 @@
-dist/
-media/
-fixtures/*.xlsx
-node_modules/
-.vscode-test/
-*.tsbuildinfo

@@ -2,7 +2,7 @@ use crate::domain::pivot::read::{PivotItem, PivotItemType, PivotRowColItem, Shar
 use domain_types::domain::pivot::{
     PivotFieldItem, PivotItemType as DtPivotItemType, PivotRowColItem as DtPivotRowColItem,
 };
-use pivot_types::{AggregateFunction, FieldId, PivotField, ShowValuesAs, ShowValuesAsConfig};
+use pivot_types::{AggregateFunction, PivotField, ShowValuesAs, ShowValuesAsConfig};
 use value_types::CellValue;
 
 pub(super) fn convert_subtotal(s: &Subtotal) -> AggregateFunction {

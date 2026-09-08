@@ -34,14 +34,6 @@ compute-wire = { path = ".", features = ["test-utils"] }
 default = []
 test-utils = []
 
-[[bin]]
-name = "generate-ts"
-path = "src/bin/generate_ts.rs"
-
-[[bin]]
-name = "generate-test-fixtures"
-path = "src/bin/generate_test_fixtures.rs"
-
 [[bench]]
 name = "wire_bench"
 harness = false

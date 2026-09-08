@@ -15,8 +15,6 @@ mod run_props;
 #[cfg(test)]
 mod tests;
 
-pub use self::enums::{parse_text_align, parse_text_anchor, parse_text_wrap};
-
 use self::body_props::parse_body_props as parse_body_props_impl;
 use self::list_style::parse_list_style as parse_list_style_impl;
 use self::paragraph::parse_paragraph as parse_paragraph_impl;

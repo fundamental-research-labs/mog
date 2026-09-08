@@ -71,9 +71,6 @@ A PGP key for encrypting sensitive vulnerability reports will be published here 
 
 This policy covers:
 
-- All packages published under `@mog-sdk/*` on npm.
-- The `mog-sdk` package on PyPI (when published).
-- Official Docker images (when published).
-- The Mog source repository.
+- The Mog source repository and the headless `mog` engine/CLI.
 
 Third-party forks and unofficial distributions are not covered by this policy.

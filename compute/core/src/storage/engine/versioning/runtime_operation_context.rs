@@ -15,6 +15,7 @@ const BLOCKED_WRITE_REASON: &str = "writeAdmissionModeBlock";
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum VersionRuntimeAdmissionPolicy {
     ObserveOnly,
+    #[allow(dead_code)]
     RequireOperationContext,
 }
 

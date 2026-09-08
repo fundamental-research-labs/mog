@@ -155,6 +155,7 @@ impl FilterColumn {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn write_xml(&self, w: &mut XmlWriter) {
         self.write_xml_with_strict(w, false);
     }
@@ -324,6 +325,7 @@ impl AutoFilterDef {
         self
     }
 
+    #[allow(dead_code)]
     pub(crate) fn write_xml(&self, w: &mut XmlWriter) {
         self.write_xml_with_strict(w, false);
     }

@@ -24,6 +24,7 @@ use super::read::has_data_at;
 /// horizontally. Horizontal navigation follows the visible route through hidden
 /// columns, and collapsed outline rows/columns are traversed to their visible
 /// exit.
+#[cfg(test)]
 pub fn find_data_edge(
     doc: &Doc,
     sheets: &MapRef,

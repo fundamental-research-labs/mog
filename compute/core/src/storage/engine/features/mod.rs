@@ -6,7 +6,6 @@ use crate::storage::cells::data_ops as cell_ops;
 use crate::storage::sheet::{
     filters as sheet_filters, grouping as sheet_grouping, sparklines as sheet_sparklines,
 };
-use crate::storage::workbook::slicers as workbook_slicers;
 use crate::table::types::{Slicer, SlicerCache, TableColumn};
 use bridge_core as bridge;
 use cell_types::SheetId;

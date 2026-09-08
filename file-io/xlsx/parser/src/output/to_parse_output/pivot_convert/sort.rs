@@ -1,5 +1,5 @@
 use crate::domain::pivot::read::{
-    PivotCache, PivotField as ReadPivotField, PivotItemType, SharedItem, SortType,
+    PivotCache, PivotField as ReadPivotField, PivotItemType, SortType,
 };
 use pivot_types::{FieldId, SortByValueConfig, SortDirection};
 use value_types::CellValue;

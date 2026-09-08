@@ -5,7 +5,7 @@
 
 use winnow::prelude::*;
 
-use crate::ast::{ASTNode, BinOp, UnaryOp};
+use crate::ast::{ASTNode, UnaryOp};
 use crate::lexer::{self, backtrack};
 use crate::parser::ParseErrorKind;
 use crate::state::{MAX_DEPTH, ParseState};

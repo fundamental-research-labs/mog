@@ -12,13 +12,12 @@ This is the public Mog repository.
 
 - Prefer the smallest relevant check for the area changed.
 - Common checks:
-  - `pnpm typecheck`
-  - `pnpm test`
-  - `pnpm check:publish-readiness:fast`
+  - `cargo test -p mog`
+  - `cargo test -p compute-api`
   - `cargo check --workspace --locked`
 
 ## Boundaries
 
-- Public packages and SDK surfaces live in `contracts`, `kernel`, `runtime`,
-  `views`, `compute`, and package-specific directories.
-- Do not add dependencies on `mog-internal` or private-only packages.
+Public surfaces live in `compute` (engine + Office.js scripting) and
+`file-io`. Do not add a Node/N-API host, UI packages, or a custom `wb`/`ws`
+scripting API.

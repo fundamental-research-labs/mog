@@ -36,13 +36,14 @@ pub use query::{
     find_by_name, get_active_scenario, get_active_scenario_id, get_all, get_by_id, get_count,
     is_at_limit,
 };
+pub(crate) use types::ScenarioSessionState;
 pub use types::{
     MAX_CHANGING_CELLS_PER_SCENARIO, MAX_SCENARIO_COMMENT_LENGTH, MAX_SCENARIO_NAME_LENGTH,
     MAX_SCENARIOS,
 };
+#[cfg(test)]
 pub(crate) use types::{
     ScenarioApplyPlan, ScenarioBaseline, ScenarioBaselineCell, ScenarioRestorePlan,
-    ScenarioSessionState,
 };
 pub use validation::{
     validate_changing_cells, validate_scenario_comment, validate_scenario_input,

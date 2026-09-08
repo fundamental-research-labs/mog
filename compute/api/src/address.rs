@@ -174,8 +174,18 @@ fn parse_a1_range(raw: &str) -> Result<(u32, u32, u32, u32), ComputeApiError> {
     };
 
     let parts: Vec<&str> = raw.split(':').collect();
+    if parts.len() == 1 {
+        let (row, col) = parse_a1(parts[0]).map_err(|e| match e {
+            ComputeApiError::InvalidAddress { reason, .. } => ComputeApiError::InvalidRange {
+                range: raw.to_owned(),
+                reason,
+            },
+            other => other,
+        })?;
+        return Ok((row, col, row, col));
+    }
     if parts.len() != 2 {
-        return Err(range_err("expected format A1:B2"));
+        return Err(range_err("expected format A1 or A1:B2"));
     }
 
     let (start_row, start_col) = parse_a1(parts[0]).map_err(|e| match e {

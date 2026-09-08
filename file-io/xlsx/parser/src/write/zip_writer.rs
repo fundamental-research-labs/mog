@@ -292,6 +292,7 @@ impl ZipWriter {
 }
 
 /// Sequential finish — compresses and writes entries one at a time.
+#[allow(dead_code)]
 fn finish_sequential(entries: Vec<ZipWriteEntry>) -> Result<Vec<u8>, ZipWriteError> {
     let estimated_size: usize = entries
         .iter()
@@ -446,6 +447,7 @@ fn compress_entry(entry: ZipWriteEntry) -> Result<CompressedEntry, ZipWriteError
 }
 
 /// Write a single entry (local file header + data) to the output
+#[allow(dead_code)]
 fn write_entry(output: &mut Vec<u8>, entry: ZipWriteEntry) -> Result<WrittenEntry, ZipWriteError> {
     // Validate filename
     if entry.name.is_empty() || entry.name.len() > MAX_FILENAME_LENGTH {

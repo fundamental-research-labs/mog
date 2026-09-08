@@ -15,6 +15,7 @@ use cell_types::{RangePos, SheetId};
 ///
 /// If the starting cell is empty and has no adjacent data, returns a
 /// single-cell range.
+#[cfg(test)]
 pub fn get_current_region(
     doc: &Doc,
     sheets: &MapRef,
@@ -116,6 +117,7 @@ pub fn get_current_region_with_extra_data(
 /// range unchanged.
 ///
 /// Returns `None` if no data is found in the selected columns/rows.
+#[cfg(test)]
 pub(crate) fn get_data_bounds_for_range(
     doc: &Doc,
     sheets: &MapRef,

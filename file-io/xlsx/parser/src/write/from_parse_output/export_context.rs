@@ -26,6 +26,7 @@ pub(super) struct WorkbookPreflight {
     pub(super) all_image_blobs: Vec<(String, Vec<u8>)>,
 }
 
+#[allow(dead_code)]
 pub(super) struct WorksheetRelationshipPlan {
     pub(super) sheet_hyperlink_outputs: Vec<Option<Vec<crate::output::results::HyperlinkOutput>>>,
     pub(super) worksheet_hyperlink_relationships: Vec<WorksheetHyperlinkGraphEntry>,

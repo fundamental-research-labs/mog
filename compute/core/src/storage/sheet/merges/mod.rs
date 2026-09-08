@@ -16,8 +16,11 @@ mod yrs_io;
 #[cfg(test)]
 mod tests;
 
-pub use codec::{StoredMerge, stored_merge_to_yrs_prelim};
+pub use codec::StoredMerge;
+#[cfg(test)]
+pub use codec::stored_merge_to_yrs_prelim;
 pub use data_loss::check_merge_data_loss;
+#[cfg(test)]
 pub use domain_types::domain::merge::*;
 pub use mutations::{
     clear_all_merges, merge_across, merge_and_center, merge_range, unmerge_range,

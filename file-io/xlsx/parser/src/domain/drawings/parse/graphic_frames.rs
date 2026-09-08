@@ -48,6 +48,7 @@ fn rel_id(xml: &[u8], namespaced: &[u8], unqualified: &[u8]) -> String {
 }
 
 /// Parse `<xdr:xfrm>` inside a graphicFrame element into a `Transform2D`.
+#[allow(dead_code)]
 pub(crate) fn parse_graphic_frame_xfrm(element: &[u8]) -> ooxml_types::drawings::Transform2D {
     parse_graphic_frame_xfrm_with_presence(element).0
 }

@@ -1,11 +1,16 @@
-use yrs::{Doc, MapRef};
+#[cfg(test)]
+use yrs::Doc;
+use yrs::MapRef;
 
 use super::sheet_refs::{
     replace_sheet_name_in_a1_formula, replace_sheet_name_in_template, template_contains_sheet_ref,
 };
-use super::storage_scan::{FormulaFieldUpdate, update_formula_cells, update_formula_cells_in_txn};
+#[cfg(test)]
+use super::storage_scan::update_formula_cells;
+use super::storage_scan::{FormulaFieldUpdate, update_formula_cells_in_txn};
 
 /// Update formula templates after a sheet rename.
+#[cfg(test)]
 pub fn update_formula_templates_on_sheet_rename(
     doc: &Doc,
     workbook: &MapRef,

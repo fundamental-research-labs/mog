@@ -1,17 +1,12 @@
-# @mog/xlsx-parser
+# xlsx-parser
 
-High-performance XLSX parser using Rust + WebAssembly with SIMD optimization.
-
-## Performance Target
-
-Parse 500K cells in under 50ms using SIMD-optimized parsing.
+High-performance XLSX parser in Rust.
 
 ## Features
 
-- **SIMD-Accelerated Scanning**: Uses WASM SIMD instructions for byte scanning
-- **Zero-Copy String Access**: Shared strings parsed without unnecessary allocations
-- **Streaming Architecture**: Pre-allocated buffers for efficient memory usage
-- **Pure Rust**: No external dependencies except wasm-bindgen
+- Streaming ZIP/XML parse into typed workbook structures
+- Shared strings, styles, formulas, and sheet data
+- Round-trip write path used by the compute engine
 
 ## XLSX Calculation Chain Policy
 
@@ -118,73 +113,8 @@ The crate follows a **read/write symmetry** pattern:
 
 ## Building
 
-### Prerequisites
-
-- [Rust](https://rustup.rs/) (1.70+)
-- [wasm-pack](https://rustwasm.github.io/wasm-pack/installer/)
-
-### Build Commands
-
 ```bash
-# Build for web (default)
-pnpm build
-
-# Build for development (faster, with debug info)
-pnpm build:dev
-
-# Build for bundler (webpack, vite, etc.)
-pnpm build:bundler
-
-# Build for Node.js
-pnpm build:nodejs
-```
-
-## Usage
-
-```typescript
-import init, {
-  parse_xlsx,
-  recommended_cell_buffer_size,
-  recommended_string_buffer_size
-} from '@mog/xlsx-parser';
-
-// Initialize WASM module
-await init();
-
-// Load XLSX file
-const xlsxData = new Uint8Array(await file.arrayBuffer());
-
-// Allocate output buffers
-const cellBufferSize = recommended_cell_buffer_size(xlsxData.length);
-const stringBufferSize = recommended_string_buffer_size(xlsxData.length);
-
-const cellBuffer = new Uint8Array(cellBufferSize);
-const stringBuffer = new Uint8Array(stringBufferSize);
-
-// Parse the file
-const result = parse_xlsx(xlsxData, cellBuffer, stringBuffer);
-
-if (result.is_ok()) {
-  console.log(`Parsed ${result.cell_count} cells in ${result.parse_time_us}us`);
-}
-```
-
-## Type Definitions
-
-TypeScript types are available in `src/types.ts`:
-
-```typescript
-import type { CellUpdate, ParsedWorkbook, ParseOptions } from '@mog/xlsx-parser/types';
-```
-
-## Testing
-
-```bash
-# Run Rust unit tests
-pnpm test
-
-# Run WASM tests in browser
-pnpm test:wasm
+cargo test -p xlsx-parser
 ```
 
 ## Round-Trip Testing
@@ -261,14 +191,8 @@ This makes it suitable for CI/CD pipelines to catch regressions.
 ## Development
 
 ```bash
-# Format code
-pnpm fmt
-
-# Lint with clippy
-pnpm lint
-
-# Check formatting
-pnpm fmt:check
+cargo fmt -p xlsx-parser
+cargo clippy -p xlsx-parser
 ```
 
 ## Binary Protocol

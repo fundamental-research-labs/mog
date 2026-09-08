@@ -16,6 +16,7 @@ pub(super) fn pivot_cache_records_path(global_idx: usize) -> String {
     ))
 }
 
+#[allow(dead_code)]
 pub(super) fn pivot_cache_rels_path(global_idx: usize) -> String {
     normalize_part_path(&format!(
         "xl/pivotCache/_rels/pivotCacheDefinition{}.xml.rels",
@@ -27,6 +28,7 @@ pub(super) fn pivot_table_path(global_idx: usize) -> String {
     normalize_part_path(&format!("xl/pivotTables/pivotTable{}.xml", global_idx))
 }
 
+#[allow(dead_code)]
 pub(super) fn pivot_table_rels_path(global_idx: usize) -> String {
     normalize_part_path(&format!(
         "xl/pivotTables/_rels/pivotTable{}.xml.rels",

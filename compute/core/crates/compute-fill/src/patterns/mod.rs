@@ -30,15 +30,18 @@ use value_types::CellValue;
 
 use crate::types::{CustomList, FillPattern, FillPatternType, LocaleNames};
 
-pub(crate) use cyclic::{detect_custom_list_pattern, detect_quarter_pattern, find_quarter_index};
+pub(crate) use cyclic::{detect_custom_list_pattern, detect_quarter_pattern};
 pub(crate) use date_time::{detect_date_pattern, detect_time_pattern};
-pub(crate) use locale::{
-    detect_month_pattern, detect_weekday_pattern, find_month_index, find_weekday_index,
-};
+pub(crate) use locale::{detect_month_pattern, detect_weekday_pattern};
 pub(crate) use numeric::{detect_growth_pattern, detect_linear_pattern};
-pub(crate) use text_numeric::{
-    detect_ordinal_pattern, detect_text_with_number_pattern, parse_ordinal, parse_text_number,
-};
+pub(crate) use text_numeric::{detect_ordinal_pattern, detect_text_with_number_pattern};
+
+#[cfg(test)]
+pub(crate) use cyclic::find_quarter_index;
+#[cfg(test)]
+pub(crate) use locale::{find_month_index, find_weekday_index};
+#[cfg(test)]
+pub(crate) use text_numeric::{parse_ordinal, parse_text_number};
 
 /// Detect the fill pattern from a sequence of cell values.
 ///

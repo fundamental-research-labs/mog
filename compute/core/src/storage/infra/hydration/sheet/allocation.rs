@@ -19,26 +19,6 @@ pub(crate) fn allocate_sheet_ids(
     allocate_sheet_ids_after_sheet_id(sheet, allocator, sheet_id)
 }
 
-/// Like `allocate_sheet_ids` but uses a pre-assigned SheetId when provided.
-/// Used by deferred hydration to maintain stable sheet IDs between fast
-/// and full paths.
-pub(crate) fn allocate_sheet_ids_with_sheet_id(
-    sheet: &SheetData,
-    allocator: &mut impl IdAllocator,
-    fixed_sheet_id: Option<SheetId>,
-) -> SheetIdAllocation {
-    let sheet_id = match fixed_sheet_id {
-        Some(id) => {
-            // Consume the allocator's SheetId slot to keep counter in sync.
-            let _ = allocator.alloc_sheet_id();
-            id
-        }
-        None => allocator.alloc_sheet_id(),
-    };
-
-    allocate_sheet_ids_after_sheet_id(sheet, allocator, sheet_id)
-}
-
 /// Like `allocate_sheet_ids`, but reuses IDs from an earlier allocation where
 /// possible while still consuming allocator slots for the current sheet shape.
 ///

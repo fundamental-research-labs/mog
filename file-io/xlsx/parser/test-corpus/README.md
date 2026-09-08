@@ -157,25 +157,7 @@ cargo run --bin generate_test_corpus --features corpus-gen
 # The generator creates files in each category with documented errors
 ```
 
-#### TypeScript Generators (Feature Coverage)
-
-Use the TypeScript generators for comprehensive feature coverage:
-
-```bash
-# Generate all test files (features, realistic, edge-cases)
-pnpm corpus:generate
-
-# Generate specific categories
-pnpm corpus:generate:features     # ECMA-376 feature coverage tests
-pnpm corpus:generate:realistic    # Real-world scenario simulations
-pnpm corpus:generate:edge-cases   # Edge case test files
-
-# Validate the entire corpus
-pnpm corpus:validate
-
-# Generate and validate in one command
-pnpm corpus:all
-```
+Corpus generation lives in the Rust `generate_test_corpus` binary (`--features corpus-gen`).
 
 ### Generated Test File Categories
 

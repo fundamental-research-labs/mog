@@ -17,7 +17,7 @@ impl CellMirror {
         if let Some(sheet) = self.sheets.get_mut(&sheet_id) {
             if sheet.cells.contains_key(cell_id) {
                 if let Some(&pos) = sheet.id_to_pos.get(cell_id) {
-                    let (row, col) = (pos.row(), pos.col());
+                    let (_row, col) = (pos.row(), pos.col());
                     #[cfg(feature = "journal")]
                     let old_val_for_journal = write_col_value(sheet, pos, value.clone());
                     #[cfg(not(feature = "journal"))]

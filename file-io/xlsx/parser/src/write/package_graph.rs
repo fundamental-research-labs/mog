@@ -51,13 +51,17 @@ pub use types::{
     RelationshipOwnerPath, ResolvedPackageGraph, ResolvedPackageRelationship,
 };
 
+#[allow(unused_imports)]
 pub(super) use hints::*;
+#[allow(unused_imports)]
 pub(super) use opaque::*;
 pub(super) use paths::{
     normalize_external_link_part_path, normalize_part_path, owner_part_path_from_rels_path,
     owner_rels_path, relationship_target_part_path, relative_target,
 };
+#[allow(unused_imports)]
 pub(super) use resolution::*;
+#[allow(unused_imports)]
 pub(super) use validation::*;
 
 const CT_PIVOT_CACHE_RECORDS: &str =

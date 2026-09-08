@@ -1,8 +1,0 @@
-{
-  "mog": {
-    "command": "node",
-    "args": ["./dist/mcp/server.mjs", "--stdio"],
-    "cwd": ".",
-    "startup_timeout_sec": 20
-  }
-}

@@ -1,0 +1,24 @@
+[package]
+name = "mog"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Headless Mog spreadsheet engine with an embedded Office.js Excel API"
+
+[[bin]]
+name = "mog"
+path = "src/main.rs"
+
+[dependencies]
+compute-api = { path = "../api" }
+value-types = { path = "../core/crates/types/value-types" }
+rquickjs = { version = "0.12.2", features = ["futures"] }
+tokio = { version = "1", features = ["rt"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]

@@ -2,9 +2,7 @@ use super::{
     VbaModule, VbaProject,
     modules::{detect_modules_from_raw, determine_module_type},
 };
-use crate::domain::vba::constants::{
-    DIRECTORY_ENTRY_SIZE, END_OF_CHAIN, OLE_MAGIC, SECTOR_SIZE_512,
-};
+use crate::domain::vba::constants::{DIRECTORY_ENTRY_SIZE, END_OF_CHAIN, SECTOR_SIZE_512};
 
 pub(super) fn parse_ole_document(data: &[u8], project: &mut VbaProject) {
     if data.len() < SECTOR_SIZE_512 {

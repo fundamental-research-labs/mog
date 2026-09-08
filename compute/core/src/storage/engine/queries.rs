@@ -2,6 +2,7 @@
 
 mod cell_regions;
 mod document_sheets;
+mod helpers;
 mod projections_settings;
 mod ranges_search_formula;
 mod styles_named_ranges;
@@ -25,7 +26,7 @@ use crate::snapshot::{
     RuntimeDiagnosticsPage, RustWorkbookSettingsPatch, WorkbookProtectionOptions, WorkbookSettings,
 };
 use bridge_core as bridge;
-use cell_types::{CellId, SheetId, SheetPos};
+use cell_types::{SheetId, SheetPos};
 use domain_types::domain::merge::{CellMergeInfo, MergeRegion, ResolvedMergedRegion};
 use domain_types::domain::sheet::{FrozenPanes, SheetMeta, SheetScrollPosition, SheetViewOptions};
 use domain_types::domain::slicer::{NamedSlicerStyle, SlicerCustomStyle};

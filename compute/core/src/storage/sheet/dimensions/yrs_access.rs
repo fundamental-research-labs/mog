@@ -1,4 +1,4 @@
-use yrs::{Any, Map, MapRef, Out, Transact};
+use yrs::{Any, Map, MapRef, Out};
 
 use crate::identity::GridIndex;
 use cell_types::SheetId;
@@ -45,6 +45,7 @@ pub(super) fn any_filter_hides_row<T: yrs::ReadTxn>(
     })
 }
 
+#[cfg(test)]
 pub(super) fn filter_hides_row<T: yrs::ReadTxn>(
     filter_hidden_rows_map: &MapRef,
     txn: &T,

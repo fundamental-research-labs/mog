@@ -1,6 +1,6 @@
 use crate::infra::scanner::find_tag_simd;
 
-use domain_types::domain::external_link::{ExternalLink, ExternalLinkType};
+use domain_types::domain::external_link::ExternalLink;
 
 use super::legacy::{parse_dde_link, parse_ole_link};
 use super::support::{extract_ext_lst_xml, extract_mc_ignorable};

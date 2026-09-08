@@ -557,6 +557,7 @@ fn element_name(element: &[u8]) -> Option<&[u8]> {
     Some(&element[name_start..name_end])
 }
 
+#[allow(dead_code)]
 pub(crate) fn extract_pivot_table_paths_for_sheet(
     sheet_num: usize,
     rels_xml: &[u8],

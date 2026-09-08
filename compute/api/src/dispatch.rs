@@ -32,7 +32,6 @@ mod native {
 
     enum Cmd {
         Execute(ErasedCmd),
-        Shutdown,
     }
 
     /// Actor handle for the engine thread. `Clone` to share across `Workbook`
@@ -95,19 +94,15 @@ mod native {
         }
     }
 
-    impl Drop for Dispatch {
-        fn drop(&mut self) {
-            // Best-effort shutdown — if the engine thread is already gone, ignore.
-            let _ = self.tx.send(Cmd::Shutdown);
-        }
-    }
-
     /// Engine event loop — runs on the dedicated thread.
+    ///
+    /// Exits when every [`Dispatch`] handle has been dropped (channel
+    /// disconnect). Do not send shutdown from `Drop` of a cloned handle:
+    /// `Workbook::sheets()` clones `Dispatch` for a temporary sub-API.
     fn engine_loop(mut engine: YrsComputeEngine, rx: crossbeam_channel::Receiver<Cmd>) {
         for cmd in rx {
             match cmd {
                 Cmd::Execute(ErasedCmd(f)) => f(&mut engine),
-                Cmd::Shutdown => break,
             }
         }
     }

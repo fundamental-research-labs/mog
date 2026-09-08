@@ -4,20 +4,8 @@
 //!
 //! ## Architecture
 //!
-//! ```text
-//! TypeScript (owns storage + UI)              Rust (owns compute)
-//! ┌──────────────────────────────┐           ┌──────────────────────────────┐
-//! │ Yjs Document (source of truth)│           │ compute-core crate           │
-//! │ Cell Identity Model           │  ──IPC──▶│ Cell Mirror (identity-keyed) │
-//! │ UndoManager, EventBus        │           │ Formula Parser (winnow)      │
-//! │ Structural ops, Canvas       │◀─results──│ AST Evaluator                │
-//! │ React UI, Selection          │           │ Function Library (508)        │
-//! │ Formatting, Number display   │           │ Dependency Graph (CellId)     │
-//! └──────────────────────────────┘           │ Recalc Scheduler (rayon)     │
-//!                                            └──────────────────────────────┘
-//! ```
-//!
-//! Communication via Tauri IPC commands. All data structures keyed by CellId (u128).
+//! Headless spreadsheet compute engine. Document state is Yrs-backed and local.
+//! All data structures are keyed by CellId (u128).
 
 // Typed-boundary authorship guardrail (W10): any remaining `&str[n..]` slice must be
 // accompanied by an explicit `#[allow(clippy::string_slice)]` with a one-line

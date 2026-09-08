@@ -34,8 +34,7 @@ For a bug report, include:
   screen recording.
 - What you expected to happen.
 - What actually happened.
-- Your environment: browser or Node version, OS, package version, and any
-  relevant file type.
+- Your environment: OS, Rust version, and any relevant file type.
 - Whether this used to work, if you know.
 
 For a feature request, include:

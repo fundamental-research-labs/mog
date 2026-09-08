@@ -30,6 +30,7 @@ mod yrs_io;
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
 pub use domain_types::domain::comment::{AddCommentOptions, Comment, CommentType, RichTextRun};
 
 pub use cleanup::validate_and_clean_comments;

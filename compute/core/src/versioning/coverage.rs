@@ -77,6 +77,7 @@ pub(super) enum SemanticCoverageClassification {
     IncludedAuthored,
     #[serde(rename = "derivedExcluded")]
     DerivedExcluded,
+    #[allow(dead_code)]
     #[serde(rename = "viewExcluded")]
     ViewExcluded,
     #[serde(rename = "opaqueDigest")]

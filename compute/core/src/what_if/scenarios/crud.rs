@@ -4,7 +4,7 @@ use crate::snapshot::{
 };
 use crate::storage::YrsStorage;
 use value_types::ComputeError;
-use yrs::{Array, Map, Transact};
+use yrs::{Array, Transact};
 
 use super::query::{get_all, is_at_limit};
 use super::storage::{

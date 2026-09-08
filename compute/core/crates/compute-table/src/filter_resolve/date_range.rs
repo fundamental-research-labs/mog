@@ -1,6 +1,7 @@
+#[cfg(test)]
+use crate::types::FilterCriteria;
 use crate::types::{
-    ConditionFilter, DynamicFilterRule, FilterCriteria, FilterLogic, FilterOperator,
-    TableFilterCondition,
+    ConditionFilter, DynamicFilterRule, FilterLogic, FilterOperator, TableFilterCondition,
 };
 use chrono::{Datelike, Duration, NaiveDate, Weekday};
 use value_types::{CellValue, date_to_serial};

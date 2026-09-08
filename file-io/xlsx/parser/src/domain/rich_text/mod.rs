@@ -5,7 +5,6 @@ pub mod read;
 mod runs;
 pub mod types;
 
-pub use read::*;
 pub use types::*;
 
 #[cfg(test)]

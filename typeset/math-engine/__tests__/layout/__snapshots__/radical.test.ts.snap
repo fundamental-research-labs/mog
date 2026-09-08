@@ -1,9 +1,0 @@
-// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
-
-exports[`Radical Layout snapshot: simple radical layout 1`] = `
-{
-  "baseline": 7,
-  "height": 7,
-  "width": 14,
-}
-`;

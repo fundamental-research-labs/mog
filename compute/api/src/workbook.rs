@@ -60,6 +60,21 @@ impl Workbook {
         Ok((Workbook { dispatch }, recalc))
     }
 
+    /// Create a blank workbook with a single `Sheet1` worksheet.
+    pub fn blank() -> Result<(Self, RecalcResult), ComputeApiError> {
+        Self::from_snapshot(WorkbookSnapshot {
+            sheets: vec![crate::SheetSnapshot {
+                id: "00000000-0000-0000-0000-000000000001".to_string(),
+                name: "Sheet1".to_string(),
+                rows: 1_000,
+                cols: 26,
+                cells: vec![],
+                ranges: vec![],
+            }],
+            ..Default::default()
+        })
+    }
+
     // -----------------------------------------------------------------
     // Sheet access
     // -----------------------------------------------------------------
@@ -206,41 +221,5 @@ impl Workbook {
     /// Workbook settings (calculation mode, culture, etc.).
     pub fn settings(&self) -> settings::WorkbookSettings {
         settings::WorkbookSettings::new(self.dispatch.clone())
-    }
-
-    // -----------------------------------------------------------------
-    // Collaboration
-    // -----------------------------------------------------------------
-
-    /// Apply a Yrs sync update from a remote peer.
-    pub fn apply_sync_update(
-        &self,
-        update: &[u8],
-    ) -> Result<snapshot_types::MutationResult, ComputeApiError> {
-        let update = update.to_vec();
-        self.dispatch
-            .call_engine(move |e| e.apply_sync_update_legacy(&update))
-            .and_then(|r| {
-                r.map(|(_vp, mutation)| mutation)
-                    .map_err(ComputeApiError::from)
-            })
-    }
-
-    /// Encode the current Yrs state vector for sync.
-    pub fn encode_state_vector(&self) -> Result<Vec<u8>, ComputeApiError> {
-        self.dispatch.query_engine(|e| e.encode_state_vector())
-    }
-
-    /// Encode the diff between local state and a remote state vector.
-    pub fn encode_diff(&self, remote_sv: &[u8]) -> Result<Vec<u8>, ComputeApiError> {
-        let sv = remote_sv.to_vec();
-        self.dispatch
-            .call_engine(move |e| e.encode_diff(&sv))
-            .and_then(|r| r.map_err(ComputeApiError::from))
-    }
-
-    /// Export the full Yrs document state.
-    pub fn sync_full_state(&self) -> Result<Vec<u8>, ComputeApiError> {
-        self.dispatch.query_engine(|e| e.sync_full_state())
     }
 }

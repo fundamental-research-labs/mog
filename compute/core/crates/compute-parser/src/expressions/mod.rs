@@ -49,6 +49,4 @@ mod postfix;
 mod pratt;
 mod range_ops;
 
-pub use alpha::{try_parse_cell_or_range_or_func, try_parse_function_call};
 pub use pratt::parse_expression;
-pub use range_ops::{is_callable, is_range_endpoint, is_range_like};

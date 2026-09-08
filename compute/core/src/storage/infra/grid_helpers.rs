@@ -6,7 +6,7 @@
 //! retired in GridIndex migration (`gridIndex/{posToId,idToPos}` is the authoritative
 //! yrs-side identity store).
 
-use yrs::{Any, Array, ArrayRef, Map, MapRef, Out};
+use yrs::{ArrayRef, Map, MapRef, Out};
 
 use cell_types::SheetId;
 use compute_document::schema::{KEY_CELL_PROPERTIES, KEY_CELLS, KEY_COL_ORDER, KEY_ROW_ORDER};
@@ -74,23 +74,6 @@ pub(crate) fn get_col_order_array<T: yrs::ReadTxn>(
         Some(Out::YArray(a)) => Some(a),
         _ => None,
     }
-}
-
-/// Read the full rowOrder array into a Vec of hex strings.
-pub(crate) fn read_row_order<T: yrs::ReadTxn>(arr: &ArrayRef, txn: &T) -> Vec<String> {
-    let len = arr.len(txn);
-    let mut result = Vec::with_capacity(len as usize);
-    for i in 0..len {
-        if let Some(Out::Any(Any::String(s))) = arr.get(txn, i) {
-            result.push(s.to_string());
-        }
-    }
-    result
-}
-
-/// Read the full colOrder array into a Vec of hex strings.
-pub(crate) fn read_col_order<T: yrs::ReadTxn>(arr: &ArrayRef, txn: &T) -> Vec<String> {
-    read_row_order(arr, txn) // Same logic, different array
 }
 
 // ---------------------------------------------------------------------------

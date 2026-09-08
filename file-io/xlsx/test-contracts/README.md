@@ -37,18 +37,7 @@ Lane E owns orchestration, not new report schemas. The gate binary exposes the
 shared command metadata and rollout suites from the Rust contracts:
 
 ```bash
-pnpm gate:xlsx:list
-pnpm gate:xlsx:schedule
-pnpm gate:xlsx:plan:smoke
-pnpm gate:xlsx:plan:golden
-pnpm gate:xlsx:plan:full
-pnpm gate:xlsx:check:smoke
-```
-
-Report policy enforcement is also contract-backed:
-
-```bash
-pnpm --filter @mog/xlsx-parser-wasm run gate:enforce-policy -- report.json
+cargo run -p xlsx-parser --bin xlsx-gate --features cli -- list
 ```
 
 Golden/full reports must use the shared envelope, carry stable fingerprints for

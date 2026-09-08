@@ -7,7 +7,6 @@ use std::collections::HashMap;
 
 use super::relationships;
 use super::types::{ControlAnchor, FormControl, FormControlType};
-pub(crate) use super::vml_write::escape_xml_text;
 pub use super::vml_write::{write_vml_form_controls, write_vml_with_ole};
 use crate::infra::scanner::{find_attr_simd, find_closing_tag, find_gt_simd, find_tag_simd};
 use crate::infra::xml::{parse_string_attr, parse_string_attr_verbatim};

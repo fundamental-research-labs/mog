@@ -1,5 +1,0 @@
-*.wasm
-*.wasm.d.ts
-*.js
-*.d.ts
-package.json.bak

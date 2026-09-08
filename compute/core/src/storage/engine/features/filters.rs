@@ -239,7 +239,7 @@ pub(super) fn get_unique_column_values(
 }
 
 pub(super) fn compute_dynamic_filter_serial_range(
-    engine: &YrsComputeEngine,
+    _engine: &YrsComputeEngine,
     rule: filters::DynamicFilterRule,
 ) -> Option<(f64, f64)> {
     let now_serial = crate::eval::clock::get_current_serial_timestamp();

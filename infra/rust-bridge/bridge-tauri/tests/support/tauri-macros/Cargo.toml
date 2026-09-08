@@ -1,8 +1,0 @@
-[package]
-name = "tauri-macros"
-version = "0.0.0"
-publish = false
-edition.workspace = true
-
-[lib]
-proc-macro = true

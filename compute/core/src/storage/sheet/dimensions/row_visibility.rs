@@ -2,9 +2,11 @@ use std::collections::BTreeSet;
 
 use yrs::{Any, Doc, Map, MapRef, Origin, Out, Transact};
 
+#[cfg(test)]
+use super::yrs_access::filter_hides_row;
 use super::yrs_access::{
-    any_filter_hides_row, effective_hidden_by_row_id, filter_hides_row, get_sheet_submap,
-    map_has_true, row_id_key, write_effective_hidden_cache,
+    any_filter_hides_row, effective_hidden_by_row_id, get_sheet_submap, map_has_true, row_id_key,
+    write_effective_hidden_cache,
 };
 use crate::identity::GridIndex;
 use cell_types::SheetId;
@@ -421,6 +423,7 @@ pub fn clear_filter_hidden_rows(
     clear_filter_hidden_rows_in_txn(&mut txn, sheets, sheet_id, filter_id, grid_index)
 }
 
+#[cfg(test)]
 pub fn is_row_manually_hidden(
     doc: &Doc,
     sheets: &MapRef,
@@ -436,6 +439,7 @@ pub fn is_row_manually_hidden(
         .is_some_and(|m| map_has_true(&m, &txn, &row_id))
 }
 
+#[cfg(test)]
 pub fn is_row_hidden_by_filter(
     doc: &Doc,
     sheets: &MapRef,
@@ -467,6 +471,7 @@ pub fn is_row_hidden_by_any_filter(
         .is_some_and(|m| any_filter_hides_row(&m, &txn, &row_id))
 }
 
+#[cfg(test)]
 pub fn is_row_hidden_only_by_filter(
     doc: &Doc,
     sheets: &MapRef,

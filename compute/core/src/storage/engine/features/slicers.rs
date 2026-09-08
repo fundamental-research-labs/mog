@@ -118,28 +118,28 @@ pub(super) fn clear_slicer_selection(
 }
 
 pub(super) fn map_slicer_invalidation_reason(
-    engine: &YrsComputeEngine,
+    _engine: &YrsComputeEngine,
     reason: &str,
 ) -> Result<slicers::CacheInvalidationEventReason, ComputeError> {
     svc::map_slicer_invalidation_reason(reason)
 }
 
 pub(super) fn map_slicer_disconnection_reason(
-    engine: &YrsComputeEngine,
+    _engine: &YrsComputeEngine,
     reason: &str,
 ) -> Result<slicers::DisconnectionEventReason, ComputeError> {
     svc::map_slicer_disconnection_reason(reason)
 }
 
 pub(super) fn get_slicer_items_from_cache(
-    engine: &YrsComputeEngine,
+    _engine: &YrsComputeEngine,
     cache: SlicerCache,
 ) -> Vec<slicers::SlicerItem> {
     svc::get_slicer_items_from_cache(cache)
 }
 
 pub(super) fn is_slicer_column_connected(
-    engine: &YrsComputeEngine,
+    _engine: &YrsComputeEngine,
     source_column_id: &str,
     table_columns: Vec<TableColumn>,
 ) -> bool {
@@ -147,7 +147,7 @@ pub(super) fn is_slicer_column_connected(
 }
 
 pub(super) fn find_slicers_for_table(
-    engine: &YrsComputeEngine,
+    _engine: &YrsComputeEngine,
     slicer_list: Vec<Slicer>,
     table_id: &str,
 ) -> Vec<usize> {
@@ -155,7 +155,7 @@ pub(super) fn find_slicers_for_table(
 }
 
 pub(super) fn find_disconnected_slicers(
-    engine: &YrsComputeEngine,
+    _engine: &YrsComputeEngine,
     slicer_list: Vec<Slicer>,
     existing_table_ids: Vec<String>,
 ) -> Vec<usize> {

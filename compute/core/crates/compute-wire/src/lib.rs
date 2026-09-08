@@ -75,7 +75,6 @@ pub mod flags;
 pub mod mutation;
 pub mod palette;
 pub mod palette_binary;
-pub mod security_filter;
 pub mod types;
 pub mod viewport;
 
@@ -175,7 +174,6 @@ pub use palette::PaletteFullError;
 pub use palette_binary::{
     PaletteBinaryError, deserialize_palette_binary, serialize_palette_binary,
 };
-pub use security_filter::filter_viewport_buffer;
 pub use types::{
     CellCFExtras, DataBarRenderData, IconRenderData, PaletteSnapshot, RenderColDimension,
     RenderRowDimension, RenderViewportMerge, ViewportBounds, ViewportRenderCell,
@@ -219,6 +217,7 @@ mod cell_format_drift_tests {
             "backgroundColorTint",
             "bold",
             "borders",
+            "extensions",
             "fontCharset",
             "fontColor",
             "fontColorTint",

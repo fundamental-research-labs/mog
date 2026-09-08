@@ -33,21 +33,6 @@ pub struct CellInfo {
     pub formatted: String,
 }
 
-/// R4 redaction impl. Value and formula are payload; format is shape
-/// (visible at Structure level). `formatted` is the display string —
-/// we zero it on denial so the UI shows the placeholder, not the raw
-/// formatted value.
-impl compute_security::RedactMaybe for CellInfo {
-    fn redact(&mut self, level: compute_security::AccessLevel) {
-        self.value.redact(level);
-        self.formula.redact(level);
-        // `formatted` is a String; at Structure level it gets the
-        // text placeholder, which matches the user-visible ARCHITECTURE
-        // §7 contract (Structure = type placeholder, None = blank).
-        self.formatted.redact(level);
-    }
-}
-
 #[bridge::api(
     service = "YrsComputeEngine",
     key = "doc_id",
@@ -64,7 +49,7 @@ impl YrsComputeEngine {
     ///
     /// Uses the CellMirror as the authority (it is always populated, unlike
     /// the Yrs grid index which is only written for interactive edits).
-    #[bridge::read(scope = "cell")]
+    #[bridge::read]
     pub fn get_cell_value(&self, sheet_id: &SheetId, row: u32, col: u32) -> CellValue {
         match cell_values::get_effective_value(&self.mirror, sheet_id, row, col) {
             Some(v) => v,
@@ -76,7 +61,7 @@ impl YrsComputeEngine {
     ///
     /// Iterates the full rectangular bounds — empty cells appear as `CellValue::Null`.
     /// This consolidates the TS `queryRange()` + reshape pattern into a single call.
-    #[bridge::read(scope = "range")]
+    #[bridge::read]
     pub fn get_range_values_2d(
         &self,
         sheet_id: &SheetId,
@@ -104,7 +89,7 @@ impl YrsComputeEngine {
     ///
     /// Combines what TypeScript does in 3-4 separate IPC calls into one.
     /// Returns `None` only if the cell is completely empty (no value, no formula).
-    #[bridge::read(scope = "cell")]
+    #[bridge::read]
     pub fn get_cell_info(&self, sheet_id: &SheetId, row: u32, col: u32) -> Option<CellInfo> {
         let value = self.get_cell_value(sheet_id, row, col);
 
@@ -186,7 +171,7 @@ impl YrsComputeEngine {
     ///
     /// Unlike viewport queries which normalize values, this returns all internal
     /// fields so callers can distinguish formula cells from value cells.
-    #[bridge::read(scope = "cell")]
+    #[bridge::read]
     pub fn get_raw_cell_data(
         &self,
         sheet_id: &SheetId,
@@ -234,7 +219,7 @@ impl YrsComputeEngine {
     ///
     /// If the cell has a formula, returns the formula string with "=" prefix.
     /// Otherwise returns the raw value as a string.
-    #[bridge::read(scope = "cell")]
+    #[bridge::read]
     pub fn get_value_for_editing(&self, sheet_id: &SheetId, row: u32, col: u32) -> String {
         super::services::queries::get_raw_value(&self.mirror, &self.stores, sheet_id, row, col)
     }
@@ -244,7 +229,7 @@ impl YrsComputeEngine {
     // -------------------------------------------------------------------
 
     /// Get formatted display text for a range as a 2D array.
-    #[bridge::read(scope = "range")]
+    #[bridge::read]
     pub fn get_display_text_2d(
         &self,
         sheet_id: &SheetId,
@@ -287,7 +272,7 @@ impl YrsComputeEngine {
     /// Get per-cell value type classification for a range as a 2D array.
     ///
     /// Each element is one of: "Empty", "String", "Double", "Boolean", "Error".
-    #[bridge::read(scope = "range")]
+    #[bridge::read]
     pub fn get_value_types_2d(
         &self,
         sheet_id: &SheetId,
@@ -324,7 +309,7 @@ impl YrsComputeEngine {
     /// Get per-cell number format category for a range as a 2D array.
     ///
     /// Each element matches the TS `NumberFormatCategory` enum.
-    #[bridge::read(scope = "range")]
+    #[bridge::read]
     pub fn get_format_categories_2d(
         &self,
         sheet_id: &SheetId,

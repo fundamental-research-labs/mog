@@ -62,7 +62,7 @@ impl YrsComputeEngine {
     /// payload (always empty for hydration: viewport buffers are populated
     /// via the per-viewport prefetch path triggered by the renderer, not
     /// via patches threaded through this call).
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     #[tracing::instrument(name = "engine_import_from_xlsx_bytes", skip_all)]
     pub fn import_from_xlsx_bytes(
         &mut self,
@@ -119,7 +119,7 @@ impl YrsComputeEngine {
     /// Fast-path XLSX import: parses and builds indexes from snapshot (NO Yrs hydration).
     /// The viewport can display immediately. Call `complete_deferred_hydration()` after
     /// first paint to enable mutations and persistence.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     #[tracing::instrument(name = "engine_import_from_xlsx_bytes_deferred", skip_all)]
     pub fn import_from_xlsx_bytes_deferred(
         &mut self,
@@ -149,7 +149,7 @@ impl YrsComputeEngine {
     /// Complete the deferred Yrs CRDT hydration started by `import_from_xlsx_bytes_deferred`.
     /// Call after first viewport paint. This performs the slow Yrs write and rebuilds
     /// indexes with full fidelity.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     #[tracing::instrument(name = "engine_complete_deferred_hydration", skip_all)]
     pub fn complete_deferred_hydration(
         &mut self,
@@ -257,7 +257,7 @@ impl YrsComputeEngine {
     /// TS code generator uses `MethodAccess::Write` + `(Uint8Array,
     /// MutationResult)` return shape as the trigger for the mutate-wrapping
     /// codegen path; this method does not actually mutate Rust state.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     #[tracing::instrument(name = "engine_settle_for_mirror", skip_all)]
     pub fn settle_for_mirror(&mut self) -> Result<(Vec<u8>, MutationResult), ComputeError> {
         let result = services::mutation_handlers::build_mutation_result_for_hydration(
@@ -278,7 +278,7 @@ impl YrsComputeEngine {
     /// `MutationResultHandler.applyAndNotify` pipeline as live mutations.
     /// See [`Self::import_from_xlsx_bytes`] for the architectural rationale —
     /// CSV is a sibling import boundary that benefits from the same fix.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     #[tracing::instrument(name = "engine_import_from_csv_bytes", skip_all)]
     pub fn import_from_csv_bytes(
         &mut self,
@@ -320,7 +320,7 @@ impl YrsComputeEngine {
     /// style palette, hydrates each matched sheet into the Yrs document, syncs
     /// all stores, and inserts them at `insert_position` in the sheet order.
     /// Returns the names of inserted sheets (possibly deduped to avoid collisions).
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     #[tracing::instrument(name = "engine_import_sheets_from_xlsx", skip_all)]
     pub fn import_sheets_from_xlsx(
         &mut self,

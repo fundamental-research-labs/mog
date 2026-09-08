@@ -43,21 +43,12 @@ pub(super) fn semantic_coverage_records() -> Vec<SemanticCoverageRecord> {
         INCLUDED_COVERAGE_ONLY,
         "vc03-schema-top-level",
     );
-    push_paths(
-        &mut records,
-        SemanticCoverageScope::TopLevel,
-        &["/security"],
-        "security",
-        unsupported("VERSIONING_UNSUPPORTED_SECURITY_SCHEMA"),
-        "vc03-schema-top-level",
-    );
 
     push_workbook_records(&mut records);
     push_sheet_records(&mut records);
     push_cell_records(&mut records);
     push_cell_property_records(&mut records);
     push_sheet_metadata_records(&mut records);
-    push_security_records(&mut records);
 
     records.sort_by(|left, right| {
         (left.scope, left.source_path.as_str(), left.domain_owner).cmp(&(
@@ -440,21 +431,6 @@ fn push_sheet_metadata_records(records: &mut Vec<SemanticCoverageRecord>) {
         ],
         "sheet-metadata",
         unsupported("VERSIONING_UNSUPPORTED_SHEET_METADATA_SCHEMA"),
-    );
-}
-
-fn push_security_records(records: &mut Vec<SemanticCoverageRecord>) {
-    push_paths(
-        records,
-        SemanticCoverageScope::Metadata,
-        &[
-            "/security/policies",
-            "/security/version",
-            "/security/templates",
-        ],
-        "security",
-        unsupported("VERSIONING_UNSUPPORTED_SECURITY_SCHEMA"),
-        "vc03-schema-security",
     );
 }
 

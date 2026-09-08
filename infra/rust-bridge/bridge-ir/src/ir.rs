@@ -89,16 +89,6 @@ pub struct MethodDescriptor {
     pub error_type: Option<Type>,
     pub is_fallible: bool,
     pub skip_targets: Vec<String>,
-    /// Security scope declared on `#[bridge::read/write/structural(scope = "...")]`.
-    /// Validated and consumed by bridge-delegate under `gated = true`.
-    /// Downstream targets typically do not see this (bridge-delegate strips
-    /// it when re-emitting), but the DSL preserves it so the IR is lossless.
-    pub scope: Option<String>,
-    /// Set by `#[bridge::write(needs_principal)]`. Marks methods whose
-    /// engine-side signature takes a trailing `caller: &Principal` that the
-    /// delegate macro supplies — downstream codegens see the public (stripped)
-    /// signature.
-    pub needs_principal: bool,
 }
 
 #[derive(Debug, Clone)]

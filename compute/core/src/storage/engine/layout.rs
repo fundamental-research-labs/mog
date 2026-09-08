@@ -20,7 +20,7 @@ use value_types::ComputeError;
 )]
 impl YrsComputeEngine {
     /// Get the pixel position (top edge) of a row.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_row_position(&self, sheet_id: &SheetId, row: u32) -> f64 {
         self.stores.layout_indexes.get(sheet_id).map_or(
             row as f64 * self.stores.layout_metrics.default_row_height_px,
@@ -29,7 +29,7 @@ impl YrsComputeEngine {
     }
 
     /// Get the pixel position (left edge) of a column.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_col_position(&self, sheet_id: &SheetId, col: u32) -> f64 {
         self.stores.layout_indexes.get(sheet_id).map_or(
             col as f64 * self.stores.layout_metrics.default_column_width_px,
@@ -38,7 +38,7 @@ impl YrsComputeEngine {
     }
 
     /// Find the row index at a pixel Y position.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_row_at_pixel(&self, sheet_id: &SheetId, y: f64) -> u32 {
         self.stores.layout_indexes.get(sheet_id).map_or(
             (y / self.stores.layout_metrics.default_row_height_px).max(0.0) as u32,
@@ -47,7 +47,7 @@ impl YrsComputeEngine {
     }
 
     /// Find the column index at a pixel X position.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_col_at_pixel(&self, sheet_id: &SheetId, x: f64) -> u32 {
         self.stores.layout_indexes.get(sheet_id).map_or(
             (x / self.stores.layout_metrics.default_column_width_px).max(0.0) as u32,
@@ -56,7 +56,7 @@ impl YrsComputeEngine {
     }
 
     /// Get the height of a row (0 if hidden).
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_row_height_from_index(&self, sheet_id: &SheetId, row: u32) -> f64 {
         self.stores
             .layout_indexes
@@ -67,7 +67,7 @@ impl YrsComputeEngine {
     }
 
     /// Get the width of a column (0 if hidden).
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_col_width_from_index(&self, sheet_id: &SheetId, col: u32) -> f64 {
         self.stores
             .layout_indexes
@@ -82,7 +82,7 @@ impl YrsComputeEngine {
     // -------------------------------------------------------------------
 
     /// Compute and set optimal width for a single column.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn auto_fit_column_and_set(
         &mut self,
         sheet_id: &SheetId,
@@ -99,7 +99,7 @@ impl YrsComputeEngine {
     }
 
     /// Compute and set optimal widths for multiple columns in one call.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn auto_fit_columns_and_set(
         &mut self,
         sheet_id: &SheetId,
@@ -116,7 +116,7 @@ impl YrsComputeEngine {
     }
 
     /// Compute and set optimal heights for multiple rows in one call.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn auto_fit_rows_and_set(
         &mut self,
         sheet_id: &SheetId,

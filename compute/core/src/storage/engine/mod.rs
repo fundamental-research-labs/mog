@@ -57,9 +57,6 @@ mod recalc_postprocess;
 mod runtime_diagnostics;
 mod screenshot;
 pub mod search;
-mod security;
-pub(crate) mod security_events;
-mod security_ops;
 pub(crate) mod services;
 mod structural;
 mod styles;
@@ -113,22 +110,6 @@ pub struct YrsComputeEngine {
     pub(crate) mutation: MutationCoordinator,
     pub(crate) viewport: ViewportService,
     pub(crate) settings: EngineSettings,
-    /// Security state — R2.3. Owns the live `PolicyEngine`, the version
-    /// counters, the matrix cache, and the shared `active` flag that
-    /// `ComputeService` reads for its gated-delegate fast path.
-    pub(crate) security: crate::storage::security_state::SecurityState,
-    /// Pending security events buffer — R5.4. Drained by
-    /// `wb_security_drain_events`; SDK event relays poll this on each
-    /// engine round-trip and re-fan-out into the per-SDK subscriber
-    /// infrastructure.
-    ///
-    /// Held in an `Arc` because `SecurityState` keeps a second handle
-    /// so the Yrs observer callback (fires on remote CRDT syncs) can
-    /// push `SecurityEvent::PoliciesReloaded` — otherwise CRDT-initiated
-    /// policy changes would never surface to SDK consumers that only
-    /// poll this buffer.
-    pub(crate) security_events: std::sync::Arc<security_events::SecurityEventBuffer>,
-
     /// Last canonical import report for this engine instance.
     ///
     /// This is runtime-only diagnostic state: it is replaced on workbook import,

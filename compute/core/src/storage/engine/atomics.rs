@@ -65,7 +65,7 @@ impl YrsComputeEngine {
     /// Atomically set the calculation mode without disturbing other settings.
     ///
     /// Replaces the TS pattern: `getWorkbookSettings()` → merge → `setWorkbookSettings()`.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn set_calculation_mode(
         &mut self,
         mode: &str,
@@ -87,7 +87,7 @@ impl YrsComputeEngine {
     }
 
     /// Atomically set the maximum iterations for iterative calculation.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn set_max_iterations(
         &mut self,
         n: u32,
@@ -98,7 +98,7 @@ impl YrsComputeEngine {
     }
 
     /// Atomically enable or disable iterative calculation.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn set_iterative_calculation(
         &mut self,
         enabled: bool,
@@ -109,7 +109,7 @@ impl YrsComputeEngine {
     }
 
     /// Atomically set the convergence threshold (max change) for iterative calculation.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn set_convergence_threshold(
         &mut self,
         threshold: f64,
@@ -127,7 +127,7 @@ impl YrsComputeEngine {
     }
 
     /// Atomically set whether to use precision as displayed (inverse of full_precision).
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn set_use_precision_as_displayed(
         &mut self,
         enabled: bool,
@@ -147,7 +147,7 @@ impl YrsComputeEngine {
     /// - "contents" = clear cell values only, preserve formats
     /// - "formats" = clear formatting only, preserve values
     /// - "hyperlinks" = remove hyperlinks only
-    #[bridge::write(scope = "range")]
+    #[bridge::write]
     pub fn clear_range_with_mode(
         &mut self,
         sheet_id: &SheetId,
@@ -218,7 +218,7 @@ impl YrsComputeEngine {
     ///
     /// Returns `true` if the sheet is not protected, or if the sheet is
     /// protected but the cell is explicitly unlocked.
-    #[bridge::read(scope = "cell")]
+    #[bridge::read]
     pub fn can_edit_cell(&self, sheet_id: &SheetId, row: u32, col: u32) -> bool {
         if self
             .mirror
@@ -256,7 +256,7 @@ impl YrsComputeEngine {
     /// Operations: "insertRows", "insertColumns", "deleteRows", "deleteColumns",
     /// "sort", "filter"/"autoFilter", "pivotTables", "editObject"/"editObjects",
     /// "formatCells", "formatColumns", "formatRows".
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn can_do_structure_op(&self, sheet_id: &SheetId, operation: &str) -> bool {
         if !super::services::queries::is_sheet_protected(&self.stores, sheet_id) {
             return true;
@@ -291,7 +291,7 @@ impl YrsComputeEngine {
     // ===================================================================
 
     /// Freeze a number of rows, preserving the current column freeze.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn freeze_rows(
         &self,
         sheet_id: &SheetId,
@@ -303,7 +303,7 @@ impl YrsComputeEngine {
     }
 
     /// Freeze a number of columns, preserving the current row freeze.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn freeze_columns(
         &self,
         sheet_id: &SheetId,

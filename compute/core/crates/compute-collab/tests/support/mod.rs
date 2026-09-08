@@ -19,7 +19,6 @@ pub fn read_text(doc: &Doc) -> String {
 pub fn realistic_bootstrap(doc: &Doc) {
     let workbook = doc.get_or_insert_map("workbook");
     let _sheets = doc.get_or_insert_map("sheets");
-    let _security = doc.get_or_insert_map("security");
     {
         let mut txn = doc.transact_mut();
         workbook.insert(&mut txn, "sheetOrder", yrs::ArrayPrelim::default());
@@ -46,7 +45,6 @@ pub fn realistic_bootstrap(doc: &Doc) {
 pub fn root_maps_only_bootstrap(doc: &Doc) {
     let _workbook = doc.get_or_insert_map("workbook");
     let _sheets = doc.get_or_insert_map("sheets");
-    let _security = doc.get_or_insert_map("security");
 }
 
 pub fn workbook_sheet_order(doc: &Doc) -> yrs::ArrayRef {

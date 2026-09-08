@@ -25,7 +25,7 @@ impl YrsComputeEngine {
     }
 
     /// Update the cached locale when the workbook culture changes.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn set_culture(
         &mut self,
         culture: &str,
@@ -58,7 +58,7 @@ impl YrsComputeEngine {
     /// Writes the theme data to the Yrs CRDT document, rebuilds the
     /// cached theme palette, and invalidates all viewport format palettes
     /// so that subsequent renders pick up the new theme colors.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn set_workbook_theme(
         &mut self,
         theme: domain_types::domain::theme::ThemeData,
@@ -93,7 +93,7 @@ impl YrsComputeEngine {
     }
 
     /// Read the current workbook theme from the Yrs document.
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn get_workbook_theme(
         &self,
     ) -> Result<domain_types::domain::theme::ThemeData, ComputeError> {

@@ -19,10 +19,6 @@
 //!     +-- slicers: Y.Map
 //!     +-- powerQuery: Y.Map
 //!     +-- scenarios: Y.Map
-//! +-- security: Y.Map
-//!     +-- policies: Y.Map
-//!     +-- version: Y.Map
-//!     +-- templates: Y.Map
 //! +-- sheets: Y.Map<SheetId, Y.Map>
 //!     +-- {sheetId}: Y.Map
 //!         +-- cells: Y.Map<CellId, Y.Map { v, f, ft, fr, fda, fv }>
@@ -62,8 +58,6 @@
 // ---------------------------------------------------------------------------
 pub mod engine;
 pub mod properties;
-pub mod security_cache;
-pub mod security_state;
 
 // ---------------------------------------------------------------------------
 // Sub-directories (internal organization)
@@ -186,7 +180,7 @@ impl YrsStorage {
     /// Create a new empty `YrsStorage` with the document schema initialised.
     ///
     /// **Provider Protocol fix** (lifecycle/refresh-persistence): only
-    /// the **root** maps (`workbook`, `sheets`, `security`) are created here.
+    /// the **root** maps (`workbook`, `sheets`) are created here.
     /// The workbook-level domain sub-maps (`sheetOrder`, `workbookSettings`,
     /// `namedRanges`, `tables`, `slicers`, `powerQuery`, `scenarios`,
     /// `documentProperties`, `fileVersion`, `fileSharing`) are **lazy-created
@@ -226,7 +220,6 @@ impl YrsStorage {
         // sessions (`apply_update` from a foreign client integrates cleanly).
         let workbook = doc.get_or_insert_map(KEY_WORKBOOK);
         let sheets = doc.get_or_insert_map(KEY_SHEETS);
-        let _security = doc.get_or_insert_map(KEY_SECURITY);
 
         // INTENTIONALLY EMPTY — see doc-comment above. Workbook-level domain
         // sub-maps are lazy-created by their writers via `ensure_workbook_child_map`.

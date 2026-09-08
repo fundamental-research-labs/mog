@@ -110,7 +110,7 @@ impl YrsComputeEngine {
     ///
     /// Uses the export path: Yrs → `ParseOutput` → `write_xlsx_from_parse_output` → bytes.
     /// This produces a rich XLSX (styles, comments, dimensions, named ranges).
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     #[tracing::instrument(name = "engine_export_to_xlsx_bytes", skip_all)]
     pub fn export_to_xlsx_bytes(&self) -> Result<Vec<u8>, ComputeError> {
         let result = self.export_to_parse_output()?;
@@ -122,7 +122,7 @@ impl YrsComputeEngine {
     /// This anti-cheat path must agree with normal export for modeled workbook
     /// facts. Any difference outside registered opaque subgraphs means source
     /// bytes are still required for modeled correctness.
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     #[tracing::instrument(name = "engine_export_to_xlsx_bytes_context_stripped", skip_all)]
     pub fn export_to_xlsx_bytes_context_stripped(&self) -> Result<Vec<u8>, ComputeError> {
         let result = self.export_to_parse_output()?;

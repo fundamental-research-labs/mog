@@ -1,7 +1,7 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
-use super::ir::{Access, DelegateDescriptor, Param, ParamTag};
+use super::ir::{Access, DelegateDescriptor, ParamTag};
 
 pub(super) fn emit_new_descriptor(desc: &DelegateDescriptor) -> TokenStream {
     let target_ident = format_ident!("{}", desc.target_type);
@@ -19,8 +19,6 @@ pub(super) fn emit_new_descriptor(desc: &DelegateDescriptor) -> TokenStream {
             // Structural collapses to write in re-emission — downstream codegens
             // (bridge-napi/pyo3/wasm/tauri) don't yet recognize `method structural`,
             // and from their perspective the method is a mutation either way.
-            // The original Structural semantics were already consumed by the
-            // delegate macro's gated wrapper above.
             Access::Write | Access::Structural => quote! { method write },
             // R2.4: keep `session` distinct when re-emitting so downstream
             // codegens preserve `&self`. All four (napi/pyo3/tauri/wasm)
@@ -31,16 +29,8 @@ pub(super) fn emit_new_descriptor(desc: &DelegateDescriptor) -> TokenStream {
 
         let name_ident = format_ident!("{}", method.name);
 
-        // Strip the trailing principal param for needs_principal methods —
-        // downstream codegens must see the public signature (without principal).
-        let public_params: Vec<&Param> = if method.needs_principal {
-            let n = method.params.len().saturating_sub(1);
-            method.params.iter().take(n).collect()
-        } else {
-            method.params.iter().collect()
-        };
-
-        let param_tokens: Vec<TokenStream> = public_params
+        let param_tokens: Vec<TokenStream> = method
+            .params
             .iter()
             .map(|p| {
                 let tag = match p.tag {
@@ -88,10 +78,6 @@ pub(super) fn emit_new_descriptor(desc: &DelegateDescriptor) -> TokenStream {
         } else {
             TokenStream::new()
         };
-
-        // Note: scope and needs_principal are deliberately NOT re-emitted —
-        // downstream codegens don't recognize them, and their contract was
-        // already discharged by the gated wrapper.
 
         // Skip targets
         let skip_tokens: Vec<TokenStream> = method

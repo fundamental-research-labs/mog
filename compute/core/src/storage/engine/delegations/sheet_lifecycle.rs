@@ -108,7 +108,6 @@ pub(in crate::storage::engine) fn reorder_sheets(
         engine.stores.storage.workbook_map(),
         &ids,
     )?;
-    engine.security.bump_structure_version();
     let mut result = MutationResult::empty();
     result.sheet_changes.push(SheetChange {
         sheet_id: String::new(),

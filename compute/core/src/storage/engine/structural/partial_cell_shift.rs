@@ -195,7 +195,6 @@ impl YrsComputeEngine {
         updates: Vec<(CellId, u32, u32)>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
         let recalc = self.apply_partial_cell_remap(sheet_id, updates)?;
-        self.security.bump_structure_version();
         self.finish_structure_change(sheet_id, recalc, None)
     }
 
@@ -207,7 +206,6 @@ impl YrsComputeEngine {
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
         let recalc =
             self.apply_partial_cell_delete_and_remap(sheet_id, deleted_cell_ids, updates)?;
-        self.security.bump_structure_version();
         self.finish_structure_change(sheet_id, recalc, None)
     }
 

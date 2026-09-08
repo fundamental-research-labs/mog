@@ -59,6 +59,11 @@ The engine exposes the Office.js Excel application-specific API:
 
 Unloaded proxy properties throw; they are not live values.
 
+Callers and scripts have full access to the workbook they receive. Applications
+embedding Mog are responsible for authorizing workbook access; the compute
+engine does not enforce caller-specific workbook, sheet, or cell permissions.
+Excel sheet protection remains a separate document feature.
+
 This is not a Microsoft Office compatibility layer beyond the Excel JS mechanics
 above. Charts, pivots, tables, Word, PowerPoint, and Office dialogs are out of
 scope.

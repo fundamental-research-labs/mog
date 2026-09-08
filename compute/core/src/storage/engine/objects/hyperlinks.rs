@@ -16,7 +16,7 @@ use value_types::ComputeError;
     crate_path = "compute_core"
 )]
 impl YrsComputeEngine {
-    #[bridge::write(scope = "cell")]
+    #[bridge::write]
     pub fn set_hyperlink(
         &mut self,
         sheet_id: &SheetId,
@@ -36,7 +36,7 @@ impl YrsComputeEngine {
     }
 
     /// Remove the hyperlink from a cell at the given position.
-    #[bridge::write(scope = "cell")]
+    #[bridge::write]
     pub fn remove_hyperlink(
         &mut self,
         sheet_id: &SheetId,
@@ -49,7 +49,7 @@ impl YrsComputeEngine {
 
     /// Get the hyperlink URL for a cell at the given position.
     /// Reads directly from the Yrs CRDT document (not the in-memory mirror).
-    #[bridge::read(scope = "cell")]
+    #[bridge::read]
     pub fn get_hyperlink(&self, sheet_id: &SheetId, row: u32, col: u32) -> Option<String> {
         let grid = self.stores.grid_indexes.get(sheet_id)?;
         hyperlinks::get_hyperlink(
@@ -63,7 +63,7 @@ impl YrsComputeEngine {
     }
 
     /// Get full hyperlink metadata for all hyperlinks on a worksheet.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_hyperlinks(&self, sheet_id: &SheetId) -> Vec<Hyperlink> {
         let Some(grid) = self.stores.grid_indexes.get(sheet_id) else {
             return Vec::new();
@@ -80,7 +80,7 @@ impl YrsComputeEngine {
     ///
     /// Iterates every cell in the range, checks for a hyperlink, and removes
     /// it if present. This replaces the N-IPC-call pattern in the TS kernel.
-    #[bridge::write(scope = "range")]
+    #[bridge::write]
     pub fn clear_hyperlinks_in_range(
         &mut self,
         sheet_id: &SheetId,

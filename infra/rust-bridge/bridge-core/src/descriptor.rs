@@ -14,21 +14,9 @@ pub(crate) struct ServiceMeta {
 
 /// How a method accesses state.
 ///
-/// `Structural` is a sibling of `Write` added for Phase B (privacy). It is
-/// a marker only at this IR level — B.1 interprets it downstream as "require
-/// `AccessLevel::Admin` instead of `AccessLevel::Write` at the gate". The parser
-/// accepts optional passthrough args on `#[bridge::structural(...)]` (e.g.
-/// `scope = "..."`) without validating them; B.1 adds the validation layer.
-///
-/// `Session` is a sibling of `Read` for privacy-sensitive session state.
-/// Semantically it covers methods that **mutate session-scoped state via
-/// interior mutability** (e.g. `ArcSwap`) and therefore take `&self` rather
-/// than `&mut self`. Downstream codegens (napi/pyo3/tauri/wasm) emit a
-/// `&self` wrapper identical to `Read` — the two differ only in intent, not
-/// FFI shape. This kind exists so `set_active_principal` (R2.4) does not
-/// get promoted to `&mut self` by the napi codegen, which would defeat the
-/// `ArcSwap` design ("SDKs expect to reset the principal at any point in a
-/// session without coordinating with in-flight calls"; see
+/// `Structural` identifies changes to workbook structure and uses mutable dispatch.
+/// `Session` identifies state changed through interior mutability and preserves
+/// the shared `&self` receiver at the FFI boundary.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum AccessLevel {
     Pure,
@@ -120,15 +108,6 @@ pub(crate) struct MethodDescriptor {
     pub is_fallible: bool,
     pub is_async: bool,
     pub skip_targets: Vec<String>,
-    /// Security scope declared on `#[bridge::read/write/structural(scope = "...")]`.
-    /// Unvalidated at this layer — bridge-delegate validates under `gated = true`
-    /// (Phase B.1). Stored as the raw literal so it round-trips through the
-    /// descriptor DSL into the delegate macro without loss.
-    pub scope: Option<String>,
-    /// Set by `#[bridge::write(needs_principal)]`. Engine-side signature has a
-    /// trailing `caller: &Principal` that the delegate macro supplies. Stripped
-    /// from re-emitted descriptors (downstream codegens never see it).
-    pub needs_principal: bool,
 }
 
 /// The full parsed API for one `#[bridge::api]` impl block.

@@ -176,9 +176,6 @@ pub(super) fn unclassified_schema_key_objects(
         &records,
         &mut objects,
     )?;
-    if let Some(security) = txn.get_map(KEY_SECURITY) {
-        scan_security_map(&txn, &security, &records, &mut objects)?;
-    }
     for (_, sheet_out) in engine.storage().sheets().iter(&txn) {
         if let Out::YMap(sheet_map) = sheet_out {
             scan_sheet_map(&txn, &sheet_map, &records, &mut objects)?;
@@ -321,24 +318,6 @@ fn scan_workbook_map<T: ReadTxn>(
             records,
             objects,
             SemanticCoverageScope::Workbook,
-            &source_path,
-        )?;
-    }
-    Ok(())
-}
-
-fn scan_security_map<T: ReadTxn>(
-    txn: &T,
-    security: &yrs::MapRef,
-    records: &[SemanticCoverageRecord],
-    objects: &mut BTreeMap<String, SemanticObjectDigest>,
-) -> Result<(), SemanticStateReadError> {
-    for (key, _) in security.iter(txn) {
-        let source_path = format!("/security/{key}");
-        record_unclassified_if_missing(
-            records,
-            objects,
-            SemanticCoverageScope::Metadata,
             &source_path,
         )?;
     }

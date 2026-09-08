@@ -4,9 +4,6 @@ pub(super) struct DelegateDescriptor {
     pub(super) target_type: String,
     /// Field on the target type that provides dispatch (e.g., "dispatch")
     pub(super) dispatch_field: String,
-    /// B.1: when set, wrap each gated method (read/write/structural) with the
-    /// security fast-path + gated-path. `false` keeps the pre-B.1 codegen.
-    pub(super) gated: bool,
     /// When true, suppress the default `use compute_core::...` imports in the
     /// generated module. Tests use this to avoid a compute-core dev-dep; the
     /// production path (compute-api) keeps imports on (the default).
@@ -40,12 +37,6 @@ pub(super) struct Method {
     pub(super) is_fallible: bool,
     pub(super) is_async: bool,
     pub(super) skip_targets: Vec<String>,
-    /// B.1: `scope = "..."` from the engine attribute.
-    pub(super) scope: Option<String>,
-    /// B.1: `needs_principal` on `#[bridge::write(needs_principal)]`.
-    pub(super) needs_principal: bool,
-    /// Source span for the `method` DSL token — used for compile_error! targeting.
-    pub(super) span: proc_macro2::Span,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,11 +45,7 @@ pub(super) enum Access {
     Read,
     Write,
     Structural,
-    /// R2.4: interior-mutable `&self` methods (e.g. `set_active_principal`
-    /// via `ArcSwap`). Under `gated = true` the delegate treats these like
-    /// `Pure` — no security gate is applied. They are re-emitted as
-    /// `method session` so downstream codegens preserve the `&self`
-    /// receiver shape.
+    /// Interior-mutable session state; preserves the `&self` receiver.
     Session,
     LifecycleCreate,
 }

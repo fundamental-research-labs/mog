@@ -26,13 +26,13 @@ impl YrsComputeEngine {
     // GROUP 2: Table Queries
 
     /// Get all tables in a specific sheet.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_all_tables_in_sheet(&self, sheet_id: &SheetId) -> Vec<CanonicalTable> {
         services::tables::get_all_tables_in_sheet(&self.mirror, sheet_id)
     }
 
     /// Get the table containing a specific cell, if any.
-    #[bridge::read(scope = "cell")]
+    #[bridge::read]
     pub fn get_table_at_cell(
         &self,
         sheet_id: &SheetId,
@@ -44,14 +44,14 @@ impl YrsComputeEngine {
 
     /// Look up a table definition by name (case-insensitive).
     /// Eliminates N+1 sheet iteration on the TS side.
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn get_table_by_name(&self, table_name: &str) -> Option<CanonicalTable> {
         services::tables::get_table_by_name(&self.mirror, table_name)
     }
 
     /// Get which table region a cell falls in (header, data, or totals).
     /// Returns the hit region info, or `None` if the cell is not inside any table.
-    #[bridge::read(scope = "cell")]
+    #[bridge::read]
     pub fn get_table_hit_region(
         &self,
         sheet_id: &SheetId,
@@ -64,7 +64,7 @@ impl YrsComputeEngine {
     // GROUP 2b: Table CRUD Mutations
 
     /// Create a new table from parameters and register it in the compute mirror.
-    #[bridge::write(scope = "range")]
+    #[bridge::write]
     #[allow(clippy::too_many_arguments)]
     pub fn create_table(
         &mut self,
@@ -100,7 +100,7 @@ impl YrsComputeEngine {
     /// table name allocation, initial style, table binding, and table-owned
     /// filter creation. All internal Yrs transactions are grouped into one undo
     /// entry.
-    #[bridge::write(scope = "range")]
+    #[bridge::write]
     #[allow(clippy::too_many_arguments)]
     pub fn create_table_lifecycle(
         &mut self,
@@ -271,7 +271,7 @@ impl YrsComputeEngine {
     }
 
     /// Delete a table by name.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn delete_table(
         &mut self,
         table_name: &str,
@@ -283,7 +283,7 @@ impl YrsComputeEngine {
     }
 
     /// Rename a table.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn rename_table(
         &mut self,
         old_name: &str,
@@ -297,7 +297,7 @@ impl YrsComputeEngine {
     }
 
     /// Resize a table's range.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn resize_table(
         &mut self,
         table_name: &str,
@@ -319,7 +319,7 @@ impl YrsComputeEngine {
     }
 
     /// Set a table's style name (persisted to Yrs and mirror).
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn set_table_style(
         &mut self,
         table_name: &str,
@@ -343,7 +343,7 @@ impl YrsComputeEngine {
     }
 
     /// Toggle the totals row on/off for a table.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn toggle_totals_row(
         &mut self,
         table_name: &str,
@@ -354,7 +354,7 @@ impl YrsComputeEngine {
     }
 
     /// Toggle the header row on/off for a table.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn toggle_header_row(
         &mut self,
         table_name: &str,
@@ -365,7 +365,7 @@ impl YrsComputeEngine {
     }
 
     /// Toggle banded rows for a table (persisted to Yrs and mirror).
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn toggle_banded_rows(
         &mut self,
         table_name: &str,
@@ -387,7 +387,7 @@ impl YrsComputeEngine {
     }
 
     /// Toggle banded columns for a table (persisted to Yrs and mirror).
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn toggle_banded_cols(
         &mut self,
         table_name: &str,
@@ -409,7 +409,7 @@ impl YrsComputeEngine {
     }
 
     /// Set a boolean option on a table (proper set semantics, not toggle).
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn set_table_bool_option(
         &mut self,
         table_name: &str,
@@ -431,7 +431,7 @@ impl YrsComputeEngine {
     }
 
     /// Set whether a table automatically expands when adjacent user input is entered.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn set_table_auto_expand(
         &mut self,
         table_name: &str,
@@ -447,7 +447,7 @@ impl YrsComputeEngine {
     }
 
     /// Set whether formulas entered in table data columns automatically create/fill calculated columns.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn set_table_auto_calculated_columns(
         &mut self,
         table_name: &str,
@@ -463,7 +463,7 @@ impl YrsComputeEngine {
     }
 
     /// Set the totals-row function metadata for a table column.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn set_table_totals_function(
         &mut self,
         table_name: &str,
@@ -482,7 +482,7 @@ impl YrsComputeEngine {
 
     /// Add a data row to a table. Returns the absolute row index where a worksheet
     /// row should be inserted (encoded in MutationResult.data).
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn add_table_data_row(
         &mut self,
         table_name: &str,
@@ -499,7 +499,7 @@ impl YrsComputeEngine {
 
     /// Remove a data row from a table by relative index. Returns the absolute row
     /// that was removed (encoded in MutationResult.data).
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn remove_table_data_row(
         &mut self,
         table_name: &str,
@@ -515,7 +515,7 @@ impl YrsComputeEngine {
     }
 
     /// Add a column to a table at the given position.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn add_table_column(
         &mut self,
         table_name: &str,
@@ -542,7 +542,7 @@ impl YrsComputeEngine {
     /// Updates the column name in the table definition and propagates the
     /// rename to all formulas containing structured references to the old
     /// column name.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn rename_table_column(
         &mut self,
         table_name: &str,
@@ -565,7 +565,7 @@ impl YrsComputeEngine {
     }
 
     /// Remove a column from a table by index.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn remove_table_column(
         &mut self,
         table_name: &str,
@@ -580,7 +580,7 @@ impl YrsComputeEngine {
         Ok((serialize_multi_viewport_patches(&[]), result))
     }
 
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn set_calculated_column_formula(
         &mut self,
         table_name: &str,
@@ -628,7 +628,7 @@ impl YrsComputeEngine {
     /// Apply pre-determined calculated-column formulas to a single row.
     /// Intended for use after inserting a new data row into a table:
     /// each `(column_index, formula)` pair is written to the given row.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn apply_calculated_formulas_to_row(
         &mut self,
         table_name: &str,
@@ -667,7 +667,7 @@ impl YrsComputeEngine {
     // -------------------------------------------------------------------
 
     /// Add a calculated column to a table.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn add_calculated_column(
         &mut self,
         table_name: &str,
@@ -685,7 +685,7 @@ impl YrsComputeEngine {
     }
 
     /// Remove a calculated column from a table by column index.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn remove_calculated_column(
         &mut self,
         table_name: &str,
@@ -701,7 +701,7 @@ impl YrsComputeEngine {
     }
 
     /// Update the formula for a calculated column.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn update_calculated_column(
         &mut self,
         table_name: &str,
@@ -723,7 +723,7 @@ impl YrsComputeEngine {
     // -------------------------------------------------------------------
 
     /// Detect if a table should auto-expand based on adjacent data.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn detect_auto_expansion(
         &self,
         sheet_id: &SheetId,
@@ -733,7 +733,7 @@ impl YrsComputeEngine {
     }
 
     /// Apply auto-expansion to a table.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn apply_auto_expansion(
         &mut self,
         sheet_id: &SheetId,
@@ -744,7 +744,7 @@ impl YrsComputeEngine {
     }
 
     /// Create a custom table style.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn create_custom_table_style(
         &mut self,
         style: compute_table::custom_styles::CustomTableStyleConfig,
@@ -754,7 +754,7 @@ impl YrsComputeEngine {
     }
 
     /// Delete a custom table style by name.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn delete_custom_table_style(
         &mut self,
         style_name: &str,
@@ -764,7 +764,7 @@ impl YrsComputeEngine {
     }
 
     /// Update a custom table style.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn update_custom_table_style(
         &mut self,
         style_name: &str,
@@ -776,7 +776,7 @@ impl YrsComputeEngine {
     }
 
     /// Get all custom table styles.
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn get_all_custom_table_styles(
         &self,
     ) -> Vec<compute_table::custom_styles::CustomTableStyleConfig> {
@@ -784,14 +784,14 @@ impl YrsComputeEngine {
     }
 
     #[bridge::skip(wasm, tauri, napi, pyo3)]
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn set_table_def(&mut self, table: TableDef) {
         services::tables::set_table_def(&mut self.stores, &mut self.mirror, table)
     }
 
     /// Remove a table by name.
     #[bridge::skip(wasm, tauri, napi, pyo3)]
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn remove_table_def(&mut self, name: &str) {
         services::tables::remove_table_def(&mut self.stores, &mut self.mirror, name)
     }
@@ -800,7 +800,7 @@ impl YrsComputeEngine {
     ///
     /// Returns `None` if the cell is not in any table or the table style produces
     /// no formatting for this position.
-    #[bridge::read(scope = "cell")]
+    #[bridge::read]
     pub fn resolve_table_format_at_cell(
         &self,
         sheet_id: &SheetId,
@@ -815,7 +815,7 @@ impl YrsComputeEngine {
     /// Converts all structured references (e.g., `Table1[Column1]`) to A1
     /// notation (e.g., `$B$2:$B$10`), then removes the table definition.
     /// Returns the number of formulas that were converted (in `data`).
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn convert_table_to_range(
         &mut self,
         table_name: &str,

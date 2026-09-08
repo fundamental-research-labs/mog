@@ -4,7 +4,7 @@
 //! make sure the target-neutral parser accepts everything downstream target
 //! crates will ever see: stateless and stateful descriptors, every access
 //! level, tagged-enum params, lifecycle create/create_from, async methods,
-//! skip targets, scope/needs_principal passthrough, and the new `extras`
+//! skip targets and the `extras`
 //! block.
 
 use bridge_ir::{AccessLevel, ApiDescriptor, LifecycleKind, ParamTag};
@@ -77,33 +77,6 @@ fn parse_stateless_descriptor_with_pure_method() {
 }
 
 #[test]
-fn parse_write_method_with_scope_and_needs_principal() {
-    // These two keys land on #[bridge::write(...)] via bridge-core and are
-    // emitted unconditionally by bridge-core/emit.rs. bridge-delegate strips
-    // them before re-emitting to napi/pyo3/wasm, but bridge-ir must parse
-    // them losslessly so bridge-cli (which does consume them) works.
-    let input = r#"
-        bridge_version = 1;
-        group = core;
-        service = Engine;
-        key_type = str;
-        key_param = "engine_id";
-        method write set_cell {
-            params { [str] sheet: &str, [prim] row: u32, [prim] col: u32, [str] value: &str, }
-            return_type = ();
-            scope = "cell";
-            needs_principal;
-        }
-    "#;
-    let desc = parse(input);
-    let m = &desc.methods[0];
-    assert_eq!(m.scope.as_deref(), Some("cell"));
-    assert!(m.needs_principal);
-    // Unit return is normalized to None.
-    assert!(m.return_type.is_none());
-}
-
-#[test]
 fn parse_lifecycle_create_from_variant() {
     let input = r#"
         bridge_version = 1;
@@ -157,10 +130,7 @@ fn parse_async_method_and_skip_target() {
 
 #[test]
 fn parse_structural_and_session_access_levels() {
-    // privacy added `structural` (admin-gated mutations) and R2.4
-    // added `session` (interior-mutable &self); bridge-ir preserves both as
-    // distinct variants so downstream targets can collapse or preserve them
-    // as they see fit.
+    // Preserve distinct structural and session access kinds.
     let input = r#"
         bridge_version = 1;
         group = core;
@@ -170,16 +140,14 @@ fn parse_structural_and_session_access_levels() {
         method structural rename_sheet {
             params { [serde] sheet: SheetId, [str] name: String, }
             return_type = ();
-            scope = "sheet";
         }
-        method session set_active_principal {
-            params { [serde] tags: Option<Vec<String>>, }
+        method session set_locale {
+            params { [serde] locale: String, }
             return_type = ();
         }
     "#;
     let desc = parse(input);
     assert!(matches!(desc.methods[0].access, AccessLevel::Structural));
-    assert_eq!(desc.methods[0].scope.as_deref(), Some("sheet"));
     assert!(matches!(desc.methods[1].access, AccessLevel::Session));
 }
 

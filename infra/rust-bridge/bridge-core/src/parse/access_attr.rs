@@ -9,40 +9,17 @@ pub(crate) fn is_bridge_attr(attr: &syn::Attribute) -> bool {
 pub(super) struct MethodAccessInfo {
     pub(super) access: AccessLevel,
     pub(super) is_async: bool,
-    /// `scope = "cell" | "range" | "sheet" | "workbook"` passthrough.
-    /// Unvalidated here — bridge-delegate enforces under `gated = true`.
-    pub(super) scope: Option<String>,
-    /// `needs_principal` marker on `#[bridge::write(needs_principal)]`.
-    /// Tells the delegate that the engine signature has a trailing `caller: &Principal`.
-    pub(super) needs_principal: bool,
 }
 
-/// Parse the attribute body for read/write/structural. Accepts an optional
-/// `scope = "..."` name-value, a bare `needs_principal` flag, and/or
-/// `kind = "subscribe"` (a TS-bridge-only annotation that flows through to
-/// `manifest.gen.ts` — runtime semantics are unaffected). Unknown tokens are
-/// rejected (so typos surface at the bridge-core layer, not silently
-/// downstream).
-pub(super) fn parse_access_attr_args(attr: &syn::Attribute) -> syn::Result<(Option<String>, bool)> {
-    // Absence of a parenthesized arg list → no scope, no needs_principal.
-    let meta_list = match &attr.meta {
-        syn::Meta::List(list) => list,
-        _ => return Ok((None, false)),
-    };
-    let mut scope: Option<String> = None;
-    let mut needs_principal = false;
+/// Validate optional `kind = "subscribe"` method metadata.
+pub(super) fn parse_access_attr_args(attr: &syn::Attribute) -> syn::Result<()> {
+    if !matches!(&attr.meta, syn::Meta::List(_)) {
+        return Ok(());
+    }
     attr.parse_args_with(|input: syn::parse::ParseStream| {
         while !input.is_empty() {
             let key: syn::Ident = input.parse()?;
             match key.to_string().as_str() {
-                "scope" => {
-                    let _: syn::Token![=] = input.parse()?;
-                    let lit: syn::LitStr = input.parse()?;
-                    scope = Some(lit.value());
-                }
-                "needs_principal" => {
-                    needs_principal = true;
-                }
                 "kind" => {
                     // TS-bridge-only annotation (e.g. `kind = "subscribe"`) for
                     // tagging methods in the generated bridge-method-kind manifest.
@@ -68,7 +45,7 @@ pub(super) fn parse_access_attr_args(attr: &syn::Attribute) -> syn::Result<(Opti
                     return Err(syn::Error::new(
                         key.span(),
                         format!(
-                            "unknown argument '{}' on bridge access attribute — expected `scope = \"...\"`, `needs_principal`, or `kind = \"subscribe\"`",
+                            "unknown argument '{}' on bridge access attribute — expected `kind = \"subscribe\"`",
                             other
                         ),
                     ));
@@ -80,8 +57,7 @@ pub(super) fn parse_access_attr_args(attr: &syn::Attribute) -> syn::Result<(Opti
         }
         Ok::<(), syn::Error>(())
     })?;
-    let _ = meta_list; // keep reference live until here so the closure can't outlive attr
-    Ok((scope, needs_principal))
+    Ok(())
 }
 
 pub(super) fn parse_method_access(
@@ -92,45 +68,30 @@ pub(super) fn parse_method_access(
         if segs.len() == 2 && segs[0].ident == "bridge" {
             match segs[1].ident.to_string().as_str() {
                 "read" => {
-                    // Propagate parse errors (unknown args, malformed
-                    // scope literal) instead of silently defaulting to
-                    // `(None, false)` — a typo like `scpoe = "cell"`
-                    // should surface as "unknown argument 'scpoe'"
-                    // here, not later as the downstream "missing scope"
-                    // diagnostic which points at the method name rather
-                    // than the typo.
-                    let (scope, needs_principal) = parse_access_attr_args(attr)?;
+                    parse_access_attr_args(attr)?;
                     return Ok(Some(MethodAccessInfo {
                         access: AccessLevel::Read,
                         is_async: false,
-                        scope,
-                        needs_principal,
                     }));
                 }
                 "write" => {
-                    let (scope, needs_principal) = parse_access_attr_args(attr)?;
+                    parse_access_attr_args(attr)?;
                     return Ok(Some(MethodAccessInfo {
                         access: AccessLevel::Write,
                         is_async: false,
-                        scope,
-                        needs_principal,
                     }));
                 }
                 "structural" => {
-                    let (scope, needs_principal) = parse_access_attr_args(attr)?;
+                    parse_access_attr_args(attr)?;
                     return Ok(Some(MethodAccessInfo {
                         access: AccessLevel::Structural,
                         is_async: false,
-                        scope,
-                        needs_principal,
                     }));
                 }
                 "pure" => {
                     return Ok(Some(MethodAccessInfo {
                         access: AccessLevel::Pure,
                         is_async: false,
-                        scope: None,
-                        needs_principal: false,
                     }));
                 }
                 "session" => {
@@ -141,8 +102,6 @@ pub(super) fn parse_method_access(
                     return Ok(Some(MethodAccessInfo {
                         access: AccessLevel::Session,
                         is_async: false,
-                        scope: None,
-                        needs_principal: false,
                     }));
                 }
                 "lifecycle" => {
@@ -167,27 +126,21 @@ pub(super) fn parse_method_access(
                         return Ok(Some(MethodAccessInfo {
                             access: AccessLevel::Lifecycle(kind),
                             is_async: false,
-                            scope: None,
-                            needs_principal: false,
                         }));
                     }
                 }
                 "async_read" => {
-                    let (scope, needs_principal) = parse_access_attr_args(attr)?;
+                    parse_access_attr_args(attr)?;
                     return Ok(Some(MethodAccessInfo {
                         access: AccessLevel::Read,
                         is_async: true,
-                        scope,
-                        needs_principal,
                     }));
                 }
                 "async_write" => {
-                    let (scope, needs_principal) = parse_access_attr_args(attr)?;
+                    parse_access_attr_args(attr)?;
                     return Ok(Some(MethodAccessInfo {
                         access: AccessLevel::Write,
                         is_async: true,
-                        scope,
-                        needs_principal,
                     }));
                 }
                 _ => {}

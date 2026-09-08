@@ -7,11 +7,11 @@ use super::helpers::{
 };
 use domain_types::{
     AlignmentFormat, BorderFormat, BorderSide, CFCellRange, CFRule, CFStyle, CellData,
-    ColDimension, Comment, CommentType, ConditionalFormat, DocumentFormat, DocumentProperties,
-    ErrorStyle, FillFormat, FontFormat, FrozenPane, HeaderFooter, MergeRegion, NamedRange,
-    OutlineGroup, PageBreakEntry, PageBreaks, PageMargins, ParseOutput, PrintSettings,
+    ColDimension, ColStyleRange, Comment, CommentType, ConditionalFormat, DocumentFormat,
+    DocumentProperties, ErrorStyle, FillFormat, FontFormat, FrozenPane, HeaderFooter, MergeRegion,
+    NamedRange, OutlineGroup, PageBreakEntry, PageBreaks, PageMargins, ParseOutput, PrintSettings,
     RowDimension, RowStyleEntry, SheetData, SheetDimensions, TableColumnSpec, TableSpec,
-    ValidationOperator, ValidationRule, ValidationSpec,
+    TrailingColRange, ValidationOperator, ValidationRule, ValidationSpec,
 };
 use value_types::{CellError, CellValue, FiniteF64};
 use xlsx_parser::infra::package_integrity::validate_archive_package_integrity;
@@ -278,6 +278,47 @@ fn roundtrip_row_and_col_dimensions() {
         let diff = (orig_w - rt_w).abs();
         assert!(diff < 0.01, "Col {col} width mismatch: {orig_w} vs {rt_w}");
     }
+}
+
+#[test]
+fn trailing_explicit_width_replaces_overlapping_widthless_style_span() {
+    let mut output = make_single_sheet(
+        "Trailing widths",
+        vec![cell(0, 19, CellValue::Text(Arc::from("anchor")))],
+    );
+    output.style_palette = vec![DocumentFormat {
+        number_format: Some("0.00".to_string()),
+        ..Default::default()
+    }];
+    output.sheets[0].col_style_ranges = vec![ColStyleRange {
+        start_col: 20,
+        end_col: 16_383,
+        style_id: 0,
+    }];
+    output.sheets[0].dimensions.trailing_col_ranges = vec![TrailingColRange {
+        min: 21,
+        max: 16_384,
+        width: 8.83203125,
+        width_str: Some("8.83203125".to_string()),
+        width_present: Some(true),
+        style_id: Some(0),
+        ..Default::default()
+    }];
+
+    let bytes = write_xlsx_from_parse_output(&output).expect("export should succeed");
+    let archive = XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert_eq!(
+        sheet_xml.matches(r#"min="21" max="16384""#).count(),
+        1,
+        "trailing dimension metadata must not overlap a widthless style span: {sheet_xml}"
+    );
+    assert!(
+        sheet_xml.contains(r#"<col min="21" max="16384" width="8.83203125""#),
+        "the authored trailing width must own the emitted span: {sheet_xml}"
+    );
 }
 
 #[test]

@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Exact package version to publish; must match release/vX.Y.Z branch'
+        description: 'Exact package version to publish; must match release/vX.Y.Z[-PRERELEASE] branch'
         required: false
         type: string
         default: ''
@@ -54,6 +54,7 @@ jobs:
       py-tag: python-v${{ steps.py-version.outputs.py-version }}
       ref: ${{ steps.ref.outputs.ref }}
       dry-run: ${{ inputs.dry-run || false }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -115,6 +116,11 @@ jobs:
             echo "Reusing artifacts from run ${{ inputs.source-run-id }}, target version $VERSION"
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if [[ "$VERSION" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Validate version
         run: |
@@ -999,6 +1005,7 @@ jobs:
     if: |
       always() &&
       needs.version.outputs.dry-run != 'true' &&
+      needs.version.outputs.prerelease != 'true' &&
       needs.version.result == 'success' &&
       needs.publish.result == 'success'
     uses: ./.github/workflows/publish-vscode-extension.yml
@@ -1021,7 +1028,10 @@ jobs:
       needs.version.outputs.dry-run != 'true' &&
       needs.version.result == 'success' &&
       needs.publish.result == 'success' &&
-      needs.publish-vscode-extension.result == 'success'
+      (
+        (needs.version.outputs.prerelease == 'true' && needs.publish-vscode-extension.result == 'skipped') ||
+        (needs.version.outputs.prerelease != 'true' && needs.publish-vscode-extension.result == 'success')
+      )
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -1036,6 +1046,7 @@ jobs:
           path: artifacts
 
       - name: Download VS Code extension artifact
+        if: ${{ needs.version.outputs.prerelease != 'true' }}
         uses: actions/download-artifact@v7
         with:
           name: mog-xlsx-editor-vsix-${{ needs.version.outputs.version }}
@@ -1056,10 +1067,14 @@ jobs:
           if gh release view "${{ needs.version.outputs.tag }}" >/dev/null 2>&1; then
             echo "${{ needs.version.outputs.tag }} release already exists; skipping."
           else
+            RELEASE_KIND=(--latest)
+            if [ "${{ needs.version.outputs.prerelease }}" = "true" ]; then
+              RELEASE_KIND=(--prerelease)
+            fi
             gh release create "${{ needs.version.outputs.tag }}" \
               --title "@mog-sdk/sdk v${{ needs.version.outputs.version }}" \
               --generate-notes \
-              --latest
+              "${RELEASE_KIND[@]}"
           fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -1073,6 +1088,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload VS Code extension artifact to TypeScript SDK release
+        if: ${{ needs.version.outputs.prerelease != 'true' }}
         run: |
           gh release upload "${{ needs.version.outputs.tag }}" \
             artifacts/mog-xlsx-editor.vsix \

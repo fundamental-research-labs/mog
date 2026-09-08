@@ -7,7 +7,8 @@ use crate::snapshot::{
 };
 use cell_types::{ColId, PayloadEncoding, RangeAnchor, RangeId, RangeKind, RowId};
 use domain_types::{
-    AutoFilter, ParseOutput, SheetData, SheetDimensions, SortCondition, SortConditionBy, SortState,
+    AutoFilter, ColDimension, ColStyleRange, DocumentFormat, ParseOutput, SheetData,
+    SheetDimensions, SortCondition, SortConditionBy, SortState,
     domain::comment::{Comment, CommentType, PersonInfo},
     domain::external_link::{ExternalLink, ImportedExternalLinkIdentity},
     domain::workbook::{WorkbookView, WorkbookViewVisibility, WorkbookWebPublishing},
@@ -72,6 +73,60 @@ fn archive_entry_names(bytes: &[u8]) -> Vec<String> {
         .iter()
         .map(|entry| entry.name.clone())
         .collect()
+}
+
+#[test]
+fn imported_explicit_default_width_survives_l2_export_with_column_style() {
+    let explicit_default_width = 8.83203125;
+    let input = ParseOutput {
+        style_palette: vec![DocumentFormat {
+            number_format: Some("0.00".to_string()),
+            ..Default::default()
+        }],
+        sheets: vec![SheetData {
+            name: "ValGraph".to_string(),
+            rows: 1,
+            cols: 8,
+            col_style_ranges: vec![ColStyleRange {
+                start_col: 1,
+                end_col: 7,
+                style_id: 0,
+            }],
+            dimensions: SheetDimensions {
+                default_col_width: Some(explicit_default_width),
+                col_widths: (1..=7)
+                    .map(|col| ColDimension {
+                        col,
+                        width: explicit_default_width,
+                        width_str: Some("8.83203125".to_string()),
+                        width_present: Some(true),
+                        custom_width: false,
+                        custom_width_attr: None,
+                        ..Default::default()
+                    })
+                    .collect(),
+                ..Default::default()
+            },
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let engine = engine_from_parse_output_normal(&input);
+    let exported = engine
+        .export_to_parse_output()
+        .expect("export parse output")
+        .parse_output;
+    let widths = &exported.sheets[0].dimensions.col_widths;
+    assert_eq!(widths.len(), 7, "authored widths must survive hydration");
+    assert!(widths.iter().all(|width| width.width_present == Some(true)));
+
+    let bytes = engine.export_to_xlsx_bytes().expect("export xlsx bytes");
+    let sheet_xml = archive_text(&bytes, "xl/worksheets/sheet1.xml").expect("sheet XML");
+    assert!(
+        sheet_xml.contains(r#"<col min="2" max="8" width="8.83203125""#),
+        "explicit default-width span must not become a widthless <col>: {sheet_xml}"
+    );
 }
 
 fn assert_substrings_in_order(haystack: &str, needles: &[&str]) {
@@ -211,6 +266,109 @@ fn xlsx_export_preserves_imported_form_control_order_through_yrs_storage() {
     assert_substrings_in_order(
         &vml_xml,
         &["_x0000_s51242", "_x0000_s51244", "_x0000_s51247"],
+    );
+}
+
+#[test]
+fn grouped_connector_ownership_survives_yrs_without_duplicate_top_level_anchor() {
+    use domain_types::domain::{
+        drawings::{DrawingContent, GroupShapeData},
+        floating_object::{
+            AnchorMode, ConnectorData, ConnectorOoxmlProps, FloatingObject, FloatingObjectAnchor,
+            FloatingObjectCommon, FloatingObjectData, ShapeData, ShapeOoxmlProps,
+        },
+    };
+
+    let grouped_connector = ooxml_types::drawings::SpreadsheetConnector::default();
+    let group = FloatingObject {
+        common: FloatingObjectCommon {
+            id: "group-1".to_string(),
+            name: "Group 1".to_string(),
+            width: 240.0,
+            height: 120.0,
+            anchor: FloatingObjectAnchor {
+                anchor_mode: AnchorMode::TwoCell,
+                end_row: Some(8),
+                end_col: Some(5),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        data: FloatingObjectData::Shape(ShapeData {
+            shape_type: "group".to_string(),
+            ooxml: Some(ShapeOoxmlProps {
+                anchor_index: Some(0),
+                group_shape: Some(GroupShapeData {
+                    children: vec![DrawingContent::Connector(grouped_connector.clone())],
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }),
+    };
+    let projected_connector = FloatingObject {
+        common: FloatingObjectCommon {
+            id: "connector-1".to_string(),
+            name: "Grouped line".to_string(),
+            width: 120.0,
+            height: 40.0,
+            anchor: FloatingObjectAnchor {
+                anchor_mode: AnchorMode::TwoCell,
+                end_row: Some(4),
+                end_col: Some(3),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        data: FloatingObjectData::Connector(ConnectorData {
+            shape_type: "line".to_string(),
+            fill: None,
+            outline: None,
+            start_connection: None,
+            end_connection: None,
+            adjustments: None,
+            ooxml: Some(ConnectorOoxmlProps {
+                connector: grouped_connector,
+                anchor_index: Some(0),
+                nested_in_group: true,
+                ..Default::default()
+            }),
+        }),
+    };
+    let input = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Grouped connector".to_string(),
+            rows: 10,
+            cols: 8,
+            floating_objects: vec![group, projected_connector],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let engine = engine_from_parse_output_normal(&input);
+    let hydrated = engine
+        .export_to_parse_output()
+        .expect("Yrs export should succeed")
+        .parse_output;
+    let connector_ooxml = hydrated.sheets[0]
+        .floating_objects
+        .iter()
+        .find_map(|object| match &object.data {
+            FloatingObjectData::Connector(connector) => connector.ooxml.as_ref(),
+            _ => None,
+        })
+        .expect("projected connector should survive Yrs hydration");
+    assert!(connector_ooxml.nested_in_group);
+
+    let exported_bytes = engine.export_to_xlsx_bytes().expect("export xlsx bytes");
+    let drawing_xml = archive_text(&exported_bytes, "xl/drawings/drawing1.xml")
+        .expect("drawing XML should exist");
+    assert_eq!(
+        drawing_xml.matches("<xdr:twoCellAnchor").count(),
+        1,
+        "the connector already owned by the group must not be duplicated as a worksheet anchor"
     );
 }
 

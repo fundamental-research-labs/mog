@@ -150,7 +150,13 @@ pub(super) fn apply_columns(
             continue;
         };
         for col in range.start_col..=range.end_col {
-            if emitted_cols.contains(&col) {
+            let one_based = col.saturating_add(1);
+            let owned_by_trailing_dimension = sheet_data
+                .dimensions
+                .trailing_col_ranges
+                .iter()
+                .any(|trailing| one_based >= trailing.min && one_based <= trailing.max);
+            if emitted_cols.contains(&col) || owned_by_trailing_dimension {
                 continue;
             }
             let outline_level = col_outline_levels.get(&col).copied();

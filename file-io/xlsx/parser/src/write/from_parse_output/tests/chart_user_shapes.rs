@@ -53,6 +53,11 @@ fn imported_chart_user_shapes_nested_image_roundtrips_rels_and_media() {
     assert!(chart_rels.contains(r#"Id="rIdUserShapes""#));
     assert!(chart_rels.contains(r#"Target="../drawings/userShapeDrawing1.xml""#));
     assert!(archive.contains("xl/drawings/userShapeDrawing1.xml"));
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+    assert!(content_types.contains(
+        r#"PartName="/xl/drawings/userShapeDrawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chartshapes+xml""#
+    ));
     assert!(user_shapes_rels.contains(r#"Id="rIdShapeImage""#));
     assert!(user_shapes_rels.contains(r#"Target="../media/userShapeImage.png""#));
     assert_eq!(
@@ -218,6 +223,11 @@ fn drawing_family_path_is_reserved_from_worksheet_drawing_allocator() {
     .unwrap();
 
     assert!(chart_rels.contains(r#"Target="../drawings/drawing2.xml""#));
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+    assert!(content_types.contains(
+        r#"PartName="/xl/drawings/drawing2.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chartshapes+xml""#
+    ));
     assert!(sheet2_rels.contains(r#"Target="../drawings/drawing3.xml""#));
     assert!(!sheet2_rels.contains(r#"Target="../drawings/drawing2.xml""#));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
@@ -331,7 +341,7 @@ fn chart_fixture_content_types_xml() -> String {
   <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
   <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
   <Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>
-  <Override PartName="/xl/drawings/userShapeDrawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>
+  <Override PartName="/xl/drawings/userShapeDrawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chartshapes+xml"/>
   <Override PartName="/xl/charts/chart1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>
 </Types>"#
         .to_string()
@@ -378,14 +388,17 @@ fn chart_fixture_chart_xml() -> String {
 
 fn chart_fixture_user_shapes_xml() -> String {
     r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-  <xdr:oneCellAnchor>
-    <xdr:from><xdr:col>1</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>1</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>
-    <xdr:ext cx="762000" cy="762000"/>
-    <xdr:pic><xdr:nvPicPr><xdr:cNvPr id="5" name="Overlay image"/><xdr:cNvPicPr/></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="rIdShapeImage"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:prstGeom prst="rect"/></xdr:spPr></xdr:pic>
-    <xdr:clientData/>
-  </xdr:oneCellAnchor>
-</xdr:wsDr>"#
+<c:userShapes xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:cdr="http://schemas.openxmlformats.org/drawingml/2006/chartDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <cdr:relSizeAnchor>
+    <cdr:from><cdr:x>0</cdr:x><cdr:y>0</cdr:y></cdr:from>
+    <cdr:to><cdr:x>1</cdr:x><cdr:y>1</cdr:y></cdr:to>
+    <cdr:pic>
+      <cdr:nvPicPr><cdr:cNvPr id="5" name="Overlay image"/><cdr:cNvPicPr/></cdr:nvPicPr>
+      <cdr:blipFill><a:blip r:embed="rIdShapeImage"/><a:stretch><a:fillRect/></a:stretch></cdr:blipFill>
+      <cdr:spPr><a:prstGeom prst="rect"/></cdr:spPr>
+    </cdr:pic>
+  </cdr:relSizeAnchor>
+</c:userShapes>"#
         .to_string()
 }
 

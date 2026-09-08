@@ -96,14 +96,25 @@ fn pivot_history_snapshot(sid: SheetId) -> WorkbookSnapshot {
 }
 
 fn create_region_sales_pivot(engine: &mut YrsComputeEngine, sid: SheetId, name: &str) -> String {
+    create_region_sales_pivot_on_sheet(engine, sid, sid, "Sheet1", name)
+}
+
+fn create_region_sales_pivot_on_sheet(
+    engine: &mut YrsComputeEngine,
+    source_sid: SheetId,
+    output_sid: SheetId,
+    output_sheet_name: &str,
+    name: &str,
+) -> String {
     engine
         .pivot_create(json!({
             "id": name,
             "name": name,
-            "sourceSheetId": sid.to_uuid_string(),
+            "sourceSheetId": source_sid.to_uuid_string(),
             "sourceSheetName": "Sheet1",
             "sourceRange": { "startRow": 0, "startCol": 0, "endRow": 2, "endCol": 1 },
-            "outputSheetName": "Sheet1",
+            "outputSheetId": output_sid.to_uuid_string(),
+            "outputSheetName": output_sheet_name,
             "outputLocation": { "row": 0, "col": 4 },
             "fields": [
                 { "id": "Region", "name": "Region", "sourceColumn": 0, "dataType": "string" },
@@ -122,11 +133,72 @@ fn create_region_sales_pivot(engine: &mut YrsComputeEngine, sid: SheetId, name: 
         }))
         .expect("create pivot");
     engine
-        .pivot_get_all(&sid)
+        .pivot_get_all(&output_sid)
         .into_iter()
         .find(|config| config.name == name)
         .expect("created pivot")
         .id
+}
+
+#[test]
+fn api_created_pivot_exports_refresh_safe_ooxml_metadata() {
+    let sid = sheet_id();
+    let snap = pivot_history_snapshot(sid);
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (output_sheet_hex, _) = engine
+        .create_sheet("PivotOutput")
+        .expect("create separate pivot output sheet");
+    let output_sid = SheetId::from_uuid_str(&output_sheet_hex).expect("output sheet id");
+    let pivot_id = create_region_sales_pivot_on_sheet(
+        &mut engine,
+        sid,
+        output_sid,
+        "PivotOutput",
+        "ExportSafePivot",
+    );
+    engine.recalculate().expect("materialize pivot");
+
+    let def = engine
+        .mirror()
+        .find_pivot_table_def(&pivot_id, "ExportSafePivot", &output_sid.to_uuid_string())
+        .expect("materialized pivot definition")
+        .clone();
+    let expected_range = format!(
+        "{}:{}",
+        crate::range_manager::pos_to_a1(def.start_row, def.start_col),
+        crate::range_manager::pos_to_a1(def.end_row, def.end_col),
+    );
+
+    let exported = engine
+        .export_to_parse_output()
+        .expect("export parse output")
+        .parse_output;
+    let pivot = exported
+        .pivot_tables
+        .iter()
+        .find(|pivot| pivot.config.id == pivot_id)
+        .expect("exported pivot");
+    assert_eq!(
+        pivot.config.ref_range.as_deref(),
+        Some(expected_range.as_str())
+    );
+    assert_eq!(pivot.config.first_data_row, Some(def.first_data_row));
+    assert_eq!(pivot.config.first_data_col, Some(def.first_data_col));
+    assert_eq!(
+        pivot
+            .config
+            .style
+            .as_ref()
+            .and_then(|style| style.style_name.as_deref()),
+        Some("PivotStyleLight16")
+    );
+
+    let bytes = engine.export_to_xlsx_bytes().expect("export xlsx bytes");
+    let pivot_xml =
+        archive_text(&bytes, "xl/pivotTables/pivotTable1.xml").expect("pivot table part");
+    assert!(pivot_xml.contains(&format!("ref=\"{expected_range}\"")));
+    assert!(pivot_xml.contains("<items count=\"1\"><item t=\"default\"/></items>"));
+    assert!(pivot_xml.contains("name=\"PivotStyleLight16\""));
 }
 
 #[test]

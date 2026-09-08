@@ -101,7 +101,7 @@ pub fn parse_connectors_for_sheet(
         };
 
         // Recursively extract connectors from content (handles group shapes too)
-        extract_connectors_from_content(content, anchor, &mut connectors);
+        extract_connectors_from_content(content, anchor, false, &mut connectors);
     }
 
     connectors
@@ -111,6 +111,7 @@ pub fn parse_connectors_for_sheet(
 fn extract_connectors_from_content(
     content: &crate::domain::drawings::DrawingContent,
     anchor: ConnectorAnchor,
+    nested_in_group: bool,
     out: &mut Vec<crate::output::results::ConnectorOutput>,
 ) {
     use crate::domain::drawings::DrawingContent;
@@ -164,14 +165,54 @@ fn extract_connectors_from_content(
                 width: anchor.width,
                 height: anchor.height,
                 raw_json,
+                nested_in_group,
             });
         }
         DrawingContent::GroupShape(group) => {
             // Recurse into group children
             for child in &group.children {
-                extract_connectors_from_content(child, anchor, out);
+                extract_connectors_from_content(child, anchor, true, out);
             }
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::drawings::{DrawingContent, GroupShape};
+
+    fn anchor() -> ConnectorAnchor {
+        ConnectorAnchor {
+            anchor_row: Some(1),
+            anchor_col: Some(2),
+            anchor_row_offset: 0,
+            anchor_col_offset: 0,
+            end_row: None,
+            end_col: None,
+            end_row_offset: None,
+            end_col_offset: None,
+            width: Some(100),
+            height: Some(200),
+        }
+    }
+
+    #[test]
+    fn connector_extraction_tracks_group_ownership() {
+        let connector = DrawingContent::Connector(Default::default());
+        let mut direct = Vec::new();
+        extract_connectors_from_content(&connector, anchor(), false, &mut direct);
+        assert_eq!(direct.len(), 1);
+        assert!(!direct[0].nested_in_group);
+
+        let grouped = DrawingContent::GroupShape(GroupShape {
+            children: vec![connector],
+            ..Default::default()
+        });
+        let mut nested = Vec::new();
+        extract_connectors_from_content(&grouped, anchor(), false, &mut nested);
+        assert_eq!(nested.len(), 1);
+        assert!(nested[0].nested_in_group);
     }
 }

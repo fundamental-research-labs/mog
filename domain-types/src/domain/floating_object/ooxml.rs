@@ -128,6 +128,12 @@ pub struct ConnectorOoxmlProps {
     pub client_data_prints_with_sheet: Option<bool>,
     /// Raw XML for mc:AlternateContent.
     pub mc_alternate_content_raw_xml: Option<String>,
+    /// Whether the connector is owned by a group shape rather than by the
+    /// worksheet drawing anchor directly. Group-owned connectors remain
+    /// available to the runtime model, but must not be emitted as additional
+    /// top-level drawing anchors during export.
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub nested_in_group: bool,
 }
 
 /// OOXML round-trip properties for drawing objects that are not projected into
@@ -198,6 +204,12 @@ pub struct ChartDrawingFrameOoxmlProps {
     pub relationship_id: Option<String>,
     /// Original drawing relationship target for the chart part.
     pub relationship_target: Option<String>,
+    /// Whether the graphic frame is owned by a group shape rather than by the
+    /// worksheet drawing anchor directly. Group-owned charts keep their chart
+    /// parts and relationships, but must not be emitted as additional top-level
+    /// drawing anchors during export.
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub nested_in_group: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_alternate_content: Option<String>,
 }

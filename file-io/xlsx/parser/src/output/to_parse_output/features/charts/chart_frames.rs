@@ -281,6 +281,7 @@ fn append_chart_drawing_frames_from_anchor(
         client_data,
         raw_alternate_content.as_deref(),
         anchor_index,
+        false,
         chart_ex,
         frames,
     );
@@ -296,6 +297,7 @@ fn append_chart_drawing_frames_from_content(
     client_data: &ClientData,
     raw_alternate_content: Option<&str>,
     anchor_index: usize,
+    nested_in_group: bool,
     chart_ex: bool,
     frames: &mut Vec<(AnchorPosition, ChartDrawingFrameOoxmlProps)>,
 ) {
@@ -310,6 +312,7 @@ fn append_chart_drawing_frames_from_content(
                 client_data,
                 raw_alternate_content,
                 anchor_index,
+                nested_in_group,
                 chart_ex,
             ) {
                 frames.push(frame);
@@ -326,6 +329,7 @@ fn append_chart_drawing_frames_from_content(
                     client_data,
                     raw_alternate_content,
                     anchor_index,
+                    true,
                     chart_ex,
                     frames,
                 );
@@ -345,6 +349,7 @@ fn chart_drawing_frame_from_graphic_frame(
     client_data: &ClientData,
     raw_alternate_content: Option<&str>,
     anchor_index: usize,
+    nested_in_group: bool,
     chart_ex: bool,
 ) -> Option<(AnchorPosition, ChartDrawingFrameOoxmlProps)> {
     let graphic_xml = gf.graphic_xml.as_deref().unwrap_or_default();
@@ -377,6 +382,7 @@ fn chart_drawing_frame_from_graphic_frame(
             client_data_prints_with_sheet,
             relationship_id,
             relationship_target,
+            nested_in_group,
             raw_alternate_content: raw_alternate_content.map(ToOwned::to_owned),
         },
     ))
@@ -562,6 +568,7 @@ mod tests {
                 .iter()
                 .all(|(_, frame)| frame.anchor_index == Some(0))
         );
+        assert!(frames.iter().all(|(_, frame)| frame.nested_in_group));
 
         let by_target = chart_frames_by_relationship_target(&frames);
         assert!(by_target.contains_key("xl/charts/chart8.xml"));

@@ -34,6 +34,10 @@ pub const CT_CUSTOM_PROPERTIES: &str =
 /// Content type for drawings
 pub const CT_DRAWING: &str = "application/vnd.openxmlformats-officedocument.drawing+xml";
 
+/// Content type for chart-owned user-shape drawings.
+pub const CT_CHART_USER_SHAPES: &str =
+    "application/vnd.openxmlformats-officedocument.drawingml.chartshapes+xml";
+
 /// Content type for charts
 pub const CT_CHART: &str = "application/vnd.openxmlformats-officedocument.drawingml.chart+xml";
 

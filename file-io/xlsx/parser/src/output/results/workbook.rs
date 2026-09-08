@@ -485,6 +485,10 @@ pub struct ConnectorOutput {
     pub height: Option<i64>,
     /// Full connector data as JSON for roundtrip fidelity.
     pub raw_json: Option<String>,
+    /// Whether this connector is owned by a group shape rather than directly
+    /// by the worksheet drawing anchor.
+    #[serde(default)]
+    pub nested_in_group: bool,
 }
 
 /// Connector endpoint referencing a shape and connection site.

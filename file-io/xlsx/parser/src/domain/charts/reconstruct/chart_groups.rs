@@ -19,7 +19,7 @@ use super::{
     formatting::{build_outline, build_shape_properties},
     ranges::series_for_export,
     series::{build_series, preserve_imported_series_text_body_properties},
-    text_body_fidelity::preserve_imported_optional_data_label_options_text_properties,
+    text_body_fidelity::preserve_imported_optional_data_label_options_fidelity,
 };
 
 // =============================================================================
@@ -65,7 +65,7 @@ pub(super) fn build_chart_groups(spec: &ChartSpec) -> Vec<ChartGroup> {
 
                     // Inject chart-level data labels
                     let mut d_lbls = spec.data_labels.as_ref().map(build_data_labels);
-                    preserve_imported_optional_data_label_options_text_properties(
+                    preserve_imported_optional_data_label_options_fidelity(
                         &mut d_lbls,
                         group.d_lbls.as_ref(),
                     );

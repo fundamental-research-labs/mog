@@ -448,6 +448,7 @@ pub(crate) fn convert_connectors(connectors: &[ConnectorOutput]) -> Vec<Floating
                     client_data_locks_with_sheet: None,
                     client_data_prints_with_sheet: None,
                     mc_alternate_content_raw_xml: None,
+                    nested_in_group: c.nested_in_group,
                 });
             FloatingObject {
                 common: FloatingObjectCommon {

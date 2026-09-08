@@ -63,6 +63,26 @@ pub(super) fn parsed_pivot_to_def(pt: &ParsedPivotTable) -> domain_types::PivotT
                 })
                 .unwrap_or((true, true));
 
+            let mut items = pivot_items_for_field_filters(
+                field.id.as_str(),
+                field_idx,
+                &field.items,
+                &config.filters,
+                &pt.ooxml_preservation.cache_shared_items,
+                page_fields.iter().any(|page_field| {
+                    page_field.field_index == field_idx as i32 && page_field.item.is_some()
+                }),
+            );
+            if items.is_empty() && matches!(axis, Some(PivotAxis::Row | PivotAxis::Col)) {
+                items.push(PivotFieldItem {
+                    item_type: PivotItemType::Default,
+                    value: None,
+                    hidden: false,
+                    show_details: true,
+                    s: None,
+                });
+            }
+
             PivotFieldDef {
                 name: Some(pivot_field_ooxml_name(field.name.as_str(), axis_placement)),
                 axis,
@@ -82,16 +102,7 @@ pub(super) fn parsed_pivot_to_def(pt: &ParsedPivotTable) -> domain_types::PivotT
                 subtotal_top: field.subtotal_top.unwrap_or(true),
                 default_subtotal: field.default_subtotal.unwrap_or(true),
                 subtotals: field.subtotals.clone(),
-                items: pivot_items_for_field_filters(
-                    field.id.as_str(),
-                    field_idx,
-                    &field.items,
-                    &config.filters,
-                    &pt.ooxml_preservation.cache_shared_items,
-                    page_fields.iter().any(|page_field| {
-                        page_field.field_index == field_idx as i32 && page_field.item.is_some()
-                    }),
-                ),
+                items,
             }
         })
         .collect();
@@ -667,6 +678,25 @@ mod tests {
             },
             initial_expansion_state: None,
             ooxml_preservation: Default::default(),
+        }
+    }
+
+    #[test]
+    fn empty_row_and_column_axis_fields_emit_a_default_item() {
+        for area in [PivotFieldArea::Row, PivotFieldArea::Column] {
+            let mut pt = parsed_pivot_with_category_filter(PivotFilter {
+                field_id: FieldId::from("Category"),
+                include_values: None,
+                exclude_values: None,
+                condition: None,
+                top_bottom: None,
+                show_items_with_no_data: None,
+            });
+            pt.config.placements[0].area = area;
+
+            let def = parsed_pivot_to_def(&pt);
+
+            assert_eq!(def.fields[0].items, vec![default_item()]);
         }
     }
 

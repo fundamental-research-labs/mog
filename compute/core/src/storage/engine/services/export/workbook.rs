@@ -19,6 +19,7 @@ use domain_types::{
 };
 use yrs::{Any, Map, Out, Transact};
 
+use crate::mirror::CellMirror;
 use crate::snapshot::{CalcMode, CalculationSettings};
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::pivots;
@@ -777,6 +778,8 @@ pub(in crate::storage::engine) fn export_workbook_timeline_caches(
 /// pivotTables maps using imported-pivot associations as the authority.
 pub(in crate::storage::engine) fn export_workbook_parsed_pivot_tables(
     stores: &EngineStores,
+    mirror: &CellMirror,
+    default_pivot_style: Option<&str>,
 ) -> Vec<domain_types::domain::pivot::ParsedPivotTable> {
     let doc = stores.storage.doc();
     let sheets_ref = stores.storage.sheets();
@@ -790,7 +793,11 @@ pub(in crate::storage::engine) fn export_workbook_parsed_pivot_tables(
         .collect::<std::collections::HashMap<_, _>>();
 
     if associations.is_empty() {
-        return export_workbook_parsed_pivot_tables_legacy_name_dedup(stores);
+        return export_workbook_parsed_pivot_tables_legacy_name_dedup(
+            stores,
+            mirror,
+            default_pivot_style,
+        );
     }
 
     let specs_by_key: std::collections::HashMap<String, ParsedPivotTable> = specs
@@ -857,7 +864,13 @@ pub(in crate::storage::engine) fn export_workbook_parsed_pivot_tables(
                         &cache_sources_by_id,
                     );
                 result.push(ParsedPivotTable {
-                    config: live_config,
+                    config: project_live_pivot_export_metadata(
+                        live_config,
+                        &output_sheet_id,
+                        mirror,
+                        None,
+                        false,
+                    ),
                     initial_expansion_state: original.initial_expansion_state.clone(),
                     ooxml_preservation,
                 });
@@ -873,6 +886,13 @@ pub(in crate::storage::engine) fn export_workbook_parsed_pivot_tables(
             if associated_native_ids.contains(&config.id) {
                 continue;
             }
+            let config = project_live_pivot_export_metadata(
+                config,
+                sheet_id,
+                mirror,
+                default_pivot_style,
+                true,
+            );
             result.push(ParsedPivotTable {
                 config,
                 initial_expansion_state: None,
@@ -886,6 +906,8 @@ pub(in crate::storage::engine) fn export_workbook_parsed_pivot_tables(
 
 fn export_workbook_parsed_pivot_tables_legacy_name_dedup(
     stores: &EngineStores,
+    mirror: &CellMirror,
+    default_pivot_style: Option<&str>,
 ) -> Vec<domain_types::domain::pivot::ParsedPivotTable> {
     let doc = stores.storage.doc();
     let sheets_ref = stores.storage.sheets();
@@ -907,6 +929,13 @@ fn export_workbook_parsed_pivot_tables_legacy_name_dedup(
             if existing_names.contains(&config.name) {
                 continue; // Imported pivot — keep original workbook-level spec
             }
+            let config = project_live_pivot_export_metadata(
+                config,
+                sheet_id,
+                mirror,
+                default_pivot_style,
+                true,
+            );
             result.push(ParsedPivotTable {
                 config,
                 initial_expansion_state: None,
@@ -916,6 +945,50 @@ fn export_workbook_parsed_pivot_tables_legacy_name_dedup(
     }
 
     result
+}
+
+fn project_live_pivot_export_metadata(
+    mut config: domain_types::domain::pivot::PivotTableConfig,
+    storage_sheet_id: &SheetId,
+    mirror: &CellMirror,
+    default_pivot_style: Option<&str>,
+    apply_default_style: bool,
+) -> domain_types::domain::pivot::PivotTableConfig {
+    let output_sheet_id = config
+        .output_sheet_id
+        .as_deref()
+        .and_then(|value| SheetId::from_uuid_str(value).ok())
+        .or_else(|| mirror.sheet_by_name(&config.output_sheet_name))
+        .unwrap_or(*storage_sheet_id);
+    if let Some(def) =
+        mirror.find_pivot_table_def(&config.id, &config.name, &output_sheet_id.to_uuid_string())
+        && !def.is_empty_rendered_region()
+    {
+        config.ref_range = Some(format!(
+            "{}:{}",
+            crate::range_manager::pos_to_a1(def.start_row, def.start_col),
+            crate::range_manager::pos_to_a1(def.end_row, def.end_col),
+        ));
+        config.first_data_row = Some(def.first_data_row);
+        config.first_data_col = Some(def.first_data_col);
+    }
+
+    if apply_default_style && config.style.is_none() {
+        config.style = Some(domain_types::domain::pivot::PivotTableStyle {
+            style_name: Some(
+                default_pivot_style
+                    .unwrap_or("PivotStyleLight16")
+                    .to_string(),
+            ),
+            show_row_headers: Some(true),
+            show_column_headers: Some(true),
+            show_row_stripes: Some(false),
+            show_column_stripes: Some(false),
+            show_last_column: Some(true),
+        });
+    }
+
+    config
 }
 
 fn read_workbook_pivot_specs(

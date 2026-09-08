@@ -7,6 +7,101 @@ use domain_types::{
 };
 use value_types::CellValue;
 
+fn legacy_note_sheet(
+    name: &str,
+    cell_ref: &str,
+    content: &str,
+    comment_package: Option<SheetCommentPackageInfo>,
+) -> SheetData {
+    SheetData {
+        name: name.to_string(),
+        rows: 1,
+        cols: 1,
+        cells: vec![domain_types::CellData {
+            row: 0,
+            col: 0,
+            value: CellValue::Text(name.into()),
+            ..Default::default()
+        }],
+        comments: vec![Comment {
+            cell_ref: cell_ref.to_string(),
+            author: "Test User".to_string(),
+            content: Some(content.to_string()),
+            runs: vec![RichTextRun {
+                text: content.to_string(),
+                ..Default::default()
+            }],
+            comment_type: CommentType::Note,
+            ..Default::default()
+        }],
+        legacy_comment_authors: vec!["Test User".to_string()],
+        comment_package,
+        ..Default::default()
+    }
+}
+
+#[test]
+fn l2_xlsx_export_reserves_all_imported_comment_paths_before_allocating_new_ones() {
+    let input = ParseOutput {
+        sheets: vec![
+            legacy_note_sheet("New comments", "A1", "new note", None),
+            legacy_note_sheet(
+                "Imported comments 1",
+                "A1",
+                "preserved note 1",
+                Some(SheetCommentPackageInfo {
+                    comments_path_hint: Some("xl/comments1.xml".to_string()),
+                    comments_relationship_id_hint: Some("rIdImportedComments".to_string()),
+                    vml_path_hint: Some("xl/drawings/vmlDrawing1.vml".to_string()),
+                    vml_relationship_id_hint: Some("rIdImportedVml".to_string()),
+                    ..Default::default()
+                }),
+            ),
+            legacy_note_sheet(
+                "Imported comments 3",
+                "A1",
+                "preserved note 3",
+                Some(SheetCommentPackageInfo {
+                    comments_path_hint: Some("xl/comments3.xml".to_string()),
+                    comments_relationship_id_hint: Some("rIdImportedComments3".to_string()),
+                    vml_path_hint: Some("xl/drawings/vmlDrawing3.vml".to_string()),
+                    vml_relationship_id_hint: Some("rIdImportedVml3".to_string()),
+                    ..Default::default()
+                }),
+            ),
+        ],
+        ..Default::default()
+    };
+
+    let engine = engine_from_parse_output_normal(&input);
+    let exported_bytes = engine.export_to_xlsx_bytes().expect("export xlsx bytes");
+
+    let imported_comments1 = archive_text(&exported_bytes, "xl/comments1.xml")
+        .expect("imported comments path should remain owned by the imported sheet");
+    let imported_comments3 = archive_text(&exported_bytes, "xl/comments3.xml")
+        .expect("sparse imported comments path should remain owned by the imported sheet");
+    let generated_comments = archive_text(&exported_bytes, "xl/comments4.xml")
+        .expect("new comments should use max imported path plus one");
+    assert!(imported_comments1.contains("preserved note 1"));
+    assert!(!imported_comments1.contains("new note"));
+    assert!(imported_comments3.contains("preserved note 3"));
+    assert!(!imported_comments3.contains("new note"));
+    assert!(generated_comments.contains("new note"));
+
+    let new_sheet_rels = archive_text(&exported_bytes, "xl/worksheets/_rels/sheet1.xml.rels")
+        .expect("new-comments sheet relationships");
+    let imported_sheet1_rels = archive_text(&exported_bytes, "xl/worksheets/_rels/sheet2.xml.rels")
+        .expect("imported-comments1 sheet relationships");
+    let imported_sheet3_rels = archive_text(&exported_bytes, "xl/worksheets/_rels/sheet3.xml.rels")
+        .expect("imported-comments3 sheet relationships");
+    assert!(new_sheet_rels.contains(r#"Target="../comments4.xml""#));
+    assert!(imported_sheet1_rels.contains(r#"Target="../comments1.xml""#));
+    assert!(imported_sheet3_rels.contains(r#"Target="../comments3.xml""#));
+    assert!(new_sheet_rels.contains(r#"Target="../drawings/vmlDrawing4.vml""#));
+    assert!(imported_sheet1_rels.contains(r#"Target="../drawings/vmlDrawing1.vml""#));
+    assert!(imported_sheet3_rels.contains(r#"Target="../drawings/vmlDrawing3.vml""#));
+}
+
 #[test]
 fn l2_xlsx_export_preserves_imported_comment_package_paths() {
     let thread_id = "{00000000-0000-0000-0000-000000000001}";

@@ -607,13 +607,14 @@ pub(super) fn write_zip_package(
                     )?;
                 }
 
-                // Write chart auxiliary files (style XML, colors XML) only
-                // when the current chart still carries imported chart identity.
-                if allows_current_auxiliary_replay
-                    && let Some(aux) = chart_auxiliary::chart_auxiliary_data(chart_spec)
-                {
-                    let auxiliary_paths =
-                        chart_auxiliary::supported_auxiliary_file_paths(&aux, &chart_path);
+                // Imported style/color parts remain valid when a standard chart is
+                // reconstructed. Opaque user-shape replay still requires current authority.
+                if let Some(aux) = chart_auxiliary::chart_auxiliary_data(chart_spec) {
+                    let auxiliary_paths = chart_auxiliary::auxiliary_file_paths_for_export(
+                        chart_spec,
+                        &chart_path,
+                        allows_current_auxiliary_replay,
+                    );
                     // Write auxiliary files (style, colors XML) preserving their original paths.
                     for (path, data) in aux.auxiliary_files {
                         if !auxiliary_paths.contains(path.trim_start_matches('/')) {
@@ -695,11 +696,12 @@ pub(super) fn write_zip_package(
                         color_style.data,
                     )?;
                 }
-                if allows_current_auxiliary_replay
-                    && let Some(aux) = chart_auxiliary::chart_auxiliary_data(chart_spec)
-                {
-                    let auxiliary_paths =
-                        chart_auxiliary::supported_auxiliary_file_paths(&aux, &chart_path);
+                if let Some(aux) = chart_auxiliary::chart_auxiliary_data(chart_spec) {
+                    let auxiliary_paths = chart_auxiliary::auxiliary_file_paths_for_export(
+                        chart_spec,
+                        &chart_path,
+                        allows_current_auxiliary_replay,
+                    );
                     for (path, data) in aux.auxiliary_files {
                         if !auxiliary_paths.contains(path.trim_start_matches('/')) {
                             continue;

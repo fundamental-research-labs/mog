@@ -333,7 +333,7 @@ pub(crate) fn navigate_range(
         other => {
             return Err(invalid(format!(
                 "Unsupported Range navigation method '{other}'"
-            )))
+            )));
         }
     };
 

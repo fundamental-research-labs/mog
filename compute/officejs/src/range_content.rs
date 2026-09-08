@@ -12,7 +12,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use compute_api::{CellRange, CellValue, ComputeApiError, Sheet};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// Error returned by a Range content projection.
 ///

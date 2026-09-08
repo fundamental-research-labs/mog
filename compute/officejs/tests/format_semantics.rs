@@ -2,7 +2,7 @@
 
 use compute_api::Workbook;
 use mog::{run_office_js, run_office_js_with_workbook};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 fn blank_workbook() -> Workbook {
     Workbook::blank().expect("blank workbook").0

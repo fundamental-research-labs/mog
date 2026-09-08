@@ -489,9 +489,11 @@ pub(crate) fn get_column(
         })
     } else if let Some(text) = key.as_str() {
         let numeric_id = text.parse::<u64>().ok();
+        let legacy_id = numeric_id.and_then(|id| u32::try_from(id).ok());
         table.columns.iter().find(|column| {
             column.id == text
                 || column.name.eq_ignore_ascii_case(text)
+                || column.ooxml_column_id == legacy_id
                 || numeric_id.is_some_and(|id| public_column_id(column) == id)
         })
     } else {

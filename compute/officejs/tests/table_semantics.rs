@@ -453,11 +453,13 @@ fn workbook_and_worksheet_table_collections_hydrate_items_and_counts() {
             .collect::<Vec<_>>(),
         vec![json!("First"), json!("Second")]
     );
-    assert!(output.value["workbookItems"]
-        .as_array()
-        .expect("workbook items")
-        .iter()
-        .all(|item| item["type"] == json!(true)));
+    assert!(
+        output.value["workbookItems"]
+            .as_array()
+            .expect("workbook items")
+            .iter()
+            .all(|item| item["type"] == json!(true))
+    );
     assert_eq!(output.value["worksheetItems"], json!(["First", "Second"]));
     assert_eq!(output.value["second"]["name"], json!("Second"));
     assert_eq!(output.value["missing"], json!(true));
@@ -514,12 +516,16 @@ fn workbook_table_add_uses_active_sheet_for_unqualified_and_address_sheet_for_qu
         output.value["second"]["values"],
         json!([["C", "D"], [3, 4]])
     );
-    assert!(output.value["first"]["table"]
-        .as_str()
-        .is_some_and(|id| id.starts_with("tbl-")));
-    assert!(output.value["second"]["table"]
-        .as_str()
-        .is_some_and(|id| id.starts_with("tbl-")));
+    assert!(
+        output.value["first"]["table"]
+            .as_str()
+            .is_some_and(|id| id.starts_with("tbl-"))
+    );
+    assert!(
+        output.value["second"]["table"]
+            .as_str()
+            .is_some_and(|id| id.starts_with("tbl-"))
+    );
     assert_eq!(
         output.value["types"],
         json!({"workbook": true, "first": true, "second": true})

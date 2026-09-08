@@ -22,7 +22,7 @@ use compute_api::Workbook;
 use serde_json::Value;
 
 use crate::format::FormatRef;
-use crate::host::{mark_object, BatchError, Host, RangeRef};
+use crate::host::{BatchError, Host, RangeRef, mark_object};
 use crate::worksheets::WorksheetRef;
 
 /// A host-side object exposed by an extension family.
@@ -361,7 +361,7 @@ mod tests {
     use std::sync::Arc;
 
     use compute_api::Workbook;
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
 
     use super::{BatchError, ExtensionHandler, ExtensionObject, HostDispatchContext};
     use crate::host::Host;

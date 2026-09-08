@@ -169,7 +169,7 @@
           .map(function (name) { return name.trim(); })
           .filter(Boolean)
           .forEach(function (name) {
-            if (name === "items") add("items");
+            if (COLLECTION_PROPERTIES.indexOf(name) >= 0) add(name);
             else if (ITEM_PROPERTIES.indexOf(name) >= 0) add("items/" + name);
             else add(name);
           });
@@ -408,5 +408,4 @@
 
   Excel.RangeBorder = RangeBorder;
   Excel.RangeBorderCollection = RangeBorderCollection;
-  Excel.__mogBorderKeys = BORDER_KEYS.slice();
 })(globalThis);

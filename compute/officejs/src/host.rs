@@ -7,9 +7,7 @@ use serde_json::{Value, json};
 use value_types::CellValue;
 
 use crate::borders::{BorderCollectionRef, BorderError, BorderRef};
-use crate::dispatch::{
-    ExtensionBinding, ExtensionHandler, ExtensionRegistry, HostDispatchContext,
-};
+use crate::dispatch::{ExtensionBinding, ExtensionHandler, ExtensionRegistry, HostDispatchContext};
 use crate::format::{FormatError, FormatRef};
 use crate::names::{self, NameError, NamedItemCollectionRef, NamedItemRef};
 use crate::range_content::{self, RangeContentError};
@@ -500,10 +498,7 @@ impl Host {
     /// can use this when all family modules are known up front; callers may
     /// also use [`Host::register_extension`] for incremental assembly before
     /// the first sync.
-    pub(crate) fn with_extensions(
-        workbook: Workbook,
-        extensions: ExtensionRegistry,
-    ) -> Self {
+    pub(crate) fn with_extensions(workbook: Workbook, extensions: ExtensionRegistry) -> Self {
         Self {
             workbook,
             sheets: Mutex::new(HashMap::new()),
@@ -685,12 +680,14 @@ impl Host {
             let dispatch = self.dispatch_extension(&raw_op, &mut loaded, &mut results)?;
             let has_delegated_load = dispatch.delegated_load.is_some();
             let raw_op = if let Some((target_id, properties)) = dispatch.delegated_load {
-                let operation_id = raw_op.get("id").and_then(Value::as_str).ok_or_else(|| {
-                    BatchError {
-                        code: "InvalidArgument",
-                        message: "A delegated load operation requires an id.".to_string(),
-                    }
-                })?;
+                let operation_id =
+                    raw_op
+                        .get("id")
+                        .and_then(Value::as_str)
+                        .ok_or_else(|| BatchError {
+                            code: "InvalidArgument",
+                            message: "A delegated load operation requires an id.".to_string(),
+                        })?;
                 if operation_id != target_id {
                     return Err(BatchError {
                         code: "InvalidArgument",
@@ -698,9 +695,8 @@ impl Host {
                     });
                 }
                 let mut delegated = raw_op;
-                delegated["properties"] = Value::Array(
-                    properties.into_iter().map(Value::String).collect(),
-                );
+                delegated["properties"] =
+                    Value::Array(properties.into_iter().map(Value::String).collect());
                 delegated
             } else {
                 raw_op
@@ -710,10 +706,12 @@ impl Host {
             }
             let op = match serde_json::from_value::<Op>(raw_op.clone()) {
                 Ok(op) => op,
-                Err(error) => return Err(BatchError {
-                    code: "InvalidArgument",
-                    message: format!("invalid Office.js operation: {error}"),
-                }),
+                Err(error) => {
+                    return Err(BatchError {
+                        code: "InvalidArgument",
+                        message: format!("invalid Office.js operation: {error}"),
+                    });
+                }
             };
             match op {
                 Op::GetItem { id, name } => {
@@ -892,13 +890,11 @@ impl Host {
                     if worksheet.is_none() && !or_null_object {
                         return Err(BatchError {
                             code: "InvalidReference",
-                            message: "The named item does not have a worksheet scope."
-                                .to_string(),
+                            message: "The named item does not have a worksheet scope.".to_string(),
                         });
                     }
-                    let worksheet = worksheet.map(|sheet| {
-                        WorksheetRef::new(self.workbook.clone(), sheet)
-                    });
+                    let worksheet =
+                        worksheet.map(|sheet| WorksheetRef::new(self.workbook.clone(), sheet));
                     bind_nullable_worksheet(self, &mut loaded, id, worksheet, or_null_object);
                 }
                 Op::NameGetArrayValues { id, name_id } => {
@@ -1569,8 +1565,7 @@ impl Host {
                                 .cloned()
                                 .ok_or_else(|| BatchError {
                                     code: "InvalidObjectPath",
-                                    message: "The worksheet object is not available."
-                                        .to_string(),
+                                    message: "The worksheet object is not available.".to_string(),
                                 })?
                                 .sheet(),
                         ),
@@ -1599,8 +1594,7 @@ impl Host {
                             .cloned()
                             .ok_or_else(|| BatchError {
                                 code: "InvalidObjectPath",
-                                message: "The TableCollection object is not available."
-                                    .to_string(),
+                                message: "The TableCollection object is not available.".to_string(),
                             })?;
                         match (scope, by_index) {
                             (Some(sheet), false) => TableRef::get_item(sheet, &key),
@@ -1608,9 +1602,7 @@ impl Host {
                                 .parse::<i64>()
                                 .map_err(|_| table_error_invalid_index("table"))
                                 .and_then(|index| TableRef::get_item_at(sheet, index)),
-                            (None, false) => {
-                                TableRef::get_item_in_workbook(&self.workbook, &key)
-                            }
+                            (None, false) => TableRef::get_item_in_workbook(&self.workbook, &key),
                             (None, true) => key
                                 .parse::<i64>()
                                 .map_err(|_| table_error_invalid_index("table"))
@@ -1691,10 +1683,7 @@ impl Host {
                 Op::TableDelete { id } => {
                     let table = table_ref(&self.tables, &id)?;
                     table.delete().map_err(table_error)?;
-                    self.tables
-                        .lock()
-                        .expect("tables lock")
-                        .remove(&id);
+                    self.tables.lock().expect("tables lock").remove(&id);
                 }
                 Op::TableConvertToRange { id, table_id } => {
                     let table = table_ref(&self.tables, &table_id)?;
@@ -1754,18 +1743,39 @@ impl Host {
                     collection_id,
                     result_id,
                 } => {
-                    let collection = table_collection_ref(&self.table_collections, &collection_id)?;
-                    let mut projection = table_collections::load_collection(
-                        &collection.table,
-                        collection.kind,
-                        &["count".to_string()],
-                    )
-                    .map_err(table_collection_error)?;
-                    let count = projection.remove("count").ok_or_else(|| BatchError {
-                        code: "GeneralException",
-                        message: "The table collection did not return its count.".to_string(),
-                    })?;
-                    results.insert(result_id, count);
+                    // `tableCollectionGetCount` is shared by the base
+                    // TableCollection (worksheet/workbook scope) and the
+                    // child rows/columns collections.  The former is stored
+                    // in `table_collection_bindings`, while the latter uses
+                    // `table_collections`; check the outer Option so a
+                    // workbook binding with a `None` worksheet is still
+                    // distinguishable from an unknown object id.
+                    if let Some(scope) = self
+                        .table_collection_bindings
+                        .lock()
+                        .expect("table collection bindings lock")
+                        .get(&collection_id)
+                        .cloned()
+                    {
+                        let count = tables::collection_items(&self.workbook, scope.as_ref(), &[])
+                            .map_err(table_error)?
+                            .len();
+                        results.insert(result_id, json!(count));
+                    } else {
+                        let collection =
+                            table_collection_ref(&self.table_collections, &collection_id)?;
+                        let mut projection = table_collections::load_collection(
+                            &collection.table,
+                            collection.kind,
+                            &["count".to_string()],
+                        )
+                        .map_err(table_collection_error)?;
+                        let count = projection.remove("count").ok_or_else(|| BatchError {
+                            code: "GeneralException",
+                            message: "The table collection did not return its count.".to_string(),
+                        })?;
+                        results.insert(result_id, count);
+                    }
                 }
                 Op::TableColumnGetItem {
                     id,
@@ -2313,8 +2323,7 @@ impl Host {
                         }
                     }
                     if let Some(scope) = table_collection_binding {
-                        let item_properties =
-                            table_collection_item_properties(&properties)?;
+                        let item_properties = table_collection_item_properties(&properties)?;
                         let items = tables::collection_items(
                             &self.workbook,
                             scope.as_ref(),
@@ -2693,11 +2702,7 @@ fn table_collection_item_properties(properties: &[String]) -> Result<Vec<String>
         }
         return Err(unsupported_load_property("TableCollection", property));
     }
-    if defaults {
-        Ok(Vec::new())
-    } else {
-        Ok(result)
-    }
+    if defaults { Ok(Vec::new()) } else { Ok(result) }
 }
 
 pub(crate) fn mark_object(

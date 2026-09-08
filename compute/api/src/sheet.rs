@@ -6,14 +6,12 @@
 use crate::address::{CellAddress, CellRange};
 use crate::dispatch::Dispatch;
 use crate::error::ComputeApiError;
+use crate::mutation::CellInput;
 use cell_types::SheetId;
 use compute_core::ZOrderEntry;
-use domain_types::{Comment, CopyType};
+use domain_types::Comment;
 use snapshot_types::MutationResult;
 use value_types::CellValue;
-
-use crate::mutation::CellInput;
-use crate::types::{BridgeAutoFillRequest, BridgeFlashFillRequest};
 
 // Domain sub-APIs
 pub mod bindings;
@@ -55,71 +53,6 @@ impl Clone for Sheet {
 }
 
 impl Sheet {
-    /// Create a new Sheet handle (called by Workbook, not public).
-    pub(crate) fn new(dispatch: Dispatch, sheet_id: SheetId) -> Self {
-        Sheet { dispatch, sheet_id }
-    }
-
-    /// Returns the sheet's ID.
-    pub fn id(&self) -> &SheetId {
-        &self.sheet_id
-    }
-
-    /// Returns the sheet's name.
-    pub fn name(&self) -> Result<String, ComputeApiError> {
-        let sid = self.sheet_id;
-        self.dispatch
-            .query_engine(move |e| e.get_sheet_name(&sid))
-            .and_then(|opt| {
-                opt.ok_or_else(|| ComputeApiError::SheetNotFound {
-                    id: self.sheet_id.to_uuid_string(),
-                })
-            })
-    }
-
-    // -----------------------------------------------------------------
-    // Cell write operations
-    // -----------------------------------------------------------------
-
-    /// Set a cell's value. Accepts A1 notation ("B2") or position (row, col).
-    pub fn set_cell(
-        &self,
-        addr: impl Into<CellAddress>,
-        value: impl Into<String>,
-    ) -> Result<MutationResult, ComputeApiError> {
-        let (row, col) = addr.into().resolve()?;
-        let sid = self.sheet_id;
-        let input = value.into();
-        self.dispatch
-            .call_engine(move |e| e.set_cell_value_parsed(&sid, row, col, &input))
-            .and_then(|r| {
-                r.map(|(_vp, mutation)| mutation)
-                    .map_err(ComputeApiError::from)
-            })
-    }
-
-    /// Set a range of cells from a 2D grid of values.
-    pub fn set_range(
-        &self,
-        range: impl Into<CellRange>,
-        values: &[Vec<String>],
-    ) -> Result<MutationResult, ComputeApiError> {
-        let (start_row, start_col, _end_row, _end_col) = range.into().resolve()?;
-        let sid = self.sheet_id;
-        let mut updates = Vec::new();
-        for (i, row_values) in values.iter().enumerate() {
-            for (j, val) in row_values.iter().enumerate() {
-                updates.push((start_row + i as u32, start_col + j as u32, val.clone()));
-            }
-        }
-        self.dispatch
-            .call_engine(move |e| e.set_cell_values_parsed(&sid, updates))
-            .and_then(|r| {
-                r.map(|(_vp, mutation)| mutation)
-                    .map_err(ComputeApiError::from)
-            })
-    }
-
     /// Set a rectangular range with already-typed cell input intents.
     ///
     /// The input grid must have exactly the same row and column dimensions as
@@ -204,114 +137,67 @@ impl Sheet {
             })
     }
 
-    /// Copy a rectangular range using the engine's formula, value, and format
-    /// semantics. The source may belong to another sheet in the same
-    /// workbook. `copy_type`, `skip_blanks`, and `transpose` map directly to
-    /// the production copy operation.
-    #[allow(clippy::too_many_arguments)]
-    pub fn copy_range(
-        &self,
-        source_sheet_id: &SheetId,
-        src_start_row: u32,
-        src_start_col: u32,
-        src_end_row: u32,
-        src_end_col: u32,
-        target_row: u32,
-        target_col: u32,
-        copy_type: CopyType,
-        skip_blanks: bool,
-        transpose: bool,
-    ) -> Result<MutationResult, ComputeApiError> {
-        let source_sid = *source_sheet_id;
-        let target_sid = self.sheet_id;
-        self.dispatch
-            .call_engine(move |engine| {
-                engine.copy_range(
-                    &source_sid,
-                    src_start_row,
-                    src_start_col,
-                    src_end_row,
-                    src_end_col,
-                    &target_sid,
-                    target_row,
-                    target_col,
-                    copy_type,
-                    skip_blanks,
-                    transpose,
-                )
-            })
-            .and_then(|result| {
-                result
-                    .map(|(_patches, mutation)| mutation)
-                    .map_err(ComputeApiError::from)
-            })
+    /// Create a new Sheet handle (called by Workbook, not public).
+    pub(crate) fn new(dispatch: Dispatch, sheet_id: SheetId) -> Self {
+        Sheet { dispatch, sheet_id }
     }
 
-    /// Move a rectangular range while preserving engine cell identity and
-    /// formula references. This deliberately routes through the Yrs
-    /// relocation pipeline rather than the legacy value-only structure API.
-    #[allow(clippy::too_many_arguments)]
-    pub fn relocate_cells_yrs(
-        &self,
-        source_sheet_id: &SheetId,
-        src_start_row: u32,
-        src_start_col: u32,
-        src_end_row: u32,
-        src_end_col: u32,
-        target_row: u32,
-        target_col: u32,
-    ) -> Result<MutationResult, ComputeApiError> {
-        let source_sid = *source_sheet_id;
-        let target_sid = self.sheet_id;
-        self.dispatch
-            .call_engine(move |engine| {
-                engine.relocate_cells_yrs(
-                    &source_sid,
-                    src_start_row,
-                    src_start_col,
-                    src_end_row,
-                    src_end_col,
-                    &target_sid,
-                    target_row,
-                    target_col,
-                )
-            })
-            .and_then(|result| {
-                result
-                    .map(|(_patches, mutation)| mutation)
-                    .map_err(ComputeApiError::from)
-            })
+    /// Returns the sheet's ID.
+    pub fn id(&self) -> &SheetId {
+        &self.sheet_id
     }
 
-    /// Fill a target range from a source range using the production
-    /// compute-fill engine. The request carries the exact source/target
-    /// bounds, direction, mode, and include flags expected by the bridge.
-    pub fn auto_fill(
-        &self,
-        request: BridgeAutoFillRequest,
-    ) -> Result<MutationResult, ComputeApiError> {
+    /// Returns the sheet's name.
+    pub fn name(&self) -> Result<String, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |engine| engine.auto_fill(&sid, request))
-            .and_then(|result| {
-                result
-                    .map(|(_patches, mutation)| mutation)
+            .query_engine(move |e| e.get_sheet_name(&sid))
+            .and_then(|opt| {
+                opt.ok_or_else(|| ComputeApiError::SheetNotFound {
+                    id: self.sheet_id.to_uuid_string(),
+                })
+            })
+    }
+
+    // -----------------------------------------------------------------
+    // Cell write operations
+    // -----------------------------------------------------------------
+
+    /// Set a cell's value. Accepts A1 notation ("B2") or position (row, col).
+    pub fn set_cell(
+        &self,
+        addr: impl Into<CellAddress>,
+        value: impl Into<String>,
+    ) -> Result<MutationResult, ComputeApiError> {
+        let (row, col) = addr.into().resolve()?;
+        let sid = self.sheet_id;
+        let input = value.into();
+        self.dispatch
+            .call_engine(move |e| e.set_cell_value_parsed(&sid, row, col, &input))
+            .and_then(|r| {
+                r.map(|(_vp, mutation)| mutation)
                     .map_err(ComputeApiError::from)
             })
     }
 
-    /// Apply Flash Fill to a source/example column pair using the production
-    /// compute-fill engine.
-    pub fn flash_fill(
+    /// Set a range of cells from a 2D grid of values.
+    pub fn set_range(
         &self,
-        request: BridgeFlashFillRequest,
+        range: impl Into<CellRange>,
+        values: &[Vec<String>],
     ) -> Result<MutationResult, ComputeApiError> {
+        let (start_row, start_col, _end_row, _end_col) = range.into().resolve()?;
         let sid = self.sheet_id;
+        let mut updates = Vec::new();
+        for (i, row_values) in values.iter().enumerate() {
+            for (j, val) in row_values.iter().enumerate() {
+                updates.push((start_row + i as u32, start_col + j as u32, val.clone()));
+            }
+        }
         self.dispatch
-            .call_engine(move |engine| engine.flash_fill(&sid, request))
-            .and_then(|result| {
-                result
-                    .map(|(_patches, mutation)| mutation)
+            .call_engine(move |e| e.set_cell_values_parsed(&sid, updates))
+            .and_then(|r| {
+                r.map(|(_vp, mutation)| mutation)
                     .map_err(ComputeApiError::from)
             })
     }

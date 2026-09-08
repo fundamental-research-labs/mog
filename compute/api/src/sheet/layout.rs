@@ -75,18 +75,6 @@ impl SheetLayout {
             .query_engine(move |e| e.get_col_width_query(&sid, col))
     }
 
-    /// Get the canonical OOXML character width of a column.
-    ///
-    /// This is intentionally separate from [`Self::get_col_width`], whose
-    /// result is in rendering pixels.  Office.js dimension adapters can use
-    /// this query when they need the workbook's persisted character-width
-    /// value instead of an MDW-dependent pixel projection.
-    pub fn get_col_width_chars(&self, col: u32) -> Result<f64, ComputeApiError> {
-        let sid = self.sheet_id;
-        self.dispatch
-            .query_engine(move |e| e.get_col_width_chars_query(&sid, col))
-    }
-
     /// Get the default row height for this sheet.
     pub fn get_default_row_height(&self) -> Result<f64, ComputeApiError> {
         let sid = self.sheet_id;
@@ -99,36 +87,6 @@ impl SheetLayout {
         let sid = self.sheet_id;
         self.dispatch
             .query_engine(move |e| e.get_default_col_width(&sid))
-    }
-
-    /// Get the canonical OOXML character width used by default columns.
-    ///
-    /// The existing [`Self::get_default_col_width`] method returns the
-    /// rendering-pixel projection for UI callers; this method preserves the
-    /// sheet's persisted character-width value.
-    pub fn get_default_col_width_chars(&self) -> Result<f64, ComputeApiError> {
-        let sid = self.sheet_id;
-        self.dispatch
-            .query_engine(move |e| e.get_default_col_width_chars(&sid))
-    }
-
-    /// Compute and set best-fit heights for the selected rows.
-    pub fn auto_fit_rows_and_set(&self, rows: Vec<u32>) -> Result<MutationResult, ComputeApiError> {
-        let sid = self.sheet_id;
-        self.dispatch
-            .call_engine(move |e| e.auto_fit_rows_and_set(&sid, rows).map(|(_, r)| r))
-            .and_then(|r| r.map_err(ComputeApiError::from))
-    }
-
-    /// Compute and set best-fit widths for the selected columns.
-    pub fn auto_fit_columns_and_set(
-        &self,
-        cols: Vec<u32>,
-    ) -> Result<MutationResult, ComputeApiError> {
-        let sid = self.sheet_id;
-        self.dispatch
-            .call_engine(move |e| e.auto_fit_columns_and_set(&sid, cols).map(|(_, r)| r))
-            .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
     // -----------------------------------------------------------------

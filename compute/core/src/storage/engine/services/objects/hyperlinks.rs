@@ -49,51 +49,6 @@ pub(in crate::storage::engine) fn set_hyperlink(
     Ok(MutationResult::empty())
 }
 
-pub(in crate::storage::engine) fn set_hyperlink_with_metadata(
-    stores: &mut EngineStores,
-    mirror: &mut CellMirror,
-    sheet_id: &SheetId,
-    row: u32,
-    col: u32,
-    address: Option<&str>,
-    document_reference: Option<&str>,
-    display: Option<&str>,
-    tooltip: Option<&str>,
-) -> Result<MutationResult, ComputeError> {
-    let pre_existing_id = stores
-        .grid_indexes
-        .get(sheet_id)
-        .and_then(|g| g.cell_id_at(row, col));
-
-    let Some(grid) = stores.grid_indexes.get_mut(sheet_id) else {
-        return Ok(MutationResult::empty());
-    };
-    hyperlinks::set_hyperlink_with_metadata(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        grid,
-        row,
-        col,
-        address,
-        document_reference,
-        display,
-        tooltip,
-    );
-
-    if pre_existing_id.is_none()
-        && let Some(cell_id) = stores
-            .grid_indexes
-            .get(sheet_id)
-            .and_then(|g| g.cell_id_at(row, col))
-    {
-        let pos = cell_types::SheetPos::new(row, col);
-        mirror.apply_edit(sheet_id, cell_id, pos, value_types::CellValue::Null, None);
-    }
-
-    Ok(MutationResult::empty())
-}
-
 pub(in crate::storage::engine) fn remove_hyperlink(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,

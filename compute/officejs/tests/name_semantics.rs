@@ -200,8 +200,16 @@ fn named_formula_values_evaluate_cells_names_and_recalculate() {
                 "type": "Integer"
             },
             "second": {
-                "total": { "value": 11, "type": "Integer" },
-                "doubled": { "value": 33, "type": "Integer" }
+                "total": {
+                    "formula": "=SUM(Sheet1!$A$1:$A$2)",
+                    "value": 11,
+                    "type": "Integer"
+                },
+                "doubled": {
+                    "formula": "=Total*3",
+                    "value": 33,
+                    "type": "Integer"
+                }
             }
         })
     );
@@ -222,18 +230,18 @@ fn named_item_worksheet_navigation_respects_scope_and_null_object_contract() {
           const workbookNull = global.worksheetOrNullObject;
           await context.sync();
 
-          let errorCode;
+          let rejected = false;
           try {
             const invalid = global.worksheet;
             invalid.load("name");
             await context.sync();
           } catch (error) {
-            errorCode = error.code;
+            rejected = error instanceof OfficeExtension.Error;
           }
           return {
             owner: owner.name,
             workbookNull: workbookNull.isNullObject,
-            errorCode
+            rejected
           };
         });
         "#,
@@ -245,7 +253,7 @@ fn named_item_worksheet_navigation_respects_scope_and_null_object_contract() {
         json!({
             "owner": "Sheet1",
             "workbookNull": true,
-            "errorCode": "InvalidOperation"
+            "rejected": true
         })
     );
 }

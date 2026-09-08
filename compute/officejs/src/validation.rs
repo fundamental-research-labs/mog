@@ -263,7 +263,7 @@ impl ValidationRef {
         let bounds = self.bounds()?;
         let candidates = self.candidates()?;
         let selected = select_candidate(&candidates, bounds);
-        let Some(selected) = selected else {
+        let Some(_selected) = selected else {
             return Ok(Vec::new());
         };
         self.invalid_cells_for_selected()
@@ -973,6 +973,7 @@ enum DateKind {
 
 enum ParsedBound {
     Literal(f64),
+    Integer(usize),
     Formula(String),
 }
 
@@ -1144,8 +1145,9 @@ fn length_constraints(
     let first = parse_bound(formula1, DateKind::Number, "formula1")?;
     let first = match first {
         ParsedBound::Literal(value) => {
-            ParsedBound::Literal(non_negative_integer(value, "formula1")? as f64)
+            ParsedBound::Integer(non_negative_integer(value, "formula1")?)
         }
+        ParsedBound::Integer(value) => ParsedBound::Integer(value),
         ParsedBound::Formula(value) => ParsedBound::Formula(value),
     };
     let second = formula2
@@ -1153,8 +1155,9 @@ fn length_constraints(
         .transpose()?;
     let second = second.map(|value| match value {
         ParsedBound::Literal(value) => {
-            non_negative_integer(value, "formula2").map(|value| ParsedBound::Literal(value as f64))
+            non_negative_integer(value, "formula2").map(ParsedBound::Integer)
         }
+        ParsedBound::Integer(value) => Ok(ParsedBound::Integer(value)),
         ParsedBound::Formula(value) => Ok(ParsedBound::Formula(value)),
     });
     let second = second.transpose()?;
@@ -1183,6 +1186,9 @@ fn length_constraints(
 fn insert_bound(constraints: &mut Map<String, Value>, key: &str, bound: ParsedBound) {
     match bound {
         ParsedBound::Literal(value) => {
+            constraints.insert(key.to_string(), json!(value));
+        }
+        ParsedBound::Integer(value) => {
             constraints.insert(key.to_string(), json!(value));
         }
         ParsedBound::Formula(formula) => {

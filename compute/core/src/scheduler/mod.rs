@@ -331,13 +331,6 @@ impl ComputeCore {
         self.dirty_since_last_recalc
     }
 
-    /// Whether a manual-calculation edit is waiting for an explicit full
-    /// recalculation. Settings changes also mark the scheduler dirty, but do
-    /// not by themselves create a pending manual edit.
-    pub(crate) fn has_pending_manual_calculation(&self) -> bool {
-        !self.pending_manual_dirty_cells.is_empty()
-    }
-
     fn rebuild_ordered_sheets_cache(&mut self) {
         let mut pairs: Vec<(SheetId, usize)> = self
             .sheet_order

@@ -213,7 +213,12 @@
 
   childCollection.prototype._getItem = function (key, orNullObject, byIndex) {
     var normalized = this._kind === "rows" ? Number(key) : key;
-    var lookup = cacheKey(normalized) + (byIndex === true ? ":index" : ":key");
+    // A normal lookup and getItemOrNullObject must never share a proxy.  The
+    // host binding carries the nullable lookup flag, so reusing a cached
+    // normal proxy would turn a later OrNullObject call into ItemNotFound
+    // (and reusing a nullable proxy would make a normal lookup look null).
+    var lookup = cacheKey(normalized) + (byIndex === true ? ":index" : ":key") +
+      (orNullObject === true ? ":null" : ":normal");
     var item = this._itemCache[lookup];
     if (!item) {
       item = this._newItem(normalized, true, orNullObject, byIndex);

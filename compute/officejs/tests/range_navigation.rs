@@ -1,7 +1,7 @@
 //! Worksheet/Range geometry through the production Office.js runtime.
 
 use compute_api::Workbook;
-use mog::{run_office_js_with_workbook, OfficeJsError};
+use mog::{OfficeJsError, run_office_js_with_workbook};
 use serde_json::json;
 
 fn blank_workbook() -> Workbook {

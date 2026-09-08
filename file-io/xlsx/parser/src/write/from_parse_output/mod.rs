@@ -69,8 +69,7 @@ use crate::infra::opc::REL_CUSTOM_PROPERTY;
 use crate::write::relationships::{RelationshipManager, create_sheet_rels};
 use crate::write::{
     ControlsWriter, REL_CHART, REL_CHART_EX, REL_COMMENTS, REL_CTRL_PROP, REL_DRAWING,
-    REL_HYPERLINK, REL_PIVOT_TABLE, REL_PRINTER_SETTINGS, REL_SLICER, REL_TABLE,
-    REL_THREADED_COMMENT, REL_VML_DRAWING,
+    REL_HYPERLINK, REL_PIVOT_TABLE, REL_SLICER, REL_TABLE, REL_THREADED_COMMENT, REL_VML_DRAWING,
 };
 
 use assembly::{
@@ -1971,29 +1970,8 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
         }
     }
 
-    for entry in &worksheet_printer_settings_relationships {
-        let owner = crate::write::package_graph::PackageOwner::Worksheet {
-            index: entry.sheet_idx,
-            path: format!("xl/worksheets/sheet{}.xml", entry.sheet_idx + 1),
-        };
-        let r_id = package_graph
-            .relationship_id(&owner, REL_PRINTER_SETTINGS, &entry.target)
-            .ok_or_else(|| {
-                WriteError::PackageIntegrity(format!(
-                    "missing worksheet printer-settings relationship for sheet {} target {}",
-                    entry.sheet_idx + 1,
-                    entry.target
-                ))
-            })?
-            .to_string();
-        if entry.is_main {
-            sheet_writers[entry.sheet_idx]
-                .ensure_print_writer()
-                .set_printer_settings_r_id(Some(r_id));
-        }
-    }
     for (sheet_idx, sheet_writer) in sheet_writers.iter_mut().enumerate() {
-        printer_settings::remap_custom_view_relationships(
+        printer_settings::finalize_relationships(
             sheet_idx,
             sheet_writer,
             &worksheet_printer_settings_relationships,

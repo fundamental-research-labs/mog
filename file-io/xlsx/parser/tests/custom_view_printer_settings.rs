@@ -48,6 +48,25 @@ fn main_page_setup_is_not_taken_from_a_custom_view() {
 }
 
 #[test]
+fn main_printer_settings_roundtrip_without_custom_views() {
+    let mut parsed = source();
+    parsed.sheets[0]
+        .worksheet_semantic_containers
+        .custom_sheet_views = None;
+    let reopened = assert_roundtrip(&parsed);
+    assert_eq!(
+        reopened.sheets[0].print_settings,
+        parsed.sheets[0].print_settings
+    );
+    assert!(
+        reopened.sheets[0]
+            .worksheet_semantic_containers
+            .custom_sheet_views
+            .is_none()
+    );
+}
+
+#[test]
 fn custom_views_keep_their_printer_targets_after_sheet_reorder_and_copy() {
     let mut parsed = source();
     let copy = parsed.sheets[0].clone();

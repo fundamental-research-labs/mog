@@ -140,15 +140,12 @@ pub(super) fn append_custom_view_relationships(
     Ok(())
 }
 
-pub(super) fn remap_custom_view_relationships(
+pub(super) fn finalize_relationships(
     sheet_idx: usize,
     writer: &mut crate::write::SheetWriter,
     relationships: &[WorksheetPrinterSettingsGraphEntry],
     graph: &crate::write::package_graph::ResolvedPackageGraph,
 ) -> Result<(), crate::write::WriteError> {
-    let Some(views) = &mut writer.worksheet_semantic_containers.custom_sheet_views else {
-        return Ok(());
-    };
     let owner = crate::write::package_graph::PackageOwner::Worksheet {
         index: sheet_idx,
         path: format!("xl/worksheets/sheet{}.xml", sheet_idx + 1),
@@ -156,7 +153,7 @@ pub(super) fn remap_custom_view_relationships(
     let mut ids = std::collections::HashMap::new();
     for entry in relationships
         .iter()
-        .filter(|entry| entry.sheet_idx == sheet_idx && !entry.is_main)
+        .filter(|entry| entry.sheet_idx == sheet_idx)
     {
         let resolved = graph
             .relationship_id(
@@ -166,13 +163,21 @@ pub(super) fn remap_custom_view_relationships(
             )
             .ok_or_else(|| {
                 crate::write::WriteError::PackageIntegrity(format!(
-                    "missing custom-view printer relationship for sheet {} target {}",
+                    "missing worksheet printer-settings relationship for sheet {} target {}",
                     sheet_idx + 1,
                     entry.target
                 ))
             })?;
-        ids.insert(entry.relationship_id_hint.clone(), resolved.to_string());
+        if entry.is_main {
+            writer
+                .ensure_print_writer()
+                .set_printer_settings_r_id(Some(resolved.to_string()));
+        } else {
+            ids.insert(entry.relationship_id_hint.clone(), resolved.to_string());
+        }
     }
-    views.raw_xml = crate::infra::xml::remap_relationship_attrs(&views.raw_xml, &ids);
+    if let Some(views) = &mut writer.worksheet_semantic_containers.custom_sheet_views {
+        views.raw_xml = crate::infra::xml::remap_relationship_attrs(&views.raw_xml, &ids);
+    }
     Ok(())
 }

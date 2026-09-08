@@ -100,6 +100,37 @@ impl WorkbookSheets {
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
+    /// Set the Office-compatible visibility state of a sheet.
+    ///
+    /// The accepted engine states are `visible`, `hidden`, and `veryHidden`.
+    /// Office.js adapters translate their public enum tokens at the boundary.
+    pub fn set_sheet_visibility(
+        &self,
+        sheet_id: &SheetId,
+        state: &str,
+    ) -> Result<MutationResult, ComputeApiError> {
+        let sid = *sheet_id;
+        let owned_state = state.to_owned();
+        self.dispatch
+            .call_engine(move |e| e.set_sheet_visibility(&sid, &owned_state).map(|(_, r)| r))
+            .and_then(|r| r.map_err(ComputeApiError::from))
+    }
+
+    /// Get the persisted visibility state of a sheet.
+    pub fn get_sheet_visibility(&self, sheet_id: &SheetId) -> Result<String, ComputeApiError> {
+        let sid = *sheet_id;
+        self.dispatch
+            .query_engine(move |e| e.get_sheet_visibility(&sid))
+            .and_then(|result| result.map_err(ComputeApiError::from))
+    }
+
+    /// Get the first persisted worksheet ID, if the workbook has a sheet.
+    /// This is the engine's genuine default-sheet query, rather than an
+    /// Office host fallback over an arbitrary collection proxy.
+    pub fn get_first_sheet_id(&self) -> Result<Option<String>, ComputeApiError> {
+        self.dispatch.query_engine(|e| e.get_first_sheet_id())
+    }
+
     /// Set or clear the tab color for a sheet.
     pub fn set_tab_color(
         &self,

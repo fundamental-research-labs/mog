@@ -10,6 +10,14 @@ use super::constraint_dispatch;
 use super::type_check;
 
 pub(super) fn validate(value: &CellValue, schema: &ColumnSchema) -> ValidationResult {
+    validate_internal(value, schema, None)
+}
+
+fn validate_internal(
+    value: &CellValue,
+    schema: &ColumnSchema,
+    mut evaluate_formula: Option<&mut dyn FnMut(&str) -> Option<CellValue>>,
+) -> ValidationResult {
     let mut errors = Vec::new();
     let inferred_type = inference::infer_type(value);
 
@@ -39,7 +47,17 @@ pub(super) fn validate(value: &CellValue, schema: &ColumnSchema) -> ValidationRe
 
     // Step 3: Constraint validation (only if type matches)
     if !has_type_errors && schema.constraints.is_some() {
-        errors.extend(constraint_dispatch::validate_constraints(value, schema));
+        if let Some(evaluate_formula) = evaluate_formula.as_deref_mut() {
+            errors.extend(
+                constraint_dispatch::validate_constraints_with_formula_evaluator(
+                    value,
+                    schema,
+                    evaluate_formula,
+                ),
+            );
+        } else {
+            errors.extend(constraint_dispatch::validate_constraints(value, schema));
+        }
     }
 
     // Step 4: Coercion fallback
@@ -57,10 +75,20 @@ pub(super) fn validate(value: &CellValue, schema: &ColumnSchema) -> ValidationRe
                 && schema.constraints.is_some()
                 && let Some(constraint_value) = constraint_value
             {
-                errors.extend(constraint_dispatch::validate_constraints(
-                    &constraint_value,
-                    schema,
-                ));
+                if let Some(evaluate_formula) = evaluate_formula.as_deref_mut() {
+                    errors.extend(
+                        constraint_dispatch::validate_constraints_with_formula_evaluator(
+                            &constraint_value,
+                            schema,
+                            evaluate_formula,
+                        ),
+                    );
+                } else {
+                    errors.extend(constraint_dispatch::validate_constraints(
+                        &constraint_value,
+                        schema,
+                    ));
+                }
             }
         }
     }
@@ -94,16 +122,16 @@ fn cell_value_result_to_cell_value(value: &crate::types::CellValueResult) -> Opt
 pub(super) fn validate_with_formula_evaluator<F>(
     value: &CellValue,
     schema: &ColumnSchema,
-    evaluate_formula: F,
+    mut evaluate_formula: F,
 ) -> ValidationResult
 where
-    F: FnOnce(&str) -> Option<CellValue>,
+    F: FnMut(&str) -> Option<CellValue>,
 {
-    // Run the standard 4-step validation first
-    let mut result = validate(value, schema);
+    // Run the standard 4-step validation plus formula-backed scalar bounds.
+    let mut result = validate_internal(value, schema, Some(&mut evaluate_formula));
 
     // Step 5: Formula constraint (only if we have constraints with a formula)
-    constraint_dispatch::append_formula_error(&mut result, schema, evaluate_formula);
+    constraint_dispatch::append_formula_error(&mut result, schema, &mut evaluate_formula);
 
     result
 }

@@ -42,7 +42,7 @@ pub fn validate_with_formula_evaluator<F>(
     evaluate_formula: F,
 ) -> ValidationResult
 where
-    F: FnOnce(&str) -> Option<CellValue>,
+    F: FnMut(&str) -> Option<CellValue>,
 {
     scalar::validate_with_formula_evaluator(value, schema, evaluate_formula)
 }

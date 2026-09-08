@@ -303,6 +303,16 @@ impl<'a> MirrorAccess<'a> {
     fn resolve_named_range_def(&self, nr: &NamedRangeDef) -> Option<ResolvedName> {
         let formula = &nr.refers_to;
 
+        // Identity refs also capture precedents inside compound formulas
+        // (e.g. `SUM(A1:A2)`). Only the exact `{0}` template is a direct
+        // range; resolving every ref-bearing definition as a range would
+        // expose the first precedent and make `Total*2` evaluate as `A1*2`.
+        if formula.template != "{0}"
+            && let Some(raw) = nr.raw_expression.as_ref()
+        {
+            return Some(classify_name_fallback(raw));
+        }
+
         // If no refs, dispatch on the typed [`ParsedExpr`] shape of
         // `raw_expression` (constant / formula / broken-ref / empty).
         // Replaces the byte-level `try_parse_constant` shadow classifier

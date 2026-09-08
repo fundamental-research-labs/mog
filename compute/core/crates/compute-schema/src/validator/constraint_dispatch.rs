@@ -2,7 +2,8 @@ use value_types::CellValue;
 
 use crate::constraints;
 use crate::types::{
-    ColumnSchema, ValidationError, ValidationErrorCode, ValidationResult, ValidationSeverity,
+    ColumnSchema, SchemaType, ValidationError, ValidationErrorCode, ValidationResult,
+    ValidationSeverity,
 };
 
 use super::numeric;
@@ -72,12 +73,96 @@ pub(super) fn validate_constraints(
     errors
 }
 
+/// Validate constraints while resolving formula-backed bounds through the
+/// production evaluator supplied by the caller.
+pub(super) fn validate_constraints_with_formula_evaluator(
+    value: &CellValue,
+    schema: &ColumnSchema,
+    evaluate_formula: &mut dyn FnMut(&str) -> Option<CellValue>,
+) -> Vec<ValidationError> {
+    let c = match &schema.constraints {
+        Some(c) => c,
+        None => return Vec::new(),
+    };
+    let mut errors = Vec::new();
+
+    if numeric::is_numeric_type(schema.schema_type)
+        && let Some(num) = numeric::extract_number(value, schema.schema_type)
+    {
+        errors.extend(
+            constraints::check_numeric_constraints_with_formula_evaluator(num, c, evaluate_formula),
+        );
+    }
+
+    // Numeric/date/time schemas may accept text input after coercion, but
+    // their formula bounds are numeric. Apply text-length bounds only to the
+    // string family so a date formula such as `=DATE(...)` is not evaluated a
+    // second time as a length constraint.
+    if matches!(
+        schema.schema_type,
+        SchemaType::String
+            | SchemaType::Email
+            | SchemaType::Url
+            | SchemaType::Phone
+            | SchemaType::Company
+            | SchemaType::Person
+            | SchemaType::Stock
+            | SchemaType::Location
+    ) && let CellValue::Text(text) = value
+    {
+        errors.extend(
+            constraints::check_string_constraints_with_formula_evaluator(text, c, evaluate_formula),
+        );
+    }
+
+    // Enum membership is independent of formula-backed scalar bounds.
+    if let Some(ref enum_values) = c.enum_values {
+        match value {
+            CellValue::Text(text) => {
+                if let Some(err) = constraints::check_enum_constraint(text, c) {
+                    errors.push(err);
+                }
+            }
+            CellValue::Number(n) => {
+                if !constraints::is_number_in_enum(n.get(), enum_values) {
+                    errors.push(ValidationError {
+                        code: ValidationErrorCode::Enum,
+                        message: format!(
+                            "Value '{}' is not in allowed values: [{}]",
+                            n.get(),
+                            enum_values.join(", ")
+                        ),
+                        severity: ValidationSeverity::Error,
+                    });
+                }
+            }
+            CellValue::Boolean(b) => {
+                let s = b.to_string();
+                if !constraints::is_in_enum(&s, enum_values) {
+                    errors.push(ValidationError {
+                        code: ValidationErrorCode::Enum,
+                        message: format!(
+                            "Value '{}' is not in allowed values: [{}]",
+                            s,
+                            enum_values.join(", ")
+                        ),
+                        severity: ValidationSeverity::Error,
+                    });
+                }
+            }
+            _ => {}
+        }
+    }
+
+    errors
+}
+
 pub(super) fn append_formula_error<F>(
     result: &mut ValidationResult,
     schema: &ColumnSchema,
-    evaluate_formula: F,
+    evaluate_formula: &mut F,
 ) where
-    F: FnOnce(&str) -> Option<CellValue>,
+    F: FnMut(&str) -> Option<CellValue>,
 {
     if let Some(ref c) = schema.constraints
         && c.formula.is_some()

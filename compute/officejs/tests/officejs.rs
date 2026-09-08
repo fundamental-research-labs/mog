@@ -61,7 +61,6 @@ fn unloaded_property_is_not_readable() {
         return await Excel.run(async (context) => {
           const sheet = context.workbook.worksheets.getItem("Sheet1");
           const range = sheet.getRange("A1");
-          range.values = [[1]];
           await context.sync();
           return range.values;
         });

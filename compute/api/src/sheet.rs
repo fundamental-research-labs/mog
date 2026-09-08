@@ -6,6 +6,7 @@
 use crate::address::{CellAddress, CellRange};
 use crate::dispatch::Dispatch;
 use crate::error::ComputeApiError;
+use crate::mutation::CellInput;
 use cell_types::SheetId;
 use compute_core::ZOrderEntry;
 use domain_types::Comment;
@@ -52,6 +53,90 @@ impl Clone for Sheet {
 }
 
 impl Sheet {
+    /// Set a rectangular range with already-typed cell input intents.
+    ///
+    /// The input grid must have exactly the same row and column dimensions as
+    /// the target range. `None` preserves the corresponding cell. Shape is
+    /// validated before dispatch, so an invalid grid cannot write beyond the
+    /// requested range or partially mutate it.
+    ///
+    /// This is the boundary used by dynamically typed hosts such as Office.js:
+    /// numbers and booleans can use [`CellInput::Value`], strings can use
+    /// [`CellInput::Literal`], and formulas can use [`CellInput::formula`]
+    /// without reducing every input to parser text.
+    pub fn set_range_typed(
+        &self,
+        range: impl Into<CellRange>,
+        values: &[Vec<Option<CellInput>>],
+    ) -> Result<MutationResult, ComputeApiError> {
+        let range = range.into();
+        let (start_row, start_col, end_row, end_col) = range.resolve()?;
+        let expected_rows = end_row
+            .checked_sub(start_row)
+            .and_then(|span| span.checked_add(1))
+            .ok_or_else(|| ComputeApiError::InvalidRange {
+                range: format!("({start_row}, {start_col})..({end_row}, {end_col})"),
+                reason: "range end precedes range start".to_string(),
+            })? as usize;
+        let expected_cols = end_col
+            .checked_sub(start_col)
+            .and_then(|span| span.checked_add(1))
+            .ok_or_else(|| ComputeApiError::InvalidRange {
+                range: format!("({start_row}, {start_col})..({end_row}, {end_col})"),
+                reason: "range end precedes range start".to_string(),
+            })? as usize;
+
+        if values.len() != expected_rows {
+            return Err(ComputeApiError::InvalidRange {
+                range: format!("({start_row}, {start_col})..({end_row}, {end_col})"),
+                reason: format!(
+                    "input grid has {} rows; target range requires {expected_rows}",
+                    values.len()
+                ),
+            });
+        }
+        if let Some((row_index, actual_cols)) = values
+            .iter()
+            .enumerate()
+            .find_map(|(index, row)| (row.len() != expected_cols).then_some((index, row.len())))
+        {
+            return Err(ComputeApiError::InvalidRange {
+                range: format!("({start_row}, {start_col})..({end_row}, {end_col})"),
+                reason: format!(
+                    "input grid row {row_index} has {actual_cols} columns; target range requires {expected_cols}"
+                ),
+            });
+        }
+
+        let sid = self.sheet_id;
+        let updates = values
+            .iter()
+            .enumerate()
+            .flat_map(|(row_offset, row)| {
+                row.iter()
+                    .enumerate()
+                    .filter_map(move |(col_offset, input)| {
+                        input.clone().map(|input| {
+                            (
+                                sid,
+                                start_row + row_offset as u32,
+                                start_col + col_offset as u32,
+                                input,
+                            )
+                        })
+                    })
+            })
+            .collect();
+
+        self.dispatch
+            .call_engine(move |engine| engine.batch_set_cells_by_position(updates, false))
+            .and_then(|result| {
+                result
+                    .map(|(_patches, mutation)| mutation)
+                    .map_err(ComputeApiError::from)
+            })
+    }
+
     /// Create a new Sheet handle (called by Workbook, not public).
     pub(crate) fn new(dispatch: Dispatch, sheet_id: SheetId) -> Self {
         Sheet { dispatch, sheet_id }

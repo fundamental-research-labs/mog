@@ -10,14 +10,22 @@ use crate::error::OfficeJsError;
 use crate::host::Host;
 
 const BOOTSTRAP: &str = include_str!("bootstrap.js");
+const FORMAT_BOOTSTRAP: &str = include_str!("format.js");
+const ENUMS_BOOTSTRAP: &str = include_str!("enums.js");
+const TABLES_BOOTSTRAP: &str = include_str!("tables.js");
+const RANGE_CONTENT_BOOTSTRAP: &str = include_str!("range_content.js");
+const RANGE_NAVIGATION_BOOTSTRAP: &str = include_str!("range_navigation.js");
+const SORT_FILTER_BOOTSTRAP: &str = include_str!("sort_filter.js");
+const VALIDATION_BOOTSTRAP: &str = include_str!("validation.js");
+const WORKSHEETS_BOOTSTRAP: &str = include_str!("worksheets.js");
+const BORDERS_BOOTSTRAP: &str = include_str!("borders.js");
+const NAMES_BOOTSTRAP: &str = include_str!("names.js");
+const TABLE_COLLECTIONS_BOOTSTRAP: &str = include_str!("table_collections.js");
 
 const RUNNER: &str = r#"
 (async () => {
   try {
     const __result = await eval("(async () => {\n" + globalThis.__mogSource + "\n})()");
-    if (globalThis.__mogPendingRuns && globalThis.__mogPendingRuns.length) {
-      await Promise.all(globalThis.__mogPendingRuns);
-    }
     return JSON.stringify({
       ok: true,
       value: __result === undefined ? null : __result,
@@ -118,6 +126,62 @@ async fn eval_in_ctx(
         .eval(BOOTSTRAP)
         .catch(&ctx)
         .map_err(|e| OfficeJsError::runtime(format!("failed to load Office.js bootstrap: {e}")))?;
+
+    let _: () = ctx
+        .eval(ENUMS_BOOTSTRAP)
+        .catch(&ctx)
+        .map_err(|e| OfficeJsError::runtime(format!("failed to load Office.js enums: {e}")))?;
+
+    let _: () = ctx
+        .eval(FORMAT_BOOTSTRAP)
+        .catch(&ctx)
+        .map_err(|e| OfficeJsError::runtime(format!("failed to load Office.js formatting: {e}")))?;
+
+    let _: () = ctx
+        .eval(TABLES_BOOTSTRAP)
+        .catch(&ctx)
+        .map_err(|e| OfficeJsError::runtime(format!("failed to load Office.js tables: {e}")))?;
+
+    let _: () = ctx.eval(RANGE_CONTENT_BOOTSTRAP).catch(&ctx).map_err(|e| {
+        OfficeJsError::runtime(format!("failed to load Office.js range content: {e}"))
+    })?;
+
+    let _: () = ctx
+        .eval(RANGE_NAVIGATION_BOOTSTRAP)
+        .catch(&ctx)
+        .map_err(|e| {
+            OfficeJsError::runtime(format!("failed to load Office.js range navigation: {e}"))
+        })?;
+    let _: () = ctx.eval(SORT_FILTER_BOOTSTRAP).catch(&ctx).map_err(|e| {
+        OfficeJsError::runtime(format!(
+            "failed to load Office.js sorting and filtering: {e}"
+        ))
+    })?;
+
+    let _: () = ctx.eval(VALIDATION_BOOTSTRAP).catch(&ctx).map_err(|e| {
+        OfficeJsError::runtime(format!("failed to load Office.js data validation: {e}"))
+    })?;
+
+    let _: () = ctx
+        .eval(WORKSHEETS_BOOTSTRAP)
+        .catch(&ctx)
+        .map_err(|e| OfficeJsError::runtime(format!("failed to load Office.js worksheets: {e}")))?;
+
+    let _: () = ctx
+        .eval(BORDERS_BOOTSTRAP)
+        .catch(&ctx)
+        .map_err(|e| OfficeJsError::runtime(format!("failed to load Office.js borders: {e}")))?;
+
+    let _: () = ctx.eval(NAMES_BOOTSTRAP).catch(&ctx).map_err(|e| {
+        OfficeJsError::runtime(format!("failed to load Office.js named items: {e}"))
+    })?;
+
+    let _: () = ctx
+        .eval(TABLE_COLLECTIONS_BOOTSTRAP)
+        .catch(&ctx)
+        .map_err(|e| {
+            OfficeJsError::runtime(format!("failed to load Office.js table collections: {e}"))
+        })?;
 
     let console_src = r#"
       globalThis.console = {

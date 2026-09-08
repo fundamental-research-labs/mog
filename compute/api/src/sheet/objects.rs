@@ -3,10 +3,10 @@
 use crate::dispatch::Dispatch;
 use crate::error::ComputeApiError;
 use cell_types::SheetId;
-use compute_core::SerializedFloatingObjectGroup;
 use compute_core::engine_types::floating_objects::{
     CreateShapeConfig, FlipAxis, MoveTarget, ResizeConfig, ShapeStyleUpdate,
 };
+use compute_core::SerializedFloatingObjectGroup;
 use domain_types::FloatingObject;
 use snapshot_types::MutationResult;
 

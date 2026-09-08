@@ -4,7 +4,7 @@
 //! for sheet discovery, cell access via [`Sheet`] handles, and domain sub-APIs.
 
 use cell_types::SheetId;
-use snapshot_types::{RecalcResult, WorkbookSnapshot};
+use snapshot_types::{RecalcOptions, RecalcResult, WorkbookSnapshot};
 
 use crate::Sheet;
 use crate::dispatch::Dispatch;
@@ -154,6 +154,55 @@ impl Workbook {
     /// Return the number of sheets in the workbook.
     pub fn sheet_count(&self) -> Result<usize, ComputeApiError> {
         self.dispatch.query_engine(|e| e.get_sheet_order().len())
+    }
+
+    // -----------------------------------------------------------------
+    // Calculation
+    // -----------------------------------------------------------------
+
+    /// Recalculate the workbook using the requested Office.js calculation
+    /// type.
+    ///
+    /// `Recalculate` uses the engine's dirty-cell aware path. `Full` forces a
+    /// full pass through the existing dependency graph while preserving the
+    /// workbook's iterative settings. `FullRebuild` rebuilds the compute core
+    /// from persisted workbook state before evaluating it.
+    pub fn calculate(&self, calculation_type: &str) -> Result<RecalcResult, ComputeApiError> {
+        match calculation_type {
+            "Recalculate" => self
+                .dispatch
+                .call_engine(|engine| engine.recalculate())
+                .and_then(|result| result.map_err(ComputeApiError::from)),
+            "Full" => {
+                let settings = self.settings().get_workbook_settings()?;
+                let calculation = settings.calculation_settings.unwrap_or_default();
+                // `recalculate_with_options` treats explicit options as a
+                // force-full request. Carry the current values through so
+                // the request changes recalc scope, not calculation policy.
+                let options = RecalcOptions {
+                    iterative: Some(calculation.enable_iterative_calculation),
+                    max_iterations: Some(calculation.max_iterations),
+                    max_change: Some(calculation.max_change),
+                };
+                self.dispatch
+                    .call_engine(move |engine| engine.recalculate_with_options(&options))
+                    .and_then(|result| result.map_err(ComputeApiError::from))
+            }
+            "FullRebuild" => self
+                .dispatch
+                .call_engine(|engine| engine.rebuild_compute_core())
+                .and_then(|result| result.map_err(ComputeApiError::from)),
+            other => Err(ComputeApiError::InvalidOperation(format!(
+                "unsupported calculation type: {other}"
+            ))),
+        }
+    }
+
+    /// Return the current engine calculation state using the Office.js
+    /// `Done`, `Calculating`, and `Pending` vocabulary.
+    pub fn calculation_state(&self) -> Result<String, ComputeApiError> {
+        self.dispatch
+            .query_engine(|engine| engine.calculation_state().to_string())
     }
 
     // -----------------------------------------------------------------

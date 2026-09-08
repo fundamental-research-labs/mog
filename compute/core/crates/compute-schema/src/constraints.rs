@@ -4,6 +4,7 @@
 //! pattern matching, enum membership). Used by the validator module.
 
 use regex::Regex;
+use value_types::CellValue;
 
 use super::types::{SchemaConstraints, ValidationError, ValidationErrorCode, ValidationSeverity};
 
@@ -142,6 +143,19 @@ pub(crate) fn check_numeric_constraints(
     errors
 }
 
+/// Resolve formula-backed numeric bounds and then apply the normal numeric
+/// constraint checks. Formula bounds are evaluated for each validation call,
+/// preserving dynamic references instead of snapshotting their current value.
+pub(crate) fn check_numeric_constraints_with_formula_evaluator(
+    value: f64,
+    constraints: &SchemaConstraints,
+    evaluate_formula: &mut dyn FnMut(&str) -> Option<CellValue>,
+) -> Vec<ValidationError> {
+    let (resolved, mut errors) = resolve_formula_bounds(constraints, evaluate_formula, false);
+    errors.extend(check_numeric_constraints(value, &resolved));
+    errors
+}
+
 // ---------------------------------------------------------------------------
 // String constraint checking
 // ---------------------------------------------------------------------------
@@ -202,6 +216,116 @@ pub(crate) fn check_string_constraints(
     errors
 }
 
+/// Resolve formula-backed text-length bounds and then apply the normal string
+/// constraint checks. Formula bounds are evaluated for each validation call.
+pub(crate) fn check_string_constraints_with_formula_evaluator(
+    value: &str,
+    constraints: &SchemaConstraints,
+    evaluate_formula: &mut dyn FnMut(&str) -> Option<CellValue>,
+) -> Vec<ValidationError> {
+    let (resolved, mut errors) = resolve_formula_bounds(constraints, evaluate_formula, true);
+    errors.extend(check_string_constraints(value, &resolved));
+    errors
+}
+
+fn resolve_formula_bounds(
+    constraints: &SchemaConstraints,
+    evaluate_formula: &mut dyn FnMut(&str) -> Option<CellValue>,
+    length_bounds: bool,
+) -> (SchemaConstraints, Vec<ValidationError>) {
+    let mut resolved = constraints.clone();
+    let mut errors = Vec::new();
+    let Some(bounds) = constraints.formula_bounds.clone() else {
+        return (resolved, errors);
+    };
+
+    for (key, formula) in bounds {
+        let Some(value) = evaluate_formula(&formula) else {
+            errors.push(formula_bound_error(
+                &key,
+                &formula,
+                "could not be evaluated",
+            ));
+            continue;
+        };
+        let Some(number) = formula_value_number(&value) else {
+            errors.push(formula_bound_error(
+                &key,
+                &formula,
+                "did not return a number",
+            ));
+            continue;
+        };
+        if length_bounds {
+            if number < 0.0 || number.fract() != 0.0 || number > usize::MAX as f64 {
+                errors.push(formula_bound_error(
+                    &key,
+                    &formula,
+                    "must evaluate to a non-negative integer",
+                ));
+                continue;
+            }
+            match key.as_str() {
+                "minLength" => resolved.min_length = Some(number as usize),
+                "maxLength" => resolved.max_length = Some(number as usize),
+                _ => errors.push(formula_bound_error(
+                    &key,
+                    &formula,
+                    "is not a text-length bound",
+                )),
+            }
+        } else {
+            match key.as_str() {
+                "min" => resolved.min = Some(number),
+                "max" => resolved.max = Some(number),
+                "exclusiveMin" => resolved.exclusive_min = Some(number),
+                "exclusiveMax" => resolved.exclusive_max = Some(number),
+                "equal" => resolved.equal = Some(number),
+                "notEqual" => resolved.not_equal = Some(number),
+                "notBetweenMin" => resolved.not_between_min = Some(number),
+                "notBetweenMax" => resolved.not_between_max = Some(number),
+                _ => errors.push(formula_bound_error(
+                    &key,
+                    &formula,
+                    "is not a numeric bound",
+                )),
+            }
+        }
+    }
+
+    (resolved, errors)
+}
+
+fn formula_value_number(value: &CellValue) -> Option<f64> {
+    match value {
+        CellValue::Number(number) => Some(number.get()),
+        CellValue::Boolean(value) => Some(if *value { 1.0 } else { 0.0 }),
+        CellValue::Text(value) => value
+            .trim()
+            .parse::<f64>()
+            .ok()
+            .filter(|number| number.is_finite()),
+        // The production expression query scalarizes an empty result to
+        // numeric zero, which is also Excel's comparison behavior for a
+        // blank numeric operand.
+        CellValue::Null => Some(0.0),
+        CellValue::Control(control) => Some(if control.value { 1.0 } else { 0.0 }),
+        // A Range operand evaluates to an array. Office's scalar validation
+        // operand uses its implicit intersection/top-left value, matching the
+        // production expression facade's scalarization behavior.
+        CellValue::Array(values) => values.get(0, 0).and_then(formula_value_number),
+        _ => None,
+    }
+}
+
+fn formula_bound_error(key: &str, formula: &str, reason: &str) -> ValidationError {
+    ValidationError {
+        code: ValidationErrorCode::Formula,
+        message: format!("Formula bound {key} ({formula}) {reason}"),
+        severity: ValidationSeverity::Warning,
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Enum constraint checking
 // ---------------------------------------------------------------------------
@@ -240,10 +364,10 @@ pub(crate) fn check_enum_constraint(
 /// Returns `None` if there is no formula constraint or if the formula passes.
 pub(crate) fn check_formula_constraint<F>(
     constraints: &SchemaConstraints,
-    evaluate_formula: F,
+    mut evaluate_formula: F,
 ) -> Option<ValidationError>
 where
-    F: FnOnce(&str) -> Option<value_types::CellValue>,
+    F: FnMut(&str) -> Option<value_types::CellValue>,
 {
     let formula = match &constraints.formula {
         Some(f) if !f.is_empty() => f,

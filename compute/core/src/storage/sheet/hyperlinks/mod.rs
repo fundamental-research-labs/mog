@@ -15,7 +15,7 @@ mod mutation_metadata_tests;
 #[cfg(test)]
 mod tests;
 
-pub use mutations::{remove_hyperlink, set_hyperlink};
+pub use mutations::{remove_hyperlink, set_hyperlink, set_hyperlink_with_metadata};
 #[cfg(test)]
 pub use queries::get_hyperlink_full;
 pub use queries::{get_all_hyperlinks, get_hyperlink};

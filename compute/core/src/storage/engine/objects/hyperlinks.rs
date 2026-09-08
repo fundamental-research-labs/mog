@@ -1,5 +1,5 @@
 use super::shared;
-use crate::snapshot::MutationResult;
+use crate::snapshot::{MutationResult, RecalcResult};
 use crate::storage::engine::YrsComputeEngine;
 use crate::storage::engine::services;
 use crate::storage::sheet::hyperlinks;
@@ -33,6 +33,75 @@ impl YrsComputeEngine {
             url,
         )
         .map(shared::with_empty_patches)
+    }
+
+    /// Set a hyperlink using the typed worksheet fields.
+    ///
+    /// `text_to_display` is also written as literal cell text. This follows
+    /// Excel's RangeHyperlink contract: the text is displayed in the top-left
+    /// cell of the range while the hyperlink metadata remains attached to the
+    /// cell. Existing formatting is retained by the literal-text edit path.
+    #[bridge::write]
+    #[allow(clippy::too_many_arguments)]
+    pub fn set_hyperlink_with_metadata(
+        &mut self,
+        sheet_id: &SheetId,
+        row: u32,
+        col: u32,
+        address: Option<String>,
+        document_reference: Option<String>,
+        text_to_display: Option<String>,
+        screen_tip: Option<String>,
+    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+        if address.as_deref().is_none_or(str::is_empty)
+            && document_reference.as_deref().is_none_or(str::is_empty)
+        {
+            return Err(ComputeError::InvalidInput {
+                message: "hyperlink requires a non-empty address or document reference".to_string(),
+            });
+        }
+
+        let has_display_text = text_to_display.is_some();
+        let mut recalc = self.with_undo_group_if(has_display_text, |engine| {
+            let recalc = match text_to_display.as_deref() {
+                Some(display) => services::cell_editing::set_cell_value_as_text(
+                    &mut engine.stores,
+                    &mut engine.mirror,
+                    &mut engine.mutation,
+                    sheet_id,
+                    row,
+                    col,
+                    display,
+                )?,
+                None => RecalcResult::empty(),
+            };
+
+            {
+                let _guard = engine.mutation.suppress_guard();
+                services::objects::set_hyperlink_with_metadata(
+                    &mut engine.stores,
+                    &mut engine.mirror,
+                    sheet_id,
+                    row,
+                    col,
+                    address.as_deref(),
+                    document_reference.as_deref(),
+                    text_to_display.as_deref(),
+                    screen_tip.as_deref(),
+                )?;
+            }
+            Ok(recalc)
+        })?;
+
+        if has_display_text {
+            self.prepare_recalc_for_flush(&mut recalc);
+            Ok((
+                self.flush_viewport_patches(),
+                MutationResult::from_recalc(recalc),
+            ))
+        } else {
+            Ok((shared::empty_patches(), MutationResult::empty()))
+        }
     }
 
     /// Remove the hyperlink from a cell at the given position.

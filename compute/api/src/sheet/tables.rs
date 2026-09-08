@@ -182,6 +182,24 @@ impl SheetTables {
             .and_then(|r| r.map(|(_vp, m)| m).map_err(ComputeApiError::from))
     }
 
+    /// Set a persisted table boolean option to an explicit value.
+    ///
+    /// The option names are the canonical engine names: `bandedRows`,
+    /// `bandedColumns`, `emphasizeFirstColumn`, `emphasizeLastColumn`, and
+    /// `showFilterButtons`.
+    pub fn set_bool_option(
+        &self,
+        table_name: &str,
+        option: &str,
+        value: bool,
+    ) -> Result<MutationResult, ComputeApiError> {
+        let name = table_name.to_string();
+        let option = option.to_string();
+        self.dispatch
+            .call_engine(move |e| e.set_table_bool_option(&name, &option, value))
+            .and_then(|r| r.map(|(_vp, m)| m).map_err(ComputeApiError::from))
+    }
+
     // -----------------------------------------------------------------
     // Column operations
     // -----------------------------------------------------------------

@@ -4,6 +4,7 @@ use crate::dispatch::Dispatch;
 use crate::error::ComputeApiError;
 use cell_types::SheetId;
 use compute_core::engine_types::queries::SheetProtectionConfig;
+use domain_types::domain::sheet::SheetProtectionOptions;
 use snapshot_types::MutationResult;
 
 /// Sheet-level protection operations.
@@ -28,6 +29,41 @@ impl SheetProtection {
         let sid = self.sheet_id;
         self.dispatch
             .call_engine(move |e| e.protect_sheet(&sid, password_hash).map(|(_, r)| r))
+            .and_then(|r| r.map_err(ComputeApiError::from))
+    }
+
+    /// Protect the sheet with an optional password hash and a complete
+    /// replacement protection option set.
+    ///
+    /// The option object is passed directly to the engine's structured sheet
+    /// protection writer so the password, protection flag, and permissions
+    /// are committed atomically.
+    pub fn protect_with_options(
+        &self,
+        password_hash: Option<String>,
+        options: SheetProtectionOptions,
+    ) -> Result<MutationResult, ComputeApiError> {
+        let sid = self.sheet_id;
+        self.dispatch
+            .call_engine(move |e| {
+                e.protect_sheet_with_options(&sid, password_hash, options)
+                    .map(|(_, r)| r)
+            })
+            .and_then(|r| r.map_err(ComputeApiError::from))
+    }
+
+    /// Replace the sheet's complete protection option set while preserving
+    /// the current protection flag and password hash.
+    pub fn set_options(
+        &self,
+        options: SheetProtectionOptions,
+    ) -> Result<MutationResult, ComputeApiError> {
+        let sid = self.sheet_id;
+        self.dispatch
+            .call_engine(move |e| {
+                e.set_sheet_protection_options(&sid, options)
+                    .map(|(_, r)| r)
+            })
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 

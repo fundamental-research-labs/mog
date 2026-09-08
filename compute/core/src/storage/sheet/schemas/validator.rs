@@ -33,12 +33,16 @@ pub(in crate::storage::sheet) fn str_to_cell_value(s: &str) -> value_types::Cell
 }
 
 fn schema_has_formula_constraint(schema: &ColumnSchema) -> bool {
-    schema
-        .constraints
-        .as_ref()
-        .and_then(|c| c.formula.as_ref())
-        .map(|f| !f.is_empty())
-        .unwrap_or(false)
+    schema.constraints.as_ref().is_some_and(|constraints| {
+        constraints
+            .formula
+            .as_ref()
+            .is_some_and(|formula| !formula.is_empty())
+            || constraints
+                .formula_bounds
+                .as_ref()
+                .is_some_and(|bounds| !bounds.is_empty())
+    })
 }
 
 fn validate_with_optional_formula(

@@ -3,8 +3,8 @@
 use crate::dispatch::Dispatch;
 use crate::error::ComputeApiError;
 use cell_types::SheetId;
-use domain_types::Comment;
 use domain_types::domain::comment::{CommentMention, CommentType};
+use domain_types::Comment;
 use snapshot_types::MutationResult;
 
 /// Sub-API for comment operations on a single sheet.

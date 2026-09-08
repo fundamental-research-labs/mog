@@ -36,8 +36,10 @@ await Excel.run(async (context) => {
 });
 ```
 
-`Range.values` and `Range.formulas` are queued until `context.sync()`. Reading a
-property requires `load` plus `sync`; unloaded properties throw.
+`Range.values` and `Range.formulas` writes are queued until `context.sync()`.
+The assigning proxy caches the assigned value immediately. To read the engine's
+result, obtain a fresh proxy and call `load` plus `sync`, as above. Reading an
+unloaded property on a fresh proxy throws.
 
 ## Tests
 

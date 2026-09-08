@@ -5,6 +5,22 @@ use crate::scheduler::ComputeCore;
 use super::{YrsComputeEngine, construction};
 
 impl YrsComputeEngine {
+    /// Return the synchronous calculation state exposed by the Office.js
+    /// host. A clean engine is complete; a dirty manual workbook has pending
+    /// work; and a dirty automatic workbook is waiting for its next recalc
+    /// boundary. Recalculation itself is synchronous on this engine, so the
+    /// transient in-progress state is never observed by a query.
+    pub fn calculation_state(&self) -> &'static str {
+        if !self.stores.compute.is_dirty() {
+            return "Done";
+        }
+        if self.stores.compute.calc_mode() == crate::snapshot::CalcMode::Manual {
+            "Pending"
+        } else {
+            "Calculating"
+        }
+    }
+
     /// Perform a full recalculation of all formula cells using the existing
     /// dependency graph and AST caches. Does NOT rebuild the ComputeCore.
     ///

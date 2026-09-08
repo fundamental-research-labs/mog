@@ -245,94 +245,93 @@ pub fn split_all_values(
 // Grid index mutation helpers (write txn)
 // ===========================================================================
 
-/// Copy all cell data from one row to another within a column range.
+/// Compact non-duplicate rows while retaining the source cells' identities.
 ///
-/// Used by remove_duplicates during compaction. If the source cell exists,
-/// its value is copied to the target. If the source is empty and the target
-/// exists, the target is deleted. Cell identities are managed through the
-/// supplied `GridIndex` — the SOLE authority for (row, col) ↔ CellId.
+/// Cell payloads are keyed by `CellId`, rather than by position. A row
+/// compaction therefore only needs to rebind each surviving source CellId to
+/// its new position. Copying just `KEY_VALUE` into the destination would leave
+/// the destination CellId in place and silently discard the source formula,
+/// format, and identity metadata. Removing all old bindings first also makes
+/// moves into an occupied destination deterministic.
 #[allow(clippy::too_many_arguments)]
-fn copy_row_cells(
+fn compact_rows_preserving_cells(
     txn: &mut yrs::TransactionMut<'_>,
+    sheets: &MapRef,
+    sheet_hex: &str,
     grid: &mut GridIndex,
     cells_map: &MapRef,
     props_map: Option<&MapRef>,
     start_col: u32,
     end_col: u32,
-    from_row: u32,
-    to_row: u32,
+    first_data_row: u32,
+    end_row: u32,
+    duplicate_rows: &std::collections::HashSet<u32>,
 ) {
-    for col in start_col..=end_col {
-        let from_cell = grid.cell_id_at(from_row, col);
-        let to_cell = grid.cell_id_at(to_row, col);
+    // Snapshot every source identity before changing the GridIndex. The
+    // destination can already contain a duplicate-row identity, so rebinding
+    // while iterating would otherwise overwrite information needed later in
+    // the pass.
+    let mut moves = Vec::new();
+    let mut duplicate_ids = Vec::new();
+    let mut affected_ids = Vec::new();
+    let mut write_row = first_data_row;
 
-        if let Some(src_id) = from_cell {
-            // Source cell exists — read its value and write to target
-            let src_hex = id_to_hex(src_id.as_u128());
-            let src_value = match cells_map.get(txn, src_hex.as_str()) {
-                Some(Out::YMap(m)) => match m.get(txn, KEY_VALUE) {
-                    Some(Out::Any(a)) => a.clone(),
-                    _ => Any::Null,
-                },
-                _ => Any::Null,
-            };
-
-            if let Some(tgt_id) = to_cell {
-                // Target cell exists — update KEY_VALUE in-place within the
-                // existing YMap. Inserting a MapPrelim at an existing YMap key
-                // does not replace the nested map in Yrs; only in-place update works.
-                let tgt_hex = id_to_hex(tgt_id.as_u128());
-                match cells_map.get(txn, tgt_hex.as_str()) {
-                    Some(Out::YMap(cell_map)) => {
-                        cell_map.insert(txn, KEY_VALUE, src_value);
-                    }
-                    _ => {
-                        let cell_prelim = MapPrelim::from([(KEY_VALUE, src_value)]);
-                        cells_map.insert(txn, tgt_hex.as_str(), cell_prelim);
-                    }
+    for read_row in first_data_row..=end_row {
+        if duplicate_rows.contains(&read_row) {
+            for col in start_col..=end_col {
+                if let Some(cell_id) = grid.cell_id_at(read_row, col) {
+                    duplicate_ids.push(cell_id);
+                    affected_ids.push(cell_id);
                 }
-            } else {
-                // No target cell — allocate a new CellId via the GridIndex
-                // (the sole identity authority) and persist the value.
-                let new_id = grid.ensure_cell_id(to_row, col);
-                let new_hex = id_to_hex(new_id.as_u128());
-                let cell_prelim = MapPrelim::from([(KEY_VALUE, src_value)]);
-                cells_map.insert(txn, new_hex.as_str(), cell_prelim);
             }
-        } else if let Some(tgt_id) = to_cell {
-            // Source is empty but target exists — delete target
-            let tgt_hex = id_to_hex(tgt_id.as_u128());
-            cells_map.remove(txn, tgt_hex.as_str());
-            if let Some(pm) = props_map {
-                pm.remove(txn, tgt_hex.as_str());
+        } else {
+            for col in start_col..=end_col {
+                if let Some(cell_id) = grid.cell_id_at(read_row, col) {
+                    moves.push((cell_id, write_row, col));
+                    affected_ids.push(cell_id);
+                }
             }
-            grid.remove_cell(&tgt_id);
+            write_row += 1;
         }
     }
-}
 
-/// Delete all cells in a row within a column range.
-fn delete_row_cells(
-    txn: &mut yrs::TransactionMut<'_>,
-    grid: &mut GridIndex,
-    cells_map: &MapRef,
-    props_map: Option<&MapRef>,
-    start_col: u32,
-    end_col: u32,
-    row: u32,
-) {
-    // Snapshot the CellIds first to avoid iterator invalidation as we
-    // deregister entries from the GridIndex.
-    let to_remove: Vec<(CellId, u32)> = (start_col..=end_col)
-        .filter_map(|col| grid.cell_id_at(row, col).map(|id| (id, col)))
-        .collect();
-    for (cell_id, _col) in to_remove {
-        let hex = id_to_hex(cell_id.as_u128());
-        cells_map.remove(txn, hex.as_str());
+    // Clear all old position bindings before registering destinations. This
+    // removes stale `posToId` entries as well as `idToPos` entries, including
+    // the bindings for duplicate cells that are about to be deleted.
+    for cell_id in &affected_ids {
+        let cell_hex = id_to_hex(cell_id.as_u128());
+        crate::storage::cells::values::remove_cell_position_from_yrs(
+            txn, sheets, sheet_hex, &cell_hex,
+        );
+        grid.remove_cell(cell_id);
+    }
+
+    // Duplicate rows are gone. Their payload and cell-owned properties must
+    // be removed by identity; surviving rows keep their original Yrs maps so
+    // formulas, formatting, and all other cell metadata move with the ID.
+    for cell_id in duplicate_ids {
+        let cell_hex = id_to_hex(cell_id.as_u128());
+        cells_map.remove(txn, cell_hex.as_str());
         if let Some(pm) = props_map {
-            pm.remove(txn, hex.as_str());
+            pm.remove(txn, cell_hex.as_str());
         }
-        grid.remove_cell(&cell_id);
+    }
+
+    // Rebind each surviving source CellId to its compacted position and
+    // mirror that authoritative mapping into Yrs for undo/redo and reload.
+    for (cell_id, to_row, col) in moves {
+        grid.register_cell(cell_id, to_row, col);
+        let cell_hex = id_to_hex(cell_id.as_u128());
+        if let (Some(row_hex), Some(col_hex)) = (grid.row_id_hex(to_row), grid.col_id_hex(col)) {
+            crate::storage::cells::values::write_cell_position_to_yrs(
+                txn,
+                sheets,
+                sheet_hex,
+                &cell_hex,
+                row_hex.as_str(),
+                col_hex.as_str(),
+            );
+        }
     }
 }
 
@@ -468,38 +467,19 @@ pub fn remove_duplicates(
         };
         let props_map = get_properties_map(&txn, sheets, &sheet_hex);
 
-        let mut write_row = first_data_row;
-
-        for read_row in first_data_row..=end_row {
-            if !dup_set.contains(&read_row) {
-                if write_row != read_row {
-                    copy_row_cells(
-                        &mut txn,
-                        grid,
-                        &cells_map,
-                        props_map.as_ref(),
-                        start_col,
-                        end_col,
-                        read_row,
-                        write_row,
-                    );
-                }
-                write_row += 1;
-            }
-        }
-
-        // Clear remaining rows (the ones freed by compaction)
-        for row in write_row..=end_row {
-            delete_row_cells(
-                &mut txn,
-                grid,
-                &cells_map,
-                props_map.as_ref(),
-                start_col,
-                end_col,
-                row,
-            );
-        }
+        compact_rows_preserving_cells(
+            &mut txn,
+            sheets,
+            &sheet_hex,
+            grid,
+            &cells_map,
+            props_map.as_ref(),
+            start_col,
+            end_col,
+            first_data_row,
+            end_row,
+            &dup_set,
+        );
     }
 
     let total_data = end_row - start_row + 1 - if options.has_headers { 1 } else { 0 };

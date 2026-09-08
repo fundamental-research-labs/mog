@@ -22,7 +22,7 @@ use compute_api::Workbook;
 use serde_json::Value;
 
 use crate::format::FormatRef;
-use crate::host::{BatchError, Host, RangeRef, mark_object};
+use crate::host::{mark_object, BatchError, Host, RangeRef};
 use crate::worksheets::WorksheetRef;
 
 /// A host-side object exposed by an extension family.
@@ -337,7 +337,11 @@ impl<'a> HostDispatchContext<'a> {
         id: &str,
         properties: &[String],
     ) -> Result<(), BatchError> {
-        if self.delegated_load.replace((id.to_string(), properties.to_vec())).is_some() {
+        if self
+            .delegated_load
+            .replace((id.to_string(), properties.to_vec()))
+            .is_some()
+        {
             return Err(BatchError {
                 code: "InvalidArgument",
                 message: "A family load handler delegated properties more than once.".to_string(),
@@ -357,7 +361,7 @@ mod tests {
     use std::sync::Arc;
 
     use compute_api::Workbook;
-    use serde_json::{Value, json};
+    use serde_json::{json, Value};
 
     use super::{BatchError, ExtensionHandler, ExtensionObject, HostDispatchContext};
     use crate::host::Host;
@@ -416,7 +420,7 @@ mod tests {
         let response: Value = serde_json::from_str(&host.apply_json(
             r#"[
                     {"op":"bindTestObject","id":"test"},
-                    {"op":"load","id":"test","properties":["value"]},
+                    {"op":"load","id":"test","properties":["value","isNullObject"]},
                     {"op":"set","id":"test","property":"value","value":3}
                 ]"#,
         ))

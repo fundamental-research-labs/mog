@@ -30,14 +30,17 @@ fn fresh_collection_load_hydrates_columns_and_data_rows() {
         await context.sync();
 
         const firstColumn = columns.items[0];
-        const numericLookup = columns.getItem(firstColumn.id);
+        const numericLookup = columns.getItem(columns.items[1].id);
         numericLookup.load(["id", "index", "name"]);
+        const stringLookup = columns.getItem(String(columns.items[1].id));
+        stringLookup.load("name");
         const firstBody = firstColumn.getDataBodyRange();
         firstBody.load(["address", "values"]);
         await context.sync();
 
         return {
           columnCount: columns.count,
+          stringLookup: stringLookup.name,
           columns: columns.items.map(column => ({
             id: column.id,
             index: column.index,
@@ -69,6 +72,7 @@ fn fresh_collection_load_hydrates_columns_and_data_rows() {
         output.value,
         json!({
             "columnCount": 2,
+            "stringLookup": "Amount",
             "columns": [
                 {"id": output.value["columns"][0]["id"], "index": 0, "name": "Product", "values": [["Pen"], ["Paper"], ["Book"]]},
                 {"id": output.value["columns"][1]["id"], "index": 1, "name": "Amount", "values": [[4], [9], [12]]}
@@ -80,9 +84,9 @@ fn fresh_collection_load_hydrates_columns_and_data_rows() {
                 {"index": 2, "values": [["Book", 12]]}
             ],
             "numericLookup": {
-                "id": output.value["columns"][0]["id"],
-                "index": 0,
-                "name": "Product"
+                "id": output.value["columns"][1]["id"],
+                "index": 1,
+                "name": "Amount"
             },
             "firstBody": {
                 "address": "Sheet1!A2:A4",

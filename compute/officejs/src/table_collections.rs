@@ -484,7 +484,7 @@ pub(crate) fn get_column(
         let legacy_id = u32::try_from(number).ok();
         table.columns.iter().find(|column| {
             column.id == text
-                || column.ooxml_column_id == legacy_id
+                || legacy_id.is_some_and(|id| column.ooxml_column_id == Some(id))
                 || public_column_id(column) == number
         })
     } else if let Some(text) = key.as_str() {
@@ -493,7 +493,7 @@ pub(crate) fn get_column(
         table.columns.iter().find(|column| {
             column.id == text
                 || column.name.eq_ignore_ascii_case(text)
-                || column.ooxml_column_id == legacy_id
+                || legacy_id.is_some_and(|id| column.ooxml_column_id == Some(id))
                 || numeric_id.is_some_and(|id| public_column_id(column) == id)
         })
     } else {

@@ -52,6 +52,7 @@ fn relationship_for_export(
 
     Some(WorksheetPrinterSettingsGraphEntry {
         sheet_idx,
+        is_main: true,
         path,
         target,
         relationship_id_hint: r_id,
@@ -88,4 +89,90 @@ fn is_supported_printer_settings_path(path: &str) -> bool {
     path.starts_with("xl/printerSettings/")
         && path.ends_with(".bin")
         && path.len() > "xl/printerSettings/.bin".len()
+}
+
+/// Register only printer payloads referenced by retained custom views. Their
+/// imported targets travel with sheet state rather than the current sheet index.
+pub(super) fn append_custom_view_relationships(
+    sheet_idx: usize,
+    containers: &domain_types::WorksheetSemanticContainers,
+    package_fidelity: Option<&domain_types::PackageFidelityMetadata>,
+    relationships: &mut Vec<WorksheetPrinterSettingsGraphEntry>,
+) -> Result<(), crate::write::WriteError> {
+    let Some(views) = &containers.custom_sheet_views else {
+        return Ok(());
+    };
+    let ids: std::collections::BTreeSet<_> =
+        crate::infra::xml::relationship_attr_values(&views.raw_xml)
+            .into_iter()
+            .collect();
+    for id in ids {
+        let unresolved = || {
+            crate::write::WriteError::PackageIntegrity(format!(
+                "custom sheet view on sheet {} has unresolved printer relationship {}",
+                sheet_idx + 1,
+                id
+            ))
+        };
+        let path = containers
+            .custom_sheet_view_printer_settings
+            .get(&id)
+            .and_then(|path| normalize_printer_settings_path(path))
+            .filter(|path| is_supported_printer_settings_path(path))
+            .ok_or_else(unresolved)?;
+        let part = package_fidelity
+            .and_then(|metadata| {
+                metadata.opaque_parts.iter().find(|part| {
+                    normalize_printer_settings_path(&part.path).as_deref() == Some(path.as_str())
+                })
+            })
+            .ok_or_else(unresolved)?;
+        relationships.push(WorksheetPrinterSettingsGraphEntry {
+            sheet_idx,
+            is_main: false,
+            target: worksheet_relative_target(&path),
+            path,
+            relationship_id_hint: id,
+            bytes: part.bytes.clone(),
+            content_type: PRINTER_SETTINGS_CONTENT_TYPE.to_string(),
+        });
+    }
+    Ok(())
+}
+
+pub(super) fn remap_custom_view_relationships(
+    sheet_idx: usize,
+    writer: &mut crate::write::SheetWriter,
+    relationships: &[WorksheetPrinterSettingsGraphEntry],
+    graph: &crate::write::package_graph::ResolvedPackageGraph,
+) -> Result<(), crate::write::WriteError> {
+    let Some(views) = &mut writer.worksheet_semantic_containers.custom_sheet_views else {
+        return Ok(());
+    };
+    let owner = crate::write::package_graph::PackageOwner::Worksheet {
+        index: sheet_idx,
+        path: format!("xl/worksheets/sheet{}.xml", sheet_idx + 1),
+    };
+    let mut ids = std::collections::HashMap::new();
+    for entry in relationships
+        .iter()
+        .filter(|entry| entry.sheet_idx == sheet_idx && !entry.is_main)
+    {
+        let resolved = graph
+            .relationship_id(
+                &owner,
+                crate::infra::opc::REL_PRINTER_SETTINGS,
+                &entry.target,
+            )
+            .ok_or_else(|| {
+                crate::write::WriteError::PackageIntegrity(format!(
+                    "missing custom-view printer relationship for sheet {} target {}",
+                    sheet_idx + 1,
+                    entry.target
+                ))
+            })?;
+        ids.insert(entry.relationship_id_hint.clone(), resolved.to_string());
+    }
+    views.raw_xml = crate::infra::xml::remap_relationship_attrs(&views.raw_xml, &ids);
+    Ok(())
 }

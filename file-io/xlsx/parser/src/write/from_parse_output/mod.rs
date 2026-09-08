@@ -345,6 +345,12 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
 
     // Also re-process hyperlinks to assign correct r:ids.
     for (sheet_idx, sheet_data) in output.sheets.iter().enumerate() {
+        printer_settings::append_custom_view_relationships(
+            sheet_idx,
+            &sheet_data.worksheet_semantic_containers,
+            output.package_fidelity.as_ref(),
+            &mut worksheet_printer_settings_relationships,
+        )?;
         let extras = &sheet_extras[sheet_idx];
         let has_comments = extras.comments.is_some();
         let has_threaded_comments = extras.threaded_comments.is_some();
@@ -1980,9 +1986,19 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                 ))
             })?
             .to_string();
-        sheet_writers[entry.sheet_idx]
-            .ensure_print_writer()
-            .set_printer_settings_r_id(Some(r_id));
+        if entry.is_main {
+            sheet_writers[entry.sheet_idx]
+                .ensure_print_writer()
+                .set_printer_settings_r_id(Some(r_id));
+        }
+    }
+    for (sheet_idx, sheet_writer) in sheet_writers.iter_mut().enumerate() {
+        printer_settings::remap_custom_view_relationships(
+            sheet_idx,
+            sheet_writer,
+            &worksheet_printer_settings_relationships,
+            &package_graph,
+        )?;
     }
 
     for entry in &worksheet_header_footer_vml_relationships {

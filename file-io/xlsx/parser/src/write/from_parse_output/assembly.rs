@@ -178,6 +178,7 @@ pub(super) struct ChartAuxiliaryRelationshipGraphEntry {
 
 pub(super) struct WorksheetPrinterSettingsGraphEntry {
     pub(super) sheet_idx: usize,
+    pub(super) is_main: bool,
     pub(super) path: String,
     pub(super) target: String,
     pub(super) relationship_id_hint: String,

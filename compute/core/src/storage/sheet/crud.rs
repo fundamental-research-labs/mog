@@ -543,6 +543,9 @@ impl YrsStorage {
             if let Some(Out::YMap(new_meta)) = new_sheet.get(&txn, KEY_PROPERTIES) {
                 new_meta.insert(&mut txn, KEY_NAME, Any::String(Arc::from(new_name)));
                 new_meta.insert(&mut txn, KEY_HIDDEN, Any::Bool(false));
+                // A copy is a new worksheet, not the imported package owner.
+                // Let export allocate a distinct positive Excel sheetId.
+                new_meta.remove(&mut txn, "originalSheetId");
             }
 
             // Insert into sheetOrder after the source sheet — lazy

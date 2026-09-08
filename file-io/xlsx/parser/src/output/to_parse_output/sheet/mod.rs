@@ -536,6 +536,26 @@ pub(super) fn convert_sheet(
         properties.page_set_up_pr = None;
     }
     let mut worksheet_semantic_containers = sheet.worksheet_semantic_containers.clone();
+    if let Some(views) = &worksheet_semantic_containers.custom_sheet_views {
+        let referenced = crate::infra::xml::relationship_attr_values(&views.raw_xml);
+        worksheet_semantic_containers.custom_sheet_view_printer_settings = sheet
+            .sheet_opc_rels
+            .iter()
+            .filter(|rel| {
+                referenced.contains(&rel.id)
+                    && rel.rel_type == crate::infra::opc::REL_PRINTER_SETTINGS
+                    && rel.target_mode.as_deref() != Some("External")
+            })
+            .filter_map(|rel| {
+                crate::infra::opc::resolve_relationship_target(
+                    Some("xl/worksheets/sheet.xml"),
+                    &rel.target,
+                )
+                .ok()
+                .map(|path| (rel.id.clone(), path))
+            })
+            .collect();
+    }
     worksheet_semantic_containers.controls = sheet
         .worksheet_controls_xml
         .clone()

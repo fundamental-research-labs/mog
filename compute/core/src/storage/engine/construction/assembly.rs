@@ -253,26 +253,6 @@ fn assemble_engine_inner(
     let (observer, undo_manager) = create_observer_and_undo(&storage);
     let settings = derive_settings(&storage);
 
-    // Seed `SecurityState` from the current doc before returning —
-    // R2.3 "seed on load" invariant. `SecurityState::new` reads the
-    // security map and flips `active` to match the snapshot; a
-    // freshly-loaded snapshot containing policies is active from the
-    // first call, without waiting for the observer to fire on a
-    // transition that never happens.
-    //
-    // The `SecurityEventBuffer` is allocated here so the engine and
-    // `SecurityState` both carry a clone — the observer pushes
-    // `PoliciesReloaded` through the `SecurityState` clone, while
-    // `security_ops` emits per-CRUD events through the engine clone.
-    // Both write into the same ring buffer (R2.3 step 5).
-    let security_events = std::sync::Arc::new(
-        crate::storage::engine::security_events::SecurityEventBuffer::default(),
-    );
-    let security = crate::storage::security_state::SecurityState::with_event_buffer(
-        storage.doc(),
-        std::sync::Arc::clone(&security_events),
-    );
-
     // Install the update_v1 observer for Provider-protocol fan-out.
     // The subscription handle's lifetime is tied to the engine via the
     // `_update_subscription` field so the observer stays attached for
@@ -309,8 +289,6 @@ fn assemble_engine_inner(
         },
         viewport: ViewportService::new(),
         settings,
-        security,
-        security_events,
         import_report: domain_types::ImportReport::default(),
         runtime_diagnostics: Default::default(),
         version_runtime_operation_context: Default::default(),

@@ -211,8 +211,6 @@ fn parse_method(input: ParseStream) -> syn::Result<MethodDescriptor> {
     let mut is_fallible = false;
     let mut is_async = false;
     let mut skip_targets = Vec::new();
-    let mut scope: Option<String> = None;
-    let mut needs_principal = false;
 
     while !content.is_empty() {
         // `async` is a reserved keyword; handle it before the ident branch.
@@ -247,16 +245,6 @@ fn parse_method(input: ParseStream) -> syn::Result<MethodDescriptor> {
                 let _: Token![;] = content.parse()?;
                 is_fallible = true;
             }
-            "scope" => {
-                let _: Token![=] = content.parse()?;
-                let lit: syn::LitStr = content.parse()?;
-                let _: Token![;] = content.parse()?;
-                scope = Some(lit.value());
-            }
-            "needs_principal" => {
-                let _: Token![;] = content.parse()?;
-                needs_principal = true;
-            }
             "skip" => {
                 let target: Ident = content.parse()?;
                 let _: Token![;] = content.parse()?;
@@ -280,8 +268,6 @@ fn parse_method(input: ParseStream) -> syn::Result<MethodDescriptor> {
         error_type,
         is_fallible,
         skip_targets,
-        scope,
-        needs_principal,
     })
 }
 

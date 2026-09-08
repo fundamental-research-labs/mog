@@ -10,16 +10,13 @@ impl Parse for DelegateDescriptor {
         // First, parse delegate config tokens (prepended by the descriptor macro's second arm)
         // delegate_target = ComputeService;
         // delegate_dispatch = dispatch;
-        // delegate_gated = true;    (optional — B.1; defaults false)
         let mut target_type: Option<String> = None;
         let mut dispatch_field: Option<String> = None;
-        let mut gated: bool = false;
         let mut skip_default_imports: bool = false;
 
         while input.peek(syn::Ident)
             && (peek_ident_eq(input, "delegate_target")
                 || peek_ident_eq(input, "delegate_dispatch")
-                || peek_ident_eq(input, "delegate_gated")
                 || peek_ident_eq(input, "delegate_skip_default_imports"))
         {
             let kw: Ident = input.parse()?;
@@ -32,10 +29,6 @@ impl Parse for DelegateDescriptor {
                 "delegate_dispatch" => {
                     let val: Ident = input.parse()?;
                     dispatch_field = Some(val.to_string());
-                }
-                "delegate_gated" => {
-                    let b: LitBool = input.parse()?;
-                    gated = b.value;
                 }
                 "delegate_skip_default_imports" => {
                     let b: LitBool = input.parse()?;
@@ -132,7 +125,6 @@ impl Parse for DelegateDescriptor {
         Ok(DelegateDescriptor {
             target_type,
             dispatch_field,
-            gated,
             skip_default_imports,
             source_type,
             group,
@@ -154,7 +146,6 @@ fn peek_ident_eq(input: ParseStream, expected: &str) -> bool {
 fn parse_method(input: ParseStream) -> syn::Result<Method> {
     let kind_ident: Ident = input.parse()?;
     let kind_str = kind_ident.to_string();
-    let span = kind_ident.span();
 
     let (access, name) = match kind_str.as_str() {
         "lifecycle" => {
@@ -214,8 +205,6 @@ fn parse_method(input: ParseStream) -> syn::Result<Method> {
     let mut is_fallible = false;
     let mut is_async = false;
     let mut skip_targets = Vec::new();
-    let mut scope: Option<String> = None;
-    let mut needs_principal = false;
 
     while !content.is_empty() {
         // `async` is a Rust keyword so syn::Ident won't parse it —
@@ -246,16 +235,6 @@ fn parse_method(input: ParseStream) -> syn::Result<Method> {
                 let _: Token![;] = content.parse()?;
                 is_fallible = true;
             }
-            "scope" => {
-                let _: Token![=] = content.parse()?;
-                let lit: syn::LitStr = content.parse()?;
-                let _: Token![;] = content.parse()?;
-                scope = Some(lit.value());
-            }
-            "needs_principal" => {
-                let _: Token![;] = content.parse()?;
-                needs_principal = true;
-            }
             "skip" => {
                 let target: Ident = content.parse()?;
                 let _: Token![;] = content.parse()?;
@@ -279,9 +258,6 @@ fn parse_method(input: ParseStream) -> syn::Result<Method> {
         is_fallible,
         is_async,
         skip_targets,
-        scope,
-        needs_principal,
-        span,
     })
 }
 

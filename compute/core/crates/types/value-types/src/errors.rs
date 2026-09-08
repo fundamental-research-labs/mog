@@ -460,31 +460,6 @@ pub enum ComputeError {
         /// Name of the structural operation that was rejected.
         operation: String,
     },
-
-    /// Access denied by the privacy policy engine (R3.3). The payload is a
-    /// flat serializable form — `value-types` must not depend on
-    /// `compute-security`, and the bridge/SDKs round-trip a string-based
-    /// shape anyway. `compute-core` converts a `SecurityError::Denied`
-    /// into this variant via a local `From` impl.
-    #[error(
-        "Security denied: principal [{principal_tags}] lacks {required} access to {target} (actual: {actual}, operation: {operation})"
-    )]
-    #[serde(rename_all = "camelCase")]
-    SecurityDenied {
-        /// Principal tag list joined with commas for display. The bridge
-        /// layer re-hydrates this into a typed form when surfacing to SDKs.
-        principal_tags: String,
-        /// `"workbook"` / `"sheet:<id>"` / `"column:<sheet>:<col>"` —
-        /// rendered in compute-core from the `AccessTarget` variant.
-        target: String,
-        /// Required access level as a lowercase string (`"read"`,
-        /// `"write"`, `"admin"`, `"structure"`).
-        required: String,
-        /// Effective access level the caller actually had.
-        actual: String,
-        /// Operation label (engine method name) for diagnostics.
-        operation: String,
-    },
 }
 
 /// Track R3 — opt `ComputeError` into the bridge tagged-error contract.
@@ -891,13 +866,6 @@ mod tests {
                 found: 99,
                 max_supported: 13,
             },
-            ComputeError::SecurityDenied {
-                principal_tags: "p".into(),
-                target: "t".into(),
-                required: "r".into(),
-                actual: "a".into(),
-                operation: "o".into(),
-            },
             ComputeError::RangeGuardViolation {
                 sheet_id: "s".into(),
                 operation: "insertRows".into(),
@@ -923,7 +891,6 @@ mod tests {
             "InvalidInput",
             "PartialArrayWrite",
             "UnsupportedSchemaVersion",
-            "SecurityDenied",
             "RangeGuardViolation",
         ];
         for (e, kind) in cases.iter().zip(expected_kinds.iter()) {

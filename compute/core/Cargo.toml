@@ -103,7 +103,6 @@ compute-collab = { path = "crates/compute-collab" }
 compute-document = { path = "crates/compute-document" }
 
 # Policy types and access-control engine (structural-op privacy rebuild)
-compute-security = { path = "crates/compute-security" }
 
 # XLSX parser and API (direct Rust types for import — no serde roundtrip)
 xlsx-api = { path = "../../file-io/xlsx-api" }
@@ -185,15 +184,6 @@ ordered-float = "4"
 
 # Yrs (Yjs CRDT port) — collaborative document storage
 yrs = { workspace = true }
-
-# LRU cache — bounds `AccessMatrixCache` (R2.2) at 64 entries so pathological
-# (principal × sheet × version) combinatorics can't blow up memory.
-lru = "0.12"
-
-# ArcSwap — `SecurityState` (R2.3) swaps `PolicyEngine` pointers without
-# locking readers, and `ComputeService` swaps the active principal the
-# same way.
-arc-swap = "1"
 
 # WASM-specific dependency overrides:
 # - getrandom needs "js" feature for random number source (used by rand/nalgebra/statrs)

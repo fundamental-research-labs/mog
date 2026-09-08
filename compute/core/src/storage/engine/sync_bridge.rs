@@ -20,7 +20,7 @@ impl YrsComputeEngine {
     // Sync protocol
     // -------------------------------------------------------------------
 
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn apply_sync_update(
         &mut self,
         update: &[u8],
@@ -87,7 +87,7 @@ impl YrsComputeEngine {
     ///
     /// `pre_sheet_order` is the sheet order captured *before* the Yrs update
     /// was applied, used to detect sheet deletions.
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn encode_state_vector(&self) -> Vec<u8> {
         sync::encode_state_vector(self.stores.storage.doc())
     }
@@ -99,12 +99,12 @@ impl YrsComputeEngine {
     /// alias exists at the bridge boundary so the TS Provider interface
     /// (`ProviderDoc.currentStateVector()`) doesn't have to import a
     /// historical `encode_state_vector` name from the wire layer.
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn current_state_vector(&self) -> Vec<u8> {
         sync::encode_state_vector(self.stores.storage.doc())
     }
 
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn encode_diff(&self, remote_sv: &[u8]) -> Result<Vec<u8>, ComputeError> {
         sync::encode_diff(self.stores.storage.doc(), remote_sv).map_err(|e| ComputeError::Eval {
             message: format!("sync encode_diff failed: {}", e),
@@ -128,7 +128,7 @@ impl YrsComputeEngine {
     /// Order is FIFO commit order. Returned slice is empty when there
     /// are no pending updates (orchestrator can use this as a no-op
     /// poll signal).
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn drain_pending_updates(&self) -> Result<Vec<Vec<u8>>, ComputeError> {
         self.update_buffer.drain_checked()
     }
@@ -146,7 +146,7 @@ impl YrsComputeEngine {
     /// `stopCapturing` name is the historical analog. The wrapper in
     /// `compute_collab` documents the audit; see that module's docs for
     /// the full rationale.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn flush_undo_capture(&mut self) -> Result<(Vec<u8>, MutationResult), ComputeError> {
         sync::flush_undo_capture(self.mutation.undo_manager.inner_mut());
         Ok((

@@ -225,23 +225,6 @@ fn emit_method(method: &MethodDescriptor, crate_path: Option<&str>) -> TokenStre
         TokenStream::new()
     };
 
-    // Phase B.1: pass `scope` and `needs_principal` through the DSL so the
-    // delegate macro can see them. Emitted only when set — methods that don't
-    // opt in produce byte-identical DSL to the pre-B.1 shape, preserving
-    // backward compat with downstream parsers (bridge-napi/pyo3/wasm/tauri)
-    // that don't recognize these keywords. The delegate macro strips them
-    // before re-emitting for downstream consumption.
-    let scope_token = match &method.scope {
-        Some(s) => quote! { scope = #s; },
-        None => TokenStream::new(),
-    };
-
-    let needs_principal_token = if method.needs_principal {
-        quote! { needs_principal; }
-    } else {
-        TokenStream::new()
-    };
-
     let skip_tokens: Vec<TokenStream> = method
         .skip_targets
         .iter()
@@ -276,8 +259,6 @@ fn emit_method(method: &MethodDescriptor, crate_path: Option<&str>) -> TokenStre
             #error_tokens
             #fallible_token
             #async_token
-            #scope_token
-            #needs_principal_token
             #(#skip_tokens)*
         }
     }

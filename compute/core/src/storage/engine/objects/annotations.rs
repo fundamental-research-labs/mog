@@ -15,7 +15,7 @@ use value_types::ComputeError;
     crate_path = "compute_core"
 )]
 impl YrsComputeEngine {
-    #[bridge::write(scope = "cell")]
+    #[bridge::write]
     pub fn set_cell_annotation_by_position(
         &mut self,
         sheet_id: &SheetId,
@@ -34,7 +34,7 @@ impl YrsComputeEngine {
         Ok(shared::with_empty_patches(result))
     }
 
-    #[bridge::read(scope = "cell")]
+    #[bridge::read]
     pub fn get_cell_annotation_by_position(
         &self,
         sheet_id: &SheetId,
@@ -44,7 +44,7 @@ impl YrsComputeEngine {
         services::objects::get_cell_annotation_by_position(&self.stores, sheet_id, row, col)
     }
 
-    #[bridge::write(scope = "cell")]
+    #[bridge::write]
     pub fn remove_cell_annotation_by_position(
         &mut self,
         sheet_id: &SheetId,
@@ -60,7 +60,7 @@ impl YrsComputeEngine {
         Ok(shared::with_empty_patches(result))
     }
 
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn list_cell_annotations(
         &self,
         sheet_id: &SheetId,
@@ -68,7 +68,7 @@ impl YrsComputeEngine {
         services::objects::list_cell_annotations(&self.stores, sheet_id)
     }
 
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn set_table_annotation(
         &mut self,
         table_ref: &str,
@@ -83,7 +83,7 @@ impl YrsComputeEngine {
         Ok(shared::with_empty_patches(result))
     }
 
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn get_table_annotation(
         &self,
         table_ref: &str,
@@ -91,7 +91,7 @@ impl YrsComputeEngine {
         services::objects::get_table_annotation(&self.stores, &self.mirror, table_ref)
     }
 
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn remove_table_annotation(
         &mut self,
         table_ref: &str,
@@ -101,7 +101,7 @@ impl YrsComputeEngine {
         Ok(shared::with_empty_patches(result))
     }
 
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn list_table_annotations(&self) -> Result<Vec<AnnotationRecord>, ComputeError> {
         services::objects::list_table_annotations(&self.stores, &self.mirror)
     }

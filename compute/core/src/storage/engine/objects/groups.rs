@@ -15,7 +15,7 @@ use value_types::ComputeError;
     crate_path = "compute_core"
 )]
 impl YrsComputeEngine {
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_floating_object_group(
         &mut self,
         sheet_id: &SheetId,
@@ -26,7 +26,7 @@ impl YrsComputeEngine {
             .map(shared::with_empty_patches)
     }
 
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_floating_object_group(
         &self,
         sheet_id: &SheetId,
@@ -35,7 +35,7 @@ impl YrsComputeEngine {
         services::objects::get_floating_object_group(&self.stores, sheet_id, group_id)
     }
 
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_floating_object_groups_in_sheet(
         &self,
         sheet_id: &SheetId,
@@ -43,7 +43,7 @@ impl YrsComputeEngine {
         services::objects::get_floating_object_groups_in_sheet(&self.stores, sheet_id)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn delete_floating_object_group(
         &mut self,
         sheet_id: &SheetId,
@@ -54,7 +54,7 @@ impl YrsComputeEngine {
     }
 
     // -------------------------------------------------------------------
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn create_floating_object_group(
         &mut self,
         sheet_id: &SheetId,
@@ -65,7 +65,7 @@ impl YrsComputeEngine {
     }
 
     /// Update a floating object group by merging partial JSON updates.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn update_floating_object_group(
         &mut self,
         sheet_id: &SheetId,
@@ -82,7 +82,7 @@ impl YrsComputeEngine {
     }
 
     /// Get a single floating object group by ID as a typed struct.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_floating_object_group_typed(
         &self,
         sheet_id: &SheetId,
@@ -92,7 +92,7 @@ impl YrsComputeEngine {
     }
 
     /// Get all floating object groups in a sheet as typed structs.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_all_floating_object_groups_typed(
         &self,
         sheet_id: &SheetId,

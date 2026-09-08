@@ -123,14 +123,13 @@ Located under `crates/`. Pure computation modules, each independently testable.
 | **compute-solver** | `crates/compute-solver` | none | Numerical optimization: Nelder-Mead, BFGS, L-BFGS-B, Differential Evolution, root finding (bisection/Brent/Newton), auto dispatch |
 | **compute-collab** | `crates/compute-collab` | none | Yrs sync protocol: state vector exchange, diff computation, update application (lib0 v1 wire format) |
 | **compute-document** | `crates/compute-document` | formula-types, cell-types | CRDT document layer: Yrs schema definition, cell serde (hex encoding), identity mapping, undo support, observation hooks |
-| **compute-wire** | `crates/compute-wire` | formula-types, value-types, cell-types, snapshot-types, compute-cf, compute-security | Binary wire protocol: viewport serialization, mutation patches, FormatPalette interning, TS codegen |
+| **compute-wire** | `crates/compute-wire` | formula-types, value-types, cell-types, snapshot-types, compute-cf | Binary wire protocol: viewport serialization, mutation patches, FormatPalette interning, TS codegen |
 | **compute-fill** | `crates/compute-fill` | value-types, cell-types, formula-types | Autofill engine: pattern detection, series generation, formula reference adjustment |
 | **compute-relational** | `crates/compute-relational` | value-types, cell-types, compute-stats, pivot-types | Relational compute engine: GROUP BY, aggregation, window functions over tabular data |
 | **compute-coordinator** | `crates/compute-coordinator` | cell-types, compute-collab, compute-document | Multi-participant sync coordinator with sheet-level locking |
 | **compute-layout-index** | `crates/compute-layout-index` | none | Spatial layout index: Fenwick tree over dimension deltas for O(log k) cell-to-pixel mapping |
 | **compute-text-measurement** | `crates/compute-text-measurement` | none | Text measurement engine for autofit, PDF export, and server-side layout |
 | **compute-screenshot** | `crates/compute-screenshot` | compute-wire, compute-layout-index, compute-text-measurement | Headless sheet screenshot rasterizer over `ViewportRenderData` |
-| **compute-security** | `crates/compute-security` | value-types, cell-types | Privacy policy types and access-control engine for compute-core |
 
 ### Root Crate
 
@@ -278,7 +277,7 @@ CRDT layer:
 
 Wire protocol:
   compute-wire --> formula-types + value-types + cell-types + snapshot-types
-               --> compute-cf + compute-security
+               --> compute-cf
 
 Charts:
   compute-charts --> compute-stats --> value-types
@@ -294,7 +293,7 @@ Layer 4 (orchestration):  compute-core
 Layer 3 (domain):         parser, functions, table, graph, cf, pivot,
                           schema, formats, charts, stats, solver, collab,
                           document, wire, fill, relational, coordinator,
-                          layout-index, text-measurement, screenshot, security
+                          layout-index, text-measurement, screenshot
 Layer 2 (type bridge):    formula-types, pivot-types, snapshot-types
 Layer 1 (leaf types):     value-types, cell-types
 Layer 1 support:          finite-at-boundary, finite-at-boundary-walker

@@ -6,12 +6,6 @@
 /// Top-level doc keys
 pub const KEY_WORKBOOK: &str = "workbook";
 pub const KEY_SHEETS: &str = "sheets";
-pub const KEY_SECURITY: &str = "security";
-
-/// Security map keys
-pub const KEY_SECURITY_POLICIES: &str = "policies";
-pub const KEY_SECURITY_VERSION: &str = "version";
-pub const KEY_SECURITY_TEMPLATES: &str = "templates";
 
 /// Workbook map keys
 pub const KEY_SHEET_ORDER: &str = "sheetOrder";
@@ -282,7 +276,6 @@ pub fn init_canonical_schema(doc: &Doc) -> (MapRef, MapRef, crate::hex::SmallHex
     // ------------------------------------------------------------------
     let workbook: MapRef = txn.get_or_insert_map(KEY_WORKBOOK);
     let sheets: MapRef = txn.get_or_insert_map(KEY_SHEETS);
-    let security: MapRef = txn.get_or_insert_map(KEY_SECURITY);
 
     // ------------------------------------------------------------------
     // Workbook sub-structures
@@ -313,19 +306,6 @@ pub fn init_canonical_schema(doc: &Doc) -> (MapRef, MapRef, crate::hex::SmallHex
     workbook.insert(&mut txn, KEY_EXTENDED_DOCUMENT_PROPERTIES, empty());
     workbook.insert(&mut txn, KEY_XLSX_METADATA, empty());
     workbook.insert(&mut txn, KEY_CUSTOM_CELL_STYLES, empty());
-
-    // ------------------------------------------------------------------
-    // Security sub-structures
-    //
-    // `policies` and `templates` are YMaps; `version` is a bare `i64`
-    // counter stored directly under the security map (written on first
-    // mutation by `SecurityStore::write_version`). Pre-creating the
-    // counter as a map would force SecurityStore to awkwardly nest the
-    // scalar under some sub-key — the counter model is "top-level i64",
-    // so we leave it absent here and let the store initialize it lazily.
-    // ------------------------------------------------------------------
-    security.insert(&mut txn, KEY_SECURITY_POLICIES, empty());
-    security.insert(&mut txn, KEY_SECURITY_TEMPLATES, empty());
 
     // ------------------------------------------------------------------
     // Default Sheet1
@@ -482,7 +462,6 @@ mod tests {
         // Root maps exist
         let wb: MapRef = txn.get_map(KEY_WORKBOOK).expect("workbook map");
         let sheets: MapRef = txn.get_map(KEY_SHEETS).expect("sheets map");
-        let security: MapRef = txn.get_map(KEY_SECURITY).expect("security map");
 
         // sheetOrder has one entry
         let order = match wb.get(&txn, KEY_SHEET_ORDER) {
@@ -523,21 +502,6 @@ mod tests {
                 key
             );
         }
-
-        // Security sub-maps exist (version is intentionally absent — see
-        // `init_canonical_schema` doc — SecurityStore lazily writes it as
-        // a bare i64 on first mutation).
-        for key in [KEY_SECURITY_POLICIES, KEY_SECURITY_TEMPLATES] {
-            assert!(
-                matches!(security.get(&txn, key), Some(Out::YMap(_))),
-                "missing security sub-map: {}",
-                key
-            );
-        }
-        assert!(
-            security.get(&txn, KEY_SECURITY_VERSION).is_none(),
-            "version counter should be absent until first SecurityStore write",
-        );
 
         // Sheet map exists with all sub-maps
         let sheet_map = match sheets.get(&txn, &*sheet_hex) {

@@ -73,8 +73,6 @@ pub(crate) fn parse_impl_block(
                 is_fallible,
                 is_async: access_info.is_async,
                 skip_targets,
-                scope: access_info.scope,
-                needs_principal: access_info.needs_principal,
             });
         }
     }

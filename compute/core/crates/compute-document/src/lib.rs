@@ -17,8 +17,5 @@ pub mod identity;
 pub mod observe;
 pub mod range;
 pub mod schema;
-pub mod security_store;
 pub mod undo;
 pub mod workbook_metadata;
-
-pub use security_store::{SecurityStore, SecurityStoreOwned};

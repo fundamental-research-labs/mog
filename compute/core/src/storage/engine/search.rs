@@ -104,7 +104,7 @@ impl YrsComputeEngine {
     /// Loose matching: `"42"` matches `Number(42.0)` and vice versa.
     /// When range bounds are `None`, the full data extent is used.
     /// Returns `(row, col)` pairs.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn find_cells_by_value(
         &self,
         sheet_id: &SheetId,
@@ -161,7 +161,7 @@ impl YrsComputeEngine {
     ///
     /// The regex is compiled once and tested against each cell's formula string.
     /// Cells without formulas are skipped. Returns `(row, col)` pairs.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn find_cells_by_formula(&self, sheet_id: &SheetId, pattern: &str) -> Vec<(u32, u32)> {
         let re = match Regex::new(pattern) {
             Ok(r) => r,
@@ -204,7 +204,7 @@ impl YrsComputeEngine {
     /// Get all tables across all sheets in the workbook.
     ///
     /// Replaces N per-sheet IPC calls with a single engine call.
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn get_all_tables_workbook(&self) -> Vec<WorkbookTable> {
         let sheet_ids = self.stores.storage.sheet_order();
         let mut result = Vec::new();
@@ -228,7 +228,7 @@ impl YrsComputeEngine {
     /// Get all comments across all sheets in the workbook.
     ///
     /// Replaces N per-sheet IPC calls with a single engine call.
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn get_all_comments_workbook(&self) -> Vec<WorkbookComment> {
         let sheet_ids = self.stores.storage.sheet_order();
         let mut result = Vec::new();
@@ -252,7 +252,7 @@ impl YrsComputeEngine {
     /// Get all pivot tables across all sheets in the workbook.
     ///
     /// Replaces N per-sheet IPC calls with a single engine call.
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn get_all_pivot_tables_workbook(&self) -> Vec<WorkbookPivotTable> {
         let sheet_ids = self.stores.storage.sheet_order();
         let mut result = Vec::new();
@@ -273,7 +273,7 @@ impl YrsComputeEngine {
     ///
     /// Accepts an optional A1 range string (e.g. `"A1:D20"`). When `None`,
     /// falls back to the sheet's data bounds.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn sign_check_a1(
         &self,
         sheet_id: &SheetId,

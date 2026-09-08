@@ -16,12 +16,6 @@ impl YrsComputeEngine {
     pub fn storage(&self) -> &YrsStorage {
         &self.stores.storage
     }
-    /// Access the security state (R2.3). Not a `#[bridge::*]` method —
-    /// consumed only by internal engine primitives (R3.1) and by
-    /// `ComputeService::new` to grab the shared `active` handle.
-    pub fn security(&self) -> &crate::storage::security_state::SecurityState {
-        &self.security
-    }
     pub fn mirror(&self) -> &CellMirror {
         &self.mirror
     }

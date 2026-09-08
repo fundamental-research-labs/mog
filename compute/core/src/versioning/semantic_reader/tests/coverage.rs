@@ -88,6 +88,24 @@ fn engine_semantic_reader_emits_schema_coverage_rows_for_all_scopes() {
 }
 
 #[test]
+fn engine_semantic_reader_marks_retired_security_root_unclassified() {
+    let (engine, _) =
+        YrsComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::from("alpha"))]))
+            .expect("engine");
+    let retired_root = engine.storage().doc().get_or_insert_map("security");
+    retired_root.insert(
+        &mut engine.storage().doc().transact_mut(),
+        "policies",
+        MapPrelim::from([] as [(&str, Any); 0]),
+    );
+
+    assert_eq!(
+        unclassified_schema_object_ids(&engine),
+        vec!["unclassified-schema-key:topLevel:/security"]
+    );
+}
+
+#[test]
 fn engine_semantic_reader_marks_unclassified_workbook_schema_key_blocking() {
     let (engine, _) =
         YrsComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::from("alpha"))]))

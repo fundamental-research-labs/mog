@@ -22,7 +22,7 @@ impl YrsComputeEngine {
     /// Uses the unified observer pipeline: drains ALL changes (not just cells),
     /// produces format viewport patches, and populates a complete MutationResult
     /// so the TS side sees dimension, merge, format, and other domain changes.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn undo(&mut self) -> Result<(Vec<u8>, MutationResult), ComputeError> {
         if !self.mutation.undo_manager.can_undo() {
             return Ok((
@@ -62,7 +62,7 @@ impl YrsComputeEngine {
     /// from applying the redone changes.
     ///
     /// Same unified pipeline as `undo()`.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn redo(&mut self) -> Result<(Vec<u8>, MutationResult), ComputeError> {
         if !self.mutation.undo_manager.can_redo() {
             return Ok((
@@ -92,20 +92,20 @@ impl YrsComputeEngine {
         Ok((patches, result))
     }
 
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn can_undo(&self) -> bool {
         services::undo::can_undo(&self.mutation)
     }
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn can_redo(&self) -> bool {
         services::undo::can_redo(&self.mutation)
     }
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn get_undo_state(&self) -> UndoState {
         services::undo::get_undo_state(&self.mutation)
     }
 
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn begin_undo_group(&mut self) -> Result<(Vec<u8>, MutationResult), ComputeError> {
         self.mutation.undo_manager.begin_undo_group();
         Ok((
@@ -113,7 +113,7 @@ impl YrsComputeEngine {
             MutationResult::empty(),
         ))
     }
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn end_undo_group(&mut self) -> Result<(Vec<u8>, MutationResult), ComputeError> {
         self.mutation.undo_manager.end_undo_group();
         Ok((

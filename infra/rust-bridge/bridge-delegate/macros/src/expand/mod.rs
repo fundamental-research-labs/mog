@@ -3,38 +3,11 @@
 //! Consumes the same descriptor DSL as bridge-wasm, but instead of generating
 //! WASM bindings, generates Rust delegate methods on a target type and re-emits
 //! descriptor macros for that target type.
-//!
-//! ## Gated delegate codegen
-//!
-//! When `gated = true` is set on the `delegate!` invocation, each `read`/`write`/
-//! `structural` method is wrapped with a security gate.
-//!
-//! - A fast-path prelude short-circuits straight to engine dispatch when
-//!   `self.security_active` is `false` (document has no policies).
-//! - On the gated path, the current principal is materialized with an anonymous
-//!   fail-safe fallback (NEVER owner). `Read` post-filters return values via a
-//!   scope-specific filter (`redact_scalar`, `filter_range_values`,
-//!   `filter_viewport_buffer`). `Write` and `Structural` pre-check via
-//!   `engine.check_write(..)` at `AccessLevel::Write` / `::Admin`.
-//! - `Pure` and `Lifecycle` are passthrough under all settings.
-//! - `#[bridge::write(needs_principal)]` methods (security ops) bypass the fast
-//!   path and always thread the principal into the engine call. Their trailing
-//!   `caller: &Principal` param is stripped from the delegate's public signature.
-//!
-//! ## Compile-time audit
-//!
-//! Under `gated = true` the macro rejects any `read`/`write`/`structural` method
-//! that omits `scope = "cell" | "range" | "sheet" | "workbook"`, and any
-//! `scope = "cell"` whose signature lacks a `CellAddr`-typed parameter. Bad
-//! `needs_principal` declarations (wrong signature shape) also fail to compile.
-//! See §6.5 for rationale — silent inference is a correctness-risk class.
 
 mod descriptor;
-mod gated;
 mod ir;
 mod method;
 mod parse;
-mod scope;
 mod types;
 
 use proc_macro2::TokenStream;
@@ -65,7 +38,7 @@ fn expand(desc: &DelegateDescriptor) -> TokenStream {
             continue;
         }
 
-        let method_tokens = emit_delegate_method(method, &dispatch_field, desc.gated);
+        let method_tokens = emit_delegate_method(method, &dispatch_field);
         delegate_methods.push(method_tokens);
     }
 
@@ -76,7 +49,7 @@ fn expand(desc: &DelegateDescriptor) -> TokenStream {
     //
     // Tests invoking the macro without a compute-core dep set
     // `skip_default_imports = true` to suppress these imports. Production
-    // consumers (compute-api) leave the flag off, preserving the pre-B.1 shape.
+    // consumers (compute-api) leave the flag off, using the standard imports.
     let mod_name = format_ident!("__bridge_delegate_{}", desc.group);
     let default_imports = if desc.skip_default_imports {
         TokenStream::new()

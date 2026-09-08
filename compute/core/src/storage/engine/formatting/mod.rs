@@ -38,7 +38,7 @@ mod schemas;
     crate_path = "compute_core"
 )]
 impl YrsComputeEngine {
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn set_schema_map(
         &mut self,
         entries: Vec<crate::bridge_types::SchemaMapEntryWire>,
@@ -47,7 +47,7 @@ impl YrsComputeEngine {
         schema_map::set_schema_map(self, entries, version)
     }
 
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn update_schema(
         &mut self,
         sheet_id: String,
@@ -58,17 +58,17 @@ impl YrsComputeEngine {
         schema_map::update_schema(self, sheet_id, column, schema, version)
     }
 
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn remove_schema(&mut self, sheet_id: String, column: u32, version: f64) -> bool {
         schema_map::remove_schema(self, sheet_id, column, version)
     }
 
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn clear_schemas(&mut self) -> Result<(Vec<u8>, MutationResult), ComputeError> {
         schema_map::clear_schemas(self)
     }
 
-    #[bridge::read(scope = "cell")]
+    #[bridge::read]
     pub fn get_cell_format(
         &self,
         sheet_id: &SheetId,
@@ -79,7 +79,7 @@ impl YrsComputeEngine {
         cell_formats::get_cell_format(self, sheet_id, cell_id, row, col)
     }
 
-    #[bridge::read(scope = "cell")]
+    #[bridge::read]
     pub fn get_cell_format_with_cf(
         &self,
         sheet_id: &SheetId,
@@ -90,7 +90,7 @@ impl YrsComputeEngine {
         cell_formats::get_cell_format_with_cf(self, sheet_id, cell_id, row, col)
     }
 
-    #[bridge::read(scope = "cell")]
+    #[bridge::read]
     pub fn get_resolved_format(
         &self,
         sheet_id: &SheetId,
@@ -100,7 +100,7 @@ impl YrsComputeEngine {
         cell_formats::get_resolved_format(self, sheet_id, row, col)
     }
 
-    #[bridge::read(scope = "cell")]
+    #[bridge::read]
     pub fn get_transferable_format(
         &self,
         sheet_id: &SheetId,
@@ -110,7 +110,7 @@ impl YrsComputeEngine {
         cell_formats::get_transferable_format(self, sheet_id, row, col)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_cell_format(
         &mut self,
         sheet_id: &SheetId,
@@ -120,7 +120,7 @@ impl YrsComputeEngine {
         cell_formats::set_cell_format(self, sheet_id, cell_id, format)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn clear_cell_format(
         &mut self,
         sheet_id: &SheetId,
@@ -129,7 +129,7 @@ impl YrsComputeEngine {
         cell_formats::clear_cell_format(self, sheet_id, cell_id)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn toggle_format_property(
         &mut self,
         sheet_id: &SheetId,
@@ -143,7 +143,7 @@ impl YrsComputeEngine {
         )
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_format_for_ranges(
         &mut self,
         sheet_id: &SheetId,
@@ -155,7 +155,7 @@ impl YrsComputeEngine {
 
     /// Apply a tri-state format patch: values set properties and clear_fields
     /// remove direct properties while omitted properties remain unchanged.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn patch_format_for_ranges(
         &mut self,
         sheet_id: &SheetId,
@@ -169,7 +169,7 @@ impl YrsComputeEngine {
     /// Apply an ordered batch of nested border patches as one undoable command.
     /// Supplied edges/flags replace complete members, cleared members remove
     /// direct overrides, and omitted members remain unchanged.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn patch_borders(
         &mut self,
         sheet_id: &SheetId,
@@ -178,7 +178,7 @@ impl YrsComputeEngine {
         range_mutations::patch_borders(self, sheet_id, operations)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_format_for_ranges_ui_state(
         &mut self,
         sheet_id: &SheetId,
@@ -194,7 +194,7 @@ impl YrsComputeEngine {
         )
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn clear_format_for_ranges(
         &mut self,
         sheet_id: &SheetId,
@@ -203,7 +203,7 @@ impl YrsComputeEngine {
         range_mutations::clear_format_for_ranges(self, sheet_id, ranges)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_cell_properties_batch(
         &mut self,
         sheet_id: &SheetId,
@@ -212,7 +212,7 @@ impl YrsComputeEngine {
         range_mutations::set_cell_properties_batch(self, sheet_id, updates)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn patch_cell_properties_batch(
         &mut self,
         sheet_id: &SheetId,
@@ -221,7 +221,7 @@ impl YrsComputeEngine {
         range_mutations::patch_cell_properties_batch(self, sheet_id, updates)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn add_cf_rule(
         &mut self,
         sheet_id: &SheetId,
@@ -230,7 +230,7 @@ impl YrsComputeEngine {
         conditional_formats::add_cf_rule(self, sheet_id, rule)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn update_cf_rule(
         &mut self,
         sheet_id: &SheetId,
@@ -240,7 +240,7 @@ impl YrsComputeEngine {
         conditional_formats::update_cf_rule(self, sheet_id, rule_id, updates)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn delete_cf_rule(
         &mut self,
         sheet_id: &SheetId,
@@ -249,7 +249,7 @@ impl YrsComputeEngine {
         conditional_formats::delete_cf_rule(self, sheet_id, rule_id)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn reorder_cf_rules(
         &mut self,
         sheet_id: &SheetId,
@@ -258,12 +258,12 @@ impl YrsComputeEngine {
         conditional_formats::reorder_cf_rules(self, sheet_id, rule_ids)
     }
 
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_all_cf_rules(&self, sheet_id: &SheetId) -> Vec<ConditionalFormat> {
         conditional_formats::get_all_cf_rules(self, sheet_id)
     }
 
-    #[bridge::read(scope = "cell")]
+    #[bridge::read]
     pub fn get_cf_rules_for_cell(
         &self,
         sheet_id: &SheetId,
@@ -273,7 +273,7 @@ impl YrsComputeEngine {
         conditional_formats::get_cf_rules_for_cell(self, sheet_id, row, col)
     }
 
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_conditional_format(
         &self,
         sheet_id: &SheetId,
@@ -282,12 +282,12 @@ impl YrsComputeEngine {
         conditional_formats::get_conditional_format(self, sheet_id, format_id)
     }
 
-    #[bridge::read(scope = "cell")]
+    #[bridge::read]
     pub fn has_cf_for_cell(&self, sheet_id: &SheetId, row: u32, col: u32) -> bool {
         conditional_formats::has_cf_for_cell(self, sheet_id, row, col)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn update_cf_ranges(
         &mut self,
         sheet_id: &SheetId,
@@ -297,7 +297,7 @@ impl YrsComputeEngine {
         conditional_formats::update_cf_ranges(self, sheet_id, format_id, new_ranges)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn clear_cf_formats_for_sheet(
         &mut self,
         sheet_id: &SheetId,
@@ -305,7 +305,7 @@ impl YrsComputeEngine {
         conditional_formats::clear_cf_formats_for_sheet(self, sheet_id)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn add_rule_to_cf(
         &mut self,
         sheet_id: &SheetId,
@@ -315,7 +315,7 @@ impl YrsComputeEngine {
         conditional_formats::add_rule_to_cf(self, sheet_id, format_id, rule)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn update_rule_in_cf(
         &mut self,
         sheet_id: &SheetId,
@@ -326,7 +326,7 @@ impl YrsComputeEngine {
         conditional_formats::update_rule_in_cf(self, sheet_id, format_id, rule_id, updates)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn delete_rule_from_cf(
         &mut self,
         sheet_id: &SheetId,
@@ -336,17 +336,17 @@ impl YrsComputeEngine {
         conditional_formats::delete_rule_from_cf(self, sheet_id, format_id, rule_id)
     }
 
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn cf_ranges_overlap(&self, a: &CFCellRange, b: &CFCellRange) -> bool {
         cf_geometry::cf_ranges_overlap(self, a, b)
     }
 
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn cf_range_contains(&self, outer: &CFCellRange, inner: &CFCellRange) -> bool {
         cf_geometry::cf_range_contains(self, outer, inner)
     }
 
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn cf_subtract_range(
         &self,
         original: &CFCellRange,
@@ -355,27 +355,27 @@ impl YrsComputeEngine {
         cf_geometry::cf_subtract_range(self, original, subtract)
     }
 
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn cf_intersect_ranges(&self, a: &CFCellRange, b: &CFCellRange) -> Option<CFCellRange> {
         cf_geometry::cf_intersect_ranges(self, a, b)
     }
 
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn cf_is_valid_range(&self, range: &CFCellRange) -> bool {
         cf_geometry::cf_is_valid_range(self, range)
     }
 
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn get_icon_set_presets(&self) -> Vec<CFIconSetPreset> {
         cf_geometry::get_icon_set_presets(self)
     }
 
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn get_cf_preset_by_id(&self, id: &str) -> Option<CFPresetCategory> {
         cf_geometry::get_cf_preset_by_id(self, id)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_row_format(
         &mut self,
         sheet_id: &SheetId,
@@ -385,7 +385,7 @@ impl YrsComputeEngine {
         row_col::set_row_format(self, sheet_id, row, format)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn patch_row_format(
         &mut self,
         sheet_id: &SheetId,
@@ -396,7 +396,7 @@ impl YrsComputeEngine {
         row_col::patch_row_format(self, sheet_id, row, format, clear_fields)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_col_format(
         &mut self,
         sheet_id: &SheetId,
@@ -406,7 +406,7 @@ impl YrsComputeEngine {
         row_col::set_col_format(self, sheet_id, col, format)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn patch_col_format(
         &mut self,
         sheet_id: &SheetId,
@@ -417,7 +417,7 @@ impl YrsComputeEngine {
         row_col::patch_col_format(self, sheet_id, col, format, clear_fields)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn clear_col_format(
         &mut self,
         sheet_id: &SheetId,
@@ -426,7 +426,7 @@ impl YrsComputeEngine {
         row_col::clear_col_format(self, sheet_id, col)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_col_format_range(
         &mut self,
         sheet_id: &SheetId,
@@ -437,7 +437,7 @@ impl YrsComputeEngine {
         row_col::set_col_format_range(self, sheet_id, start_col, end_col, format)
     }
 
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_row_formats(
         &self,
         sheet_id: &SheetId,
@@ -446,7 +446,7 @@ impl YrsComputeEngine {
         row_col::get_row_formats(self, sheet_id, rows)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_row_formats(
         &mut self,
         sheet_id: &SheetId,
@@ -455,7 +455,7 @@ impl YrsComputeEngine {
         row_col::set_row_formats(self, sheet_id, updates)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn patch_row_formats(
         &mut self,
         sheet_id: &SheetId,
@@ -464,7 +464,7 @@ impl YrsComputeEngine {
         row_col::patch_row_formats(self, sheet_id, updates)
     }
 
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_col_formats(
         &self,
         sheet_id: &SheetId,
@@ -473,7 +473,7 @@ impl YrsComputeEngine {
         row_col::get_col_formats(self, sheet_id, cols)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_col_formats(
         &mut self,
         sheet_id: &SheetId,
@@ -482,7 +482,7 @@ impl YrsComputeEngine {
         row_col::set_col_formats(self, sheet_id, updates)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn patch_col_formats(
         &mut self,
         sheet_id: &SheetId,
@@ -491,7 +491,7 @@ impl YrsComputeEngine {
         row_col::patch_col_formats(self, sheet_id, updates)
     }
 
-    #[bridge::read(scope = "range")]
+    #[bridge::read]
     pub fn query_range_properties(
         &self,
         sheet_id: &SheetId,
@@ -505,7 +505,7 @@ impl YrsComputeEngine {
         )
     }
 
-    #[bridge::read(scope = "cell")]
+    #[bridge::read]
     pub fn get_displayed_cell_properties(
         &self,
         sheet_id: &SheetId,
@@ -515,7 +515,7 @@ impl YrsComputeEngine {
         displayed::get_displayed_cell_properties(self, sheet_id, row, col)
     }
 
-    #[bridge::read(scope = "range")]
+    #[bridge::read]
     pub fn get_displayed_range_properties(
         &self,
         sheet_id: &SheetId,
@@ -529,12 +529,12 @@ impl YrsComputeEngine {
         )
     }
 
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_column_schema(&self, sheet_id: &SheetId, col_index: u32) -> Option<ColumnSchema> {
         schemas::get_column_schema(self, sheet_id, col_index)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_column_schema(
         &mut self,
         sheet_id: &SheetId,
@@ -544,7 +544,7 @@ impl YrsComputeEngine {
         schemas::set_column_schema(self, sheet_id, col_index, schema)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn clear_column_schema(
         &mut self,
         sheet_id: &SheetId,
@@ -553,22 +553,22 @@ impl YrsComputeEngine {
         schemas::clear_column_schema(self, sheet_id, col_index)
     }
 
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_all_column_schemas(&self, sheet_id: &SheetId) -> Vec<(u32, ColumnSchema)> {
         schemas::get_all_column_schemas(self, sheet_id)
     }
 
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_range_schema(&self, sheet_id: &SheetId, schema_id: &str) -> Option<RangeSchema> {
         schemas::get_range_schema(self, sheet_id, schema_id)
     }
 
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_range_schemas_for_sheet(&self, sheet_id: &SheetId) -> Vec<RangeSchema> {
         schemas::get_range_schemas_for_sheet(self, sheet_id)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_range_schema(
         &mut self,
         sheet_id: &SheetId,
@@ -577,7 +577,7 @@ impl YrsComputeEngine {
         schemas::set_range_schema(self, sheet_id, schema)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn update_range_schema(
         &mut self,
         sheet_id: &SheetId,
@@ -587,7 +587,7 @@ impl YrsComputeEngine {
         schemas::update_range_schema(self, sheet_id, schema_id, updates)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn delete_range_schema(
         &mut self,
         sheet_id: &SheetId,
@@ -596,7 +596,7 @@ impl YrsComputeEngine {
         schemas::delete_range_schema(self, sheet_id, schema_id)
     }
 
-    #[bridge::read(scope = "cell")]
+    #[bridge::read]
     pub fn validate_cell_value(
         &self,
         sheet_id: &SheetId,

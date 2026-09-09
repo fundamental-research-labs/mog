@@ -10,7 +10,7 @@
 //! Plus a zero-config overhead bench: document with no policies, the
 //! gated path short-circuits on one relaxed atomic-load + branch.
 //!
-//! These measure the pure-engine primitives (no Yrs, no Dispatch, no
+//! These measure the pure-engine primitives (no workbook storage, no Dispatch, no
 //! ComputeService). They are the floor — the full bridge-delegate
 //! wrapper adds actor-dispatch and principal materialisation on top.
 //! Per §12 the floor is what matters; the dispatch overhead is fixed

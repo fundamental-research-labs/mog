@@ -48,7 +48,7 @@ fn test_interactive_sequence_spills() {
     // Check projected values via col_data (no phantom CellIds created)
     let sheet_mirror = mirror.get_sheet(&sheet_id).unwrap();
     let col_slice = sheet_mirror
-        .get_column_slice(0)
+        .get_column_view(0)
         .expect("col_data for column 0 should exist");
     for row in 1..5u32 {
         assert_eq!(
@@ -151,7 +151,7 @@ fn test_spill_shrinkage_clears_old_phantoms() {
     {
         let sheet_mirror = mirror.get_sheet(&sheet_id).unwrap();
         let col_slice = sheet_mirror
-            .get_column_slice(0)
+            .get_column_view(0)
             .expect("col_data should exist");
         assert_eq!(col_slice[3], CellValue::number(4.0), "A4 should be 4");
         assert_eq!(col_slice[4], CellValue::number(5.0), "A5 should be 5");
@@ -165,7 +165,7 @@ fn test_spill_shrinkage_clears_old_phantoms() {
     {
         let sheet_mirror = mirror.get_sheet(&sheet_id).unwrap();
         let col_slice = sheet_mirror
-            .get_column_slice(0)
+            .get_column_view(0)
             .expect("col_data should exist");
         assert_eq!(
             col_slice[3],

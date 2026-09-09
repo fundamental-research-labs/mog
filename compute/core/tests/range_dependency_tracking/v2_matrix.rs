@@ -1,7 +1,7 @@
 use crate::fullcol::fullcol_workbook;
 use crate::helpers::*;
 use crate::matrix::{AggregatorShape, EditPosition as V2EditPos, Extent, ValueType as V2ValueType};
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use value_types::{CellValue, FiniteF64};
 
 /// Map a `ValueType` to an f64 new-value for the forward op.
@@ -54,7 +54,7 @@ pub(crate) fn run_fullcol_case_v2(
     value_kind: V2ValueType,
 ) -> Result<(), String> {
     let snapshot = fullcol_workbook(shape, extent);
-    let (mut engine, _init) = YrsComputeEngine::from_snapshot(snapshot)
+    let (mut engine, _init) = ComputeEngine::from_snapshot(snapshot)
         .map_err(|e| format!("from_snapshot err: {:?}", e))?;
 
     let source = sheet_id(0);

@@ -27,8 +27,14 @@ fn text(value: &str) -> CellValue {
 
 fn cross_sheet_snapshot() -> WorkbookSnapshot {
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: SHEET1_ID.to_string(),
                 name: "Sheet1".to_string(),
                 rows: 100,
@@ -56,6 +62,9 @@ fn cross_sheet_snapshot() -> WorkbookSnapshot {
                 ranges: vec![],
             },
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: SHEET2_ID.to_string(),
                 name: "Sheet2".to_string(),
                 rows: 100,
@@ -95,8 +104,8 @@ fn cross_sheet_snapshot() -> WorkbookSnapshot {
 }
 
 #[test]
-fn cross_sheet_structural_formula_writeback_survives_undo_redo() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(cross_sheet_snapshot()).unwrap();
+fn cross_sheet_structural_formula_writeback_tracks_inserted_rows() {
+    let (mut engine, _) = ComputeEngine::from_snapshot(cross_sheet_snapshot()).unwrap();
     let sheet1 = sid(SHEET1_ID);
     let sheet2 = sid(SHEET2_ID);
     let sheet1_a1 = cid(SHEET1_A1_ID);
@@ -127,31 +136,11 @@ fn cross_sheet_structural_formula_writeback_survives_undo_redo() {
         cell_value_at(&engine, &sheet1, 0, 0),
         CellValue::Number(FiniteF64::must(99.0))
     );
-
-    engine.undo().expect("undo insert row");
-    assert_eq!(
-        engine.get_formula(&sheet1_a1).as_deref(),
-        Some("=Sheet2!A2")
-    );
-    assert_eq!(
-        cell_value_at(&engine, &sheet1, 0, 0),
-        CellValue::Number(FiniteF64::must(99.0))
-    );
-
-    engine.redo().expect("redo insert row");
-    assert_eq!(
-        engine.get_formula(&sheet1_a1).as_deref(),
-        Some("=Sheet2!A3")
-    );
-    assert_eq!(
-        cell_value_at(&engine, &sheet1, 0, 0),
-        CellValue::Number(FiniteF64::must(99.0))
-    );
 }
 
 #[test]
 fn copy_sheet_preserves_existing_cross_sheet_dependency_edges() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(cross_sheet_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(cross_sheet_snapshot()).unwrap();
     let sheet1 = sid(SHEET1_ID);
     let sheet2 = sid(SHEET2_ID);
 

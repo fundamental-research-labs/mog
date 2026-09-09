@@ -57,7 +57,7 @@ pub enum PerformanceFingerprintCategory {
     WorksheetCellIteration,
     FormulaProcessing,
     DomainHydration,
-    StorageYrsPersistence,
+    StoragePersistence,
     ExportSerialization,
     PackageGraphConstruction,
     MemoryGrowth,

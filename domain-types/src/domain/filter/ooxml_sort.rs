@@ -18,7 +18,7 @@ pub struct SortState {
     ///
     /// These are XML lexical metadata rather than CT_SortState semantic fields,
     /// but producers sometimes place extension namespace declarations here.
-    /// Preserve them on the typed node so parser/writer and Yrs import/export
+    /// Preserve them on the typed node so parser/writer and engine import/export
     /// keep the complete authored element.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub namespace_attrs: Vec<(String, String)>,

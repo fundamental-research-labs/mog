@@ -8,6 +8,9 @@ fn two_sheet_snapshot() -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
                 name: "Sheet1".to_string(),
                 rows: 10,
@@ -16,6 +19,9 @@ fn two_sheet_snapshot() -> WorkbookSnapshot {
                 ranges: vec![],
             },
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: "550e8400-e29b-41d4-a716-446655440099".to_string(),
                 name: "Sheet2".to_string(),
                 rows: 10,
@@ -50,7 +56,7 @@ fn assert_reconcile_only(hint: Option<&SheetLifecycleRuntimeHint>) {
 
 #[test]
 fn forward_create_sheet_hints_new_sheet_focus() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
 
     let (hex, result) = engine.create_sheet("Sheet2").unwrap();
     let new_sheet_id = sheet_id_from_hex(&hex);
@@ -59,25 +65,8 @@ fn forward_create_sheet_hints_new_sheet_focus() {
 }
 
 #[test]
-fn redo_create_sheet_replays_new_sheet_focus_hint() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
-
-    let (hex, _result) = engine.create_sheet("Sheet2").unwrap();
-    let new_sheet_id = sheet_id_from_hex(&hex);
-
-    let (_patches, undo_result) = engine.undo().unwrap();
-    assert_reconcile_only(undo_result.sheet_lifecycle_runtime_hint.as_ref());
-
-    let (_patches, redo_result) = engine.redo().unwrap();
-    assert_focus(
-        redo_result.sheet_lifecycle_runtime_hint.as_ref(),
-        new_sheet_id,
-    );
-}
-
-#[test]
 fn forward_copy_sheet_hints_copied_sheet_focus() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(two_sheet_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(two_sheet_snapshot()).unwrap();
     let source = sheet_id();
 
     let (hex, result) = engine.copy_sheet(&source, "Copy").unwrap();
@@ -91,7 +80,7 @@ fn forward_copy_sheet_hints_copied_sheet_focus() {
 
 #[test]
 fn forward_delete_sheet_hints_provider_reconciliation() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(two_sheet_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(two_sheet_snapshot()).unwrap();
     let target = second_sheet_id();
 
     let (_patches, result) = engine.delete_sheet(&target).unwrap();
@@ -101,7 +90,7 @@ fn forward_delete_sheet_hints_provider_reconciliation() {
 
 #[test]
 fn hide_and_show_sheet_emit_visibility_hints() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(two_sheet_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(two_sheet_snapshot()).unwrap();
     let target = second_sheet_id();
 
     let (_patches, hide_result) = engine.set_sheet_visibility(&target, "hidden").unwrap();

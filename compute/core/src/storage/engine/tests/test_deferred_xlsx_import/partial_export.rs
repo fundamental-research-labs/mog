@@ -5,7 +5,7 @@ use super::*;
 fn deferred_xlsx_export_rejects_partial_workbook_until_full_hydration() {
     let bytes = deferred_calc_fixture_xlsx(DeferredCalcFixtureMode::Control);
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     engine
         .import_from_xlsx_bytes_deferred(&bytes)
         .expect("deferred XLSX import should succeed");

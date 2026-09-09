@@ -53,7 +53,13 @@ fn build_numeric_snapshot(rows: u32, cols: u32) -> WorkbookSnapshot {
         }
     }
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_uuid(0),
             name: "Sheet1".to_string(),
             rows,
@@ -426,7 +432,10 @@ fn engine_hydration_col_data_sanity() {
 
     println!("=== Engine Hydration Sanity ({}x{}) ===", rows, cols);
     println!("  Cells in mirror:      {}", sheet.cell_count());
-    println!("  col_data populated:   {}", !sheet.col_data_is_empty());
+    println!(
+        "  col_data populated:   {}",
+        !sheet.column_values_are_empty()
+    );
     println!("  Theoretical payload:  {} bytes", theoretical_payload);
     println!("  Theoretical col_data: {} bytes", theoretical_col_data);
     println!("  Theoretical sparse:   {} bytes", theoretical_sparse);

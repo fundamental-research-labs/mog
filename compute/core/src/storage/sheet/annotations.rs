@@ -1,110 +1,72 @@
-use cell_types::SheetId;
-use compute_document::hex::id_to_hex;
-use compute_document::schema::KEY_CELL_ANNOTATIONS;
-use compute_document::undo::ORIGIN_USER_EDIT;
-use value_types::ComputeError;
-use yrs::{Any, Doc, Map, MapPrelim, MapRef, Origin, Out, Transact};
-
 use crate::engine_types::AnnotationRecord;
+use crate::storage::WorkbookStorage;
+use cell_types::{CellId, SheetId};
+use value_types::ComputeError;
 
-fn read_record(value: Out) -> Option<AnnotationRecord> {
-    match value {
-        Out::Any(Any::String(json)) => serde_json::from_str::<AnnotationRecord>(&json).ok(),
-        _ => None,
-    }
-}
-
-fn get_annotations_map<T: yrs::ReadTxn>(
-    txn: &T,
-    sheets: &MapRef,
-    sheet_hex: &str,
-) -> Option<MapRef> {
-    let sheet_map = match sheets.get(txn, sheet_hex) {
-        Some(Out::YMap(map)) => map,
-        _ => return None,
-    };
-    match sheet_map.get(txn, KEY_CELL_ANNOTATIONS) {
-        Some(Out::YMap(map)) => Some(map),
-        _ => None,
-    }
-}
-
-fn ensure_annotations_map(
-    txn: &mut yrs::TransactionMut<'_>,
-    sheets: &MapRef,
-    sheet_hex: &str,
-) -> Result<MapRef, ComputeError> {
-    let sheet_map = match sheets.get(txn, sheet_hex) {
-        Some(Out::YMap(map)) => map,
-        _ => {
-            return Err(ComputeError::SheetNotFound {
-                sheet_id: sheet_hex.to_string(),
-            });
-        }
-    };
-    Ok(match sheet_map.get(txn, KEY_CELL_ANNOTATIONS) {
-        Some(Out::YMap(map)) => map,
-        _ => sheet_map.insert(txn, KEY_CELL_ANNOTATIONS, MapPrelim::default()),
-    })
+fn wire(record: &AnnotationRecord<CellId>) -> AnnotationRecord {
+    record
+        .clone()
+        .map_anchor(|id| compute_document::hex::id_to_hex(id.as_u128()).to_string())
 }
 
 pub(crate) fn set_cell_annotation(
-    doc: &Doc,
-    sheets: &MapRef,
-    sheet_id: &SheetId,
-    cell_id: &str,
+    storage: &mut WorkbookStorage,
+    sheet: &SheetId,
+    cell: &str,
     record: &AnnotationRecord,
 ) -> Result<(), ComputeError> {
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let json = serde_json::to_string(record).map_err(|err| ComputeError::Eval {
-        message: format!("serialize cell annotation: {}", err),
+    let id = CellId::from_uuid_str(cell).map_err(|_| ComputeError::InvalidInput {
+        message: format!("Invalid annotation cell identity: {cell}"),
     })?;
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let annotations_map = ensure_annotations_map(&mut txn, sheets, &sheet_hex)?;
-    annotations_map.insert(&mut txn, cell_id, Any::String(json.into()));
+    let metadata =
+        storage
+            .sheet_metadata
+            .get_mut(sheet)
+            .ok_or_else(|| ComputeError::SheetNotFound {
+                sheet_id: sheet.to_uuid_string(),
+            })?;
+    metadata
+        .cell_annotations
+        .insert(id, record.clone().map_anchor(|_| id));
     Ok(())
 }
-
 pub(crate) fn get_cell_annotation(
-    doc: &Doc,
-    sheets: &MapRef,
-    sheet_id: &SheetId,
-    cell_id: &str,
+    storage: &WorkbookStorage,
+    sheet: &SheetId,
+    cell: &str,
 ) -> Option<AnnotationRecord> {
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let txn = doc.transact();
-    let annotations_map = get_annotations_map(&txn, sheets, &sheet_hex)?;
-    annotations_map.get(&txn, cell_id).and_then(read_record)
+    let id = CellId::from_uuid_str(cell).ok()?;
+    storage
+        .sheet_metadata
+        .get(sheet)?
+        .cell_annotations
+        .get(&id)
+        .map(wire)
 }
-
 pub(crate) fn remove_cell_annotation(
-    doc: &Doc,
-    sheets: &MapRef,
-    sheet_id: &SheetId,
-    cell_id: &str,
+    storage: &mut WorkbookStorage,
+    sheet: &SheetId,
+    cell: &str,
 ) -> Option<AnnotationRecord> {
-    let existing = get_cell_annotation(doc, sheets, sheet_id, cell_id);
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    if let Some(annotations_map) = get_annotations_map(&txn, sheets, &sheet_hex) {
-        annotations_map.remove(&mut txn, cell_id);
-    }
-    existing
+    let id = CellId::from_uuid_str(cell).ok()?;
+    storage
+        .sheet_metadata
+        .get_mut(sheet)?
+        .cell_annotations
+        .remove(&id)
+        .as_ref()
+        .map(wire)
 }
-
 pub(crate) fn list_cell_annotations(
-    doc: &Doc,
-    sheets: &MapRef,
-    sheet_id: &SheetId,
+    storage: &WorkbookStorage,
+    sheet: &SheetId,
 ) -> Vec<AnnotationRecord> {
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let txn = doc.transact();
-    let Some(annotations_map) = get_annotations_map(&txn, sheets, &sheet_hex) else {
-        return Vec::new();
-    };
-    let mut records: Vec<AnnotationRecord> = annotations_map
-        .iter(&txn)
-        .filter_map(|(_key, value)| read_record(value))
+    let mut records: Vec<_> = storage
+        .sheet_metadata
+        .get(sheet)
+        .into_iter()
+        .flat_map(|metadata| metadata.cell_annotations.values())
+        .map(wire)
         .collect();
     records.sort_by(|a, b| a.anchor_id.cmp(&b.anchor_id).then_with(|| a.id.cmp(&b.id)));
     records

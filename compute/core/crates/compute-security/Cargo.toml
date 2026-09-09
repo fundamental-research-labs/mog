@@ -12,7 +12,7 @@ description = "Privacy policy types and access-control engine for compute-core"
 cell-types = { path = "../types/cell-types" }
 value-types = { path = "../types/value-types" }
 # Needed for `RedactMaybe` impls on return types surfaced by the
-# gated delegate macro (cell/range-scope reads on `YrsComputeEngine`
+# gated delegate macro (cell/range-scope reads on `ComputeEngine`
 # return `CellFormat`, `Sparkline`, `CellMergeInfo`, etc.). The
 # redaction logic lives alongside the trait so there's a single
 # place to audit. These crates have no reverse dep on

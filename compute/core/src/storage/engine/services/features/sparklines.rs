@@ -6,16 +6,11 @@ use compute_document::hex::id_to_hex;
 use value_types::ComputeError;
 
 pub(in crate::storage::engine) fn add_sparkline(
-    stores: &EngineStores,
+    stores: &mut EngineStores,
     sheet_id: &SheetId,
     sparkline: &sparklines::Sparkline,
 ) -> Result<MutationResult, ComputeError> {
-    sparklines::add_sparkline(
-        stores.storage.doc(),
-        &stores.storage.sheets_ref(),
-        sheet_id,
-        sparkline,
-    );
+    sparklines::add_sparkline(&mut stores.storage, sheet_id, sparkline);
     let mut result = MutationResult::empty();
     push_sparkline_change(
         stores,
@@ -29,37 +24,22 @@ pub(in crate::storage::engine) fn add_sparkline(
 }
 
 pub(in crate::storage::engine) fn update_sparkline(
-    stores: &EngineStores,
+    stores: &mut EngineStores,
     sheet_id: &SheetId,
     sparkline_id: &str,
     updates: &sparklines::SparklineUpdate,
 ) -> Result<MutationResult, ComputeError> {
-    let before = sparklines::get_sparkline(
-        stores.storage.doc(),
-        &stores.storage.sheets_ref(),
-        sheet_id,
-        sparkline_id,
-    );
+    let before = sparklines::get_sparkline(&stores.storage, sheet_id, sparkline_id);
 
-    let updated = sparklines::update_sparkline(
-        stores.storage.doc(),
-        &stores.storage.sheets_ref(),
-        sheet_id,
-        sparkline_id,
-        updates,
-    );
+    let updated =
+        sparklines::update_sparkline(&mut stores.storage, sheet_id, sparkline_id, updates);
     if !updated {
         return Err(ComputeError::InvalidInput {
             message: format!("sparkline '{sparkline_id}' not found"),
         });
     }
 
-    let after = sparklines::get_sparkline(
-        stores.storage.doc(),
-        &stores.storage.sheets_ref(),
-        sheet_id,
-        sparkline_id,
-    );
+    let after = sparklines::get_sparkline(&stores.storage, sheet_id, sparkline_id);
 
     let mut result = MutationResult::empty();
     match (before, after) {
@@ -107,22 +87,12 @@ pub(in crate::storage::engine) fn update_sparkline(
 }
 
 pub(in crate::storage::engine) fn delete_sparkline(
-    stores: &EngineStores,
+    stores: &mut EngineStores,
     sheet_id: &SheetId,
     sparkline_id: &str,
 ) -> Result<MutationResult, ComputeError> {
-    let before = sparklines::get_sparkline(
-        stores.storage.doc(),
-        &stores.storage.sheets_ref(),
-        sheet_id,
-        sparkline_id,
-    );
-    let deleted = sparklines::delete_sparkline(
-        stores.storage.doc(),
-        &stores.storage.sheets_ref(),
-        sheet_id,
-        sparkline_id,
-    );
+    let before = sparklines::get_sparkline(&stores.storage, sheet_id, sparkline_id);
+    let deleted = sparklines::delete_sparkline(&mut stores.storage, sheet_id, sparkline_id);
     if !deleted {
         return Err(ComputeError::InvalidInput {
             message: format!("sparkline '{sparkline_id}' not found"),
@@ -146,11 +116,7 @@ pub(in crate::storage::engine) fn get_sparklines_in_sheet(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> Vec<sparklines::Sparkline> {
-    sparklines::get_sparklines_in_sheet(
-        stores.storage.doc(),
-        &stores.storage.sheets_ref(),
-        sheet_id,
-    )
+    sparklines::get_sparklines_in_sheet(&stores.storage, sheet_id)
 }
 
 pub(in crate::storage::engine) fn get_sparkline(
@@ -158,12 +124,7 @@ pub(in crate::storage::engine) fn get_sparkline(
     sheet_id: &SheetId,
     sparkline_id: &str,
 ) -> Option<sparklines::Sparkline> {
-    sparklines::get_sparkline(
-        stores.storage.doc(),
-        &stores.storage.sheets_ref(),
-        sheet_id,
-        sparkline_id,
-    )
+    sparklines::get_sparkline(&stores.storage, sheet_id, sparkline_id)
 }
 
 pub(in crate::storage::engine) fn get_sparkline_at_cell(
@@ -172,13 +133,7 @@ pub(in crate::storage::engine) fn get_sparkline_at_cell(
     row: u32,
     col: u32,
 ) -> Option<sparklines::Sparkline> {
-    sparklines::get_sparkline_at_cell(
-        stores.storage.doc(),
-        &stores.storage.sheets_ref(),
-        sheet_id,
-        row,
-        col,
-    )
+    sparklines::get_sparkline_at_cell(&stores.storage, sheet_id, row, col)
 }
 
 pub(in crate::storage::engine) fn add_sparkline_group(
@@ -186,20 +141,11 @@ pub(in crate::storage::engine) fn add_sparkline_group(
     sheet_id: &SheetId,
     group: &sparklines::SparklineGroup,
 ) -> Result<MutationResult, ComputeError> {
-    sparklines::add_sparkline_group(
-        stores.storage.doc(),
-        &stores.storage.sheets_ref(),
-        sheet_id,
-        group,
-    );
+    sparklines::add_sparkline_group(&mut stores.storage, sheet_id, group);
     let mut result = MutationResult::empty();
     for sparkline_id in &group.sparkline_ids {
-        if let Some(sparkline) = sparklines::get_sparkline(
-            stores.storage.doc(),
-            &stores.storage.sheets_ref(),
-            sheet_id,
-            sparkline_id,
-        ) {
+        if let Some(sparkline) = sparklines::get_sparkline(&stores.storage, sheet_id, sparkline_id)
+        {
             push_sparkline_change(
                 stores,
                 &mut result,
@@ -218,23 +164,14 @@ pub(in crate::storage::engine) fn get_sparkline_group(
     sheet_id: &SheetId,
     group_id: &str,
 ) -> Option<sparklines::SparklineGroup> {
-    sparklines::get_sparkline_group(
-        stores.storage.doc(),
-        &stores.storage.sheets_ref(),
-        sheet_id,
-        group_id,
-    )
+    sparklines::get_sparkline_group(&stores.storage, sheet_id, group_id)
 }
 
 pub(in crate::storage::engine) fn get_sparkline_groups_in_sheet(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> Vec<sparklines::SparklineGroup> {
-    sparklines::get_sparkline_groups_in_sheet(
-        stores.storage.doc(),
-        &stores.storage.sheets_ref(),
-        sheet_id,
-    )
+    sparklines::get_sparkline_groups_in_sheet(&stores.storage, sheet_id)
 }
 
 pub(in crate::storage::engine) fn delete_sparkline_group(
@@ -243,12 +180,7 @@ pub(in crate::storage::engine) fn delete_sparkline_group(
     group_id: &str,
     delete_sparklines: bool,
 ) -> Result<MutationResult, ComputeError> {
-    let before_group = sparklines::get_sparkline_group(
-        stores.storage.doc(),
-        &stores.storage.sheets_ref(),
-        sheet_id,
-        group_id,
-    );
+    let before_group = sparklines::get_sparkline_group(&stores.storage, sheet_id, group_id);
     let before_sparklines: Vec<sparklines::Sparkline> = before_group
         .as_ref()
         .map(|group| {
@@ -256,20 +188,14 @@ pub(in crate::storage::engine) fn delete_sparkline_group(
                 .sparkline_ids
                 .iter()
                 .filter_map(|sparkline_id| {
-                    sparklines::get_sparkline(
-                        stores.storage.doc(),
-                        &stores.storage.sheets_ref(),
-                        sheet_id,
-                        sparkline_id,
-                    )
+                    sparklines::get_sparkline(&stores.storage, sheet_id, sparkline_id)
                 })
                 .collect()
         })
         .unwrap_or_default();
 
     let deleted = sparklines::delete_sparkline_group(
-        stores.storage.doc(),
-        &stores.storage.sheets_ref(),
+        &mut stores.storage,
         sheet_id,
         group_id,
         delete_sparklines,
@@ -307,26 +233,18 @@ pub(in crate::storage::engine) fn clear_sparklines_in_range(
     end_col: u32,
 ) -> Result<MutationResult, ComputeError> {
     let range = sparklines::CellRange::new(start_row, start_col, end_row, end_col);
-    let before: Vec<sparklines::Sparkline> = sparklines::get_sparklines_in_sheet(
-        stores.storage.doc(),
-        &stores.storage.sheets_ref(),
-        sheet_id,
-    )
-    .into_iter()
-    .filter(|sparkline| {
-        sparkline.cell.row >= start_row
-            && sparkline.cell.row <= end_row
-            && sparkline.cell.col >= start_col
-            && sparkline.cell.col <= end_col
-    })
-    .collect();
+    let before: Vec<sparklines::Sparkline> =
+        sparklines::get_sparklines_in_sheet(&stores.storage, sheet_id)
+            .into_iter()
+            .filter(|sparkline| {
+                sparkline.cell.row >= start_row
+                    && sparkline.cell.row <= end_row
+                    && sparkline.cell.col >= start_col
+                    && sparkline.cell.col <= end_col
+            })
+            .collect();
 
-    sparklines::clear_sparklines_in_range(
-        stores.storage.doc(),
-        &stores.storage.sheets_ref(),
-        sheet_id,
-        &range,
-    );
+    sparklines::clear_sparklines_in_range(&mut stores.storage, sheet_id, &range);
     let mut result = MutationResult::empty();
     for sparkline in before {
         push_sparkline_change(
@@ -345,16 +263,8 @@ pub(in crate::storage::engine) fn clear_sparklines_for_sheet(
     stores: &mut EngineStores,
     sheet_id: &SheetId,
 ) -> Result<MutationResult, ComputeError> {
-    let before = sparklines::get_sparklines_in_sheet(
-        stores.storage.doc(),
-        &stores.storage.sheets_ref(),
-        sheet_id,
-    );
-    sparklines::clear_sparklines_for_sheet(
-        stores.storage.doc(),
-        &stores.storage.sheets_ref(),
-        sheet_id,
-    );
+    let before = sparklines::get_sparklines_in_sheet(&stores.storage, sheet_id);
+    sparklines::clear_sparklines_for_sheet(&mut stores.storage, sheet_id);
     let mut result = MutationResult::empty();
     for sparkline in before {
         push_sparkline_change(
@@ -398,13 +308,7 @@ pub(in crate::storage::engine) fn has_sparkline(
     row: u32,
     col: u32,
 ) -> bool {
-    sparklines::has_sparkline(
-        stores.storage.doc(),
-        &stores.storage.sheets_ref(),
-        sheet_id,
-        row,
-        col,
-    )
+    sparklines::has_sparkline(&stores.storage, sheet_id, row, col)
 }
 
 // -------------------------------------------------------------------

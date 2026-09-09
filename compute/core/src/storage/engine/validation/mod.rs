@@ -3,13 +3,13 @@ pub(in crate::storage::engine) mod range;
 pub(in crate::storage::engine) mod sheet;
 pub(in crate::storage::engine) mod structure;
 
-use super::YrsComputeEngine;
+use super::ComputeEngine;
 use super::mutation::EngineMutation;
 use value_types::ComputeError;
 
 pub fn validate_mutation(
     mutation: &EngineMutation,
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
 ) -> Result<(), ComputeError> {
     match mutation {
         EngineMutation::CreateSheet { name, .. }

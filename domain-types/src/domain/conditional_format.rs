@@ -1,6 +1,6 @@
 //! Unified conditional formatting types.
 //!
-//! Single source of truth for CF data — used by the XLSX parser, yrs_schema
+//! Single source of truth for CF data — used by the XLSX parser, native storage
 //! hydration, cf_store runtime CRUD, and XLSX export. Replaces both the old
 //! `domain::conditional::CFSpec` and `compute-core::domain_types::cf::ConditionalFormat`.
 //!
@@ -18,7 +18,7 @@
 //! - [`CFIconSet`] `icon_set_name`
 //!
 //! Wire compat is preserved: each enum carries `#[serde(rename = "<ooxml-token>")]`
-//! so the JSON / Yrs byte shape is identical to what the pre-refactor `String`
+//! so the JSON byte shape is identical to what the pre-refactor `String`
 //! field held (`op.to_ooxml().to_string()`).
 
 mod types;

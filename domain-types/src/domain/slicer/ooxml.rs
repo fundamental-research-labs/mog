@@ -104,7 +104,7 @@ pub fn table_filter_selected_values_for_slicer(
 /// This bridges the ParseOutput types (`SlicerDef`, `SlicerCacheDef`,
 /// `SlicerAnchor`) from ooxml-types to the canonical runtime type
 /// (`StoredSlicer`).  Called during hydration to populate the workbook
-/// `slicers` Y.Map.
+/// `slicers` collection.
 pub fn xlsx_import_to_stored_slicer(
     slicer: &OoxmlSlicerDef,
     cache: Option<&OoxmlSlicerCacheDef>,
@@ -303,7 +303,7 @@ pub fn xlsx_import_to_stored_slicer(
 /// Reconstruct an ooxml-types `SlicerCacheDef` from a `StoredSlicer`.
 ///
 /// Used by the export path to produce `ParseOutput.slicer_caches` from
-/// the workbook `slicers` Y.Map.
+/// the workbook `slicers` collection.
 pub fn stored_slicer_to_cache_def(stored: &StoredSlicer) -> OoxmlSlicerCacheDef {
     let cache_name = stored
         .cache_name
@@ -381,7 +381,7 @@ pub fn stored_slicer_to_cache_def(stored: &StoredSlicer) -> OoxmlSlicerCacheDef 
 /// Reconstruct an ooxml-types `SlicerDef` from a `StoredSlicer`.
 ///
 /// Used by the export path to produce `SheetData.slicers` from
-/// the workbook `slicers` Y.Map.
+/// the workbook `slicers` collection.
 pub fn stored_slicer_to_slicer_def(stored: &StoredSlicer) -> OoxmlSlicerDef {
     let cache_name = stored
         .cache_name

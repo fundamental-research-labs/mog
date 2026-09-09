@@ -1,7 +1,7 @@
 use super::*;
 
 pub(super) fn get_column_schema(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     col_index: u32,
 ) -> Option<ColumnSchema> {
@@ -9,7 +9,7 @@ pub(super) fn get_column_schema(
 }
 
 pub(super) fn set_column_schema(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     col_index: u32,
     schema: &ColumnSchema,
@@ -20,7 +20,7 @@ pub(super) fn set_column_schema(
 }
 
 pub(super) fn clear_column_schema(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     col_index: u32,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
@@ -30,14 +30,14 @@ pub(super) fn clear_column_schema(
 }
 
 pub(super) fn get_all_column_schemas(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> Vec<(u32, ColumnSchema)> {
     services::formatting::get_all_column_schemas(&engine.stores, sheet_id)
 }
 
 pub(super) fn get_range_schema(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     schema_id: &str,
 ) -> Option<RangeSchema> {
@@ -45,14 +45,14 @@ pub(super) fn get_range_schema(
 }
 
 pub(super) fn get_range_schemas_for_sheet(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> Vec<RangeSchema> {
     services::formatting::get_range_schemas_for_sheet(&engine.stores, sheet_id)
 }
 
 pub(super) fn set_range_schema(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     schema: &RangeSchema,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
@@ -61,7 +61,7 @@ pub(super) fn set_range_schema(
 }
 
 pub(super) fn update_range_schema(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     schema_id: &str,
     updates: &RangeSchema,
@@ -76,7 +76,7 @@ pub(super) fn update_range_schema(
 }
 
 pub(super) fn delete_range_schema(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     schema_id: &str,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
@@ -86,7 +86,7 @@ pub(super) fn delete_range_schema(
 }
 
 pub(super) fn validate_cell_value(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
     col: u32,

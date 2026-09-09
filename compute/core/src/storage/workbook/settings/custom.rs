@@ -1,85 +1,64 @@
-use std::sync::Arc;
+use crate::storage::workbook::WorkbookMetadata;
 
-use compute_document::undo::ORIGIN_UI_STATE;
-use yrs::{Any, Doc, Map, MapRef, Origin, Out, Transact};
-
-use super::map::{
-    ensure_optional_string_sub_map, ensure_settings_map, get_optional_string_sub_map,
-    get_settings_map,
-};
-
-pub fn get_custom_setting(doc: &Doc, workbook: &MapRef, key: &str) -> Option<String> {
-    let txn = doc.transact();
-    let settings_map = get_settings_map(workbook, &txn)?;
-    if let Some(Out::YMap(custom_map)) = settings_map.get(&txn, "customSettings")
-        && let Some(Out::Any(Any::String(v))) = custom_map.get(&txn, key)
-    {
-        return Some(v.to_string());
-    }
-    None
+pub fn get_custom_setting(metadata: &WorkbookMetadata, key: &str) -> Option<String> {
+    metadata
+        .settings
+        .custom_settings
+        .as_ref()?
+        .get(key)?
+        .as_str()
+        .map(str::to_owned)
 }
 
-/// Set a custom setting value. Pass `None` to delete the key.
-pub fn set_custom_setting(doc: &Doc, workbook: &MapRef, key: &str, value: Option<&str>) {
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_UI_STATE));
-    let settings_map = ensure_settings_map(workbook, &mut txn);
-
-    let custom_map = ensure_optional_string_sub_map(&settings_map, &mut txn, "customSettings");
-
+/// Set a custom string setting, or remove it when `value` is `None`.
+pub fn set_custom_setting(metadata: &mut WorkbookMetadata, key: &str, value: Option<&str>) {
     match value {
-        Some(v) => {
-            custom_map.insert(&mut txn, key, Any::String(Arc::from(v)));
+        Some(value) => {
+            metadata
+                .settings
+                .custom_settings
+                .get_or_insert_with(Default::default)
+                .insert(key.to_owned(), serde_json::Value::String(value.to_owned()));
         }
         None => {
-            custom_map.remove(&mut txn, key);
+            if let Some(settings) = &mut metadata.settings.custom_settings {
+                settings.remove(key);
+                if settings.is_empty() {
+                    metadata.settings.custom_settings = None;
+                }
+            }
         }
     }
 }
 
-/// List all custom settings as key-value pairs.
-pub fn list_custom_settings(doc: &Doc, workbook: &MapRef) -> Vec<(String, String)> {
-    let txn = doc.transact();
-    let settings_map = match get_settings_map(workbook, &txn) {
-        Some(m) => m,
-        None => return Vec::new(),
-    };
-    let custom_map = match get_optional_string_sub_map(&settings_map, &txn, "customSettings") {
-        Some(m) => m,
-        _ => return Vec::new(),
-    };
-
-    let mut result = Vec::new();
-    for (key, value) in custom_map.iter(&txn) {
-        if let Out::Any(Any::String(v)) = value {
-            result.push((key.to_string(), v.to_string()));
-        }
-    }
+pub fn list_custom_settings(metadata: &WorkbookMetadata) -> Vec<(String, String)> {
+    let mut result: Vec<_> = metadata
+        .settings
+        .custom_settings
+        .iter()
+        .flat_map(|settings| settings.iter())
+        .filter_map(|(key, value)| value.as_str().map(|value| (key.clone(), value.to_owned())))
+        .collect();
+    result.sort_unstable();
     result
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::YrsStorage;
+    use crate::storage::workbook::WorkbookMetadata;
 
     #[test]
     fn test_custom_settings_set_list_delete() {
-        let storage = YrsStorage::new();
+        let mut metadata = WorkbookMetadata::default();
 
-        assert_eq!(
-            get_custom_setting(storage.doc(), storage.workbook_map(), "a"),
-            None
-        );
-        assert!(list_custom_settings(storage.doc(), storage.workbook_map()).is_empty());
+        assert_eq!(get_custom_setting(&metadata, "a"), None);
+        assert!(list_custom_settings(&metadata).is_empty());
 
-        set_custom_setting(storage.doc(), storage.workbook_map(), "a", Some("one"));
-        set_custom_setting(storage.doc(), storage.workbook_map(), "b", Some("two"));
-        assert_eq!(
-            get_custom_setting(storage.doc(), storage.workbook_map(), "a"),
-            Some("one".to_string())
-        );
+        set_custom_setting(&mut metadata, "a", Some("one"));
+        set_custom_setting(&mut metadata, "b", Some("two"));
+        assert_eq!(get_custom_setting(&metadata, "a"), Some("one".to_string()));
 
-        let mut listed = list_custom_settings(storage.doc(), storage.workbook_map());
+        let mut listed = list_custom_settings(&metadata);
         listed.sort();
         assert_eq!(
             listed,
@@ -89,10 +68,7 @@ mod tests {
             ]
         );
 
-        set_custom_setting(storage.doc(), storage.workbook_map(), "a", None);
-        assert_eq!(
-            get_custom_setting(storage.doc(), storage.workbook_map(), "a"),
-            None
-        );
+        set_custom_setting(&mut metadata, "a", None);
+        assert_eq!(get_custom_setting(&metadata, "a"), None);
     }
 }

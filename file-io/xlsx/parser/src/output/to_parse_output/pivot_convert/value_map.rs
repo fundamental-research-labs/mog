@@ -126,6 +126,7 @@ fn convert_item_type(t: &PivotItemType) -> DtPivotItemType {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pivot_types::FieldId;
 
     #[test]
     fn subtotal_count_mappings_match_engine_contract() {

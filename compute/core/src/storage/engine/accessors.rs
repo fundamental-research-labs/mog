@@ -1,19 +1,17 @@
-use super::YrsComputeEngine;
+use super::ComputeEngine;
 use crate::identity::GridIndex;
 use crate::mirror::CellMirror;
 use crate::scheduler::ComputeCore;
-use crate::storage::YrsStorage;
+use crate::storage::WorkbookStorage;
 use cell_types::SheetId;
-use compute_document::observe::DocumentObserver;
-use compute_document::undo::UndoRedoManager;
 use compute_layout_index::LayoutIndex;
 
-impl YrsComputeEngine {
+impl ComputeEngine {
     // -------------------------------------------------------------------
     // Accessors
     // -------------------------------------------------------------------
 
-    pub fn storage(&self) -> &YrsStorage {
+    pub fn storage(&self) -> &WorkbookStorage {
         &self.stores.storage
     }
     /// Access the security state (R2.3). Not a `#[bridge::*]` method —
@@ -26,7 +24,7 @@ impl YrsComputeEngine {
         &self.mirror
     }
     #[allow(dead_code)] // Bridge-ready: mutable engine access for bridge callers
-    pub(crate) fn storage_mut(&mut self) -> &mut YrsStorage {
+    pub(crate) fn storage_mut(&mut self) -> &mut WorkbookStorage {
         &mut self.stores.storage
     }
     pub fn grid_index(&self, sheet_id: &SheetId) -> Option<&GridIndex> {
@@ -44,12 +42,6 @@ impl YrsComputeEngine {
     #[allow(dead_code)] // Bridge-ready: mutable engine access for bridge callers
     pub(crate) fn compute_mut(&mut self) -> &mut ComputeCore {
         &mut self.stores.compute
-    }
-    pub fn undo_manager(&self) -> &UndoRedoManager {
-        &self.mutation.undo_manager
-    }
-    pub fn observer(&self) -> &DocumentObserver {
-        &self.mutation.observer
     }
 
     /// Run a closure with mutable access to the engine's internal stores,
@@ -72,7 +64,7 @@ impl YrsComputeEngine {
     #[cfg(test)]
     pub(crate) fn with_storage_and_mirror_for_test<F, R>(&mut self, f: F) -> R
     where
-        F: FnOnce(&mut YrsStorage, &mut CellMirror) -> R,
+        F: FnOnce(&mut WorkbookStorage, &mut CellMirror) -> R,
     {
         f(&mut self.stores.storage, &mut self.mirror)
     }

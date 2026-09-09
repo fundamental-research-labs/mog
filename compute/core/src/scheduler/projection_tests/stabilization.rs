@@ -275,7 +275,7 @@ fn test_projection_stabilization_recursion_bound() {
     {
         let sheet_mirror = mirror.get_sheet(&sheet_id).unwrap();
         let col_slice = sheet_mirror
-            .get_column_slice(0)
+            .get_column_view(0)
             .expect("col_data should exist");
         for row in 1..10u32 {
             assert_eq!(

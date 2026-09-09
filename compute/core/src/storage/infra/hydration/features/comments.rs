@@ -1,22 +1,19 @@
 use std::collections::{HashMap, HashSet};
 
-use yrs::{Map, MapPrelim, MapRef};
-
-use domain_types::yrs_schema;
+use crate::storage::sheet::comments::{CommentAnchor, StoredComment};
 
 use crate::storage::infra::hydration::helpers::PositionMap;
 
-/// Hydrate comments using structured Y.Map entries via `yrs_schema::comment`.
+/// Resolve imported comment anchors into typed native identities.
 ///
 /// Comments with source IDs, such as XLSX threaded-comment IDs, keep those IDs
 /// so parent/thread links remain valid through import, SDK readback, and export.
 pub(in crate::storage::infra::hydration) fn hydrate_comments(
-    txn: &mut yrs::TransactionMut,
-    comments_map: &MapRef,
     pos_map: &PositionMap,
     comments: &[domain_types::domain::comment::Comment],
     persons: &[domain_types::domain::comment::PersonInfo],
-) {
+) -> Vec<StoredComment> {
+    let mut result = Vec::with_capacity(comments.len());
     let person_map: HashMap<&str, &domain_types::domain::comment::PersonInfo> =
         persons.iter().map(|p| (p.id.as_str(), p)).collect();
     let mut used_comment_ids = HashSet::new();
@@ -42,10 +39,9 @@ pub(in crate::storage::infra::hydration) fn hydrate_comments(
             c.author_email = Some(email);
         }
 
-        let entries = yrs_schema::comment::to_yrs_prelim(&c);
-        let comment_prelim: MapPrelim = entries.into_iter().collect();
-        comments_map.insert(txn, &*comment_id, comment_prelim);
+        result.push(c.map_cell_ref(CommentAnchor::from_wire));
     }
+    result
 }
 
 fn allocate_comment_id(

@@ -25,9 +25,7 @@ pub use floating_objects::{FloatingObjectBounds, FloatingObjectChange};
 pub use policy_parse::{
     AutomaticConversionCategory, PolicyPreservedParseOutcome, PolicyPreservedParseSummary,
 };
-pub use primitives::{
-    Axis, ChangeKind, FloatingObjectChangeKind, SheetLifecycleRuntimeHint, UndoState,
-};
+pub use primitives::{Axis, ChangeKind, FloatingObjectChangeKind, SheetLifecycleRuntimeHint};
 pub use result::MutationResult;
 pub use sheet_workbook::{
     PageBreakChange, PrintAreaChange, PrintSettingsChange, PrintTitlesChange, ScrollPositionChange,

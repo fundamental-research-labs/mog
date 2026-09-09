@@ -1,6 +1,6 @@
 use super::shared;
 use crate::snapshot::MutationResult;
-use crate::storage::engine::YrsComputeEngine;
+use crate::storage::engine::ComputeEngine;
 use crate::storage::engine::services;
 use bridge_core as bridge;
 use cell_types::SheetId;
@@ -8,13 +8,13 @@ use domain_types::domain::comment::{Comment, CommentMention, CommentType};
 use value_types::ComputeError;
 
 #[bridge::api(
-    service = "YrsComputeEngine",
+    service = "ComputeEngine",
     key = "doc_id",
     group = "objects_comments",
     fn_prefix = "compute",
     crate_path = "compute_core"
 )]
-impl YrsComputeEngine {
+impl ComputeEngine {
     #[bridge::skip(ts_bridge)]
     #[bridge::write(scope = "sheet")]
     #[allow(clippy::too_many_arguments)]
@@ -28,18 +28,20 @@ impl YrsComputeEngine {
         parent_id: Option<String>,
         comment_type: CommentType,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let (result, row, col) = services::objects::add_comment(
-            &mut self.stores,
-            sheet_id,
-            cell_id,
-            text,
-            author,
-            author_id.as_deref(),
-            parent_id.as_deref(),
-            comment_type,
-        )?;
-        let patches = self.produce_comment_viewport_patches(sheet_id, &[(row, col)], true);
-        Ok((patches, result))
+        self.with_history(|engine| {
+            let (result, row, col) = services::objects::add_comment(
+                &mut engine.stores,
+                sheet_id,
+                cell_id,
+                text,
+                author,
+                author_id.as_deref(),
+                parent_id.as_deref(),
+                comment_type,
+            )?;
+            let patches = engine.produce_comment_viewport_patches(sheet_id, &[(row, col)], true);
+            Ok((patches, result))
+        })
     }
 
     /// Convert an existing note to a threaded comment.
@@ -51,7 +53,9 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         comment_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::convert_note_to_thread(&mut self.stores, sheet_id, comment_id)
+        self.with_history(|engine| {
+            services::objects::convert_note_to_thread(&mut engine.stores, sheet_id, comment_id)
+        })
     }
 
     #[bridge::write(scope = "sheet")]
@@ -61,7 +65,9 @@ impl YrsComputeEngine {
         comment_id: &str,
         text: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::update_comment(&mut self.stores, sheet_id, comment_id, text)
+        self.with_history(|engine| {
+            services::objects::update_comment(&mut engine.stores, sheet_id, comment_id, text)
+        })
     }
 
     #[bridge::write(scope = "sheet")]
@@ -70,14 +76,16 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         comment_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let (result, cell_pos, still_has) =
-            services::objects::delete_comment(&mut self.stores, sheet_id, comment_id)?;
-        let patches = if let Some((row, col)) = cell_pos {
-            self.produce_comment_viewport_patches(sheet_id, &[(row, col)], still_has)
-        } else {
-            shared::empty_patches()
-        };
-        Ok((patches, result))
+        self.with_history(|engine| {
+            let (result, cell_pos, still_has) =
+                services::objects::delete_comment(&mut engine.stores, sheet_id, comment_id)?;
+            let patches = if let Some((row, col)) = cell_pos {
+                engine.produce_comment_viewport_patches(sheet_id, &[(row, col)], still_has)
+            } else {
+                shared::empty_patches()
+            };
+            Ok((patches, result))
+        })
     }
 
     #[bridge::write(scope = "sheet")]
@@ -87,7 +95,9 @@ impl YrsComputeEngine {
         cell_id: &str,
         resolved: bool,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::set_thread_resolved(&mut self.stores, sheet_id, cell_id, resolved)
+        self.with_history(|engine| {
+            services::objects::set_thread_resolved(&mut engine.stores, sheet_id, cell_id, resolved)
+        })
     }
 
     #[bridge::read(scope = "sheet")]
@@ -138,7 +148,9 @@ impl YrsComputeEngine {
         comment_id: &str,
         visible: bool,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::set_note_visible(&mut self.stores, sheet_id, comment_id, visible)
+        self.with_history(|engine| {
+            services::objects::set_note_visible(&mut engine.stores, sheet_id, comment_id, visible)
+        })
     }
 
     /// Set the height and/or width of a note (in points).
@@ -150,13 +162,15 @@ impl YrsComputeEngine {
         height: Option<f64>,
         width: Option<f64>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::set_note_dimensions(
-            &mut self.stores,
-            sheet_id,
-            comment_id,
-            height,
-            width,
-        )
+        self.with_history(|engine| {
+            services::objects::set_note_dimensions(
+                &mut engine.stores,
+                sheet_id,
+                comment_id,
+                height,
+                width,
+            )
+        })
     }
 
     /// Check whether a cell has any comments.
@@ -175,10 +189,12 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         cell_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let (result, row, col) =
-            services::objects::delete_comments_for_cell(&mut self.stores, sheet_id, cell_id)?;
-        let patches = self.produce_comment_viewport_patches(sheet_id, &[(row, col)], false);
-        Ok((patches, result))
+        self.with_history(|engine| {
+            let (result, row, col) =
+                services::objects::delete_comments_for_cell(&mut engine.stores, sheet_id, cell_id)?;
+            let patches = engine.produce_comment_viewport_patches(sheet_id, &[(row, col)], false);
+            Ok((patches, result))
+        })
     }
 
     /// Remove all comments from a sheet.
@@ -187,14 +203,16 @@ impl YrsComputeEngine {
         &mut self,
         sheet_id: &SheetId,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let (result, positions) =
-            services::objects::clear_all_comments(&mut self.stores, sheet_id)?;
-        let patches = if positions.is_empty() {
-            shared::empty_patches()
-        } else {
-            self.produce_comment_viewport_patches(sheet_id, &positions, false)
-        };
-        Ok((patches, result))
+        self.with_history(|engine| {
+            let (result, positions) =
+                services::objects::clear_all_comments(&mut engine.stores, sheet_id)?;
+            let patches = if positions.is_empty() {
+                shared::empty_patches()
+            } else {
+                engine.produce_comment_viewport_patches(sheet_id, &positions, false)
+            };
+            Ok((patches, result))
+        })
     }
 
     /// Validate comments and remove orphans whose parent cells no longer exist.
@@ -204,7 +222,9 @@ impl YrsComputeEngine {
         &mut self,
         sheet_id: &SheetId,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::validate_and_clean_comments(&mut self.stores, sheet_id)
+        self.with_history(|engine| {
+            services::objects::validate_and_clean_comments(&mut engine.stores, sheet_id)
+        })
     }
 
     /// Update a comment with mention content. Sets content, content_type to Mention,
@@ -217,13 +237,15 @@ impl YrsComputeEngine {
         content: &str,
         mentions: Vec<CommentMention>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::update_comment_mentions(
-            &mut self.stores,
-            sheet_id,
-            comment_id,
-            content,
-            mentions,
-        )
+        self.with_history(|engine| {
+            services::objects::update_comment_mentions(
+                &mut engine.stores,
+                sheet_id,
+                comment_id,
+                content,
+                mentions,
+            )
+        })
     }
 
     // -------------------------------------------------------------------
@@ -233,8 +255,7 @@ impl YrsComputeEngine {
     /// Add a comment to a cell identified by (row, col) position.
     ///
     /// Resolves the CellId from the grid index. If no cell exists at the
-    /// position, a new CellId is created and registered in both the
-    /// in-memory grid index and the Yrs grid index maps.
+    /// position, a new CellId is registered in the shared native identity index.
     #[bridge::write(scope = "cell")]
     #[allow(clippy::too_many_arguments)]
     pub fn add_comment_by_position(
@@ -248,21 +269,23 @@ impl YrsComputeEngine {
         parent_id: Option<String>,
         comment_type: CommentType,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let (result, cell_id) = services::objects::add_comment_by_position(
-            &mut self.stores,
-            &self.mirror,
-            sheet_id,
-            row,
-            col,
-            text,
-            author,
-            author_id.as_deref(),
-            parent_id.as_deref(),
-            comment_type,
-        )?;
-        self.mirror.set_comment(sheet_id, cell_id);
-        let patches = self.produce_comment_viewport_patches(sheet_id, &[(row, col)], true);
-        Ok((patches, result))
+        self.with_history(|engine| {
+            let (result, cell_id) = services::objects::add_comment_by_position(
+                &mut engine.stores,
+                &mut engine.mirror,
+                sheet_id,
+                row,
+                col,
+                text,
+                author,
+                author_id.as_deref(),
+                parent_id.as_deref(),
+                comment_type,
+            )?;
+            engine.mirror.set_comment(sheet_id, cell_id);
+            let patches = engine.produce_comment_viewport_patches(sheet_id, &[(row, col)], true);
+            Ok((patches, result))
+        })
     }
 
     /// Get comments for a cell identified by (row, col) position.
@@ -290,20 +313,23 @@ impl YrsComputeEngine {
         row: u32,
         col: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let (result, cell_id) = services::objects::delete_comments_for_cell_by_position(
-            &mut self.stores,
-            sheet_id,
-            row,
-            col,
-        )?;
-        if let Some(cid) = cell_id {
-            self.mirror.remove_comment(sheet_id, &cid);
-            let patches = self.produce_comment_viewport_patches(sheet_id, &[(row, col)], false);
-            Ok((patches, result))
-        } else {
-            let patches = shared::empty_patches();
-            Ok((patches, result))
-        }
+        self.with_history(|engine| {
+            let (result, cell_id) = services::objects::delete_comments_for_cell_by_position(
+                &mut engine.stores,
+                sheet_id,
+                row,
+                col,
+            )?;
+            if let Some(cid) = cell_id {
+                engine.mirror.remove_comment(sheet_id, &cid);
+                let patches =
+                    engine.produce_comment_viewport_patches(sheet_id, &[(row, col)], false);
+                Ok((patches, result))
+            } else {
+                let patches = shared::empty_patches();
+                Ok((patches, result))
+            }
+        })
     }
 
     // -------------------------------------------------------------------

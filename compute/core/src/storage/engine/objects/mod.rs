@@ -1,4 +1,4 @@
-//! Object bridge methods for YrsComputeEngine.
+//! Object bridge methods for ComputeEngine.
 
 mod annotations;
 mod charts;

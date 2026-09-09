@@ -1,13 +1,13 @@
 use super::support::{
     as_f64, assert_number_at, assert_sum_at, cell_at, cell_id, sheet_id, workbook_10_rows,
 };
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use value_types::{CellValue, FiniteF64};
 
 #[test]
 fn lifecycle_import_cold_load_read() {
     let snap = workbook_10_rows();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).expect("from_snapshot");
+    let (engine, _) = ComputeEngine::from_snapshot(snap).expect("from_snapshot");
     let sid = sheet_id(0);
 
     for r in 0..10u32 {
@@ -24,7 +24,7 @@ fn lifecycle_import_cold_load_read() {
     assert_sum_at(&engine, &sid, 0, 1, 55.0, "cold-load SUM(A1:A10)");
 
     let sheet = engine.mirror().get_sheet(&sid).expect("sheet mirror");
-    if let Some(col_slice) = sheet.get_column_slice(0) {
+    if let Some(col_slice) = sheet.get_column_view(0) {
         assert!(
             col_slice.len() >= 10,
             "col_data for column A should have at least 10 entries"
@@ -44,8 +44,7 @@ fn lifecycle_import_cold_load_read() {
 
 #[test]
 fn lifecycle_edit_cell_recalc() {
-    let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(workbook_10_rows()).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(workbook_10_rows()).expect("from_snapshot");
     let sid = sheet_id(0);
     let a1 = cell_id(0, 0, 0);
 
@@ -61,7 +60,7 @@ fn lifecycle_edit_cell_recalc() {
 #[test]
 fn lifecycle_import_values_roundtrip() {
     let snap = workbook_10_rows();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).expect("from_snapshot");
     let sid = sheet_id(0);
 
     let new_values: Vec<(u32, u32, CellValue, Option<String>)> = (0..5u32)

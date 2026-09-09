@@ -7,22 +7,25 @@
 //! reflective enumeration over the bridge descriptors.
 //!
 //! Grep-worthy list of bump sites (each must be in this test):
-//! 1. `YrsComputeEngine::structure_change` (insert/delete rows/cols)
-//! 2. `YrsComputeEngine::apply_mutation(EngineMutation::CreateSheet)`
-//! 3. `YrsComputeEngine::apply_mutation(EngineMutation::DeleteSheet)`
-//! 4. `YrsComputeEngine::apply_mutation(EngineMutation::CopySheet)`
-//! 5. `YrsComputeEngine::apply_mutation(EngineMutation::RenameSheet)`
-//! 6. `YrsComputeEngine::reorder_sheets`
+//! 1. `ComputeEngine::structure_change` (insert/delete rows/cols)
+//! 2. `ComputeEngine::apply_mutation(EngineMutation::CreateSheet)`
+//! 3. `ComputeEngine::apply_mutation(EngineMutation::DeleteSheet)`
+//! 4. `ComputeEngine::apply_mutation(EngineMutation::CopySheet)`
+//! 5. `ComputeEngine::apply_mutation(EngineMutation::RenameSheet)`
+//! 6. `ComputeEngine::reorder_sheets`
 
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use formula_types::StructureChange;
 use snapshot_types::{SheetSnapshot, WorkbookSnapshot};
 
 const SHEET1_UUID: &str = "11111111-1111-1111-1111-111111111111";
 
-fn fresh_engine() -> YrsComputeEngine {
+fn fresh_engine() -> ComputeEngine {
     let snapshot = WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET1_UUID.to_string(),
             name: "Sheet1".to_string(),
             rows: 10,
@@ -32,7 +35,7 @@ fn fresh_engine() -> YrsComputeEngine {
         }],
         ..Default::default()
     };
-    let (engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (engine, _) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
     engine
 }
 
@@ -107,7 +110,7 @@ fn copy_sheet_bumps_structure_version() {
 }
 
 // rename_sheet has no direct `#[bridge::write]` entry point on
-// YrsComputeEngine — it routes through `EngineMutation::RenameSheet`
+// ComputeEngine — it routes through `EngineMutation::RenameSheet`
 // via `apply_mutation` which is `pub(crate)`. The bump is verified at
 // the apply_mutation branch (see engine/mod.rs). When R3.2 reclassifies
 // and exposes a structural rename method, this test should be

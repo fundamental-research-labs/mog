@@ -1,64 +1,54 @@
-use yrs::{Doc, MapRef};
-
 use crate::snapshot::CalculationSettings;
+use crate::storage::workbook::WorkbookMetadata;
 
-use super::read::get_settings;
-use super::write::set_setting;
-
-pub fn get_calculation_settings(doc: &Doc, workbook: &MapRef) -> CalculationSettings {
-    let settings = get_settings(doc, workbook);
-    settings.calculation_settings.unwrap_or_default()
+pub fn get_calculation_settings(metadata: &WorkbookMetadata) -> CalculationSettings {
+    metadata
+        .settings
+        .calculation_settings
+        .clone()
+        .unwrap_or_default()
 }
 
-/// Check if iterative calculation is enabled.
-pub fn is_iterative_calculation_enabled(doc: &Doc, workbook: &MapRef) -> bool {
-    get_calculation_settings(doc, workbook).enable_iterative_calculation
+pub fn is_iterative_calculation_enabled(metadata: &WorkbookMetadata) -> bool {
+    metadata
+        .settings
+        .calculation_settings
+        .as_ref()
+        .is_some_and(|s| s.enable_iterative_calculation)
 }
 
-/// Set calculation settings (merges with current values).
-///
-/// Serializes to a JSON object and stores via `json_to_any`, which converts to
-/// a structured `Any::Map` instead of a JSON string.
-pub fn set_calculation_settings(doc: &Doc, workbook: &MapRef, updates: &CalculationSettings) {
-    let json_val =
-        serde_json::to_value(updates).expect("CalculationSettings serialization should not fail");
-    set_setting(doc, workbook, "calculationSettings", json_val);
+pub fn set_calculation_settings(metadata: &mut WorkbookMetadata, settings: &CalculationSettings) {
+    metadata.settings.calculation_settings = Some(settings.clone());
 }
 
-/// Enable or disable iterative calculation.
-pub fn set_iterative_calculation_enabled(doc: &Doc, workbook: &MapRef, enabled: bool) {
-    let mut current = get_calculation_settings(doc, workbook);
-    current.enable_iterative_calculation = enabled;
-    set_calculation_settings(doc, workbook, &current);
+pub fn set_iterative_calculation_enabled(metadata: &mut WorkbookMetadata, enabled: bool) {
+    metadata
+        .settings
+        .calculation_settings
+        .get_or_insert_with(Default::default)
+        .enable_iterative_calculation = enabled;
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::YrsStorage;
+    use crate::storage::workbook::WorkbookMetadata;
 
     #[test]
     fn test_calculation_settings() {
-        let storage = YrsStorage::new();
+        let mut metadata = WorkbookMetadata::default();
 
         // Default: iterative calc disabled
-        let calc = get_calculation_settings(storage.doc(), storage.workbook_map());
+        let calc = get_calculation_settings(&metadata);
         assert!(!calc.enable_iterative_calculation);
         assert_eq!(calc.max_iterations, 100);
         assert!((calc.max_change.get() - 0.001).abs() < f64::EPSILON);
 
-        assert!(!is_iterative_calculation_enabled(
-            storage.doc(),
-            storage.workbook_map()
-        ));
+        assert!(!is_iterative_calculation_enabled(&metadata));
 
         // Enable iterative calc
-        set_iterative_calculation_enabled(storage.doc(), storage.workbook_map(), true);
+        set_iterative_calculation_enabled(&mut metadata, true);
 
-        assert!(is_iterative_calculation_enabled(
-            storage.doc(),
-            storage.workbook_map()
-        ));
+        assert!(is_iterative_calculation_enabled(&metadata));
 
         // Set full calculation settings
         let new_calc = CalculationSettings {
@@ -67,9 +57,9 @@ mod tests {
             max_change: value_types::FiniteF64::must(0.0001),
             ..Default::default()
         };
-        set_calculation_settings(storage.doc(), storage.workbook_map(), &new_calc);
+        set_calculation_settings(&mut metadata, &new_calc);
 
-        let calc = get_calculation_settings(storage.doc(), storage.workbook_map());
+        let calc = get_calculation_settings(&metadata);
         assert!(calc.enable_iterative_calculation);
         assert_eq!(calc.max_iterations, 500);
         assert!((calc.max_change.get() - 0.0001).abs() < f64::EPSILON);

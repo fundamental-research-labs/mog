@@ -220,10 +220,8 @@ pub(super) fn build_sheet_parts(
         }
 
         // ── Sort State ──────────────────────────────────────────────────
-        // Typed OOXML preservation: worksheet-level sort state now reconstructs from
-        // the typed `SheetData.sort_state`. The former raw-XML sidecar on
-        // raw sort-state sidecar was silently dropping sort
-        // state on the Yrs-hydration path whenever the blob was absent.
+        // Reconstruct worksheet-level sort state from the typed field,
+        // including outputs assembled from native storage without raw XML.
         if let Some(ref ss) = sheet_data.sort_state {
             let xml = crate::domain::auto_filter::write::write_sort_state_xml(ss);
             sheet_writer.set_sort_state_xml(xml);

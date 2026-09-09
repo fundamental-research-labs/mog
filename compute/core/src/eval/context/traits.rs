@@ -98,17 +98,8 @@ pub trait DataSource {
     /// Number of columns in a sheet, or `None` if the sheet doesn't exist.
     fn sheet_cols(&self, sheet: &SheetId) -> Option<u32>;
 
-    /// Whether the sheet has any column data at all.
-    ///
-    /// Used to decide between dense column-slice iteration and sparse
-    /// cell-by-cell fallback during range materialization.
-    fn col_data_is_empty(&self, sheet: &SheetId) -> bool;
-
-    /// Get a column's values as a contiguous slice, or `None` if unavailable.
-    ///
-    /// The slice is indexed by row number. Used by the dense materialization
-    /// tier for direct column-slice iteration.
-    fn get_column_slice(&self, sheet: &SheetId, col: u32) -> Option<&[CellValue]>;
+    /// Borrow a column by row number without copying its values.
+    fn get_column_view(&self, sheet: &SheetId, col: u32) -> Option<value_types::ColumnView<'_>>;
 
     /// Resolve a position to a CellId, or `None` if no cell exists there.
     fn cell_id_at(&self, sheet: &SheetId, row: u32, col: u32) -> Option<CellId>;
@@ -188,6 +179,17 @@ pub trait EvalMetadata {
         None
     }
 
+    /// Borrow or derive a numeric column when the requested range warrants caching.
+    fn get_dense_column_for_range(
+        &self,
+        sheet: &SheetId,
+        col: u32,
+        _start_row: u32,
+        _end_row: u32,
+    ) -> Option<&DenseColumn> {
+        self.get_dense_column(sheet, col)
+    }
+
     /// Get the boolean mask for a dense column.
     ///
     /// The mask tracks which rows contain boolean-sourced values. Used by
@@ -199,12 +201,15 @@ pub trait EvalMetadata {
 
     /// Get the raw cell values for a column as a borrowed slice.
     ///
-    /// Returns the dense column store data for `(sheet, col)` as a contiguous
-    /// `&[CellValue]` slice indexed by row number. Used by borrowed aggregate
+    /// Returns borrowed native values for `(sheet, col)`, indexed by row number. Used by borrowed aggregate
     /// fast paths to iterate range data without materializing `CellValue::Array`.
     ///
     /// Returns `None` if the sheet/column is not available or not in the dense store.
-    fn get_column_values(&self, _sheet: &SheetId, _col: u32) -> Option<&[CellValue]> {
+    fn get_column_values(
+        &self,
+        _sheet: &SheetId,
+        _col: u32,
+    ) -> Option<value_types::ColumnView<'_>> {
         None
     }
 
@@ -316,77 +321,6 @@ pub trait EvalMetadata {
         None
     }
 
-    /// Look up (or build) a `CountFrequencyMap` for the given single-column range
-    /// and return the count for `criteria`.
-    ///
-    /// Returns `None` by default, signalling the caller to fall back to the
-    /// thread-local frequency cache.
-    ///
-    /// `sheet`: sheet containing the range.
-    /// `col`: column index of the single-column range.
-    /// `row_start`/`row_end`: inclusive row bounds.
-    /// `values`: cell value refs to build the frequency map from (used on cache miss).
-    /// `criteria`: the criteria value to look up in the frequency map.
-    fn count_frequency_lookup(
-        &self,
-        _sheet: &SheetId,
-        _col: u32,
-        _row_start: u32,
-        _row_end: u32,
-        _values: &[&CellValue],
-        _criteria: &CellValue,
-    ) -> Option<u64> {
-        None
-    }
-
-    /// Look up (or build) a `SumFrequencyMap` for the given criteria+sum range pair
-    /// and return the sum for `criteria`.
-    ///
-    /// Returns `None` if no persistent cache is available. Returns
-    /// `Some(Ok(sum))` on success or `Some(Err(CellError))` if the entry is
-    /// poisoned (an error cell appeared in the sum range for that criteria key).
-    ///
-    /// `crit_sheet`/`crit_col`/`crit_row_start`/`crit_row_end`: criteria range.
-    /// `sum_sheet`/`sum_col`/`sum_row_start`/`sum_row_end`: sum range.
-    /// `crit_values`/`sum_values`: cell value refs (used on cache miss).
-    /// `criteria`: the criteria value to look up.
-    #[allow(clippy::too_many_arguments)]
-    fn sum_frequency_lookup(
-        &self,
-        _crit_sheet: &SheetId,
-        _crit_col: u32,
-        _crit_row_start: u32,
-        _crit_row_end: u32,
-        _sum_sheet: &SheetId,
-        _sum_col: u32,
-        _sum_row_start: u32,
-        _sum_row_end: u32,
-        _crit_values: &[&CellValue],
-        _sum_values: &[&CellValue],
-        _criteria: &CellValue,
-    ) -> Option<Result<f64, CellError>> {
-        None
-    }
-
-    /// Like `sum_frequency_lookup` but returns `(sum, count)` for AVERAGEIF.
-    #[allow(clippy::too_many_arguments)]
-    fn sum_and_count_frequency_lookup(
-        &self,
-        _crit_sheet: &SheetId,
-        _crit_col: u32,
-        _crit_row_start: u32,
-        _crit_row_end: u32,
-        _sum_sheet: &SheetId,
-        _sum_col: u32,
-        _sum_row_start: u32,
-        _sum_row_end: u32,
-        _crit_values: &[&CellValue],
-        _sum_values: &[&CellValue],
-        _criteria: &CellValue,
-    ) -> Option<Result<(f64, u64), CellError>> {
-        None
-    }
-
     /// Look up (or build) a criteria bitmask for a single-column range.
     ///
     /// Returns a `ColumnBitset` where bit `i` set = row `i` matches the criteria.
@@ -401,7 +335,7 @@ pub trait EvalMetadata {
         _row_start: u32,
         _row_end: u32,
         _criteria: &CellValue,
-        _col_values: &[CellValue],
+        _col_values: value_types::ColumnView<'_>,
     ) -> Option<compute_functions::helpers::column_bitset::ColumnBitset> {
         None
     }
@@ -419,7 +353,7 @@ pub trait EvalMetadata {
         _row_start: u32,
         _row_end: u32,
         _criteria: &CellValue,
-        _col_values: &[CellValue],
+        _col_values: value_types::ColumnView<'_>,
     ) -> Option<compute_functions::helpers::column_bitset::ColumnBitset> {
         None
     }

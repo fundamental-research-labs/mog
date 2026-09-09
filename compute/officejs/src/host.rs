@@ -101,6 +101,32 @@ impl Host {
             message: format!("invalid Office.js batch: {e}"),
         })?;
 
+        if !ops
+            .iter()
+            .any(|op| matches!(op, Op::AddWorksheet { .. } | Op::Set { .. }))
+        {
+            return self.apply_batch(ops);
+        }
+
+        // One mutating context.sync() is one user action. Nesting lets callers
+        // combine several syncs with an explicit WorkbookHistory group.
+        let history = self.workbook.history();
+        history.begin_undo_group().map_err(engine_error)?;
+        let result = self.apply_batch(ops);
+        let end_result = history.end_undo_group().map_err(engine_error);
+
+        // A failed batch retains its successful prefix. Close the group even
+        // on that path, and preserve the original operation's error.
+        match result {
+            Ok(batch) => {
+                end_result?;
+                Ok(batch)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    fn apply_batch(&self, ops: Vec<Op>) -> Result<BatchResult, BatchError> {
         let mut loaded = HashMap::new();
         for op in ops {
             match op {

@@ -11,9 +11,7 @@
 //! 3. **Slicer connection checking** helpers
 //! 4. **Slicer item state** types for UI rendering
 //!
-//! The actual CRDT storage operations are handled by `storage/mod.rs`
-//! (KEY_SLICERS). This module provides the supporting types and pure helpers
-//! that the storage layer uses.
+//! Workbook metadata owns the native slicer and timeline collections.
 
 pub use domain_types::domain::slicer::{
     CacheInvalidationEventReason, CrossFilterMode, DisconnectionEventReason, NamedSlicerStyle,
@@ -115,6 +113,126 @@ pub fn find_disconnected_slicers(
         })
         .map(|(i, _)| i)
         .collect()
+}
+
+/// Copy workbook-owned objects after native pivot identities have been allocated.
+pub(crate) fn copy_sheet_objects(
+    storage: &mut crate::storage::WorkbookStorage,
+    source: &cell_types::SheetId,
+    target: &cell_types::SheetId,
+    pivot_copies: &std::collections::HashMap<String, domain_types::domain::pivot::PivotTableConfig>,
+    allocator: &cell_types::IdAllocator,
+) {
+    fn copied_name(name: &str, identity: u128) -> String {
+        format!(
+            "{}_{identity:032x}",
+            name.chars().take(220).collect::<String>()
+        )
+    }
+    let mut slicer_cache_names = std::collections::HashMap::new();
+    let mut timeline_cache_names = std::collections::HashMap::new();
+    let copies: Vec<_> = storage
+        .metadata
+        .slicers
+        .values()
+        .filter(|slicer| {
+            cell_types::SheetId::from_uuid_str(&slicer.sheet_id)
+                .ok()
+                .as_ref()
+                == Some(source)
+        })
+        .cloned()
+        .collect();
+    for mut slicer in copies {
+        let new_identity = allocator.next_u128();
+        let cache_key = slicer
+            .cache_name
+            .clone()
+            .unwrap_or_else(|| slicer.id.clone());
+        slicer.id = uuid::Uuid::from_u128(new_identity).to_string();
+        slicer.sheet_id = target.to_uuid_string();
+        slicer.name = Some(copied_name(
+            slicer.name.as_deref().unwrap_or(&slicer.caption),
+            new_identity,
+        ));
+        slicer.cache_name = Some(
+            slicer_cache_names
+                .entry(cache_key.clone())
+                .or_insert_with(|| copied_name(&cache_key, allocator.next_u128()))
+                .clone(),
+        );
+        slicer.uid = None;
+        slicer.cache_uid = None;
+        slicer.anchor_object_id = None;
+        if let SlicerSource::Pivot { pivot_id, .. } = &mut slicer.source {
+            if let Some(copy) = pivot_copies.get(pivot_id) {
+                *pivot_id = copy.id.clone();
+                slicer.pivot_cache_id = copy.cache_id;
+                slicer.pivot_table_tab_id = None;
+            }
+        }
+        crate::storage::engine::history::metadata::capture_workbook_entry!(
+            storage, slicers, slicer.id
+        );
+        storage.metadata.slicers.insert(slicer.id.clone(), slicer);
+    }
+    let copies: Vec<_> = storage
+        .metadata
+        .timelines
+        .values()
+        .filter(|timeline| {
+            cell_types::SheetId::from_uuid_str(&timeline.sheet_id)
+                .ok()
+                .as_ref()
+                == Some(source)
+        })
+        .cloned()
+        .collect();
+    for mut timeline in copies {
+        let new_identity = allocator.next_u128();
+        timeline.id = uuid::Uuid::from_u128(new_identity).to_string();
+        timeline.sheet_id = target.to_uuid_string();
+        timeline.name = copied_name(&timeline.name, new_identity);
+        timeline.cache_name = timeline_cache_names
+            .entry(timeline.cache_name.clone())
+            .or_insert_with(|| copied_name(&timeline.cache_name, allocator.next_u128()))
+            .clone();
+        timeline.uid = None;
+        timeline.anchor_object_id = None;
+        if let Some(cache) = timeline.cache.as_mut() {
+            cache.name = timeline.cache_name.clone();
+            cache.uid = None;
+            let copied_cache_id = cache
+                .pivot_tables
+                .iter()
+                .filter_map(|pivot| pivot_copies.get(&pivot.name))
+                .find_map(|pivot| pivot.cache_id)
+                .or(cache.pivot_cache_id);
+            let forked_cache = copied_cache_id != cache.pivot_cache_id;
+            cache.pivot_tables.retain_mut(|pivot| {
+                if let Some(copy) = pivot_copies.get(&pivot.name) {
+                    pivot.name.clone_from(&copy.name);
+                    // Export resolves the copied sheet's generated OOXML ID.
+                    pivot.tab_id = 0;
+                    true
+                } else {
+                    // External connections remain valid while the copied pivot
+                    // continues to use their shared source cache.
+                    !forked_cache
+                }
+            });
+            cache.pivot_cache_id = copied_cache_id;
+        }
+        crate::storage::engine::history::metadata::capture_workbook_entry!(
+            storage,
+            timelines,
+            timeline.id
+        );
+        storage
+            .metadata
+            .timelines
+            .insert(timeline.id.clone(), timeline);
+    }
 }
 
 // ============================================================================

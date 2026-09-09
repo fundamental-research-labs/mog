@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use super::helpers::*;
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use domain_types::{ErrorStyle, ImeMode, ValidationOperator, ValidationRule, ValidationSpec};
 use value_types::{CellValue, FiniteF64};
 use xlsx_parser::write::write_xlsx_from_parse_output;
@@ -152,7 +152,7 @@ fn roundtrip_data_validation_declared_count_survives_l2_hydration_export() {
     output.sheets[0].data_validations_declared_count = Some(2);
 
     let xlsx_bytes = write_xlsx_from_parse_output(&output).expect("write_xlsx_from_parse_output");
-    let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
+    let (engine, _) = ComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
     let exported = engine
         .export_to_parse_output()
         .expect("export_to_parse_output")
@@ -181,7 +181,7 @@ fn roundtrip_x14_data_validation_hydrates_into_canonical_validation_store() {
     output.sheets[0].x14_data_validations_declared_count = Some(1);
 
     let xlsx_bytes = write_xlsx_from_parse_output(&output).expect("write_xlsx_from_parse_output");
-    let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
+    let (engine, _) = ComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
     let exported = engine
         .export_to_parse_output()
         .expect("export_to_parse_output")
@@ -203,7 +203,7 @@ fn roundtrip_empty_data_validation_container_survives_l2_hydration_export() {
     output.sheets[0].data_validations_declared_count = Some(0);
 
     let xlsx_bytes = write_xlsx_from_parse_output(&output).expect("write_xlsx_from_parse_output");
-    let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
+    let (engine, _) = ComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
     let exported = engine
         .export_to_parse_output()
         .expect("export_to_parse_output")

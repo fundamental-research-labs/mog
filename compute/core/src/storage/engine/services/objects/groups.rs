@@ -11,13 +11,7 @@ pub(in crate::storage::engine) fn set_floating_object_group(
     group_id: &str,
     json: serde_json::Value,
 ) -> Result<MutationResult, ComputeError> {
-    floating_objects::set_floating_object_group(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        group_id,
-        &json,
-    )?;
+    floating_objects::set_floating_object_group(&mut stores.storage, sheet_id, group_id, &json)?;
     let mut result = MutationResult::empty();
     result
         .floating_object_group_changes
@@ -40,8 +34,7 @@ pub(in crate::storage::engine) fn get_floating_object_group(
     group_id: &str,
 ) -> Result<Option<serde_json::Value>, ComputeError> {
     Ok(floating_objects::get_floating_object_group(
-        stores.storage.doc(),
-        stores.storage.sheets(),
+        &stores.storage,
         sheet_id,
         group_id,
     ))
@@ -52,8 +45,7 @@ pub(in crate::storage::engine) fn get_floating_object_groups_in_sheet(
     sheet_id: &SheetId,
 ) -> Result<Vec<(String, serde_json::Value)>, ComputeError> {
     Ok(floating_objects::get_all_floating_object_groups(
-        stores.storage.doc(),
-        stores.storage.sheets(),
+        &stores.storage,
         sheet_id,
     ))
 }
@@ -63,12 +55,8 @@ pub(in crate::storage::engine) fn delete_floating_object_group(
     sheet_id: &SheetId,
     group_id: &str,
 ) -> Result<MutationResult, ComputeError> {
-    let deleted = floating_objects::delete_floating_object_group(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        group_id,
-    );
+    let deleted =
+        floating_objects::delete_floating_object_group(&mut stores.storage, sheet_id, group_id);
     if !deleted {
         return Err(ComputeError::InvalidInput {
             message: format!("floating object group '{group_id}' not found"),
@@ -113,13 +101,8 @@ pub(in crate::storage::engine) fn create_floating_object_group(
             .ok_or_else(|| ComputeError::InvalidInput {
                 message: "floating object group member IDs must be strings".to_string(),
             })?;
-        if floating_objects::get_floating_object_typed(
-            stores.storage.doc(),
-            stores.storage.sheets(),
-            sheet_id,
-            member_id,
-        )
-        .is_none()
+        if floating_objects::get_floating_object_typed(&stores.storage, sheet_id, member_id)
+            .is_none()
         {
             return Err(ComputeError::InvalidInput {
                 message: format!("floating object '{member_id}' not found"),
@@ -127,8 +110,7 @@ pub(in crate::storage::engine) fn create_floating_object_group(
         }
     }
     let group_id = floating_objects::create_floating_object_group(
-        stores.storage.doc(),
-        stores.storage.sheets(),
+        &mut stores.storage,
         sheet_id,
         config,
         &stores.id_alloc,
@@ -154,8 +136,7 @@ pub(in crate::storage::engine) fn update_floating_object_group(
     updates: &serde_json::Value,
 ) -> Result<MutationResult, ComputeError> {
     floating_objects::update_floating_object_group(
-        stores.storage.doc(),
-        stores.storage.sheets(),
+        &mut stores.storage,
         sheet_id,
         group_id,
         updates,
@@ -181,23 +162,14 @@ pub(in crate::storage::engine) fn get_floating_object_group_typed(
     sheet_id: &SheetId,
     group_id: &str,
 ) -> Option<SerializedFloatingObjectGroup> {
-    floating_objects::get_floating_object_group_typed(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        group_id,
-    )
+    floating_objects::get_floating_object_group_typed(&stores.storage, sheet_id, group_id)
 }
 
 pub(in crate::storage::engine) fn get_all_floating_object_groups_typed(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> Vec<SerializedFloatingObjectGroup> {
-    floating_objects::get_all_floating_object_groups_typed(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-    )
+    floating_objects::get_all_floating_object_groups_typed(&stores.storage, sheet_id)
 }
 
 // -------------------------------------------------------------------

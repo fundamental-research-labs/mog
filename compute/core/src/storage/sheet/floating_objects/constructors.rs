@@ -1,25 +1,20 @@
 use crate::engine_types::floating_objects::CreateShapeConfig;
+use crate::storage::WorkbookStorage;
 use cell_types::SheetId;
 use compute_document::hex::id_to_hex;
 use compute_document::identity::GridIndex;
-use compute_document::schema::KEY_FLOATING_OBJECTS;
-use compute_document::undo::ORIGIN_USER_EDIT;
 use domain_types::domain::floating_object::{
     AnchorMode, ChartData, FloatingObject, FloatingObjectAnchor, FloatingObjectCommon,
     FloatingObjectData, ShapeData,
 };
 use value_types::ComputeError;
-use yrs::{Doc, MapRef, Origin, Transact};
 
-use super::codec::{read_all_typed, write_object_typed};
 use super::ids::{generate_object_id, now_millis};
 use super::keys::{
     KEY_ANCHOR_COL_OFFSET_EMU, KEY_ANCHOR_ROW_OFFSET_EMU, KEY_END_COL_OFFSET_EMU,
     KEY_END_ROW_OFFSET_EMU, KEY_EXTENT_CX_EMU, KEY_EXTENT_CY_EMU,
 };
-use super::objects::get_all_floating_objects;
-use super::order::append_object_id_if_missing;
-use super::sheet_map::get_sheet_submap;
+use super::state::{required_state_mut, state};
 use super::units::{json_i64_alias, px_to_emu};
 
 fn json_number_to_i64(value: &serde_json::Value) -> Option<i64> {
@@ -69,27 +64,30 @@ fn nested_or_flat_i64_alias(
 }
 
 pub fn create_shape_from_config(
-    doc: &Doc,
-    sheets: &MapRef,
+    storage: &mut WorkbookStorage,
     sheet_id: &SheetId,
     config: &CreateShapeConfig,
     grid_index: Option<&mut GridIndex>,
     id_alloc: &cell_types::IdAllocator,
 ) -> Result<serde_json::Value, ComputeError> {
     let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let map =
-        get_sheet_submap(&txn, sheets, &sheet_hex, KEY_FLOATING_OBJECTS).ok_or_else(|| {
-            ComputeError::SheetNotFound {
-                sheet_id: sheet_hex.to_string(),
-            }
-        })?;
-
     let object_id = generate_object_id(id_alloc);
+    crate::storage::engine::history::metadata::capture_sheet_entry!(
+        storage,
+        *sheet_id,
+        floating_objects.objects,
+        object_id
+    );
+    crate::storage::engine::history::metadata::capture_sheet_field!(
+        storage,
+        *sheet_id,
+        floating_objects.order
+    );
+    let state = required_state_mut(storage, sheet_id)?;
     let now = now_millis();
 
     // Read all floating objects once and reuse for z-index and shape counting.
-    let all_objects = read_all_typed(&txn, &map);
+    let all_objects: Vec<_> = state.objects.values().collect();
 
     // Compute z-index: max across all floating objects (charts are floating objects now), then +1.
     let max_z = all_objects
@@ -173,9 +171,9 @@ pub fn create_shape_from_config(
         }),
     };
 
-    write_object_typed(&mut txn, &map, &object_id, &obj);
-    append_object_id_if_missing(&mut txn, sheets, &sheet_hex, &object_id);
-    serde_json::to_value(&obj).map_err(|e| ComputeError::Eval {
+    let result = serde_json::to_value(&obj);
+    state.insert(obj);
+    result.map_err(|e| ComputeError::Eval {
         message: e.to_string(),
     })
 }
@@ -185,31 +183,34 @@ pub fn create_shape_from_config(
 /// Generates a unique ID, computes z-index (max of all floating objects + 1),
 /// and stores the object via `write_object_typed` (the canonical struct-based write path).
 /// All chart domain fields (series, axes, legend, colors, data ranges, etc.) are
-/// stored as individual Y.Map keys on the floating object — no `chartConfig` sub-object.
+/// decoded into the chart domain fields at the public JSON boundary.
 ///
 /// Returns the full JSON object on success.
 pub fn create_chart_object(
-    doc: &Doc,
-    sheets: &MapRef,
+    storage: &mut WorkbookStorage,
     sheet_id: &SheetId,
     config: &serde_json::Value,
     grid_index: Option<&mut GridIndex>,
     id_alloc: &cell_types::IdAllocator,
 ) -> Result<serde_json::Value, ComputeError> {
     let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let map =
-        get_sheet_submap(&txn, sheets, &sheet_hex, KEY_FLOATING_OBJECTS).ok_or_else(|| {
-            ComputeError::SheetNotFound {
-                sheet_id: sheet_hex.to_string(),
-            }
-        })?;
-
     let object_id = generate_object_id(id_alloc);
+    crate::storage::engine::history::metadata::capture_sheet_entry!(
+        storage,
+        *sheet_id,
+        floating_objects.objects,
+        object_id
+    );
+    crate::storage::engine::history::metadata::capture_sheet_field!(
+        storage,
+        *sheet_id,
+        floating_objects.order
+    );
+    let state = required_state_mut(storage, sheet_id)?;
     let now = now_millis();
 
     // Read all floating objects for z-index and chart counting.
-    let all_objects = read_all_typed(&txn, &map);
+    let all_objects: Vec<_> = state.objects.values().collect();
 
     // Compute z-index: max across all floating objects (charts are floating objects now), then +1.
     let max_z = all_objects
@@ -351,41 +352,30 @@ pub fn create_chart_object(
         data: FloatingObjectData::Chart(chart_data),
     };
 
-    write_object_typed(&mut txn, &map, &object_id, &obj);
-    append_object_id_if_missing(&mut txn, sheets, &sheet_hex, &object_id);
-    serde_json::to_value(&obj).map_err(|e| ComputeError::Eval {
+    let result = serde_json::to_value(&obj);
+    state.insert(obj);
+    result.map_err(|e| ComputeError::Eval {
         message: e.to_string(),
     })
 }
 
-// =============================================================================
-// Chart Query Helpers (floating objects filtered by type=="chart")
-// =============================================================================
-
-/// Get all chart floating objects in a sheet as JSON values.
-#[allow(dead_code)]
-pub fn get_chart_objects(doc: &Doc, sheets: &MapRef, sheet_id: &SheetId) -> Vec<serde_json::Value> {
-    get_all_floating_objects(doc, sheets, sheet_id)
+/// Get native chart objects, excluding other drawing kinds before cloning.
+pub fn get_chart_objects(storage: &WorkbookStorage, sheet_id: &SheetId) -> Vec<FloatingObject> {
+    state(storage, sheet_id)
         .into_iter()
-        .filter(|(_id, json)| json.get("type").and_then(|v| v.as_str()) == Some("chart"))
-        .map(|(_id, json)| json)
+        .flat_map(|state| state.objects.values())
+        .filter(|object| matches!(object.data, FloatingObjectData::Chart(_)))
+        .map(|object| object.as_ref().clone())
         .collect()
 }
 
-/// Get all chart floating objects linked to a specific table (by sourceTableId primitive field).
-#[allow(dead_code)]
+/// Get native charts whose source is the specified table identity.
 pub fn get_charts_linked_to_table(
-    doc: &Doc,
-    sheets: &MapRef,
+    storage: &WorkbookStorage,
     sheet_id: &SheetId,
     table_id: &str,
-) -> Vec<serde_json::Value> {
-    get_all_floating_objects(doc, sheets, sheet_id)
-        .into_iter()
-        .filter(|(_id, json)| {
-            json.get("type").and_then(|v| v.as_str()) == Some("chart")
-                && json.get("sourceTableId").and_then(|v| v.as_str()) == Some(table_id)
-        })
-        .map(|(_id, json)| json)
-        .collect()
+) -> Vec<FloatingObject> {
+    state(storage, sheet_id).into_iter().flat_map(|state| state.objects.values())
+        .filter(|object| matches!(&object.data, FloatingObjectData::Chart(chart) if chart.source_table_id.as_deref() == Some(table_id)))
+        .map(|object| object.as_ref().clone()).collect()
 }

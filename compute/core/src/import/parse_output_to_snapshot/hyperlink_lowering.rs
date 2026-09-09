@@ -51,14 +51,6 @@ pub enum HyperlinkAnchor {
     Range(RangeRef),
 }
 
-impl HyperlinkAnchor {
-    /// Whether this anchor is a multi-cell range.
-    #[must_use]
-    pub fn is_range(&self) -> bool {
-        matches!(self, Self::Range(_))
-    }
-}
-
 /// Classify a hyperlink's `cell_ref` into a typed [`HyperlinkAnchor`].
 ///
 /// Returns [`None`] when the input is not a well-formed single cell or range
@@ -90,7 +82,7 @@ pub fn classify_hyperlink_anchor(raw: &str) -> Option<HyperlinkAnchor> {
 /// Returns [`None`] when the input is empty, a named range (no `!`
 /// separator), or anything other than a single cell.
 ///
-/// Currently exposed as the public classifier for boundary 1.14. The Yrs
+/// Currently exposed as the public classifier for boundary 1.14. The native
 /// hydrator preserves `link.location` verbatim (bytes are the authoritative
 /// form for round-trip fidelity; named-range and defined-name targets are
 /// legal here and must not be lost). Downstream consumers that need the
@@ -199,12 +191,6 @@ mod tests {
         assert!(classify_hyperlink_anchor("#REF!").is_none());
         assert!(classify_hyperlink_anchor("not an anchor").is_none());
         assert!(classify_hyperlink_anchor("=A1+1").is_none());
-    }
-
-    #[test]
-    fn anchor_is_range_discriminator() {
-        assert!(!classify_hyperlink_anchor("A1").unwrap().is_range());
-        assert!(classify_hyperlink_anchor("A1:B5").unwrap().is_range());
     }
 
     // ── Hyperlink.location (Boundary 1.14) ────────────────────────────────

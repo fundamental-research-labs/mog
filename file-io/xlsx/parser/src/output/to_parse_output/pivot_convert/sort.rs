@@ -74,7 +74,7 @@ pub(super) fn resolve_sort_by_value(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::pivot::read::{CacheField, PivotField, PivotItem};
+    use crate::domain::pivot::read::{CacheField, PivotField, PivotItem, SharedItem};
 
     fn make_cache_with_shared_items(items: Vec<SharedItem>) -> PivotCache {
         PivotCache {

@@ -2,7 +2,7 @@
 //!
 //! Each service module groups related functionality and declares its
 //! dependencies via function parameter types. Bridge methods on
-//! `YrsComputeEngine` delegate to these functions.
+//! `ComputeEngine` delegate to these functions.
 
 use crate::mirror::CellMirror;
 use cell_types::SheetId;
@@ -30,40 +30,10 @@ pub(super) mod resolved_formats;
 pub(super) mod structural;
 pub(super) mod styles;
 pub(super) mod tables;
-pub(super) mod undo;
 
 // ---------------------------------------------------------------------------
 // Shared helpers used across multiple service modules
 // ---------------------------------------------------------------------------
-
-/// Parse a non-formula value from input text using rich parsing.
-///
-/// Delegates to `cell_values::parse_input_value` which handles dates,
-/// currency symbols, percentages, thousands separators, and accounting
-/// negatives — in addition to plain numbers and booleans. Used by the
-/// outer `set_cell` layer after formula and apostrophe sentinels have
-/// been dispatched.
-pub(crate) fn parse_rich_value(input: &str) -> CellValue {
-    parse_rich_value_with_target(input, None)
-}
-
-/// Format-aware variant of [`parse_rich_value`] used by mutation handlers
-/// that have resolved the cell's effective format-category hint.
-///
-/// Bare numeric input into a percent-formatted cell
-/// (G1) divides by 100; bare `"n/d"` into a fraction-formatted cell (G3)
-/// parses as a number. When `target == None`, behaviour matches
-/// [`parse_rich_value`] verbatim.
-pub(crate) fn parse_rich_value_with_target(
-    input: &str,
-    target: Option<compute_formats::FormatType>,
-) -> CellValue {
-    parse_rich_value_with_context(
-        input,
-        &crate::storage::cells::values::InputParseContext::default_for_target(target),
-    )
-    .0
-}
 
 pub(crate) fn parse_rich_value_with_context(
     input: &str,

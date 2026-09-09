@@ -3,7 +3,7 @@ use super::support::{
     workbook_10_rows,
 };
 use cell_types::SheetPos;
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use compute_document::hex::id_to_hex;
 use domain_types::CellFormat;
 use domain_types::domain::comment::CommentType;
@@ -11,8 +11,7 @@ use snapshot_types::WorkbookSnapshot;
 
 #[test]
 fn lifecycle_copy_sheet() {
-    let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(workbook_10_rows()).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(workbook_10_rows()).expect("from_snapshot");
     let sid = sheet_id(0);
 
     let (_hex, _result) = engine.copy_sheet(&sid, "DataCopy").expect("copy_sheet");
@@ -49,8 +48,7 @@ fn lifecycle_copy_sheet() {
 
 #[test]
 fn copy_sheet_remaps_cell_properties_and_comments_to_copy_cell_ids() {
-    let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(workbook_10_rows()).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(workbook_10_rows()).expect("from_snapshot");
     let source_sid = sheet_id(0);
 
     let source_a1_id = engine
@@ -127,7 +125,7 @@ fn copy_sheet_preserves_existing_cross_sheet_dependency_edges() {
         ],
         ..Default::default()
     };
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).expect("from_snapshot");
     let sheet1_sid = sheet_id(0);
     let sheet2_sid = sheet_id(1);
     let sheet2_a1 = cell_id(1, 0, 0);

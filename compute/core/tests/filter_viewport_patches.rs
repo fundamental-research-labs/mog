@@ -14,7 +14,7 @@
 //!   cargo test -p compute-core --test filter_viewport_patches
 
 use cell_types::SheetId;
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use serde_json::json;
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
@@ -54,6 +54,9 @@ fn text_cell(id_suffix: u32, row: u32, col: u32, t: &str) -> CellData {
 fn snapshot_with_filter_data() -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_id_str(1),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -76,7 +79,7 @@ fn snapshot_with_filter_data() -> WorkbookSnapshot {
     }
 }
 
-fn register_viewport(engine: &mut YrsComputeEngine, sheet_id: &SheetId) -> String {
+fn register_viewport(engine: &mut ComputeEngine, sheet_id: &SheetId) -> String {
     let viewport_id = "viewport-1".to_string();
     engine
         .register_viewport(&viewport_id, sheet_id, 0, 0, 9, 5)
@@ -117,7 +120,7 @@ fn first_viewport_payload_size(patches: &[u8]) -> usize {
 #[test]
 fn create_filter_emits_full_viewport_patches() {
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_with_filter_data()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(snapshot_with_filter_data()).expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
     let _vp = register_viewport(&mut engine, &sid);
 
@@ -146,7 +149,7 @@ fn apply_filter_emits_full_viewport_patches_with_hidden_rows() {
     use domain_types::domain::filter::ColumnFilter;
 
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_with_filter_data()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(snapshot_with_filter_data()).expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
     let _vp = register_viewport(&mut engine, &sid);
 
@@ -192,7 +195,7 @@ fn clear_column_filter_emits_full_viewport_patches() {
     use domain_types::domain::filter::ColumnFilter;
 
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_with_filter_data()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(snapshot_with_filter_data()).expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
     let _vp = register_viewport(&mut engine, &sid);
 
@@ -234,7 +237,7 @@ fn clear_all_column_filters_clears_criteria_and_filter_hidden_rows() {
     use domain_types::domain::filter::ColumnFilter;
 
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_with_filter_data()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(snapshot_with_filter_data()).expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
     let _vp = register_viewport(&mut engine, &sid);
 
@@ -293,7 +296,7 @@ fn clear_all_column_filters_clears_criteria_and_filter_hidden_rows() {
 #[test]
 fn delete_filter_emits_full_viewport_patches() {
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_with_filter_data()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(snapshot_with_filter_data()).expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
     let _vp = register_viewport(&mut engine, &sid);
 
@@ -329,7 +332,7 @@ fn apply_filter_no_registered_viewport_returns_zero_viewport_blob() {
     use domain_types::domain::filter::ColumnFilter;
 
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_with_filter_data()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(snapshot_with_filter_data()).expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
     // No register_viewport — the patch blob carries 0 viewports.
 
@@ -371,7 +374,7 @@ fn apply_filter_no_registered_viewport_returns_zero_viewport_blob() {
 #[test]
 fn clear_all_filters_emits_deleted_changes_for_each_filter() {
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_with_filter_data()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(snapshot_with_filter_data()).expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
     let _vp = register_viewport(&mut engine, &sid);
 

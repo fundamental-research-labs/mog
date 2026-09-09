@@ -1,7 +1,7 @@
 use cell_types::SheetId;
 use compute_document::identity::GridIndex;
 
-use crate::storage::YrsStorage;
+use crate::storage::WorkbookStorage;
 
 use super::types::CellRange;
 
@@ -14,14 +14,13 @@ use super::types::CellRange;
 /// Excel refuses to sort ranges that contain merged cells.
 /// Returns `(has_merges, optional_error_message)`.
 pub fn check_sort_range_merges(
-    storage: &YrsStorage,
+    storage: &WorkbookStorage,
     sheet_id: SheetId,
     grid: &GridIndex,
     range: &CellRange,
 ) -> (bool, Option<String>) {
     let merges = crate::storage::sheet::merges::get_merges_in_range(
-        storage.doc(),
-        storage.sheets(),
+        &storage,
         sheet_id,
         grid,
         range.start_row(),

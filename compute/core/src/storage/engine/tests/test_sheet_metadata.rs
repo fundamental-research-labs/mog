@@ -7,7 +7,7 @@ use super::helpers::*;
 #[test]
 fn test_set_tab_color_returns_mutation_result_with_sheet_changes() {
     let snap = simple_snapshot();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
     let (_patches, result) = engine
@@ -27,7 +27,7 @@ fn test_set_tab_color_returns_mutation_result_with_sheet_changes() {
 #[test]
 fn test_set_tab_color_preserves_old_color() {
     let snap = simple_snapshot();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
 
@@ -50,7 +50,7 @@ fn test_set_tab_color_preserves_old_color() {
 #[test]
 fn test_set_tab_color_clear_returns_sheet_changes() {
     let snap = simple_snapshot();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
 
@@ -117,7 +117,7 @@ fn test_sheet_change_field_deserializes_from_camel_case() {
 #[test]
 fn test_set_sheet_hidden_returns_non_empty_sheet_changes() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
     let (_patches, result) = engine.set_sheet_hidden(&sid, true).unwrap();
@@ -135,7 +135,7 @@ fn test_set_sheet_hidden_returns_non_empty_sheet_changes() {
 #[test]
 fn test_move_sheet_returns_non_empty_sheet_changes() {
     let snap = simple_snapshot();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
     // Move to same position (index 0) -- should still produce a sheet change
@@ -154,7 +154,7 @@ fn test_move_sheet_returns_non_empty_sheet_changes() {
 #[test]
 fn test_set_frozen_panes_returns_non_empty_sheet_changes() {
     let snap = simple_snapshot();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
     let (_patches, result) = engine.set_frozen_panes(&sid, 2, 3).unwrap();
@@ -172,7 +172,7 @@ fn test_set_frozen_panes_returns_non_empty_sheet_changes() {
 #[test]
 fn test_set_scroll_position_returns_scroll_position_change() {
     let snap = simple_snapshot();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
     let (_patches, result) = engine.set_scroll_position(&sid, 10, 5).unwrap();
@@ -187,7 +187,7 @@ fn test_set_scroll_position_returns_scroll_position_change() {
 #[test]
 fn test_set_sheet_visibility_returns_non_empty_sheet_changes() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
     let (_patches, result) = engine.set_sheet_visibility(&sid, "hidden").unwrap();

@@ -5,18 +5,12 @@
 //! This module shifts the remaining position-based metadata: conditional formats,
 //! tables, validations, outline groups, sparklines, pivot tables, and print metadata.
 
-use std::collections::{HashMap, HashSet};
-
-use cell_types::{IdAllocator, SheetId};
-use compute_document::hex::id_to_hex;
-use compute_document::schema::{KEY_COL_FORMAT_RANGES, KEY_PROPERTIES};
+use cell_types::SheetId;
 use formula_types::StructureChange;
-use yrs::{Any, Map, Out, Transact};
 
 use crate::mirror::CellMirror;
-use crate::storage::engine::services::tables;
 use crate::storage::engine::stores::EngineStores;
-use crate::storage::sheet::{cf_store, grouping, pivots, print as meta, schemas, sparklines};
+use crate::storage::sheet::{cf_store, grouping, pivots, print as meta, sparklines};
 
 // =========================================================================
 // Public entry point
@@ -49,70 +43,65 @@ pub(in crate::storage::engine) fn shift_all_metadata_ranges(
 }
 
 fn shift_col_format_ranges(
-    stores: &mut EngineStores,
+    _stores: &mut EngineStores,
     mirror: &mut CellMirror,
     sheet_id: &SheetId,
     change: &StructureChange,
 ) {
+    let Some(sheet) = mirror.get_sheet_mut(sheet_id) else {
+        return;
+    };
+    if sheet.history.is_active() {
+        for range in &sheet.format_ranges {
+            let bounds=cell_types::SheetRange::new(range.start_row,range.start_col,range.end_row,range.end_col);
+            if shift_range(&bounds,change) != Some(bounds) { crate::storage::engine::history::metadata::capture_format_range(sheet,range.id); }
+        }
+    }
+    sheet.format_ranges.retain_mut(|range| {
+        let bounds = cell_types::SheetRange::new(
+            range.start_row,
+            range.start_col,
+            range.end_row,
+            range.end_col,
+        );
+        if let Some(shifted) = shift_range(&bounds, change) {
+            range.start_row = shifted.start_row();
+            range.start_col = shifted.start_col();
+            range.end_row = shifted.end_row();
+            range.end_col = shifted.end_col();
+            true
+        } else {
+            sheet.range_format_cache.remove(&range.id);
+            sheet.range_xlsx_style_id_cache.remove(&range.id);
+            false
+        }
+    });
+    sheet.rebuild_format_range_spatial_index();
     if !matches!(
         change,
         StructureChange::InsertCols { .. } | StructureChange::DeleteCols { .. }
     ) {
         return;
     }
-
-    let doc = stores.storage.doc();
-    let sheets = stores.storage.sheets();
-    let mut txn = doc.transact_mut();
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let Some(Out::YMap(sheet_map)) = sheets.get(&txn, sheet_hex.as_str()) else {
-        return;
-    };
-    let Some(Out::YMap(ranges_map)) = sheet_map.get(&txn, KEY_COL_FORMAT_RANGES) else {
-        return;
-    };
-
-    let mut remove_keys = Vec::new();
-    let mut updates = Vec::new();
-    for (key, value) in ranges_map.iter(&txn) {
-        let Out::YMap(nested) = value else {
-            continue;
-        };
-        let start_col = match nested.get(&txn, "_sc") {
-            Some(Out::Any(Any::Number(n))) => n as u32,
-            _ => continue,
-        };
-        let end_col = match nested.get(&txn, "_ec") {
-            Some(Out::Any(Any::Number(n))) => n as u32,
-            _ => continue,
-        };
-        let range = cell_types::SheetRange::new(0, start_col, 0, end_col);
-        match shift_range(&range, change) {
-            Some(shifted) => {
-                updates.push((key.to_string(), shifted.start_col(), shifted.end_col()))
-            }
-            None => remove_keys.push(key.to_string()),
+    if sheet.history.is_active() {
+        for range in &sheet.col_format_ranges {
+            let bounds=cell_types::SheetRange::new(0,range.start_col,0,range.end_col);
+            if shift_range(&bounds,change) != Some(bounds) { crate::storage::engine::history::metadata::capture_column_format_range(sheet,range.id); }
         }
     }
-
-    for key in remove_keys {
-        ranges_map.remove(&mut txn, key.as_str());
-    }
-    for (key, start_col, end_col) in updates {
-        if let Some(Out::YMap(nested)) = ranges_map.get(&txn, key.as_str()) {
-            nested.insert(&mut txn, "_sc", Any::Number(start_col as f64));
-            nested.insert(&mut txn, "_ec", Any::Number(end_col as f64));
+    sheet.col_format_ranges.retain_mut(|range| {
+        let bounds = cell_types::SheetRange::new(0, range.start_col, 0, range.end_col);
+        if let Some(shifted) = shift_range(&bounds, change) {
+            range.start_col = shifted.start_col();
+            range.end_col = shifted.end_col();
+            true
+        } else {
+            sheet.col_format_range_cache.remove(&range.id);
+            sheet.col_range_xlsx_style_id_cache.remove(&range.id);
+            false
         }
-    }
-    drop(txn);
-
-    if let Some(sheet_mirror) = mirror.get_sheet_mut(sheet_id) {
-        crate::storage::properties::hydrate_col_format_ranges(
-            &stores.storage,
-            sheet_id,
-            sheet_mirror,
-        );
-    }
+    });
+    sheet.rebuild_col_format_range_spatial_index();
 }
 
 /// Relocate range-backed validation metadata for a cut/move operation.
@@ -145,121 +134,100 @@ pub(in crate::storage::engine) fn relocate_validation_ranges(
         target_col + width,
     );
 
-    let id_alloc = stores.id_alloc.clone();
-    let doc = stores.storage.doc();
-    let sheets = doc.get_or_insert_map("sheets");
-
-    let mut original_by_sheet: HashMap<SheetId, Vec<schemas::RangeSchema>> = HashMap::new();
-    original_by_sheet.insert(
-        *source_sheet_id,
-        schemas::get_range_schemas_for_sheet(doc, &sheets, source_sheet_id),
-    );
-    if source_sheet_id != target_sheet_id {
-        original_by_sheet.insert(
-            *target_sheet_id,
-            schemas::get_range_schemas_for_sheet(doc, &sheets, target_sheet_id),
-        );
-    }
-
-    let mut updated_by_sheet = original_by_sheet.clone();
-    let mut moved_by_schema: Vec<(schemas::RangeSchema, Vec<cell_types::SheetRange>)> = Vec::new();
-
-    if let Some(source_schemas) = updated_by_sheet.get_mut(source_sheet_id) {
-        for schema in source_schemas.iter_mut() {
-            let mut remaining_refs = Vec::with_capacity(schema.ranges.len());
-            let mut moved_ranges = Vec::new();
-
-            for rr in &schema.ranges {
-                if !range_ref_applies_to_sheet(rr, source_sheet_id) {
-                    remaining_refs.push(rr.clone());
-                    continue;
-                }
-
-                let Some(range) = range_ref_to_sheet_range(rr) else {
-                    remaining_refs.push(rr.clone());
-                    continue;
+    let Some(source) = stores.storage.sheet_metadata.get(source_sheet_id) else {
+        return;
+    };
+    let mut source_rules = source.validations.rules.clone();
+    let mut moved = Vec::new();
+    for entry in &mut source_rules {
+        let mut fragments = Vec::new();
+        entry.spec.ranges = entry
+            .spec
+            .ranges
+            .iter()
+            .flat_map(|text| {
+                let Some(range) = parse_validation_range(text) else {
+                    return vec![text.clone()];
                 };
-
                 if let Some(overlap) = intersect_ranges(&range, &source_range) {
-                    moved_ranges.push(translate_range(
-                        &overlap,
-                        source_range.start_row(),
-                        source_range.start_col(),
-                        target_row,
-                        target_col,
-                    ));
-                    remaining_refs.extend(
-                        subtract_range(&range, &source_range)
-                            .into_iter()
-                            .map(|r| sheet_range_to_ref(&r)),
+                    fragments.push(
+                        translate_range(
+                            &overlap,
+                            source_range.start_row(),
+                            source_range.start_col(),
+                            target_row,
+                            target_col,
+                        )
+                        .to_string(),
                     );
+                    subtract_range(&range, &source_range)
+                        .into_iter()
+                        .map(|r| r.to_string())
+                        .collect()
                 } else {
-                    remaining_refs.push(rr.clone());
+                    vec![text.clone()]
                 }
-            }
-
-            if !moved_ranges.is_empty() {
-                moved_by_schema.push((schema.clone(), moved_ranges));
-            }
-            schema.ranges = remaining_refs;
+            })
+            .collect();
+        if !fragments.is_empty() {
+            let mut fragment = entry.clone();
+            fragment.spec.ranges = fragments;
+            moved.push(fragment);
         }
     }
-
-    if let Some(target_schemas) = updated_by_sheet.get_mut(target_sheet_id) {
-        for schema in target_schemas.iter_mut() {
-            let mut remaining_refs = Vec::with_capacity(schema.ranges.len());
-
-            for rr in &schema.ranges {
-                if !range_ref_applies_to_sheet(rr, target_sheet_id) {
-                    remaining_refs.push(rr.clone());
-                    continue;
-                }
-
-                let Some(range) = range_ref_to_sheet_range(rr) else {
-                    remaining_refs.push(rr.clone());
-                    continue;
+    if moved.is_empty() {
+        return;
+    }
+    let mut target_rules = if source_sheet_id == target_sheet_id {
+        source_rules.clone()
+    } else {
+        stores
+            .storage
+            .sheet_metadata
+            .get(target_sheet_id)
+            .map(|m| m.validations.rules.clone())
+            .unwrap_or_default()
+    };
+    for entry in &mut target_rules {
+        entry.spec.ranges = entry
+            .spec
+            .ranges
+            .iter()
+            .flat_map(|text| {
+                let Some(range) = parse_validation_range(text) else {
+                    return vec![text.clone()];
                 };
-
-                if intersect_ranges(&range, &target_range).is_some() {
-                    remaining_refs.extend(
-                        subtract_range(&range, &target_range)
-                            .into_iter()
-                            .map(|r| sheet_range_to_ref(&r)),
-                    );
-                } else {
-                    remaining_refs.push(rr.clone());
-                }
+                subtract_range(&range, &target_range)
+                    .into_iter()
+                    .map(|r| r.to_string())
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+    }
+    for mut entry in moved {
+        if source_sheet_id == target_sheet_id {
+            if let Some(existing) = target_rules.iter_mut().find(|e| e.id == entry.id) {
+                existing.spec.ranges.extend(entry.spec.ranges);
+                continue;
             }
-
-            schema.ranges = remaining_refs;
+        } else if target_rules.iter().any(|e| e.id == entry.id) {
+            entry.id = format!("validation-{:032x}", stores.id_alloc.next_u128());
+        }
+        target_rules.push(entry);
+    }
+    if source_sheet_id != target_sheet_id {
+        source_rules.retain(|entry| !entry.spec.ranges.is_empty());
+        crate::storage::engine::history::metadata::capture_validation_replacement(&stores.storage,*source_sheet_id,&source_rules);
+        if let Some(metadata) = stores.storage.sheet_metadata.get_mut(source_sheet_id) {
+            metadata.validations.rules = source_rules;
+            metadata.validations.declared_count = None;
         }
     }
-
-    let target_schemas = updated_by_sheet.entry(*target_sheet_id).or_default();
-    for (source_schema, moved_ranges) in moved_by_schema {
-        let moved_refs: Vec<_> = moved_ranges.iter().map(sheet_range_to_ref).collect();
-        if let Some(existing) = target_schemas.iter_mut().find(|s| s.id == source_schema.id) {
-            existing.ranges.extend(moved_refs);
-        } else {
-            let mut moved_schema = source_schema;
-            moved_schema.ranges = moved_refs;
-            target_schemas.push(moved_schema);
-        }
-    }
-
-    let mut sheets_to_apply: HashSet<SheetId> = original_by_sheet.keys().copied().collect();
-    sheets_to_apply.extend(updated_by_sheet.keys().copied());
-
-    for sheet_id in sheets_to_apply {
-        let original = original_by_sheet
-            .get(&sheet_id)
-            .map(Vec::as_slice)
-            .unwrap_or(&[]);
-        let updated = updated_by_sheet
-            .get(&sheet_id)
-            .map(Vec::as_slice)
-            .unwrap_or(&[]);
-        apply_validation_schema_delta(doc, &sheets, &sheet_id, original, updated, &id_alloc);
+    target_rules.retain(|entry| !entry.spec.ranges.is_empty());
+    crate::storage::engine::history::metadata::capture_validation_replacement(&stores.storage,*target_sheet_id,&target_rules);
+    if let Some(metadata) = stores.storage.sheet_metadata.get_mut(target_sheet_id) {
+        metadata.validations.rules = target_rules;
+        metadata.validations.declared_count = None;
     }
 }
 
@@ -308,12 +276,9 @@ pub(in crate::storage::engine) fn relocate_pivot_ranges(
         .map(|s| s.name.clone())
         .unwrap_or_default();
 
-    // Collect the pivots to move (and their new anchors) before taking the
-    // doc borrow for the writes.
+    // Collect pivots and new anchors before updating their native records.
     let moves: Vec<_> = {
-        let doc = stores.storage.doc();
-        let sheets = doc.get_or_insert_map("sheets");
-        pivots::get_all_pivots(doc, &sheets, source_sheet_id)
+        pivots::get_all_pivots(&stores.storage, source_sheet_id)
             .into_iter()
             .filter_map(|pivot| {
                 // Only pivots whose output renders on this sheet are eligible.
@@ -344,8 +309,6 @@ pub(in crate::storage::engine) fn relocate_pivot_ranges(
         return Vec::new();
     }
 
-    let doc = stores.storage.doc();
-    let sheets = doc.get_or_insert_map("sheets");
     let mut moved_ids = Vec::with_capacity(moves.len());
     for (mut pivot, new_row, new_col) in moves {
         let pivot_id = pivot.id.clone();
@@ -353,7 +316,7 @@ pub(in crate::storage::engine) fn relocate_pivot_ranges(
             row: new_row,
             col: new_col,
         };
-        if pivots::update_pivot(doc, &sheets, source_sheet_id, &pivot_id, pivot).is_some() {
+        if pivots::update_pivot(&mut stores.storage, source_sheet_id, &pivot_id, pivot).is_some() {
             moved_ids.push(pivot_id);
         }
     }
@@ -467,14 +430,9 @@ fn invalidate_range_bound_worksheet_semantic_containers(
         return;
     }
 
-    let doc = stores.storage.doc();
-    let sheets = stores.storage.sheets();
-    let mut txn = doc.transact_mut();
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    if let Some(Out::YMap(sheet_map)) = sheets.get(&txn, sheet_hex.as_str())
-        && let Some(Out::YMap(meta_map)) = sheet_map.get(&txn, KEY_PROPERTIES)
-    {
-        meta_map.remove(&mut txn, "worksheetSemanticContainers");
+    crate::storage::engine::history::metadata::capture_sheet_field!(stores.storage,*sheet_id,semantic_containers);
+    if let Some(meta) = stores.storage.sheet_metadata.get_mut(sheet_id) {
+        meta.semantic_containers = Default::default();
     }
 }
 
@@ -526,9 +484,7 @@ fn shift_position(pos: u32, change: &StructureChange, is_row: bool) -> Option<u3
 
 /// Shift conditional format ranges.
 fn shift_cf_ranges(stores: &mut EngineStores, sheet_id: &SheetId, change: &StructureChange) {
-    let doc = stores.storage.doc();
-    let sheets = doc.get_or_insert_map("sheets");
-    let formats = cf_store::get_formats_for_sheet(doc, &sheets, sheet_id);
+    let formats = cf_store::get_formats_for_sheet(&stores.storage, sheet_id);
 
     for format in &formats {
         let new_ranges: Vec<cell_types::SheetRange> = format
@@ -537,7 +493,7 @@ fn shift_cf_ranges(stores: &mut EngineStores, sheet_id: &SheetId, change: &Struc
             .filter_map(|r| shift_range(r, change))
             .collect();
         if new_ranges != format.ranges {
-            cf_store::update_cf_ranges(doc, &sheets, &format.id, sheet_id, &new_ranges);
+            cf_store::update_cf_ranges(&mut stores.storage, &format.id, sheet_id, &new_ranges);
         }
     }
 }
@@ -563,7 +519,6 @@ fn shift_table_ranges(
                 let mut updated = table;
                 updated.range = new_range;
                 stores.compute.set_table(mirror, updated.clone());
-                tables::persist_table_to_yrs(stores, &updated);
             }
             None => {
                 stores.compute.remove_table(mirror, &table.name);
@@ -573,113 +528,62 @@ fn shift_table_ranges(
     }
 }
 
-/// Shift validation (range schema) ranges.
+/// Shift validation geometry without reconstructing its lossless OOXML properties.
 fn shift_validation_ranges(
     stores: &mut EngineStores,
     sheet_id: &SheetId,
     change: &StructureChange,
 ) {
-    let id_alloc = stores.id_alloc.clone();
-    let doc = stores.storage.doc();
-    let sheets = doc.get_or_insert_map("sheets");
-    let range_schemas = schemas::get_range_schemas_for_sheet(doc, &sheets, sheet_id);
-
-    for schema in &range_schemas {
-        let mut any_changed = false;
-        let mut new_ranges: Vec<domain_types::domain::validation::IdentityRangeSchemaRef> =
-            Vec::with_capacity(schema.ranges.len());
-
-        for rr in &schema.ranges {
-            // Skip cross-sheet ranges
-            if rr.sheet_id.is_some() {
-                new_ranges.push(rr.clone());
-                continue;
+    if stores.storage.history.is_active() {
+        if let Some(meta)=stores.storage.sheet_metadata.get(sheet_id) {
+            for entry in &meta.validations.rules {
+                crate::storage::engine::history::metadata::capture_sheet_vector_entry!(stores.storage,*sheet_id,validations.rules,entry.id,value=>value.id);
             }
-
-            let start = parse_row_col(&rr.start_id);
-            let end = parse_row_col(&rr.end_id);
-
-            match (start, end) {
-                (Some((sr, sc)), Some((er, ec))) => {
-                    let range = cell_types::SheetRange::new(sr, sc, er, ec);
-                    match shift_range(&range, change) {
-                        Some(shifted) => {
-                            let new_start =
-                                format_row_col(shifted.start_row(), shifted.start_col());
-                            let new_end = format_row_col(shifted.end_row(), shifted.end_col());
-                            if new_start != rr.start_id || new_end != rr.end_id {
-                                any_changed = true;
-                            }
-                            new_ranges.push(
-                                domain_types::domain::validation::IdentityRangeSchemaRef {
-                                    start_id: new_start,
-                                    end_id: new_end,
-                                    sheet_id: None,
-                                },
-                            );
-                        }
-                        None => {
-                            any_changed = true;
-                        }
+        }
+    }
+    crate::storage::engine::history::metadata::capture_sheet_field!(stores.storage,*sheet_id,validations.declared_count);
+    let Some(metadata) = stores.storage.sheet_metadata.get_mut(sheet_id) else {
+        return;
+    };
+    let mut changed = false;
+    for entry in &mut metadata.validations.rules {
+        entry.spec.ranges = entry
+            .spec
+            .ranges
+            .iter()
+            .filter_map(|text| {
+                let Some(range) = parse_validation_range(text) else {
+                    return Some(text.clone());
+                };
+                match shift_range(&range, change) {
+                    Some(shifted) if shifted == range => Some(text.clone()),
+                    Some(shifted) => {
+                        changed = true;
+                        Some(shifted.to_string())
+                    }
+                    None => {
+                        changed = true;
+                        None
                     }
                 }
-                _ => {
-                    // Unparseable — pass through unchanged
-                    new_ranges.push(rr.clone());
-                }
-            }
-        }
-
-        if any_changed {
-            if new_ranges.is_empty() {
-                schemas::delete_range_schema(doc, &sheets, sheet_id, &schema.id);
-            } else {
-                let mut updated = schema.clone();
-                updated.ranges = new_ranges;
-                let _ = schemas::set_range_schema_with_alloc(
-                    doc, &sheets, sheet_id, &updated, &id_alloc,
-                );
-            }
-        }
+            })
+            .collect();
+    }
+    if changed {
+        metadata
+            .validations
+            .rules
+            .retain(|entry| !entry.spec.ranges.is_empty());
+        metadata.validations.declared_count = None;
     }
 }
 
-/// Parse a "row:col" string into (row, col).
-fn parse_row_col(id: &str) -> Option<(u32, u32)> {
-    let (r_str, c_str) = id.split_once(':')?;
-    Some((r_str.parse::<u32>().ok()?, c_str.parse::<u32>().ok()?))
-}
-
-/// Format (row, col) as a "row:col" string.
-fn format_row_col(row: u32, col: u32) -> String {
-    format!("{row}:{col}")
-}
-
-fn range_ref_applies_to_sheet(
-    rr: &domain_types::domain::validation::IdentityRangeSchemaRef,
-    sheet_id: &SheetId,
-) -> bool {
-    rr.sheet_id
-        .as_deref()
-        .is_none_or(|sid| sid == sheet_id.to_uuid_string())
-}
-
-fn range_ref_to_sheet_range(
-    rr: &domain_types::domain::validation::IdentityRangeSchemaRef,
-) -> Option<cell_types::SheetRange> {
-    let (sr, sc) = parse_row_col(&rr.start_id)?;
-    let (er, ec) = parse_row_col(&rr.end_id)?;
-    Some(cell_types::SheetRange::new(sr, sc, er, ec))
-}
-
-fn sheet_range_to_ref(
-    range: &cell_types::SheetRange,
-) -> domain_types::domain::validation::IdentityRangeSchemaRef {
-    domain_types::domain::validation::IdentityRangeSchemaRef {
-        start_id: format_row_col(range.start_row(), range.start_col()),
-        end_id: format_row_col(range.end_row(), range.end_col()),
-        sheet_id: None,
-    }
+fn parse_validation_range(text: &str) -> Option<cell_types::SheetRange> {
+    text.parse().ok().or_else(|| {
+        text.parse::<cell_types::SheetPos>()
+            .ok()
+            .map(|pos| cell_types::SheetRange::single(pos.row(), pos.col()))
+    })
 }
 
 fn intersect_ranges(
@@ -746,38 +650,9 @@ fn translate_range(
     )
 }
 
-fn apply_validation_schema_delta(
-    doc: &yrs::Doc,
-    sheets: &yrs::MapRef,
-    sheet_id: &SheetId,
-    original: &[schemas::RangeSchema],
-    updated: &[schemas::RangeSchema],
-    id_alloc: &IdAllocator,
-) {
-    let updated_ids: HashSet<&str> = updated
-        .iter()
-        .filter(|schema| !schema.ranges.is_empty())
-        .map(|schema| schema.id.as_str())
-        .collect();
-
-    for schema in original {
-        if !updated_ids.contains(schema.id.as_str()) {
-            schemas::delete_range_schema(doc, sheets, sheet_id, &schema.id);
-        }
-    }
-
-    for schema in updated {
-        if !schema.ranges.is_empty() {
-            let _ = schemas::set_range_schema_with_alloc(doc, sheets, sheet_id, schema, id_alloc);
-        }
-    }
-}
-
 /// Shift outline/grouping ranges.
 fn shift_grouping_ranges(stores: &mut EngineStores, sheet_id: &SheetId, change: &StructureChange) {
-    let doc = stores.storage.doc();
-    let sheets = doc.get_or_insert_map("sheets");
-    let mut config = grouping::get_sheet_grouping_config(doc, &sheets, sheet_id);
+    let mut config = grouping::get_sheet_grouping_config(&stores.storage, sheet_id);
     let mut changed = false;
 
     let affects_rows = matches!(
@@ -836,16 +711,14 @@ fn shift_grouping_ranges(stores: &mut EngineStores, sheet_id: &SheetId, change: 
     }
 
     if changed {
-        grouping::set_sheet_grouping_config(doc, &sheets, sheet_id, &config);
+        grouping::set_sheet_grouping_config(&mut stores.storage, sheet_id, &config);
     }
 }
 
 /// Shift sparkline cell positions and data ranges.
 fn shift_sparkline_ranges(stores: &mut EngineStores, sheet_id: &SheetId, change: &StructureChange) {
-    let doc = stores.storage.doc();
-    let sheets = doc.get_or_insert_map("sheets");
     let sheet_id_hex = sheet_id.to_uuid_string();
-    let all_sparklines = sparklines::get_sparklines_in_sheet(doc, &sheets, sheet_id);
+    let all_sparklines = sparklines::get_sparklines_in_sheet(&stores.storage, sheet_id);
 
     for sp in &all_sparklines {
         if sp.cell.sheet_id != sheet_id_hex {
@@ -856,7 +729,7 @@ fn shift_sparkline_ranges(stores: &mut EngineStores, sheet_id: &SheetId, change:
         let cell_col = shift_position(sp.cell.col, change, false);
 
         if cell_row.is_none() || cell_col.is_none() {
-            sparklines::delete_sparkline(doc, &sheets, sheet_id, &sp.id);
+            sparklines::delete_sparkline(&mut stores.storage, sheet_id, &sp.id);
             continue;
         }
         let new_row = cell_row.unwrap();
@@ -898,7 +771,7 @@ fn shift_sparkline_ranges(stores: &mut EngineStores, sheet_id: &SheetId, change:
                     end_col: s.end_col(),
                 });
             }
-            sparklines::update_sparkline(doc, &sheets, sheet_id, &sp.id, &update);
+            sparklines::update_sparkline(&mut stores.storage, sheet_id, &sp.id, &update);
         }
     }
 }
@@ -910,15 +783,18 @@ fn shift_pivot_ranges(
     sheet_id: &SheetId,
     change: &StructureChange,
 ) {
-    let doc = stores.storage.doc();
-    let sheets = doc.get_or_insert_map("sheets");
-    let all_pivots = pivots::get_all_pivots(doc, &sheets, sheet_id);
+    let all_pivots: Vec<_> = stores
+        .storage
+        .sheet_metadata
+        .iter()
+        .flat_map(|(owner, sheet)| sheet.pivots.values().cloned().map(|pivot| (*owner, pivot)))
+        .collect();
     let current_sheet_name = mirror
         .get_sheet(sheet_id)
         .map(|s| s.name.clone())
         .unwrap_or_default();
 
-    for pivot in all_pivots {
+    for (owner, pivot) in all_pivots {
         let mut updated = pivot.clone();
         let mut changed = false;
 
@@ -937,13 +813,17 @@ fn shift_pivot_ranges(
                     changed = true;
                 }
             } else {
-                pivots::delete_pivot(doc, &sheets, sheet_id, &pivot.id);
+                pivots::delete_pivot(&mut stores.storage, &owner, &pivot.id);
+                crate::storage::workbook::imported_pivots::mark_native_pivot_deleted(
+                    &mut stores.storage,
+                    &pivot.id,
+                );
                 continue;
             }
         }
 
         // Shift output_location if it's on the affected sheet
-        if pivot.output_sheet_name == current_sheet_name {
+        if owner == *sheet_id {
             let new_row = shift_position(pivot.output_location.row, change, true);
             let new_col = shift_position(pivot.output_location.col, change, false);
 
@@ -955,7 +835,11 @@ fn shift_pivot_ranges(
                     changed = true;
                 }
                 (None, _) | (_, None) => {
-                    pivots::delete_pivot(doc, &sheets, sheet_id, &pivot.id);
+                    pivots::delete_pivot(&mut stores.storage, &owner, &pivot.id);
+                    crate::storage::workbook::imported_pivots::mark_native_pivot_deleted(
+                        &mut stores.storage,
+                        &pivot.id,
+                    );
                     continue;
                 }
                 _ => {}
@@ -963,18 +847,15 @@ fn shift_pivot_ranges(
         }
 
         if changed {
-            pivots::update_pivot(doc, &sheets, sheet_id, &pivot.id, updated);
+            pivots::update_pivot(&mut stores.storage, &owner, &pivot.id, updated);
         }
     }
 }
 
 /// Shift print metadata (print area, print titles, page breaks).
 fn shift_print_metadata(stores: &mut EngineStores, sheet_id: &SheetId, change: &StructureChange) {
-    let doc = stores.storage.doc();
-    let sheets = doc.get_or_insert_map("sheets");
-
     // --- Print area ---
-    if let Some(area) = meta::get_print_area(doc, &sheets, sheet_id) {
+    if let Some(area) = meta::get_print_area(&stores.storage, sheet_id) {
         let range =
             cell_types::SheetRange::new(area.start_row, area.start_col, area.end_row, area.end_col);
         match shift_range(&range, change) {
@@ -986,17 +867,17 @@ fn shift_print_metadata(stores: &mut EngineStores, sheet_id: &SheetId, change: &
                     end_col: shifted.end_col(),
                 };
                 if new_area != area {
-                    meta::set_print_area(doc, &sheets, sheet_id, Some(&new_area));
+                    meta::set_print_area(&mut stores.storage, sheet_id, Some(&new_area));
                 }
             }
             None => {
-                meta::set_print_area(doc, &sheets, sheet_id, None);
+                meta::set_print_area(&mut stores.storage, sheet_id, None);
             }
         }
     }
 
     // --- Print titles ---
-    let titles = meta::get_print_titles(doc, &sheets, sheet_id);
+    let titles = meta::get_print_titles(&stores.storage, sheet_id);
     let mut new_titles = titles.clone();
     let mut titles_changed = false;
 
@@ -1045,11 +926,11 @@ fn shift_print_metadata(stores: &mut EngineStores, sheet_id: &SheetId, change: &
     }
 
     if titles_changed {
-        meta::set_print_titles(doc, &sheets, sheet_id, &new_titles);
+        meta::set_print_titles(&mut stores.storage, sheet_id, &new_titles);
     }
 
     // --- Page breaks ---
-    let mut breaks = meta::get_page_breaks(doc, &sheets, sheet_id);
+    let mut breaks = meta::get_page_breaks(&stores.storage, sheet_id);
     let mut breaks_changed = false;
 
     let affects_rows = matches!(
@@ -1104,6 +985,6 @@ fn shift_print_metadata(stores: &mut EngineStores, sheet_id: &SheetId, change: &
     }
 
     if breaks_changed {
-        meta::set_page_breaks(doc, &sheets, sheet_id, &breaks);
+        meta::set_page_breaks(&mut stores.storage, sheet_id, &breaks);
     }
 }

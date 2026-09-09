@@ -34,10 +34,9 @@ use domain_types::domain::slicer::NamedSlicerStyle;
 use domain_types::units::{CharWidth, Pixels, Points};
 use domain_types::{DefinedName, NameValidationResult};
 use value_types::ComputeError;
-use yrs::Transact;
 
 use super::super::merge_index::MergeDirectResolver;
-use super::super::query_serialization::{cell_data_to_json, cell_value_to_json};
+use super::super::query_serialization::cell_value_to_json;
 use crate::storage::engine::stores::EngineStores;
 
 /// Resolve a cell's (row, col) from its hex id via the authoritative

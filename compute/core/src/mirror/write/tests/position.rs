@@ -28,11 +28,11 @@ fn vacate_position_clears_position_state_without_deleting_cell() {
     assert!(!sheet.pos_to_id.contains_key(&old_pos));
     assert_eq!(sheet.id_to_pos.get(&cell_id), Some(&new_pos));
     assert!(sheet.cells.contains_key(&cell_id));
-    assert_eq!(sheet.col_data[&4][2], CellValue::Null);
+    assert_eq!(sheet.get_column_view(4).unwrap()[2], CellValue::Null);
 }
 
 #[test]
-fn sync_cell_position_mapping_restores_position_and_col_data() {
+fn sync_cell_position_mapping_restores_position_and_column_values() {
     let (mut mirror, sheet_id) = make_mirror();
     let cell_id = CellId::from_raw(701);
     let pos = SheetPos::new(6, 8);
@@ -51,5 +51,8 @@ fn sync_cell_position_mapping_restores_position_and_col_data() {
     let sheet = mirror.get_sheet(&sheet_id).unwrap();
     assert_eq!(sheet.pos_to_id.get(&pos), Some(&cell_id));
     assert_eq!(sheet.id_to_pos.get(&cell_id), Some(&pos));
-    assert_eq!(sheet.col_data[&8][6], CellValue::from("cached"));
+    assert_eq!(
+        sheet.get_column_view(8).unwrap()[6],
+        CellValue::from("cached")
+    );
 }

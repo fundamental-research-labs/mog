@@ -34,6 +34,7 @@ use crate::mirror::CellMirror;
 /// Must run BEFORE the structural op removes the doomed cells' identities,
 /// so their pre-delete positions can still be resolved via the mirror.
 pub(super) fn pre_delete_re_anchor_range_refs(
+    stores: &crate::storage::engine::stores::EngineStores,
     mirror: &mut CellMirror,
     sheet_id: &SheetId,
     at: u32,
@@ -255,6 +256,18 @@ pub(super) fn pre_delete_re_anchor_range_refs(
                 // Re-anchor only changes refs; formula shape is preserved.
                 is_aggregate: old_formula.is_aggregate,
             };
+            if let Some(sid) = mirror.sheet_for_cell(&owning_cell)
+                && let Some(pos) = mirror.resolve_position(&owning_cell)
+            {
+                crate::storage::engine::history::cells::capture_cell(
+                    stores,
+                    mirror,
+                    sid,
+                    owning_cell,
+                    pos.row(),
+                    pos.col(),
+                );
+            }
             mirror.set_formula(&owning_cell, Some(new_formula));
         }
     }

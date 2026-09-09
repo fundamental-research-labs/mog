@@ -1,7 +1,7 @@
 use cell_types::{
     CellId, ColId, PayloadEncoding, RangeAnchor, RangeId, RangeKind, RowId, SheetId, SheetPos,
 };
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use snapshot_types::{CellData, RangeData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
 
@@ -47,6 +47,9 @@ pub(super) fn formula_cell(sheet_idx: u32, row: u32, col: u32, formula: &str) ->
 
 pub(super) fn sheet_snap(idx: u32, name: &str, cells: Vec<CellData>) -> SheetSnapshot {
     SheetSnapshot {
+        identities: Vec::new(),
+        row_axis: None,
+        col_axis: None,
         id: sheet_uuid(idx),
         name: name.to_string(),
         rows: 100,
@@ -56,7 +59,7 @@ pub(super) fn sheet_snap(idx: u32, name: &str, cells: Vec<CellData>) -> SheetSna
     }
 }
 
-pub(super) fn cell_at(engine: &YrsComputeEngine, sid: &SheetId, row: u32, col: u32) -> CellValue {
+pub(super) fn cell_at(engine: &ComputeEngine, sid: &SheetId, row: u32, col: u32) -> CellValue {
     engine
         .mirror()
         .get_cell_value_at(sid, SheetPos::new(row, col))
@@ -83,11 +86,11 @@ pub(super) fn workbook_10_rows() -> WorkbookSnapshot {
     }
 }
 
-pub(super) fn yrs_row_id(row_index: usize) -> RowId {
+pub(super) fn snapshot_row_id(row_index: usize) -> RowId {
     RowId::from_raw((row_index + 1) as u128)
 }
 
-pub(super) fn yrs_col_id(sheet_rows: usize, col_index: usize) -> ColId {
+pub(super) fn snapshot_col_id(sheet_rows: usize, col_index: usize) -> ColId {
     ColId::from_raw((sheet_rows + col_index + 1) as u128)
 }
 
@@ -110,9 +113,9 @@ pub(super) fn range_backed_workbook(
         }
     }
 
-    let row_ids: Vec<RowId> = (0..range_rows as usize).map(yrs_row_id).collect();
+    let row_ids: Vec<RowId> = (0..range_rows as usize).map(snapshot_row_id).collect();
     let col_ids: Vec<ColId> = (0..range_cols as usize)
-        .map(|i| yrs_col_id(sheet_rows as usize, i))
+        .map(|i| snapshot_col_id(sheet_rows as usize, i))
         .collect();
 
     let range_data = RangeData {
@@ -134,6 +137,9 @@ pub(super) fn range_backed_workbook(
 
     WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_uuid(0),
             name: "Data".to_string(),
             rows: sheet_rows,
@@ -146,7 +152,7 @@ pub(super) fn range_backed_workbook(
 }
 
 pub(super) fn assert_number_at(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sid: &SheetId,
     row: u32,
     col: u32,
@@ -162,7 +168,7 @@ pub(super) fn assert_number_at(
 }
 
 pub(super) fn assert_null_at(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sid: &SheetId,
     row: u32,
     col: u32,
@@ -176,7 +182,7 @@ pub(super) fn assert_null_at(
 }
 
 pub(super) fn assert_column_values(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sid: &SheetId,
     col: u32,
     values: &[(u32, f64)],
@@ -188,7 +194,7 @@ pub(super) fn assert_column_values(
 }
 
 pub(super) fn assert_sum_at(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sid: &SheetId,
     row: u32,
     col: u32,

@@ -1,18 +1,21 @@
 use super::*;
-use yrs::ReadTxn;
 
 pub(super) fn make_sheet_id(n: u128) -> SheetId {
     SheetId::from_raw(n)
 }
 
-pub(super) fn storage_with_sheet() -> (YrsStorage, SheetId, GridIndex) {
+pub(super) fn storage_with_sheet() -> (WorkbookStorage, SheetId, GridIndex) {
     let (storage, sid, gi, _mirror) = storage_with_sheet_and_mirror();
     (storage, sid, gi)
 }
 
-pub(super) fn storage_with_sheet_and_mirror()
--> (YrsStorage, SheetId, GridIndex, crate::mirror::CellMirror) {
-    let mut storage = YrsStorage::new();
+pub(super) fn storage_with_sheet_and_mirror() -> (
+    WorkbookStorage,
+    SheetId,
+    GridIndex,
+    crate::mirror::CellMirror,
+) {
+    let mut storage = WorkbookStorage::new();
     let mut mirror = crate::mirror::CellMirror::new();
     let sid = make_sheet_id(1);
     storage
@@ -27,8 +30,8 @@ pub(super) fn empty_mirror() -> crate::mirror::CellMirror {
     crate::mirror::CellMirror::new()
 }
 
-pub(super) fn validation_rule_count(storage: &YrsStorage, sid: &SheetId) -> usize {
-    get_range_schemas_for_sheet(storage.doc(), storage.sheets(), sid).len()
+pub(super) fn validation_rule_count(storage: &WorkbookStorage, sid: &SheetId) -> usize {
+    get_range_schemas_for_sheet(&storage, sid).len()
 }
 
 pub(super) fn make_range_schema(id: &str) -> RangeSchema {
@@ -85,27 +88,8 @@ pub(super) fn range_schema_at(id: &str, start: &str, end: &str) -> RangeSchema {
     }
 }
 
-pub(super) fn sync_storage(src: &YrsStorage, dst: &YrsStorage) {
-    use yrs::updates::decoder::Decode;
-    let sv = dst.doc().transact().state_vector();
-    let update = src.doc().transact().encode_diff_v1(&sv);
-    let decoded = yrs::Update::decode_v1(&update).expect("decode update");
-    dst.doc()
-        .transact_mut()
-        .apply_update(decoded)
-        .expect("apply update");
-}
-
-pub(super) fn clone_storage(src: &YrsStorage) -> YrsStorage {
-    let update = src
-        .doc()
-        .transact()
-        .encode_diff_v1(&yrs::StateVector::default());
-    YrsStorage::from_yrs_state(&update).expect("clone from yrs state")
-}
-
-pub(super) fn view_ids(storage: &YrsStorage, sid: &SheetId) -> Vec<String> {
-    get_range_schemas_for_sheet(storage.doc(), storage.sheets(), sid)
+pub(super) fn view_ids(storage: &WorkbookStorage, sid: &SheetId) -> Vec<String> {
+    get_range_schemas_for_sheet(&storage, sid)
         .into_iter()
         .map(|r| r.id)
         .collect()

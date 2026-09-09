@@ -209,7 +209,7 @@ impl SheetStructure {
         let sid = self.sheet_id;
         self.dispatch
             .call_engine(move |e| {
-                e.relocate_cells(
+                e.relocate_values(
                     &sid,
                     src_start_row,
                     src_start_col,

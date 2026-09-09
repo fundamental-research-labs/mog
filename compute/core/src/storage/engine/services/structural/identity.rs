@@ -5,35 +5,29 @@ use value_types::{CellValue, ComputeError};
 use crate::mirror::CellMirror;
 use crate::snapshot::MutationResult;
 use crate::storage::engine::stores::EngineStores;
-use crate::storage::infra::cell_iter;
 
 // -------------------------------------------------------------------
 // Cell Identity and Position Mutations
 // -------------------------------------------------------------------
 
-/// Get or create a CellId at a position in the Yrs document.
+/// Get or create a sparse native CellId at a position.
 pub(in crate::storage::engine) fn get_or_create_cell_id(
     stores: &mut EngineStores,
+    mirror: &mut CellMirror,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
 ) -> Result<MutationResult, ComputeError> {
-    let grid = stores
-        .grid_indexes
-        .get_mut(sheet_id)
-        .ok_or_else(|| ComputeError::Eval {
-            message: format!("No GridIndex for sheet {:?}", sheet_id),
-        })?;
+    let cell_id =
+        super::super::cell_editing::ensure_cell_id_mirrored(stores, mirror, sheet_id, row, col)
+            .ok_or_else(|| ComputeError::SheetNotFound {
+                sheet_id: sheet_id.to_uuid_string(),
+            })?;
 
-    let cell_id = cell_iter::get_or_create_cell_id(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        *sheet_id,
-        grid,
-        row,
-        col,
-    );
-
+    stores
+        .storage
+        .history
+        .retain_untracked_identity(*sheet_id, cell_id);
     let cell_id_hex = id_to_hex(cell_id.as_u128());
     Ok(MutationResult::empty().with_data(&cell_id_hex)?)
 }
@@ -65,29 +59,20 @@ pub(in crate::storage::engine) fn update_cell_position(
             message: format!("Cell {:?} not found in GridIndex", cell_id),
         })?;
 
-    cell_iter::update_cell_position(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        *sheet_id,
-        grid,
-        cell_id,
-        new_row,
-        new_col,
-    );
+    grid.ensure_capacity(new_row, new_col);
+    grid.register_cell(cell_id, new_row, new_col);
+    mirror.install_sheet_axes(*sheet_id, grid.row_axis(), grid.col_axis());
 
-    let (value, _formula, identity_formula) = stores
+    let new_pos = SheetPos::new(new_row, new_col);
+    if !mirror.move_cell(&cell_id, sheet_id, new_pos) {
+        // Metadata-only identities have no authored value to transfer.
+        mirror.sync_cell_position_mapping(sheet_id, cell_id, new_pos);
+    }
+
+    stores
         .storage
-        .read_cell_from_yrs(sheet_id, &cell_id)
-        .unwrap_or((CellValue::Null, None, None));
-
-    mirror.apply_edit(
-        sheet_id,
-        cell_id,
-        SheetPos::new(new_row, new_col),
-        value,
-        identity_formula,
-    );
-
+        .history
+        .retain_untracked_identity(*sheet_id, cell_id);
     Ok(MutationResult::empty())
 }
 

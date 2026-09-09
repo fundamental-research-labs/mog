@@ -1,53 +1,12 @@
-//! Per-sheet settings dispatch and round-trip fidelity metadata.
-//!
-//! Three concerns:
-//!   - `SheetSettings` aggregate read + string-keyed write for the TS bridge.
-//!   - `SheetRoundtripMeta` — extra fields read from the meta map needed
-//!     for lossless XLSX round-trip fidelity, not used at runtime.
-//!   - `get_default_row_descent` — single extra accessor reading
-//!     `defaultRowDescent` from the meta map, called by XLSX export.
-
-use std::sync::Arc;
-
-use yrs::{Any, Doc, Map, MapPrelim, MapRef, Origin, Out, Transact};
-
+//! Typed sheet settings, exposed through the existing string-key API boundary.
+use crate::storage::WorkbookStorage;
 use cell_types::SheetId;
-use compute_document::undo::ORIGIN_USER_EDIT;
-use domain_types::domain::protection::SheetProtection;
 use domain_types::domain::sheet::{SheetProtectionOptions, SheetSettings};
 use domain_types::units::{
     CharWidth, LayoutMetrics, Pixels, Points, char_width_to_pixels, pixels_to_char_width,
     pixels_to_points, points_to_pixels,
 };
-use domain_types::yrs_schema::protection as protection_schema;
 
-use super::yrs_helpers::{
-    KEY_ACTIVE_CELL, KEY_BASE_COL_WIDTH, KEY_CUSTOM_HEIGHT, KEY_DEFAULT_COL_WIDTH,
-    KEY_DEFAULT_ROW_DESCENT, KEY_DEFAULT_ROW_HEIGHT, KEY_GRIDLINE_COLOR, KEY_OUTLINE_LEVEL_COL,
-    KEY_OUTLINE_LEVEL_ROW, KEY_PROTECTION_DETAILS, KEY_RIGHT_TO_LEFT, KEY_SHEET_UID,
-    KEY_SHOW_COLUMN_HEADERS, KEY_SHOW_FORMULAS, KEY_SHOW_GRIDLINES, KEY_SHOW_ROW_HEADERS,
-    KEY_SHOW_ZERO_VALUES, KEY_SQREF, KEY_TAB_SELECTED, KEY_ZERO_HEIGHT, KEY_ZOOM_SCALE,
-    KEY_ZOOM_SCALE_NORMAL, get_meta_map, meta_bool, meta_number, meta_optional_number,
-    meta_optional_u32, meta_string,
-};
-
-// =========================================================================
-// SheetSettings — aggregate read + string-keyed write for TS bridge
-// =========================================================================
-
-const KEY_CUSTOM_PROPERTIES: &str = "customProperties";
-
-/// Canonical list of camelCase Yrs meta keys that comprise a `SheetSettings`
-/// payload. Mirrors the TS-side `SHEET_SETTINGS_FIELDS` (kernel
-/// `core-defaults.ts`) and is the single source of truth used by the
-/// observer-translation path in `mutation_handlers/result_building.rs`
-/// to decide whether a sheet-meta change should hydrate a
-/// `SheetSettingsChange` (full settings snapshot) instead of a
-/// discriminator-only `SheetChange`.
-///
-/// Top-level meta keys only. `protectionDetails` is the one sheet-protection
-/// storage key; public fields such as `isProtected` and `protectionPasswordHash`
-/// are derived from that domain model in `get_sheet_settings`.
 pub const SHEET_SETTINGS_KEYS: &[&str] = &[
     // SheetViewOptions
     "showGridlines",
@@ -66,215 +25,307 @@ pub const SHEET_SETTINGS_KEYS: &[&str] = &[
     "customProperties",
 ];
 
-/// Returns true if `key` is one of the top-level sheet-meta keys that
-/// participate in `SheetSettings`. Use this to route observer-translated
-/// sheet-meta changes between `SheetSettingsChange` and `SheetChange`.
 pub fn is_sheet_settings_key(key: &str) -> bool {
     SHEET_SETTINGS_KEYS.contains(&key)
 }
 
-/// Get all settings for a sheet.
 #[cfg(test)]
-pub(crate) fn get_sheet_settings(doc: &Doc, sheets: &MapRef, sheet_id: &SheetId) -> SheetSettings {
-    get_sheet_settings_with_layout_metrics(doc, sheets, sheet_id, LayoutMetrics::default())
+pub(crate) fn get_sheet_settings(storage: &WorkbookStorage, sheet_id: &SheetId) -> SheetSettings {
+    get_sheet_settings_with_layout_metrics(storage, sheet_id, LayoutMetrics::default())
 }
 
 pub(crate) fn get_sheet_settings_with_layout_metrics(
-    doc: &Doc,
-    sheets: &MapRef,
+    storage: &WorkbookStorage,
     sheet_id: &SheetId,
     layout_metrics: LayoutMetrics,
 ) -> SheetSettings {
-    let txn = doc.transact();
-    match get_meta_map(&txn, sheets, sheet_id) {
-        Some(meta) => {
-            let protection = read_sheet_protection(&txn, &meta);
-            SheetSettings {
-                show_gridlines: meta_bool(&txn, &meta, KEY_SHOW_GRIDLINES, true),
-                show_row_headers: meta_bool(&txn, &meta, KEY_SHOW_ROW_HEADERS, true),
-                show_column_headers: meta_bool(&txn, &meta, KEY_SHOW_COLUMN_HEADERS, true),
-                is_protected: protection
-                    .as_ref()
-                    .map(|protection| protection.is_protected)
-                    .unwrap_or(false),
-                protection_password_hash: protection
-                    .as_ref()
-                    .and_then(|protection| protection.password_hash.clone()),
-                show_zero_values: meta_bool(&txn, &meta, KEY_SHOW_ZERO_VALUES, true),
-                gridline_color: meta_string(&txn, &meta, KEY_GRIDLINE_COLOR),
-                right_to_left: meta_bool(&txn, &meta, KEY_RIGHT_TO_LEFT, false),
-                show_formulas: meta_bool(&txn, &meta, KEY_SHOW_FORMULAS, false),
-                zoom_scale: meta_optional_u32(&txn, &meta, KEY_ZOOM_SCALE),
-                protection_options: protection.as_ref().map(SheetProtectionOptions::from),
-                default_row_height: {
-                    // Yrs stores canonical (points); convert to pixels for TS bridge
-                    let pt = Points(meta_number(&txn, &meta, KEY_DEFAULT_ROW_HEIGHT, 15.0));
-                    points_to_pixels(pt).0
-                },
-                default_col_width: {
-                    // Yrs stores canonical (char-width); convert to pixels for TS bridge
-                    let cw = CharWidth(meta_number(&txn, &meta, KEY_DEFAULT_COL_WIDTH, 8.43));
-                    char_width_to_pixels(cw, layout_metrics.column_width_mdw).0
-                },
-                custom_properties: meta_string(&txn, &meta, KEY_CUSTOM_PROPERTIES),
-            }
-        }
-        None => default_sheet_settings(layout_metrics),
-    }
-}
-
-fn default_sheet_settings(layout_metrics: LayoutMetrics) -> SheetSettings {
+    let Some(meta) = storage.sheet_metadata.get(sheet_id) else {
+        return SheetSettings {
+            default_row_height: layout_metrics.default_row_height_px,
+            default_col_width: layout_metrics.default_column_width_px,
+            ..SheetSettings::default()
+        };
+    };
     SheetSettings {
-        default_row_height: layout_metrics.default_row_height_px,
-        default_col_width: layout_metrics.default_column_width_px,
-        ..SheetSettings::default()
+        show_gridlines: meta.view.show_gridlines,
+        show_row_headers: meta.view.show_row_headers,
+        show_column_headers: meta.view.show_column_headers,
+        show_zero_values: meta.view.show_zeros,
+        right_to_left: meta.view.right_to_left,
+        show_formulas: meta.view.show_formulas,
+        zoom_scale: meta.view.zoom_scale,
+        gridline_color: meta.gridline_color.clone(),
+        custom_properties: meta.custom_properties.clone(),
+        is_protected: meta
+            .protection
+            .as_ref()
+            .is_some_and(|protection| protection.is_protected),
+        protection_password_hash: meta
+            .protection
+            .as_ref()
+            .and_then(|protection| protection.password_hash.clone()),
+        protection_options: meta.protection.as_ref().map(SheetProtectionOptions::from),
+        default_row_height: points_to_pixels(Points(
+            meta.format.default_row_height.unwrap_or(15.0),
+        ))
+        .0,
+        default_col_width: char_width_to_pixels(
+            CharWidth(meta.format.default_col_width.unwrap_or(8.43)),
+            layout_metrics.column_width_mdw,
+        )
+        .0,
     }
 }
 
-fn read_sheet_protection<T: yrs::ReadTxn>(txn: &T, meta: &MapRef) -> Option<SheetProtection> {
-    match meta.get(txn, KEY_PROTECTION_DETAILS) {
-        Some(Out::YMap(prot_map)) => protection_schema::sheet_from_yrs_map(&prot_map, txn),
-        _ => None,
-    }
-}
-
-fn protection_map_for_write(txn: &mut yrs::TransactionMut, meta: &MapRef) -> Option<MapRef> {
-    match meta.get(txn, KEY_PROTECTION_DETAILS) {
-        Some(Out::YMap(existing)) => Some(existing),
-        _ => {
-            meta.insert(txn, KEY_PROTECTION_DETAILS, MapPrelim::default());
-            match meta.get(txn, KEY_PROTECTION_DETAILS) {
-                Some(Out::YMap(m)) => Some(m),
-                _ => None,
-            }
-        }
-    }
-}
-
-/// Returns true if `key` is a protection option that belongs in the
-/// `protectionDetails` Y.Map (keys match SheetProtectionOptions camelCase fields).
-fn is_protection_option_key(key: &str) -> bool {
-    matches!(
-        key,
-        "selectLockedCells"
-            | "selectUnlockedCells"
-            | "formatCells"
-            | "formatColumns"
-            | "formatRows"
-            | "insertColumns"
-            | "insertRows"
-            | "insertHyperlinks"
-            | "deleteColumns"
-            | "deleteRows"
-            | "sort"
-            | "useAutoFilter"
-            | "usePivotTableReports"
-            | "editObjects"
-            | "editScenarios"
-    )
-}
-
-fn is_protection_setting_key(key: &str) -> bool {
-    key == "isProtected" || key == "protectionPasswordHash" || is_protection_option_key(key)
-}
-
-/// Set a single sheet setting by key and string value.
-///
-/// Recognized keys: showGridlines, showRowHeaders, showColumnHeaders,
-/// isProtected, protectionPasswordHash, showZeroValues, rightToLeft, gridlineColor,
-/// defaultRowHeight, defaultColWidth, plus protection option keys
-/// (selectLockedCells, selectUnlockedCells, formatCells, etc.).
-///
-/// Protection keys are routed into the nested `protectionDetails` Y.Map so
-/// that sheet protection has one storage domain model.
 #[cfg(test)]
 pub(crate) fn set_sheet_setting(
-    doc: &Doc,
-    sheets: &MapRef,
+    storage: &mut WorkbookStorage,
     sheet_id: &SheetId,
     key: &str,
     value: &str,
 ) {
-    set_sheet_setting_with_layout_metrics(
-        doc,
-        sheets,
-        sheet_id,
-        key,
-        value,
-        LayoutMetrics::default(),
-    )
+    set_sheet_setting_with_layout_metrics(storage, sheet_id, key, value, LayoutMetrics::default());
 }
 
 pub(crate) fn set_sheet_setting_with_layout_metrics(
-    doc: &Doc,
-    sheets: &MapRef,
+    storage: &mut WorkbookStorage,
     sheet_id: &SheetId,
     key: &str,
     value: &str,
     layout_metrics: LayoutMetrics,
 ) {
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    if let Some(meta) = get_meta_map(&txn, sheets, sheet_id) {
-        if is_protection_setting_key(key) {
-            let Some(prot_map) = protection_map_for_write(&mut txn, &meta) else {
-                return;
-            };
-
-            match key {
-                "isProtected" => {
-                    if value == "true" || value == "false" {
-                        prot_map.insert(
-                            &mut txn,
-                            protection_schema::KEY_IS_PROTECTED,
-                            Any::Bool(value == "true"),
-                        );
-                    }
-                }
-                "protectionPasswordHash" => {
-                    if value.is_empty() || value == "null" {
-                        prot_map.remove(&mut txn, protection_schema::KEY_PASSWORD_HASH);
-                    } else {
-                        prot_map.insert(
-                            &mut txn,
-                            protection_schema::KEY_PASSWORD_HASH,
-                            Any::String(Arc::from(value)),
-                        );
-                    }
-                }
-                _ => {
-                    if value == "true" || value == "false" {
-                        prot_map.insert(&mut txn, key, Any::Bool(value == "true"));
-                    }
-                }
+    crate::storage::engine::history::metadata::capture_sheet_field!(
+        storage,
+        *sheet_id,
+        view.show_gridlines
+    );
+    crate::storage::engine::history::metadata::capture_sheet_field!(
+        storage,
+        *sheet_id,
+        view.show_row_headers
+    );
+    crate::storage::engine::history::metadata::capture_sheet_field!(
+        storage,
+        *sheet_id,
+        view.show_column_headers
+    );
+    crate::storage::engine::history::metadata::capture_sheet_field!(
+        storage,
+        *sheet_id,
+        view.show_zeros
+    );
+    crate::storage::engine::history::metadata::capture_sheet_field!(
+        storage,
+        *sheet_id,
+        view.right_to_left
+    );
+    crate::storage::engine::history::metadata::capture_sheet_field!(
+        storage,
+        *sheet_id,
+        view.show_formulas
+    );
+    crate::storage::engine::history::metadata::capture_sheet_field!(
+        storage,
+        *sheet_id,
+        view.zoom_scale
+    );
+    crate::storage::engine::history::metadata::capture_sheet_field!(
+        storage,
+        *sheet_id,
+        gridline_color
+    );
+    crate::storage::engine::history::metadata::capture_sheet_field!(
+        storage,
+        *sheet_id,
+        custom_properties
+    );
+    crate::storage::engine::history::metadata::capture_sheet_field!(
+        storage,
+        *sheet_id,
+        format.default_row_height
+    );
+    crate::storage::engine::history::metadata::capture_sheet_field!(
+        storage,
+        *sheet_id,
+        format.default_col_width
+    );
+    crate::storage::engine::history::metadata::capture_sheet_field!(storage, *sheet_id, protection);
+    let Some(meta) = storage.sheet_metadata.get_mut(sheet_id) else {
+        return;
+    };
+    match key {
+        "showGridlines" => {
+            if let Ok(value) = value.parse::<bool>() {
+                meta.view.show_gridlines = value;
             }
-            return;
         }
-
-        // Regular settings — store as flat top-level keys in the meta map
-        if value == "true" || value == "false" {
-            meta.insert(&mut txn, key, Any::Bool(value == "true"));
-        } else if let Ok(n) = value.parse::<f64>() {
-            // The TS bridge sends pixel values for dimensions; convert to
-            // canonical units before storing so GET round-trips correctly.
-            let stored = match key {
-                KEY_DEFAULT_COL_WIDTH => {
-                    pixels_to_char_width(Pixels(n), layout_metrics.column_width_mdw).0
-                }
-                KEY_DEFAULT_ROW_HEIGHT => pixels_to_points(Pixels(n)).0,
-                _ => n,
+        "showRowHeaders" => {
+            if let Ok(value) = value.parse::<bool>() {
+                meta.view.show_row_headers = value;
+            }
+        }
+        "showColumnHeaders" => {
+            if let Ok(value) = value.parse::<bool>() {
+                meta.view.show_column_headers = value;
+            }
+        }
+        "showZeroValues" => {
+            if let Ok(value) = value.parse::<bool>() {
+                meta.view.show_zeros = value;
+            }
+        }
+        "rightToLeft" => {
+            if let Ok(value) = value.parse::<bool>() {
+                meta.view.right_to_left = value;
+            }
+        }
+        "showFormulas" => {
+            if let Ok(value) = value.parse::<bool>() {
+                meta.view.show_formulas = value;
+            }
+        }
+        "zoomScale" => {
+            if let Ok(value) = value.parse::<u32>() {
+                meta.view.zoom_scale = Some(value);
+            }
+        }
+        "gridlineColor" => meta.gridline_color = Some(value.to_owned()),
+        "customProperties" => meta.custom_properties = Some(value.to_owned()),
+        "defaultRowHeight" => {
+            if let Ok(value) = value.parse::<f64>()
+                && value.is_finite()
+            {
+                meta.format.default_row_height = Some(pixels_to_points(Pixels(value)).0);
+            }
+        }
+        "defaultColWidth" => {
+            if let Ok(value) = value.parse::<f64>()
+                && value.is_finite()
+            {
+                meta.format.default_col_width =
+                    Some(pixels_to_char_width(Pixels(value), layout_metrics.column_width_mdw).0);
+            }
+        }
+        "protectionPasswordHash" => {
+            let protection = meta.protection.get_or_insert_with(Default::default);
+            protection.password_hash = if value.is_empty() || value == "null" {
+                None
+            } else {
+                Some(value.to_owned())
             };
-            meta.insert(&mut txn, key, Any::Number(stored));
-        } else {
-            meta.insert(&mut txn, key, Any::String(Arc::from(value)));
         }
+        "isProtected" => {
+            if let Ok(value) = value.parse::<bool>() {
+                meta.protection
+                    .get_or_insert_with(Default::default)
+                    .is_protected = value;
+            }
+        }
+        "selectLockedCells" => {
+            if let Ok(value) = value.parse::<bool>() {
+                meta.protection
+                    .get_or_insert_with(Default::default)
+                    .select_locked = value;
+            }
+        }
+        "selectUnlockedCells" => {
+            if let Ok(value) = value.parse::<bool>() {
+                meta.protection
+                    .get_or_insert_with(Default::default)
+                    .select_unlocked = value;
+            }
+        }
+        "formatCells" => {
+            if let Ok(value) = value.parse::<bool>() {
+                meta.protection
+                    .get_or_insert_with(Default::default)
+                    .format_cells = value;
+            }
+        }
+        "formatColumns" => {
+            if let Ok(value) = value.parse::<bool>() {
+                meta.protection
+                    .get_or_insert_with(Default::default)
+                    .format_columns = value;
+            }
+        }
+        "formatRows" => {
+            if let Ok(value) = value.parse::<bool>() {
+                meta.protection
+                    .get_or_insert_with(Default::default)
+                    .format_rows = value;
+            }
+        }
+        "insertColumns" => {
+            if let Ok(value) = value.parse::<bool>() {
+                meta.protection
+                    .get_or_insert_with(Default::default)
+                    .insert_columns = value;
+            }
+        }
+        "insertRows" => {
+            if let Ok(value) = value.parse::<bool>() {
+                meta.protection
+                    .get_or_insert_with(Default::default)
+                    .insert_rows = value;
+            }
+        }
+        "insertHyperlinks" => {
+            if let Ok(value) = value.parse::<bool>() {
+                meta.protection
+                    .get_or_insert_with(Default::default)
+                    .insert_hyperlinks = value;
+            }
+        }
+        "deleteColumns" => {
+            if let Ok(value) = value.parse::<bool>() {
+                meta.protection
+                    .get_or_insert_with(Default::default)
+                    .delete_columns = value;
+            }
+        }
+        "deleteRows" => {
+            if let Ok(value) = value.parse::<bool>() {
+                meta.protection
+                    .get_or_insert_with(Default::default)
+                    .delete_rows = value;
+            }
+        }
+        "sort" => {
+            if let Ok(value) = value.parse::<bool>() {
+                meta.protection.get_or_insert_with(Default::default).sort = value;
+            }
+        }
+        "useAutoFilter" => {
+            if let Ok(value) = value.parse::<bool>() {
+                meta.protection
+                    .get_or_insert_with(Default::default)
+                    .auto_filter = value;
+            }
+        }
+        "usePivotTableReports" => {
+            if let Ok(value) = value.parse::<bool>() {
+                meta.protection
+                    .get_or_insert_with(Default::default)
+                    .pivot_tables = value;
+            }
+        }
+        "editObjects" => {
+            if let Ok(value) = value.parse::<bool>() {
+                meta.protection.get_or_insert_with(Default::default).objects = value;
+            }
+        }
+        "editScenarios" => {
+            if let Ok(value) = value.parse::<bool>() {
+                meta.protection
+                    .get_or_insert_with(Default::default)
+                    .scenarios = value;
+            }
+        }
+        _ => {}
     }
 }
 
-// =========================================================================
-// Round-trip fidelity metadata
-// =========================================================================
-
-/// Extra metadata needed for lossless XLSX round-tripping but not used at runtime.
 pub struct SheetRoundtripMeta {
     pub tab_selected: bool,
     pub active_cell: Option<String>,
@@ -301,74 +352,34 @@ pub struct SheetRoundtripMeta {
     pub trailing_col_ranges: Vec<domain_types::TrailingColRange>,
 }
 
-/// Read round-trip fidelity fields from the Yrs meta map.
 pub(crate) fn get_roundtrip_meta(
-    doc: &Doc,
-    sheets: &MapRef,
+    storage: &WorkbookStorage,
     sheet_id: &SheetId,
 ) -> SheetRoundtripMeta {
-    let txn = doc.transact();
-    match get_meta_map(&txn, sheets, sheet_id) {
-        Some(meta) => SheetRoundtripMeta {
-            tab_selected: meta_bool(&txn, &meta, KEY_TAB_SELECTED, false),
-            active_cell: meta_string(&txn, &meta, KEY_ACTIVE_CELL),
-            sqref: meta_string(&txn, &meta, KEY_SQREF),
-            uid: meta_string(&txn, &meta, KEY_SHEET_UID),
-            default_row_height: meta_optional_number(&txn, &meta, KEY_DEFAULT_ROW_HEIGHT),
-            default_col_width: meta_optional_number(&txn, &meta, KEY_DEFAULT_COL_WIDTH),
-            default_row_descent: meta_optional_number(&txn, &meta, KEY_DEFAULT_ROW_DESCENT),
-            base_col_width: meta_optional_u32(&txn, &meta, KEY_BASE_COL_WIDTH),
-            zoom_scale_normal: meta_optional_u32(&txn, &meta, KEY_ZOOM_SCALE_NORMAL),
-            custom_height: meta_bool(&txn, &meta, KEY_CUSTOM_HEIGHT, false),
-            zero_height: meta_bool(&txn, &meta, KEY_ZERO_HEIGHT, false),
-            thick_top: meta_bool(&txn, &meta, "thickTop", false),
-            thick_bottom: meta_bool(&txn, &meta, "thickBottom", false),
-            outline_level_row: meta_optional_u32(&txn, &meta, KEY_OUTLINE_LEVEL_ROW)
-                .map(|v| v as u8),
-            outline_level_col: meta_optional_u32(&txn, &meta, KEY_OUTLINE_LEVEL_COL)
-                .map(|v| v as u8),
-            trailing_col_ranges: meta_string(&txn, &meta, "trailingColRanges")
-                .and_then(|s| serde_json::from_str(&s).ok())
-                .unwrap_or_default(),
-        },
-        None => SheetRoundtripMeta {
-            tab_selected: false,
-            active_cell: None,
-            sqref: None,
-            uid: None,
-            default_row_height: None,
-            default_col_width: None,
-            default_row_descent: None,
-            base_col_width: None,
-            zoom_scale_normal: None,
-            custom_height: false,
-            zero_height: false,
-            thick_top: false,
-            thick_bottom: false,
-            outline_level_row: None,
-            outline_level_col: None,
-            trailing_col_ranges: Vec::new(),
-        },
+    let default_meta = super::SheetMetadata::default();
+    let meta = storage
+        .sheet_metadata
+        .get(sheet_id)
+        .unwrap_or(&default_meta);
+    SheetRoundtripMeta {
+        tab_selected: meta.view.tab_selected.clone(),
+        active_cell: meta.view.active_cell.clone(),
+        sqref: meta.view.sqref.clone(),
+        uid: meta.uid.clone(),
+        default_row_height: meta.format.default_row_height.clone(),
+        default_col_width: meta.format.default_col_width.clone(),
+        default_row_descent: meta.format.default_row_descent.clone(),
+        base_col_width: meta.format.base_col_width.clone(),
+        zoom_scale_normal: meta.view.zoom_scale_normal.clone(),
+        custom_height: meta.format.custom_height.clone(),
+        zero_height: meta.format.zero_height.clone(),
+        thick_top: meta.format.thick_top.clone(),
+        thick_bottom: meta.format.thick_bottom.clone(),
+        outline_level_row: meta.format.outline_level_row.clone(),
+        outline_level_col: meta.format.outline_level_col.clone(),
+        trailing_col_ranges: meta.format.trailing_col_ranges.clone(),
     }
 }
-
-/// Get the default row descent (x14ac:dyDescent) for a sheet, if set.
-pub(crate) fn get_default_row_descent(
-    doc: &Doc,
-    sheets: &MapRef,
-    sheet_id: &SheetId,
-) -> Option<f64> {
-    let txn = doc.transact();
-    let meta = get_meta_map(&txn, sheets, sheet_id)?;
-    match meta.get(&txn, KEY_DEFAULT_ROW_DESCENT) {
-        Some(Out::Any(Any::Number(n))) => Some(n),
-        _ => None,
-    }
-}
-
-// =============================================================================
-// Tests
-// =============================================================================
 
 #[cfg(test)]
 mod tests {
@@ -377,48 +388,30 @@ mod tests {
 
     #[test]
     fn test_sheet_settings() {
-        let (storage, _mirror, sid) = setup();
-        let settings = get_sheet_settings(storage.doc(), storage.sheets(), &sid);
+        let (mut storage, _mirror, sid) = setup();
+        let settings = get_sheet_settings(&storage, &sid);
         assert!(settings.show_gridlines);
         assert!(!settings.is_protected);
         assert_eq!(settings.default_row_height, 20.0);
 
-        set_sheet_setting(
-            storage.doc(),
-            storage.sheets(),
-            &sid,
-            "showGridlines",
-            "false",
-        );
-        let settings = get_sheet_settings(storage.doc(), storage.sheets(), &sid);
+        set_sheet_setting(&mut storage, &sid, "showGridlines", "false");
+        let settings = get_sheet_settings(&storage, &sid);
         assert!(!settings.show_gridlines);
 
-        set_sheet_setting(
-            storage.doc(),
-            storage.sheets(),
-            &sid,
-            "defaultRowHeight",
-            "25.0",
-        );
-        let settings = get_sheet_settings(storage.doc(), storage.sheets(), &sid);
+        set_sheet_setting(&mut storage, &sid, "defaultRowHeight", "25.0");
+        let settings = get_sheet_settings(&storage, &sid);
         assert_eq!(settings.default_row_height, 25.0);
     }
 
     #[test]
     fn test_protection_settings_are_stored_in_protection_details() {
-        let (storage, _mirror, sid) = setup();
+        let (mut storage, _mirror, sid) = setup();
 
-        set_sheet_setting(storage.doc(), storage.sheets(), &sid, "isProtected", "true");
-        set_sheet_setting(
-            storage.doc(),
-            storage.sheets(),
-            &sid,
-            "protectionPasswordHash",
-            "hash123",
-        );
-        set_sheet_setting(storage.doc(), storage.sheets(), &sid, "formatCells", "true");
+        set_sheet_setting(&mut storage, &sid, "isProtected", "true");
+        set_sheet_setting(&mut storage, &sid, "protectionPasswordHash", "hash123");
+        set_sheet_setting(&mut storage, &sid, "formatCells", "true");
 
-        let settings = get_sheet_settings(storage.doc(), storage.sheets(), &sid);
+        let settings = get_sheet_settings(&storage, &sid);
         assert!(settings.is_protected);
         assert_eq!(
             settings.protection_password_hash,
@@ -432,17 +425,13 @@ mod tests {
             Some(true)
         );
 
-        let txn = storage.doc().transact();
-        let meta = get_meta_map(&txn, storage.sheets(), &sid).expect("sheet meta exists");
-        assert!(meta.get(&txn, "isProtected").is_none());
-        assert!(meta.get(&txn, "protectionPasswordHash").is_none());
-
-        let prot_map = match meta.get(&txn, KEY_PROTECTION_DETAILS) {
-            Some(Out::YMap(map)) => map,
-            _ => panic!("expected protectionDetails map"),
-        };
-        let protection =
-            protection_schema::sheet_from_yrs_map(&prot_map, &txn).expect("valid protection map");
+        let protection = storage
+            .sheet_metadata
+            .get(&sid)
+            .unwrap()
+            .protection
+            .as_ref()
+            .unwrap();
         assert!(protection.is_protected);
         assert_eq!(protection.password_hash, Some("hash123".to_string()));
         assert!(protection.format_cells);

@@ -1,0 +1,623 @@
+{
+  "label": "native-history",
+  "revision": "f2edc322212d1e32edae1915892e406b33ca1d18",
+  "status": " M Cargo.lock\n M Cargo.toml\n M README.md\n M compute/api/src/bridge_service.rs\n M compute/api/src/dispatch.rs\n M compute/api/src/lib.rs\n M compute/api/src/sheet/formats.rs\n M compute/api/src/sheet/structure.rs\n M compute/api/src/workbook.rs\n M compute/api/src/workbook/scenarios.rs\n M compute/api/src/workbook/sheets.rs\n M compute/api/tests/coverage_audit.rs\n M compute/api/tests/delete_columns_ref_error.rs\n M compute/api/tests/principal_state.rs\n M compute/api/tests/security_e2e/adversarial_bypass_runtime.rs\n M compute/api/tests/security_e2e/adversarial_disposition.rs\n M compute/api/tests/security_e2e/bootstrap.rs\n M compute/api/tests/security_e2e/enforcement.rs\n M compute/api/tests/security_e2e/fixtures.rs\n M compute/api/tests/smoke.rs\n M compute/core/Cargo.toml\n M compute/core/README.md\n M compute/core/benches/eval_bench.rs\n M compute/core/benches/range_baseline/range_benches.rs\n M compute/core/benches/range_baseline/range_fixtures.rs\n M compute/core/benches/range_baseline/support.rs\n M compute/core/crates/compute-cf/src/lib.rs\n M compute/core/crates/compute-cf/src/stats.rs\n D compute/core/crates/compute-collab/Cargo.toml\n D compute/core/crates/compute-collab/src/error.rs\n D compute/core/crates/compute-collab/src/lib.rs\n D compute/core/crates/compute-collab/src/limits.rs\n D compute/core/crates/compute-collab/src/observe.rs\n D compute/core/crates/compute-collab/src/protocol.rs\n D compute/core/crates/compute-collab/src/undo.rs\n D compute/core/crates/compute-collab/tests/error_limits.rs\n D compute/core/crates/compute-collab/tests/observe.rs\n D compute/core/crates/compute-collab/tests/protocol_roundtrip.rs\n D compute/core/crates/compute-collab/tests/provider_replay.rs\n D compute/core/crates/compute-collab/tests/support/mod.rs\n D compute/core/crates/compute-collab/tests/undo_capture.rs\n M compute/core/crates/compute-document/Cargo.toml\n D compute/core/crates/compute-document/src/cell_serde.rs\n D compute/core/crates/compute-document/src/error.rs\n M compute/core/crates/compute-document/src/hex.rs\n M compute/core/crates/compute-document/src/identity/axes.rs\n M compute/core/crates/compute-document/src/identity/axis_mutations.rs\n M compute/core/crates/compute-document/src/identity/construction.rs\n M compute/core/crates/compute-document/src/identity/grid_index.rs\n M compute/core/crates/compute-document/src/identity/mod.rs\n M compute/core/crates/compute-document/src/identity/sorting.rs\n M compute/core/crates/compute-document/src/identity/tests/construction.rs\n M compute/core/crates/compute-document/src/identity/tests/sorting.rs\n M compute/core/crates/compute-document/src/lib.rs\n D compute/core/crates/compute-document/src/observe/changes.rs\n D compute/core/crates/compute-document/src/observe/helpers.rs\n D compute/core/crates/compute-document/src/observe/mod.rs\n D compute/core/crates/compute-document/src/observe/sheets.rs\n D compute/core/crates/compute-document/src/observe/tests/assertions.rs\n D compute/core/crates/compute-document/src/observe/tests/cells.rs\n D compute/core/crates/compute-document/src/observe/tests/changes.rs\n D compute/core/crates/compute-document/src/observe/tests/fixtures.rs\n D compute/core/crates/compute-document/src/observe/tests/hex.rs\n D compute/core/crates/compute-document/src/observe/tests/ignored.rs\n D compute/core/crates/compute-document/src/observe/tests/lifecycle.rs\n D compute/core/crates/compute-document/src/observe/tests/mod.rs\n D compute/core/crates/compute-document/src/observe/tests/origins.rs\n D compute/core/crates/compute-document/src/observe/tests/pivots.rs\n D compute/core/crates/compute-document/src/observe/tests/sheets_domains.rs\n D compute/core/crates/compute-document/src/observe/tests/sheets_in_place.rs\n D compute/core/crates/compute-document/src/observe/tests/workbook.rs\n D compute/core/crates/compute-document/src/observe/workbook.rs\n M compute/core/crates/compute-document/src/range.rs\n D compute/core/crates/compute-document/src/schema.rs\n D compute/core/crates/compute-document/src/security_store.rs\n D compute/core/crates/compute-document/src/undo/clock.rs\n D compute/core/crates/compute-document/src/undo/manager.rs\n D compute/core/crates/compute-document/src/undo/mod.rs\n D compute/core/crates/compute-document/src/undo/origin.rs\n D compute/core/crates/compute-document/src/undo/poll.rs\n D compute/core/crates/compute-document/src/undo/tests/grouping.rs\n D compute/core/crates/compute-document/src/undo/tests/mod.rs\n D compute/core/crates/compute-document/src/undo/tests/origins.rs\n D compute/core/crates/compute-document/src/undo/tests/poll.rs\n D compute/core/crates/compute-document/src/undo/tests/stack.rs\n D compute/core/crates/compute-document/src/undo/tests/support.rs\n D compute/core/crates/compute-document/src/workbook_metadata.rs\n D compute/core/crates/compute-document/tests/security_store.rs\n M compute/core/crates/compute-functions/src/helpers/bitmask_cache.rs\n M compute/core/crates/compute-functions/src/helpers/column_index.rs\n M compute/core/crates/compute-functions/src/helpers/conditional_aggregate.rs\n M compute/core/crates/compute-functions/src/helpers/criteria/mod.rs\n M compute/core/crates/compute-functions/src/helpers/criteria/predicate.rs\n M compute/core/crates/compute-functions/src/helpers/sumifs_result_cache.rs\n M compute/core/crates/compute-graph/examples/spreadsheet_recalc.rs\n M compute/core/crates/compute-parser/src/expressions/mod.rs\n M compute/core/crates/compute-parser/src/lib.rs\n M compute/core/crates/compute-parser/src/parsed_expr/mod.rs\n M compute/core/crates/compute-parser/src/reference_tokens.rs\n M compute/core/crates/compute-security/Cargo.toml\n M compute/core/crates/compute-security/benches/engine.rs\n M compute/core/crates/compute-security/src/engine.rs\n M compute/core/crates/compute-security/src/events.rs\n M compute/core/crates/compute-security/src/filters.rs\n M compute/core/crates/compute-security/src/lib.rs\n M compute/core/crates/compute-security/src/matrix.rs\n M compute/core/crates/compute-security/src/policy.rs\n M compute/core/crates/compute-security/src/principal.rs\n M compute/core/crates/compute-security/src/templates.rs\n M compute/core/crates/compute-security/tests/templates.rs\n M compute/core/crates/compute-table/src/events.rs\n M compute/core/crates/compute-table/src/range_resolution.rs\n M compute/core/crates/compute-wire/Cargo.toml\n M compute/core/crates/compute-wire/src/mutation/mod.rs\n M compute/core/crates/types/cell-types/src/id_alloc.rs\n M compute/core/crates/types/cell-types/src/identity/axis_store.rs\n M compute/core/crates/types/formula-types/src/identity_formula/mod.rs\n M compute/core/crates/types/formula-types/src/identity_formula/types.rs\n M compute/core/crates/types/snapshot-types/src/bindings.rs\n M compute/core/crates/types/snapshot-types/src/cell_ops.rs\n M compute/core/crates/types/snapshot-types/src/init.rs\n M compute/core/crates/types/snapshot-types/src/lib.rs\n M compute/core/crates/types/snapshot-types/src/mutation/mod.rs\n M compute/core/crates/types/snapshot-types/src/mutation/primitives.rs\n M compute/core/crates/types/snapshot-types/src/mutation/result.rs\n M compute/core/crates/types/snapshot-types/src/object_ops.rs\n M compute/core/crates/types/snapshot-types/src/scenario.rs\n M compute/core/crates/types/snapshot-types/src/settings.rs\n M compute/core/crates/types/snapshot-types/src/versioning/mod.rs\n M compute/core/crates/types/snapshot-types/src/versioning/public_contracts.rs\n M compute/core/crates/types/snapshot-types/src/versioning/semantic_merge.rs\n M compute/core/crates/types/value-types/src/dense/column.rs\n M compute/core/crates/types/value-types/src/lib.rs\n M compute/core/src/bridge_pure.rs\n M compute/core/src/data_table/creation.rs\n M compute/core/src/engine_types/annotations.rs\n M compute/core/src/engine_types/mod.rs\n M compute/core/src/eval/cache/range_store.rs\n M compute/core/src/eval/cache/workbook_cache.rs\n M compute/core/src/eval/context/traits.rs\n M compute/core/src/eval/engine/aggregate.rs\n M compute/core/src/eval/eval_tests/error_propagation.rs\n M compute/core/src/eval/eval_tests/lookups.rs\n M compute/core/src/eval/eval_tests/range_ops.rs\n M compute/core/src/eval/functions/borrowed_multi_criteria.rs\n M compute/core/src/eval/lookup/index_cache.rs\n M compute/core/src/eval/test_helpers.rs\n M compute/core/src/eval_bridge/mirror_access.rs\n M compute/core/src/eval_bridge/mirror_context.rs\n M compute/core/src/eval_bridge/override_context.rs\n M compute/core/src/identity/tests.rs\n M compute/core/src/import/parse_output_to_snapshot/anchor_collection.rs\n M compute/core/src/import/parse_output_to_snapshot/classifier.rs\n M compute/core/src/import/parse_output_to_snapshot/data_table_lowering.rs\n M compute/core/src/import/parse_output_to_snapshot/hyperlink_lowering.rs\n M compute/core/src/import/parse_output_to_snapshot/mod.rs\n M compute/core/src/import/parse_output_to_snapshot/name_lowering.rs\n M compute/core/src/import/parse_output_to_snapshot/sheet_lowering.rs\n M compute/core/src/import/parse_output_to_snapshot/sparkline_lowering.rs\n M compute/core/src/import/parse_output_to_snapshot/table_lowering.rs\n M compute/core/src/import/parse_output_to_snapshot/tests.rs\n M compute/core/src/import/parse_output_to_snapshot/validation_lowering.rs\n M compute/core/src/import/parse_output_to_snapshot/view_lowering.rs\n M compute/core/src/lib.rs\n M compute/core/src/mirror/cell_mirror.rs\n M compute/core/src/mirror/dense.rs\n M compute/core/src/mirror/materialize_pivot_tests.rs\n M compute/core/src/mirror/metadata.rs\n M compute/core/src/mirror/mod.rs\n M compute/core/src/mirror/range_view.rs\n M compute/core/src/mirror/read.rs\n M compute/core/src/mirror/sheet.rs\n M compute/core/src/mirror/snapshot.rs\n M compute/core/src/mirror/structure.rs\n M compute/core/src/mirror/test_helpers.rs\n M compute/core/src/mirror/tests/cells.rs\n D compute/core/src/mirror/tests/dense_col_data.rs\n M compute/core/src/mirror/tests/mod.rs\n M compute/core/src/mirror/tests/sheets.rs\n M compute/core/src/mirror/tests/snapshot.rs\n M compute/core/src/mirror/types.rs\n M compute/core/src/mirror/variable_store.rs\n M compute/core/src/mirror/write/cells.rs\n M compute/core/src/mirror/write/identity.rs\n M compute/core/src/mirror/write/mod.rs\n M compute/core/src/mirror/write/pivot_materialization.rs\n M compute/core/src/mirror/write/position.rs\n M compute/core/src/mirror/write/projection_materialization.rs\n M compute/core/src/mirror/write/tests/cells.rs\n M compute/core/src/mirror/write/tests/identity.rs\n M compute/core/src/mirror/write/tests/pivot_materialization.rs\n M compute/core/src/mirror/write/tests/position.rs\n M compute/core/src/mirror/write/tests/projection_materialization.rs\n M compute/core/src/scheduler/agg_prepass/hashmap.rs\n M compute/core/src/scheduler/agg_prepass/mod.rs\n M compute/core/src/scheduler/agg_prepass/sorted_range.rs\n M compute/core/src/scheduler/agg_prepass/tests/mod.rs\n M compute/core/src/scheduler/agg_prepass/tests/test_cache_only.rs\n M compute/core/src/scheduler/cf_eval.rs\n M compute/core/src/scheduler/cf_formula_tests.rs\n M compute/core/src/scheduler/data_table_prepass.rs\n M compute/core/src/scheduler/edit.rs\n M compute/core/src/scheduler/formula_reg.rs\n M compute/core/src/scheduler/init.rs\n D compute/core/src/scheduler/input.rs\n M compute/core/src/scheduler/level_eval.rs\n M compute/core/src/scheduler/mod.rs\n M compute/core/src/scheduler/projection_tests/basic_spills.rs\n M compute/core/src/scheduler/projection_tests/helpers.rs\n M compute/core/src/scheduler/projection_tests/materialization.rs\n M compute/core/src/scheduler/projection_tests/patch_contracts.rs\n M compute/core/src/scheduler/projection_tests/stabilization.rs\n M compute/core/src/scheduler/recalc/entrypoints.rs\n M compute/core/src/scheduler/scheduler_tests/agg_prepass.rs\n M compute/core/src/scheduler/scheduler_tests/agg_prepass/cross_sheet.rs\n M compute/core/src/scheduler/scheduler_tests/agg_prepass/helpers.rs\n M compute/core/src/scheduler/scheduler_tests/cycles.rs\n M compute/core/src/scheduler/scheduler_tests/dependency_levels.rs\n M compute/core/src/scheduler/scheduler_tests/formula_behaviors.rs\n M compute/core/src/scheduler/scheduler_tests/init.rs\n M compute/core/src/scheduler/scheduler_tests/parallel_recalc.rs\n M compute/core/src/scheduler/scheduler_tests/sheet_spill.rs\n M compute/core/src/scheduler/schema_validation.rs\n M compute/core/src/scheduler/test_helpers.rs\n M compute/core/src/scheduler/value_utils.rs\n M compute/core/src/storage/cells/data_ops.rs\n D compute/core/src/storage/cells/data_ops/tests/fixtures.rs\n D compute/core/src/storage/cells/data_ops/tests/headers.rs\n M compute/core/src/storage/cells/data_ops/tests/mod.rs\n M compute/core/src/storage/cells/data_ops/tests/preview.rs\n M compute/core/src/storage/cells/data_ops/tests/remove_duplicates.rs\n D compute/core/src/storage/cells/data_ops/tests/text_to_columns.rs\n M compute/core/src/storage/cells/formula_updater/mod.rs\n M compute/core/src/storage/cells/formula_updater/named_range_rename.rs\n M compute/core/src/storage/cells/formula_updater/named_refs.rs\n M compute/core/src/storage/cells/formula_updater/sheet_refs.rs\n D compute/core/src/storage/cells/formula_updater/sheet_rename.rs\n D compute/core/src/storage/cells/formula_updater/storage_scan.rs\n M compute/core/src/storage/cells/formula_updater/tests/mod.rs\n M compute/core/src/storage/cells/formula_updater/tests/named_range_mirror.rs\n M compute/core/src/storage/cells/formula_updater/tests/named_range_storage.rs\n M compute/core/src/storage/cells/formula_updater/tests/sheet_refs.rs\n D compute/core/src/storage/cells/formula_updater/tests/sheet_rename_storage.rs\n M compute/core/src/storage/cells/structured_ref_updater.rs\n D compute/core/src/storage/cells/structured_ref_updater/ops.rs\n D compute/core/src/storage/cells/structured_ref_updater/range.rs\n D compute/core/src/storage/cells/structured_ref_updater/rewrite.rs\n D compute/core/src/storage/cells/structured_ref_updater/storage_scan.rs\n M compute/core/src/storage/cells/values.rs\n M compute/core/src/storage/cells/values/parsing.rs\n D compute/core/src/storage/cells/values/storage_methods.rs\n D compute/core/src/storage/cells/values/tests/cell_input_dispatch.rs\n M compute/core/src/storage/cells/values/tests/format_hints.rs\n M compute/core/src/storage/cells/values/tests/mod.rs\n M compute/core/src/storage/cells/values/tests/storage_roundtrip.rs\n M compute/core/src/storage/cells/values/tests/support.rs\n M compute/core/src/storage/engine/accessors.rs\n M compute/core/src/storage/engine/atomics.rs\n M compute/core/src/storage/engine/bridge_imports.rs\n M compute/core/src/storage/engine/cell_bridge.rs\n M compute/core/src/storage/engine/cell_semantics.rs\n M compute/core/src/storage/engine/cf_cache/convert.rs\n M compute/core/src/storage/engine/cf_cache/engine.rs\n M compute/core/src/storage/engine/cf_cache/ranges.rs\n M compute/core/src/storage/engine/cf_cache/tests.rs\n M compute/core/src/storage/engine/construction.rs\n M compute/core/src/storage/engine/construction/assembly.rs\n D compute/core/src/storage/engine/construction/axis_resolver.rs\n M compute/core/src/storage/engine/construction/csv.rs\n M compute/core/src/storage/engine/construction/deferred.rs\n M compute/core/src/storage/engine/construction/indexes.rs\n M compute/core/src/storage/engine/construction/named_ranges.rs\n M compute/core/src/storage/engine/construction/range_styles.rs\n M compute/core/src/storage/engine/construction/rebuild.rs\n M compute/core/src/storage/engine/construction/runtime.rs\n M compute/core/src/storage/engine/construction/sheet_import.rs\n M compute/core/src/storage/engine/construction/snapshots.rs\n M compute/core/src/storage/engine/construction/table_auto_filter_projection.rs\n M compute/core/src/storage/engine/construction/types.rs\n M compute/core/src/storage/engine/construction/xlsx.rs\n M compute/core/src/storage/engine/data_table_formula.rs\n M compute/core/src/storage/engine/delegations.rs\n M compute/core/src/storage/engine/delegations/batch_cells.rs\n M compute/core/src/storage/engine/delegations/compute_sheets_named.rs\n M compute/core/src/storage/engine/delegations/defined_names_print_cells.rs\n M compute/core/src/storage/engine/delegations/scenarios_bindings.rs\n M compute/core/src/storage/engine/delegations/sheet_lifecycle.rs\n M compute/core/src/storage/engine/delegations/sheet_settings_print.rs\n D compute/core/src/storage/engine/delegations/what_if_sync.rs\n M compute/core/src/storage/engine/export.rs\n M compute/core/src/storage/engine/features/filters.rs\n M compute/core/src/storage/engine/features/grouping.rs\n M compute/core/src/storage/engine/features/mod.rs\n M compute/core/src/storage/engine/features/range_ops.rs\n M compute/core/src/storage/engine/features/slicers.rs\n M compute/core/src/storage/engine/features/sparklines.rs\n M compute/core/src/storage/engine/features/text_to_columns.rs\n M compute/core/src/storage/engine/format_inference.rs\n M compute/core/src/storage/engine/formatting/cell_formats.rs\n M compute/core/src/storage/engine/formatting/cf_geometry.rs\n M compute/core/src/storage/engine/formatting/conditional_formats.rs\n M compute/core/src/storage/engine/formatting/display_text.rs\n M compute/core/src/storage/engine/formatting/displayed.rs\n M compute/core/src/storage/engine/formatting/mod.rs\n M compute/core/src/storage/engine/formatting/range_mutations.rs\n M compute/core/src/storage/engine/formatting/range_queries.rs\n M compute/core/src/storage/engine/formatting/row_col.rs\n M compute/core/src/storage/engine/formatting/schema_map.rs\n M compute/core/src/storage/engine/formatting/schemas.rs\n M compute/core/src/storage/engine/grid_indexing.rs\n M compute/core/src/storage/engine/integration_tests_direct_edit_results.rs\n M compute/core/src/storage/engine/integration_tests_find_in_range.rs\n M compute/core/src/storage/engine/integration_tests_old_value.rs\n M compute/core/src/storage/engine/integration_tests_replace_all.rs\n M compute/core/src/storage/engine/layout.rs\n M compute/core/src/storage/engine/mod.rs\n M compute/core/src/storage/engine/mutation.rs\n M compute/core/src/storage/engine/mutation_coordinator.rs\n M compute/core/src/storage/engine/mutation_dispatch.rs\n M compute/core/src/storage/engine/objects/annotations.rs\n M compute/core/src/storage/engine/objects/charts.rs\n M compute/core/src/storage/engine/objects/comments.rs\n M compute/core/src/storage/engine/objects/floating.rs\n M compute/core/src/storage/engine/objects/groups.rs\n M compute/core/src/storage/engine/objects/hyperlinks.rs\n M compute/core/src/storage/engine/objects/mod.rs\n M compute/core/src/storage/engine/objects/pivots.rs\n M compute/core/src/storage/engine/objects/shared.rs\n M compute/core/src/storage/engine/objects/z_order.rs\n M compute/core/src/storage/engine/pivot_materialization.rs\n M compute/core/src/storage/engine/queries.rs\n M compute/core/src/storage/engine/queries/cell_regions.rs\n M compute/core/src/storage/engine/queries/document_sheets.rs\n M compute/core/src/storage/engine/queries/helpers.rs\n M compute/core/src/storage/engine/queries/projections_settings.rs\n M compute/core/src/storage/engine/queries/ranges_search_formula.rs\n M compute/core/src/storage/engine/queries/styles_named_ranges.rs\n M compute/core/src/storage/engine/queries/workbook_settings.rs\n D compute/core/src/storage/engine/queries/yrs_a1_named_values.rs\n M compute/core/src/storage/engine/query_serialization.rs\n M compute/core/src/storage/engine/recalc.rs\n M compute/core/src/storage/engine/recalc_postprocess.rs\n M compute/core/src/storage/engine/screenshot.rs\n M compute/core/src/storage/engine/search.rs\n M compute/core/src/storage/engine/security.rs\n M compute/core/src/storage/engine/security_events.rs\n M compute/core/src/storage/engine/security_ops.rs\n M compute/core/src/storage/engine/services/advanced_filter.rs\n M compute/core/src/storage/engine/services/autofit.rs\n M compute/core/src/storage/engine/services/cell_editing/array_formulas.rs\n M compute/core/src/storage/engine/services/cell_editing/bulk_edits.rs\n M compute/core/src/storage/engine/services/cell_editing/direct_edits.rs\n M compute/core/src/storage/engine/services/cell_editing/identity.rs\n M compute/core/src/storage/engine/services/cell_editing/mod.rs\n M compute/core/src/storage/engine/services/cell_editing/range_sync.rs\n D compute/core/src/storage/engine/services/cell_editing/yrs_persistence.rs\n M compute/core/src/storage/engine/services/cf_cache.rs\n M compute/core/src/storage/engine/services/delegations/mod.rs\n M compute/core/src/storage/engine/services/delegations/named_ranges.rs\n M compute/core/src/storage/engine/services/delegations/print.rs\n M compute/core/src/storage/engine/services/delegations/scenarios_bindings.rs\n M compute/core/src/storage/engine/services/delegations/settings_protection.rs\n M compute/core/src/storage/engine/services/delegations/sheet_lifecycle.rs\n M compute/core/src/storage/engine/services/delegations/tests.rs\n M compute/core/src/storage/engine/services/delegations/view_state.rs\n D compute/core/src/storage/engine/services/delegations/what_if_sync.rs\n M compute/core/src/storage/engine/services/export/cells/materialize.rs\n M compute/core/src/storage/engine/services/export/cells/mod.rs\n M compute/core/src/storage/engine/services/export/cells/overlays.rs\n M compute/core/src/storage/engine/services/export/cells/style_ids.rs\n M compute/core/src/storage/engine/services/export/cells/tests.rs\n D compute/core/src/storage/engine/services/export/cells/yrs_reads.rs\n M compute/core/src/storage/engine/services/export/comment_package_metadata.rs\n M compute/core/src/storage/engine/services/export/dimensions.rs\n M compute/core/src/storage/engine/services/export/mod.rs\n M compute/core/src/storage/engine/services/export/named_ranges.rs\n M compute/core/src/storage/engine/services/export/palette.rs\n M compute/core/src/storage/engine/services/export/pivot_cache_reconciliation.rs\n M compute/core/src/storage/engine/services/export/print_defined_names.rs\n M compute/core/src/storage/engine/services/export/sheet_metadata.rs\n M compute/core/src/storage/engine/services/export/slicers.rs\n M compute/core/src/storage/engine/services/export/workbook.rs\n M compute/core/src/storage/engine/services/export/workbook_views.rs\n M compute/core/src/storage/engine/services/features/grouping.rs\n M compute/core/src/storage/engine/services/features/mod.rs\n M compute/core/src/storage/engine/services/features/outline_expansion.rs\n D compute/core/src/storage/engine/services/features/slicer_crdt.rs\n M compute/core/src/storage/engine/services/features/sparklines.rs\n M compute/core/src/storage/engine/services/features/text_to_columns.rs\n M compute/core/src/storage/engine/services/filters.rs\n M compute/core/src/storage/engine/services/filters/clear_all.rs\n M compute/core/src/storage/engine/services/filters/value_queries.rs\n M compute/core/src/storage/engine/services/formatting/cell_properties.rs\n D compute/core/src/storage/engine/services/formatting/cf_identity.rs\n M compute/core/src/storage/engine/services/formatting/conditional_formats.rs\n M compute/core/src/storage/engine/services/formatting/mod.rs\n M compute/core/src/storage/engine/services/formatting/range_formats.rs\n M compute/core/src/storage/engine/services/formatting/row_col_formats.rs\n M compute/core/src/storage/engine/services/formatting/schema_storage.rs\n M compute/core/src/storage/engine/services/imported_filters.rs\n M compute/core/src/storage/engine/services/metadata_shift.rs\n M compute/core/src/storage/engine/services/mod.rs\n M compute/core/src/storage/engine/services/mutation.rs\n M compute/core/src/storage/engine/services/mutation_handlers/cell_mutations/clear.rs\n M compute/core/src/storage/engine/services/mutation_handlers/cell_mutations/cse_clear.rs\n M compute/core/src/storage/engine/services/mutation_handlers/cell_mutations/mod.rs\n M compute/core/src/storage/engine/services/mutation_handlers/cell_mutations/position_resolution.rs\n M compute/core/src/storage/engine/services/mutation_handlers/cell_mutations/raw_edits.rs\n M compute/core/src/storage/engine/services/mutation_handlers/cell_mutations/set_cells.rs\n M compute/core/src/storage/engine/services/mutation_handlers/cell_mutations/tests.rs\n D compute/core/src/storage/engine/services/mutation_handlers/cell_mutations/yrs_writes.rs\n M compute/core/src/storage/engine/services/mutation_handlers/fill.rs\n M compute/core/src/storage/engine/services/mutation_handlers/find_replace.rs\n M compute/core/src/storage/engine/services/mutation_handlers/mod.rs\n M compute/core/src/storage/engine/services/mutation_handlers/named_ranges.rs\n M compute/core/src/storage/engine/services/mutation_handlers/range_operations/copy.rs\n M compute/core/src/storage/engine/services/mutation_handlers/range_operations/range_sort.rs\n M compute/core/src/storage/engine/services/mutation_handlers/range_operations/relocate.rs\n M compute/core/src/storage/engine/services/mutation_handlers/range_operations/remove_duplicates.rs\n M compute/core/src/storage/engine/services/mutation_handlers/range_operations/sort.rs\n D compute/core/src/storage/engine/services/mutation_handlers/result_building/deferred.rs\n M compute/core/src/storage/engine/services/mutation_handlers/result_building/enrichment.rs\n M compute/core/src/storage/engine/services/mutation_handlers/result_building/mod.rs\n D compute/core/src/storage/engine/services/mutation_handlers/result_building/observer.rs\n M compute/core/src/storage/engine/services/mutation_handlers/result_building/sheet_hydration.rs\n M compute/core/src/storage/engine/services/mutation_handlers/result_building/tests.rs\n M compute/core/src/storage/engine/services/mutation_handlers/result_building/workbook_hydration.rs\n M compute/core/src/storage/engine/services/mutation_handlers/sheet_mutations.rs\n M compute/core/src/storage/engine/services/objects/annotations.rs\n M compute/core/src/storage/engine/services/objects/charts.rs\n M compute/core/src/storage/engine/services/objects/comments.rs\n M compute/core/src/storage/engine/services/objects/floating.rs\n M compute/core/src/storage/engine/services/objects/groups.rs\n M compute/core/src/storage/engine/services/objects/hyperlinks.rs\n M compute/core/src/storage/engine/services/objects/pivots.rs\n M compute/core/src/storage/engine/services/objects/z_order.rs\n M compute/core/src/storage/engine/services/queries/cells.rs\n M compute/core/src/storage/engine/services/queries/dimensions.rs\n M compute/core/src/storage/engine/services/queries/mod.rs\n M compute/core/src/storage/engine/services/queries/named_ranges.rs\n M compute/core/src/storage/engine/services/queries/ranges.rs\n M compute/core/src/storage/engine/services/queries/search.rs\n M compute/core/src/storage/engine/services/queries/sheets.rs\n M compute/core/src/storage/engine/services/queries/workbook.rs\n M compute/core/src/storage/engine/services/structural/dimensions.rs\n M compute/core/src/storage/engine/services/structural/floating_bounds.rs\n D compute/core/src/storage/engine/services/structural/formula_writeback.rs\n M compute/core/src/storage/engine/services/structural/identity.rs\n M compute/core/src/storage/engine/services/structural/merges.rs\n M compute/core/src/storage/engine/services/structural/mod.rs\n M compute/core/src/storage/engine/services/structural/pre_delete_reanchor.rs\n D compute/core/src/storage/engine/services/structural/range_virtual_cells.rs\n M compute/core/src/storage/engine/services/structural/structure_change.rs\n M compute/core/src/storage/engine/services/styles.rs\n M compute/core/src/storage/engine/services/tables.rs\n M compute/core/src/storage/engine/services/tables/filter_delete.rs\n M compute/core/src/storage/engine/services/tables/format_materialization.rs\n M compute/core/src/storage/engine/services/tables/mutations.rs\n M compute/core/src/storage/engine/services/tables/options.rs\n M compute/core/src/storage/engine/services/tables/persistence.rs\n M compute/core/src/storage/engine/services/tables/queries.rs\n M compute/core/src/storage/engine/services/tables/tests.rs\n M compute/core/src/storage/engine/services/tables/tests/tests/lifecycle.rs\n M compute/core/src/storage/engine/services/tables/tests/tests/persistence_catalog.rs\n M compute/core/src/storage/engine/services/tables/tests/tests/rename_column.rs\n D compute/core/src/storage/engine/services/undo.rs\n M compute/core/src/storage/engine/stores.rs\n M compute/core/src/storage/engine/structural/dimensions.rs\n M compute/core/src/storage/engine/structural/identity.rs\n M compute/core/src/storage/engine/structural/merges.rs\n M compute/core/src/storage/engine/structural/mod.rs\n M compute/core/src/storage/engine/structural/partial_cell_shift.rs\n M compute/core/src/storage/engine/structural/relocate_values.rs\n M compute/core/src/storage/engine/structural/structure_change.rs\n D compute/core/src/storage/engine/structural/yrs_position_persistence.rs\n M compute/core/src/storage/engine/styles.rs\n D compute/core/src/storage/engine/sync_authored_cells.rs\n D compute/core/src/storage/engine/sync_bridge.rs\n D compute/core/src/storage/engine/sync_pipeline.rs\n D compute/core/src/storage/engine/sync_pipeline/axis_capacity.rs\n D compute/core/src/storage/engine/sync_pipeline/repair.rs\n D compute/core/src/storage/engine/sync_pipeline/runtime_settings.rs\n M compute/core/src/storage/engine/table_result_merge.rs\n M compute/core/src/storage/engine/tables.rs\n M compute/core/src/storage/engine/tests/helpers.rs\n M compute/core/src/storage/engine/tests/mod.rs\n D compute/core/src/storage/engine/tests/sync_helpers.rs\n M compute/core/src/storage/engine/tests/test_advanced_filter.rs\n M compute/core/src/storage/engine/tests/test_annotations.rs\n M compute/core/src/storage/engine/tests/test_binary_patches.rs\n M compute/core/src/storage/engine/tests/test_bootstrap_hydration.rs\n M compute/core/src/storage/engine/tests/test_border_patches.rs\n M compute/core/src/storage/engine/tests/test_cell_input_value.rs\n M compute/core/src/storage/engine/tests/test_comments.rs\n M compute/core/src/storage/engine/tests/test_copy_range.rs\n M compute/core/src/storage/engine/tests/test_copy_range_format_contracts.rs\n M compute/core/src/storage/engine/tests/test_core.rs\n M compute/core/src/storage/engine/tests/test_cross_sheet_regressions.rs\n M compute/core/src/storage/engine/tests/test_data_bounds.rs\n M compute/core/src/storage/engine/tests/test_deferred_xlsx_import.rs\n M compute/core/src/storage/engine/tests/test_deferred_xlsx_import/bootstrap_rendering.rs\n M compute/core/src/storage/engine/tests/test_deferred_xlsx_import/calc_completion.rs\n M compute/core/src/storage/engine/tests/test_deferred_xlsx_import/formula_visibility.rs\n M compute/core/src/storage/engine/tests/test_deferred_xlsx_import/identity_allocation.rs\n M compute/core/src/storage/engine/tests/test_deferred_xlsx_import/partial_export.rs\n D compute/core/src/storage/engine/tests/test_deferred_xlsx_import/provider_replay.rs\n M compute/core/src/storage/engine/tests/test_deferred_xlsx_import/range_streaming.rs\n M compute/core/src/storage/engine/tests/test_deferred_xlsx_import/structural_shared_formulas.rs\n M compute/core/src/storage/engine/tests/test_deferred_xlsx_import/support.rs\n M compute/core/src/storage/engine/tests/test_displayed_format_projection.rs\n M compute/core/src/storage/engine/tests/test_floating_object_invalid_targets.rs\n M compute/core/src/storage/engine/tests/test_formatting.rs\n M compute/core/src/storage/engine/tests/test_formula_format_inheritance.rs\n M compute/core/src/storage/engine/tests/test_imported_autofilter_metadata.rs\n M compute/core/src/storage/engine/tests/test_named_range_refers_to.rs\n M compute/core/src/storage/engine/tests/test_old_value.rs\n M compute/core/src/storage/engine/tests/test_outline_visibility.rs\n M compute/core/src/storage/engine/tests/test_pivot_materialization.rs\n M compute/core/src/storage/engine/tests/test_properties.rs\n M compute/core/src/storage/engine/tests/test_queries.rs\n M compute/core/src/storage/engine/tests/test_range_sort.rs\n M compute/core/src/storage/engine/tests/test_range_structural.rs\n D compute/core/src/storage/engine/tests/test_range_structural_replay.rs\n M compute/core/src/storage/engine/tests/test_rebuild.rs\n M compute/core/src/storage/engine/tests/test_sheet_introduce_unification.rs\n M compute/core/src/storage/engine/tests/test_sheet_lifecycle_runtime_hint.rs\n M compute/core/src/storage/engine/tests/test_sheet_metadata.rs\n M compute/core/src/storage/engine/tests/test_slicers.rs\n M compute/core/src/storage/engine/tests/test_sort_filter.rs\n M compute/core/src/storage/engine/tests/test_sparklines.rs\n M compute/core/src/storage/engine/tests/test_structural_deferred_formula_graph.rs\n M compute/core/src/storage/engine/tests/test_structural_viewport.rs\n M compute/core/src/storage/engine/tests/test_subtotals.rs\n D compute/core/src/storage/engine/tests/test_sync_bootstrap.rs\n D compute/core/src/storage/engine/tests/test_sync_mutation_results.rs\n D compute/core/src/storage/engine/tests/test_sync_protocol.rs\n D compute/core/src/storage/engine/tests/test_sync_provider_replay.rs\n M compute/core/src/storage/engine/tests/test_table_filter_lifecycle.rs\n D compute/core/src/storage/engine/tests/test_undo_observer_translation.rs\n M compute/core/src/storage/engine/tests/test_undo_redo_atomic_ops.rs\n M compute/core/src/storage/engine/tests/test_undo_redo_bulk_position.rs\n M compute/core/src/storage/engine/tests/test_undo_redo_core.rs\n M compute/core/src/storage/engine/tests/test_undo_redo_merges.rs\n M compute/core/src/storage/engine/tests/test_undo_redo_non_undoable_state.rs\n M compute/core/src/storage/engine/tests/test_undo_redo_result_payloads.rs\n M compute/core/src/storage/engine/tests/test_undo_redo_sort.rs\n M compute/core/src/storage/engine/tests/test_versioning_admission.rs\n M compute/core/src/storage/engine/tests/test_viewport.rs\n M compute/core/src/storage/engine/tests/test_workbook_settings.rs\n M compute/core/src/storage/engine/tests/test_xlsx_col_style_ranges.rs\n M compute/core/src/storage/engine/tests/test_xlsx_export.rs\n M compute/core/src/storage/engine/tests/test_xlsx_export_charts.rs\n M compute/core/src/storage/engine/tests/test_xlsx_export_comments.rs\n M compute/core/src/storage/engine/tests/test_xlsx_export_imported_pivots.rs\n M compute/core/src/storage/engine/tests/test_xlsx_export_print.rs\n M compute/core/src/storage/engine/tests/test_xlsx_export_protection.rs\n M compute/core/src/storage/engine/tests/test_xlsx_export_tables.rs\n M compute/core/src/storage/engine/tests/test_xlsx_export_validations.rs\n M compute/core/src/storage/engine/tests/test_xlsx_export_view_state.rs\n D compute/core/src/storage/engine/undo_bridge.rs\n D compute/core/src/storage/engine/update_buffer.rs\n M compute/core/src/storage/engine/validation/mod.rs\n M compute/core/src/storage/engine/validation/sheet.rs\n M compute/core/src/storage/engine/versioning/diagnostics.rs\n M compute/core/src/storage/engine/versioning/mod.rs\n M compute/core/src/storage/engine/versioning/redaction.rs\n M compute/core/src/storage/engine/viewport/functions/active_cell.rs\n M compute/core/src/storage/engine/viewport/functions/patch_cells.rs\n M compute/core/src/storage/engine/viewport/functions/render_cells.rs\n M compute/core/src/storage/engine/viewport/functions/render_data.rs\n M compute/core/src/storage/engine/viewport/mod.rs\n M compute/core/src/storage/engine/viewport/patches.rs\n M compute/core/src/storage/engine/viewport/registry.rs\n M compute/core/src/storage/engine/viewport/render.rs\n M compute/core/src/storage/engine/viewport/service.rs\n M compute/core/src/storage/engine/workbook_theme.rs\n M compute/core/src/storage/infra/cell_iter/clear.rs\n D compute/core/src/storage/infra/cell_iter/identity.rs\n D compute/core/src/storage/infra/cell_iter/iteration.rs\n M compute/core/src/storage/infra/cell_iter/mod.rs\n M compute/core/src/storage/infra/cell_iter/navigation.rs\n D compute/core/src/storage/infra/cell_iter/read.rs\n M compute/core/src/storage/infra/cell_iter/region.rs\n M compute/core/src/storage/infra/cell_iter/relocation.rs\n M compute/core/src/storage/infra/cell_iter/tests.rs\n M compute/core/src/storage/infra/cell_iter/tests/navigation_outline.rs\n M compute/core/src/storage/infra/cell_iter/tests/region.rs\n M compute/core/src/storage/infra/cell_iter/types.rs\n D compute/core/src/storage/infra/grid_helpers.rs\n D compute/core/src/storage/infra/hydration/data_tables.rs\n M compute/core/src/storage/infra/hydration/features.rs\n M compute/core/src/storage/infra/hydration/features/comments.rs\n M compute/core/src/storage/infra/hydration/form_controls.rs\n M compute/core/src/storage/infra/hydration/helpers.rs\n M compute/core/src/storage/infra/hydration/import.rs\n M compute/core/src/storage/infra/hydration/mod.rs\n M compute/core/src/storage/infra/hydration/print_defined_names.rs\n M compute/core/src/storage/infra/hydration/sheet/allocation.rs\n D compute/core/src/storage/infra/hydration/sheet/dimensions.rs\n D compute/core/src/storage/infra/hydration/sheet/domain.rs\n M compute/core/src/storage/infra/hydration/sheet/grid_index.rs\n M compute/core/src/storage/infra/hydration/sheet/identity.rs\n M compute/core/src/storage/infra/hydration/sheet/mod.rs\n D compute/core/src/storage/infra/hydration/sheet/view_meta.rs\n M compute/core/src/storage/infra/hydration/snapshot.rs\n M compute/core/src/storage/infra/hydration/styles.rs\n M compute/core/src/storage/infra/hydration/table_styles.rs\n D compute/core/src/storage/infra/hydration/view.rs\n M compute/core/src/storage/infra/hydration/workbook.rs\n M compute/core/src/storage/infra/mod.rs\n D compute/core/src/storage/infra/yrs_helpers.rs\n M compute/core/src/storage/mod.rs\n M compute/core/src/storage/properties.rs\n M compute/core/src/storage/properties/cascade.rs\n M compute/core/src/storage/properties/cell.rs\n M compute/core/src/storage/properties/protection.rs\n M compute/core/src/storage/properties/ranges.rs\n M compute/core/src/storage/properties/row_col.rs\n M compute/core/src/storage/properties/tests/cascade_protection.rs\n M compute/core/src/storage/properties/tests/cell_properties.rs\n D compute/core/src/storage/properties/tests/compact_yrs.rs\n M compute/core/src/storage/properties/tests/format_ranges.rs\n M compute/core/src/storage/properties/tests/mod.rs\n M compute/core/src/storage/properties/tests/row_col_formats.rs\n M compute/core/src/storage/properties/tests/support.rs\n D compute/core/src/storage/properties/yrs.rs\n M compute/core/src/storage/security_state.rs\n M compute/core/src/storage/sheet/annotations.rs\n D compute/core/src/storage/sheet/bindings/codec.rs\n M compute/core/src/storage/sheet/bindings/connections.rs\n M compute/core/src/storage/sheet/bindings/crud.rs\n M compute/core/src/storage/sheet/bindings/mod.rs\n M compute/core/src/storage/sheet/bindings/tests.rs\n D compute/core/src/storage/sheet/bindings/yrs_io.rs\n M compute/core/src/storage/sheet/cf_store.rs\n M compute/core/src/storage/sheet/cf_store/formats.rs\n M compute/core/src/storage/sheet/cf_store/formats_tests.rs\n M compute/core/src/storage/sheet/cf_store/ranges.rs\n M compute/core/src/storage/sheet/cf_store/ranges_tests.rs\n D compute/core/src/storage/sheet/cf_store/rule_bodies.rs\n D compute/core/src/storage/sheet/cf_store/rule_bodies_tests.rs\n M compute/core/src/storage/sheet/cf_store/rules.rs\n M compute/core/src/storage/sheet/cf_store/rules_tests.rs\n M compute/core/src/storage/sheet/cf_store/test_support.rs\n D compute/core/src/storage/sheet/cf_store/yrs_io.rs\n M compute/core/src/storage/sheet/comments/cleanup.rs\n M compute/core/src/storage/sheet/comments/mod.rs\n M compute/core/src/storage/sheet/comments/mutations.rs\n M compute/core/src/storage/sheet/comments/notes.rs\n M compute/core/src/storage/sheet/comments/queries.rs\n M compute/core/src/storage/sheet/comments/tests/cleanup.rs\n M compute/core/src/storage/sheet/comments/tests/helpers.rs\n M compute/core/src/storage/sheet/comments/tests/mutations.rs\n M compute/core/src/storage/sheet/comments/tests/notes.rs\n M compute/core/src/storage/sheet/comments/tests/queries.rs\n D compute/core/src/storage/sheet/comments/yrs_io.rs\n M compute/core/src/storage/sheet/crud.rs\n M compute/core/src/storage/sheet/dimensions/col_visibility.rs\n M compute/core/src/storage/sheet/dimensions/cols.rs\n M compute/core/src/storage/sheet/dimensions/mod.rs\n M compute/core/src/storage/sheet/dimensions/row_visibility.rs\n M compute/core/src/storage/sheet/dimensions/rows.rs\n M compute/core/src/storage/sheet/dimensions/scans.rs\n M compute/core/src/storage/sheet/dimensions/tests.rs\n D compute/core/src/storage/sheet/dimensions/yrs_access.rs\n M compute/core/src/storage/sheet/filters.rs\n M compute/core/src/storage/sheet/filters/bindings.rs\n D compute/core/src/storage/sheet/filters/codec.rs\n M compute/core/src/storage/sheet/filters/crud.rs\n M compute/core/src/storage/sheet/filters/evaluation.rs\n M compute/core/src/storage/sheet/filters/tests/bindings.rs\n D compute/core/src/storage/sheet/filters/tests/codec.rs\n M compute/core/src/storage/sheet/filters/tests/crud.rs\n M compute/core/src/storage/sheet/filters/tests/evaluation.rs\n M compute/core/src/storage/sheet/filters/tests/helpers.rs\n M compute/core/src/storage/sheet/filters/tests/mod.rs\n M compute/core/src/storage/sheet/floating_objects.rs\n M compute/core/src/storage/sheet/floating_objects/bounds.rs\n D compute/core/src/storage/sheet/floating_objects/codec.rs\n M compute/core/src/storage/sheet/floating_objects/connectors.rs\n M compute/core/src/storage/sheet/floating_objects/constructors.rs\n M compute/core/src/storage/sheet/floating_objects/groups.rs\n M compute/core/src/storage/sheet/floating_objects/ids.rs\n M compute/core/src/storage/sheet/floating_objects/keys.rs\n M compute/core/src/storage/sheet/floating_objects/mutations.rs\n M compute/core/src/storage/sheet/floating_objects/objects.rs\n D compute/core/src/storage/sheet/floating_objects/order.rs\n D compute/core/src/storage/sheet/floating_objects/sheet_map.rs\n M compute/core/src/storage/sheet/floating_objects/tests/charts.rs\n D compute/core/src/storage/sheet/floating_objects/tests/codec.rs\n D compute/core/src/storage/sheet/floating_objects/tests/crdt.rs\n M compute/core/src/storage/sheet/floating_objects/tests/groups_opaque.rs\n M compute/core/src/storage/sheet/floating_objects/tests/groups_typed.rs\n M compute/core/src/storage/sheet/floating_objects/tests/helpers.rs\n M compute/core/src/storage/sheet/floating_objects/tests/mod.rs\n M compute/core/src/storage/sheet/floating_objects/tests/objects_opaque.rs\n M compute/core/src/storage/sheet/floating_objects/tests/objects_typed.rs\n M compute/core/src/storage/sheet/floating_objects/tests/z_order.rs\n M compute/core/src/storage/sheet/floating_objects/z_order.rs\n M compute/core/src/storage/sheet/grouping.rs\n M compute/core/src/storage/sheet/grouping/auto_outline.rs\n M compute/core/src/storage/sheet/grouping/auto_outline_tests.rs\n M compute/core/src/storage/sheet/grouping/collapse.rs\n M compute/core/src/storage/sheet/grouping/collapse_tests.rs\n M compute/core/src/storage/sheet/grouping/crud.rs\n M compute/core/src/storage/sheet/grouping/crud_tests.rs\n M compute/core/src/storage/sheet/grouping/outline.rs\n M compute/core/src/storage/sheet/grouping/outline_tests.rs\n M compute/core/src/storage/sheet/grouping/queries.rs\n M compute/core/src/storage/sheet/grouping/queries_tests.rs\n M compute/core/src/storage/sheet/grouping/render.rs\n M compute/core/src/storage/sheet/grouping/render_tests.rs\n M compute/core/src/storage/sheet/grouping/settings.rs\n M compute/core/src/storage/sheet/grouping/settings_tests.rs\n M compute/core/src/storage/sheet/grouping/subtotals.rs\n M compute/core/src/storage/sheet/grouping/subtotals_tests.rs\n M compute/core/src/storage/sheet/grouping/test_support.rs\n M compute/core/src/storage/sheet/grouping/tests.rs\n M compute/core/src/storage/sheet/grouping/types.rs\n D compute/core/src/storage/sheet/grouping/yrs_io.rs\n D compute/core/src/storage/sheet/grouping/yrs_io_tests.rs\n D compute/core/src/storage/sheet/hyperlinks/codec.rs\n D compute/core/src/storage/sheet/hyperlinks/keys.rs\n M compute/core/src/storage/sheet/hyperlinks/mod.rs\n M compute/core/src/storage/sheet/hyperlinks/mutation_metadata_tests.rs\n M compute/core/src/storage/sheet/hyperlinks/mutations.rs\n M compute/core/src/storage/sheet/hyperlinks/queries.rs\n M compute/core/src/storage/sheet/hyperlinks/tests.rs\n D compute/core/src/storage/sheet/merges/codec.rs\n M compute/core/src/storage/sheet/merges/data_loss.rs\n M compute/core/src/storage/sheet/merges/mod.rs\n M compute/core/src/storage/sheet/merges/mutations.rs\n M compute/core/src/storage/sheet/merges/queries.rs\n D compute/core/src/storage/sheet/merges/resolve.rs\n M compute/core/src/storage/sheet/merges/tests/mod.rs\n D compute/core/src/storage/sheet/merges/yrs_io.rs\n M compute/core/src/storage/sheet/mod.rs\n M compute/core/src/storage/sheet/order.rs\n M compute/core/src/storage/sheet/pivots.rs\n M compute/core/src/storage/sheet/print.rs\n M compute/core/src/storage/sheet/properties.rs\n M compute/core/src/storage/sheet/protection.rs\n M compute/core/src/storage/sheet/range_storage.rs\n M compute/core/src/storage/sheet/schemas/columns.rs\n M compute/core/src/storage/sheet/schemas/mod.rs\n D compute/core/src/storage/sheet/schemas/range_store.rs\n M compute/core/src/storage/sheet/schemas/ranges.rs\n M compute/core/src/storage/sheet/schemas/tests/column_schema.rs\n D compute/core/src/storage/sheet/schemas/tests/crdt.rs\n M compute/core/src/storage/sheet/schemas/tests/custom_formula.rs\n M compute/core/src/storage/sheet/schemas/tests/mod.rs\n M compute/core/src/storage/sheet/schemas/tests/range_backed_storage.rs\n M compute/core/src/storage/sheet/schemas/tests/range_schema.rs\n M compute/core/src/storage/sheet/schemas/tests/support.rs\n M compute/core/src/storage/sheet/schemas/tests/validation.rs\n D compute/core/src/storage/sheet/schemas/validation_rules.rs\n M compute/core/src/storage/sheet/schemas/validator.rs\n D compute/core/src/storage/sheet/schemas/yrs_io.rs\n M compute/core/src/storage/sheet/settings.rs\n M compute/core/src/storage/sheet/sorting.rs\n D compute/core/src/storage/sheet/sorting/mutations.rs\n D compute/core/src/storage/sheet/sorting/mutations_tests.rs\n M compute/core/src/storage/sheet/sorting/planner.rs\n M compute/core/src/storage/sheet/sorting/planner_tests/color_and_custom.rs\n M compute/core/src/storage/sheet/sorting/planner_tests/range_and_criteria.rs\n M compute/core/src/storage/sheet/sorting/planner_tests/value_order.rs\n M compute/core/src/storage/sheet/sorting/test_helpers.rs\n M compute/core/src/storage/sheet/sorting/types.rs\n M compute/core/src/storage/sheet/sorting/validation.rs\n M compute/core/src/storage/sheet/sorting/validation_tests.rs\n M compute/core/src/storage/sheet/sparklines.rs\n D compute/core/src/storage/sheet/sparklines/codec.rs\n D compute/core/src/storage/sheet/sparklines/groups.rs\n D compute/core/src/storage/sheet/sparklines/items.rs\n D compute/core/src/storage/sheet/sparklines/keys.rs\n D compute/core/src/storage/sheet/sparklines/range.rs\n M compute/core/src/storage/sheet/sparklines/tests.rs\n M compute/core/src/storage/sheet/sparklines/tests/groups.rs\n M compute/core/src/storage/sheet/sparklines/tests/items.rs\n M compute/core/src/storage/sheet/sparklines/tests/range.rs\n M compute/core/src/storage/sheet/sparklines/tests/support.rs\n D compute/core/src/storage/sheet/sparklines/yrs_io.rs\n M compute/core/src/storage/sheet/split_view.rs\n D compute/core/src/storage/sheet/structural/axis_order.rs\n D compute/core/src/storage/sheet/structural/deleted_cells.rs\n D compute/core/src/storage/sheet/structural/hidden_metadata_tests.rs\n M compute/core/src/storage/sheet/structural/mod.rs\n D compute/core/src/storage/sheet/structural/removed_ranges.rs\n M compute/core/src/storage/sheet/structural/tests.rs\n M compute/core/src/storage/sheet/test_support.rs\n M compute/core/src/storage/sheet/view.rs\n M compute/core/src/storage/sheet/visibility.rs\n D compute/core/src/storage/sheet/yrs_helpers.rs\n D compute/core/src/storage/sheet_dimensions/mod.rs\n D compute/core/src/storage/tests/cells.rs\n M compute/core/src/storage/tests/construction.rs\n M compute/core/src/storage/tests/identity_formula.rs\n M compute/core/src/storage/tests/mirror_metadata.rs\n M compute/core/src/storage/tests/mod.rs\n M compute/core/src/storage/tests/sheets.rs\n M compute/core/src/storage/tests/snapshot.rs\n M compute/core/src/storage/tests/support.rs\n M compute/core/src/storage/workbook/annotations.rs\n D compute/core/src/storage/workbook/data_tables.rs\n M compute/core/src/storage/workbook/imported_pivots.rs\n M compute/core/src/storage/workbook/mod.rs\n M compute/core/src/storage/workbook/named_ranges/keys.rs\n M compute/core/src/storage/workbook/named_ranges/mod.rs\n M compute/core/src/storage/workbook/named_ranges/mutations.rs\n M compute/core/src/storage/workbook/named_ranges/queries.rs\n M compute/core/src/storage/workbook/named_ranges/tests.rs\n M compute/core/src/storage/workbook/named_ranges/validation.rs\n D compute/core/src/storage/workbook/named_ranges/yrs_codec.rs\n M compute/core/src/storage/workbook/settings/calculation.rs\n M compute/core/src/storage/workbook/settings/custom.rs\n D compute/core/src/storage/workbook/settings/map.rs\n M compute/core/src/storage/workbook/settings/mod.rs\n M compute/core/src/storage/workbook/settings/protection.rs\n M compute/core/src/storage/workbook/settings/read.rs\n M compute/core/src/storage/workbook/settings/styles.rs\n M compute/core/src/storage/workbook/settings/write.rs\n M compute/core/src/storage/workbook/slicers.rs\n M compute/core/src/test_support/mod.rs\n D compute/core/src/test_support/yrs_canonical.rs\n M compute/core/src/versioning/coverage.rs\n M compute/core/src/versioning/coverage/records.rs\n M compute/core/src/versioning/formula_reader.rs\n M compute/core/src/versioning/mod.rs\n M compute/core/src/versioning/semantic_reader.rs\n M compute/core/src/versioning/semantic_reader/tests.rs\n M compute/core/src/versioning/semantic_reader/tests/coverage.rs\n M compute/core/src/versioning/semantic_reader/tests/direct_formats.rs\n M compute/core/src/versioning/semantic_reader/tests/named_ranges.rs\n M compute/core/src/versioning/semantic_reader/tests/presence_domains.rs\n M compute/core/src/versioning/semantic_reader/tests/value_provenance.rs\n M compute/core/src/versioning/semantic_reader/value_provenance.rs\n M compute/core/src/what_if/mod.rs\n M compute/core/src/what_if/scenarios/apply_restore.rs\n M compute/core/src/what_if/scenarios/crud.rs\n M compute/core/src/what_if/scenarios/mod.rs\n M compute/core/src/what_if/scenarios/query.rs\n D compute/core/src/what_if/scenarios/storage.rs\n M compute/core/src/what_if/scenarios/tests.rs\n M compute/core/src/what_if/scenarios/types.rs\n M compute/core/tests/auto_fill_formula_regression.rs\n M compute/core/tests/auto_fill_integration.rs\n M compute/core/tests/bench_countifs.rs\n M compute/core/tests/bench_deep_chain.rs\n M compute/core/tests/byrow_bycol_nested_array.rs\n M compute/core/tests/cache_benchmark.rs\n M compute/core/tests/cell_value_round_trip_via_engine.rs\n M compute/core/tests/cf_canonical_schema.rs\n M compute/core/tests/cf_viewport_patches.rs\n D compute/core/tests/collab_structural_formula_sync.rs\n M compute/core/tests/corpus_full_recalc_pinned.rs\n M compute/core/tests/countif_array_criteria.rs\n M compute/core/tests/countifs_formula_range.rs\n M compute/core/tests/cross_sheet_source_of_truth.rs\n M compute/core/tests/cross_sheet_tests.rs\n M compute/core/tests/cse_viewport_has_formula_flag.rs\n M compute/core/tests/cycle_text_iteration.rs\n M compute/core/tests/data_table_active_cell_metadata.rs\n M compute/core/tests/data_table_creation_contract.rs\n M compute/core/tests/data_table_hydration_keeps_body_formulas.rs\n M compute/core/tests/data_table_region_membership.rs\n M compute/core/tests/data_table_sensitivity.rs\n M compute/core/tests/data_table_transient_contract.rs\n M compute/core/tests/data_validation_passed_event.rs\n M compute/core/tests/dimension_parity.rs\n M compute/core/tests/engine_bug_reducers.rs\n M compute/core/tests/engine_root_module_shape.rs\n M compute/core/tests/error_messages_demo.rs\n M compute/core/tests/filter_empty_corner.rs\n M compute/core/tests/filter_unique_column_range_blank_tail.rs\n M compute/core/tests/filter_viewport_patches.rs\n M compute/core/tests/fixtures/corpus-pin/mod.rs\n M compute/core/tests/formula_accuracy_ifs_and/support.rs\n M compute/core/tests/formula_accuracy_match_index/support.rs\n M compute/core/tests/formula_accuracy_misc.rs\n M compute/core/tests/formula_accuracy_null_mismatch.rs\n M compute/core/tests/formula_accuracy_structured_refs/support.rs\n M compute/core/tests/formula_accuracy_xlookup/support.rs\n M compute/core/tests/formula_contracts.rs\n M compute/core/tests/formula_introspection.rs\n M compute/core/tests/getpivotdata_recalc_ordering.rs\n M compute/core/tests/hydration_parity.rs\n M compute/core/tests/import_mutation_result.rs\n M compute/core/tests/imported_api_eval_regressions.rs\n M compute/core/tests/input_lossless_fidelity.rs\n M compute/core/tests/insert_cut_cells_formula_relocation.rs\n M compute/core/tests/named_range_display.rs\n M compute/core/tests/numeric_repeatability/audit_total.rs\n M compute/core/tests/numeric_repeatability/edit.rs\n M compute/core/tests/numeric_repeatability/mixed_type.rs\n M compute/core/tests/numeric_repeatability/regressions.rs\n M compute/core/tests/numeric_repeatability/sequences.rs\n M compute/core/tests/numeric_repeatability/topology_families.rs\n M compute/core/tests/overflow_countifs_sumifs.rs\n M compute/core/tests/range_cache_regression/fixtures.rs\n M compute/core/tests/range_cache_regression/harness.rs\n M compute/core/tests/range_cell_iterator_audit.rs\n D compute/core/tests/range_collab_convergence.rs\n M compute/core/tests/range_dependency_tracking/fullcol.rs\n M compute/core/tests/range_dependency_tracking/helpers.rs\n M compute/core/tests/range_dependency_tracking/indirect.rs\n M compute/core/tests/range_dependency_tracking/named.rs\n M compute/core/tests/range_dependency_tracking/offset.rs\n M compute/core/tests/range_dependency_tracking/regression_fullcol_extent.rs\n M compute/core/tests/range_dependency_tracking/three_d.rs\n M compute/core/tests/range_dependency_tracking/v2_matrix.rs\n M compute/core/tests/range_lifecycle_regression.rs\n M compute/core/tests/range_lifecycle_regression/basic_lifecycle.rs\n M compute/core/tests/range_lifecycle_regression/copy_sheet_lifecycle.rs\n M compute/core/tests/range_lifecycle_regression/cross_sheet_dependencies.rs\n D compute/core/tests/range_lifecycle_regression/edit_history.rs\n M compute/core/tests/range_lifecycle_regression/mirror_column_invariants.rs\n M compute/core/tests/range_lifecycle_regression/persistence_roundtrip.rs\n M compute/core/tests/range_lifecycle_regression/range_payload_lifecycle.rs\n M compute/core/tests/range_lifecycle_regression/structural_lifecycle.rs\n M compute/core/tests/range_lifecycle_regression/support.rs\n M compute/core/tests/range_memory_budget.rs\n M compute/core/tests/range_seam_baseline.rs\n M compute/core/tests/range_virtual_identity_regression.rs\n M compute/core/tests/range_xlsx_baseline.rs\n M compute/core/tests/recalc_dense_aggregate.rs\n M compute/core/tests/recalc_idempotent.rs\n M compute/core/tests/recalc_idempotent_corpus.rs\n M compute/core/tests/recalc_projection/main.rs\n M compute/core/tests/recalc_projection/sequence_spill.rs\n M compute/core/tests/recalc_projection/transpose_spill.rs\n M compute/core/tests/recalc_vectorized.rs\n M compute/core/tests/relocate_cells_viewport_patches.rs\n M compute/core/tests/relocate_identity_property.rs\n M compute/core/tests/relocate_table_bindings.rs\n M compute/core/tests/relocate_validation_metadata.rs\n M compute/core/tests/resize_unmaterialized_axis.rs\n M compute/core/tests/roundtrip_parse_output/conditional_formats.rs\n M compute/core/tests/roundtrip_parse_output/data_validations.rs\n M compute/core/tests/roundtrip_parse_output/field_independence.rs\n M compute/core/tests/roundtrip_parse_output/integration.rs\n M compute/core/tests/security_ops.rs\n M compute/core/tests/security_primitives.rs\n D compute/core/tests/security_state_observer.rs\n M compute/core/tests/security_structure_version.rs\n M compute/core/tests/sheet_scoped_named_range.rs\n M compute/core/tests/snapshot_copy_sheet_parity.rs\n M compute/core/tests/sort_viewport_patches.rs\n M compute/core/tests/spill_blocker_merged_region.rs\n M compute/core/tests/stress_autofill.rs\n M compute/core/tests/stress_common/mod.rs\n M compute/core/tests/stress_copy.rs\n M compute/core/tests/stress_cycle_creation.rs\n M compute/core/tests/stress_engine_common/mod.rs\n M compute/core/tests/stress_graph_consistency.rs\n M compute/core/tests/stress_performance.rs\n M compute/core/tests/stress_sort.rs\n M compute/core/tests/stress_structural.rs\n M compute/core/tests/stress_tables_named.rs\n M compute/core/tests/stress_workflows.rs\n M compute/core/tests/structural_op_smoke.rs\n M compute/core/tests/sumif_cross_sheet_spill.rs\n M compute/core/tests/support/assertions.rs\n M compute/core/tests/support/fixtures.rs\n M compute/core/tests/support/iterative_identity/runner.rs\n M compute/core/tests/support/iterative_identity/workbooks.rs\n M compute/core/tests/support/recalc_fixtures.rs\n M compute/core/tests/text_to_columns_viewport_patches.rs\n M compute/core/tests/transpose_iterative_calc.rs\n M compute/core/tests/unique_blank_source_coerced_to_zero.rs\n M compute/core/tests/xlsx_auto_filter_roundtrip.rs\n M compute/core/tests/xlsx_cell_editing_roundtrip.rs\n M compute/core/tests/xlsx_clear_roundtrip.rs\n M compute/core/tests/xlsx_comment_anchor_roundtrip.rs\n M compute/core/tests/xlsx_explicit_blank_roundtrip.rs\n M compute/core/tests/xlsx_hyperlink_roundtrip.rs\n M compute/core/tests/xlsx_merge_roundtrip.rs\n M compute/core/tests/xlsx_range_ops_roundtrip.rs\n M compute/core/tests/xlsx_raw_value_roundtrip.rs\n M compute/core/tests/xlsx_rowcol_insert_delete_roundtrip.rs\n M compute/core/tests/xlsx_sheet_meta_roundtrip.rs\n M compute/core/tests/xlsx_sheet_view_roundtrip.rs\n M compute/core/tests/xlsx_sort_roundtrip.rs\n M compute/core/tests/xlsx_sparklines_roundtrip.rs\n M compute/core/tests/xlsx_structural_roundtrip.rs\n M compute/core/tests/xlsx_theme_roundtrip.rs\n M compute/officejs/src/host.rs\n M compute/officejs/src/lib.rs\n M compute/officejs/tests/officejs.rs\n M docs/README.md\n M docs/guides/architecture-overview.md\n M docs/guides/quickstart.md\n M domain-types/Cargo.toml\n M domain-types/src/cell_format.rs\n M domain-types/src/domain/README.md\n M domain-types/src/domain/cell_style.rs\n M domain-types/src/domain/chart/mod.rs\n M domain-types/src/domain/chart/ooxml_mirror_types/mod.rs\n M domain-types/src/domain/comment.rs\n M domain-types/src/domain/conditional_format.rs\n M domain-types/src/domain/conditional_format/tests/normalization.rs\n M domain-types/src/domain/conditional_format/tests/serde_roundtrip.rs\n M domain-types/src/domain/conditional_format/tests/wire_compat.rs\n M domain-types/src/domain/conditional_format/types/format.rs\n M domain-types/src/domain/conditional_format/types/style.rs\n M domain-types/src/domain/data_features.rs\n M domain-types/src/domain/filter/mod.rs\n M domain-types/src/domain/filter/ooxml_sort.rs\n M domain-types/src/domain/filter/runtime.rs\n M domain-types/src/domain/filter/tests.rs\n M domain-types/src/domain/floating_object/objects.rs\n M domain-types/src/domain/floating_object/style.rs\n M domain-types/src/domain/grouping.rs\n M domain-types/src/domain/merge.rs\n M domain-types/src/domain/named_range.rs\n M domain-types/src/domain/pivot/mod.rs\n M domain-types/src/domain/pivot/ooxml.rs\n M domain-types/src/domain/sheet.rs\n M domain-types/src/domain/slicer/ooxml.rs\n M domain-types/src/domain/slicer/stored.rs\n M domain-types/src/domain/slicer/tests.rs\n M domain-types/src/domain/slicer/timeline.rs\n M domain-types/src/domain/sparkline.rs\n M domain-types/src/domain/table.rs\n M domain-types/src/format.rs\n M domain-types/src/lib.rs\n M domain-types/src/parse_output.rs\n M domain-types/src/units.rs\n D domain-types/src/yrs_schema/README.md\n D domain-types/src/yrs_schema/auto_filter.rs\n D domain-types/src/yrs_schema/cell_format.rs\n D domain-types/src/yrs_schema/cell_properties.rs\n D domain-types/src/yrs_schema/column_schema.rs\n D domain-types/src/yrs_schema/comment.rs\n D domain-types/src/yrs_schema/conditional_format.rs\n D domain-types/src/yrs_schema/doc_properties.rs\n D domain-types/src/yrs_schema/file_sharing.rs\n D domain-types/src/yrs_schema/file_version.rs\n D domain-types/src/yrs_schema/filter_sort_state.rs\n D domain-types/src/yrs_schema/floating_object.rs\n D domain-types/src/yrs_schema/floating_object/chart_ooxml_tests.rs\n D domain-types/src/yrs_schema/floating_object/picture_ooxml_tests.rs\n D domain-types/src/yrs_schema/floating_object/tests.rs\n D domain-types/src/yrs_schema/floating_object/types/chart.rs\n D domain-types/src/yrs_schema/floating_object/types/codec_helpers.rs\n D domain-types/src/yrs_schema/floating_object/types/common.rs\n D domain-types/src/yrs_schema/floating_object/types/drawing.rs\n D domain-types/src/yrs_schema/floating_object/types/embedded.rs\n D domain-types/src/yrs_schema/floating_object/types/fields.rs\n D domain-types/src/yrs_schema/floating_object/types/keys.rs\n D domain-types/src/yrs_schema/floating_object/types/mod.rs\n D domain-types/src/yrs_schema/floating_object/types/shapes.rs\n D domain-types/src/yrs_schema/frozen_panes.rs\n D domain-types/src/yrs_schema/helpers.rs\n D domain-types/src/yrs_schema/hyperlink.rs\n D domain-types/src/yrs_schema/merge.rs\n D domain-types/src/yrs_schema/mod.rs\n D domain-types/src/yrs_schema/named_range.rs\n D domain-types/src/yrs_schema/page_breaks.rs\n D domain-types/src/yrs_schema/pivot_cache_records.rs\n D domain-types/src/yrs_schema/print.rs\n D domain-types/src/yrs_schema/protection.rs\n D domain-types/src/yrs_schema/sheet_properties.rs\n D domain-types/src/yrs_schema/sheet_view.rs\n D domain-types/src/yrs_schema/slicer.rs\n D domain-types/src/yrs_schema/sort_state.rs\n D domain-types/src/yrs_schema/sparkline.rs\n D domain-types/src/yrs_schema/table.rs\n D domain-types/src/yrs_schema/tests/cell_properties.rs\n D domain-types/src/yrs_schema/tests/comment.rs\n D domain-types/src/yrs_schema/tests/edge_adapters.rs\n D domain-types/src/yrs_schema/tests/flat_maps.rs\n D domain-types/src/yrs_schema/tests/floating_object.rs\n D domain-types/src/yrs_schema/tests/mod.rs\n D domain-types/src/yrs_schema/tests/print.rs\n D domain-types/src/yrs_schema/tests/protection.rs\n D domain-types/src/yrs_schema/tests/support.rs\n D domain-types/src/yrs_schema/tests/table.rs\n D domain-types/src/yrs_schema/tests/validation.rs\n D domain-types/src/yrs_schema/validation.rs\n D domain-types/src/yrs_schema/web_publishing.rs\n D domain-types/src/yrs_schema/workbook_properties.rs\n M file-io/csv-parser/src/lib.rs\n M file-io/ooxml/types/src/cond_format/enums.rs\n M file-io/ooxml/types/src/cond_format/rules.rs\n M file-io/ooxml/types/src/cond_format/tests.rs\n M file-io/ooxml/types/src/styles/enums.rs\n M file-io/xlsx-api/src/export.rs\n M file-io/xlsx/parser/README.md\n M file-io/xlsx/parser/src/domain/cond_format/types.rs\n M file-io/xlsx/parser/src/domain/cond_format/write/bridge.rs\n M file-io/xlsx/parser/src/domain/cond_format/write/x14.rs\n M file-io/xlsx/parser/src/domain/controls/tests/writers.rs\n M file-io/xlsx/parser/src/domain/external/read/entry.rs\n M file-io/xlsx/parser/src/domain/timelines/read.rs\n M file-io/xlsx/parser/src/domain/timelines/write.rs\n M file-io/xlsx/parser/src/domain/vba/read/ole.rs\n M file-io/xlsx/parser/src/output/to_parse_output/features/conditional_formats.rs\n M file-io/xlsx/parser/src/output/to_parse_output/pivot_convert/sort.rs\n M file-io/xlsx/parser/src/output/to_parse_output/pivot_convert/value_map.rs\n M file-io/xlsx/parser/src/write/from_parse_output/differential_formats.rs\n M file-io/xlsx/parser/src/write/from_parse_output/hyperlink_targets.rs\n M file-io/xlsx/parser/src/write/from_parse_output/mod.rs\n M file-io/xlsx/parser/src/write/from_parse_output/sheet_cells.rs\n M file-io/xlsx/parser/src/write/from_parse_output/sheet_parts.rs\n M file-io/xlsx/parser/src/write/from_parse_output/styles.rs\n M file-io/xlsx/parser/src/write/from_parse_output/tests/fill_lowering.rs\n M file-io/xlsx/parser/src/write/from_parse_output/tests/styles.rs\n M file-io/xlsx/parser/src/write/from_parse_output/workbook_parts.rs\n M file-io/xlsx/parser/src/write/package_ownership.rs\n M file-io/xlsx/parser/src/write/sheet.rs\n M file-io/xlsx/parser/tests/conditional_format_roundtrip.rs\n M file-io/xlsx/parser/tests/roundtrip_parse_output.rs\n M file-io/xlsx/parser/tests/roundtrip_parse_output/parse_result_sidecar_storage_audit.md\n M file-io/xlsx/parser/tests/roundtrip_parse_output/partial_domains/modeled_roundtrip.rs\n M file-io/xlsx/parser/tests/sort_state_roundtrip.rs\n M file-io/xlsx/parser/xml-derive/src/xml_enum.rs\n M file-io/xlsx/test-contracts/src/fingerprints.rs\n M infra/rust-bridge/bridge-delegate/macros/src/expand/ir.rs\n M infra/rust-bridge/bridge-delegate/src/lib.rs\n?? compute/api/README.md\n?? compute/api/tests/history.rs\n?? compute/core/crates/compute-document/src/identity/axis_index.rs\n?? compute/core/crates/compute-parser/tests/reference_rewrites.rs\n?? compute/core/crates/compute-security/tests/policy_wire.rs\n?? compute/core/crates/types/snapshot-types/src/history.rs\n?? compute/core/crates/types/value-types/src/column_view.rs\n?? compute/core/examples/\n?? compute/core/src/eval/cache/workbook_cache_tests.rs\n?? compute/core/src/mirror/history.rs\n?? compute/core/src/mirror/tests/column_views.rs\n?? compute/core/src/mirror/tests/numeric_cache.rs\n?? compute/core/src/scheduler/history.rs\n?? compute/core/src/scheduler/scheduler_tests/agg_prepass/mixed_criteria_cache.rs\n?? compute/core/src/scheduler/scheduler_tests/agg_prepass/single_criteria_cache.rs\n?? compute/core/src/storage/cell_metadata.rs\n?? \"compute/core/src/storage/cells/data_ops/tests/preview 2.rs\"\n?? \"compute/core/src/storage/cells/data_ops/tests/remove_duplicates 2.rs\"\n?? compute/core/src/storage/engine/delegations/what_if.rs\n?? compute/core/src/storage/engine/history/\n?? compute/core/src/storage/engine/queries/a1_named_values.rs\n?? \"compute/core/src/storage/engine/queries/helpers 2.rs\"\n?? compute/core/src/storage/engine/runtime_settings.rs\n?? compute/core/src/storage/engine/services/delegations/what_if.rs\n?? compute/core/src/storage/engine/services/export/cells/metadata_reads.rs\n?? compute/core/src/storage/engine/services/export/cells/style_runs.rs\n?? compute/core/src/storage/engine/services/features/slicer_store.rs\n?? compute/core/src/storage/engine/services/mutation_handlers/cell_mutations/identity_registration.rs\n?? compute/core/src/storage/engine/services/tables/copy.rs\n?? compute/core/src/storage/engine/services/tables/formula_updates.rs\n?? compute/core/src/storage/engine/services/tables/tests/tests/reference_updates.rs\n?? compute/core/src/storage/engine/tests/test_bulk_position.rs\n?? compute/core/src/storage/engine/tests/test_deferred_xlsx_import/native_completion.rs\n?? compute/core/src/storage/engine/tests/test_deferred_xlsx_import/table_slicers.rs\n?? compute/core/src/storage/engine/tests/test_merge_mutations.rs\n?? compute/core/src/storage/engine/tests/test_native_floating_storage.rs\n?? compute/core/src/storage/engine/tests/test_native_history.rs\n?? compute/core/src/storage/engine/tests/test_native_history_cse.rs\n?? compute/core/src/storage/engine/tests/test_native_history_structure.rs\n?? compute/core/src/storage/engine/tests/test_native_history_translation.rs\n?? compute/core/src/storage/engine/tests/test_native_history_ui_formats.rs\n?? compute/core/src/storage/engine/tests/test_native_range_storage.rs\n?? compute/core/src/storage/engine/tests/test_pivot_materialization/\n?? compute/core/src/storage/infra/time.rs\n?? compute/core/src/storage/properties/tests/native_storage.rs\n?? compute/core/src/storage/security_state/\n?? compute/core/src/storage/sheet/anchor_ranges.rs\n?? compute/core/src/storage/sheet/color.rs\n?? compute/core/src/storage/sheet/comments/store.rs\n?? compute/core/src/storage/sheet/copy_native.rs\n?? compute/core/src/storage/sheet/dimensions/state.rs\n?? compute/core/src/storage/sheet/filters/copy.rs\n?? compute/core/src/storage/sheet/filters/tests/native_state.rs\n?? compute/core/src/storage/sheet/floating_objects/anchors.rs\n?? compute/core/src/storage/sheet/floating_objects/state.rs\n?? compute/core/src/storage/sheet/grouping/store.rs\n?? compute/core/src/storage/sheet/grouping/store_tests.rs\n?? compute/core/src/storage/sheet/merges/state.rs\n?? compute/core/src/storage/sheet/metadata.rs\n?? compute/core/src/storage/sheet/schemas/state.rs\n?? compute/core/src/storage/sheet/schemas/tests/updates.rs\n?? compute/core/src/storage/workbook/external_links.rs\n?? compute/core/src/storage/workbook/metadata.rs\n?? compute/core/src/test_support/native_canonical.rs\n?? compute/core/tests/native_cell_queries.rs\n?? compute/core/tests/native_range_formats.rs\n?? compute/core/tests/native_scenarios.rs\n?? compute/core/tests/native_sheet_metadata.rs\n?? compute/core/tests/native_workbook_settings.rs\n?? compute/officejs/examples/storage_bench_officejs.rs\n?? compute/officejs/tests/history.rs\n?? docs/guides/benchmarks/\n?? docs/guides/remove-yrs-bench.md\n?? docs/guides/remove-yrs.md\n?? docs/guides/undo-redo.md\n?? scripts/\n",
+  "tracked_diff_sha256": "7df519b1c240912f200c7e33a67e25c1d7eed57459bb3770929f697bead19d53",
+  "source_tree_sha256": "64ce5e11d0190174fadac9749d85a20ebcecd69ecbf03409f379ca2aef06895b",
+  "benchmark_binary_sha256": {
+    "storage_bench": "22ca9fe68aed63d53bc8a23774f7f589c91127585fa89235f7e43dbbaa3ebcfd",
+    "storage_bench_officejs": "5f20701c370b13ccb109085b5364b7b4e3a7fb6367f2176bb8390645cc01b72b"
+  },
+  "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+  "machine": {
+    "system": "Linux",
+    "release": "7.0.14-orbstack-00380-ga7e0a2dc9535",
+    "architecture": "aarch64"
+  },
+  "cpu_count": 18,
+  "mem_total": "MemTotal:       51374032 kB",
+  "build_command": [
+    "cargo",
+    "build",
+    "--release",
+    "--locked",
+    "-p",
+    "compute-core",
+    "--example",
+    "storage_bench",
+    "-p",
+    "mog",
+    "--example",
+    "storage_bench_officejs"
+  ],
+  "rayon_num_threads": 1,
+  "measurement": "GNU time child peak RSS; wait4 CPU and wall include the GNU time wrapper",
+  "runs": 5,
+  "warmups": 1,
+  "fixture_sha256": "41724da2e7d4a30d282611490d636e402120b00415eb71a38125f81cabb0e6c8",
+  "workloads": {
+    "blank_one": {
+      "command": [
+        "/tmp/mog-public-check-target/release/examples/storage_bench",
+        "blank_one"
+      ],
+      "samples": [
+        {
+          "wall_s": 0.0020995669765397906,
+          "user_s": 0.001983,
+          "system_s": 0.0,
+          "cpu_s": 0.001983,
+          "peak_rss_kib": 21904,
+          "live_rss_kib": 22088,
+          "phases_s": {
+            "create": 0.00095272,
+            "write": 0.000108543
+          },
+          "log": "/tmp/mog-native-history-bench/blank_one-0.log"
+        },
+        {
+          "wall_s": 0.0019044809741899371,
+          "user_s": 0.0,
+          "system_s": 0.001807,
+          "cpu_s": 0.001807,
+          "peak_rss_kib": 21928,
+          "live_rss_kib": 22064,
+          "phases_s": {
+            "create": 0.000868427,
+            "write": 9.7209e-05
+          },
+          "log": "/tmp/mog-native-history-bench/blank_one-1.log"
+        },
+        {
+          "wall_s": 0.0019713989458978176,
+          "user_s": 0.0018839999999999998,
+          "system_s": 0.0,
+          "cpu_s": 0.0018839999999999998,
+          "peak_rss_kib": 21904,
+          "live_rss_kib": 22088,
+          "phases_s": {
+            "create": 0.000940719,
+            "write": 6.5418e-05
+          },
+          "log": "/tmp/mog-native-history-bench/blank_one-2.log"
+        },
+        {
+          "wall_s": 0.0017561459681019187,
+          "user_s": 0.0,
+          "system_s": 0.0016879999999999998,
+          "cpu_s": 0.0016879999999999998,
+          "peak_rss_kib": 21908,
+          "live_rss_kib": 22092,
+          "phases_s": {
+            "create": 0.000774134,
+            "write": 7.8418e-05
+          },
+          "log": "/tmp/mog-native-history-bench/blank_one-3.log"
+        },
+        {
+          "wall_s": 0.0017797709442675114,
+          "user_s": 0.0009549999999999999,
+          "system_s": 0.0007469999999999999,
+          "cpu_s": 0.001702,
+          "peak_rss_kib": 21872,
+          "live_rss_kib": 22072,
+          "phases_s": {
+            "create": 0.000833427,
+            "write": 6.3709e-05
+          },
+          "log": "/tmp/mog-native-history-bench/blank_one-4.log"
+        }
+      ],
+      "median": {
+        "wall_s": 0.0019044809741899371,
+        "user_s": 0.0009549999999999999,
+        "system_s": 0.0007469999999999999,
+        "cpu_s": 0.001807,
+        "peak_rss_kib": 21904,
+        "live_rss_kib": 22088,
+        "phases_s": {
+          "create": 0.000868427,
+          "write": 7.8418e-05
+        }
+      }
+    },
+    "numeric_100k": {
+      "command": [
+        "/tmp/mog-public-check-target/release/examples/storage_bench",
+        "numeric_100k"
+      ],
+      "samples": [
+        {
+          "wall_s": 0.04470687301363796,
+          "user_s": 0.038577,
+          "system_s": 0.0060349999999999996,
+          "cpu_s": 0.044612,
+          "peak_rss_kib": 85080,
+          "live_rss_kib": 66768,
+          "phases_s": {
+            "hydrate": 0.034430416
+          },
+          "log": "/tmp/mog-native-history-bench/numeric_100k-0.log"
+        },
+        {
+          "wall_s": 0.044649454997852445,
+          "user_s": 0.039154999999999995,
+          "system_s": 0.005366999999999999,
+          "cpu_s": 0.04452199999999999,
+          "peak_rss_kib": 85084,
+          "live_rss_kib": 66772,
+          "phases_s": {
+            "hydrate": 0.034645543
+          },
+          "log": "/tmp/mog-native-history-bench/numeric_100k-1.log"
+        },
+        {
+          "wall_s": 0.04431924200616777,
+          "user_s": 0.035233,
+          "system_s": 0.008976,
+          "cpu_s": 0.044209,
+          "peak_rss_kib": 85060,
+          "live_rss_kib": 66780,
+          "phases_s": {
+            "hydrate": 0.033990951
+          },
+          "log": "/tmp/mog-native-history-bench/numeric_100k-2.log"
+        },
+        {
+          "wall_s": 0.04443441110197455,
+          "user_s": 0.036958,
+          "system_s": 0.00733,
+          "cpu_s": 0.044287999999999994,
+          "peak_rss_kib": 85068,
+          "live_rss_kib": 66788,
+          "phases_s": {
+            "hydrate": 0.033892909
+          },
+          "log": "/tmp/mog-native-history-bench/numeric_100k-3.log"
+        },
+        {
+          "wall_s": 0.04452178697101772,
+          "user_s": 0.039415,
+          "system_s": 0.005011,
+          "cpu_s": 0.044426,
+          "peak_rss_kib": 85064,
+          "live_rss_kib": 66768,
+          "phases_s": {
+            "hydrate": 0.034576042
+          },
+          "log": "/tmp/mog-native-history-bench/numeric_100k-4.log"
+        }
+      ],
+      "median": {
+        "wall_s": 0.04452178697101772,
+        "user_s": 0.038577,
+        "system_s": 0.0060349999999999996,
+        "cpu_s": 0.044426,
+        "peak_rss_kib": 85068,
+        "live_rss_kib": 66772,
+        "phases_s": {
+          "hydrate": 0.034430416
+        }
+      }
+    },
+    "chain_10k": {
+      "command": [
+        "/tmp/mog-public-check-target/release/examples/storage_bench",
+        "chain_10k"
+      ],
+      "samples": [
+        {
+          "wall_s": 0.5528828350361437,
+          "user_s": 0.547411,
+          "system_s": 0.0050089999999999996,
+          "cpu_s": 0.55242,
+          "peak_rss_kib": 54880,
+          "live_rss_kib": 55132,
+          "phases_s": {
+            "hydrate_recalc": 0.02369891,
+            "recalc_10": 0.522778431
+          },
+          "log": "/tmp/mog-native-history-bench/chain_10k-0.log"
+        },
+        {
+          "wall_s": 0.5512640239903703,
+          "user_s": 0.5428879999999999,
+          "system_s": 0.007993,
+          "cpu_s": 0.550881,
+          "peak_rss_kib": 54880,
+          "live_rss_kib": 55116,
+          "phases_s": {
+            "hydrate_recalc": 0.025416973,
+            "recalc_10": 0.519479849
+          },
+          "log": "/tmp/mog-native-history-bench/chain_10k-1.log"
+        },
+        {
+          "wall_s": 0.5555822850437835,
+          "user_s": 0.549091,
+          "system_s": 0.005986,
+          "cpu_s": 0.555077,
+          "peak_rss_kib": 54876,
+          "live_rss_kib": 55112,
+          "phases_s": {
+            "hydrate_recalc": 0.023707244,
+            "recalc_10": 0.526071346
+          },
+          "log": "/tmp/mog-native-history-bench/chain_10k-2.log"
+        },
+        {
+          "wall_s": 0.5709604290314019,
+          "user_s": 0.5596559999999999,
+          "system_s": 0.010005,
+          "cpu_s": 0.569661,
+          "peak_rss_kib": 54864,
+          "live_rss_kib": 55132,
+          "phases_s": {
+            "hydrate_recalc": 0.025137637,
+            "recalc_10": 0.538782415
+          },
+          "log": "/tmp/mog-native-history-bench/chain_10k-3.log"
+        },
+        {
+          "wall_s": 0.6321427499642596,
+          "user_s": 0.622073,
+          "system_s": 0.007996,
+          "cpu_s": 0.630069,
+          "peak_rss_kib": 54880,
+          "live_rss_kib": 55116,
+          "phases_s": {
+            "hydrate_recalc": 0.029231102,
+            "recalc_10": 0.595748353
+          },
+          "log": "/tmp/mog-native-history-bench/chain_10k-4.log"
+        }
+      ],
+      "median": {
+        "wall_s": 0.5555822850437835,
+        "user_s": 0.549091,
+        "system_s": 0.007993,
+        "cpu_s": 0.555077,
+        "peak_rss_kib": 54880,
+        "live_rss_kib": 55116,
+        "phases_s": {
+          "hydrate_recalc": 0.025137637,
+          "recalc_10": 0.526071346
+        }
+      }
+    },
+    "xlsx_100k": {
+      "command": [
+        "/tmp/mog-public-check-target/release/examples/storage_bench",
+        "xlsx_100k",
+        "/tmp/mog-native-history-bench/dense_100k.xlsx"
+      ],
+      "samples": [
+        {
+          "wall_s": 0.16701126494444907,
+          "user_s": 0.145837,
+          "system_s": 0.021072,
+          "cpu_s": 0.166909,
+          "peak_rss_kib": 152320,
+          "live_rss_kib": 58324,
+          "phases_s": {
+            "parse_hydrate": 0.154184818
+          },
+          "log": "/tmp/mog-native-history-bench/xlsx_100k-0.log"
+        },
+        {
+          "wall_s": 0.16682388703338802,
+          "user_s": 0.138571,
+          "system_s": 0.02803,
+          "cpu_s": 0.166601,
+          "peak_rss_kib": 152324,
+          "live_rss_kib": 58320,
+          "phases_s": {
+            "parse_hydrate": 0.155498709
+          },
+          "log": "/tmp/mog-native-history-bench/xlsx_100k-1.log"
+        },
+        {
+          "wall_s": 0.1670714319916442,
+          "user_s": 0.14355099999999998,
+          "system_s": 0.023433,
+          "cpu_s": 0.166984,
+          "peak_rss_kib": 152444,
+          "live_rss_kib": 58316,
+          "phases_s": {
+            "parse_hydrate": 0.15790078
+          },
+          "log": "/tmp/mog-native-history-bench/xlsx_100k-2.log"
+        },
+        {
+          "wall_s": 0.17574049497488886,
+          "user_s": 0.137546,
+          "system_s": 0.03806,
+          "cpu_s": 0.17560599999999998,
+          "peak_rss_kib": 152360,
+          "live_rss_kib": 58308,
+          "phases_s": {
+            "parse_hydrate": 0.163187676
+          },
+          "log": "/tmp/mog-native-history-bench/xlsx_100k-3.log"
+        },
+        {
+          "wall_s": 0.1754114490468055,
+          "user_s": 0.145904,
+          "system_s": 0.029317,
+          "cpu_s": 0.17522100000000002,
+          "peak_rss_kib": 152452,
+          "live_rss_kib": 58324,
+          "phases_s": {
+            "parse_hydrate": 0.16152149
+          },
+          "log": "/tmp/mog-native-history-bench/xlsx_100k-4.log"
+        }
+      ],
+      "median": {
+        "wall_s": 0.1670714319916442,
+        "user_s": 0.14355099999999998,
+        "system_s": 0.02803,
+        "cpu_s": 0.166984,
+        "peak_rss_kib": 152360,
+        "live_rss_kib": 58320,
+        "phases_s": {
+          "parse_hydrate": 0.15790078
+        }
+      }
+    },
+    "officejs_1k": {
+      "command": [
+        "/tmp/mog-public-check-target/release/examples/storage_bench_officejs"
+      ],
+      "samples": [
+        {
+          "wall_s": 0.011517014005221426,
+          "user_s": 0.009105,
+          "system_s": 0.0023539999999999998,
+          "cpu_s": 0.011459,
+          "peak_rss_kib": 34624,
+          "live_rss_kib": null,
+          "phases_s": {
+            "officejs_write_load": 0.009811702
+          },
+          "log": "/tmp/mog-native-history-bench/officejs_1k-0.log"
+        },
+        {
+          "wall_s": 0.011053174966946244,
+          "user_s": 0.008081,
+          "system_s": 0.002911,
+          "cpu_s": 0.010992,
+          "peak_rss_kib": 34644,
+          "live_rss_kib": null,
+          "phases_s": {
+            "officejs_write_load": 0.009635283
+          },
+          "log": "/tmp/mog-native-history-bench/officejs_1k-1.log"
+        },
+        {
+          "wall_s": 0.011312636081129313,
+          "user_s": 0.008291999999999999,
+          "system_s": 0.00299,
+          "cpu_s": 0.011281999999999999,
+          "peak_rss_kib": 34712,
+          "live_rss_kib": null,
+          "phases_s": {
+            "officejs_write_load": 0.009737659
+          },
+          "log": "/tmp/mog-native-history-bench/officejs_1k-2.log"
+        },
+        {
+          "wall_s": 0.010970133007504046,
+          "user_s": 0.009615,
+          "system_s": 0.001379,
+          "cpu_s": 0.010994,
+          "peak_rss_kib": 34656,
+          "live_rss_kib": null,
+          "phases_s": {
+            "officejs_write_load": 0.009639574
+          },
+          "log": "/tmp/mog-native-history-bench/officejs_1k-3.log"
+        },
+        {
+          "wall_s": 0.010743420920334756,
+          "user_s": 0.008365,
+          "system_s": 0.0023829999999999997,
+          "cpu_s": 0.010747999999999999,
+          "peak_rss_kib": 34428,
+          "live_rss_kib": null,
+          "phases_s": {
+            "officejs_write_load": 0.00946253
+          },
+          "log": "/tmp/mog-native-history-bench/officejs_1k-4.log"
+        }
+      ],
+      "median": {
+        "wall_s": 0.011053174966946244,
+        "user_s": 0.008365,
+        "system_s": 0.0023829999999999997,
+        "cpu_s": 0.010994,
+        "peak_rss_kib": 34644,
+        "live_rss_kib": null,
+        "phases_s": {
+          "officejs_write_load": 0.009639574
+        }
+      }
+    },
+    "sum_100k": {
+      "command": [
+        "/tmp/mog-public-check-target/release/examples/storage_bench",
+        "sum_100k"
+      ],
+      "samples": [
+        {
+          "wall_s": 0.29541298002004623,
+          "user_s": 0.277177,
+          "system_s": 0.016106,
+          "cpu_s": 0.293283,
+          "peak_rss_kib": 86396,
+          "live_rss_kib": 68500,
+          "phases_s": {
+            "hydrate_recalc": 0.051592206,
+            "recalc_100": 0.235633926
+          },
+          "log": "/tmp/mog-native-history-bench/sum_100k-0.log"
+        },
+        {
+          "wall_s": 0.3448334509739652,
+          "user_s": 0.31371299999999996,
+          "system_s": 0.019082,
+          "cpu_s": 0.33279499999999995,
+          "peak_rss_kib": 86424,
+          "live_rss_kib": 68496,
+          "phases_s": {
+            "hydrate_recalc": 0.05346327,
+            "recalc_100": 0.281162391
+          },
+          "log": "/tmp/mog-native-history-bench/sum_100k-1.log"
+        },
+        {
+          "wall_s": 0.3646344810258597,
+          "user_s": 0.34105399999999997,
+          "system_s": 0.019631,
+          "cpu_s": 0.360685,
+          "peak_rss_kib": 86436,
+          "live_rss_kib": 68508,
+          "phases_s": {
+            "hydrate_recalc": 0.104825181,
+            "recalc_100": 0.251003777
+          },
+          "log": "/tmp/mog-native-history-bench/sum_100k-2.log"
+        },
+        {
+          "wall_s": 0.308830559020862,
+          "user_s": 0.277011,
+          "system_s": 0.022971,
+          "cpu_s": 0.299982,
+          "peak_rss_kib": 86440,
+          "live_rss_kib": 68512,
+          "phases_s": {
+            "hydrate_recalc": 0.053946984,
+            "recalc_100": 0.244551242
+          },
+          "log": "/tmp/mog-native-history-bench/sum_100k-3.log"
+        },
+        {
+          "wall_s": 0.27511156909167767,
+          "user_s": 0.257974,
+          "system_s": 0.015976,
+          "cpu_s": 0.27394999999999997,
+          "peak_rss_kib": 86424,
+          "live_rss_kib": 68496,
+          "phases_s": {
+            "hydrate_recalc": 0.054158653,
+            "recalc_100": 0.210621249
+          },
+          "log": "/tmp/mog-native-history-bench/sum_100k-4.log"
+        }
+      ],
+      "median": {
+        "wall_s": 0.308830559020862,
+        "user_s": 0.277177,
+        "system_s": 0.019082,
+        "cpu_s": 0.299982,
+        "peak_rss_kib": 86424,
+        "live_rss_kib": 68500,
+        "phases_s": {
+          "hydrate_recalc": 0.053946984,
+          "recalc_100": 0.244551242
+        }
+      }
+    },
+    "history_1k": {
+      "command": [
+        "/tmp/mog-public-check-target/release/examples/storage_bench",
+        "history_1k"
+      ],
+      "samples": [
+        {
+          "wall_s": 0.10184460389427841,
+          "user_s": 0.061904999999999995,
+          "system_s": 0.031316,
+          "cpu_s": 0.093221,
+          "peak_rss_kib": 32796,
+          "live_rss_kib": 33440,
+          "phases_s": {
+            "write_1000": 0.028961641,
+            "undo_1000": 0.028873807,
+            "redo_1000": 0.041013286
+          },
+          "log": "/tmp/mog-native-history-bench/history_1k-0.log"
+        },
+        {
+          "wall_s": 0.11252444004639983,
+          "user_s": 0.06899899999999999,
+          "system_s": 0.03378,
+          "cpu_s": 0.10277899999999998,
+          "peak_rss_kib": 32804,
+          "live_rss_kib": 33300,
+          "phases_s": {
+            "write_1000": 0.045064502,
+            "undo_1000": 0.027610249,
+            "redo_1000": 0.036878486
+          },
+          "log": "/tmp/mog-native-history-bench/history_1k-1.log"
+        },
+        {
+          "wall_s": 0.11297836306039244,
+          "user_s": 0.060717999999999994,
+          "system_s": 0.041944999999999996,
+          "cpu_s": 0.10266299999999999,
+          "peak_rss_kib": 32540,
+          "live_rss_kib": 33312,
+          "phases_s": {
+            "write_1000": 0.038772592,
+            "undo_1000": 0.033344319,
+            "redo_1000": 0.03784854
+          },
+          "log": "/tmp/mog-native-history-bench/history_1k-2.log"
+        },
+        {
+          "wall_s": 0.11663923994638026,
+          "user_s": 0.064966,
+          "system_s": 0.040118999999999995,
+          "cpu_s": 0.10508499999999998,
+          "peak_rss_kib": 32812,
+          "live_rss_kib": 33240,
+          "phases_s": {
+            "write_1000": 0.04380282,
+            "undo_1000": 0.029109518,
+            "redo_1000": 0.040770242
+          },
+          "log": "/tmp/mog-native-history-bench/history_1k-3.log"
+        },
+        {
+          "wall_s": 0.09155997901689261,
+          "user_s": 0.05576,
+          "system_s": 0.027714,
+          "cpu_s": 0.08347399999999999,
+          "peak_rss_kib": 32840,
+          "live_rss_kib": 33316,
+          "phases_s": {
+            "write_1000": 0.03393491,
+            "undo_1000": 0.026783698,
+            "redo_1000": 0.028000004
+          },
+          "log": "/tmp/mog-native-history-bench/history_1k-4.log"
+        }
+      ],
+      "median": {
+        "wall_s": 0.11252444004639983,
+        "user_s": 0.061904999999999995,
+        "system_s": 0.03378,
+        "cpu_s": 0.10266299999999999,
+        "peak_rss_kib": 32804,
+        "live_rss_kib": 33312,
+        "phases_s": {
+          "write_1000": 0.038772592,
+          "undo_1000": 0.028873807,
+          "redo_1000": 0.03784854
+        }
+      }
+    }
+  }
+}

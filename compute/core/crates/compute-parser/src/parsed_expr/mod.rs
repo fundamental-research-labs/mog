@@ -20,7 +20,7 @@
 //! `compute-parser` is the next-best fit: it is one layer above `formula-types`
 //! in the dep DAG, already exports `ASTNode` and every A1 entry point this
 //! module uses, and is already a dependency of every consumer that needs these
-//! types (Yrs construction, wire queries, scheduler, and import via
+//! types (native construction, wire queries, scheduler, and import via
 //! `compute-core`). No consumer needs to gain a new dep to reach these types.
 //!
 //! # Totality

@@ -1,11 +1,11 @@
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use xlsx_parser::parse_xlsx_to_output;
 
 #[test]
 fn copying_imported_sheet_allocates_unique_id_and_preserves_custom_views() {
     let input =
         include_bytes!("../../../file-io/xlsx/parser/tests/data/custom-view-printer-settings.xlsx");
-    let (mut engine, _) = YrsComputeEngine::from_xlsx_bytes(input).unwrap();
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(input).unwrap();
     let source = *engine
         .mirror()
         .sheet_ids()

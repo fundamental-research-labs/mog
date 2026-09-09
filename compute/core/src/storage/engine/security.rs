@@ -1,4 +1,4 @@
-//! Stateless gate primitives on `YrsComputeEngine` — R3.1.
+//! Stateless gate primitives on `ComputeEngine` — R3.1.
 //!
 //! Three methods that the `bridge-delegate` macro calls from its gated
 //! wrappers. None mutate engine state; all take `&Principal` by argument
@@ -23,7 +23,7 @@ use compute_security::{
     SheetAccessMatrix,
 };
 
-use super::YrsComputeEngine;
+use super::ComputeEngine;
 use crate::identity::GridIndex;
 
 /// Adapter that exposes the engine's in-memory `GridIndex` as a
@@ -53,7 +53,7 @@ impl<'a> ColumnIndex for GridColumnIndex<'a> {
     }
 }
 
-impl YrsComputeEngine {
+impl ComputeEngine {
     /// Push a `SecurityEvent` onto the engine's event buffer. This is the
     /// sole public entrypoint for emitting events at the engine layer —
     /// the buffer itself stays private so the only way to enqueue an

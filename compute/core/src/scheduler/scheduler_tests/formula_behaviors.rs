@@ -11,7 +11,13 @@ fn test_dependency_chain_a_b_c() {
 
     // A1=5, B1=A1*2, C1=B1+10
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "00000000-0000-0000-0000-000000000001".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -99,7 +105,13 @@ fn test_volatile_cell_always_recalculated() {
     let mut mirror = CellMirror::new();
 
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "00000000-0000-0000-0000-000000000001".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -216,6 +228,9 @@ fn test_add_sheet() {
         .unwrap();
 
     let new_sheet = SheetSnapshot {
+        identities: Vec::new(),
+        row_axis: None,
+        col_axis: None,
         id: "00000000-0000-0000-0000-000000000002".to_string(),
         name: "Sheet2".to_string(),
         rows: 100,
@@ -402,7 +417,13 @@ fn test_sum_range_formula() {
     let mut mirror = CellMirror::new();
 
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "00000000-0000-0000-0000-000000000001".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -490,7 +511,13 @@ fn test_diamond_dependency() {
 
     // A1=10, B1=A1*2, C1=A1+5, D1=B1+C1
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "00000000-0000-0000-0000-000000000001".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -653,7 +680,13 @@ fn test_independent_formulas() {
     let mut mirror = CellMirror::new();
 
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "00000000-0000-0000-0000-000000000001".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -755,7 +788,13 @@ fn test_formula_referencing_empty_cell() {
     let mut mirror = CellMirror::new();
 
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "00000000-0000-0000-0000-000000000001".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -811,7 +850,13 @@ fn test_if_formula() {
     let mut mirror = CellMirror::new();
 
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "00000000-0000-0000-0000-000000000001".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -912,7 +957,13 @@ fn test_long_chain() {
     }
 
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "00000000-0000-0000-0000-000000000001".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,

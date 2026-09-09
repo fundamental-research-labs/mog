@@ -12,7 +12,7 @@ use value_types::{CellValue, FiniteF64};
 #[test]
 fn test_set_cell_binary_patches_contain_display_text() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
     // Register viewport covering the cell we'll edit
@@ -71,7 +71,7 @@ fn test_set_cell_binary_patches_contain_display_text() {
 #[test]
 fn test_apply_mutation_set_cells_patches_contain_display_text() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
     engine.register_viewport("main", &sid, 0, 0, 100, 26);
@@ -132,7 +132,7 @@ fn test_apply_mutation_set_cells_patches_contain_display_text() {
 #[test]
 fn test_apply_mutation_set_cells_by_position_patches_contain_display_text() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
     engine.register_viewport("main", &sid, 0, 0, 100, 26);
@@ -188,7 +188,7 @@ fn test_apply_mutation_set_cells_by_position_patches_contain_display_text() {
 #[test]
 fn test_formula_recalc_binary_patches_contain_display_text() {
     let snap = simple_snapshot(); // A1=10, B1=20, A2=A1+B1=30
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
     engine.register_viewport("main", &sid, 0, 0, 100, 26);

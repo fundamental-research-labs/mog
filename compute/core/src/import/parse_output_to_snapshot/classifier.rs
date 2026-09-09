@@ -7,11 +7,13 @@
 //! size threshold are promoted to ranges -- shorter runs stay as individual
 //! `CellData` entries.
 
-use cell_types::{ColId, PayloadEncoding, RangeAnchor, RangeKind, RowId};
+use cell_types::{
+    AxisIdentityStore, ColId, PayloadEncoding, RangeAnchor, RangeKind, RowId, SheetId,
+};
 use domain_types::SheetData;
 use rustc_hash::{FxHashMap, FxHashSet};
 use snapshot_types::{CellData, RangeData, SheetSnapshot, WorkbookSnapshot};
-use value_types::{CellError, CellValue};
+use value_types::CellValue;
 
 use super::DefaultIdAllocator;
 use super::anchor_collection::collect_anchored_positions;
@@ -91,10 +93,12 @@ pub(crate) fn classify_sheet_ranges(
     sheet_data: &SheetData,
     snapshot: &WorkbookSnapshot,
     cell_id_to_pos: Option<&FxHashMap<String, (u32, u32)>>,
-    sheet_row_ids: &[RowId],
-    sheet_col_ids: &[ColId],
+    sheet_row_axis: &AxisIdentityStore<RowId>,
+    sheet_col_axis: &AxisIdentityStore<ColId>,
     allocator: &mut DefaultIdAllocator,
 ) {
+    let sheet_id =
+        SheetId::from_uuid_str(&sheet.id).expect("classified sheet has a native identity");
     // 1. Collect anchored positions (cells that must not be ranged).
     let anchored = collect_anchored_positions(sheet_data, &sheet.id, snapshot, cell_id_to_pos);
 
@@ -129,8 +133,9 @@ pub(crate) fn classify_sheet_ranges(
                 *col,
                 entries,
                 &sheet.cells,
-                sheet_row_ids,
-                sheet_col_ids,
+                sheet_id,
+                sheet_row_axis,
+                sheet_col_axis,
                 allocator,
                 &mut range_data,
                 &mut ranged_cell_indices,
@@ -161,8 +166,9 @@ fn classify_column(
     col: u32,
     entries: &[(u32, usize)],
     cells: &[CellData],
-    sheet_row_ids: &[RowId],
-    sheet_col_ids: &[ColId],
+    sheet_id: SheetId,
+    sheet_row_axis: &AxisIdentityStore<RowId>,
+    sheet_col_axis: &AxisIdentityStore<ColId>,
     allocator: &mut DefaultIdAllocator,
     range_data: &mut Vec<RangeData>,
     ranged_cell_indices: &mut FxHashSet<usize>,
@@ -190,8 +196,9 @@ fn classify_column(
                         &numeric_state,
                         col,
                         cells,
-                        sheet_row_ids,
-                        sheet_col_ids,
+                        sheet_id,
+                        sheet_row_axis,
+                        sheet_col_axis,
                         allocator,
                         range_data,
                         ranged_cell_indices,
@@ -211,8 +218,9 @@ fn classify_column(
                         &numeric_state,
                         col,
                         cells,
-                        sheet_row_ids,
-                        sheet_col_ids,
+                        sheet_id,
+                        sheet_row_axis,
+                        sheet_col_axis,
                         allocator,
                         range_data,
                         ranged_cell_indices,
@@ -229,8 +237,9 @@ fn classify_column(
                         &numeric_state,
                         col,
                         cells,
-                        sheet_row_ids,
-                        sheet_col_ids,
+                        sheet_id,
+                        sheet_row_axis,
+                        sheet_col_axis,
                         allocator,
                         range_data,
                         ranged_cell_indices,
@@ -251,8 +260,9 @@ fn classify_column(
                         &numeric_state,
                         col,
                         cells,
-                        sheet_row_ids,
-                        sheet_col_ids,
+                        sheet_id,
+                        sheet_row_axis,
+                        sheet_col_axis,
                         allocator,
                         range_data,
                         ranged_cell_indices,
@@ -268,8 +278,9 @@ fn classify_column(
                         &numeric_state,
                         col,
                         cells,
-                        sheet_row_ids,
-                        sheet_col_ids,
+                        sheet_id,
+                        sheet_row_axis,
+                        sheet_col_axis,
                         allocator,
                         range_data,
                         ranged_cell_indices,
@@ -290,8 +301,9 @@ fn classify_column(
                         &numeric_state,
                         col,
                         cells,
-                        sheet_row_ids,
-                        sheet_col_ids,
+                        sheet_id,
+                        sheet_row_axis,
+                        sheet_col_axis,
                         allocator,
                         range_data,
                         ranged_cell_indices,
@@ -313,8 +325,9 @@ fn classify_column(
             &numeric_state,
             col,
             cells,
-            sheet_row_ids,
-            sheet_col_ids,
+            sheet_id,
+            sheet_row_axis,
+            sheet_col_axis,
             allocator,
             range_data,
             ranged_cell_indices,
@@ -371,8 +384,9 @@ fn flush_run(
     numeric_state: &NumericRunState,
     col: u32,
     cells: &[CellData],
-    sheet_row_ids: &[RowId],
-    sheet_col_ids: &[ColId],
+    sheet_id: SheetId,
+    sheet_row_axis: &AxisIdentityStore<RowId>,
+    sheet_col_axis: &AxisIdentityStore<ColId>,
     allocator: &mut DefaultIdAllocator,
     range_data: &mut Vec<RangeData>,
     ranged_cell_indices: &mut FxHashSet<usize>,
@@ -413,20 +427,23 @@ fn flush_run(
     // Build row_ids for the range.
     let row_ids: Vec<RowId> = run
         .iter()
-        .map(|entry| sheet_row_ids[entry.row as usize])
+        .map(|entry| {
+            sheet_row_axis
+                .identity_at(sheet_id, entry.row)
+                .expect("range row within allocated axis")
+        })
         .collect();
 
-    let first_row = run.first().unwrap().row;
-    let last_row = run.last().unwrap().row;
-
-    let col_id = sheet_col_ids[col as usize];
+    let col_id = sheet_col_axis
+        .identity_at(sheet_id, col)
+        .expect("range column within allocated axis");
 
     let rd = RangeData {
         range_id: allocator.alloc_range_id(),
         kind: RangeKind::Data,
         anchor: RangeAnchor::Elastic {
-            start_row: sheet_row_ids[first_row as usize],
-            end_row: sheet_row_ids[last_row as usize],
+            start_row: row_ids[0],
+            end_row: *row_ids.last().unwrap(),
             start_col: col_id,
             end_col: col_id,
         },
@@ -459,106 +476,10 @@ fn is_empty_null_cell(cell: &CellData) -> bool {
 // ---------------------------------------------------------------------------
 
 fn encode_payload(encoding: PayloadEncoding, run: &[RunEntry], cells: &[CellData]) -> Vec<u8> {
-    match encoding {
-        PayloadEncoding::None => Vec::new(),
-        PayloadEncoding::F64Le => encode_f64le(run, cells),
-        PayloadEncoding::I64Le => encode_i64le(run, cells),
-        PayloadEncoding::MixedCbor => encode_mixed_cbor(run, cells),
-    }
-}
-
-/// Encode all values as little-endian f64 (8 bytes each).
-fn encode_f64le(run: &[RunEntry], cells: &[CellData]) -> Vec<u8> {
-    let mut payload = Vec::with_capacity(run.len() * 8);
-    for entry in run {
-        let f: f64 = match &cells[entry.cell_idx].value {
-            CellValue::Number(v) => **v,
-            // Shouldn't happen in a numeric run, but be defensive.
-            _ => 0.0,
-        };
-        payload.extend_from_slice(&f.to_le_bytes());
-    }
-    payload
-}
-
-/// Encode all values as little-endian i64 (8 bytes each).
-fn encode_i64le(run: &[RunEntry], cells: &[CellData]) -> Vec<u8> {
-    let mut payload = Vec::with_capacity(run.len() * 8);
-    for entry in run {
-        let i: i64 = match &cells[entry.cell_idx].value {
-            CellValue::Number(v) => {
-                let f: f64 = **v;
-                // Safe: we verified these are exact integers during classification.
-                f as i64
-            }
-            _ => 0,
-        };
-        payload.extend_from_slice(&i.to_le_bytes());
-    }
-    payload
-}
-
-/// Encode heterogeneous values with a tag-length-value scheme.
-///
-/// Wire format per entry:
-/// - `0x00` — Null (1 byte total)
-/// - `0x01` + 8-byte LE f64 — Number (9 bytes total)
-/// - `0x02` + 4-byte LE u32 length + UTF-8 bytes — Text
-/// - `0x03` + 1-byte (0 or 1) — Boolean
-/// - `0x04` + 1-byte error discriminant — Error
-///
-/// Array and Control variants are encoded as Null (tag 0x00) since they are
-/// not expected in import data; the mirror can refine this in a later phase.
-fn encode_mixed_cbor(run: &[RunEntry], cells: &[CellData]) -> Vec<u8> {
-    let mut payload = Vec::new();
-    for entry in run {
-        let value = &cells[entry.cell_idx].value;
-        match value {
-            CellValue::Null => {
-                payload.push(0x00);
-            }
-            CellValue::Number(f) => {
-                payload.push(0x01);
-                payload.extend_from_slice(&(**f).to_le_bytes());
-            }
-            CellValue::Text(s) => {
-                payload.push(0x02);
-                let bytes = s.as_bytes();
-                payload.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
-                payload.extend_from_slice(bytes);
-            }
-            CellValue::Boolean(b) => {
-                payload.push(0x03);
-                payload.push(u8::from(*b));
-            }
-            CellValue::Error(err, _) => {
-                payload.push(0x04);
-                payload.push(error_discriminant(*err));
-            }
-            CellValue::Array(_) | CellValue::Control(_) | CellValue::Image(_) => {
-                // Treat as null for now — these are not expected in import data.
-                payload.push(0x00);
-            }
-        }
-    }
-    payload
-}
-
-/// Map `CellError` variants to stable discriminant bytes for wire encoding.
-fn error_discriminant(err: CellError) -> u8 {
-    match err {
-        CellError::Div0 => 0,
-        CellError::Na => 1,
-        CellError::Name => 2,
-        CellError::Null => 3,
-        CellError::Num => 4,
-        CellError::Ref => 5,
-        CellError::Value => 6,
-        CellError::Spill => 7,
-        CellError::Calc => 8,
-        CellError::GettingData => 9,
-        CellError::Circ => 10,
-    }
+    crate::mirror::range_view::encode_values(
+        encoding,
+        run.iter().map(|entry| &cells[entry.cell_idx].value),
+    )
 }
 
 #[cfg(test)]
@@ -580,7 +501,10 @@ mod tests {
 
     fn make_sheet(cells: Vec<CellData>, rows: u32, cols: u32) -> SheetSnapshot {
         SheetSnapshot {
-            id: "test_sheet".into(),
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
+            id: SheetId::from_raw(1).to_string(),
             name: "Sheet1".into(),
             rows,
             cols,
@@ -608,8 +532,8 @@ mod tests {
             &sheet_data,
             &snapshot,
             None,
-            row_ids,
-            col_ids,
+            &AxisIdentityStore::Explicit(row_ids.to_vec()),
+            &AxisIdentityStore::Explicit(col_ids.to_vec()),
             allocator,
         );
     }

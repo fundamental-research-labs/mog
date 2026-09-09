@@ -82,7 +82,8 @@ pub(crate) struct SortColumnCriterion {
     pub mode: SortMode,
 }
 
-/// Options for a sort operation.
+/// Options used by the sort planner test harness.
+#[cfg(test)]
 #[derive(Debug, Clone)]
 pub(crate) struct SortOptions {
     /// The sort criteria (one per column, evaluated in order).

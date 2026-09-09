@@ -25,7 +25,7 @@ const HEX_DIGITS: &[u8; 16] = b"0123456789abcdef";
 /// A 32-character lowercase hex string stored on the stack.
 ///
 /// This is the output of [`id_to_hex`] and is the standard representation for
-/// u128 IDs (CellId, SheetId, RowId, ColId) as Yrs map keys.
+/// u128 IDs (CellId, SheetId, RowId, ColId) at transport boundaries.
 #[derive(Clone, Copy)]
 pub struct SmallHex {
     buf: [u8; 32],
@@ -265,7 +265,7 @@ pub fn hex_to_id(hex: &str) -> Option<u128> {
     u128::from_str_radix(hex, 16).ok()
 }
 
-/// Parse a cell_id UUID string to hex format (for yrs map keys).
+/// Parse a cell_id UUID string into its compact hexadecimal form.
 pub fn cell_id_str_to_hex(uuid_str: &str) -> Result<SmallHex, ComputeError> {
     let id = CellId::from_uuid_str(uuid_str)?;
     Ok(id_to_hex(id.as_u128()))

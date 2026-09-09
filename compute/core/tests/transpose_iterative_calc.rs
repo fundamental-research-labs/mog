@@ -67,6 +67,9 @@ fn build_snapshot_iterative(
                 })
                 .collect();
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: sheet_uuid(si),
                 name: name.to_string(),
                 rows,
@@ -78,6 +81,9 @@ fn build_snapshot_iterative(
         .collect();
 
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: sheet_snapshots,
         named_ranges: vec![],
         tables: vec![],
@@ -121,7 +127,7 @@ fn assert_col_data_number(
         .get_sheet(sheet_id)
         .unwrap_or_else(|| panic!("{}: sheet not found", label));
     let col_slice = sheet_mirror
-        .get_column_slice(col)
+        .get_column_view(col)
         .unwrap_or_else(|| panic!("{}: col_data for column {} not found", label, col));
     assert!(
         (row as usize) < col_slice.len(),
@@ -751,6 +757,9 @@ fn test_transpose_25_elements_high_offset_iterative_calc() {
                 })
                 .collect();
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: sheet_uuid(si),
                 name: "SourceA".to_string(),
                 rows: 30,
@@ -774,6 +783,9 @@ fn test_transpose_25_elements_high_offset_iterative_calc() {
                 })
                 .collect();
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: sheet_uuid(si),
                 name: "SourceB".to_string(),
                 rows: 30,
@@ -797,6 +809,9 @@ fn test_transpose_25_elements_high_offset_iterative_calc() {
                 })
                 .collect();
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: sheet_uuid(si),
                 name: "Output".to_string(),
                 rows: 300,
@@ -808,6 +823,9 @@ fn test_transpose_25_elements_high_offset_iterative_calc() {
     ];
 
     let snapshot = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets,
         named_ranges: vec![],
         tables: vec![],

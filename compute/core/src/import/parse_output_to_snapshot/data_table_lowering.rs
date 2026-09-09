@@ -77,6 +77,9 @@ mod tests {
 
     fn resolver_sheets() -> Vec<SheetSnapshot> {
         vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: "Sheet1".to_string(),
             rows: 0,

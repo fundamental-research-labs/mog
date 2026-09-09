@@ -10,7 +10,13 @@ use crate::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
 /// Build a snapshot with a 10x10 sheet and the given cells.
 pub(super) fn spill_snapshot(cells: Vec<CellData>) -> WorkbookSnapshot {
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "00000000-0000-0000-0000-000000000001".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,

@@ -7,12 +7,13 @@
 //! # Design
 //!
 //! - **Lazy**: columns are only materialized when requested by a large-range aggregate.
-//! - **Dirty-on-write**: any write to a cell in a cached column invalidates that column.
+//! - **Native authority**: numeric writes update a derived slot; other mutations invalidate it.
 //! - **NAN sentinel**: non-numeric cells are stored as `f64::NAN`, skipped during aggregation.
 //! - **Threshold**: only used for ranges > `DENSE_THRESHOLD` cells; below that, direct
 //!   FxHashMap iteration is fast enough.
 
 use rustc_hash::FxHashMap;
+use std::sync::OnceLock;
 
 use super::SheetMirror;
 use cell_types::SheetId;
@@ -31,11 +32,18 @@ type ColumnKey = (SheetId, u32);
 /// Cache of materialized dense columns.
 ///
 /// - **Lazy**: columns are only materialized when requested.
-/// - **Dirty-on-write**: any write to a cell in a cached column invalidates that column.
+/// Numeric caches are disposable; authored values remain in the native cell store.
 #[derive(Debug, Clone)]
 pub struct DenseColumnCache {
-    columns: FxHashMap<ColumnKey, DenseColumn>,
-    bool_masks: FxHashMap<ColumnKey, DenseBoolMask>,
+    columns: FxHashMap<ColumnKey, OnceLock<Option<CachedColumn>>>,
+}
+
+#[derive(Debug, Clone)]
+struct CachedColumn {
+    dense: DenseColumn,
+    mask: DenseBoolMask,
+    /// Only lazily built numeric/null columns support direct slot updates.
+    numeric_only: bool,
 }
 
 impl Default for DenseColumnCache {
@@ -48,27 +56,101 @@ impl DenseColumnCache {
     pub fn new() -> Self {
         Self {
             columns: FxHashMap::default(),
-            bool_masks: FxHashMap::default(),
         }
     }
 
     /// Get a cached dense column, or `None` if not materialized or dirty.
     pub fn get(&self, sheet: &SheetId, col: u32) -> Option<&DenseColumn> {
-        self.columns.get(&(*sheet, col))
+        Some(&self.columns.get(&(*sheet, col))?.get()?.as_ref()?.dense)
     }
 
     /// Get a cached bool mask, or `None` if not materialized or dirty.
     pub fn get_bool_mask(&self, sheet: &SheetId, col: u32) -> Option<&DenseBoolMask> {
-        self.bool_masks.get(&(*sheet, col))
+        Some(&self.columns.get(&(*sheet, col))?.get()?.as_ref()?.mask)
+    }
+
+    /// Reserve a lazy slot for an occupied column without materializing its values.
+    pub(crate) fn register_column(&mut self, sheet: SheetId, col: u32) {
+        self.columns.entry((sheet, col)).or_default();
+    }
+
+    /// Borrow a lazily derived numeric/null column for a sufficiently large range.
+    /// Mixed columns are remembered as ineligible until their next mutation.
+    pub(crate) fn get_numeric_for_range(
+        &self,
+        sheet: SheetId,
+        col: u32,
+        start_row: u32,
+        end_row: u32,
+        source: &SheetMirror,
+    ) -> Option<&DenseColumn> {
+        if cfg!(feature = "dd-precision")
+            || end_row < start_row
+            || (end_row as u64 - start_row as u64 + 1) < DENSE_THRESHOLD as u64
+        {
+            return None;
+        }
+        let slot = self.columns.get(&(sheet, col))?;
+        let cached = slot.get_or_init(|| {
+            let view = source.get_column_view(col)?;
+            if view.len() < DENSE_THRESHOLD {
+                return None;
+            }
+            let mut values = Vec::with_capacity(view.len());
+            let mut numeric_count = 0;
+            for value in view {
+                match value {
+                    CellValue::Number(number) => {
+                        values.push(number.get());
+                        numeric_count += 1;
+                    }
+                    CellValue::Null => values.push(f64::NAN),
+                    _ => return None,
+                }
+            }
+            Some(CachedColumn {
+                mask: DenseBoolMask::new(Vec::new(), 0, values.len() as u32),
+                dense: DenseColumn::new(values, numeric_count, 0, Vec::new()),
+                numeric_only: true,
+            })
+        });
+        let cached = cached.as_ref()?;
+        cached.numeric_only.then_some(&cached.dense)
+    }
+
+    /// Keep a numeric cache current after a native scalar write, or discard it.
+    pub(crate) fn update_cell<'a>(
+        &mut self,
+        sheet: SheetId,
+        col: u32,
+        row: u32,
+        value: impl FnOnce() -> Option<&'a CellValue>,
+    ) {
+        let slot = self.columns.entry((sheet, col)).or_default();
+        if let Some(Some(cached)) = slot.get_mut()
+            && cached.numeric_only
+        {
+            let number = match value() {
+                Some(CellValue::Number(number)) => Some(number.get()),
+                Some(CellValue::Null) | None => None,
+                _ => {
+                    slot.take();
+                    return;
+                }
+            };
+            if cached.dense.set_numeric_at(row, number) {
+                return;
+            }
+        }
+        slot.take();
     }
 
     /// Materialize a column from the `SheetMirror`'s data.
     /// Reads all cells in the column and builds a contiguous `Vec<f64>`.
     /// Also produces a `DenseBoolMask` tracking which rows are boolean-sourced.
     ///
-    /// Prefers `col_data` when it exists for the column (includes projected values
-    /// from dynamic array materialization), falling back to the sparse `cells` map
-    /// via `pos_to_id` when col_data doesn't have that column.
+    /// Reads authored, imported and projected values from their native owners.
+    /// This numeric cache is derived lazily; generic CellValue copies are not retained.
     pub fn materialize(
         &mut self,
         sheet: &SheetId,
@@ -82,59 +164,34 @@ impl DenseColumnCache {
         let num_words = (rows as usize).div_ceil(64);
         let mut mask = DenseBoolMask::new(vec![0u64; num_words], 0, rows);
 
-        // Prefer col_data when available — it includes projected values from
-        // dynamic array materialization alongside regular cell values.
-        if let Some(col_slice) = sheet_mirror.get_column_slice(col) {
-            let len = (rows as usize).min(col_slice.len());
-            for row in 0..len {
-                match &col_slice[row] {
-                    CellValue::Number(n) => {
-                        values[row] = n.get();
-                        numeric_count += 1;
-                    }
-                    CellValue::Boolean(b) => {
-                        values[row] = if *b { 1.0 } else { 0.0 };
-                        numeric_count += 1;
-                        mask.set_bit(row);
-                    }
-                    CellValue::Error(e, _) => {
-                        errors.push((row as u32, *e));
-                    }
-                    _ => {} // NAN remains for non-numeric
+        let column = sheet_mirror.get_column_view(col);
+        for row in 0..rows {
+            match column
+                .as_ref()
+                .and_then(|column| column.get(row as usize))
+                .or_else(|| sheet_mirror.value_at(cell_types::SheetPos::new(row, col)))
+            {
+                Some(CellValue::Number(n)) => {
+                    values[row as usize] = n.get();
+                    numeric_count += 1;
                 }
-            }
-        } else {
-            // Fallback: sparse cell-by-cell lookup via pos_to_id + cells map.
-            for row in 0..rows {
-                if let Some(cell_id) = sheet_mirror
-                    .pos_to_id
-                    .get(&cell_types::SheetPos::new(row, col))
-                    && let Some(entry) = sheet_mirror.cells.get(cell_id)
-                {
-                    match &entry.value {
-                        CellValue::Number(n) => {
-                            values[row as usize] = n.get();
-                            numeric_count += 1;
-                        }
-                        CellValue::Boolean(b) => {
-                            values[row as usize] = if *b { 1.0 } else { 0.0 };
-                            numeric_count += 1;
-                            mask.set_bit(row as usize);
-                        }
-                        CellValue::Error(e, _) => {
-                            errors.push((row, *e));
-                        }
-                        _ => {} // NAN remains for non-numeric
-                    }
+                Some(CellValue::Boolean(b)) => {
+                    values[row as usize] = if *b { 1.0 } else { 0.0 };
+                    numeric_count += 1;
+                    mask.set_bit(row as usize);
                 }
+                Some(CellValue::Error(e, _)) => errors.push((row, *e)),
+                _ => {}
             }
         }
 
-        let key = (*sheet, col);
-        self.columns
-            .insert(key, DenseColumn::new(values, numeric_count, 0, errors));
-        self.bool_masks.insert(key, mask);
-        self.columns.get(&key).unwrap()
+        self.store_dense(
+            *sheet,
+            col,
+            DenseColumn::new(values, numeric_count, 0, errors),
+            mask,
+        );
+        self.get(sheet, col).unwrap()
     }
 
     /// Store an externally-produced dense column and its bool mask.
@@ -146,38 +203,53 @@ impl DenseColumnCache {
         dense: DenseColumn,
         mask: DenseBoolMask,
     ) {
-        let key = (sheet, col);
-        self.columns.insert(key, dense);
-        self.bool_masks.insert(key, mask);
+        self.columns.insert(
+            (sheet, col),
+            OnceLock::from(Some(CachedColumn {
+                dense,
+                mask,
+                numeric_only: false,
+            })),
+        );
     }
 
     /// Invalidate a column (called when any cell in that column is written).
     pub fn invalidate(&mut self, sheet: &SheetId, col: u32) {
-        let key = (*sheet, col);
-        self.columns.remove(&key);
-        self.bool_masks.remove(&key);
+        self.columns.entry((*sheet, col)).or_default().take();
     }
 
     /// Invalidate all columns for a sheet (called on structural changes).
     pub fn invalidate_sheet(&mut self, sheet: &SheetId) {
-        self.columns.retain(|(s, _), _| s != sheet);
-        self.bool_masks.retain(|(s, _), _| s != sheet);
+        for ((owner, _), slot) in &mut self.columns {
+            if owner == sheet {
+                slot.take();
+            }
+        }
+    }
+
+    /// Remove all cache slots when their owning sheet is removed.
+    pub(crate) fn remove_sheet(&mut self, sheet: &SheetId) {
+        self.columns.retain(|(owner, _), _| owner != sheet);
     }
 
     /// Invalidate everything.
     pub fn invalidate_all(&mut self) {
-        self.columns.clear();
-        self.bool_masks.clear();
+        for slot in self.columns.values_mut() {
+            slot.take();
+        }
     }
 
     /// Number of cached columns (for testing/diagnostics).
     pub fn len(&self) -> usize {
-        self.columns.len()
+        self.columns
+            .values()
+            .filter(|slot| slot.get().is_some_and(Option::is_some))
+            .count()
     }
 
     /// Whether the cache is empty.
     pub fn is_empty(&self) -> bool {
-        self.columns.is_empty()
+        self.len() == 0
     }
 }
 

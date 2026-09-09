@@ -8,22 +8,32 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::hash_map;
 use value_types::CellValue;
 
-use super::range_view::{ColDataState, RangeExtent, RangeView};
+use super::range_view::{RangeExtent, RangeView};
 
 // =============================================================================
 // Format Range types
 // =============================================================================
 
+/// Imported/style-range defaults precede table styles; user range edits follow them.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum FormatRangeLayer {
+    #[default]
+    Inherited,
+    Direct,
+}
+
 /// A Format Range — a rectangular region carrying a CellFormat overlay.
 ///
-/// In the format cascade `default -> col -> row -> **Format Range** -> table -> cell`,
-/// Format Ranges sit between row and table. When multiple Format Ranges overlap
-/// at a cell position, they are merged field-by-field with higher `RangeId`
-/// values winning on conflicts (using `merge_formats` semantics).
-#[derive(Debug, Clone, Copy)]
+/// Inherited ranges precede table styles; direct user patches follow them.
+/// Overlapping rectangles merge field by field in stable precedence order.
+/// Splitting a rectangle retains its precedence, while each new edit comes last.
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct FormatRange {
     /// Stable identity for this range.
     pub id: RangeId,
+    /// Stable precedence survives rectangle splitting without changing identity order.
+    pub precedence: u128,
+    pub layer: FormatRangeLayer,
     /// Inclusive start row.
     pub start_row: u32,
     /// Inclusive start column.
@@ -57,7 +67,7 @@ impl RectLike for FormatRange {
 }
 
 /// A sparse whole-column default format range.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct ColumnFormatRange {
     pub id: RangeId,
     pub start_col: u32,
@@ -115,7 +125,7 @@ pub struct CellEdit {
 /// `Box<IdentityFormula>` instead of inline: data cells (no formula) drop from
 /// 80→32 bytes, saving ~32 MB for a 670K-cell workbook. Formula cells pay one
 /// pointer indirection (cold path — evaluation uses `ast_cache`, not this field).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CellEntry {
     pub value: CellValue,
     /// Identity-based formula (stores references by CellId, not A1 strings).
@@ -134,6 +144,7 @@ impl CellEntry {
 /// Per-sheet cell storage with bidirectional position<->identity index.
 #[derive(Debug, Clone)]
 pub struct SheetMirror {
+    pub(crate) history: crate::storage::engine::history::HistoryCapture,
     pub id: SheetId,
     pub name: String,
     /// Materialized data extent used for dense/content storage.
@@ -159,25 +170,24 @@ pub struct SheetMirror {
     pub(crate) pos_to_id: FxHashMap<SheetPos, CellId>,
     /// CellId -> Position reverse index.
     pub(crate) id_to_pos: FxHashMap<CellId, SheetPos>,
-    /// Column-major dense storage for fast range access. Indexed: col_data[col][row] = CellValue.
-    pub(crate) col_data: FxHashMap<u32, Vec<CellValue>>,
-    /// RowId -> row index within this sheet. Populated from `GridIndex` at
-    /// engine assembly time and refreshed after structural mutations.
-    /// unified reference model — enables full-row refs (`1:1`) to resolve to a concrete
-    /// `(SheetId, row_index)` tuple for display-time prefix emission.
-    pub(crate) row_to_index: FxHashMap<RowId, u32>,
-    /// ColId -> col index within this sheet. Same shape and motivation as
-    /// `row_to_index`.
-    pub(crate) col_to_index: FxHashMap<ColId, u32>,
-    /// Reverse of `row_to_index`: row index -> RowId.
-    pub(crate) index_to_row: FxHashMap<u32, RowId>,
-    /// Reverse of `col_to_index`: col index -> ColId.
-    pub(crate) index_to_col: FxHashMap<u32, ColId>,
+    /// Column extents contain positions only, never duplicate cell values.
+    pub(crate) column_lengths: FxHashMap<u32, usize>,
+    /// Columns with authored or generated values require layered reads.
+    columns_with_overlays: FxHashSet<u32>,
+    /// Contiguous imported row axes permit direct borrowed column iteration.
+    range_row_starts: FxHashMap<RangeId, u32>,
+    /// Generated pivot output has no authored cell entry.
+    pub(crate) generated_values: FxHashMap<SheetPos, CellValue>,
+    /// Array columns borrow the same Arc payload as their source cell.
+    pub(crate) projected_columns: FxHashMap<u32, Vec<ProjectionColumn>>,
+    pub(crate) range_columns: FxHashMap<u32, Vec<RangeId>>,
+    /// Native axis identities shared with the grid index.
+    pub(crate) row_axis: std::sync::Arc<compute_document::identity::AxisIndex<RowId>>,
+    pub(crate) col_axis: std::sync::Arc<compute_document::identity::AxisIndex<ColId>>,
 
     // --- Range storage ---
     pub(crate) range_views: FxHashMap<RangeId, RangeView>,
     pub(crate) range_spatial_index: IntervalTree<RangeExtent>,
-    pub(crate) col_data_state: FxHashMap<u32, ColDataState>,
 
     // --- Domain caches ---
     // These are lazily populated from the storage layer or snapshot hydration.
@@ -206,7 +216,7 @@ pub struct SheetMirror {
     /// Used by the format cascade to find overlapping Format Ranges at a cell position.
     pub(crate) format_ranges: Vec<FormatRange>,
     pub(crate) format_range_spatial_index: IntervalTree<FormatRange>,
-    /// Cached CellFormat per RangeId, populated during hydration from the `rangeFormats` Yrs sub-map.
+    /// Native format associated with each format range.
     pub(crate) range_format_cache: FxHashMap<RangeId, CellFormat>,
     /// Original XLSX cellXfs style id per imported format RangeId.
     pub(crate) range_xlsx_style_id_cache: FxHashMap<RangeId, u32>,
@@ -222,6 +232,7 @@ impl SheetMirror {
     /// Create an empty sheet mirror.
     pub fn new(id: SheetId, name: String, rows: u32, cols: u32) -> Self {
         Self {
+            history: Default::default(),
             id,
             name,
             rows,
@@ -233,14 +244,20 @@ impl SheetMirror {
             cells: FxHashMap::default(),
             pos_to_id: FxHashMap::default(),
             id_to_pos: FxHashMap::default(),
-            col_data: FxHashMap::default(),
-            row_to_index: FxHashMap::default(),
-            col_to_index: FxHashMap::default(),
-            index_to_row: FxHashMap::default(),
-            index_to_col: FxHashMap::default(),
+            column_lengths: FxHashMap::default(),
+            columns_with_overlays: FxHashSet::default(),
+            range_row_starts: FxHashMap::default(),
+            generated_values: FxHashMap::default(),
+            projected_columns: FxHashMap::default(),
+            range_columns: FxHashMap::default(),
+            row_axis: std::sync::Arc::new(compute_document::identity::AxisIndex::new(
+                cell_types::AxisIdentityStore::Explicit(Vec::new()),
+            )),
+            col_axis: std::sync::Arc::new(compute_document::identity::AxisIndex::new(
+                cell_types::AxisIdentityStore::Explicit(Vec::new()),
+            )),
             range_views: FxHashMap::default(),
             range_spatial_index: IntervalTree::new(),
-            col_data_state: FxHashMap::default(),
             merge_regions: Vec::new(),
             row_heights: FxHashMap::default(),
             col_widths: FxHashMap::default(),
@@ -273,6 +290,7 @@ impl SheetMirror {
         cell_capacity: usize,
     ) -> Self {
         Self {
+            history: Default::default(),
             id,
             name,
             rows,
@@ -284,14 +302,20 @@ impl SheetMirror {
             cells: FxHashMap::with_capacity_and_hasher(cell_capacity, Default::default()),
             pos_to_id: FxHashMap::with_capacity_and_hasher(cell_capacity, Default::default()),
             id_to_pos: FxHashMap::with_capacity_and_hasher(cell_capacity, Default::default()),
-            col_data: FxHashMap::default(),
-            row_to_index: FxHashMap::default(),
-            col_to_index: FxHashMap::default(),
-            index_to_row: FxHashMap::default(),
-            index_to_col: FxHashMap::default(),
+            column_lengths: FxHashMap::default(),
+            columns_with_overlays: FxHashSet::default(),
+            range_row_starts: FxHashMap::default(),
+            generated_values: FxHashMap::default(),
+            projected_columns: FxHashMap::default(),
+            range_columns: FxHashMap::default(),
+            row_axis: std::sync::Arc::new(compute_document::identity::AxisIndex::new(
+                cell_types::AxisIdentityStore::Explicit(Vec::new()),
+            )),
+            col_axis: std::sync::Arc::new(compute_document::identity::AxisIndex::new(
+                cell_types::AxisIdentityStore::Explicit(Vec::new()),
+            )),
             range_views: FxHashMap::default(),
             range_spatial_index: IntervalTree::new(),
-            col_data_state: FxHashMap::default(),
             merge_regions: Vec::new(),
             row_heights: FxHashMap::default(),
             col_widths: FxHashMap::default(),
@@ -358,13 +382,90 @@ impl SheetMirror {
         self.grid_cols.max(self.cols)
     }
 
-    /// Get a column's dense data as a slice, if available.
-    pub fn get_column_slice(&self, col: u32) -> Option<&[CellValue]> {
-        debug_assert!(
-            self.col_data_state.get(&col) != Some(&ColDataState::Partial),
-            "get_column_slice called during mutation phase with Partial col_data for col {col}"
-        );
-        self.col_data.get(&col).map(|v| v.as_slice())
+    /// Borrow existing values without creating a dense CellValue copy.
+    pub fn get_column_view(&self, col: u32) -> Option<value_types::ColumnView<'_>> {
+        let rows = *self.column_lengths.get(&col)?;
+        if !self.columns_with_overlays.contains(&col)
+            && let Some(ranges) = self.range_columns.get(&col)
+            && let [range_id] = ranges.as_slice()
+            && let Some(&row_start) = self.range_row_starts.get(range_id)
+            && let Some(col_id) = self.col_id_at(col)
+        {
+            let range = &self.range_views[range_id];
+            if let Some(&offset) = range.col_offset_by_id.get(&col_id) {
+                return Some(value_types::ColumnView::from_strided(
+                    &range.values,
+                    range.payload_cols as usize,
+                    offset as usize,
+                    row_start,
+                    rows,
+                ));
+            }
+        }
+        Some(value_types::ColumnView::from_grid(self, col, rows))
+    }
+
+    pub(crate) fn note_column_position(&mut self, pos: SheetPos) {
+        self.columns_with_overlays.insert(pos.col());
+        self.column_lengths
+            .entry(pos.col())
+            .and_modify(|len| *len = (*len).max(pos.row() as usize + 1))
+            .or_insert(pos.row() as usize + 1);
+    }
+
+    pub(crate) fn consume_range_value(&mut self, pos: SheetPos) {
+        let Some(row_id) = self.row_id_at(pos.row()) else {
+            return;
+        };
+        let Some(col_id) = self.col_id_at(pos.col()) else {
+            return;
+        };
+        if let Some(ranges) = self.range_columns.get(&pos.col()) {
+            for id in ranges {
+                if let Some(range) = self.range_views.get_mut(id) {
+                    range.consume_value(&row_id, &col_id);
+                }
+            }
+        }
+    }
+
+    /// Read the authored value, or its range/generated source, by position.
+    pub fn value_at(&self, pos: SheetPos) -> Option<&CellValue> {
+        let cell = self.pos_to_id.get(&pos);
+        let entry = cell.and_then(|id| self.cells.get(id));
+        if let Some(entry) = entry {
+            if !entry.is_ghost() || cell.is_some_and(|id| id.is_virtual()) {
+                return match &entry.value {
+                    CellValue::Array(array) => array.get(0, 0),
+                    value => Some(value),
+                };
+            }
+        }
+        if let Some(columns) = self.projected_columns.get(&pos.col()) {
+            for column in columns.iter().rev() {
+                if let Some(row) = pos.row().checked_sub(column.origin_row)
+                    && let Some(value) = column.array.get(row as usize, column.array_col)
+                    && (row != 0 || column.array_col != 0)
+                {
+                    return Some(value);
+                }
+            }
+        }
+        if let Some(value) = self.generated_values.get(&pos) {
+            return Some(value);
+        }
+        if let Some(ranges) = self.range_columns.get(&pos.col())
+            && let Some(row_id) = self.row_id_at(pos.row())
+            && let Some(col_id) = self.col_id_at(pos.col())
+        {
+            for range_id in ranges.iter().rev() {
+                let range = &self.range_views[range_id];
+                if let Some(value) = range.value_at(&row_id, &col_id) {
+                    return Some(value);
+                }
+            }
+        }
+        entry.map(|entry| &entry.value)
     }
 
     // -----------------------------------------------------------------------
@@ -397,8 +498,8 @@ impl SheetMirror {
         if hits.is_empty() {
             return None;
         }
-        let row_id = self.index_to_row.get(&pos.row()).copied()?;
-        let col_id = self.index_to_col.get(&pos.col()).copied()?;
+        let row_id = self.row_id_at(pos.row())?;
+        let col_id = self.col_id_at(pos.col())?;
         Some(CellId::virtual_at(self.id, row_id, col_id))
     }
 
@@ -421,39 +522,49 @@ impl SheetMirror {
         self.id_to_pos.get(cell_id).copied()
     }
 
-    /// Whether the column-major dense storage is empty.
-    pub fn col_data_is_empty(&self) -> bool {
-        self.col_data.is_empty()
+    /// Whether the sheet has any value-bearing columns.
+    pub fn column_values_are_empty(&self) -> bool {
+        self.column_lengths.is_empty()
     }
 
-    /// Bounds of non-null values in column-major dense storage.
-    ///
-    /// `col_data` is allowed to contain null padding and null-only columns after
-    /// clears, projection invalidation, and structural edits. Those storage
-    /// slots are not user-visible content and must not expand used-range
-    /// queries.
+    /// Bounds of visible non-null content, including generated output.
     pub(crate) fn dense_content_bounds(&self) -> Option<(u32, u32, u32, u32)> {
-        let mut min_row = u32::MAX;
-        let mut max_row = 0u32;
-        let mut min_col = u32::MAX;
-        let mut max_col = 0u32;
-        let mut found = false;
-
-        for (&col, values) in &self.col_data {
-            for (row, value) in values.iter().enumerate() {
-                if value.is_null() {
-                    continue;
+        let mut bounds = None;
+        let mut include = |row: u32, col: u32| {
+            if self
+                .value_at(SheetPos::new(row, col))
+                .is_none_or(CellValue::is_null)
+            {
+                return;
+            }
+            let (min_row, min_col, max_row, max_col) = bounds.get_or_insert((row, col, row, col));
+            *min_row = (*min_row).min(row);
+            *max_row = (*max_row).max(row);
+            *min_col = (*min_col).min(col);
+            *max_col = (*max_col).max(col);
+        };
+        for pos in self.pos_to_id.keys().chain(self.generated_values.keys()) {
+            include(pos.row(), pos.col());
+        }
+        for (&col, projections) in &self.projected_columns {
+            for projection in projections {
+                for row in 0..projection.array.rows() {
+                    include(projection.origin_row + row as u32, col);
                 }
-                let row = row as u32;
-                found = true;
-                min_row = min_row.min(row);
-                max_row = max_row.max(row);
-                min_col = min_col.min(col);
-                max_col = max_col.max(col);
             }
         }
-
-        found.then_some((min_row, min_col, max_row, max_col))
+        for range in self.range_views.values() {
+            for row_id in range.row_offset_by_id.keys() {
+                if let Some(row) = self.row_axis.position_of(self.id, *row_id) {
+                    for col_id in range.col_offset_by_id.keys() {
+                        if let Some(col) = self.col_axis.position_of(self.id, *col_id) {
+                            include(row, col);
+                        }
+                    }
+                }
+            }
+        }
+        bounds
     }
 
     /// Number of cells in this sheet.
@@ -461,35 +572,30 @@ impl SheetMirror {
         self.cells.len()
     }
 
-    /// Mutable access to the cell store for Range fold operations.
-    pub fn cells_mut(&mut self) -> &mut FxHashMap<CellId, CellEntry> {
-        &mut self.cells
-    }
-
     /// Resolve a [`RowId`] to its 0-based row index within this sheet.
     ///
     /// Populated by [`crate::mirror::CellMirror::install_row_col_indexes`].
     #[inline]
     pub fn row_index_of(&self, row_id: &RowId) -> Option<u32> {
-        self.row_to_index.get(row_id).copied()
+        self.row_axis.position_of(self.id, *row_id)
     }
 
     /// Resolve a [`ColId`] to its 0-based column index within this sheet.
     #[inline]
     pub fn col_index_of(&self, col_id: &ColId) -> Option<u32> {
-        self.col_to_index.get(col_id).copied()
+        self.col_axis.position_of(self.id, *col_id)
     }
 
     /// Resolve a row index to its [`RowId`].
     #[inline]
     pub fn row_id_at(&self, index: u32) -> Option<RowId> {
-        self.index_to_row.get(&index).copied()
+        self.row_axis.identity_at(self.id, index)
     }
 
     /// Resolve a column index to its [`ColId`].
     #[inline]
     pub fn col_id_at(&self, index: u32) -> Option<ColId> {
-        self.index_to_col.get(&index).copied()
+        self.col_axis.identity_at(self.id, index)
     }
 
     // -----------------------------------------------------------------------
@@ -537,171 +643,94 @@ impl SheetMirror {
     }
 
     // -----------------------------------------------------------------------
-    // Range-aware col_data rebuild
+    // Range and column position indexes
     // -----------------------------------------------------------------------
 
-    pub fn rebuild_col_data(&mut self, col: u32) {
-        let col_id = match self.index_to_col.get(&col).copied() {
-            Some(id) => id,
-            None => {
-                self.col_data_state.remove(&col);
-                return;
-            }
-        };
-
-        let mut has_range = false;
-        let mut max_row: usize = self.rows as usize;
-
-        for rv in self.range_views.values() {
-            if rv.encoding == PayloadEncoding::None {
-                continue;
-            }
-            if rv.col_offset_by_id.contains_key(&col_id) {
-                has_range = true;
-                for &row_id in rv.row_offset_by_id.keys() {
-                    if let Some(&row_idx) = self.row_to_index.get(&row_id) {
-                        max_row = max_row.max(row_idx as usize + 1);
-                    }
-                }
-            }
-        }
-
-        if !has_range {
-            self.col_data_state.remove(&col);
-            return;
-        }
-
-        // Find max row from per-cell entries at this column
-        for pos in self.pos_to_id.keys() {
-            if pos.col() == col {
-                max_row = max_row.max(pos.row() as usize + 1);
-            }
-        }
-
-        let size = max_row.max(self.rows as usize);
-        let mut data = vec![CellValue::Null; size];
-
-        // Layer 1: decode Range payload data into the vector
-        for rv in self.range_views.values() {
-            if rv.encoding == PayloadEncoding::None {
-                continue;
-            }
-            if let Some(&col_offset) = rv.col_offset_by_id.get(&col_id) {
-                rv.decode_column_into(col_offset, &self.row_to_index, &mut data);
-            }
-        }
-
-        self.apply_column_overlays(col, col_id, &mut data);
-
-        self.col_data.insert(col, data);
-        self.col_data_state.insert(col, ColDataState::Complete);
-    }
-
-    /// Rebuild a known set of range-backed columns together.
-    ///
-    /// This is the deferred hydration path: when several columns belong to the
-    /// same MixedCbor range, decode the range once into all destination columns.
-    pub(crate) fn rebuild_range_columns_data(&mut self, cols: &FxHashSet<u32>) {
-        let mut columns: FxHashMap<u32, Vec<CellValue>> = FxHashMap::default();
-
-        for &col in cols {
-            let Some(col_id) = self.index_to_col.get(&col).copied() else {
-                self.col_data_state.remove(&col);
-                continue;
-            };
-            let size = self.column_data_size(col, col_id);
-            columns.insert(col, vec![CellValue::Null; size]);
-        }
-
-        for rv in self.range_views.values() {
-            if rv.encoding == PayloadEncoding::None {
-                continue;
-            }
-            rv.decode_range_into_columns(&self.row_to_index, &self.col_to_index, &mut columns);
-        }
-
-        for &col in cols {
-            let Some(col_id) = self.index_to_col.get(&col).copied() else {
-                continue;
-            };
-            let Some(data) = columns.get_mut(&col) else {
-                continue;
-            };
-            self.apply_column_overlays(col, col_id, data);
-        }
-
-        for (col, data) in columns {
-            self.col_data.insert(col, data);
-            self.col_data_state.insert(col, ColDataState::Complete);
-        }
-    }
-
-    fn column_data_size(&self, col: u32, col_id: ColId) -> usize {
-        let mut max_row = self.rows as usize;
-
-        for rv in self.range_views.values() {
-            if rv.encoding == PayloadEncoding::None {
-                continue;
-            }
-            if rv.col_offset_by_id.contains_key(&col_id) {
-                for &row_id in rv.row_offset_by_id.keys() {
-                    if let Some(&row_idx) = self.row_to_index.get(&row_id) {
-                        max_row = max_row.max(row_idx as usize + 1);
-                    }
-                }
-            }
-        }
-
-        for pos in self.pos_to_id.keys() {
-            if pos.col() == col {
-                max_row = max_row.max(pos.row() as usize + 1);
-            }
-        }
-
-        max_row.max(self.rows as usize)
-    }
-
-    fn apply_column_overlays(&self, col: u32, col_id: ColId, data: &mut [CellValue]) {
-        // Layer 2: per-cell overrides overwrite payload values. Imported
-        // ghost identities (Null with no formula) carry metadata/addressability
-        // only and must not erase range payloads. User-authored blank range
-        // overrides are virtual cells and still suppress the payload value.
-        for (pos, cell_id) in &self.pos_to_id {
-            if pos.col() == col
-                && let Some(entry) = self.cells.get(cell_id)
+    pub fn rebuild_column_index(&mut self) {
+        self.column_lengths.clear();
+        self.columns_with_overlays.clear();
+        self.range_row_starts.clear();
+        self.range_columns.clear();
+        for (id, pos) in &self.id_to_pos {
+            if self
+                .cells
+                .get(id)
+                .is_some_and(|entry| !entry.is_ghost() || id.is_virtual())
             {
-                let is_blank_range_override =
-                    cell_id.is_virtual() && entry.value.is_null() && entry.formula.is_none();
-                let should_overlay =
-                    !entry.value.is_null() || entry.formula.is_some() || is_blank_range_override;
-                if !should_overlay {
-                    continue;
-                }
-                let row = pos.row() as usize;
-                if row < data.len() {
-                    data[row] = entry.value.clone();
+                self.columns_with_overlays.insert(pos.col());
+                self.column_lengths
+                    .entry(pos.col())
+                    .and_modify(|len| *len = (*len).max(self.rows as usize))
+                    .or_insert(self.rows as usize);
+            }
+        }
+        for pos in self.generated_values.keys() {
+            self.columns_with_overlays.insert(pos.col());
+            self.column_lengths
+                .entry(pos.col())
+                .and_modify(|len| *len = (*len).max(pos.row() as usize + 1))
+                .or_insert(pos.row() as usize + 1);
+        }
+        for (&col, projections) in &self.projected_columns {
+            self.columns_with_overlays.insert(col);
+            for projection in projections {
+                let end = projection.origin_row as usize + projection.array.rows();
+                self.column_lengths
+                    .entry(col)
+                    .and_modify(|len| *len = (*len).max(end))
+                    .or_insert(end);
+            }
+        }
+        for (id, range) in &self.range_views {
+            if range.encoding == PayloadEncoding::None {
+                continue;
+            }
+            if range.payload_cols != 0
+                && range.row_offset_by_id.len() == range.values.len() / range.payload_cols as usize
+                && let Some((first_id, _)) = range
+                    .row_offset_by_id
+                    .iter()
+                    .find(|(_, offset)| **offset == 0)
+                && let Some(start) = self.row_axis.position_of(self.id, *first_id)
+                && range.row_offset_by_id.iter().all(|(id, offset)| {
+                    self.row_axis.position_of(self.id, *id) == start.checked_add(*offset)
+                })
+            {
+                self.range_row_starts.insert(*id, start);
+            }
+            let rows = range
+                .row_offset_by_id
+                .keys()
+                .filter_map(|id| self.row_axis.position_of(self.id, *id))
+                .max()
+                .map_or(0, |row| row as usize + 1);
+            self.rows = self.rows.max(rows as u32);
+            for col_id in range.col_offset_by_id.keys() {
+                if let Some(col) = self.col_axis.position_of(self.id, *col_id) {
+                    self.cols = self.cols.max(col.saturating_add(1));
+                    self.range_columns.entry(col).or_default().push(*id);
+                    self.column_lengths
+                        .entry(col)
+                        .and_modify(|len| *len = (*len).max(rows))
+                        .or_insert(rows);
                 }
             }
         }
-
-        // Layer 3: RangeView overrides that have explicit CellId entries.
-        for rv in self.range_views.values() {
-            if let Some(&col_offset) = rv.col_offset_by_id.get(&col_id) {
-                let _ = col_offset;
-                for ((row_id, ov_col_id), cell_id) in &rv.overrides {
-                    if *ov_col_id != col_id {
-                        continue;
-                    }
-                    if let Some(entry) = self.cells.get(cell_id)
-                        && let Some(&row_idx) = self.row_to_index.get(row_id)
-                    {
-                        let row = row_idx as usize;
-                        if row < data.len() {
-                            data[row] = entry.value.clone();
-                        }
-                    }
-                }
-            }
+        for ranges in self.range_columns.values_mut() {
+            ranges.sort_by_key(|id| id.as_u128());
+        }
+        let authored_positions: Vec<_> = self
+            .pos_to_id
+            .iter()
+            .filter_map(|(pos, id)| {
+                self.cells
+                    .get(id)
+                    .filter(|entry| !entry.is_ghost() || id.is_virtual())
+                    .map(|_| *pos)
+            })
+            .collect();
+        for pos in authored_positions {
+            self.consume_range_value(pos);
         }
     }
 
@@ -715,15 +744,26 @@ impl SheetMirror {
     /// (ascending) so that callers can merge with higher-RangeId winning on
     /// per-property conflicts.
     pub(crate) fn format_ranges_at(&self, row: u32, col: u32) -> Vec<(RangeId, &CellFormat)> {
-        let mut matches: Vec<(RangeId, &CellFormat)> = self
-            .format_range_spatial_index
-            .query(row, col)
+        self.format_ranges_at_layer(row, col, None)
+    }
+
+    pub(crate) fn format_ranges_at_layer(
+        &self,
+        row: u32,
+        col: u32,
+        layer: Option<FormatRangeLayer>,
+    ) -> Vec<(RangeId, &CellFormat)> {
+        let mut ranges = self.format_range_spatial_index.query(row, col);
+        ranges.retain(|range| layer.is_none_or(|layer| range.layer == layer));
+        ranges.sort_by_key(|range| (range.layer, range.precedence, range.id.as_u128()));
+        ranges
             .into_iter()
-            .filter_map(|r| self.range_format_cache.get(&r.id).map(|fmt| (r.id, fmt)))
-            .collect();
-        // Sort by RangeId ascending so we can merge lower-first, higher-wins.
-        matches.sort_by_key(|(id, _)| id.as_u128());
-        matches
+            .filter_map(|range| {
+                self.range_format_cache
+                    .get(&range.id)
+                    .map(|format| (range.id, format))
+            })
+            .collect()
     }
 
     pub(crate) fn rebuild_format_range_spatial_index(&mut self) {
@@ -774,5 +814,19 @@ impl SheetMirror {
 
     pub(crate) fn col_range_xlsx_style_id_cache(&self) -> &FxHashMap<RangeId, u32> {
         &self.col_range_xlsx_style_id_cache
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ProjectionColumn {
+    pub origin_row: u32,
+    pub origin_col: u32,
+    pub array_col: usize,
+    pub array: std::sync::Arc<value_types::CellArray>,
+}
+
+impl value_types::ValueGrid for SheetMirror {
+    fn value_at(&self, row: u32, col: u32) -> Option<&CellValue> {
+        self.value_at(SheetPos::new(row, col))
     }
 }

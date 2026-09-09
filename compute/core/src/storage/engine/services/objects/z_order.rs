@@ -11,18 +11,8 @@ pub(in crate::storage::engine) fn bring_floating_object_to_front(
     sheet_id: &SheetId,
     object_id: &str,
 ) -> Result<MutationResult, ComputeError> {
-    floating_objects::bring_floating_object_to_front(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        object_id,
-    );
-    let data = floating_objects::get_floating_object_typed(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        object_id,
-    );
+    floating_objects::bring_floating_object_to_front(&mut stores.storage, sheet_id, object_id);
+    let data = floating_objects::get_floating_object_typed(&stores.storage, sheet_id, object_id);
     let mut result = MutationResult::empty();
     result.floating_object_changes.push(FloatingObjectChange {
         sheet_id: sheet_id.to_uuid_string(),
@@ -42,18 +32,8 @@ pub(in crate::storage::engine) fn send_floating_object_to_back(
     sheet_id: &SheetId,
     object_id: &str,
 ) -> Result<MutationResult, ComputeError> {
-    floating_objects::send_floating_object_to_back(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        object_id,
-    );
-    let data = floating_objects::get_floating_object_typed(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        object_id,
-    );
+    floating_objects::send_floating_object_to_back(&mut stores.storage, sheet_id, object_id);
+    let data = floating_objects::get_floating_object_typed(&stores.storage, sheet_id, object_id);
     let mut result = MutationResult::empty();
     result.floating_object_changes.push(FloatingObjectChange {
         sheet_id: sheet_id.to_uuid_string(),
@@ -73,18 +53,8 @@ pub(in crate::storage::engine) fn bring_floating_object_forward(
     sheet_id: &SheetId,
     object_id: &str,
 ) -> Result<MutationResult, ComputeError> {
-    floating_objects::bring_floating_object_forward(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        object_id,
-    );
-    let data = floating_objects::get_floating_object_typed(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        object_id,
-    );
+    floating_objects::bring_floating_object_forward(&mut stores.storage, sheet_id, object_id);
+    let data = floating_objects::get_floating_object_typed(&stores.storage, sheet_id, object_id);
     let mut result = MutationResult::empty();
     result.floating_object_changes.push(FloatingObjectChange {
         sheet_id: sheet_id.to_uuid_string(),
@@ -104,18 +74,8 @@ pub(in crate::storage::engine) fn send_floating_object_backward(
     sheet_id: &SheetId,
     object_id: &str,
 ) -> Result<MutationResult, ComputeError> {
-    floating_objects::send_floating_object_backward(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        object_id,
-    );
-    let data = floating_objects::get_floating_object_typed(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        object_id,
-    );
+    floating_objects::send_floating_object_backward(&mut stores.storage, sheet_id, object_id);
+    let data = floating_objects::get_floating_object_typed(&stores.storage, sheet_id, object_id);
     let mut result = MutationResult::empty();
     result.floating_object_changes.push(FloatingObjectChange {
         sheet_id: sheet_id.to_uuid_string(),
@@ -134,33 +94,21 @@ pub(in crate::storage::engine) fn get_floating_objects_in_z_order(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> Vec<FloatingObject> {
-    floating_objects::get_floating_objects_in_z_order(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-    )
+    floating_objects::get_floating_objects_in_z_order(&stores.storage, sheet_id)
 }
 
 pub(in crate::storage::engine) fn get_floating_object_max_z_index(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> i32 {
-    floating_objects::get_floating_object_max_z_index(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-    )
+    floating_objects::get_floating_object_max_z_index(&stores.storage, sheet_id)
 }
 
 pub(in crate::storage::engine) fn get_floating_object_min_z_index(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> i32 {
-    floating_objects::get_floating_object_min_z_index(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-    )
+    floating_objects::get_floating_object_min_z_index(&stores.storage, sheet_id)
 }
 
 // -------------------------------------------------------------------
@@ -170,21 +118,21 @@ pub(in crate::storage::engine) fn get_max_z_index_all(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> i32 {
-    floating_objects::get_max_z_index_all(stores.storage.doc(), stores.storage.sheets(), sheet_id)
+    floating_objects::get_max_z_index_all(&stores.storage, sheet_id)
 }
 
 pub(in crate::storage::engine) fn get_min_z_index_all(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> i32 {
-    floating_objects::get_min_z_index_all(stores.storage.doc(), stores.storage.sheets(), sheet_id)
+    floating_objects::get_min_z_index_all(&stores.storage, sheet_id)
 }
 
 pub(in crate::storage::engine) fn get_all_in_z_order(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> Vec<ZOrderEntry> {
-    floating_objects::get_all_in_z_order(stores.storage.doc(), stores.storage.sheets(), sheet_id)
+    floating_objects::get_all_in_z_order(&stores.storage, sheet_id)
 }
 
 // -------------------------------------------------------------------

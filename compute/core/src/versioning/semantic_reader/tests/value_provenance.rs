@@ -1,18 +1,15 @@
 use std::sync::Arc;
 
 use cell_types::CellId;
-use compute_document::cell_serde::write_rich_string_to_yrs;
 use compute_document::hex::id_to_hex;
-use compute_document::schema::{KEY_ARRAY_REF, KEY_CELLS, KEY_FORMULA_METADATA};
 use domain_types::RichSharedString;
 use snapshot_types::versioning::{
     SemanticDiagnosticSeverity, SemanticDomainCoverageStatus, SemanticWorkbookState,
     VersionDomainCapabilityState,
 };
 use value_types::{CellControl, CellImage, CellImageSizing, CellValue};
-use yrs::{Any, Map, Out, Transact};
 
-use crate::storage::engine::YrsComputeEngine;
+use crate::storage::engine::ComputeEngine;
 use crate::storage::properties::{self, CellProperties};
 use crate::versioning::{SemanticWorkbookStateReader, coverage_for_states};
 
@@ -23,42 +20,11 @@ fn test_cell_id(id_suffix: u32) -> CellId {
         .expect("test cell id")
 }
 
-fn mutate_raw_cell<F>(engine: &YrsComputeEngine, cell_id: &CellId, mutate: F)
-where
-    F: FnOnce(&yrs::MapRef, &mut yrs::TransactionMut<'_>),
-{
-    let sheet_id = engine.storage().sheet_order()[0];
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let cell_hex = id_to_hex(cell_id.as_u128());
-    let sheets = engine.storage().sheets_ref();
-    let mut txn = engine.storage().doc().transact_mut();
-    let sheet_map = match sheets.get(&txn, &sheet_hex) {
-        Some(Out::YMap(map)) => map,
-        other => panic!("expected sheet map, got {other:?}"),
-    };
-    let cells_map = match sheet_map.get(&txn, KEY_CELLS) {
-        Some(Out::YMap(map)) => map,
-        other => panic!("expected cells map, got {other:?}"),
-    };
-    let cell_map = match cells_map.get(&txn, &cell_hex) {
-        Some(Out::YMap(map)) => map,
-        other => panic!("expected cell map, got {other:?}"),
-    };
-
-    mutate(&cell_map, &mut txn);
-}
-
-fn set_test_cell_properties(engine: &YrsComputeEngine, id_suffix: u32, props: CellProperties) {
+fn set_test_cell_properties(engine: &mut ComputeEngine, id_suffix: u32, props: CellProperties) {
     let sheet_id = engine.storage().sheet_order()[0];
     let cell_id = test_cell_id(id_suffix);
     let cell_hex = id_to_hex(cell_id.as_u128());
-    properties::set_properties(
-        engine.storage().doc(),
-        engine.storage().sheets(),
-        &sheet_id,
-        &cell_hex,
-        &props,
-    );
+    properties::set_properties(engine.storage_mut(), &sheet_id, &cell_hex, &props);
 }
 
 fn assert_ambiguous_value_provenance(
@@ -111,17 +77,22 @@ fn assert_ambiguous_value_provenance(
 
 #[test]
 fn scalar_with_formula_metadata_is_ambiguous_value_provenance() {
-    let (engine, _) =
-        YrsComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::number(7.0))]))
+    let (mut engine, _) =
+        ComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::number(7.0))]))
             .expect("engine");
     let cell_id = test_cell_id(1);
-    mutate_raw_cell(&engine, &cell_id, |cell_map, txn| {
-        cell_map.insert(
-            txn,
-            KEY_FORMULA_METADATA,
-            Any::String(Arc::<str>::from("{\"resultType\":\"number\"}")),
-        );
-    });
+    engine.storage_mut().set_cell_metadata(
+        cell_id,
+        crate::storage::CellMetadata {
+            formula: Some(crate::storage::FormulaMetadata::from(
+                &ooxml_types::worksheet::CellFormula {
+                    ca: true,
+                    ..Default::default()
+                },
+            )),
+            ..Default::default()
+        },
+    );
 
     let state = engine.read_semantic_workbook_state().expect("state");
 
@@ -130,22 +101,22 @@ fn scalar_with_formula_metadata_is_ambiguous_value_provenance() {
 
 #[test]
 fn rich_and_unsupported_value_metadata_are_ambiguous_value_provenance() {
-    let (engine, _) =
-        YrsComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::from("rich"))]))
+    let (mut engine, _) =
+        ComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::from("rich"))]))
             .expect("engine");
     let cell_id = test_cell_id(1);
-    mutate_raw_cell(&engine, &cell_id, |cell_map, txn| {
-        write_rich_string_to_yrs(
-            cell_map,
-            txn,
-            &RichSharedString {
+    engine.storage_mut().set_cell_metadata(
+        cell_id,
+        crate::storage::CellMetadata {
+            rich_string: Some(RichSharedString {
                 plain_text: "rich".to_string(),
                 ..Default::default()
-            },
-        );
-    });
+            }),
+            ..Default::default()
+        },
+    );
     set_test_cell_properties(
-        &engine,
+        &mut engine,
         1,
         CellProperties {
             cell_metadata_index: Some(3),
@@ -166,13 +137,17 @@ fn rich_and_unsupported_value_metadata_are_ambiguous_value_provenance() {
 
 #[test]
 fn array_marker_is_ambiguous_value_provenance() {
-    let (engine, _) =
-        YrsComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::number(1.0))]))
+    let (mut engine, _) =
+        ComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::number(1.0))]))
             .expect("engine");
     let cell_id = test_cell_id(1);
-    mutate_raw_cell(&engine, &cell_id, |cell_map, txn| {
-        cell_map.insert(txn, KEY_ARRAY_REF, Any::String(Arc::<str>::from("A1:B2")));
-    });
+    engine.storage_mut().set_cell_metadata(
+        cell_id,
+        crate::storage::CellMetadata {
+            array_ref: Some("A1:B2".to_string()),
+            ..Default::default()
+        },
+    );
 
     let state = engine.read_semantic_workbook_state().expect("state");
 
@@ -181,11 +156,11 @@ fn array_marker_is_ambiguous_value_provenance() {
 
 #[test]
 fn preservation_sidecars_are_ambiguous_value_provenance() {
-    let (engine, _) =
-        YrsComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::number(123.0))]))
+    let (mut engine, _) =
+        ComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::number(123.0))]))
             .expect("engine");
     set_test_cell_properties(
-        &engine,
+        &mut engine,
         1,
         CellProperties {
             date_lexical_value: Some("2024-01-02".to_string()),
@@ -209,7 +184,7 @@ fn array_control_and_image_values_remain_opaque_blocking() {
         None,
         None,
     );
-    let (engine, _) = YrsComputeEngine::from_snapshot(workbook(vec![
+    let (mut engine, _) = ComputeEngine::from_snapshot(workbook(vec![
         cell(
             1,
             0,

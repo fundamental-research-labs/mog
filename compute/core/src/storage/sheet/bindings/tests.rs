@@ -1,19 +1,14 @@
-use std::sync::Arc;
-
 use super::*;
-use crate::storage::YrsStorage;
-use compute_document::schema::KEY_BINDINGS;
-use compute_document::undo::ORIGIN_USER_EDIT;
+use crate::storage::WorkbookStorage;
 use value_types::ComputeError;
-use yrs::{Any, Map, MapPrelim, Origin, Out, Transact};
 
 // -------------------------------------------------------------------
 // Helpers
 // -------------------------------------------------------------------
 
-/// Create a YrsStorage with one sheet and return (storage, sheet_hex).
-fn storage_with_sheet() -> (YrsStorage, String) {
-    let mut storage = YrsStorage::new();
+/// Create a WorkbookStorage with one sheet and return (storage, sheet_hex).
+fn storage_with_sheet() -> (WorkbookStorage, String) {
+    let mut storage = WorkbookStorage::new();
     let mut mirror = crate::mirror::CellMirror::new();
     let sheet_id = cell_types::SheetId::from_raw(1);
     storage
@@ -23,9 +18,9 @@ fn storage_with_sheet() -> (YrsStorage, String) {
     (storage, sheet_hex)
 }
 
-/// Create a YrsStorage with two sheets and return (storage, sheet1_hex, sheet2_hex).
-fn storage_with_two_sheets() -> (YrsStorage, String, String) {
-    let mut storage = YrsStorage::new();
+/// Create a WorkbookStorage with two sheets and return (storage, sheet1_hex, sheet2_hex).
+fn storage_with_two_sheets() -> (WorkbookStorage, String, String) {
+    let mut storage = WorkbookStorage::new();
     let mut mirror = crate::mirror::CellMirror::new();
     let s1 = cell_types::SheetId::from_raw(1);
     let s2 = cell_types::SheetId::from_raw(2);
@@ -61,13 +56,10 @@ fn sample_mappings() -> Vec<ColumnMapping> {
 
 #[test]
 fn test_create_binding_default_options() {
-    let (storage, sheet_hex) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
+    let (mut storage, sheet_hex) = storage_with_sheet();
 
     let binding = create_binding(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_hex,
         "conn-1",
         sample_mappings(),
@@ -94,9 +86,7 @@ fn test_create_binding_default_options() {
 
 #[test]
 fn test_create_binding_custom_options() {
-    let (storage, sheet_hex) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
+    let (mut storage, sheet_hex) = storage_with_sheet();
 
     let options = CreateBindingOptions {
         auto_generate_rows: Some(false),
@@ -106,8 +96,7 @@ fn test_create_binding_custom_options() {
     };
 
     let binding = create_binding(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_hex,
         "conn-2",
         sample_mappings(),
@@ -128,13 +117,10 @@ fn test_create_binding_custom_options() {
 
 #[test]
 fn test_create_binding_invalid_sheet() {
-    let storage = YrsStorage::new();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
+    let mut storage = WorkbookStorage::new();
 
     let result = create_binding(
-        doc,
-        sheets,
+        &mut storage,
         "nonexistent-sheet",
         "conn-1",
         sample_mappings(),
@@ -158,9 +144,7 @@ fn test_create_binding_invalid_sheet() {
 #[test]
 fn test_get_all_bindings_empty() {
     let (storage, sheet_hex) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
-    let bindings = get_all_bindings(doc, sheets, &sheet_hex);
+    let bindings = get_all_bindings(&storage, &sheet_hex);
     assert!(bindings.is_empty());
 }
 
@@ -170,13 +154,10 @@ fn test_get_all_bindings_empty() {
 
 #[test]
 fn test_get_all_bindings_one() {
-    let (storage, sheet_hex) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
+    let (mut storage, sheet_hex) = storage_with_sheet();
 
     create_binding(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_hex,
         "conn-1",
         sample_mappings(),
@@ -185,7 +166,7 @@ fn test_get_all_bindings_one() {
     )
     .unwrap();
 
-    let bindings = get_all_bindings(doc, sheets, &sheet_hex);
+    let bindings = get_all_bindings(&storage, &sheet_hex);
     assert_eq!(bindings.len(), 1);
     assert_eq!(bindings[0].connection_id, "conn-1");
 }
@@ -196,14 +177,11 @@ fn test_get_all_bindings_one() {
 
 #[test]
 fn test_get_all_bindings_multiple() {
-    let (storage, sheet_hex) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
+    let (mut storage, sheet_hex) = storage_with_sheet();
 
     for i in 0..3 {
         create_binding(
-            doc,
-            sheets,
+            &mut storage,
             &sheet_hex,
             &format!("conn-{}", i),
             sample_mappings(),
@@ -213,7 +191,7 @@ fn test_get_all_bindings_multiple() {
         .unwrap();
     }
 
-    let bindings = get_all_bindings(doc, sheets, &sheet_hex);
+    let bindings = get_all_bindings(&storage, &sheet_hex);
     assert_eq!(bindings.len(), 3);
 }
 
@@ -223,10 +201,8 @@ fn test_get_all_bindings_multiple() {
 
 #[test]
 fn test_get_all_bindings_nonexistent_sheet() {
-    let storage = YrsStorage::new();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
-    let bindings = get_all_bindings(doc, sheets, "no-such-sheet");
+    let storage = WorkbookStorage::new();
+    let bindings = get_all_bindings(&storage, "no-such-sheet");
     assert!(bindings.is_empty());
 }
 
@@ -236,13 +212,10 @@ fn test_get_all_bindings_nonexistent_sheet() {
 
 #[test]
 fn test_get_binding_found() {
-    let (storage, sheet_hex) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
+    let (mut storage, sheet_hex) = storage_with_sheet();
 
     let created = create_binding(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_hex,
         "conn-1",
         sample_mappings(),
@@ -251,7 +224,7 @@ fn test_get_binding_found() {
     )
     .unwrap();
 
-    let binding = get_binding(doc, sheets, &sheet_hex, &created.id);
+    let binding = get_binding(&storage, &sheet_hex, &created.id);
     assert!(binding.is_some());
     let binding = binding.unwrap();
     assert_eq!(binding.id, created.id);
@@ -265,9 +238,7 @@ fn test_get_binding_found() {
 #[test]
 fn test_get_binding_not_found() {
     let (storage, sheet_hex) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
-    let binding = get_binding(doc, sheets, &sheet_hex, "nonexistent-binding");
+    let binding = get_binding(&storage, &sheet_hex, "nonexistent-binding");
     assert!(binding.is_none());
 }
 
@@ -277,14 +248,11 @@ fn test_get_binding_not_found() {
 
 #[test]
 fn test_get_bindings_for_connection() {
-    let (storage, hex1, hex2) = storage_with_two_sheets();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
+    let (mut storage, hex1, hex2) = storage_with_two_sheets();
 
     // Create bindings on both sheets for the same connection
     create_binding(
-        doc,
-        sheets,
+        &mut storage,
         &hex1,
         "shared-conn",
         sample_mappings(),
@@ -294,8 +262,7 @@ fn test_get_bindings_for_connection() {
     .unwrap();
 
     create_binding(
-        doc,
-        sheets,
+        &mut storage,
         &hex2,
         "shared-conn",
         sample_mappings(),
@@ -306,8 +273,7 @@ fn test_get_bindings_for_connection() {
 
     // Also create a binding for a different connection
     create_binding(
-        doc,
-        sheets,
+        &mut storage,
         &hex1,
         "other-conn",
         sample_mappings(),
@@ -316,7 +282,7 @@ fn test_get_bindings_for_connection() {
     )
     .unwrap();
 
-    let bindings = get_bindings_for_connection(doc, sheets, "shared-conn");
+    let bindings = get_bindings_for_connection(&storage, "shared-conn");
     assert_eq!(bindings.len(), 2);
     assert!(bindings.iter().all(|b| b.connection_id == "shared-conn"));
 }
@@ -327,13 +293,10 @@ fn test_get_bindings_for_connection() {
 
 #[test]
 fn test_get_bindings_for_connection_none() {
-    let (storage, sheet_hex) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
+    let (mut storage, sheet_hex) = storage_with_sheet();
 
     create_binding(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_hex,
         "conn-1",
         sample_mappings(),
@@ -342,7 +305,7 @@ fn test_get_bindings_for_connection_none() {
     )
     .unwrap();
 
-    let bindings = get_bindings_for_connection(doc, sheets, "nonexistent-conn");
+    let bindings = get_bindings_for_connection(&storage, "nonexistent-conn");
     assert!(bindings.is_empty());
 }
 
@@ -352,13 +315,10 @@ fn test_get_bindings_for_connection_none() {
 
 #[test]
 fn test_update_binding() {
-    let (storage, sheet_hex) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
+    let (mut storage, sheet_hex) = storage_with_sheet();
 
     let created = create_binding(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_hex,
         "conn-1",
         sample_mappings(),
@@ -368,8 +328,7 @@ fn test_update_binding() {
     .unwrap();
 
     let updated = update_binding(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_hex,
         &created.id,
         UpdateBindingFields {
@@ -397,13 +356,10 @@ fn test_update_binding() {
 
 #[test]
 fn test_update_binding_column_mappings() {
-    let (storage, sheet_hex) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
+    let (mut storage, sheet_hex) = storage_with_sheet();
 
     let created = create_binding(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_hex,
         "conn-1",
         sample_mappings(),
@@ -420,8 +376,7 @@ fn test_update_binding_column_mappings() {
     }];
 
     let updated = update_binding(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_hex,
         &created.id,
         UpdateBindingFields {
@@ -442,13 +397,10 @@ fn test_update_binding_column_mappings() {
 
 #[test]
 fn test_update_binding_not_found() {
-    let (storage, sheet_hex) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
+    let (mut storage, sheet_hex) = storage_with_sheet();
 
     let result = update_binding(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_hex,
         "nonexistent",
         UpdateBindingFields {
@@ -466,13 +418,10 @@ fn test_update_binding_not_found() {
 
 #[test]
 fn test_update_refresh_metadata() {
-    let (storage, sheet_hex) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
+    let (mut storage, sheet_hex) = storage_with_sheet();
 
     let created = create_binding(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_hex,
         "conn-1",
         sample_mappings(),
@@ -484,9 +433,9 @@ fn test_update_refresh_metadata() {
     assert!(created.last_refresh.is_none());
     assert!(created.last_row_count.is_none());
 
-    update_refresh_metadata(doc, sheets, &sheet_hex, &created.id, 1700000000000, 42);
+    update_refresh_metadata(&mut storage, &sheet_hex, &created.id, 1700000000000, 42);
 
-    let binding = get_binding(doc, sheets, &sheet_hex, &created.id).unwrap();
+    let binding = get_binding(&storage, &sheet_hex, &created.id).unwrap();
     assert_eq!(binding.last_refresh, Some(1700000000000));
     assert_eq!(binding.last_row_count, Some(42));
 }
@@ -497,11 +446,9 @@ fn test_update_refresh_metadata() {
 
 #[test]
 fn test_update_refresh_metadata_nonexistent() {
-    let (storage, sheet_hex) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
+    let (mut storage, sheet_hex) = storage_with_sheet();
     // Should not panic
-    update_refresh_metadata(doc, sheets, &sheet_hex, "nonexistent", 123, 0);
+    update_refresh_metadata(&mut storage, &sheet_hex, "nonexistent", 123, 0);
 }
 
 // -------------------------------------------------------------------
@@ -510,13 +457,10 @@ fn test_update_refresh_metadata_nonexistent() {
 
 #[test]
 fn test_remove_binding_found() {
-    let (storage, sheet_hex) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
+    let (mut storage, sheet_hex) = storage_with_sheet();
 
     let created = create_binding(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_hex,
         "conn-1",
         sample_mappings(),
@@ -525,13 +469,13 @@ fn test_remove_binding_found() {
     )
     .unwrap();
 
-    let removed = remove_binding(doc, sheets, &sheet_hex, &created.id);
+    let removed = remove_binding(&mut storage, &sheet_hex, &created.id);
     assert!(removed);
 
     // Verify it's gone
-    let binding = get_binding(doc, sheets, &sheet_hex, &created.id);
+    let binding = get_binding(&storage, &sheet_hex, &created.id);
     assert!(binding.is_none());
-    assert!(get_all_bindings(doc, sheets, &sheet_hex).is_empty());
+    assert!(get_all_bindings(&storage, &sheet_hex).is_empty());
 }
 
 // -------------------------------------------------------------------
@@ -540,10 +484,8 @@ fn test_remove_binding_found() {
 
 #[test]
 fn test_remove_binding_not_found() {
-    let (storage, sheet_hex) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
-    let removed = remove_binding(doc, sheets, &sheet_hex, "nonexistent");
+    let (mut storage, sheet_hex) = storage_with_sheet();
+    let removed = remove_binding(&mut storage, &sheet_hex, "nonexistent");
     assert!(!removed);
 }
 
@@ -553,10 +495,8 @@ fn test_remove_binding_not_found() {
 
 #[test]
 fn test_remove_binding_nonexistent_sheet() {
-    let storage = YrsStorage::new();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
-    let removed = remove_binding(doc, sheets, "no-sheet", "no-binding");
+    let mut storage = WorkbookStorage::new();
+    let removed = remove_binding(&mut storage, "no-sheet", "no-binding");
     assert!(!removed);
 }
 
@@ -566,14 +506,11 @@ fn test_remove_binding_nonexistent_sheet() {
 
 #[test]
 fn test_remove_bindings_for_connection() {
-    let (storage, hex1, hex2) = storage_with_two_sheets();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
+    let (mut storage, hex1, hex2) = storage_with_two_sheets();
 
     // Create 2 bindings for "shared-conn" and 1 for "other-conn"
     create_binding(
-        doc,
-        sheets,
+        &mut storage,
         &hex1,
         "shared-conn",
         sample_mappings(),
@@ -583,8 +520,7 @@ fn test_remove_bindings_for_connection() {
     .unwrap();
 
     create_binding(
-        doc,
-        sheets,
+        &mut storage,
         &hex2,
         "shared-conn",
         sample_mappings(),
@@ -594,8 +530,7 @@ fn test_remove_bindings_for_connection() {
     .unwrap();
 
     create_binding(
-        doc,
-        sheets,
+        &mut storage,
         &hex1,
         "other-conn",
         sample_mappings(),
@@ -604,14 +539,14 @@ fn test_remove_bindings_for_connection() {
     )
     .unwrap();
 
-    let removed_count = remove_bindings_for_connection(doc, sheets, "shared-conn");
+    let removed_count = remove_bindings_for_connection(&mut storage, "shared-conn");
     assert_eq!(removed_count, 2);
 
     // Verify shared-conn bindings are gone
-    assert!(get_bindings_for_connection(doc, sheets, "shared-conn").is_empty());
+    assert!(get_bindings_for_connection(&storage, "shared-conn").is_empty());
 
     // other-conn still has its binding
-    let remaining = get_all_bindings(doc, sheets, &hex1);
+    let remaining = get_all_bindings(&storage, &hex1);
     assert_eq!(remaining.len(), 1);
     assert_eq!(remaining[0].connection_id, "other-conn");
 }
@@ -622,13 +557,10 @@ fn test_remove_bindings_for_connection() {
 
 #[test]
 fn test_remove_bindings_for_connection_none() {
-    let (storage, sheet_hex) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
+    let (mut storage, sheet_hex) = storage_with_sheet();
 
     create_binding(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_hex,
         "conn-1",
         sample_mappings(),
@@ -637,11 +569,11 @@ fn test_remove_bindings_for_connection_none() {
     )
     .unwrap();
 
-    let removed_count = remove_bindings_for_connection(doc, sheets, "nonexistent-conn");
+    let removed_count = remove_bindings_for_connection(&mut storage, "nonexistent-conn");
     assert_eq!(removed_count, 0);
 
     // Original binding still exists
-    assert_eq!(get_all_bindings(doc, sheets, &sheet_hex).len(), 1);
+    assert_eq!(get_all_bindings(&storage, &sheet_hex).len(), 1);
 }
 
 // -------------------------------------------------------------------
@@ -650,13 +582,10 @@ fn test_remove_bindings_for_connection_none() {
 
 #[test]
 fn test_create_binding_empty_mappings() {
-    let (storage, sheet_hex) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
+    let (mut storage, sheet_hex) = storage_with_sheet();
 
     let binding = create_binding(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_hex,
         "conn-1",
         vec![],
@@ -668,7 +597,7 @@ fn test_create_binding_empty_mappings() {
     assert!(binding.column_mappings.is_empty());
 
     // Should still be retrievable
-    let fetched = get_binding(doc, sheets, &sheet_hex, &binding.id).unwrap();
+    let fetched = get_binding(&storage, &sheet_hex, &binding.id).unwrap();
     assert!(fetched.column_mappings.is_empty());
 }
 
@@ -678,13 +607,10 @@ fn test_create_binding_empty_mappings() {
 
 #[test]
 fn test_unique_binding_ids() {
-    let (storage, sheet_hex) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
+    let (mut storage, sheet_hex) = storage_with_sheet();
 
     let b1 = create_binding(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_hex,
         "conn-1",
         sample_mappings(),
@@ -694,8 +620,7 @@ fn test_unique_binding_ids() {
     .unwrap();
 
     let b2 = create_binding(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_hex,
         "conn-2",
         sample_mappings(),
@@ -767,13 +692,10 @@ fn test_column_mapping_serde_roundtrip() {
 
 #[test]
 fn test_create_remove_create_again() {
-    let (storage, sheet_hex) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
+    let (mut storage, sheet_hex) = storage_with_sheet();
 
     let b1 = create_binding(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_hex,
         "conn-1",
         sample_mappings(),
@@ -782,12 +704,11 @@ fn test_create_remove_create_again() {
     )
     .unwrap();
 
-    assert!(remove_binding(doc, sheets, &sheet_hex, &b1.id));
-    assert!(get_all_bindings(doc, sheets, &sheet_hex).is_empty());
+    assert!(remove_binding(&mut storage, &sheet_hex, &b1.id));
+    assert!(get_all_bindings(&storage, &sheet_hex).is_empty());
 
     let b2 = create_binding(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_hex,
         "conn-1",
         sample_mappings(),
@@ -797,7 +718,7 @@ fn test_create_remove_create_again() {
     .unwrap();
 
     assert_ne!(b1.id, b2.id);
-    assert_eq!(get_all_bindings(doc, sheets, &sheet_hex).len(), 1);
+    assert_eq!(get_all_bindings(&storage, &sheet_hex).len(), 1);
 }
 
 // -------------------------------------------------------------------
@@ -806,13 +727,10 @@ fn test_create_remove_create_again() {
 
 #[test]
 fn test_update_preserves_immutable_fields() {
-    let (storage, sheet_hex) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
+    let (mut storage, sheet_hex) = storage_with_sheet();
 
     let created = create_binding(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_hex,
         "conn-1",
         sample_mappings(),
@@ -822,8 +740,7 @@ fn test_update_preserves_immutable_fields() {
     .unwrap();
 
     let updated = update_binding(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_hex,
         &created.id,
         UpdateBindingFields {
@@ -845,13 +762,10 @@ fn test_update_preserves_immutable_fields() {
 
 #[test]
 fn test_update_refresh_metadata_preserves_fields() {
-    let (storage, sheet_hex) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
+    let (mut storage, sheet_hex) = storage_with_sheet();
 
     let created = create_binding(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_hex,
         "conn-1",
         sample_mappings(),
@@ -865,9 +779,9 @@ fn test_update_refresh_metadata_preserves_fields() {
     )
     .unwrap();
 
-    update_refresh_metadata(doc, sheets, &sheet_hex, &created.id, 999, 50);
+    update_refresh_metadata(&mut storage, &sheet_hex, &created.id, 999, 50);
 
-    let binding = get_binding(doc, sheets, &sheet_hex, &created.id).unwrap();
+    let binding = get_binding(&storage, &sheet_hex, &created.id).unwrap();
     // Refresh metadata updated
     assert_eq!(binding.last_refresh, Some(999));
     assert_eq!(binding.last_row_count, Some(50));
@@ -886,10 +800,8 @@ fn test_update_refresh_metadata_preserves_fields() {
 
 #[test]
 fn test_get_binding_nonexistent_sheet() {
-    let storage = YrsStorage::new();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
-    let binding = get_binding(doc, sheets, "no-sheet", "no-binding");
+    let storage = WorkbookStorage::new();
+    let binding = get_binding(&storage, "no-sheet", "no-binding");
     assert!(binding.is_none());
 }
 
@@ -899,67 +811,7 @@ fn test_get_binding_nonexistent_sheet() {
 
 #[test]
 fn test_remove_bindings_for_connection_empty_storage() {
-    let storage = YrsStorage::new();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
-    let count = remove_bindings_for_connection(doc, sheets, "some-conn");
+    let mut storage = WorkbookStorage::new();
+    let count = remove_bindings_for_connection(&mut storage, "some-conn");
     assert_eq!(count, 0);
-}
-
-#[test]
-fn test_malformed_binding_values_are_skipped() {
-    let (storage, sheet_hex) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
-
-    {
-        let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-        let sheet_map = match sheets.get(&txn, sheet_hex.as_str()).unwrap() {
-            Out::YMap(m) => m,
-            _ => panic!("sheet should be a map"),
-        };
-        let bindings_map = match sheet_map.get(&txn, KEY_BINDINGS).unwrap() {
-            Out::YMap(m) => m,
-            _ => panic!("bindings should be a map"),
-        };
-
-        bindings_map.insert(&mut txn, "not-a-map", Any::Bool(true));
-        bindings_map.insert(
-            &mut txn,
-            "missing-id",
-            MapPrelim::from([(
-                "connectionId",
-                Any::String(Arc::from("conn-with-missing-id")),
-            )]),
-        );
-    }
-
-    assert!(get_all_bindings(doc, sheets, &sheet_hex).is_empty());
-    assert!(get_binding(doc, sheets, &sheet_hex, "not-a-map").is_none());
-    assert!(get_binding(doc, sheets, &sheet_hex, "missing-id").is_none());
-    assert!(get_bindings_for_connection(doc, sheets, "conn-with-missing-id").is_empty());
-    assert_eq!(
-        remove_bindings_for_connection(doc, sheets, "conn-with-missing-id"),
-        0
-    );
-}
-
-#[test]
-fn test_connection_scans_skip_non_map_shapes() {
-    let storage = YrsStorage::new();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
-
-    {
-        let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-        sheets.insert(&mut txn, "not-a-sheet-map", Any::Bool(true));
-        sheets.insert(
-            &mut txn,
-            "sheet-with-non-map-bindings",
-            MapPrelim::from([(KEY_BINDINGS, Any::Bool(true))]),
-        );
-    }
-
-    assert!(get_bindings_for_connection(doc, sheets, "conn-1").is_empty());
-    assert_eq!(remove_bindings_for_connection(doc, sheets, "conn-1"), 0);
 }

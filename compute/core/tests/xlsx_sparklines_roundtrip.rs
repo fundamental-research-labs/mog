@@ -1,4 +1,4 @@
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use domain_types::{
     CellData, EmptyCellDisplay, ParseOutput, SheetData, SheetDimensions, Sparkline,
     SparklineAxisSettings, SparklineCellAddress, SparklineDataRange, SparklineGroup, SparklineType,
@@ -13,7 +13,7 @@ fn deferred_xlsx_import_preserves_sparkline_theme_colors() {
         .expect("sparkline parse output should write");
 
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(WorkbookSnapshot::default()).expect("blank engine");
+        ComputeEngine::from_snapshot(WorkbookSnapshot::default()).expect("blank engine");
     engine
         .import_from_xlsx_bytes_deferred(&xlsx)
         .expect("deferred XLSX import should accept theme sparkline colors");

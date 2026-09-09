@@ -3,7 +3,6 @@
 use super::super::*;
 use super::helpers::*;
 use cell_types::SheetPos;
-use compute_document::schema::KEY_SLICERS;
 use domain_types::{
     ParseOutput, SheetData, SheetDimensions,
     domain::filter::{ColumnFilter, FilterCapability, FilterKind, FilterMetadataOwnerPath},
@@ -20,7 +19,6 @@ use formula_types::StructureChange;
 use ooxml_types::slicers::{SlicerCacheDef, SlicerDef, SlicerSortOrder, TableSlicerCache};
 use std::sync::Arc;
 use value_types::CellValue;
-use yrs::{Map, Transact};
 
 fn archive_entry_names(bytes: &[u8]) -> Vec<String> {
     xlsx_parser::zip::XlsxArchive::new(bytes)
@@ -42,7 +40,7 @@ fn text_cell(row: u32, col: u32, value: &str) -> domain_types::CellData {
 
 #[test]
 fn runtime_created_range_backed_table_exports_to_xlsx_package() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
 
     engine
@@ -147,7 +145,7 @@ fn runtime_created_range_backed_table_exports_to_xlsx_package() {
 
 #[test]
 fn table_row_lifecycle_persists_structurally_shifted_range_for_xlsx_export() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
 
     engine
@@ -229,7 +227,7 @@ fn table_row_lifecycle_persists_structurally_shifted_range_for_xlsx_export() {
 
 #[test]
 fn table_column_add_materializes_header_cell_after_structural_insert() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
 
     engine
@@ -286,7 +284,7 @@ fn table_column_add_materializes_header_cell_after_structural_insert() {
 
 #[test]
 fn runtime_created_table_exports_totals_row_metadata_from_cells() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
 
     engine
@@ -471,7 +469,7 @@ fn xlsx_import_export_preserves_table_identity_schema_and_supported_filter_proje
         ..Default::default()
     };
     let input_bytes = xlsx_api::export_from_parse_output(&input).expect("write input xlsx");
-    let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&input_bytes).expect("from_xlsx_bytes");
+    let (engine, _) = ComputeEngine::from_xlsx_bytes(&input_bytes).expect("from_xlsx_bytes");
     let sheet_id =
         cell_types::SheetId::from_uuid_str(&engine.get_all_sheet_ids()[0]).expect("sheet id");
 
@@ -539,8 +537,7 @@ fn xlsx_import_export_preserves_table_identity_schema_and_supported_filter_proje
     );
 
     let binding = crate::storage::sheet::filters::get_filter_metadata_binding(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
+        &engine.stores.storage,
         &sheet_id,
         &runtime_filter.id,
     )
@@ -796,7 +793,7 @@ fn imported_table_export_uses_one_projection_for_parts_slicers_and_query_tables(
         }],
         ..Default::default()
     };
-    let engine = engine_from_parse_output_normal(&input);
+    let mut engine = engine_from_parse_output_normal(&input);
     let sheet_id =
         cell_types::SheetId::from_uuid_str(&engine.get_all_sheet_ids()[0]).expect("sheet id");
     let table = engine
@@ -806,19 +803,14 @@ fn imported_table_export_uses_one_projection_for_parts_slicers_and_query_tables(
         .expect("hydrated People table");
     let stable_table_id = table.id.clone();
     let stable_region_column_id = table.columns[1].id.clone();
-    let stored_slicer = {
-        let txn = engine.stores.storage.doc().transact();
-        let slicers_map = match engine.stores.storage.workbook_map().get(&txn, KEY_SLICERS) {
-            Some(yrs::Out::YMap(map)) => map,
-            _ => panic!("slicers map should be hydrated"),
-        };
-        slicers_map
-            .iter(&txn)
-            .find_map(|(_, value)| {
-                domain_types::yrs_schema::slicer::from_yrs_out(value.clone(), &txn)
-            })
-            .expect("stored table-backed slicer")
-    };
+    let stored_slicer = engine
+        .stores
+        .storage
+        .metadata
+        .slicers
+        .values()
+        .next()
+        .expect("stored table-backed slicer");
     assert!(
         matches!(stored_slicer.source, SlicerSource::Table { ref table_id, ref column_cell_id }
             if table_id == &stable_table_id && column_cell_id == &stable_region_column_id)
@@ -900,4 +892,38 @@ fn imported_table_export_uses_one_projection_for_parts_slicers_and_query_tables(
             && slicer_cache_xml.contains(r#"column="1""#),
         "{slicer_cache_xml}"
     );
+
+    let source_slicer = engine.get_all_slicers(&sheet_id).pop().unwrap();
+    let (copy_id, _) = engine.copy_sheet(&sheet_id, "Copied").unwrap();
+    let copy_id = cell_types::SheetId::from_uuid_str(&copy_id).unwrap();
+    let copied_table = engine.get_all_tables_in_sheet(&copy_id).pop().unwrap();
+    let copied_slicer = engine.get_all_slicers(&copy_id).pop().unwrap();
+    assert_ne!(copied_slicer.id, source_slicer.id);
+    assert_ne!(copied_slicer.cache_name, source_slicer.cache_name);
+    assert_eq!(copied_slicer.caption, source_slicer.caption);
+    assert_eq!(copied_slicer.selected_values, source_slicer.selected_values);
+    assert!(
+        matches!(&copied_slicer.source, SlicerSource::Table { table_id, column_cell_id }
+        if table_id == &copied_table.id && column_cell_id == &copied_table.columns[1].id)
+    );
+    let exported = engine.export_to_parse_output().unwrap().parse_output;
+    let copied_sheet = exported
+        .sheets
+        .iter()
+        .find(|sheet| sheet.name == "Copied")
+        .unwrap();
+    let copied_cache = exported
+        .slicer_caches
+        .iter()
+        .find(|cache| Some(&cache.name) == copied_slicer.cache_name.as_ref())
+        .unwrap();
+    assert_eq!(
+        copied_cache.table_slicer_cache.as_ref().unwrap().table_id,
+        copied_sheet.tables[0].id
+    );
+    let out = engine.export_to_xlsx_bytes().unwrap();
+    let (reloaded, _) = ComputeEngine::from_xlsx_bytes(&out).unwrap();
+    assert_eq!(reloaded.get_all_slicers_workbook().len(), 2);
+    engine.delete_sheet(&copy_id).unwrap();
+    assert_eq!(engine.get_all_slicers_workbook(), vec![source_slicer]);
 }

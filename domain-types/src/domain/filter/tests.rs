@@ -60,7 +60,7 @@ fn column_filter_dynamic_roundtrip() {
 
 #[test]
 fn column_filter_color_roundtrip() {
-    // Note: `ColumnFilter::Color` is the runtime (Yrs-stored) shape, not
+    // Note: `ColumnFilter::Color` is the runtime shape, not
     // the OOXML-typed `OoxmlFilterType::Color`. The `color` token here
     // is a free-form string the UI assigns; typed OOXML preservation did not migrate
     // this runtime shape (see `ooxml_filter_type_to_column_filter` for

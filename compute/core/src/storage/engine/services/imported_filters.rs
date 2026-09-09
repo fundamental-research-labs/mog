@@ -1,15 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::storage::engine::history::metadata::{capture_row, capture_sheet_field};
 use cell_types::{CellId, SheetId, SheetPos};
 use compute_document::hex::{hex_to_id, id_to_hex};
-use compute_document::schema::KEY_PROPERTIES;
-use compute_document::undo::{ORIGIN_BOOTSTRAP, ORIGIN_USER_EDIT};
 use domain_types::domain::filter::{
     AutoFilter, FilterColumn, OoxmlFilterType, column_filter_to_ooxml_filter_type,
 };
-use domain_types::yrs_schema;
 use value_types::CellValue;
-use yrs::{Map, MapPrelim, Origin, Out, Transact};
 
 use crate::mirror::CellMirror;
 use crate::storage::engine::filter_import_diagnostics::{
@@ -77,24 +74,18 @@ pub(in crate::storage::engine) fn normalize_imported_auto_filter_visibility_for_
         );
     }
 
-    let imported_filters =
-        filters::get_filters_in_sheet(stores.storage.doc(), stores.storage.sheets(), sheet_id)
-            .into_iter()
-            .filter(|filter| {
-                matches!(
-                    filter.filter_kind,
-                    filters::FilterKind::AutoFilter | filters::FilterKind::TableFilter
-                ) && !filter.column_filters.is_empty()
-            })
-            .collect::<Vec<_>>();
+    let imported_filters = filters::get_filters_in_sheet(&stores.storage, sheet_id)
+        .into_iter()
+        .filter(|filter| {
+            matches!(
+                filter.filter_kind,
+                filters::FilterKind::AutoFilter | filters::FilterKind::TableFilter
+            ) && !filter.column_filters.is_empty()
+        })
+        .collect::<Vec<_>>();
 
     for filter in imported_filters {
-        let binding = filters::get_filter_metadata_binding(
-            stores.storage.doc(),
-            stores.storage.sheets(),
-            sheet_id,
-            &filter.id,
-        );
+        let binding = filters::get_filter_metadata_binding(&stores.storage, sheet_id, &filter.id);
         if let Some(binding) = binding.as_ref() {
             if binding.shell.capability == filters::FilterCapability::Unsupported {
                 if filter.filter_kind == filters::FilterKind::AutoFilter
@@ -148,8 +139,7 @@ pub(in crate::storage::engine) fn normalize_imported_auto_filter_visibility_for_
             let mut visibility_profile =
                 crate::xlsx_profile::PhaseTimer::new("import", "normalize_filter_hidden_rows");
             let transitions = dimensions::normalize_imported_filter_hidden_rows(
-                stores.storage.doc(),
-                stores.storage.sheets(),
+                &mut stores.storage,
                 sheet_id,
                 &filter.id,
                 &rows_excluded,
@@ -170,56 +160,33 @@ pub(in crate::storage::engine) fn normalize_imported_auto_filter_visibility_for_
         sync_mirror_rows_from_effective_hidden(stores, mirror, sheet_id, &rows_excluded);
         sync_mirror_rows_from_effective_hidden(stores, mirror, sheet_id, &rows_included);
     }
-
-    let transitions = dimensions::finalize_imported_hidden_row_cache(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        stores.grid_indexes.get(sheet_id),
-    );
-    apply_visibility_transitions(stores, mirror, sheet_id, &transitions);
 }
 
 fn remove_filter_only_rows_from_explicit_hidden_metadata(
-    stores: &EngineStores,
+    stores: &mut EngineStores,
     sheet_id: &SheetId,
     rows: impl IntoIterator<Item = u32>,
 ) {
-    let rows_to_remove: BTreeSet<u32> = rows
+    let grid = stores.grid_indexes.get(sheet_id);
+    let ids: Vec<_> = rows
         .into_iter()
         .filter(|row| {
-            let ownership = dimensions::get_row_visibility_ownership(
-                stores.storage.doc(),
-                stores.storage.sheets(),
-                sheet_id,
-                *row,
-                stores.grid_indexes.get(sheet_id),
-            );
-            !ownership.manual && !ownership.structural && !ownership.filter_owner_ids.is_empty()
+            let owner =
+                dimensions::get_row_visibility_ownership(&stores.storage, sheet_id, *row, grid);
+            !owner.manual && !owner.structural && !owner.filter_owner_ids.is_empty()
         })
+        .filter_map(|row| grid?.row_id(row))
         .collect();
-    if rows_to_remove.is_empty() {
-        return;
+    for id in &ids {
+        capture_row(&stores.storage, *sheet_id, *id);
     }
-
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let mut txn = stores
-        .storage
-        .doc()
-        .transact_mut_with(Origin::from(ORIGIN_BOOTSTRAP));
-    let Some(Out::YMap(sheet_map)) = stores.storage.sheets().get(&txn, &sheet_hex) else {
-        return;
-    };
-    let Some(Out::YMap(meta_map)) = sheet_map.get(&txn, KEY_PROPERTIES) else {
-        return;
-    };
-    let explicit_hidden: Vec<u32> =
-        yrs_schema::helpers::read_json_vec(&meta_map, &txn, "rowExplicitHidden");
-    let retained = explicit_hidden
-        .into_iter()
-        .filter(|row| !rows_to_remove.contains(row))
-        .collect::<Vec<_>>();
-    yrs_schema::helpers::write_json_vec(&meta_map, &mut txn, "rowExplicitHidden", &retained);
+    if let Some(meta) = stores.storage.sheet_metadata.get_mut(sheet_id) {
+        for id in ids {
+            if let Some(row) = meta.dimensions.rows.get_mut(&id) {
+                row.explicit_hidden = false;
+            }
+        }
+    }
 }
 
 pub(in crate::storage::engine) fn sync_imported_auto_filter_metadata_from_runtime(
@@ -231,12 +198,7 @@ pub(in crate::storage::engine) fn sync_imported_auto_filter_metadata_from_runtim
     let Some(mut metadata) = read_imported_auto_filter_metadata(stores, sheet_id) else {
         return;
     };
-    let Some(filter_state) = filters::get_filter(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        filter_id,
-    ) else {
+    let Some(filter_state) = filters::get_filter(&stores.storage, sheet_id, filter_id) else {
         return;
     };
     if filter_state.filter_kind != filters::FilterKind::AutoFilter {
@@ -253,20 +215,8 @@ pub(in crate::storage::engine) fn sync_imported_auto_filter_metadata_from_runtim
 
     merge_runtime_auto_filter_into_imported_metadata(&mut metadata, runtime_auto_filter);
     write_imported_auto_filter_metadata(stores, sheet_id, &metadata);
-    if let Some(filter_state) = filters::get_filter(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        filter_id,
-    ) {
-        upsert_sheet_auto_filter_binding(
-            stores,
-            mirror,
-            sheet_id,
-            &filter_state,
-            Some(&metadata),
-            false,
-        );
+    if let Some(filter_state) = filters::get_filter(&stores.storage, sheet_id, filter_id) {
+        upsert_sheet_auto_filter_binding(stores, mirror, sheet_id, &filter_state, Some(&metadata));
     }
 }
 
@@ -320,12 +270,7 @@ fn sync_imported_auto_filter_column_metadata(
     let Some(mut metadata) = read_imported_auto_filter_metadata(stores, sheet_id) else {
         return;
     };
-    let Some(filter_state) = filters::get_filter(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        filter_id,
-    ) else {
+    let Some(filter_state) = filters::get_filter(&stores.storage, sheet_id, filter_id) else {
         return;
     };
     if filter_state.filter_kind != filters::FilterKind::AutoFilter {
@@ -367,18 +312,11 @@ fn sync_imported_auto_filter_column_metadata(
 
     replace_imported_column_filter_type(&mut metadata, relative_col, filter_type);
     write_imported_auto_filter_metadata(stores, sheet_id, &metadata);
-    upsert_sheet_auto_filter_binding(
-        stores,
-        mirror,
-        sheet_id,
-        &filter_state,
-        Some(&metadata),
-        false,
-    );
+    upsert_sheet_auto_filter_binding(stores, mirror, sheet_id, &filter_state, Some(&metadata));
 }
 
 pub(in crate::storage::engine) fn delete_imported_auto_filter_metadata(
-    stores: &EngineStores,
+    stores: &mut EngineStores,
     sheet_id: &SheetId,
     binding: Option<&filters::FilterMetadataBinding>,
 ) {
@@ -392,36 +330,22 @@ pub(in crate::storage::engine) fn delete_imported_auto_filter_metadata(
         }
     }
 
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let mut txn = stores
-        .storage
-        .doc()
-        .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let Some(Out::YMap(sheet_map)) = stores.storage.sheets().get(&txn, &sheet_hex) else {
-        return;
-    };
-    let Some(Out::YMap(meta_map)) = sheet_map.get(&txn, KEY_PROPERTIES) else {
-        return;
-    };
-    meta_map.remove(&mut txn, "autoFilter");
+    capture_sheet_field!(stores.storage, *sheet_id, auto_filter);
+    if let Some(metadata) = stores.storage.sheet_metadata.get_mut(sheet_id) {
+        metadata.auto_filter = None;
+    }
 }
 
 pub(in crate::storage::engine) fn read_imported_auto_filter_metadata(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> Option<AutoFilter> {
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let txn = stores.storage.doc().transact();
-    let Some(Out::YMap(sheet_map)) = stores.storage.sheets().get(&txn, &sheet_hex) else {
-        return None;
-    };
-    let Some(Out::YMap(meta_map)) = sheet_map.get(&txn, KEY_PROPERTIES) else {
-        return None;
-    };
-    let Some(Out::YMap(af_map)) = meta_map.get(&txn, "autoFilter") else {
-        return None;
-    };
-    yrs_schema::auto_filter::from_yrs_map(&af_map, &txn)
+    stores
+        .storage
+        .sheet_metadata
+        .get(sheet_id)?
+        .auto_filter
+        .clone()
 }
 
 pub(in crate::storage::engine) fn upsert_sheet_auto_filter_bindings_for_sheet(
@@ -430,20 +354,12 @@ pub(in crate::storage::engine) fn upsert_sheet_auto_filter_bindings_for_sheet(
     sheet_id: &SheetId,
     imported_auto_filter: Option<&AutoFilter>,
 ) {
-    let filters =
-        filters::get_filters_in_sheet(stores.storage.doc(), stores.storage.sheets(), sheet_id);
+    let filters = filters::get_filters_in_sheet(&stores.storage, sheet_id);
     for filter in filters
         .iter()
         .filter(|filter| filter.filter_kind == filters::FilterKind::AutoFilter)
     {
-        upsert_sheet_auto_filter_binding(
-            stores,
-            mirror,
-            sheet_id,
-            filter,
-            imported_auto_filter,
-            imported_auto_filter.is_some(),
-        );
+        upsert_sheet_auto_filter_binding(stores, mirror, sheet_id, filter, imported_auto_filter);
     }
 }
 
@@ -453,7 +369,6 @@ pub(in crate::storage::engine) fn upsert_sheet_auto_filter_binding(
     sheet_id: &SheetId,
     filter: &filters::FilterState,
     imported_auto_filter: Option<&AutoFilter>,
-    import_origin: bool,
 ) {
     if filter.filter_kind != filters::FilterKind::AutoFilter {
         return;
@@ -550,33 +465,12 @@ pub(in crate::storage::engine) fn upsert_sheet_auto_filter_binding(
         source_fingerprint: fingerprint,
     };
 
-    let origin = if import_origin {
-        ORIGIN_BOOTSTRAP
-    } else {
-        ORIGIN_USER_EDIT
-    };
-    filters::delete_stale_filter_metadata_bindings_for_source_key_with_origin(
-        stores.storage.doc(),
-        stores.storage.sheets(),
+    filters::delete_stale_filter_metadata_bindings_for_source_key(
+        &mut stores.storage,
         sheet_id,
         &binding,
-        origin,
     );
-    if import_origin {
-        filters::upsert_import_filter_metadata_binding(
-            stores.storage.doc(),
-            stores.storage.sheets(),
-            sheet_id,
-            &binding,
-        );
-    } else {
-        filters::upsert_filter_metadata_binding(
-            stores.storage.doc(),
-            stores.storage.sheets(),
-            sheet_id,
-            &binding,
-        );
-    }
+    filters::upsert_filter_metadata_binding(&mut stores.storage, sheet_id, &binding);
 }
 
 fn record_unsupported_filter_import_diagnostics(
@@ -598,8 +492,7 @@ fn record_unsupported_filter_import_diagnostics(
         .iter()
         .position(|candidate| candidate == sheet_id)
         .map(|idx| idx as u32);
-    let sheet_name =
-        properties::get_sheet_name(stores.storage.doc(), stores.storage.sheets(), sheet_id);
+    let sheet_name = properties::get_sheet_name(&stores.storage, sheet_id);
     let source_key = serde_json::to_string(&binding.source_key).ok();
 
     if imported_auto_filter.ext_lst_raw.is_some() {
@@ -678,25 +571,14 @@ fn column_name(mut zero_based_col: u32) -> String {
 }
 
 fn write_imported_auto_filter_metadata(
-    stores: &EngineStores,
+    stores: &mut EngineStores,
     sheet_id: &SheetId,
     auto_filter: &AutoFilter,
 ) {
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let mut txn = stores
-        .storage
-        .doc()
-        .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let Some(Out::YMap(sheet_map)) = stores.storage.sheets().get(&txn, &sheet_hex) else {
-        return;
-    };
-    let Some(Out::YMap(meta_map)) = sheet_map.get(&txn, KEY_PROPERTIES) else {
-        return;
-    };
-    let af_prelim: MapPrelim = yrs_schema::auto_filter::to_yrs_prelim(auto_filter)
-        .into_iter()
-        .collect();
-    meta_map.insert(&mut txn, "autoFilter", af_prelim);
+    capture_sheet_field!(stores.storage, *sheet_id, auto_filter);
+    if let Some(metadata) = stores.storage.sheet_metadata.get_mut(sheet_id) {
+        metadata.auto_filter = Some(auto_filter.clone());
+    }
 }
 
 fn merge_runtime_auto_filter_into_imported_metadata(
@@ -780,8 +662,7 @@ pub(in crate::storage::engine) fn apply_visibility_transitions(
         .iter()
         .map(|&(row, _cache_hidden)| {
             let hidden = dimensions::get_row_visibility_ownership(
-                stores.storage.doc(),
-                stores.storage.sheets(),
+                &stores.storage,
                 sheet_id,
                 row,
                 stores.grid_indexes.get(sheet_id),
@@ -813,8 +694,7 @@ fn sync_mirror_rows_from_effective_hidden(
 ) {
     for &row in rows {
         let hidden = dimensions::get_row_visibility_ownership(
-            stores.storage.doc(),
-            stores.storage.sheets(),
+            &stores.storage,
             sheet_id,
             row,
             stores.grid_indexes.get(sheet_id),
@@ -833,12 +713,11 @@ fn evaluate_runtime_filter(
     let sid = *sheet_id;
     let grid_index = stores.grid_indexes.get(&sid);
     filters::evaluate_filter(
-        stores.storage.doc(),
-        stores.storage.sheets(),
+        &stores.storage,
         sheet_id,
         filter_id,
         |row, col| {
-            if let Some(col_slice) = mirror.get_column_slice(&sid, col) {
+            if let Some(col_slice) = mirror.get_column_view(&sid, col) {
                 return col_slice
                     .get(row as usize)
                     .cloned()

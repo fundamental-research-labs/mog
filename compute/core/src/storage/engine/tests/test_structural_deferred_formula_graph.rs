@@ -37,7 +37,13 @@ fn cell(id: &str, row: u32, col: u32, value: CellValue, formula: Option<&str>) -
 
 fn workbook(cells: Vec<CellData>) -> WorkbookSnapshot {
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET_ID.to_string(),
             name: "Sheet1".to_string(),
             rows: 20,
@@ -56,7 +62,7 @@ fn workbook(cells: Vec<CellData>) -> WorkbookSnapshot {
     }
 }
 
-fn install_minimal_compute(engine: &mut YrsComputeEngine, snapshot: WorkbookSnapshot) {
+fn install_minimal_compute(engine: &mut ComputeEngine, snapshot: WorkbookSnapshot) {
     let mut compute = ComputeCore::new();
     compute.set_id_alloc(engine.stores.grid_id_alloc.clone());
     compute
@@ -85,7 +91,7 @@ fn delete_column_builds_deferred_graph_before_invalidating_imported_refs() {
             Some("=A1*2"),
         ),
     ]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot.clone()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot.clone()).unwrap();
     install_minimal_compute(&mut engine, snapshot);
 
     let sheet = sid();
@@ -140,7 +146,7 @@ fn delete_row_builds_deferred_graph_before_invalidating_imported_refs() {
             Some("=A1*2"),
         ),
     ]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot.clone()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot.clone()).unwrap();
     install_minimal_compute(&mut engine, snapshot);
 
     let sheet = sid();

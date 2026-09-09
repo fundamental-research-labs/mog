@@ -14,7 +14,13 @@ pub(super) fn make_cell_id(n: u128) -> CellId {
 /// Sheet ID and Cell IDs are deterministic UUID strings for easy reference.
 pub(super) fn basic_snapshot() -> WorkbookSnapshot {
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "00000000-0000-0000-0000-000000000001".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,

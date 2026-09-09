@@ -5,6 +5,21 @@ use crate::mirror::cell_mirror::CellMirror;
 use crate::mirror::types::CellEntry;
 
 impl CellMirror {
+    /// Register an existing identity without allocating a value entry.
+    pub(crate) fn register_identity_position(
+        &mut self,
+        sheet_id: SheetId,
+        pos: SheetPos,
+        cell_id: CellId,
+    ) {
+        if let Some(sheet) = self.sheets.get_mut(&sheet_id) {
+            sheet.id_to_pos.insert(cell_id, pos);
+            sheet.pos_to_id.entry(pos).or_insert(cell_id);
+            self.cell_to_sheet.insert(cell_id, sheet_id);
+            sheet.expand_identity_extent(pos);
+        }
+    }
+
     /// Get or create a CellId at the given position.
     ///
     /// If a cell already exists at the position, its CellId is returned.
@@ -12,7 +27,7 @@ impl CellMirror {
     ///
     /// For positions within an active projection, the CellId is registered in
     /// the identity maps (`pos_to_id`, `id_to_pos`, `cells`, `cell_to_sheet`)
-    /// but `col_data` is NOT touched - the projected value written by
+    /// but `column_values` is NOT touched - the projected value written by
     /// `materialize_projection()` must be preserved. Ghost cells should never
     /// overwrite projected spill values.
     pub fn ensure_cell_id(
@@ -37,7 +52,7 @@ impl CellMirror {
         };
 
         // If position is within an active projection, register the CellId for
-        // identity tracking only - do NOT write Null to col_data.
+        // identity tracking only - do NOT write Null to column_values.
         if self
             .projection_registry
             .is_projected(sheet_id, pos.row(), pos.col())
@@ -52,16 +67,16 @@ impl CellMirror {
             return Some(new_id);
         }
 
-        // Normal path: full insert with col_data write
+        // Normal path: full insert with column_values write
         self.insert_cell(sheet_id, new_id, pos, entry);
         Some(new_id)
     }
 
-    /// Get or create a CellId at the given position, preserving `col_data`.
+    /// Get or create a CellId at the given position, preserving `column_values`.
     ///
     /// Like `ensure_cell_id`, but registers identity mappings only - it does
-    /// NOT write `Null` to `col_data`. This is critical for data table body
-    /// cells whose cached XLSX values in `col_data` must survive until the
+    /// NOT write `Null` to `column_values`. This is critical for data table body
+    /// cells whose cached XLSX values in `column_values` must survive until the
     /// prepass writes computed results.
     pub fn ensure_cell_id_identity_only(
         &mut self,
@@ -105,7 +120,7 @@ impl CellMirror {
         };
 
         // If position is within an active projection, register the CellId for
-        // identity tracking only - do NOT write Null to col_data.
+        // identity tracking only - do NOT write Null to column_values.
         if self
             .projection_registry
             .is_projected(sheet_id, pos.row(), pos.col())
@@ -120,12 +135,12 @@ impl CellMirror {
             return;
         }
 
-        // Normal path: full insert with col_data write
+        // Normal path: full insert with column_values write
         self.insert_cell(sheet_id, cell_id, pos, entry);
     }
 
     /// Register a pre-allocated CellId at the given position **for identity
-    /// tracking only** - does NOT write `Null` into `col_data`.
+    /// tracking only** - does NOT write `Null` into `column_values`.
     ///
     /// This is the right primitive for callers that need a stable CellId at a
     /// position (so it can be referenced later through `resolve_position` /
@@ -138,7 +153,7 @@ impl CellMirror {
     /// * Any future "exists for refs purposes only" identity allocation.
     ///
     /// Compare with [`Self::register_ghost_cell`], which falls through to
-    /// [`Self::insert_cell`] (writes `Null` to `col_data`) when the position
+    /// [`Self::insert_cell`] (writes `Null` to `column_values`) when the position
     /// is not under an active projection. That behaviour is correct for
     /// parallel-init ghost cells - those positions did carry data in the
     /// source XLSX and the `Null` write reserves the slot. It is *wrong* for

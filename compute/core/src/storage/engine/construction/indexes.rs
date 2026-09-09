@@ -1,15 +1,15 @@
 use super::*;
 
-pub(in crate::storage::engine) fn build_grid_indexes_from_yrs(
-    storage: &crate::storage::YrsStorage,
+pub(in crate::storage::engine) fn build_grid_indexes(
+    mirror: &CellMirror,
     snapshot: &WorkbookSnapshot,
     grid_id_alloc: Arc<IdAllocator>,
 ) -> Result<FxHashMap<SheetId, GridIndex>, ComputeError> {
     let mut grid_indexes = FxHashMap::default();
     for sheet_snap in &snapshot.sheets {
         let sheet_id = SheetId::from_uuid_str(&sheet_snap.id)?;
-        let grid = crate::storage::engine::build_grid_from_yrs_for_sheet(
-            storage,
+        let grid = crate::storage::engine::build_grid_from_native_sheet(
+            mirror,
             sheet_id,
             sheet_snap,
             grid_id_alloc.clone(),
@@ -24,7 +24,7 @@ pub(in crate::storage::engine) fn build_grid_indexes_from_yrs(
 ///
 /// Range payloads store RowId/ColId, not physical row/column numbers. Deferred
 /// first-paint import cannot allocate fresh axes here or the mirror cannot map
-/// range identities back to sheet positions when it materializes `col_data`.
+/// range identities back to their current sheet positions.
 pub(in crate::storage::engine) fn build_grid_indexes_from_allocations_range(
     snapshot: &WorkbookSnapshot,
     allocations: &[crate::storage::infra::hydration::SheetIdAllocation],
@@ -42,17 +42,20 @@ pub(in crate::storage::engine) fn build_grid_indexes_from_allocations_range(
         let sheet_id = SheetId::from_uuid_str(&sheet_snap.id)?;
         let mut grid = GridIndex::from_axis_stores(
             sheet_id,
-            AxisIdentityStore::Explicit(allocation.row_ids.clone()),
-            AxisIdentityStore::Explicit(allocation.col_ids.clone()),
+            allocation.row_axis.clone(),
+            allocation.col_axis.clone(),
             grid_id_alloc.clone(),
         );
         for cell_data in &sheet_snap.cells {
             let cell_id = CellId::from_uuid_str(&cell_data.cell_id)?;
             grid.register_cell(cell_id, cell_data.row, cell_data.col);
         }
-        for identity in &allocation.identity_only_cells {
-            grid.register_cell(identity.cell_id, identity.row, identity.col);
+        for identity in &sheet_snap.identities {
+            if grid.cell_id_at(identity.row, identity.col).is_none() {
+                grid.register_cell(identity.cell_id, identity.row, identity.col);
+            }
         }
+
         grid_indexes.insert(sheet_id, grid);
     }
     Ok(grid_indexes)
@@ -185,7 +188,7 @@ pub(in crate::storage::engine) fn build_layout_indexes_from_parse_output_range(
 
 /// Build merge spatial indexes for every sheet.
 pub(in crate::storage::engine) fn build_merge_indexes(
-    storage: &YrsStorage,
+    storage: &WorkbookStorage,
     snapshot: &WorkbookSnapshot,
     grid_indexes: &FxHashMap<SheetId, compute_document::identity::GridIndex>,
 ) -> Result<FxHashMap<SheetId, RangeSpatialIndex<MergeSpatialItem>>, ComputeError> {
@@ -193,7 +196,7 @@ pub(in crate::storage::engine) fn build_merge_indexes(
     for sheet_snap in &snapshot.sheets {
         let sheet_id = SheetId::from_uuid_str(&sheet_snap.id)?;
         let resolved = match grid_indexes.get(&sheet_id) {
-            Some(grid) => merges::get_all_merges(storage.doc(), storage.sheets(), sheet_id, grid),
+            Some(grid) => merges::get_all_merges(&storage, sheet_id, grid),
             None => Vec::new(),
         };
         let items: Vec<MergeSpatialItem> = resolved
@@ -219,7 +222,7 @@ pub(in crate::storage::engine) fn build_merge_indexes(
 
 /// Build `LayoutIndex` for every sheet from dimension data.
 pub(in crate::storage::engine) fn build_layout_indexes(
-    storage: &YrsStorage,
+    storage: &WorkbookStorage,
     snapshot: &WorkbookSnapshot,
     grid_indexes: &FxHashMap<SheetId, GridIndex>,
     layout_metrics: domain_types::units::LayoutMetrics,
@@ -243,7 +246,7 @@ pub(in crate::storage::engine) fn build_layout_indexes(
 
 /// Build a `LayoutIndex` for a single sheet.
 pub(in crate::storage::engine) fn build_layout_index_for_sheet(
-    storage: &YrsStorage,
+    storage: &WorkbookStorage,
     sheet_id: &SheetId,
     rows: u32,
     cols: u32,
@@ -252,8 +255,8 @@ pub(in crate::storage::engine) fn build_layout_index_for_sheet(
 ) -> LayoutIndex {
     use crate::storage::sheet::properties;
 
-    // Read canonical units (points / char-width) from Yrs metadata
-    let meta = properties::get_sheet_meta(storage.doc(), storage.sheets(), sheet_id);
+    // Read canonical units (points / char-width) from native metadata
+    let meta = properties::get_sheet_meta(&storage, sheet_id);
     let default_row_height_pt = meta
         .as_ref()
         .map(|m| domain_types::units::Points(m.default_row_height))
@@ -278,47 +281,33 @@ pub(in crate::storage::engine) fn build_layout_index_for_sheet(
         })
         .unwrap_or_else(|| layout_metrics.default_column_width());
 
-    // Read custom dimensions (canonical units from Yrs) and convert to pixels
+    // Read custom dimensions (canonical native units) and convert to pixels
     let custom_row_heights: Vec<(usize, domain_types::units::Pixels)> =
-        dimensions::get_all_custom_row_heights(
-            storage.doc(),
-            storage.sheets(),
-            sheet_id,
-            grid_index,
-        )
-        .into_iter()
-        .map(|(row, pt)| (row, domain_types::units::points_to_pixels(pt)))
-        .collect();
+        dimensions::get_all_custom_row_heights(&storage, sheet_id, grid_index)
+            .into_iter()
+            .map(|(row, pt)| (row, domain_types::units::points_to_pixels(pt)))
+            .collect();
     let custom_col_widths: Vec<(usize, domain_types::units::Pixels)> =
-        dimensions::get_all_custom_col_widths(
-            storage.doc(),
-            storage.sheets(),
-            sheet_id,
-            grid_index,
-        )
-        .into_iter()
-        .map(|(col, cw)| {
-            (
-                col,
-                domain_types::units::char_width_to_pixels(cw, layout_metrics.column_width_mdw),
-            )
-        })
-        .collect();
+        dimensions::get_all_custom_col_widths(&storage, sheet_id, grid_index)
+            .into_iter()
+            .map(|(col, cw)| {
+                (
+                    col,
+                    domain_types::units::char_width_to_pixels(cw, layout_metrics.column_width_mdw),
+                )
+            })
+            .collect();
 
-    let mut hidden_rows = dimensions::get_hidden_rows(storage.doc(), storage.sheets(), sheet_id);
+    let mut hidden_rows = dimensions::get_hidden_rows(storage, sheet_id, grid_index);
     hidden_rows.extend(grouping::get_rows_hidden_by_structural_groups(
-        storage.doc(),
-        storage.sheets(),
-        sheet_id,
+        &storage, sheet_id,
     ));
     hidden_rows.sort_unstable();
     hidden_rows.dedup();
 
-    let mut hidden_cols = dimensions::get_hidden_columns(storage.doc(), storage.sheets(), sheet_id);
+    let mut hidden_cols = dimensions::get_hidden_columns(storage, sheet_id, grid_index);
     hidden_cols.extend(grouping::get_columns_hidden_by_structural_groups(
-        storage.doc(),
-        storage.sheets(),
-        sheet_id,
+        &storage, sheet_id,
     ));
     hidden_cols.sort_unstable();
     hidden_cols.dedup();

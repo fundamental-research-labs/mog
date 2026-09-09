@@ -1,6 +1,6 @@
 //! Data binding domain types.
 //!
-//! Pure data contracts — no Yrs, no storage internals.
+//! Pure data contracts without storage internals.
 
 use serde::{Deserialize, Serialize};
 

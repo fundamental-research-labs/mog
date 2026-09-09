@@ -1,7 +1,7 @@
 use cell_types::{CellId, SheetId, SheetPos};
 use compute_core::bridge_types::CellInput;
 use compute_core::engine_types::fill::{BridgeAutoFillRequest, BridgeFillRangeSpec};
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use snapshot_types::{RecalcOptions, WorkbookSnapshot};
 use value_types::{CellError, CellValue};
 use xlsx_parser::write::ZipWriter;
@@ -54,7 +54,7 @@ fn minimal_xlsx(
         .expect("minimal XLSX fixture should be writable")
 }
 
-fn first_sheet_id(engine: &YrsComputeEngine) -> SheetId {
+fn first_sheet_id(engine: &ComputeEngine) -> SheetId {
     SheetId::from_uuid_str(
         engine
             .get_all_sheet_ids()
@@ -64,7 +64,7 @@ fn first_sheet_id(engine: &YrsComputeEngine) -> SheetId {
     .expect("sheet id should parse")
 }
 
-fn cell_id_at(engine: &YrsComputeEngine, sheet_id: &SheetId, row: u32, col: u32) -> CellId {
+fn cell_id_at(engine: &ComputeEngine, sheet_id: &SheetId, row: u32, col: u32) -> CellId {
     CellId::from_uuid_str(
         &engine
             .get_cell_id_at(sheet_id, row, col)
@@ -73,7 +73,7 @@ fn cell_id_at(engine: &YrsComputeEngine, sheet_id: &SheetId, row: u32, col: u32)
     .expect("cell id should parse")
 }
 
-fn value_at(engine: &YrsComputeEngine, sheet_id: &SheetId, row: u32, col: u32) -> CellValue {
+fn value_at(engine: &ComputeEngine, sheet_id: &SheetId, row: u32, col: u32) -> CellValue {
     engine
         .mirror()
         .get_cell_value_at(sheet_id, SheetPos::new(row, col))
@@ -127,7 +127,7 @@ fn imported_autofill_preserves_blank_reference_vector_formulas() {
         b"",
     );
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(WorkbookSnapshot::default()).expect("bootstrap engine");
+        ComputeEngine::from_snapshot(WorkbookSnapshot::default()).expect("bootstrap engine");
     engine
         .import_from_xlsx_bytes_deferred(&bytes)
         .expect("deferred import xlsx");
@@ -175,7 +175,7 @@ fn imported_data_table_recalc_mutation_preserves_cached_table_values() {
         br#"<calcPr calcId="191029" calcMode="auto"/>"#,
     );
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(WorkbookSnapshot::default()).expect("bootstrap engine");
+        ComputeEngine::from_snapshot(WorkbookSnapshot::default()).expect("bootstrap engine");
     engine
         .import_from_xlsx_bytes_deferred(&bytes)
         .expect("deferred import xlsx");

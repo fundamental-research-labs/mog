@@ -32,10 +32,10 @@ pub struct AnnotationFingerprint {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AnnotationRecord {
+pub struct AnnotationRecord<Anchor = String> {
     pub schema_version: u32,
     pub id: String,
-    pub anchor_id: String,
+    pub anchor_id: Anchor,
     pub text: String,
     pub status: AnnotationStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -45,6 +45,23 @@ pub struct AnnotationRecord {
     pub updated_at: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub checked_at: Option<u64>,
+}
+
+impl<Anchor> AnnotationRecord<Anchor> {
+    pub(crate) fn map_anchor<T>(self, map: impl FnOnce(Anchor) -> T) -> AnnotationRecord<T> {
+        AnnotationRecord {
+            schema_version: self.schema_version,
+            id: self.id,
+            anchor_id: map(self.anchor_id),
+            text: self.text,
+            status: self.status,
+            stale_reason: self.stale_reason,
+            fingerprint: self.fingerprint,
+            created_at: self.created_at,
+            updated_at: self.updated_at,
+            checked_at: self.checked_at,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

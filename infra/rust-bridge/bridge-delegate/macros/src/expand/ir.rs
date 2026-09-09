@@ -11,7 +11,7 @@ pub(super) struct DelegateDescriptor {
     /// generated module. Tests use this to avoid a compute-core dev-dep; the
     /// production path (compute-api) keeps imports on (the default).
     pub(super) skip_default_imports: bool,
-    /// Original source type name (e.g., "YrsComputeEngine"). Kept in the IR
+    /// Original source type name (e.g., "ComputeEngine"). Kept in the IR
     /// for debugging / future use; downstream re-emission uses target_type.
     #[allow(dead_code)]
     pub(super) source_type: String,

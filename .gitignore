@@ -17,3 +17,6 @@ target/
 *.bak
 .mcp.json
 rust_out
+
+# Python benchmark tooling
+__pycache__/

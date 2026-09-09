@@ -8,7 +8,7 @@ use value_types::{CellValue, FiniteF64};
 #[test]
 fn test_rebuild_compute_core_preserves_values_and_formulas() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // Verify initial state: A1=10, B1=20, A2=A1+B1=30
     assert_eq!(
@@ -65,7 +65,7 @@ fn test_rebuild_compute_core_preserves_named_ranges() {
         "0.15".to_string(),
     ));
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // Verify the named range exists in the compute core's mirror
     let nr_before = engine.mirror().get_named_range("TaxRate");
@@ -74,12 +74,7 @@ fn test_rebuild_compute_core_preserves_named_ranges() {
         "named range should exist before rebuild"
     );
 
-    // Register the name via the engine's canonicalizing write path so it
-    // survives rebuild (`build_workbook_snapshot` reads named ranges from
-    // Yrs, and after typed formula boundary Yrs stores them as JSON `IdentityFormula`
-    // only — the storage-layer `create_named_range` that writes raw A1
-    // is no longer a direct rebuild-survival path). `set_named_range`
-    // canonicalizes to JSON at the write boundary.
+    // Register through the engine so rebuild retains the canonical identity formula.
     let def =
         NamedRangeDef::from_expression("TaxRate".to_string(), Scope::Workbook, "0.15".to_string());
     engine.set_named_range("TaxRate".to_string(), def).unwrap();
@@ -109,7 +104,7 @@ fn test_rebuild_compute_core_preserves_tables() {
         has_totals: false,
     });
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // Verify table exists before rebuild
     assert_eq!(engine.mirror().all_tables().len(), 1);
@@ -158,7 +153,7 @@ fn test_rebuild_compute_core_preserves_data_table_regions() {
         ooxml_flags: None,
     });
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // Verify data table region exists before rebuild
     assert_eq!(engine.mirror().all_data_table_regions().len(), 1);
@@ -192,7 +187,13 @@ fn test_rebuild_compute_core_preserves_data_table_regions() {
 fn test_rebuild_preserves_projections() {
     // Snapshot with a SEQUENCE(3) formula and array_ref declaring the spill extent
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -220,7 +221,7 @@ fn test_rebuild_preserves_projections() {
         calculation_settings: None,
     };
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // Verify projection exists before rebuild
@@ -243,7 +244,7 @@ fn test_rebuild_preserves_projections() {
         .mirror()
         .get_sheet(&sid)
         .unwrap()
-        .get_column_slice(0)
+        .get_column_view(0)
         .unwrap();
     assert_eq!(
         col[1],
@@ -283,7 +284,7 @@ fn test_rebuild_preserves_projections() {
         .mirror()
         .get_sheet(&sid)
         .unwrap()
-        .get_column_slice(0)
+        .get_column_view(0)
         .unwrap();
     assert_eq!(
         col_after[1],
@@ -301,7 +302,13 @@ fn test_rebuild_preserves_projections() {
 fn test_rebuild_preserves_cse_single_cell() {
     // Create a snapshot with values in A1:A2 and B1:B2, and a CSE formula in C1
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -367,7 +374,7 @@ fn test_rebuild_preserves_cse_single_cell() {
         calculation_settings: None,
     };
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let c1_id = CellId::from_uuid_str("550e8400-e29b-41d4-a716-446655440006").unwrap();
 
     // C1 = SUM(A1:A2*B1:B2) = 2*10 + 3*20 = 80
@@ -399,10 +406,16 @@ fn test_rebuild_preserves_cse_single_cell() {
 #[test]
 fn test_structure_change_reregisters_projections() {
     // Verify that structure_change() + full_recalc re-registers projections
-    // after they are cleared. This tests the CRDT structural sync path where
+    // after they are cleared. This tests the native structural rebuild path where
     // projection_registry.clear() is called before structure_change().
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -428,7 +441,7 @@ fn test_structure_change_reregisters_projections() {
         calculation_settings: None,
     };
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // Verify projection exists before
@@ -437,7 +450,7 @@ fn test_structure_change_reregisters_projections() {
         "A1 should be a projection source before structure_change"
     );
 
-    // Simulate what CRDT structural sync does: clear projections, then structure_change
+    // Simulate what native structural rebuild does: clear projections, then structure_change
     engine.mirror.projection_registry.clear();
     assert!(
         !engine.mirror().projection_registry.is_source(&cell_id_a1()),
@@ -471,7 +484,7 @@ fn test_structure_change_reregisters_projections() {
         .mirror()
         .get_sheet(&sid)
         .unwrap()
-        .get_column_slice(0)
+        .get_column_view(0)
         .unwrap();
     assert_eq!(
         col[1],
@@ -489,7 +502,13 @@ fn test_structure_change_reregisters_projections() {
 fn test_recalculate_preserves_projections() {
     // Verify that recalculate() (the new wb.calculate() path) preserves projections
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -515,7 +534,7 @@ fn test_recalculate_preserves_projections() {
         calculation_settings: None,
     };
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // Call recalculate() -- the new non-destructive wb.calculate() path
@@ -543,7 +562,7 @@ fn test_recalculate_preserves_projections() {
         .mirror()
         .get_sheet(&sid)
         .unwrap()
-        .get_column_slice(0)
+        .get_column_view(0)
         .unwrap();
     assert_eq!(
         col[1],

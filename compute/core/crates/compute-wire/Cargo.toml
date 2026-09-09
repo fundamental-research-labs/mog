@@ -17,7 +17,7 @@ cell-types = { path = "../types/cell-types" }
 snapshot-types = { path = "../types/snapshot-types" }
 compute-cf = { path = "../compute-cf" }
 # R4.1: viewport filter uses SheetAccessMatrix + AccessLevel directly on the
-# wire buffer. compute-security has no Yrs or compute-core deps, so this edge
+# wire buffer. compute-security has no workbook storage or compute-core deps, so this edge
 # is clean.
 compute-security = { path = "../compute-security" }
 serde = { workspace = true, features = ["derive"] }

@@ -2,13 +2,13 @@ use domain_types::CellFormat;
 use domain_types::domain::filter::SortOrder;
 use value_types::{CellValue, FiniteF64};
 
-use super::super::planner::compute_sorted_row_order;
-use super::super::test_helpers::{make_cell_id, place_cell, storage_with_sheet};
+use super::super::test_helpers::compute_sorted_row_order;
+use super::super::test_helpers::{make_cell_id, place_cell, planner_fixture as storage_with_sheet};
 use super::super::types::{CellRange, SortCriterion, SortMode, SortOptions};
 
 #[test]
 fn test_compute_sorted_row_order_with_headers() {
-    let (storage, sheet_id, mut grid) = storage_with_sheet();
+    let (mut storage, sheet_id, mut grid) = storage_with_sheet();
     let c_header = make_cell_id(300);
     let c1 = make_cell_id(301);
     let c2 = make_cell_id(302);
@@ -16,7 +16,7 @@ fn test_compute_sorted_row_order_with_headers() {
 
     // Row 0: header "Name"
     place_cell(
-        &storage,
+        &mut storage,
         &mut grid,
         sheet_id,
         c_header,
@@ -26,7 +26,7 @@ fn test_compute_sorted_row_order_with_headers() {
     );
     // Row 1: value 30
     place_cell(
-        &storage,
+        &mut storage,
         &mut grid,
         sheet_id,
         c1,
@@ -36,7 +36,7 @@ fn test_compute_sorted_row_order_with_headers() {
     );
     // Row 2: value 10
     place_cell(
-        &storage,
+        &mut storage,
         &mut grid,
         sheet_id,
         c2,
@@ -46,7 +46,7 @@ fn test_compute_sorted_row_order_with_headers() {
     );
     // Row 3: value 20
     place_cell(
-        &storage,
+        &mut storage,
         &mut grid,
         sheet_id,
         c3,
@@ -67,15 +67,9 @@ fn test_compute_sorted_row_order_with_headers() {
         has_headers: true,
     };
 
-    let result = compute_sorted_row_order(
-        storage.doc(),
-        &storage.sheets_ref(),
-        sheet_id,
-        &range,
-        &options,
-        &grid,
-        |_r, _c| CellFormat::default(),
-    );
+    let result = compute_sorted_row_order(&storage, &range, &options, &grid, |_r, _c| {
+        CellFormat::default()
+    });
     // Data rows: 1(30), 2(10), 3(20) -> sorted: 2(10), 3(20), 1(30)
     assert_eq!(result.sorted_indices, vec![2, 3, 1]);
     assert_eq!(result.rows_moved, 3); // all three data rows moved
@@ -87,7 +81,7 @@ fn test_compute_sorted_row_order_with_headers() {
 
 #[test]
 fn test_compute_sorted_row_order_multi_criteria() {
-    let (storage, sheet_id, mut grid) = storage_with_sheet();
+    let (mut storage, sheet_id, mut grid) = storage_with_sheet();
     // Two columns: col 0 (category), col 1 (value)
     let c_a0 = make_cell_id(401);
     let c_a1 = make_cell_id(402);
@@ -98,7 +92,7 @@ fn test_compute_sorted_row_order_multi_criteria() {
 
     // Row 0: "B", 20
     place_cell(
-        &storage,
+        &mut storage,
         &mut grid,
         sheet_id,
         c_a0,
@@ -107,7 +101,7 @@ fn test_compute_sorted_row_order_multi_criteria() {
         &CellValue::Text("B".into()),
     );
     place_cell(
-        &storage,
+        &mut storage,
         &mut grid,
         sheet_id,
         c_b0,
@@ -117,7 +111,7 @@ fn test_compute_sorted_row_order_multi_criteria() {
     );
     // Row 1: "A", 30
     place_cell(
-        &storage,
+        &mut storage,
         &mut grid,
         sheet_id,
         c_a1,
@@ -126,7 +120,7 @@ fn test_compute_sorted_row_order_multi_criteria() {
         &CellValue::Text("A".into()),
     );
     place_cell(
-        &storage,
+        &mut storage,
         &mut grid,
         sheet_id,
         c_b1,
@@ -136,7 +130,7 @@ fn test_compute_sorted_row_order_multi_criteria() {
     );
     // Row 2: "A", 10
     place_cell(
-        &storage,
+        &mut storage,
         &mut grid,
         sheet_id,
         c_a2,
@@ -145,7 +139,7 @@ fn test_compute_sorted_row_order_multi_criteria() {
         &CellValue::Text("A".into()),
     );
     place_cell(
-        &storage,
+        &mut storage,
         &mut grid,
         sheet_id,
         c_b2,
@@ -174,15 +168,9 @@ fn test_compute_sorted_row_order_multi_criteria() {
         has_headers: false,
     };
 
-    let result = compute_sorted_row_order(
-        storage.doc(),
-        &storage.sheets_ref(),
-        sheet_id,
-        &range,
-        &options,
-        &grid,
-        |_r, _c| CellFormat::default(),
-    );
+    let result = compute_sorted_row_order(&storage, &range, &options, &grid, |_r, _c| {
+        CellFormat::default()
+    });
     // Sorted: A,10 (row2) -> A,30 (row1) -> B,20 (row0)
     assert_eq!(result.sorted_indices, vec![2, 1, 0]);
 }
@@ -193,7 +181,7 @@ fn test_compute_sorted_row_order_multi_criteria() {
 
 #[test]
 fn test_compute_sorted_row_order_unresolved() {
-    let (storage, sheet_id, grid) = storage_with_sheet();
+    let (storage, _sheet_id, grid) = storage_with_sheet();
 
     let range = CellRange::new(0, 0, 2, 0);
 
@@ -209,15 +197,9 @@ fn test_compute_sorted_row_order_unresolved() {
         has_headers: false,
     };
 
-    let result = compute_sorted_row_order(
-        storage.doc(),
-        &storage.sheets_ref(),
-        sheet_id,
-        &range,
-        &options,
-        &grid,
-        |_r, _c| CellFormat::default(),
-    );
+    let result = compute_sorted_row_order(&storage, &range, &options, &grid, |_r, _c| {
+        CellFormat::default()
+    });
     assert!(result.has_unresolved_criteria);
     assert_eq!(result.sorted_indices.len(), 0);
     assert_eq!(result.rows_moved, 0);

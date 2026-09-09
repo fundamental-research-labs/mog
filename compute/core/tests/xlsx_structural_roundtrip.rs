@@ -8,11 +8,11 @@
 //! intentionally absent). Each test does a single structural mutation, exports,
 //! re-parses, and asserts formula refs shifted correctly.
 //!
-//! The public structural API on `YrsComputeEngine` is `structure_change(&StructureChange)`.
+//! The public structural API on `ComputeEngine` is `structure_change(&StructureChange)`.
 // TODO R49: no standalone `insert_row` / `delete_col` methods on the engine;
 // tests route through `structure_change()` which is the production path.
 
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use formula_types::StructureChange;
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
@@ -20,6 +20,9 @@ use value_types::{CellValue, FiniteF64};
 fn one_sheet_snapshot(name: &str, rows: u32, cols: u32, cells: Vec<CellData>) -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: name.to_string(),
             rows,
@@ -56,7 +59,7 @@ fn formula_cell(uuid_suffix: u32, row: u32, col: u32, formula: &str, cached: f64
 }
 
 fn xlsx_bytes_for(snapshot: WorkbookSnapshot) -> Vec<u8> {
-    let (engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (engine, _) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
     engine.export_to_xlsx_bytes().expect("export_to_xlsx_bytes")
 }
 
@@ -79,7 +82,7 @@ fn formula_fixture() -> WorkbookSnapshot {
 #[test]
 fn xlsx_insert_row_shifts_formula_refs() {
     let bytes = xlsx_bytes_for(formula_fixture());
-    let (mut engine, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
     let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
 
     // Insert one row at row 0 (pushes everything down by 1).
@@ -131,7 +134,7 @@ fn xlsx_insert_row_shifts_formula_refs() {
 #[test]
 fn xlsx_delete_row_shifts_formula_refs() {
     let bytes = xlsx_bytes_for(formula_fixture());
-    let (mut engine, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
     let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
 
     // Delete row 0 (the A1=1 row).
@@ -182,7 +185,7 @@ fn xlsx_delete_row_shifts_formula_refs() {
 #[test]
 fn xlsx_insert_col_shifts_formula_refs() {
     let bytes = xlsx_bytes_for(formula_fixture());
-    let (mut engine, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
     let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
 
     // Insert one col at col 0 (A shifts to B, etc.).
@@ -246,7 +249,7 @@ fn xlsx_delete_col_shifts_formula_refs() {
     cells.push(formula_cell(id, 0, 3, "=SUM(A1:A5)", 15.0));
 
     let bytes = xlsx_bytes_for(one_sheet_snapshot("DelCol", 10, 5, cells));
-    let (mut engine, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
     let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
 
     // Delete col B (col index 1) — harmless column, so SUM(A1:A5) should remain

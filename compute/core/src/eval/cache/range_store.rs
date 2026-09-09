@@ -37,16 +37,8 @@ pub type RangeKey = RangePos;
 // materialize_range — free function
 // ---------------------------------------------------------------------------
 
-/// Materialize range data from a data source using the 3-tier strategy.
-///
-/// Tiers:
-/// 1. Single-column dense: use column slice directly
-/// 2. Multi-column dense: iterate column slices
-/// 3. Fallback: hash-map cell-by-cell lookup
-///
-/// When `overrides` is Some, checks the override map before reading from the source.
-/// This supports What-If analysis (Goal Seek, Data Tables) without duplicating
-/// the materialization logic.
+/// Materialize one owned range from borrowed native column views.
+/// What-if overrides are applied before copying each value into the result.
 pub fn materialize_range(
     key: &RangeKey,
     source: &dyn DataSource,
@@ -85,85 +77,23 @@ pub fn materialize_range(
         source_val.cloned().unwrap_or(CellValue::Null)
     };
 
-    // Tier 1: Single-column range using dense column store
-    if min_col == max_col {
-        if let Some(col_slice) = source.get_column_slice(&key.sheet(), min_col) {
-            let row_count_u64 = (max_row as u64) - (min_row as u64) + 1;
-            let total = row_count_u64 as usize;
-            let start = min_row as usize;
-            let end = ((max_row + 1) as usize).min(col_slice.len());
-
-            if start < end {
-                let mut result: Vec<Vec<CellValue>> = (min_row
-                    ..min_row.saturating_add((end - start) as u32))
-                    .enumerate()
-                    .map(|(i, r)| {
-                        let source_val = Some(&col_slice[start + i]);
-                        vec![read_cell(r, min_col, source_val)]
-                    })
-                    .collect();
-                // Pad trailing Nulls when col_slice is shorter than the requested range.
-                while result.len() < total {
-                    let r = min_row + result.len() as u32;
-                    result.push(vec![read_cell(r, min_col, None)]);
-                }
-                return Arc::new(CellArray::from_rows(result));
-            } else {
-                return Arc::new(CellArray::from_rows(
-                    (min_row..=max_row)
-                        .map(|r| vec![read_cell(r, min_col, None)])
-                        .collect(),
-                ));
-            }
+    let columns: Vec<_> = (min_col..=max_col)
+        .map(|col| source.get_column_view(&key.sheet(), col))
+        .collect();
+    let num_rows = (max_row as u64 - min_row as u64 + 1) as usize;
+    let num_cols = columns.len();
+    let mut values = Vec::with_capacity(num_rows.saturating_mul(num_cols));
+    for row in min_row..=max_row {
+        for (offset, column) in columns.iter().enumerate() {
+            let col = min_col + offset as u32;
+            let value = column
+                .as_ref()
+                .and_then(|column| column.get(row as usize))
+                .or_else(|| source.get_cell_value_at(&key.sheet(), row, col));
+            values.push(read_cell(row, col, value));
         }
-        // Column not in col_data — all nulls (but still check overrides)
-        return Arc::new(CellArray::from_rows(
-            (min_row..=max_row)
-                .map(|r| vec![read_cell(r, min_col, None)])
-                .collect(),
-        ));
     }
-
-    // Tier 2: Multi-column range using dense column store
-    if !source.col_data_is_empty(&key.sheet()) {
-        let num_rows = ((max_row as u64) - (min_row as u64) + 1) as usize;
-        let num_cols = ((max_col as u64) - (min_col as u64) + 1) as usize;
-        let mut rows = Vec::with_capacity(num_rows);
-        for r in min_row..=max_row {
-            let mut row = Vec::with_capacity(num_cols);
-            for c in min_col..=max_col {
-                let source_val = source
-                    .get_column_slice(&key.sheet(), c)
-                    .and_then(|col| col.get(r as usize));
-                row.push(read_cell(r, c, source_val));
-            }
-            rows.push(row);
-        }
-        return Arc::new(CellArray::from_rows(rows));
-    }
-
-    // Tier 3: Fallback — hash-map-based cell-by-cell lookup
-    let mut rows = Vec::with_capacity(((max_row as u64) - (min_row as u64) + 1) as usize);
-    for r in min_row..=max_row {
-        let mut row = Vec::with_capacity(((max_col as u64) - (min_col as u64) + 1) as usize);
-        for c in min_col..=max_col {
-            // Check overrides via resolved cell ID
-            if let Some(ovs) = overrides
-                && let Some(cid) = source.cell_id_at(&key.sheet(), r, c)
-                && let Some(ov) = ovs.get(&cid)
-            {
-                row.push(ov.clone());
-                continue;
-            }
-            let val = source
-                .get_cell_value_at(&key.sheet(), r, c)
-                .cloned()
-                .unwrap_or(CellValue::Null);
-            row.push(val);
-        }
-        rows.push(row);
-    }
-    Arc::new(CellArray::from_rows(rows))
+    Arc::new(CellArray::new(values, num_cols))
 }
 
 // ---------------------------------------------------------------------------

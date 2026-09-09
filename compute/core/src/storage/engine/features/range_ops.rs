@@ -1,11 +1,11 @@
-use super::super::YrsComputeEngine;
+use super::super::ComputeEngine;
 use super::super::services::features as svc;
 use crate::snapshot::MutationResult;
 use cell_types::SheetId;
 use value_types::ComputeError;
 
 pub(super) fn sort_range(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,
@@ -40,7 +40,7 @@ pub(super) fn sort_range(
 }
 
 pub(super) fn auto_fill(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     request: crate::engine_types::fill::BridgeAutoFillRequest,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
@@ -59,7 +59,7 @@ pub(super) fn auto_fill(
 }
 
 pub(super) fn auto_fill_preview(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     request: crate::engine_types::fill::BridgeAutoFillRequest,
 ) -> Result<crate::engine_types::fill::BridgeAutoFillPreviewResult, ComputeError> {
@@ -72,7 +72,7 @@ pub(super) fn auto_fill_preview(
 }
 
 pub(super) fn flash_fill(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     request: crate::engine_types::fill::BridgeFlashFillRequest,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
@@ -93,7 +93,7 @@ pub(super) fn flash_fill(
 }
 
 pub(super) fn copy_range(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     source_sheet_id: &SheetId,
     src_start_row: u32,
     src_start_col: u32,
@@ -140,7 +140,7 @@ pub(super) fn copy_range(
 }
 
 pub(super) fn remove_duplicates(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,
@@ -176,7 +176,7 @@ pub(super) fn remove_duplicates(
 }
 
 pub(super) fn check_sort_range_merges(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,

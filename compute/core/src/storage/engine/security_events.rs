@@ -19,11 +19,11 @@
 //! especially for long-running server sessions).
 
 use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 use compute_security::SecurityEvent;
 
-use super::YrsComputeEngine;
+use super::ComputeEngine;
 
 /// Soft cap on in-flight events. 256 is well above any realistic burst
 /// for the R5 scope (policy CRUD happens at user-interaction speed); a
@@ -36,22 +36,16 @@ const EVENT_BUFFER_CAP: usize = 256;
 /// `&self` so the delegate macro can emit `#[bridge::read]` calls
 /// against it without reaching for a `&mut self` path.
 ///
-/// Shared via `Arc` with `SecurityState` so the Yrs observer callback
-/// (which runs on the commit path and has no direct engine handle) can
-/// push `PoliciesReloaded` events when a remote peer syncs policies
-/// into the doc (R2.3 step 5). Without that handle, SDK consumers that
-/// only drain this buffer would never see the CRDT-initiated reload.
+/// Shared with `SecurityState` so policy publications and API mutation events
+/// are drained together.
 #[derive(Debug, Default)]
 pub(crate) struct SecurityEventBuffer {
     inner: Mutex<VecDeque<SecurityEvent>>,
 }
 
 impl SecurityEventBuffer {
-    /// Push one event. Drops the oldest entry when the buffer is full
-    /// — events are diagnostic and lossy-under-load is the documented
-    /// policy; callers that need durable delivery should persist
-    /// policies via Yrs sync (the source of truth) and treat the event
-    /// stream as a UI hint.
+    /// Push one diagnostic event, dropping the oldest entry at capacity.
+    /// Callers can query the native policy list for current authoritative state.
     pub(crate) fn push(&self, event: SecurityEvent) {
         let mut guard = self.inner.lock().expect("SecurityEventBuffer poisoned");
         if guard.len() >= EVENT_BUFFER_CAP {
@@ -83,13 +77,6 @@ impl SecurityEventBuffer {
 /// emission surface — the B.1 macro emits denial errors but not
 /// events; events flow through the typed return-error path on the
 /// SDK side today).
-pub(crate) fn push_event(engine: &YrsComputeEngine, event: SecurityEvent) {
+pub(crate) fn push_event(engine: &ComputeEngine, event: SecurityEvent) {
     engine.security_events.push(event);
-}
-
-/// `SecurityState` holds a clone of the shared buffer; expose a helper
-/// so the observer callback can push `PoliciesReloaded` without naming
-/// engine internals.
-pub(crate) fn push_on(buffer: &Arc<SecurityEventBuffer>, event: SecurityEvent) {
-    buffer.push(event);
 }

@@ -752,7 +752,7 @@ fn conditional_formatting_x14_default() {
 // Serde <-> OOXML token equivalence
 //
 // Domain-types CF enum fields are typed as these ooxml enums directly
-// instead of `String` fields holding OOXML tokens. The JSON / Yrs wire
+// instead of `String` fields holding OOXML tokens. The JSON wire
 // format produced by `serde::Serialize` must remain byte-identical to the
 // legacy `String` content, which was `to_ooxml().to_string()`. These tests
 // lock that invariant.

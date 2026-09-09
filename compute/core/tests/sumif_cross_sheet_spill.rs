@@ -74,6 +74,9 @@ fn build_multi_sheet_snapshot(
             }
 
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: sheet_uuid(si),
                 name: name.to_string(),
                 rows: *rows,
@@ -85,6 +88,9 @@ fn build_multi_sheet_snapshot(
         .collect();
 
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: sheet_snapshots,
         named_ranges: vec![],
         tables: vec![],

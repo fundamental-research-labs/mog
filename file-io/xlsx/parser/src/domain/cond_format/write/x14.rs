@@ -334,7 +334,7 @@ mod tests {
             sheet_id: "sheet-1".to_string(),
             pivot: None,
             ranges: vec![domain_types::CFCellRange::new(0, 0, 4, 0)],
-            range_identities: None,
+
             rules: vec![rule],
         }]
     }

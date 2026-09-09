@@ -2,7 +2,7 @@
 //!
 //! Typed domain wrappers for `ooxml_types` chart fields that need a stable
 //! storage/API shape while the broader chart model is elevated. These mirrors
-//! preserve serde/Yrs payloads and convert bidirectionally with the OOXML
+//! preserve serialized payloads and convert bidirectionally with the OOXML
 //! structs they represent.
 //!
 //! Types with deeply nested OOXML sub-parts that overlap the broader

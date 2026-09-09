@@ -9,7 +9,7 @@
 //! manually. This makes it architecturally impossible to produce patches with
 //! missing display text or metadata flags.
 
-use crate::storage::engine::{YrsComputeEngine, services};
+use crate::storage::engine::{ComputeEngine, services};
 use crate::storage::properties;
 use cell_types::{CellId, SheetId, SheetPos};
 use compute_document::hex::id_to_hex;
@@ -20,7 +20,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use snapshot_types::RecalcResult;
 use value_types::CellValue;
 
-impl YrsComputeEngine {
+impl ComputeEngine {
     /// Build a [`CfColorOverrides`] map from the CF cache for a given sheet.
     pub(crate) fn build_cf_color_overrides(&self, sheet_id: &SheetId) -> Option<CfColorOverrides> {
         super::functions::build_cf_color_overrides(&self.stores, sheet_id)
@@ -559,27 +559,32 @@ impl YrsComputeEngine {
 
     /// Pull viewport patches for the stashed pending recalc result.
     pub fn flush_viewport_patches(&mut self) -> Vec<u8> {
-        let format_patches = self.mutation.pending_format_patches.take();
-        let value_patches = match self.mutation.pending_recalc.take() {
-            Some(mut recalc) => self.produce_viewport_patches_for_recalc(&mut recalc),
-            None => compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-        };
+        self.without_history(|engine| {
+            let format_patches = engine.mutation.pending_format_patches.take();
+            let value_patches = match engine.mutation.pending_recalc.take() {
+                Some(mut recalc) => engine.produce_viewport_patches_for_recalc(&mut recalc),
+                None => compute_wire::mutation::serialize_multi_viewport_patches(&[]),
+            };
 
-        match format_patches {
-            Some(format_patches) => compute_wire::mutation::concat_multi_viewport_patches(&[
-                format_patches,
-                value_patches,
-            ]),
-            None => value_patches,
-        }
+            match format_patches {
+                Some(format_patches) => compute_wire::mutation::concat_multi_viewport_patches(&[
+                    format_patches,
+                    value_patches,
+                ]),
+                None => value_patches,
+            }
+        })
     }
 
     /// Pull format-specific viewport patches (with palette delta).
     pub fn flush_format_viewport_patches(&mut self) -> Vec<u8> {
-        self.mutation
-            .pending_format_patches
-            .take()
-            .unwrap_or_default()
+        self.without_history(|engine| {
+            engine
+                .mutation
+                .pending_format_patches
+                .take()
+                .unwrap_or_default()
+        })
     }
 
     /// Build viewport patches (with palette delta) for a set of format-changed cells.
@@ -740,222 +745,73 @@ impl YrsComputeEngine {
 
         patches
     }
+}
 
-    /// Build format viewport patches from observer property changes.
-    ///
-    /// Merges the former `mod.rs` wrapper and `functions::build_format_patches_from_observer`
-    /// free function into one self-contained method. For each changed property cell,
-    /// resolves (row, col) from grid_indexes, collects effective formats, interns them
-    /// into palettes, enriches display text and metadata flags, and serializes viewport
-    /// patches.
-    pub(crate) fn produce_observer_format_patches(
+impl ComputeEngine {
+    /// History can restore an already-interned default format. Send a complete
+    /// palette with its original indices so every restored format is reviewable
+    /// from this patch without invalidating other visible cells' palette indices.
+    pub(crate) fn produce_history_viewport_patches(
         &mut self,
-        doc_changes: &compute_document::observe::DocumentChanges,
+        recalc: &mut RecalcResult,
     ) -> Vec<u8> {
-        // ── Borrow splitting ────────────────────────────────────────────
-        // We must take shared refs to stores/mirror/settings BEFORE taking
-        // &mut self.viewport, because the format closure captures the first
-        // three while the body mutates the viewport.
-        let mirror = &self.mirror;
-        let stores = &self.stores;
-        let settings = &self.settings;
-
-        // Build the format_value closure (previously in mod.rs wrapper).
-        let format_fn = |value: &CellValue, sheet_id: &SheetId, row: u32, col: u32| -> String {
-            let cell_id_hex = mirror
-                .resolve_cell_id(sheet_id, SheetPos::new(row, col))
-                .map(|cid| id_to_hex(cid.as_u128()))
+        let mut sheets = FxHashSet::default();
+        for change in &mut recalc.changed_cells {
+            let (Ok(sheet), Some(pos)) =
+                (SheetId::from_uuid_str(&change.sheet_id), &change.position)
+            else {
+                continue;
+            };
+            sheets.insert(sheet);
+            let cell_hex = CellId::from_uuid_str(&change.cell_id)
+                .ok()
+                .map(|cell| id_to_hex(cell.as_u128()))
                 .unwrap_or_default();
-            let table_fmt = services::resolve_structured_format_at_cell(mirror, sheet_id, row, col);
+            let table =
+                services::resolve_structured_format_at_cell(&self.mirror, &sheet, pos.row, pos.col);
             let mut effective = properties::get_effective_format(
-                &stores.storage,
-                sheet_id,
-                &cell_id_hex,
-                row,
-                col,
-                table_fmt.as_ref(),
-                stores.grid_indexes.get(sheet_id),
-                mirror.get_sheet(sheet_id),
+                &self.stores.storage,
+                &sheet,
+                &cell_hex,
+                pos.row,
+                pos.col,
+                table.as_ref(),
+                self.stores.grid_indexes.get(&sheet),
+                self.mirror.get_sheet(&sheet),
             );
-            domain_types::theme_color::resolve_theme_refs(&mut effective, &settings.theme_palette);
-            let format_code = effective.number_format.as_deref().unwrap_or("General");
-            compute_formats::format_value(value, format_code, &settings.locale).text
-        };
-
-        // ── Pass 0: Group affected cells by sheet ──────────────────────
-        //
-        // Undoing a format on a previously-empty cell removes both the
-        // property payload and the sparse gridIndex cell binding. At this
-        // point apply_all_observer_changes has already applied the gridIndex
-        // removal, so cell_id -> (row, col) can be gone. The observer's
-        // gridIndex change still carries row/col identity hexes; use them as
-        // the authoritative fallback for the matching property change.
-        let mut grid_position_fallbacks: FxHashMap<(SheetId, CellId), (u32, u32)> =
-            FxHashMap::default();
-        for change in &doc_changes.grid_index {
-            let Some(row) = services::mutation::resolve_hex_id_to_position(
-                stores,
-                &change.sheet_id,
-                &change.row_hex,
-                true,
-            ) else {
-                continue;
-            };
-            let Some(col) = services::mutation::resolve_hex_id_to_position(
-                stores,
-                &change.sheet_id,
-                &change.col_hex,
-                false,
-            ) else {
-                continue;
-            };
-            grid_position_fallbacks
-                .entry((change.sheet_id, change.cell_id))
-                .or_insert((row, col));
-        }
-
-        let mut by_sheet: FxHashMap<SheetId, Vec<(u128, u32, u32)>> = FxHashMap::default();
-
-        for pch in &doc_changes.properties {
-            let position = stores
-                .grid_indexes
-                .get(&pch.sheet_id)
-                .and_then(|grid| grid.cell_position(&pch.cell_id))
-                .or_else(|| {
-                    grid_position_fallbacks
-                        .get(&(pch.sheet_id, pch.cell_id))
-                        .copied()
-                });
-
-            if let Some((row, col)) = position {
-                by_sheet
-                    .entry(pch.sheet_id)
+            domain_types::theme_color::resolve_theme_refs(
+                &mut effective,
+                &self.settings.theme_palette,
+            );
+            change.format_idx = Some(
+                self.viewport
+                    .format_palettes_mut()
+                    .entry(sheet)
                     .or_default()
-                    .push((pch.cell_id.as_u128(), row, col));
+                    .intern(&effective)
+                    .unwrap_or(0),
+            );
+        }
+        for projection in &recalc.projection_changes {
+            if let Ok(sheet) = SheetId::from_uuid_str(&projection.sheet_id) {
+                sheets.insert(sheet);
             }
         }
-
-        if by_sheet.is_empty() {
-            return vec![];
-        }
-
-        let viewport = &self.viewport;
-        let mut all_patches: Vec<(String, Vec<u8>)> = Vec::new();
-
-        for (sheet_id, affected_cells) in &by_sheet {
-            let sheet_id_str = sheet_id.to_uuid_string();
-
-            // Pass 1: Collect cell data
-            let mut cell_data: Vec<(u128, u32, u32, CellValue, CellFormat)> =
-                Vec::with_capacity(affected_cells.len());
-            for &(cell_id_raw, row, col) in affected_cells {
-                let cell_id = CellId::from_raw(cell_id_raw);
-                let value = stores
-                    .compute
-                    .get_cell_value(mirror, &cell_id)
-                    .cloned()
-                    .unwrap_or_else(|| {
-                        mirror
-                            .get_cell_value_at(sheet_id, SheetPos::new(row, col))
-                            .cloned()
-                            .unwrap_or(CellValue::Null)
-                    });
-                let cell_hex = id_to_hex(cell_id_raw);
-                let table_fmt =
-                    services::resolve_structured_format_at_cell(mirror, sheet_id, row, col);
-                let effective = properties::get_effective_format(
-                    &stores.storage,
-                    sheet_id,
-                    &cell_hex,
-                    row,
-                    col,
-                    table_fmt.as_ref(),
-                    stores.grid_indexes.get(sheet_id),
-                    mirror.get_sheet(sheet_id),
-                );
-                cell_data.push((cell_id_raw, row, col, value, effective));
-            }
-
-            // Pass 2: Intern formats into palette (interior-mutable borrow).
-            let mut palettes = viewport.format_palettes_mut();
-            let palette = palettes.entry(*sheet_id).or_default();
-            let palette_len_before = palette.len() as u16;
-
-            let mut changed_cells: Vec<snapshot_types::CellChange> =
-                Vec::with_capacity(cell_data.len());
-            for (cell_id_raw, row, col, value, mut effective) in cell_data {
-                domain_types::theme_color::resolve_theme_refs(
-                    &mut effective,
-                    &settings.theme_palette,
-                );
-                let format_idx = palette.intern(&effective).unwrap_or(0);
-                changed_cells.push(snapshot_types::CellChange {
-                    cell_id: CellId::from_raw(cell_id_raw).to_uuid_string(),
-                    sheet_id: sheet_id_str.clone(),
-                    position: Some(snapshot_types::CellPosition { row, col }),
-                    value,
-                    display_text: None,
-                    old_display_text: None,
-                    old_formula: None,
-                    new_formula: None,
-                    number_format: None,
-                    format_idx: Some(format_idx),
-                    extra_flags: 0,
-                    old_value: None,
-                });
-            }
-
-            // Pass 3: Build palette delta binary
-            let delta_formats = palette.formats_since(palette_len_before);
-            let palette_bytes = compute_wire::palette_binary::serialize_palette_binary(
-                delta_formats,
-                palette_len_before,
-            );
-            drop(palettes);
-
-            // Pass 4: Enrich display text + metadata flags
-            let mut recalc = crate::snapshot::RecalcResult::empty();
-            recalc.changed_cells = changed_cells;
-            crate::storage::engine::services::mutation_handlers::enrich_display_text(
-                stores,
-                mirror,
-                settings,
-                &mut recalc,
-                &format_fn,
-            );
-            crate::storage::engine::services::mutation_handlers::enrich_metadata_flags(
-                stores,
-                mirror,
-                &mut recalc,
-            );
-
-            let cf_colors = super::functions::build_cf_color_overrides(stores, sheet_id);
-            let palette_param = if palette_bytes.is_empty() {
-                None
-            } else {
-                Some(PaletteSnapshot {
-                    start_index: palette_len_before,
-                    palette_bytes: palette_bytes.as_slice(),
+        let mut patches = Vec::new();
+        for sheet in sheets {
+            let palette_bytes = self
+                .viewport
+                .format_palettes()
+                .get(&sheet)
+                .map(|palette| {
+                    compute_wire::palette_binary::serialize_palette_binary(
+                        palette.formats_since(0),
+                        0,
+                    )
                 })
-            };
-
-            let regs = viewport.registered_viewports();
-            for (viewport_id, reg) in regs.iter() {
-                if reg.sheet_id != *sheet_id {
-                    continue;
-                }
-                let patch = compute_wire::mutation::serialize_mutation_result_for_viewport(
-                    &recalc,
-                    &sheet_id_str,
-                    0,
-                    reg.bounds,
-                    palette_param,
-                    cf_colors.as_ref(),
-                );
-                all_patches.push((viewport_id.clone(), patch));
-            }
+                .unwrap_or_default();
+            patches.push(self.produce_format_viewport_patches(recalc, &sheet, 0, &palette_bytes));
         }
-
-        compute_wire::mutation::serialize_multi_viewport_patches(&all_patches)
+        compute_wire::mutation::concat_multi_viewport_patches(&patches)
     }
 }

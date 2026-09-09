@@ -1,44 +1,27 @@
 use super::*;
-use yrs::MapPrelim;
 
 fn table_catalog_table_by_key(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     key: &str,
 ) -> Option<domain_types::domain::table::Table> {
-    let workbook = engine.stores.storage.workbook_map().clone();
-    let doc = engine.stores.storage.doc().clone();
-    let txn = doc.transact();
-    match workbook.get(&txn, compute_document::schema::KEY_TABLES) {
-        Some(Out::YMap(tables_map)) => match tables_map.get(&txn, key) {
-            Some(Out::YMap(table_map)) => {
-                domain_types::yrs_schema::table::from_yrs_map_to_table(&table_map, &txn)
-            }
-            _ => None,
-        },
-        _ => None,
-    }
+    engine
+        .mirror
+        .all_tables()
+        .iter()
+        .find(|table| table.id == key)
+        .cloned()
 }
 
 fn table_catalog_spec_by_key(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     key: &str,
 ) -> Option<domain_types::domain::table::TableSpec> {
-    let workbook = engine.stores.storage.workbook_map().clone();
-    let doc = engine.stores.storage.doc().clone();
-    let txn = doc.transact();
-    match workbook.get(&txn, compute_document::schema::KEY_TABLES) {
-        Some(Out::YMap(tables_map)) => match tables_map.get(&txn, key) {
-            Some(Out::YMap(table_map)) => {
-                domain_types::yrs_schema::table::from_yrs_map(&table_map, &txn)
-            }
-            _ => None,
-        },
-        _ => None,
-    }
+    table_catalog_table_by_key(engine, key)
+        .map(|table| domain_types::domain::table::catalog_entry_to_xlsx_table_spec(&table, None))
 }
 
 fn replace_catalog_spec(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     spec: &domain_types::domain::table::TableSpec,
     sheet_id: SheetId,
     table_id: String,
@@ -51,21 +34,6 @@ fn replace_catalog_spec(
         column_ids,
     );
 
-    {
-        let workbook = engine.stores.storage.workbook_map().clone();
-        let mut txn = engine.stores.storage.doc().transact_mut();
-        let tables_map = crate::storage::ensure_workbook_child_map(
-            &workbook,
-            &mut txn,
-            compute_document::schema::KEY_TABLES,
-        );
-        let table_prelim: MapPrelim =
-            domain_types::yrs_schema::table::to_yrs_prelim_from_table(&table)
-                .into_iter()
-                .collect();
-        tables_map.insert(&mut txn, table.id.as_str(), table_prelim);
-    }
-
     engine
         .stores
         .compute
@@ -73,27 +41,16 @@ fn replace_catalog_spec(
     table
 }
 
-fn insert_catalog_table_with_key(
-    engine: &mut YrsComputeEngine,
-    key: &str,
-    table: &domain_types::domain::table::Table,
-) {
-    let workbook = engine.stores.storage.workbook_map().clone();
-    let mut txn = engine.stores.storage.doc().transact_mut();
-    let tables_map = crate::storage::ensure_workbook_child_map(
-        &workbook,
-        &mut txn,
-        compute_document::schema::KEY_TABLES,
-    );
-    let table_prelim: MapPrelim = domain_types::yrs_schema::table::to_yrs_prelim_from_table(table)
-        .into_iter()
-        .collect();
-    tables_map.insert(&mut txn, key, table_prelim);
+fn insert_catalog_table(engine: &mut ComputeEngine, table: &domain_types::domain::table::Table) {
+    engine
+        .stores
+        .compute
+        .set_table(&mut engine.mirror, table.clone());
 }
 
 #[test]
-fn runtime_table_mutations_keep_workbook_table_catalog_in_sync() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+fn runtime_table_mutations_update_native_table_catalog() {
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
 
     engine
@@ -146,7 +103,7 @@ fn runtime_table_mutations_keep_workbook_table_catalog_in_sync() {
 
 #[test]
 fn deleting_table_removes_workbook_table_catalog_entry() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
 
     engine
@@ -171,45 +128,8 @@ fn deleting_table_removes_workbook_table_catalog_entry() {
 }
 
 #[test]
-fn mismatched_catalog_key_is_ignored_by_sync_and_export() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
-    let sid = sheet_id();
-
-    engine
-        .create_table(
-            &sid,
-            "ValidTable".into(),
-            0,
-            0,
-            2,
-            1,
-            vec!["A".into(), "B".into()],
-            true,
-        )
-        .expect("create valid table");
-
-    let mut invalid = table_catalog_table_by_key(&engine, &table_id_by_name(&engine, "ValidTable"))
-        .expect("valid table");
-    invalid.id = "tbl-invalid".to_string();
-    invalid.name = "InvalidTable".to_string();
-    insert_catalog_table_with_key(&mut engine, "InvalidTable", &invalid);
-
-    sync_tables_from_yrs(&mut engine.stores, &mut engine.mirror);
-
-    assert!(
-        engine.get_table_by_name("InvalidTable").is_none(),
-        "sync must ignore catalog entries whose Y.Map key is not table.id"
-    );
-
-    let exported = engine.build_parse_output_from_yrs();
-    let exported_tables = &exported.sheets[0].tables;
-    assert_eq!(exported_tables.len(), 1);
-    assert_eq!(exported_tables[0].name, "ValidTable");
-}
-
-#[test]
-fn sync_tables_materializes_imported_custom_style_options_from_catalog() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+fn native_snapshot_preserves_imported_custom_style_options() {
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
 
     let imported_spec = domain_types::domain::table::TableSpec {
@@ -257,27 +177,27 @@ fn sync_tables_materializes_imported_custom_style_options_from_catalog() {
             .into_iter()
             .map(str::to_string),
     );
-    insert_catalog_table_with_key(&mut engine, &imported_table.id, &imported_table);
+    insert_catalog_table(&mut engine, &imported_table);
 
-    sync_tables_from_yrs(&mut engine.stores, &mut engine.mirror);
+    reload_native_snapshot(&mut engine);
 
-    let synced = engine
+    let restored = engine
         .get_table_by_name("StyledSales")
-        .expect("imported table should sync into mirror");
-    assert_eq!(synced.ooxml_table_id, Some(7));
-    assert_eq!(synced.display_name, "StyledSales");
-    assert_eq!(synced.style, "MogBrandExportStyle");
-    assert!(synced.banded_rows);
-    assert!(synced.banded_columns);
-    assert!(synced.emphasize_first_column);
-    assert!(synced.emphasize_last_column);
-    assert!(!synced.show_filter_buttons);
-    assert!(synced.auto_filter_ref.is_none());
+        .expect("imported table should survive native snapshot reload");
+    assert_eq!(restored.ooxml_table_id, Some(7));
+    assert_eq!(restored.display_name, "StyledSales");
+    assert_eq!(restored.style, "MogBrandExportStyle");
+    assert!(restored.banded_rows);
+    assert!(restored.banded_columns);
+    assert!(restored.emphasize_first_column);
+    assert!(restored.emphasize_last_column);
+    assert!(!restored.show_filter_buttons);
+    assert!(restored.auto_filter_ref.is_none());
 }
 
 #[test]
 fn catalog_updates_preserve_imported_ooxml_metadata() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
 
     engine

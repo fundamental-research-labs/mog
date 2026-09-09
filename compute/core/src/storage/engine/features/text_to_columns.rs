@@ -1,4 +1,4 @@
-use super::super::YrsComputeEngine;
+use super::super::ComputeEngine;
 use super::super::services::features as svc;
 use crate::snapshot::MutationResult;
 use crate::storage::cells::data_ops as cell_ops;
@@ -6,7 +6,7 @@ use cell_types::SheetId;
 use value_types::ComputeError;
 
 pub(super) fn text_to_columns(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     start_row: u32,
     end_row: u32,
@@ -18,7 +18,6 @@ pub(super) fn text_to_columns(
     let mut result = svc::text_to_columns(
         &mut engine.stores,
         &mut engine.mirror,
-        &mut engine.mutation,
         *sheet_id,
         start_row,
         end_row,
@@ -35,7 +34,7 @@ pub(super) fn text_to_columns(
 }
 
 pub(super) fn text_to_columns_simple(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     start_row: u32,
     end_row: u32,
@@ -76,7 +75,6 @@ pub(super) fn text_to_columns_simple(
     let mut result = svc::text_to_columns(
         &mut engine.stores,
         &mut engine.mirror,
-        &mut engine.mutation,
         *sheet_id,
         start_row,
         end_row,
@@ -92,7 +90,7 @@ pub(super) fn text_to_columns_simple(
 }
 
 pub(super) fn preview_text_to_columns(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     source_start_row: u32,
     source_end_row: u32,
@@ -101,7 +99,7 @@ pub(super) fn preview_text_to_columns(
     max_preview_rows: u32,
 ) -> Vec<Vec<String>> {
     svc::preview_text_to_columns(
-        &engine.stores,
+        &engine.mirror,
         *sheet_id,
         source_start_row,
         source_end_row,

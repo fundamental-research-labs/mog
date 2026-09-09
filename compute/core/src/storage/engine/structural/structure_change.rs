@@ -1,4 +1,4 @@
-use super::super::YrsComputeEngine;
+use super::super::ComputeEngine;
 use super::super::construction;
 use super::super::services;
 use crate::snapshot::{FloatingObjectChange, MutationResult, RecalcResult};
@@ -6,7 +6,7 @@ use cell_types::SheetId;
 use formula_types::StructureChange;
 use value_types::ComputeError;
 
-impl YrsComputeEngine {
+impl ComputeEngine {
     pub(super) fn apply_structure_change_bridge(
         &mut self,
         sheet_id: &SheetId,
@@ -15,25 +15,13 @@ impl YrsComputeEngine {
         self.complete_deferred_hydration_for_structure_change()?;
 
         // Pass 1: Suppress observer, apply structural ops + merge rebuild + formula recalc.
-        //
-        // Wrap the entire operation in an undo group so the separate Yrs
-        // transactions emitted by `apply_structure_change` (StructuralOps
-        // rowOrder/colOrder edit, metadata_shift writes, and
-        // invalidate_stale_yrs_formulas formula-body refresh) collapse into a
-        // single undoable step. Without the group, each inner transaction is
-        // its own undo entry and a single `undo()` would only peel the last
-        // one — leaving positions shifted while the formula string reverted,
-        // or vice versa (FT-007 `undo-structural-formula-revert`).
-        self.mutation.undo_manager.begin_undo_group();
-        let _guard = self.mutation.suppress_guard();
         let apply_result = services::structural::apply_structure_change(
             &mut self.stores,
             &mut self.mirror,
             sheet_id,
             change,
         );
-        drop(_guard);
-        self.mutation.undo_manager.end_undo_group();
+
         let recalc = apply_result?;
 
         // R2.3 — structural layout mutated; stale column-indexed matrices

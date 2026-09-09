@@ -163,9 +163,7 @@ impl ComputeCore {
                 new_value = CellValue::number(0.0);
             }
 
-            // Dynamic array source cells: store Array in the cell entry,
-            // but write the top-left scalar to col_data so aggregation reads
-            // (SUM, DenseColumn, etc.) see the scalar, not the full array.
+            // Store the shared array once; scalar reads select its top-left value.
             if let CellValue::Array(ref arr) = new_value {
                 let top_left = arr.get(0, 0).cloned().unwrap_or(CellValue::Null);
                 // Compare by reference first to avoid cloning old_value when unchanged.
@@ -176,8 +174,7 @@ impl ComputeCore {
                 } else {
                     CellValue::Null // won't be used
                 };
-                mirror.set_value_mut(&cell_id, top_left.clone());
-                mirror.set_entry_value_only(&cell_id, new_value.clone());
+                mirror.set_value_mut(&cell_id, new_value.clone());
 
                 if changed
                     && let Some((_sid, mut change)) =
@@ -422,9 +419,7 @@ impl ComputeCore {
                 new_value = CellValue::number(0.0);
             }
 
-            // Dynamic array source cells: store Array in the cell entry,
-            // but write the top-left scalar to col_data so aggregation reads
-            // (SUM, DenseColumn, etc.) see the scalar, not the full array.
+            // Store the shared array once; scalar reads select its top-left value.
             if let CellValue::Array(ref arr) = new_value {
                 let top_left = arr.get(0, 0).cloned().unwrap_or(CellValue::Null);
                 // Compare by reference first to avoid cloning old_value when unchanged.
@@ -435,10 +430,7 @@ impl ComputeCore {
                 } else {
                     CellValue::Null // won't be used
                 };
-                // Write top-left scalar to both entry.value and col_data
-                mirror.set_value_mut(&cell_id, top_left.clone());
-                // Overwrite entry.value with the full Array (col_data keeps scalar)
-                mirror.set_entry_value_only(&cell_id, new_value.clone());
+                mirror.set_value_mut(&cell_id, new_value.clone());
 
                 if changed
                     && let Some((_sid, mut change)) =

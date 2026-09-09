@@ -19,16 +19,16 @@ use value_types::{CellValue, FiniteF64};
 const STANDARD_CHART_PROJECTION_SCHEMA_VERSION: u32 = 6;
 
 #[test]
-fn imported_axis_visibility_and_formatting_survive_yrs_and_xlsx_export() {
+fn imported_axis_visibility_and_formatting_survive_native_and_xlsx_export() {
     std::thread::Builder::new()
         .stack_size(16 * 1024 * 1024)
-        .spawn(assert_imported_axis_visibility_and_formatting_survive_yrs_and_xlsx_export)
+        .spawn(assert_imported_axis_visibility_and_formatting_survive_native_and_xlsx_export)
         .expect("spawn chart roundtrip test")
         .join()
         .expect("chart roundtrip test");
 }
 
-fn assert_imported_axis_visibility_and_formatting_survive_yrs_and_xlsx_export() {
+fn assert_imported_axis_visibility_and_formatting_survive_native_and_xlsx_export() {
     let mut chart = bounded_source_range_chart();
     chart.axes = Some(domain_types::chart::AxisData {
         category_axis: Some(domain_types::chart::SingleAxisData {
@@ -96,16 +96,18 @@ fn assert_imported_axis_visibility_and_formatting_survive_yrs_and_xlsx_export() 
 }
 
 #[test]
-fn imported_group_and_series_false_data_label_flags_survive_yrs_and_xlsx_export() {
+fn imported_group_and_series_false_data_label_flags_survive_native_and_xlsx_export() {
     std::thread::Builder::new()
         .stack_size(16 * 1024 * 1024)
-        .spawn(assert_imported_group_and_series_false_data_label_flags_survive_yrs_and_xlsx_export)
+        .spawn(
+            assert_imported_group_and_series_false_data_label_flags_survive_native_and_xlsx_export,
+        )
         .expect("spawn chart roundtrip test")
         .join()
         .expect("chart roundtrip test");
 }
 
-fn assert_imported_group_and_series_false_data_label_flags_survive_yrs_and_xlsx_export() {
+fn assert_imported_group_and_series_false_data_label_flags_survive_native_and_xlsx_export() {
     let mut chart = bounded_source_range_chart();
     chart.series[0].idx = Some(0);
     let false_labels = imported_explicit_false_data_labels();
@@ -266,7 +268,7 @@ fn assert_sdk_authored_chart_color_style_export(
     expected_scheme: Option<&str>,
     expected_color: Option<&str>,
 ) {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sheet_id = sheet_id();
     let mut chart_config = serde_json::json!({
         "type": "area",
@@ -318,7 +320,7 @@ fn assert_sdk_authored_chart_color_style_export(
 
 #[test]
 fn sdk_authored_chart_color_scheme_without_palette_omits_invalid_sidecar() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sheet_id = sheet_id();
     engine
         .create_chart(
@@ -345,7 +347,7 @@ fn sdk_authored_chart_color_scheme_without_palette_omits_invalid_sidecar() {
 }
 
 #[test]
-fn imported_standard_chart_metadata_survives_yrs_with_current_package_replay() {
+fn imported_standard_chart_metadata_survives_native_with_current_package_replay() {
     let input = ParseOutput {
         sheets: vec![SheetData {
             name: "Data".to_string(),
@@ -647,7 +649,7 @@ fn assert_reparsed_source_ranges(chart: &ChartSpec) {
 }
 
 #[test]
-fn imported_bounded_chart_source_ranges_survive_yrs_and_xlsx_export() {
+fn imported_bounded_chart_source_ranges_survive_native_and_xlsx_export() {
     let input = ParseOutput {
         sheets: vec![SheetData {
             name: "Data".to_string(),

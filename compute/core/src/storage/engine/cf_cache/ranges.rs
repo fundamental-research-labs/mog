@@ -3,7 +3,6 @@ use domain_types::domain::conditional_format::ConditionalFormat;
 
 pub(super) fn resolve_format_ranges(
     format: &ConditionalFormat,
-    resolve_cell_id: &impl Fn(&str, &str) -> Option<(u32, u32)>,
     fallback_sheet_id: Option<SheetId>,
 ) -> Option<Vec<RangePos>> {
     // Parse the sheet_id from the format, or use the fallback (caller's sheet context).
@@ -24,49 +23,22 @@ pub(super) fn resolve_format_ranges(
         },
     };
 
-    // Primary path: resolve range_identities via the closure
-    let mut ranges: Vec<RangePos> = format
-        .range_identities
-        .as_ref()
-        .map(|ris| {
-            ris.iter()
-                .filter_map(|r| {
-                    let start = resolve_cell_id(&format.sheet_id, &r.top_left_cell_id)?;
-                    let end = resolve_cell_id(&format.sheet_id, &r.bottom_right_cell_id)?;
-                    Some(RangePos::new(
-                        sheet_id,
-                        start.0.min(end.0),
-                        start.1.min(end.1),
-                        start.0.max(end.0),
-                        start.1.max(end.1),
-                    ))
-                })
-                .collect()
+    let ranges: Vec<RangePos> = format
+        .ranges
+        .iter()
+        .map(|range| {
+            RangePos::new(
+                sheet_id,
+                range.start_row(),
+                range.start_col(),
+                range.end_row(),
+                range.end_col(),
+            )
         })
-        .unwrap_or_default();
-
-    // Fallback: if range_identities yielded nothing, use position-based ranges
-    if ranges.is_empty() {
-        ranges = format
-            .ranges
-            .iter()
-            .map(|r| {
-                RangePos::new(
-                    sheet_id,
-                    r.start_row(),
-                    r.start_col(),
-                    r.end_row(),
-                    r.end_col(),
-                )
-            })
-            .collect();
-    }
+        .collect();
 
     if ranges.is_empty() {
-        tracing::debug!(
-            "CF format {} has no valid ranges (neither range_identities nor ranges), skipping",
-            format.id
-        );
+        tracing::debug!("CF format {} has no ranges, skipping", format.id);
         return None;
     }
 

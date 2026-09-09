@@ -1,113 +1,377 @@
+use crate::storage::engine::history::metadata::{MetadataImpact, capture_workbook_entry};
+use cell_types::SheetId;
+use formula_types::{IdentityFormula, Scope};
 use value_types::ComputeError;
 
 use crate::mirror::CellMirror;
 use crate::snapshot::{ChangeKind, MutationResult, NamedRangeChange};
 use crate::storage::engine::mutation::MutationOutput;
 use crate::storage::engine::stores::EngineStores;
+use crate::storage::workbook::named_ranges::{self, StoredDefinedName};
 
-/// Apply a named range mutation (create, update, or import).
-pub(in crate::storage::engine) fn mutation_named_range_create(
-    stores: &EngineStores,
-    input: domain_types::DefinedNameInput,
-) -> Result<MutationOutput, ComputeError> {
-    use crate::storage::workbook::named_ranges;
-    let defined_name = named_ranges::create_named_range(
-        stores.storage.doc(),
-        stores.storage.workbook_map(),
-        input,
-        &stores.id_alloc,
-    )?;
-    let mut result = MutationResult::empty();
-    result.named_range_changes.push(NamedRangeChange {
-        name: defined_name.name.clone(),
-        kind: ChangeKind::Set,
-    });
-    Ok(MutationOutput::Plain(result.with_data(&defined_name)?))
+fn scope_of(scope: Option<&str>) -> Scope {
+    scope
+        .and_then(|scope| SheetId::from_uuid_str(scope).ok())
+        .map_or(Scope::Workbook, Scope::Sheet)
 }
 
-/// Update an existing named range.
-///
-/// If the update renames the name (`updates.name` differs from the existing
-/// name), every formula in the workbook that references the old name is
-/// rewritten to use the new name — both in the Yrs-persisted formula text and
-/// in the in-memory mirror's [`IdentityFormula::template`] strings (named-range
-/// refs aren't AST nodes today, so they live in the template literally). This
-/// is the Rust source of truth for the rename-rewrite contract; the kernel
-/// must not duplicate this in TS.
+/// Resolve API/import text once before it enters native authored storage.
+pub(in crate::storage::engine) fn normalize_named_range_reference(
+    stores: &mut EngineStores,
+    mirror: &mut CellMirror,
+    scope: Option<&str>,
+    expression: &str,
+) -> IdentityFormula {
+    // The existing string API can carry its serialized typed reference back in.
+    if let Ok(identity) = serde_json::from_str::<IdentityFormula>(expression) {
+        return identity;
+    }
+    let context = scope
+        .and_then(|scope| SheetId::from_uuid_str(scope).ok())
+        .or_else(|| mirror.sheet_ids().next().copied());
+    let a1 = format!("={}", expression.strip_prefix('=').unwrap_or(expression));
+    context
+        .and_then(|sheet| {
+            stores
+                .compute
+                .to_identity_formula_with_rect_ranges(mirror, &sheet, &a1)
+                .ok()
+        })
+        .unwrap_or_else(|| named_ranges::expression_template(expression))
+}
+
+fn install_name(stores: &mut EngineStores, mirror: &mut CellMirror, name: StoredDefinedName) {
+    let definitions = crate::storage::engine::construction::defined_names_to_named_range_defs(
+        vec![name],
+        |identity| {
+            stores
+                .compute
+                .to_a1_display_qualified(mirror, &SheetId::from_raw(0), identity)
+        },
+    );
+    for definition in definitions {
+        stores
+            .compute
+            .set_named_range(mirror, definition.name.clone(), definition);
+    }
+}
+
+fn name_result(name: &StoredDefinedName) -> Result<MutationResult, ComputeError> {
+    let mut result = MutationResult::empty();
+    result.named_range_changes.push(NamedRangeChange {
+        name: name.name.clone(),
+        kind: ChangeKind::Set,
+    });
+    // Serialize only for the established external string response contract.
+    let wire = name.clone().map_reference(|identity| {
+        serde_json::to_string(&identity).expect("typed reference serializes")
+    });
+    Ok(result.with_data(&wire)?)
+}
+
+pub(in crate::storage::engine) fn mutation_named_range_create(
+    stores: &mut EngineStores,
+    mirror: &mut CellMirror,
+    input: domain_types::DefinedNameInput,
+) -> Result<MutationOutput, ComputeError> {
+    let identity =
+        normalize_named_range_reference(stores, mirror, input.scope.as_deref(), &input.refers_to);
+    capture_workbook_entry!(
+        stores.storage,
+        named_ranges,
+        named_ranges::get_defined_name_key(&input.name, input.scope.as_deref()),
+        MetadataImpact::Names
+    );
+    let name = named_ranges::create_named_range(
+        &mut stores.storage.metadata,
+        domain_types::DefinedNameInput {
+            name: input.name,
+            refers_to: identity,
+            scope: input.scope,
+            comment: input.comment,
+        },
+        &stores.id_alloc,
+    )?;
+    install_name(stores, mirror, name.clone());
+    stores.compute.mark_dirty();
+    Ok(MutationOutput::Plain(name_result(&name)?))
+}
+
+/// Rename updates authored references, rendered formula source, cached ASTs and
+/// dependency edges together. Recalculation sees the new name immediately.
 pub(in crate::storage::engine) fn mutation_named_range_update(
-    stores: &EngineStores,
+    stores: &mut EngineStores,
     mirror: &mut CellMirror,
     id: String,
     updates: domain_types::NamedRangeUpdate,
 ) -> Result<MutationOutput, ComputeError> {
-    use crate::storage::cells::formula_updater;
-    use crate::storage::workbook::named_ranges;
-
-    // Capture the old name before applying the update so we can detect a
-    // rename and rewrite formula bodies.
-    let old_name = named_ranges::get_named_range_by_id(
-        stores.storage.doc(),
-        stores.storage.workbook_map(),
-        &id,
-    )
-    .map(|dn| dn.name);
-
-    let defined_name = named_ranges::update_named_range(
-        stores.storage.doc(),
-        stores.storage.workbook_map(),
-        &id,
-        updates,
-    )?;
-
-    // Sole site that performs the formula-text rewrite on a name rename.
-    // The TS layer used to do this with a regex scan of every sheet
-    // (`_rewriteNamedRangeInFormulas`); that work belongs here so it
-    // happens atomically with the rename and so callers can't forget it.
-    if let Some(prev) = old_name
-        && prev != defined_name.name
-    {
-        // 1) Yrs storage rewrite (persistent).
-        let _ = formula_updater::update_formula_templates_on_named_range_rename(
-            stores.storage.doc(),
-            stores.storage.workbook_map(),
-            stores.storage.sheets(),
-            &prev,
-            &defined_name.name,
-        );
-        // 2) In-memory mirror rewrite (drives `formula_strings` /
-        // `to_a1_display`). Without this, the formula bar would still show
-        // the old name because the IdentityFormula.template carries the bare
-        // identifier verbatim.
-        formula_updater::update_mirror_formulas_on_named_range_rename(
-            mirror,
-            &prev,
-            &defined_name.name,
+    let existing =
+        named_ranges::get_named_range_by_id(&stores.storage.metadata, &id).ok_or_else(|| {
+            ComputeError::Eval {
+                message: format!("Defined name with ID {} not found", id),
+            }
+        })?;
+    let local_scopes: std::collections::HashSet<_> =
+        named_ranges::get_all_named_ranges(&stores.storage.metadata)
+            .iter()
+            .filter(|name| name.name.eq_ignore_ascii_case(&existing.name))
+            .filter_map(|name| {
+                name.scope
+                    .as_deref()
+                    .and_then(|scope| SheetId::from_uuid_str(scope).ok())
+            })
+            .collect();
+    let reference_changed = updates.refers_to.is_some();
+    let reference = updates.refers_to.as_deref().map(|expression| {
+        normalize_named_range_reference(stores, mirror, existing.scope.as_deref(), expression)
+    });
+    capture_workbook_entry!(
+        stores.storage,
+        named_ranges,
+        named_ranges::get_defined_name_key(&existing.name, existing.scope.as_deref()),
+        MetadataImpact::Names
+    );
+    if let Some(new_name) = &updates.name {
+        capture_workbook_entry!(
+            stores.storage,
+            named_ranges,
+            named_ranges::get_defined_name_key(new_name, existing.scope.as_deref()),
+            MetadataImpact::Names
         );
     }
-
-    let mut result = MutationResult::empty();
-    result.named_range_changes.push(NamedRangeChange {
-        name: defined_name.name.clone(),
-        kind: ChangeKind::Set,
-    });
-    Ok(MutationOutput::Plain(result.with_data(&defined_name)?))
+    let name = named_ranges::update_named_range(
+        &mut stores.storage.metadata,
+        &id,
+        domain_types::NamedRangeUpdate {
+            name: updates.name,
+            refers_to: reference,
+            comment: updates.comment,
+            visible: updates.visible,
+        },
+    )?;
+    let renamed = existing.name != name.name;
+    let recalc = if renamed {
+        let renamed_scope = existing
+            .scope
+            .as_deref()
+            .and_then(|scope| SheetId::from_uuid_str(scope).ok());
+        let first_sheet = mirror.sheet_ids().next().copied();
+        let mut renamed_definitions = Vec::new();
+        for (key, definition) in &stores.storage.metadata.named_ranges {
+            let context = definition
+                .scope
+                .as_deref()
+                .and_then(|scope| SheetId::from_uuid_str(scope).ok())
+                .or(first_sheet);
+            let template = rewrite_scoped_name_reference(
+                &definition.refers_to.template,
+                context,
+                renamed_scope,
+                &local_scopes,
+                mirror,
+                &existing.name,
+                &name.name,
+            );
+            if template != definition.refers_to.template {
+                capture_workbook_entry!(stores.storage, named_ranges, key, MetadataImpact::Names);
+                renamed_definitions.push((key.clone(), template));
+            }
+        }
+        for (key, template) in renamed_definitions {
+            stores
+                .storage
+                .metadata
+                .named_ranges
+                .get_mut(&key)
+                .unwrap()
+                .refers_to
+                .template = template;
+        }
+        if stores.storage.history.is_active() {
+            for sheet_id in mirror.sheet_ids().copied() {
+                let Some(sheet) = mirror.get_sheet(&sheet_id) else {
+                    continue;
+                };
+                for (cell_id, entry) in sheet.cells_iter() {
+                    let Some(formula) = &entry.formula else {
+                        continue;
+                    };
+                    if rewrite_scoped_name_reference(
+                        &formula.template,
+                        Some(sheet_id),
+                        renamed_scope,
+                        &local_scopes,
+                        mirror,
+                        &existing.name,
+                        &name.name,
+                    ) != formula.template
+                        && let Some(pos) = mirror.resolve_position(cell_id)
+                    {
+                        crate::storage::engine::history::cells::capture_cell(
+                            stores,
+                            mirror,
+                            sheet_id,
+                            *cell_id,
+                            pos.row(),
+                            pos.col(),
+                        );
+                    }
+                }
+            }
+        }
+        let changed_cells =
+            crate::storage::cells::formula_updater::update_mirror_formulas_on_named_range_rename(
+                mirror,
+                |mirror, sheet, template| {
+                    rewrite_scoped_name_reference(
+                        template,
+                        Some(sheet),
+                        renamed_scope,
+                        &local_scopes,
+                        mirror,
+                        &existing.name,
+                        &name.name,
+                    )
+                },
+            );
+        stores.compute.remove_named_range_scoped(
+            mirror,
+            &scope_of(existing.scope.as_deref()),
+            &existing.name,
+        );
+        for definition in named_ranges::get_all_named_ranges(&stores.storage.metadata) {
+            install_name(stores, mirror, definition);
+        }
+        Some(
+            stores
+                .compute
+                .structure_change_with_formula_refresh(mirror, None, &changed_cells)?,
+        )
+    } else {
+        install_name(stores, mirror, name.clone());
+        if reference_changed {
+            let scope = scope_of(name.scope.as_deref());
+            let seed = mirror
+                .variables
+                .get_variable_cell_id(&scope, &name.name.to_ascii_lowercase());
+            seed.map(|id| stores.compute.recalc(mirror, &[id]))
+                .transpose()?
+        } else {
+            None
+        }
+    };
+    let mut result = name_result(&name)?;
+    if let Some(recalc) = recalc {
+        let mut recalculated = MutationResult::from_recalc(recalc);
+        recalculated.named_range_changes = result.named_range_changes;
+        recalculated.data = result.data.take();
+        Ok(MutationOutput::Recalc(recalculated))
+    } else {
+        stores.compute.mark_dirty();
+        Ok(MutationOutput::Plain(result))
+    }
 }
 
-/// Import multiple named ranges in bulk.
 pub(in crate::storage::engine) fn mutation_named_ranges_import(
-    stores: &EngineStores,
+    stores: &mut EngineStores,
+    mirror: &mut CellMirror,
     names: Vec<domain_types::DefinedName>,
 ) -> Result<MutationOutput, ComputeError> {
-    use crate::storage::workbook::named_ranges;
-    let count = named_ranges::import_named_ranges(
-        stores.storage.doc(),
-        stores.storage.workbook_map(),
-        names,
-    );
+    let names: Vec<_> = names
+        .into_iter()
+        .map(|name| {
+            let scope = name.scope.clone();
+            name.map_reference(|expression| {
+                normalize_named_range_reference(stores, mirror, scope.as_deref(), &expression)
+            })
+        })
+        .collect();
+    for name in &names {
+        capture_workbook_entry!(
+            stores.storage,
+            named_ranges,
+            named_ranges::get_defined_name_key(&name.name, name.scope.as_deref()),
+            MetadataImpact::Names
+        );
+    }
+    let count = named_ranges::import_named_ranges(&mut stores.storage.metadata, names);
+    for name in named_ranges::get_all_named_ranges(&stores.storage.metadata) {
+        install_name(stores, mirror, name);
+    }
+    stores.compute.mark_dirty();
     let mut result = MutationResult::empty();
     result.named_range_changes.push(NamedRangeChange {
         name: format!("{} names imported", count),
         kind: ChangeKind::Set,
     });
     Ok(MutationOutput::Plain(result.with_data(&count)?))
+}
+
+/// Resolve each name token's worksheet context before rewriting. A workbook
+/// name must not capture a sheet-local shadow, and explicit sheet qualifiers
+/// must continue to resolve in the qualified sheet.
+fn rewrite_scoped_name_reference(
+    expression: &str,
+    current_sheet: Option<SheetId>,
+    renamed_scope: Option<SheetId>,
+    local_scopes: &std::collections::HashSet<SheetId>,
+    mirror: &CellMirror,
+    old_name: &str,
+    new_name: &str,
+) -> String {
+    let mut output = String::with_capacity(expression.len());
+    let mut cursor = 0;
+    for (start, end) in
+        crate::storage::cells::formula_updater::formula_identifier_candidates(expression)
+    {
+        if !expression[start..end].eq_ignore_ascii_case(old_name) {
+            continue;
+        }
+        let prefix = &expression[..start];
+        let trimmed = prefix.trim_end();
+        let context = if let Some(qualifier) = trimmed.strip_suffix('!') {
+            let qualifier = qualifier.trim_end();
+            let sheet_name = if let Some(quoted) = qualifier.strip_suffix('\'') {
+                let bytes = quoted.as_bytes();
+                let mut index = bytes.len();
+                let mut opening = None;
+                while index > 0 {
+                    index -= 1;
+                    if bytes[index] == b'\'' {
+                        if index > 0 && bytes[index - 1] == b'\'' {
+                            index -= 1;
+                        } else {
+                            opening = Some(index);
+                            break;
+                        }
+                    }
+                }
+                opening.map(|index| quoted[index + 1..].replace("''", "'"))
+            } else {
+                let start = qualifier
+                    .char_indices()
+                    .rev()
+                    .find(|(_, c)| !(c.is_alphanumeric() || *c == '_' || *c == '.'))
+                    .map_or(0, |(index, c)| index + c.len_utf8());
+                Some(qualifier[start..].to_string())
+            };
+            let Some(sheet) = sheet_name.and_then(|sheet| mirror.sheet_by_name(&sheet)) else {
+                continue;
+            };
+            Some(sheet)
+        } else {
+            current_sheet
+        };
+        let resolves_to_renamed = match renamed_scope {
+            Some(scope) => context == Some(scope),
+            None => context.is_none_or(|sheet| !local_scopes.contains(&sheet)),
+        };
+        if resolves_to_renamed {
+            output.push_str(&expression[cursor..start]);
+            output.push_str(new_name);
+            cursor = end;
+        }
+    }
+    output.push_str(&expression[cursor..]);
+    output
 }

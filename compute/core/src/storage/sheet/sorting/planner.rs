@@ -1,33 +1,12 @@
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
-use cell_types::{CellId, SheetId};
-use compute_document::cell_serde::yrs_any_to_cell_value;
-use compute_document::hex::id_to_hex;
-use compute_document::identity::GridIndex;
 use domain_types::CellFormat;
 use domain_types::domain::filter::SortOrder;
 use value_types::CellValue;
-use yrs::{Doc, Map, MapRef, Out, Transact};
-
-use crate::storage::infra::grid_helpers::get_cells_map;
 
 use super::compare::{compare_by_color, compare_by_custom_list, compare_cell_values};
-use super::types::{CellRange, SortColumnCriterion, SortConfig, SortMode, SortOptions, SortResult};
-
-/// Read a CellValue from the cells map given a cell's hex ID.
-fn read_cell_value_from_maps<T: yrs::ReadTxn>(
-    txn: &T,
-    cells_map: &MapRef,
-    cell_hex: &str,
-) -> CellValue {
-    match cells_map.get(txn, cell_hex) {
-        Some(Out::YMap(cell_map)) => yrs_any_to_cell_value(&cell_map, txn),
-        _ => CellValue::Null,
-    }
-}
-
-// ---------------------------------------------------------------------------
+use super::types::{CellRange, SortColumnCriterion, SortConfig, SortMode, SortResult};
 
 struct ResolvedCriterion {
     col: u32,
@@ -44,9 +23,7 @@ struct RowData {
 
 #[allow(clippy::too_many_arguments)]
 fn compute_sorted_row_order_from_resolved<F, G>(
-    doc: &Doc,
-    sheets: &MapRef,
-    sheet_id: SheetId,
+    hidden_rows: &HashSet<u32>,
     range: &CellRange,
     has_headers: bool,
     resolved_criteria: Vec<ResolvedCriterion>,
@@ -59,14 +36,6 @@ where
     F: Fn(u32, u32) -> CellFormat,
     G: Fn(u32, u32) -> CellValue,
 {
-    let hidden_rows: HashSet<u32> = if visible_rows_only {
-        crate::storage::sheet::dimensions::get_hidden_rows(doc, sheets, &sheet_id)
-            .into_iter()
-            .collect()
-    } else {
-        HashSet::new()
-    };
-
     let data_start_row = if has_headers {
         range.start_row() + 1
     } else {
@@ -178,172 +147,13 @@ where
     }
 }
 
-// -------------------------------------------------------------------
-// compute_sorted_row_order
-// -------------------------------------------------------------------
-
-/// Compute the sorted order of rows in a range.
-///
-/// Uses `compare_cell_values()` for consistent comparison logic:
-/// - Natural sort for strings with numbers ("Item 2" before "Item 10")
-/// - Nulls handling (configurable: first or last)
-/// - Type priority (numbers before strings)
-///
-/// Identity (position ↔ CellId) is resolved exclusively via the provided
-/// `GridIndex`. The yrs `cells` map is read only for cell values (keyed by
-/// cell_hex).
-pub fn compute_sorted_row_order<F>(
-    doc: &Doc,
-    sheets: &MapRef,
-    sheet_id: SheetId,
-    range: &CellRange,
-    options: &SortOptions,
-    grid_index: &GridIndex,
-    get_cell_format: F,
-) -> SortResult
-where
-    F: Fn(u32, u32) -> CellFormat,
-{
-    compute_sorted_row_order_with_scope(
-        doc,
-        sheets,
-        sheet_id,
-        range,
-        options,
-        grid_index,
-        get_cell_format,
-        false,
-    )
-}
-
-/// Compute a sorted row order, optionally sorting only visible rows.
-///
-/// `visible_rows_only` matches Excel AutoFilter sort semantics: rows hidden by
-/// the active filter remain in their current physical slots, and only the
-/// visible row slots receive sorted visible rows.
-pub fn compute_sorted_row_order_with_scope<F>(
-    doc: &Doc,
-    sheets: &MapRef,
-    sheet_id: SheetId,
-    range: &CellRange,
-    options: &SortOptions,
-    grid_index: &GridIndex,
-    get_cell_format: F,
-    visible_rows_only: bool,
-) -> SortResult
-where
-    F: Fn(u32, u32) -> CellFormat,
-{
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let txn = doc.transact();
-
-    let fail = || SortResult {
-        sorted_indices: vec![],
-        target_indices: vec![],
-        rows_moved: 0,
-        has_unresolved_criteria: true,
-    };
-
-    let cells_map = match get_cells_map(&txn, sheets, &sheet_hex) {
-        Some(m) => m,
-        None => return fail(),
-    };
-
-    let data_start_row = if options.has_headers {
-        range.start_row() + 1
-    } else {
-        range.start_row()
-    };
-    let data_end_row = range.end_row();
-
-    // Resolve all header CellIds to column positions via GridIndex.
-    let mut resolved_criteria: Vec<ResolvedCriterion> = Vec::new();
-    let mut has_unresolved_criteria = false;
-
-    for criterion in &options.criteria {
-        match grid_index.cell_position(&criterion.header_cell_id) {
-            Some((_row, col)) => {
-                resolved_criteria.push(ResolvedCriterion {
-                    col,
-                    direction: criterion.direction,
-                    case_sensitive: criterion.case_sensitive,
-                    mode: criterion.mode.clone(),
-                });
-            }
-            None => {
-                has_unresolved_criteria = true;
-                // Skip unresolved criteria (column was deleted)
-            }
-        }
-    }
-
-    // If all criteria are unresolved, no sorting possible
-    if resolved_criteria.is_empty() {
-        return SortResult {
-            sorted_indices: vec![],
-            target_indices: vec![],
-            rows_moved: 0,
-            has_unresolved_criteria: true,
-        };
-    }
-
-    // Build (row, col) -> CellId lookup for the data portion of the range,
-    // by walking the GridIndex.
-    let min_criterion_col = resolved_criteria
-        .iter()
-        .map(|c| c.col)
-        .min()
-        .unwrap_or(range.start_col());
-    let max_criterion_col = resolved_criteria
-        .iter()
-        .map(|c| c.col)
-        .max()
-        .unwrap_or(range.end_col());
-
-    let mut pos_to_cell_id: HashMap<(u32, u32), CellId> = HashMap::new();
-    for (cell_id, r, c) in grid_index.cells_in_range(
-        data_start_row,
-        min_criterion_col,
-        data_end_row,
-        max_criterion_col,
-    ) {
-        pos_to_cell_id.insert((r, c), cell_id);
-    }
-
-    let get_cell_value = |row: u32, col: u32| -> CellValue {
-        match pos_to_cell_id.get(&(row, col)) {
-            Some(cell_id) => {
-                let cell_hex = id_to_hex(cell_id.as_u128());
-                read_cell_value_from_maps(&txn, &cells_map, &cell_hex)
-            }
-            None => CellValue::Null,
-        }
-    };
-
-    compute_sorted_row_order_from_resolved(
-        doc,
-        sheets,
-        sheet_id,
-        range,
-        options.has_headers,
-        resolved_criteria,
-        has_unresolved_criteria,
-        get_cell_value,
-        get_cell_format,
-        visible_rows_only,
-    )
-}
-
 /// Compute sorted row order from absolute column criteria and a positional
 /// value accessor.
 ///
-/// This is the bridge/API path: selected sort columns may be backed by imported
-/// Range data without sparse CellIds, so value reads must go through a caller
-/// supplied positional accessor rather than the Yrs `cells` map.
+/// Selected sort columns can contain compact native ranges, so value reads
+/// use the caller's positional accessor.
 pub fn compute_sorted_row_order_by_columns_with_scope<F, G>(
-    doc: &Doc,
-    sheets: &MapRef,
-    sheet_id: SheetId,
+    hidden_rows: &HashSet<u32>,
     range: &CellRange,
     criteria: &[SortColumnCriterion],
     has_headers: bool,
@@ -373,9 +183,7 @@ where
     }
 
     compute_sorted_row_order_from_resolved(
-        doc,
-        sheets,
-        sheet_id,
+        hidden_rows,
         range,
         has_headers,
         resolved_criteria,

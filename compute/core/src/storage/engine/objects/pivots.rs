@@ -3,7 +3,7 @@ use crate::engine_types::PivotCreateWithSheetOptions;
 use crate::snapshot::{
     ChangeKind, MutationResult, PivotTableChange, SheetChange, SheetChangeField,
 };
-use crate::storage::engine::YrsComputeEngine;
+use crate::storage::engine::ComputeEngine;
 use crate::storage::engine::pivot_materialization::apply_pivot_value_number_formats;
 use crate::storage::engine::services;
 use crate::storage::sheet::order;
@@ -24,7 +24,7 @@ struct PivotUpdateMaterializeResult {
     result: Option<PivotTableResult>,
 }
 
-impl YrsComputeEngine {
+impl ComputeEngine {
     fn normalize_pivot_update_config(
         &self,
         sheet_id: &SheetId,
@@ -148,7 +148,7 @@ impl YrsComputeEngine {
             &self.stores.grid_id_alloc,
         );
         apply_pivot_value_number_formats(
-            &self.stores,
+            &mut self.stores,
             &self.mirror,
             &output_sheet_id,
             config.output_location.row,
@@ -193,7 +193,7 @@ impl YrsComputeEngine {
     }
 
     fn apply_pivot_sheet_insert_index(
-        &self,
+        &mut self,
         sheet_id: &SheetId,
         insert_index: Option<u32>,
         result: &mut MutationResult,
@@ -214,12 +214,7 @@ impl YrsComputeEngine {
             return;
         }
 
-        if order::move_sheet(
-            self.stores.storage.doc(),
-            self.stores.storage.workbook_map(),
-            sheet_id,
-            new_index,
-        ) {
+        if order::move_sheet(&mut self.stores.storage, sheet_id, new_index) {
             result.sheet_changes.push(SheetChange {
                 sheet_id: sheet_id.to_uuid_string(),
                 kind: ChangeKind::Set,
@@ -482,39 +477,40 @@ impl YrsComputeEngine {
 }
 
 #[bridge::api(
-    service = "YrsComputeEngine",
+    service = "ComputeEngine",
     key = "doc_id",
     group = "objects_pivots",
     fn_prefix = "compute",
     crate_path = "compute_core"
 )]
-impl YrsComputeEngine {
+impl ComputeEngine {
     #[bridge::write(scope = "workbook")]
     pub fn pivot_create(
         &mut self,
         config: serde_json::Value,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        // Validate all fields upfront — one comprehensive error, not one-at-a-time
-        validate_pivot_config_json(&config)
-            .map_err(|msg| ComputeError::InvalidInput { message: msg })?;
-        let config: PivotTableConfig =
-            serde_json::from_value(config).map_err(|e| ComputeError::Deserialize {
-                message: e.to_string(),
-            })?;
-        let config = self.resolve_pivot_source_identity(config)?;
-        let (sheet_id, config) = self.resolve_pivot_output_identity(config)?;
-        let config = self.populate_missing_pivot_fields_from_source(config)?;
-        let result = services::objects::pivot_create(&mut self.stores, &sheet_id, config)?;
-        // Pivot CRUD doesn't touch cells but `recalculate_with_options` uses
-        // `materialize_all_pivots` to render output — must not short-circuit.
-        self.stores.compute.mark_dirty();
-        Ok((shared::empty_patches(), result))
+        self.with_history(|engine| {
+            // Validate all fields upfront — one comprehensive error, not one-at-a-time
+            validate_pivot_config_json(&config)
+                .map_err(|msg| ComputeError::InvalidInput { message: msg })?;
+            let config: PivotTableConfig =
+                serde_json::from_value(config).map_err(|e| ComputeError::Deserialize {
+                    message: e.to_string(),
+                })?;
+            let config = engine.resolve_pivot_source_identity(config)?;
+            let (sheet_id, config) = engine.resolve_pivot_output_identity(config)?;
+            let config = engine.populate_missing_pivot_fields_from_source(config)?;
+            let result = services::objects::pivot_create(&mut engine.stores, &sheet_id, config)?;
+            // Pivot CRUD doesn't touch cells but `recalculate_with_options` uses
+            // `materialize_all_pivots` to render output — must not short-circuit.
+            engine.stores.compute.mark_dirty();
+            Ok((shared::empty_patches(), result))
+        })
     }
 
     /// Atomically create a new sheet AND a pivot table on it.
     ///
-    /// Both the sheet creation and pivot creation happen within a single
-    /// `#[bridge::write(scope = "workbook")]` scope, so undo reverts both operations together.
+    /// Both operations share the workbook write scope and upfront validation.
     /// Returns the new sheet's ID (hex) and the stored pivot config.
     ///
     /// Accepts raw JSON with comprehensive upfront validation.
@@ -526,34 +522,39 @@ impl YrsComputeEngine {
         config: serde_json::Value,
         options: Option<PivotCreateWithSheetOptions>,
     ) -> Result<(String, PivotTableConfig, MutationResult), ComputeError> {
-        // Validate all fields upfront — one comprehensive error, not one-at-a-time
-        validate_pivot_config_json(&config)
-            .map_err(|msg| ComputeError::InvalidInput { message: msg })?;
-        let mut config: PivotTableConfig =
-            serde_json::from_value(config).map_err(|e| ComputeError::Deserialize {
-                message: e.to_string(),
+        self.with_history(|engine| {
+            // Validate all fields upfront — one comprehensive error, not one-at-a-time
+            validate_pivot_config_json(&config)
+                .map_err(|msg| ComputeError::InvalidInput { message: msg })?;
+            let mut config: PivotTableConfig =
+                serde_json::from_value(config).map_err(|e| ComputeError::Deserialize {
+                    message: e.to_string(),
+                })?;
+            config = engine.resolve_pivot_source_identity(config)?;
+            let insert_index = engine.resolve_pivot_sheet_insert_index(options.as_ref())?;
+            let (sheet_hex, mut sheet_result) = engine.mutation_create_sheet(sheet_name)?;
+            let sheet_id = SheetId::from_uuid_str(&sheet_hex).map_err(|e| ComputeError::Eval {
+                message: format!("Invalid SheetId after creation: {e}"),
             })?;
-        config = self.resolve_pivot_source_identity(config)?;
-        let insert_index = self.resolve_pivot_sheet_insert_index(options.as_ref())?;
-        let (sheet_hex, mut sheet_result) = self.mutation_create_sheet(sheet_name)?;
-        let sheet_id = SheetId::from_uuid_str(&sheet_hex).map_err(|e| ComputeError::Eval {
-            message: format!("Invalid SheetId after creation: {e}"),
-        })?;
-        self.apply_pivot_sheet_insert_index(&sheet_id, insert_index, &mut sheet_result);
-        // Default output_sheet_name to the newly created sheet when empty
-        if config.output_sheet_name.is_empty() {
-            config.output_sheet_name = sheet_name.to_string();
-        }
-        config.output_sheet_id = Some(sheet_id.to_uuid_string());
-        config = self.populate_missing_pivot_fields_from_source(config)?;
-        let pivot =
-            services::objects::pivot_create_with_sheet_inner(&mut self.stores, &sheet_id, config)?;
-        sheet_result.pivot_changes.push(PivotTableChange {
-            sheet_id: sheet_id.to_uuid_string(),
-            pivot_id: pivot.id.clone(),
-            kind: ChangeKind::Set,
-        });
-        Ok((sheet_hex, pivot, sheet_result))
+            engine.apply_pivot_sheet_insert_index(&sheet_id, insert_index, &mut sheet_result);
+            // Default output_sheet_name to the newly created sheet when empty
+            if config.output_sheet_name.is_empty() {
+                config.output_sheet_name = sheet_name.to_string();
+            }
+            config.output_sheet_id = Some(sheet_id.to_uuid_string());
+            config = engine.populate_missing_pivot_fields_from_source(config)?;
+            let pivot = services::objects::pivot_create_with_sheet_inner(
+                &mut engine.stores,
+                &sheet_id,
+                config,
+            )?;
+            sheet_result.pivot_changes.push(PivotTableChange {
+                sheet_id: sheet_id.to_uuid_string(),
+                pivot_id: pivot.id.clone(),
+                kind: ChangeKind::Set,
+            });
+            Ok((sheet_hex, pivot, sheet_result))
+        })
     }
 
     /// Replace a pivot table config.
@@ -566,12 +567,15 @@ impl YrsComputeEngine {
         pivot_id: &str,
         config: PivotTableConfig,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let config = self.normalize_pivot_update_config(sheet_id, config)?;
-        let result = services::objects::pivot_update(&mut self.stores, sheet_id, pivot_id, config)?;
-        // Pivot config changes layout/aggregation — next calculate must
-        // re-materialize, so don't let the idempotent short-circuit skip it.
-        self.stores.compute.mark_dirty();
-        Ok((shared::empty_patches(), result))
+        self.with_history(|engine| {
+            let config = engine.normalize_pivot_update_config(sheet_id, config)?;
+            let result =
+                services::objects::pivot_update(&mut engine.stores, sheet_id, pivot_id, config)?;
+            // Pivot config changes layout/aggregation — next calculate must
+            // re-materialize, so don't let the idempotent short-circuit skip it.
+            engine.stores.compute.mark_dirty();
+            Ok((shared::empty_patches(), result))
+        })
     }
 
     /// Delete a pivot table by ID. Returns `MutationResult` with `bool` in `data`.
@@ -582,39 +586,41 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         pivot_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        // Clear materialized cells before deleting
-        if let Some(config) = services::objects::pivot_get(&self.stores, sheet_id, pivot_id) {
-            if let Some(output_sheet_id) = config
-                .output_sheet_id
-                .as_deref()
-                .and_then(|sheet_id| SheetId::from_uuid_str(sheet_id).ok())
-                .or_else(|| self.mirror.sheet_by_name(&config.output_sheet_name))
-            {
-                let output_sheet_uuid = output_sheet_id.to_uuid_string();
-                let old_def = self
-                    .mirror
-                    .find_pivot_table_def(pivot_id, &config.name, &output_sheet_uuid)
-                    .cloned();
-                if let Some(def) = old_def {
-                    let old_rows = def.rendered_row_count();
-                    let old_cols = def.rendered_col_count();
-                    if old_rows > 0 && old_cols > 0 {
-                        self.mirror.clear_pivot_region(
-                            &output_sheet_id,
-                            def.start_row,
-                            def.start_col,
-                            old_rows,
-                            old_cols,
-                        );
+        self.with_history(|engine| {
+            // Clear materialized cells before deleting
+            if let Some(config) = services::objects::pivot_get(&engine.stores, sheet_id, pivot_id) {
+                if let Some(output_sheet_id) = config
+                    .output_sheet_id
+                    .as_deref()
+                    .and_then(|sheet_id| SheetId::from_uuid_str(sheet_id).ok())
+                    .or_else(|| engine.mirror.sheet_by_name(&config.output_sheet_name))
+                {
+                    let output_sheet_uuid = output_sheet_id.to_uuid_string();
+                    let old_def = engine
+                        .mirror
+                        .find_pivot_table_def(pivot_id, &config.name, &output_sheet_uuid)
+                        .cloned();
+                    if let Some(def) = old_def {
+                        let old_rows = def.rendered_row_count();
+                        let old_cols = def.rendered_col_count();
+                        if old_rows > 0 && old_cols > 0 {
+                            engine.mirror.clear_pivot_region(
+                                &output_sheet_id,
+                                def.start_row,
+                                def.start_col,
+                                old_rows,
+                                old_cols,
+                            );
+                        }
                     }
                 }
             }
-        }
-        let result = services::objects::pivot_delete(&mut self.stores, sheet_id, pivot_id)?;
-        // Removed pivot must not be re-materialized on next calculate —
-        // but cells we just cleared need the flush; mark dirty either way.
-        self.stores.compute.mark_dirty();
-        Ok((shared::empty_patches(), result))
+            let result = services::objects::pivot_delete(&mut engine.stores, sheet_id, pivot_id)?;
+            // Removed pivot must not be re-materialized on next calculate —
+            // but cells we just cleared need the flush; mark dirty either way.
+            engine.stores.compute.mark_dirty();
+            Ok((shared::empty_patches(), result))
+        })
     }
 
     /// Get a single pivot table by ID.
@@ -644,9 +650,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
     ) -> Vec<ImportedPivotViewRecord> {
         crate::storage::workbook::imported_pivots::read_view_records_for_output_sheet(
-            self.stores.storage.doc(),
-            self.stores.storage.workbook_map(),
-            self.stores.storage.sheets(),
+            &self.stores.storage,
             sheet_id,
         )
     }
@@ -733,17 +737,19 @@ impl YrsComputeEngine {
         first_data_row: u32,
         first_data_col: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::pivot_register_def(
-            &self.stores,
-            &mut self.mirror,
-            sheet_id,
-            pivot_id,
-            total_rows,
-            total_cols,
-            first_data_row,
-            first_data_col,
-        )
-        .map(shared::with_empty_patches)
+        self.without_history(|engine| {
+            services::objects::pivot_register_def(
+                &engine.stores,
+                &mut engine.mirror,
+                sheet_id,
+                pivot_id,
+                total_rows,
+                total_cols,
+                first_data_row,
+                first_data_col,
+            )
+            .map(shared::with_empty_patches)
+        })
     }
 
     /// Remove a pivot table definition from the GETPIVOTDATA registry.
@@ -756,8 +762,10 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         pivot_name: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::pivot_unregister_def(&mut self.mirror, sheet_id, pivot_name)
-            .map(shared::with_empty_patches)
+        self.without_history(|engine| {
+            services::objects::pivot_unregister_def(&mut engine.mirror, sheet_id, pivot_name)
+                .map(shared::with_empty_patches)
+        })
     }
 
     /// Compute and materialize a pivot table to sheet cells.
@@ -771,8 +779,11 @@ impl YrsComputeEngine {
         pivot_id: &str,
         expansion_state: Option<PivotExpansionState>,
     ) -> Result<PivotTableResult, ComputeError> {
-        let (_, result) = self.materialize_pivot_table(sheet_id, pivot_id, expansion_state)?;
-        Ok(result)
+        self.without_history(|engine| {
+            let (_, result) =
+                engine.materialize_pivot_table(sheet_id, pivot_id, expansion_state)?;
+            Ok(result)
+        })
     }
 
     /// Compute and materialize a pivot table, returning viewport patches through
@@ -790,11 +801,13 @@ impl YrsComputeEngine {
         pivot_id: &str,
         expansion_state: Option<PivotExpansionState>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let (output_sheet_id, result) =
-            self.materialize_pivot_table(sheet_id, pivot_id, expansion_state)?;
-        let mutation_result = MutationResult::empty().with_data(&result)?;
-        let patches = self.produce_full_viewport_patches(&output_sheet_id);
-        Ok((patches, mutation_result))
+        self.without_history(|engine| {
+            let (output_sheet_id, result) =
+                engine.materialize_pivot_table(sheet_id, pivot_id, expansion_state)?;
+            let mutation_result = MutationResult::empty().with_data(&result)?;
+            let patches = engine.produce_full_viewport_patches(&output_sheet_id);
+            Ok((patches, mutation_result))
+        })
     }
 
     /// Replace a pivot config and materialize its output in one mutation.
@@ -813,27 +826,30 @@ impl YrsComputeEngine {
         config: PivotTableConfig,
         expansion_state: Option<PivotExpansionState>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let config = self.normalize_pivot_update_config(sheet_id, config)?;
-        let update_result =
-            services::objects::pivot_update(&mut self.stores, sheet_id, pivot_id, config)?;
-        self.stores.compute.mark_dirty();
+        self.with_history(|engine| {
+            let config = engine.normalize_pivot_update_config(sheet_id, config)?;
+            let update_result =
+                services::objects::pivot_update(&mut engine.stores, sheet_id, pivot_id, config)?;
+            engine.stores.compute.mark_dirty();
 
-        let updated_config: Option<PivotTableConfig> = update_result.extract_data().unwrap_or(None);
-        if updated_config.is_none() {
+            let updated_config: Option<PivotTableConfig> =
+                update_result.extract_data().unwrap_or(None);
+            if updated_config.is_none() {
+                let data = PivotUpdateMaterializeResult {
+                    config: None,
+                    result: None,
+                };
+                return Ok((shared::empty_patches(), update_result.with_data(&data)?));
+            }
+
+            let (output_sheet_id, pivot_result) =
+                engine.materialize_pivot_table(sheet_id, pivot_id, expansion_state)?;
             let data = PivotUpdateMaterializeResult {
-                config: None,
-                result: None,
+                config: updated_config,
+                result: Some(pivot_result),
             };
-            return Ok((shared::empty_patches(), update_result.with_data(&data)?));
-        }
-
-        let (output_sheet_id, pivot_result) =
-            self.materialize_pivot_table(sheet_id, pivot_id, expansion_state)?;
-        let data = PivotUpdateMaterializeResult {
-            config: updated_config,
-            result: Some(pivot_result),
-        };
-        let patches = self.produce_full_viewport_patches(&output_sheet_id);
-        Ok((patches, update_result.with_data(&data)?))
+            let patches = engine.produce_full_viewport_patches(&output_sheet_id);
+            Ok((patches, update_result.with_data(&data)?))
+        })
     }
 }

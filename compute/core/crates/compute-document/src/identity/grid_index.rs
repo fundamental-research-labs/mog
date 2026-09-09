@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use cell_types::{AxisIdentityStore, CellId, ColId, IdAllocator, RowId, SheetId};
+use cell_types::{CellId, ColId, IdAllocator, RowId, SheetId};
 use rustc_hash::FxHashMap;
 
 /// Tracks identity-position mappings for a single sheet.
@@ -24,10 +24,10 @@ pub struct GridIndex {
     // Row identity tracking. Legacy rowOrder hydrates as Explicit; compact
     // persisted axes hydrate as Runs and resolve reverse lookups without a
     // dense RowId -> row_index map.
-    pub(super) row_axis: AxisIdentityStore<RowId>,
+    pub(super) row_axis: Arc<super::AxisIndex<RowId>>,
 
     // Column identity tracking. See row_axis.
-    pub(super) col_axis: AxisIdentityStore<ColId>,
+    pub(super) col_axis: Arc<super::AxisIndex<ColId>>,
 
     // Cell identity tracking (SPARSE -- only materialized cells)
     pub(super) cell_at_pos: FxHashMap<(u32, u32), CellId>, // (row, col) -> CellId

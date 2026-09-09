@@ -5,7 +5,7 @@ use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellError, CellValue, ComputeError};
 
 use super::*;
-use crate::storage::engine::YrsComputeEngine;
+use crate::storage::engine::ComputeEngine;
 use crate::storage::engine::mutation::CellInput;
 
 const SHEET_UUID: &str = "aa000000000000000000000000000001";
@@ -19,6 +19,9 @@ const FULL_SHEET_END_COL: u32 = 16_383;
 fn snapshot_with_cells(cells: Vec<CellData>) -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET_UUID.to_string(),
             name: "Sheet1".to_string(),
             rows: 10,
@@ -34,6 +37,9 @@ fn two_sheet_snapshot() -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: SHEET_UUID.to_string(),
                 name: "Sheet1".to_string(),
                 rows: 10,
@@ -42,6 +48,9 @@ fn two_sheet_snapshot() -> WorkbookSnapshot {
                 ranges: vec![],
             },
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: SHEET2_UUID.to_string(),
                 name: "Sheet2".to_string(),
                 rows: 10,
@@ -110,7 +119,7 @@ fn patch_flags_for_position(packed: &[u8], row: u32, col: u32) -> Option<u16> {
 #[test]
 fn mutation_set_cells_by_position_trusted_path_errors_newly_created_cycle() {
     let snapshot = snapshot_with_cells(vec![]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
     let sheet_id = SheetId::from_uuid_str(SHEET_UUID).expect("sheet uuid");
 
     engine
@@ -176,7 +185,7 @@ fn mutation_set_cells_by_position_trusted_path_errors_newly_created_cycle() {
 #[test]
 fn mutation_cross_sheet_cycle_viewport_preserves_formula_flag() {
     let snapshot = two_sheet_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
     let sheet1 = SheetId::from_uuid_str(SHEET_UUID).expect("sheet1 uuid");
     let sheet2 = SheetId::from_uuid_str(SHEET2_UUID).expect("sheet2 uuid");
     engine
@@ -317,7 +326,7 @@ fn mutation_clear_range_whole_sheet_uses_sparse_grid_targets() {
             array_ref: None,
         },
     ]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
     let sheet_id = SheetId::from_uuid_str(SHEET_UUID).expect("sheet uuid");
     let a1_id = CellId::from_uuid_str(A1_UUID).expect("A1 uuid");
     let j10_id = CellId::from_uuid_str(J10_UUID).expect("J10 uuid");
@@ -372,7 +381,7 @@ fn mutation_clear_range_by_position_whole_sheet_uses_sparse_grid_targets() {
             array_ref: None,
         },
     ]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
     let sheet_id = SheetId::from_uuid_str(SHEET_UUID).expect("sheet uuid");
     let a1_id = CellId::from_uuid_str(A1_UUID).expect("A1 uuid");
     let j10_id = CellId::from_uuid_str(J10_UUID).expect("J10 uuid");
@@ -416,7 +425,7 @@ fn mutation_clear_range_sparse_projection_overlap_rejects_partial_cse_clear() {
         identity_formula: None,
         array_ref: Some("A1:C2".to_string()),
     }]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
     let sheet_id = SheetId::from_uuid_str(SHEET_UUID).expect("sheet uuid");
     let anchor_id = CellId::from_uuid_str(CSE_A1_UUID).expect("CSE anchor uuid");
 
@@ -454,7 +463,7 @@ fn mutation_clear_range_full_cse_extent_clears_anchor() {
         identity_formula: None,
         array_ref: Some("A1:C2".to_string()),
     }]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
     let sheet_id = SheetId::from_uuid_str(SHEET_UUID).expect("sheet uuid");
     let anchor_id = CellId::from_uuid_str(CSE_A1_UUID).expect("CSE anchor uuid");
 
@@ -487,7 +496,7 @@ fn mutation_clear_range_dynamic_spill_member_rejects_without_blocker() {
         identity_formula: None,
         array_ref: None,
     }]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
     let sheet_id = SheetId::from_uuid_str(SHEET_UUID).expect("sheet uuid");
     let a1_id = CellId::from_uuid_str(A1_UUID).expect("A1 uuid");
 
@@ -546,7 +555,7 @@ fn mutation_clear_range_by_position_rejects_partial_cse_clear() {
         identity_formula: None,
         array_ref: Some("A1:C2".to_string()),
     }]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
     let sheet_id = SheetId::from_uuid_str(SHEET_UUID).expect("sheet uuid");
     let anchor_id = CellId::from_uuid_str(CSE_A1_UUID).expect("CSE anchor uuid");
 
@@ -584,6 +593,9 @@ fn mutation_set_cells_raw_preserves_iterative_seed_on_same_formula_reentry() {
         max_iterations: 100,
         max_change: value_types::FiniteF64::must(0.001),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET_UUID.to_string(),
             name: "Sheet1".to_string(),
             rows: 10,
@@ -601,7 +613,7 @@ fn mutation_set_cells_raw_preserves_iterative_seed_on_same_formula_reentry() {
         }],
         ..Default::default()
     };
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
     let sheet_id = SheetId::from_uuid_str(SHEET_UUID).expect("sheet uuid");
     let a1_id = CellId::from_uuid_str(A1_UUID).expect("cell uuid");
 
@@ -631,8 +643,7 @@ fn mutation_set_cells_raw_preserves_iterative_seed_on_same_formula_reentry() {
         // self-cycles. Matches how init_from_snapshot (via
         // `bulk_parse_and_register` + `set_precedents_fresh`) avoids
         // per-edge cycle detection.
-        mutation_set_cells_raw(stores, mirror, mutation, edits, true)
-            .expect("mutation_set_cells_raw");
+        mutation_set_cells_raw(stores, mirror, edits, true).expect("mutation_set_cells_raw");
     });
 
     // Post-check: A1 must still hold ~10.0. If the pre-write destroyed

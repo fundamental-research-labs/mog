@@ -1,5 +1,5 @@
 use cell_types::SheetId;
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellError, CellValue};
 
@@ -16,6 +16,9 @@ fn sid() -> SheetId {
 fn snapshot(cells: Vec<CellData>) -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET_ID.to_string(),
             name: "Sheet1".to_string(),
             rows: 50,
@@ -51,7 +54,7 @@ fn formula_cell(row: u32, col: u32, formula: &str) -> CellData {
     }
 }
 
-fn cell_value(engine: &YrsComputeEngine, row: u32, col: u32) -> CellValue {
+fn cell_value(engine: &ComputeEngine, row: u32, col: u32) -> CellValue {
     engine
         .query_range(&sid(), row, col, row, col)
         .cells
@@ -62,7 +65,7 @@ fn cell_value(engine: &YrsComputeEngine, row: u32, col: u32) -> CellValue {
 
 #[test]
 fn formulatext_returns_user_entered_formula_text() {
-    let (engine, _) = YrsComputeEngine::from_snapshot(snapshot(vec![
+    let (engine, _) = ComputeEngine::from_snapshot(snapshot(vec![
         value_cell(0, 0, CellValue::number(1.0)),
         formula_cell(0, 1, "=A1+1"),
         formula_cell(0, 2, "=FORMULATEXT(B1)"),
@@ -74,7 +77,7 @@ fn formulatext_returns_user_entered_formula_text() {
 
 #[test]
 fn formulatext_errors_for_non_formula_blank_scalar_and_external() {
-    let (engine, _) = YrsComputeEngine::from_snapshot(snapshot(vec![
+    let (engine, _) = ComputeEngine::from_snapshot(snapshot(vec![
         value_cell(0, 0, CellValue::number(1.0)),
         formula_cell(0, 1, "=FORMULATEXT(A1)"),
         formula_cell(0, 2, "=FORMULATEXT(Z1)"),
@@ -103,7 +106,7 @@ fn formulatext_errors_for_non_formula_blank_scalar_and_external() {
 
 #[test]
 fn formulatext_range_whole_row_and_column_use_upper_left() {
-    let (engine, _) = YrsComputeEngine::from_snapshot(snapshot(vec![
+    let (engine, _) = ComputeEngine::from_snapshot(snapshot(vec![
         formula_cell(0, 0, "=1+1"),
         formula_cell(1, 0, "=2+2"),
         formula_cell(0, 1, "=3+3"),
@@ -122,7 +125,7 @@ fn formulatext_range_whole_row_and_column_use_upper_left() {
 
 #[test]
 fn formulatext_dirty_on_formula_text_change_without_value_change() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot(vec![
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot(vec![
         formula_cell(0, 0, "=1+1"),
         formula_cell(0, 1, "=FORMULATEXT(A1)"),
     ]))
@@ -138,7 +141,7 @@ fn formulatext_dirty_on_formula_text_change_without_value_change() {
 #[test]
 fn formulatext_self_reference_returns_own_text() {
     let (engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot(vec![formula_cell(0, 0, "=FORMULATEXT(A1)")]))
+        ComputeEngine::from_snapshot(snapshot(vec![formula_cell(0, 0, "=FORMULATEXT(A1)")]))
             .unwrap();
 
     assert_eq!(
@@ -149,7 +152,7 @@ fn formulatext_self_reference_returns_own_text() {
 
 #[test]
 fn formulatext_wrong_arity_returns_value_error() {
-    let (engine, _) = YrsComputeEngine::from_snapshot(snapshot(vec![
+    let (engine, _) = ComputeEngine::from_snapshot(snapshot(vec![
         formula_cell(0, 0, "=FORMULATEXT()"),
         formula_cell(0, 1, "=FORMULATEXT(A1,A2)"),
     ]))
@@ -168,7 +171,7 @@ fn formulatext_wrong_arity_returns_value_error() {
 #[test]
 fn formulatext_over_8192_chars_returns_na() {
     let long_formula = format!("={}", "1+".repeat(4097));
-    let (engine, _) = YrsComputeEngine::from_snapshot(snapshot(vec![
+    let (engine, _) = ComputeEngine::from_snapshot(snapshot(vec![
         formula_cell(0, 0, &long_formula),
         formula_cell(0, 1, "=FORMULATEXT(A1)"),
     ]))

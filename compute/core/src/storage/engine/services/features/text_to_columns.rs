@@ -6,7 +6,7 @@ use cell_types::{SheetId, SheetPos};
 use value_types::{CellValue, ComputeError};
 
 pub(in crate::storage::engine) fn preview_text_to_columns(
-    stores: &EngineStores,
+    mirror: &CellMirror,
     sheet_id: SheetId,
     source_start_row: u32,
     source_end_row: u32,
@@ -14,15 +14,9 @@ pub(in crate::storage::engine) fn preview_text_to_columns(
     options: &cell_ops::TextToColumnsOptions,
     max_preview_rows: u32,
 ) -> Vec<Vec<String>> {
-    let grid = match stores.grid_indexes.get(&sheet_id) {
-        Some(g) => g,
-        None => return vec![],
-    };
     cell_ops::preview_text_to_columns(
-        stores.storage.doc(),
-        stores.storage.sheets(),
+        mirror,
         sheet_id,
-        grid,
         source_start_row,
         source_end_row,
         source_col,
@@ -92,7 +86,6 @@ fn col_format_is_numeric(format: Option<&domain_types::CellFormat>) -> bool {
 pub(in crate::storage::engine) fn text_to_columns(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
-    mutation_coord: &mut crate::storage::engine::mutation_coordinator::MutationCoordinator,
     sheet_id: SheetId,
     start_row: u32,
     end_row: u32,
@@ -207,23 +200,12 @@ pub(in crate::storage::engine) fn text_to_columns(
     }
 
     // 5. Route through the standard mutation pipeline so the mirror, viewport
-    //    buffer, and undo journal all stay in sync. Skip per-edge cycle
+    //    buffer, and dependencies all stay in sync. Skip per-edge cycle
     //    detection — a structural split can't introduce a formula cycle, and
     //    bulk routing keeps the path consistent with other batch writes.
-    let should_group_undo = !edits.is_empty();
-    if should_group_undo {
-        mutation_coord.undo_manager.begin_undo_group();
-    }
     let recalc_result = super::super::mutation_handlers::mutation_set_cells_by_position(
-        stores,
-        mirror,
-        mutation_coord,
-        edits,
-        true,
+        stores, mirror, edits, true,
     );
-    if should_group_undo {
-        mutation_coord.undo_manager.end_undo_group();
-    }
     let recalc = recalc_result?;
     Ok(
         MutationResult::from_recalc(recalc).with_data(&serde_json::json!({

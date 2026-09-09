@@ -1,16 +1,16 @@
 //! R5.1 — integration tests for the engine's `wb_security_*` ops.
 //!
-//! These tests hit the `YrsComputeEngine` directly (no dispatch, no
-//! ComputeService) so the bridging contract — attenuation, Yrs write,
-//! observer-driven `active` flip, template bookkeeping — is exercised
+//! These tests hit the `ComputeEngine` directly (no dispatch, no
+//! ComputeService) so the bridging contract — attenuation, native writes,
+//! activation, template bookkeeping — is exercised
 //! in isolation. The outer delegate-layer pre-check (bridge::write
 //! gating) is covered by R3's primitive tests and R7.1's end-to-end
 //! tests; here we focus on what the engine method body owns:
-//! attenuation + Yrs mutation + event emission.
+//! attenuation + native mutation + event emission.
 
 use std::sync::Arc;
 
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use compute_security::{
     AccessLevel, AccessPolicy, AccessPolicyPatch, AccessTarget, PolicyId, PolicyMetadata,
     PrincipalPool, PrincipalTag, SecurityEvent, TagMatcher, Template,
@@ -19,9 +19,12 @@ use snapshot_types::{SheetSnapshot, WorkbookSnapshot};
 
 const SHEET1_UUID: &str = "11111111-1111-1111-1111-111111111111";
 
-fn fresh_engine() -> YrsComputeEngine {
+fn fresh_engine() -> ComputeEngine {
     let snapshot = WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET1_UUID.to_string(),
             name: "Sheet1".to_string(),
             rows: 10,
@@ -31,7 +34,7 @@ fn fresh_engine() -> YrsComputeEngine {
         }],
         ..Default::default()
     };
-    let (engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (engine, _) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
     engine
 }
 
@@ -72,8 +75,8 @@ fn agent_tags() -> Vec<String> {
 #[test]
 fn add_policy_owner_succeeds_and_activates() {
     // Owner principal on an empty doc has Admin workbook-level access via
-    // the default-for-owner rule; attenuation passes, Yrs write fires the
-    // observer, and `active` flips true.
+    // the default-for-owner rule; attenuation passes and the native mutation
+    // publishes `active` before returning.
     let mut engine = fresh_engine();
     let pool = PrincipalPool::new();
     let owner = owner_principal(&pool);
@@ -106,7 +109,7 @@ fn add_policy_owner_succeeds_and_activates() {
 fn add_policy_attenuation_violation() {
     // Seed a Write-level policy so the caller's ceiling is Write, then
     // try to add an Admin-level policy. The attenuation guard inside
-    // wb_security_add_policy rejects before touching Yrs.
+    // wb_security_add_policy rejects before changing policies.
     let mut engine = fresh_engine();
     let pool = PrincipalPool::new();
     let owner = owner_principal(&pool);

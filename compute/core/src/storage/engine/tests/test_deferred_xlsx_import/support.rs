@@ -87,7 +87,7 @@ pub(super) fn basic_import_fixture_xlsx() -> Vec<u8> {
 }
 
 pub(super) fn assert_viewport_empty_cell_fill(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -522,7 +522,7 @@ pub(super) fn named_range_concat_fixture_xlsx() -> Vec<u8> {
     zip.finish().expect("write named-range concat fixture")
 }
 
-pub(super) fn sheet_ids(engine: &YrsComputeEngine) -> (SheetId, SheetId) {
+pub(super) fn sheet_ids(engine: &ComputeEngine) -> (SheetId, SheetId) {
     let ids = engine.get_all_sheet_ids();
     assert_eq!(ids.len(), 2, "fixture should import two sheets");
     (

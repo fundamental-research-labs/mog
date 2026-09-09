@@ -77,8 +77,8 @@ pub fn derive_xml_enum(input: DeriveInput) -> syn::Result<TokenStream> {
             /// Parse from XML attribute bytes. Lenient fallback to default
             /// on unknown tokens — this is the XLSX external-format read
             /// path where Excel forward-compat occasionally surfaces tokens
-            /// newer than our vocabulary. For *internal* read paths (Yrs,
-            /// palette, domain conversions), use the strict equivalent on
+            /// newer than our vocabulary. For *internal* read paths (palette,
+            /// domain conversions), use the strict equivalent on
             /// hand-written enums (round-D 2026-04-23) or audit the enum
             /// for a strict form (a dedicated round will extend strictness
             /// to every OOXML enum).

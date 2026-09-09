@@ -1,5 +1,5 @@
 use super::support::{as_f64, cell_at, cell_id, formula_cell, sheet_id, sheet_snap, value_cell};
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use snapshot_types::WorkbookSnapshot;
 
 #[test]
@@ -20,7 +20,7 @@ fn lifecycle_cross_sheet_formula_survives_edit() {
         ..Default::default()
     };
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).expect("from_snapshot");
     let data_sid = sheet_id(0);
     let summary_sid = sheet_id(1);
     let a1 = cell_id(0, 0, 0);
@@ -40,13 +40,5 @@ fn lifecycle_cross_sheet_formula_survives_edit() {
         (as_f64(&post_sum) - 150.0).abs() < 1e-9,
         "SUM should be 150 after edit, got {:?}",
         post_sum
-    );
-
-    engine.undo().expect("undo");
-    let undo_sum = cell_at(&engine, &summary_sid, 0, 0);
-    assert!(
-        (as_f64(&undo_sum) - 60.0).abs() < 1e-9,
-        "SUM should revert to 60 after undo, got {:?}",
-        undo_sum
     );
 }

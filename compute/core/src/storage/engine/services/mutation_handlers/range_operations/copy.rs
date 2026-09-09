@@ -4,7 +4,6 @@ use value_types::{CellValue, ComputeError};
 
 use crate::mirror::CellMirror;
 use crate::snapshot::{CellChange, CellPosition, RecalcResult};
-use crate::storage::engine::mutation_coordinator::MutationCoordinator;
 use crate::storage::engine::stores::EngineStores;
 
 use super::super::cell_mutations::mutation_set_cells_by_position_raw;
@@ -78,7 +77,6 @@ fn source_format_at(
 pub(in crate::storage::engine) fn mutation_copy_range(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
-    mutation: &mut MutationCoordinator,
     source_sheet_id: &SheetId,
     src_start_row: u32,
     src_start_col: u32,
@@ -218,8 +216,6 @@ pub(in crate::storage::engine) fn mutation_copy_range(
     let mut cell_edits: Vec<(SheetId, u32, u32, CellValue, Option<String>)> = Vec::new();
     let mut format_edits: Vec<(SheetId, u32, u32, domain_types::CellFormat)> = Vec::new();
 
-    mutation.observer.set_suppressed(true);
-
     let is_cross_sheet = source_sheet_id != target_sheet_id;
 
     // Render an IdentityFormula to an A1 body against the target position. Returns
@@ -343,14 +339,7 @@ pub(in crate::storage::engine) fn mutation_copy_range(
             continue;
         };
         let cell_hex = id_to_hex(cell_id.as_u128());
-        properties::replace_cell_format(
-            stores.storage.doc(),
-            stores.storage.workbook_map(),
-            stores.storage.sheets(),
-            sheet_id,
-            &cell_hex,
-            format,
-        );
+        properties::replace_cell_format(&mut stores.storage, sheet_id, &cell_hex, format);
         let value = mirror
             .get_cell_value_at(sheet_id, SheetPos::new(*row, *col))
             .cloned()
@@ -374,8 +363,6 @@ pub(in crate::storage::engine) fn mutation_copy_range(
         });
     }
 
-    mutation.observer.set_suppressed(false);
-
     let mut format_recalc = RecalcResult::empty();
     format_recalc.changed_cells = format_changes;
 
@@ -383,8 +370,7 @@ pub(in crate::storage::engine) fn mutation_copy_range(
         return Ok(format_recalc);
     }
 
-    let mut recalc =
-        mutation_set_cells_by_position_raw(stores, mirror, mutation, cell_edits, false)?;
+    let mut recalc = mutation_set_cells_by_position_raw(stores, mirror, cell_edits, false)?;
     super::patches::merge_recalc_results(&mut recalc, format_recalc);
     Ok(recalc)
 }

@@ -45,7 +45,7 @@ fn test_from_snapshot_formula() {
     let snap = simple_snapshot();
     let mirror = CellMirror::from_snapshot(snap).unwrap();
 
-    // CellEntry.formula is None in the mirror (yrs doc is the authoritative source).
+    // No identity formula was supplied; raw formula text is compiled by ComputeCore.
     // The scheduler's formula_strings map is the authoritative source.
     let cell_id = CellId::from_uuid_str("550e8400-e29b-41d4-a716-446655440003").unwrap();
     assert!(mirror.get_formula(&cell_id).is_none());
@@ -53,7 +53,13 @@ fn test_from_snapshot_formula() {
 #[test]
 fn test_from_snapshot_invalid_uuid() {
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "not-a-uuid".to_string(),
             name: "Bad".to_string(),
             rows: 10,
@@ -76,7 +82,13 @@ fn test_from_snapshot_invalid_uuid() {
 fn test_from_snapshot_invalid_cell_uuid() {
     // Use a non-Null value so the cell is not skipped as a ghost cell.
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: "Sheet1".to_string(),
             rows: 10,
@@ -106,7 +118,13 @@ fn test_from_snapshot_invalid_cell_uuid() {
 #[test]
 fn test_named_range_from_snapshot() {
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: "Sheet1".to_string(),
             rows: 10,
@@ -139,7 +157,13 @@ fn test_named_range_from_snapshot() {
 #[test]
 fn test_table_from_snapshot() {
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: "Sheet1".to_string(),
             rows: 10,
@@ -182,6 +206,9 @@ fn test_empty_mirror() {
 #[test]
 fn test_empty_snapshot() {
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![],
         named_ranges: vec![],
         tables: vec![],
@@ -198,7 +225,13 @@ fn test_empty_snapshot() {
 #[test]
 fn test_empty_sheet() {
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: "Empty".to_string(),
             rows: 100,
@@ -230,6 +263,9 @@ fn test_multiple_sheets() {
     let mut mirror = CellMirror::new();
 
     let snap1 = SheetSnapshot {
+        identities: Vec::new(),
+        row_axis: None,
+        col_axis: None,
         id: "550e8400-e29b-41d4-a716-446655440001".to_string(),
         name: "Sheet1".to_string(),
         rows: 10,
@@ -246,6 +282,9 @@ fn test_multiple_sheets() {
         ranges: vec![],
     };
     let snap2 = SheetSnapshot {
+        identities: Vec::new(),
+        row_axis: None,
+        col_axis: None,
         id: "550e8400-e29b-41d4-a716-446655440002".to_string(),
         name: "Sheet2".to_string(),
         rows: 10,

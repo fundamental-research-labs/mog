@@ -3,10 +3,9 @@ use super::test_support::*;
 
 #[test]
 fn test_set_outline_settings() {
-    let (s, id) = storage_with_sheet();
+    let (mut s, id) = storage_with_sheet();
     set_outline_settings(
-        s.doc(),
-        &s.sheets_ref(),
+        &mut s,
         &id,
         &OutlineSettingsUpdate {
             summary_rows_below: Some(false),
@@ -14,7 +13,7 @@ fn test_set_outline_settings() {
             ..Default::default()
         },
     );
-    let c = get_sheet_grouping_config(s.doc(), &s.sheets_ref(), &id);
+    let c = get_sheet_grouping_config(&s, &id);
     assert!(!c.summary_rows_below);
     assert!(!c.show_outline_symbols);
     assert!(c.summary_columns_right);

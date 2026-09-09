@@ -3,9 +3,6 @@
 use super::super::*;
 use super::helpers::*;
 use crate::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
-use compute_document::cell_serde::write_rich_string_to_yrs;
-use compute_document::hex::id_to_hex;
-use compute_document::schema::KEY_CELLS;
 use compute_pivot::types::{
     FieldId, PivotGrandTotals, PivotHeader, PivotRenderedBounds, PivotRow, PivotTableResult,
 };
@@ -13,7 +10,6 @@ use domain_types::domain::pivot::PivotTableStyle;
 use domain_types::{CellFormat, FontSize, RichSharedString, RichTextRun};
 use snapshot_types::PivotTableDef;
 use value_types::CellValue;
-use yrs::{Map, Out, Transact};
 
 // -------------------------------------------------------------------
 // Test 23: register_viewport and get_registered_viewports
@@ -22,7 +18,7 @@ use yrs::{Map, Out, Transact};
 #[test]
 fn test_register_viewport_appears_in_registry() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
     engine.register_viewport("main", &sid, 0, 0, 50, 20);
@@ -43,7 +39,7 @@ fn test_register_viewport_appears_in_registry() {
 #[test]
 fn test_update_viewport_bounds() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
     engine.register_viewport("main", &sid, 0, 0, 50, 20);
@@ -64,7 +60,7 @@ fn test_update_viewport_bounds() {
 #[test]
 fn test_update_viewport_bounds_unknown_id() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // Should not panic; just no-op
     engine.update_viewport_bounds("nonexistent", 0, 0, 50, 20);
@@ -78,7 +74,7 @@ fn test_update_viewport_bounds_unknown_id() {
 #[test]
 fn test_unregister_viewport() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
     engine.register_viewport("main", &sid, 0, 0, 50, 20);
@@ -95,8 +91,14 @@ fn test_unregister_viewport() {
 #[test]
 fn test_reset_sheet_viewports_selective() {
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
                 name: "Sheet1".to_string(),
                 rows: 100,
@@ -105,6 +107,9 @@ fn test_reset_sheet_viewports_selective() {
                 ranges: vec![],
             },
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: "550e8400-e29b-41d4-a716-446655440099".to_string(),
                 name: "Sheet2".to_string(),
                 rows: 100,
@@ -123,7 +128,7 @@ fn test_reset_sheet_viewports_selective() {
         calculation_settings: None,
     };
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid1 = SheetId::from_uuid_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
     let sid2 = SheetId::from_uuid_str("550e8400-e29b-41d4-a716-446655440099").unwrap();
@@ -149,7 +154,7 @@ fn test_reset_sheet_viewports_selective() {
 #[test]
 fn test_get_viewport_binary_updates_registry() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
 
@@ -172,7 +177,7 @@ fn test_get_viewport_binary_updates_registry() {
 #[test]
 fn test_multiple_viewports_same_sheet() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
     engine.register_viewport("top-pane", &sid, 0, 0, 10, 20);
@@ -193,7 +198,7 @@ fn test_multiple_viewports_same_sheet() {
 #[test]
 fn test_register_viewport_replaces_existing() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
     engine.register_viewport("main", &sid, 0, 0, 50, 20);
@@ -208,7 +213,7 @@ fn test_register_viewport_replaces_existing() {
 #[test]
 fn test_viewport_binary_renders_materialized_values_without_cell_ids() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     let anchor_row = 0;
@@ -275,29 +280,18 @@ fn test_viewport_binary_renders_materialized_values_without_cell_ids() {
 }
 
 fn write_rich_string_for_test_cell(
-    engine: &YrsComputeEngine,
-    sheet_id: &SheetId,
+    engine: &mut ComputeEngine,
+    _sheet_id: &SheetId,
     cell_id: &CellId,
     rich_string: &RichSharedString,
 ) {
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let cell_hex = id_to_hex(cell_id.as_u128());
-    let sheets = engine.storage().sheets_ref();
-    let mut txn = engine.storage().doc().transact_mut();
-    let sheet_map = match sheets.get(&txn, &sheet_hex) {
-        Some(Out::YMap(map)) => map,
-        other => panic!("expected sheet map, got {other:?}"),
-    };
-    let cells_map = match sheet_map.get(&txn, KEY_CELLS) {
-        Some(Out::YMap(map)) => map,
-        other => panic!("expected cells map, got {other:?}"),
-    };
-    let cell_map = match cells_map.get(&txn, &cell_hex) {
-        Some(Out::YMap(map)) => map,
-        other => panic!("expected cell map, got {other:?}"),
-    };
-
-    write_rich_string_to_yrs(&cell_map, &mut txn, rich_string);
+    engine.stores.storage.set_cell_metadata(
+        *cell_id,
+        crate::storage::CellMetadata {
+            rich_string: Some(rich_string.clone()),
+            ..Default::default()
+        },
+    );
 }
 
 #[test]
@@ -307,7 +301,13 @@ fn rich_text_viewport_format_uses_run_aggregate_font() {
     let cell_id_b2 = CellId::from_uuid_str("550e8400-e29b-41d4-a716-446655440005").unwrap();
     let cell_id_c2 = CellId::from_uuid_str("550e8400-e29b-41d4-a716-446655440006").unwrap();
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sid.to_uuid_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -383,7 +383,7 @@ fn rich_text_viewport_format_uses_run_aggregate_font() {
         max_change: value_types::FiniteF64::must(0.001),
         calculation_settings: None,
     };
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     engine
         .set_format_for_ranges(
@@ -423,7 +423,7 @@ fn rich_text_viewport_format_uses_run_aggregate_font() {
         .unwrap();
 
     write_rich_string_for_test_cell(
-        &engine,
+        &mut engine,
         &sid,
         &cell_id_a1(),
         &RichSharedString {
@@ -438,7 +438,7 @@ fn rich_text_viewport_format_uses_run_aggregate_font() {
         },
     );
     write_rich_string_for_test_cell(
-        &engine,
+        &mut engine,
         &sid,
         &cell_id_c1,
         &RichSharedString {
@@ -468,7 +468,7 @@ fn rich_text_viewport_format_uses_run_aggregate_font() {
         },
     );
     write_rich_string_for_test_cell(
-        &engine,
+        &mut engine,
         &sid,
         &cell_id_b1(),
         &RichSharedString {
@@ -493,7 +493,7 @@ fn rich_text_viewport_format_uses_run_aggregate_font() {
         },
     );
     write_rich_string_for_test_cell(
-        &engine,
+        &mut engine,
         &sid,
         &cell_id_a2(),
         &RichSharedString {
@@ -515,7 +515,7 @@ fn rich_text_viewport_format_uses_run_aggregate_font() {
         },
     );
     write_rich_string_for_test_cell(
-        &engine,
+        &mut engine,
         &sid,
         &cell_id_b2,
         &RichSharedString {
@@ -542,7 +542,7 @@ fn rich_text_viewport_format_uses_run_aggregate_font() {
         },
     );
     write_rich_string_for_test_cell(
-        &engine,
+        &mut engine,
         &sid,
         &cell_id_c2,
         &RichSharedString {
@@ -595,7 +595,13 @@ fn pivot_total_viewport_format_overrides_cell_xf() {
     let sid = sheet_id();
     let cell_id = CellId::from_uuid_str("550e8400-e29b-41d4-a716-446655440040").unwrap();
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sid.to_uuid_string(),
             name: "Pivot".to_string(),
             rows: 100,
@@ -647,7 +653,7 @@ fn pivot_total_viewport_format_overrides_cell_xf() {
         max_change: value_types::FiniteF64::must(0.001),
         calculation_settings: None,
     };
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     engine
         .set_cell_format(
@@ -681,7 +687,13 @@ fn pivot_total_viewport_format_overrides_cell_xf() {
 fn projection_member_viewport_format_prefers_allocated_member_cell_style() {
     let sid = sheet_id();
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sid.to_uuid_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -717,7 +729,7 @@ fn projection_member_viewport_format_prefers_allocated_member_cell_style() {
         max_change: value_types::FiniteF64::must(0.001),
         calculation_settings: None,
     };
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     engine
         .set_format_for_ranges(

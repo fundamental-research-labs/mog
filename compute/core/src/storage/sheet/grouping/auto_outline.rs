@@ -1,15 +1,10 @@
 use cell_types::{SheetId, col_to_letter};
 use regex::Regex;
-use yrs::{Doc, MapRef};
 
-use super::crud::group_rows;
-use super::queries::get_groups;
-use super::types::{CellRange, GroupAxis, SubtotalsCellAccessor};
+use super::types::{CellRange, SubtotalsCellAccessor};
 
 pub fn auto_outline(
-    doc: &Doc,
-    sheets: &MapRef,
-    cell_accessor: &dyn SubtotalsCellAccessor,
+    cell_accessor: &mut dyn SubtotalsCellAccessor,
     sheet_id: &SheetId,
     range: &CellRange,
 ) -> u32 {
@@ -31,9 +26,9 @@ pub fn auto_outline(
                 let rs: u32 = caps[1].parse::<u32>().unwrap_or(0).saturating_sub(1);
                 let re: u32 = caps[2].parse::<u32>().unwrap_or(0).saturating_sub(1);
                 if rs >= range.start_row() && re < row && re >= rs {
-                    let existing = get_groups(doc, sheets, sheet_id, GroupAxis::Row);
+                    let existing = cell_accessor.get_row_groups(sheet_id);
                     if !existing.iter().any(|g| g.start == rs && g.end == row)
-                        && group_rows(doc, sheets, sheet_id, rs, row).is_ok()
+                        && cell_accessor.group_rows(sheet_id, rs, row).is_ok()
                     {
                         created += 1;
                     }

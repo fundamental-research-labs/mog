@@ -7,7 +7,7 @@ use super::super::floating_object::FloatingObjectAnchor;
 use super::{SlicerSource, SlicerStyle};
 
 /// Canonical slicer schema — Rust owns this type, TS is generated from it.
-/// Matches the full persisted shape in Yrs CRDT storage.
+/// Stored directly in native workbook metadata.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StoredSlicer {

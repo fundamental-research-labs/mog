@@ -13,7 +13,7 @@
 //! Run:
 //!   cargo test -p compute-core --test data_table_active_cell_metadata
 
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use formula_types::CellRef;
 use snapshot_types::properties::{CellMetadata, RegionKind, RegionMeta};
 use snapshot_types::{CellData, DataTableRegionDef, SheetSnapshot, WorkbookSnapshot};
@@ -65,6 +65,9 @@ fn data_table_workbook() -> WorkbookSnapshot {
     ];
 
     let sheet = SheetSnapshot {
+        identities: Vec::new(),
+        row_axis: None,
+        col_axis: None,
         id: SHEET_UUID.to_string(),
         name: "Sheet1".to_string(),
         rows: 50,
@@ -118,7 +121,7 @@ fn parse_metadata(active: &compute_core::snapshot::ActiveCellData) -> CellMetada
 #[test]
 fn data_table_master_active_cell_metadata_has_region_anchor() {
     let snap = data_table_workbook();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).expect("engine");
+    let (engine, _) = ComputeEngine::from_snapshot(snap).expect("engine");
 
     let sheet_id = cell_types::SheetId::from_uuid_str(SHEET_UUID).unwrap();
     let b2_id = cell_types::CellId::from_uuid_str(&cell_uuid(5)).unwrap();
@@ -163,7 +166,7 @@ fn data_table_master_active_cell_metadata_has_region_anchor() {
 #[test]
 fn data_table_body_active_cell_metadata_has_region_member() {
     let snap = data_table_workbook();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).expect("engine");
+    let (engine, _) = ComputeEngine::from_snapshot(snap).expect("engine");
 
     let sheet_id = cell_types::SheetId::from_uuid_str(SHEET_UUID).unwrap();
     let c3_id = cell_types::CellId::from_uuid_str(&cell_uuid(8)).unwrap();
@@ -198,7 +201,7 @@ fn data_table_body_active_cell_metadata_has_region_member() {
 #[test]
 fn cell_outside_data_table_has_no_region_metadata() {
     let snap = data_table_workbook();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).expect("engine");
+    let (engine, _) = ComputeEngine::from_snapshot(snap).expect("engine");
 
     let sheet_id = cell_types::SheetId::from_uuid_str(SHEET_UUID).unwrap();
     let a1_id = cell_types::CellId::from_uuid_str(&cell_uuid(1)).unwrap();
@@ -223,7 +226,7 @@ fn cell_outside_data_table_has_no_region_metadata() {
 #[test]
 fn data_table_formula_readback_is_synthesized_across_query_surfaces() {
     let snap = data_table_workbook();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).expect("engine");
+    let (engine, _) = ComputeEngine::from_snapshot(snap).expect("engine");
 
     let sheet_id = cell_types::SheetId::from_uuid_str(SHEET_UUID).unwrap();
 
@@ -249,13 +252,13 @@ fn data_table_formula_readback_is_synthesized_across_query_surfaces() {
 fn data_table_formula_preserves_omitted_one_variable_arguments() {
     let mut row_input_snap = data_table_workbook();
     row_input_snap.data_table_regions[0].col_input_ref = None;
-    let (row_engine, _) = YrsComputeEngine::from_snapshot(row_input_snap).expect("row engine");
+    let (row_engine, _) = ComputeEngine::from_snapshot(row_input_snap).expect("row engine");
     let sheet_id = cell_types::SheetId::from_uuid_str(SHEET_UUID).unwrap();
     assert_eq!(row_engine.get_raw_value(&sheet_id, 2, 2), "=TABLE($A$2,)");
 
     let mut col_input_snap = data_table_workbook();
     col_input_snap.data_table_regions[0].row_input_ref = None;
-    let (col_engine, _) = YrsComputeEngine::from_snapshot(col_input_snap).expect("col engine");
+    let (col_engine, _) = ComputeEngine::from_snapshot(col_input_snap).expect("col engine");
     assert_eq!(col_engine.get_raw_value(&sheet_id, 2, 2), "=TABLE(,$A$1)");
 }
 
@@ -273,7 +276,7 @@ fn data_table_formula_treats_sheet_zero_positional_refs_as_current_sheet() {
         col: 0,
     });
 
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).expect("engine");
+    let (engine, _) = ComputeEngine::from_snapshot(snap).expect("engine");
     let sheet_id = cell_types::SheetId::from_uuid_str(SHEET_UUID).unwrap();
 
     assert_eq!(

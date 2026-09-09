@@ -9,15 +9,12 @@ use crate::storage::sheet::floating_objects::{
 
 #[test]
 fn test_unified_z_order_interleave() {
-    let (storage, sheet_id) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
+    let (mut storage, sheet_id) = storage_with_sheet();
 
     // Create chart as a floating object
     let chart_config = serde_json::json!({ "chartType": "bar", "anchorRow": 0, "anchorCol": 0, "width": 400, "height": 300 });
     let chart_json = create_chart_object(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         &chart_config,
         None,
@@ -28,15 +25,14 @@ fn test_unified_z_order_interleave() {
 
     // Create shape floating object
     let obj_id = create_floating_object(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         &basic_object_config(),
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
 
-    let entries = get_all_in_z_order(doc, sheets, &sheet_id);
+    let entries = get_all_in_z_order(&storage, &sheet_id);
     assert_eq!(entries.len(), 2);
 
     // Both should be present
@@ -64,19 +60,16 @@ fn test_unified_z_order_interleave() {
 
 #[test]
 fn test_unified_max_min_z_index() {
-    let (storage, sheet_id) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
+    let (mut storage, sheet_id) = storage_with_sheet();
 
     // Empty sheet
-    assert_eq!(get_max_z_index_all(doc, sheets, &sheet_id), 0);
-    assert_eq!(get_min_z_index_all(doc, sheets, &sheet_id), 0);
+    assert_eq!(get_max_z_index_all(&storage, &sheet_id), 0);
+    assert_eq!(get_min_z_index_all(&storage, &sheet_id), 0);
 
     // Add chart (as floating object) and shape floating object
     let chart_config = serde_json::json!({ "chartType": "bar", "anchorRow": 0, "anchorCol": 0, "width": 400, "height": 300 });
     let _chart_json = create_chart_object(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         &chart_config,
         None,
@@ -84,16 +77,15 @@ fn test_unified_max_min_z_index() {
     )
     .unwrap();
     let _obj_id = create_floating_object(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         &basic_object_config(),
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
 
-    let max_z = get_max_z_index_all(doc, sheets, &sheet_id);
-    let min_z = get_min_z_index_all(doc, sheets, &sheet_id);
+    let max_z = get_max_z_index_all(&storage, &sheet_id);
+    let min_z = get_min_z_index_all(&storage, &sheet_id);
     assert!(max_z >= min_z);
     assert!(max_z >= 0);
 }
@@ -104,9 +96,7 @@ fn test_unified_max_min_z_index() {
 
 #[test]
 fn test_create_chart_object_basic() {
-    let (storage, sheet_id) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
+    let (mut storage, sheet_id) = storage_with_sheet();
     let config = serde_json::json!({
         "chartType": "bar",
         "anchorRow": 2,
@@ -117,8 +107,7 @@ fn test_create_chart_object_basic() {
         "series": [{"name": "Revenue"}]
     });
     let obj = create_chart_object(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         &config,
         None,
@@ -144,9 +133,7 @@ fn test_create_chart_object_basic() {
 
 #[test]
 fn test_create_chart_object_accepts_nested_anchor_contract() {
-    let (storage, sheet_id) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
+    let (mut storage, sheet_id) = storage_with_sheet();
     let config = serde_json::json!({
         "chartType": "column",
         "anchor": {
@@ -164,8 +151,7 @@ fn test_create_chart_object_accepts_nested_anchor_contract() {
     });
 
     let obj = create_chart_object(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         &config,
         None,
@@ -184,26 +170,22 @@ fn test_create_chart_object_accepts_nested_anchor_contract() {
 
 #[test]
 fn test_chart_z_index_unified_with_shapes() {
-    let (storage, sheet_id) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
+    let (mut storage, sheet_id) = storage_with_sheet();
 
     // Create a shape first
     let _shape_id = create_floating_object(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         &basic_object_config(),
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
-    let shape_z = get_floating_object_max_z_index(doc, sheets, &sheet_id);
+    let shape_z = get_floating_object_max_z_index(&storage, &sheet_id);
 
     // Create a chart — should get a higher z-index
     let chart_config = serde_json::json!({ "chartType": "line", "anchorRow": 0, "anchorCol": 0, "width": 400, "height": 300 });
     let chart_obj = create_chart_object(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         &chart_config,
         None,
@@ -216,14 +198,11 @@ fn test_chart_z_index_unified_with_shapes() {
 
 #[test]
 fn test_get_chart_objects() {
-    let (storage, sheet_id) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
+    let (mut storage, sheet_id) = storage_with_sheet();
 
     // Create a shape and a chart
     let _shape_id = create_floating_object(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         &basic_object_config(),
         &crate::storage::STORAGE_ID_ALLOC,
@@ -231,8 +210,7 @@ fn test_get_chart_objects() {
     .unwrap();
     let chart_config = serde_json::json!({ "chartType": "pie", "anchorRow": 0, "anchorCol": 0, "width": 400, "height": 300 });
     let _chart_obj = create_chart_object(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         &chart_config,
         None,
@@ -241,23 +219,23 @@ fn test_get_chart_objects() {
     .unwrap();
 
     // get_chart_objects should only return charts, not shapes
-    let charts = get_chart_objects(doc, sheets, &sheet_id);
+    let charts = get_chart_objects(&storage, &sheet_id);
     assert_eq!(charts.len(), 1);
-    assert_eq!(charts[0]["type"], "chart");
-    assert_eq!(charts[0]["chartType"], "pie");
+    assert_eq!(charts[0].object_type(), "chart");
+    assert_eq!(
+        serde_json::to_value(&charts[0]).unwrap()["chartType"],
+        "pie"
+    );
 }
 
 #[test]
 fn test_get_charts_linked_to_table_query() {
-    let (storage, sheet_id) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
+    let (mut storage, sheet_id) = storage_with_sheet();
 
     // Create two charts, one linked to a table
     let config1 = serde_json::json!({ "chartType": "bar", "anchorRow": 0, "anchorCol": 0, "width": 400, "height": 300, "sourceTableId": "table-A" });
     let _c1 = create_chart_object(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         &config1,
         None,
@@ -267,8 +245,7 @@ fn test_get_charts_linked_to_table_query() {
 
     let config2 = serde_json::json!({ "chartType": "line", "anchorRow": 0, "anchorCol": 0, "width": 400, "height": 300 });
     let _c2 = create_chart_object(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         &config2,
         None,
@@ -276,24 +253,24 @@ fn test_get_charts_linked_to_table_query() {
     )
     .unwrap();
 
-    let linked = get_charts_linked_to_table(doc, sheets, &sheet_id, "table-A");
+    let linked = get_charts_linked_to_table(&storage, &sheet_id, "table-A");
     assert_eq!(linked.len(), 1);
-    assert_eq!(linked[0]["chartType"], "bar");
+    assert_eq!(
+        serde_json::to_value(&linked[0]).unwrap()["chartType"],
+        "bar"
+    );
 
-    let linked_b = get_charts_linked_to_table(doc, sheets, &sheet_id, "table-B");
+    let linked_b = get_charts_linked_to_table(&storage, &sheet_id, "table-B");
     assert!(linked_b.is_empty());
 }
 
 #[test]
 fn test_delete_chart_floating_object() {
-    let (storage, sheet_id) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
+    let (mut storage, sheet_id) = storage_with_sheet();
 
     let config = serde_json::json!({ "chartType": "bar", "anchorRow": 0, "anchorCol": 0, "width": 400, "height": 300 });
     let chart_obj = create_chart_object(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         &config,
         None,
@@ -302,22 +279,19 @@ fn test_delete_chart_floating_object() {
     .unwrap();
     let chart_id = chart_obj["id"].as_str().unwrap();
 
-    assert!(get_floating_object(doc, sheets, &sheet_id, chart_id).is_some());
-    let deleted = delete_floating_object(doc, sheets, &sheet_id, chart_id);
+    assert!(get_floating_object(&storage, &sheet_id, chart_id).is_some());
+    let deleted = delete_floating_object(&mut storage, &sheet_id, chart_id);
     assert!(deleted);
-    assert!(get_floating_object(doc, sheets, &sheet_id, chart_id).is_none());
+    assert!(get_floating_object(&storage, &sheet_id, chart_id).is_none());
 }
 
 #[test]
 fn test_update_chart_config() {
-    let (storage, sheet_id) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
+    let (mut storage, sheet_id) = storage_with_sheet();
 
     let config = serde_json::json!({ "chartType": "bar", "anchorRow": 0, "anchorCol": 0, "width": 400, "height": 300, "dataRange": "A1:B5" });
     let chart_obj = create_chart_object(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         &config,
         None,
@@ -328,19 +302,17 @@ fn test_update_chart_config() {
 
     // Update chart fields directly as individual top-level keys
     let updates = serde_json::json!({ "dataRange": "A1:C10", "legend": {"show": true} });
-    let updated = update_floating_object(doc, sheets, &sheet_id, chart_id, &updates);
+    let updated = update_floating_object(&mut storage, &sheet_id, chart_id, &updates);
     assert!(updated);
 
-    let obj = get_floating_object(doc, sheets, &sheet_id, chart_id).unwrap();
+    let obj = get_floating_object(&storage, &sheet_id, chart_id).unwrap();
     assert_eq!(obj["dataRange"], "A1:C10");
     assert_eq!(obj["legend"]["show"], true);
 }
 
 #[test]
 fn test_update_chart_series_config() {
-    let (storage, sheet_id) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
+    let (mut storage, sheet_id) = storage_with_sheet();
 
     let config = serde_json::json!({
         "chartType": "column",
@@ -351,8 +323,7 @@ fn test_update_chart_series_config() {
         "dataRange": "A1:B4"
     });
     let chart_obj = create_chart_object(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         &config,
         None,
@@ -370,10 +341,10 @@ fn test_update_chart_series_config() {
             }
         ]
     });
-    let updated = update_floating_object(doc, sheets, &sheet_id, chart_id, &updates);
+    let updated = update_floating_object(&mut storage, &sheet_id, chart_id, &updates);
     assert!(updated);
 
-    let obj = get_floating_object(doc, sheets, &sheet_id, chart_id).unwrap();
+    let obj = get_floating_object(&storage, &sheet_id, chart_id).unwrap();
     assert_eq!(obj["series"][0]["name"], "Revenue (USD)");
     assert_eq!(obj["series"][0]["values"], "B2:B4");
     assert_eq!(obj["series"][0]["categories"], "A2:A4");

@@ -42,7 +42,13 @@ fn make_cf_snapshot() -> WorkbookSnapshot {
         })
         .collect();
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_uuid(),
             name: "Sheet1".to_string(),
             rows: 10,
@@ -86,7 +92,13 @@ fn make_formula_rule(formula: &str, priority: i32) -> CFRule {
 /// Workbook: A1 is truly blank, A2 is a formula returning "", and A3 is text.
 fn make_blanks_snapshot() -> WorkbookSnapshot {
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_uuid(),
             name: "Sheet1".to_string(),
             rows: 10,
@@ -379,7 +391,13 @@ fn test_cf_formula_cross_column() {
         },
     ];
     let snapshot = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_uuid(),
             name: "Sheet1".to_string(),
             rows: 10,

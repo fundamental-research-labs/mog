@@ -145,7 +145,7 @@ pub(crate) fn bench_range_backed_col_slice(c: &mut Criterion) {
             },
             |(mirror, sheet_id)| {
                 let sheet = mirror.get_sheet(&sheet_id).unwrap();
-                black_box(sheet.get_column_slice(0));
+                black_box(sheet.get_column_view(0));
             },
         );
     });
@@ -157,7 +157,7 @@ pub(crate) fn bench_range_backed_col_slice(c: &mut Criterion) {
 
         b.iter(|| {
             let sheet = mirror.get_sheet(&sheet_id).unwrap();
-            black_box(sheet.get_column_slice(0));
+            black_box(sheet.get_column_view(0));
         });
     });
 

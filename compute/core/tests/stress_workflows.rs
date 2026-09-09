@@ -6,7 +6,7 @@ use stress_engine_common::*;
 use cell_types::SheetPos;
 use compute_core::bridge_types::{BridgeSortCriterion, BridgeSortOptions};
 use compute_core::engine_types::fill::{BridgeAutoFillRequest, BridgeFillRangeSpec};
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use domain_types::domain::copy::CopyType;
 use domain_types::domain::filter::{SortBy, SortOrder};
 use snapshot_types::{CellData, CellEdit, RecalcResult, SheetSnapshot, WorkbookSnapshot};
@@ -23,7 +23,7 @@ use formula_types::StructureChange;
 #[test]
 fn test_agent_builds_data_pipeline() {
     let snapshot = make_snapshot(vec![]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     // Steps 1-5: Set A1:A5 = 10,20,30,40,50
@@ -130,7 +130,7 @@ fn test_agent_restructures_model() {
         cells.push(make_cell(i, 1, num(((i + 1) * 2) as f64), None));
     }
     let snapshot = make_snapshot(cells);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     // Steps 1-5: Assert initial state
@@ -234,7 +234,7 @@ fn test_agent_restructures_model() {
 #[test]
 fn test_agent_builds_table() {
     let snapshot = make_snapshot(vec![]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     // Steps 1-3: Enter headers
@@ -356,7 +356,7 @@ fn test_agent_builds_table() {
 #[test]
 fn test_agent_iterates_financial_model() {
     let snapshot = make_snapshot(vec![]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     // Steps 1-6: Set up model labels and assumptions
@@ -515,7 +515,7 @@ fn test_adversarial_100_random_ops() {
         }
     }
     let snapshot = make_snapshot_large(100, 26, cells);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     // LCG PRNG

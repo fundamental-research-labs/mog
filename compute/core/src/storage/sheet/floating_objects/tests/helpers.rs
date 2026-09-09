@@ -1,12 +1,12 @@
-use crate::storage::YrsStorage;
+use crate::storage::WorkbookStorage;
 use cell_types::SheetId;
 
 pub(super) fn make_sheet_id(n: u128) -> SheetId {
     SheetId::from_raw(n)
 }
 
-pub(super) fn storage_with_sheet() -> (YrsStorage, SheetId) {
-    let mut storage = YrsStorage::new();
+pub(super) fn storage_with_sheet() -> (WorkbookStorage, SheetId) {
+    let mut storage = WorkbookStorage::new();
     let mut mirror = crate::mirror::CellMirror::new();
     let sheet_id = make_sheet_id(1);
     storage

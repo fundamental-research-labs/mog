@@ -4,7 +4,7 @@
 //!
 //! ## Architecture
 //!
-//! Headless spreadsheet compute engine. Document state is Yrs-backed and local.
+//! Headless spreadsheet compute engine. Document state uses native sparse values and typed metadata.
 //! All data structures are keyed by CellId (u128).
 
 // Typed-boundary authorship guardrail (W10): any remaining `&str[n..]` slice must be
@@ -60,10 +60,6 @@ pub use compute_charts as charts;
 // Conditional Formatting evaluation (extracted to compute-cf crate)
 pub use compute_cf as cf;
 
-// Collab sync protocol — zero external usage
-#[cfg(feature = "__internal")]
-pub use compute_collab as collab;
-
 // Document layer — zero external usage
 #[cfg(feature = "__internal")]
 pub use compute_document as document;
@@ -75,10 +71,10 @@ pub mod projection;
 // Pivot Table Engine (extracted to compute-pivot crate)
 pub use compute_pivot as pivot;
 
-// Yrs-backed CRDT storage (hybrid: yrs::Doc + CellMirror)
+// Native metadata and spreadsheet engine.
 pub mod storage;
 
-// Range manager (A1-style range parsing utilities, no Yrs dependency)
+// Range manager (A1-style range parsing utilities)
 pub(crate) mod range_manager;
 
 // Snapshot types (IPC initialization and incremental updates, extracted to snapshot-types crate)

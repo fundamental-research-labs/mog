@@ -16,7 +16,7 @@
 use std::collections::{HashMap, HashSet};
 
 use cell_types::CellId;
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use formula_types::IdentityFormulaRef;
 use proptest::prelude::*;
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
@@ -58,6 +58,9 @@ fn sheet_snapshot(
     cells: Vec<CellData>,
 ) -> SheetSnapshot {
     SheetSnapshot {
+        identities: Vec::new(),
+        row_axis: None,
+        col_axis: None,
         id: id.to_string(),
         name: name.to_string(),
         rows,
@@ -281,7 +284,7 @@ fn run_same_sheet_property(plan: GridPlan) -> Result<(), TestCaseError> {
     };
 
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot must succeed");
+        ComputeEngine::from_snapshot(snapshot).expect("from_snapshot must succeed");
     let sid = *engine
         .mirror()
         .sheet_ids()
@@ -340,7 +343,7 @@ fn run_same_sheet_property(plan: GridPlan) -> Result<(), TestCaseError> {
     }
 
     let _ = engine
-        .relocate_cells_yrs(
+        .relocate_cells(
             &sid,
             plan.src_r1,
             plan.src_c1,
@@ -453,7 +456,7 @@ fn run_cross_sheet_property(plan: CrossSheetPlan) -> Result<(), TestCaseError> {
     };
 
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot must succeed");
+        ComputeEngine::from_snapshot(snapshot).expect("from_snapshot must succeed");
     let sheet_ids: Vec<_> = engine.mirror().sheet_ids().copied().collect();
     prop_assert_eq!(sheet_ids.len(), 2);
 
@@ -470,7 +473,7 @@ fn run_cross_sheet_property(plan: CrossSheetPlan) -> Result<(), TestCaseError> {
     let b_sid = b_sid.expect("sheet B");
 
     // Pre-move id maps on each sheet.
-    let collect_ids = |engine: &YrsComputeEngine, sid: &_| {
+    let collect_ids = |engine: &ComputeEngine, sid: &_| {
         let mut map = HashMap::new();
         for r in 0..GRID_ROWS {
             for c in 0..GRID_COLS {
@@ -518,7 +521,7 @@ fn run_cross_sheet_property(plan: CrossSheetPlan) -> Result<(), TestCaseError> {
     }
 
     let _ = engine
-        .relocate_cells_yrs(
+        .relocate_cells(
             &a_sid,
             plan.src_r1,
             plan.src_c1,
@@ -661,7 +664,7 @@ fn run_formula_ref_property(plan: FormulaPlan) -> Result<(), TestCaseError> {
     };
 
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot must succeed");
+        ComputeEngine::from_snapshot(snapshot).expect("from_snapshot must succeed");
     let sid = *engine.mirror().sheet_ids().next().expect("sheet");
 
     // Sanity: F's formula pre-move references V by CellId.
@@ -691,7 +694,7 @@ fn run_formula_ref_property(plan: FormulaPlan) -> Result<(), TestCaseError> {
 
     // Move V (1x1) to (dst_r, dst_c).
     let _ = engine
-        .relocate_cells_yrs(
+        .relocate_cells(
             &sid, plan.v_row, plan.v_col, plan.v_row, plan.v_col, &sid, plan.dst_r, plan.dst_c,
         )
         .expect("relocate must succeed");

@@ -27,25 +27,16 @@ pub(in crate::storage::engine) fn create_filter(
     // Filter range corners are stored as CellId references so filters survive
     // row/col insert/delete. Empty corners need identity-only CellIds so the
     // storage-layer references are always resolvable without expanding data.
-    let grid =
-        stores
-            .grid_indexes
-            .get_mut(sheet_id)
-            .ok_or_else(|| ComputeError::SheetNotFound {
-                sheet_id: id_to_hex(sheet_id.as_u128()).into(),
-            })?;
-
-    let header_start_id = grid.ensure_cell_id(start_row, start_col);
-    let header_end_id = grid.ensure_cell_id(start_row, end_col);
-    let data_end_id = grid.ensure_cell_id(end_row, end_col);
-
-    mirror.register_identity_only(
-        sheet_id,
-        SheetPos::new(start_row, start_col),
-        header_start_id,
-    );
-    mirror.register_identity_only(sheet_id, SheetPos::new(start_row, end_col), header_end_id);
-    mirror.register_identity_only(sheet_id, SheetPos::new(end_row, end_col), data_end_id);
+    let mut ensure = |row, col| {
+        super::cell_editing::ensure_cell_id_mirrored(stores, mirror, sheet_id, row, col).ok_or_else(
+            || ComputeError::SheetNotFound {
+                sheet_id: sheet_id.to_uuid_string(),
+            },
+        )
+    };
+    let header_start_id = ensure(start_row, start_col)?;
+    let header_end_id = ensure(start_row, end_col)?;
+    let data_end_id = ensure(end_row, end_col)?;
 
     let header_start = id_to_hex(header_start_id.as_u128()).to_string();
     let header_end = id_to_hex(header_end_id.as_u128()).to_string();
@@ -55,8 +46,7 @@ pub(in crate::storage::engine) fn create_filter(
         .unwrap_or(filters::FilterKind::AutoFilter);
     let table_id = config["tableId"].as_str().map(|s| s.to_string());
     let filter_state = filters::create_filter(
-        stores.storage.doc(),
-        stores.storage.sheets(),
+        &mut stores.storage,
         sheet_id,
         &header_start,
         &header_end,
@@ -72,7 +62,6 @@ pub(in crate::storage::engine) fn create_filter(
             sheet_id,
             &filter_state,
             None,
-            false,
         );
     }
     let mut result = MutationResult::empty();
@@ -181,12 +170,7 @@ fn filter_change_metadata_for_id(
     filter_id: &str,
     filter: Option<&filters::FilterState>,
 ) -> FilterChangeMetadata {
-    let binding = filters::get_filter_metadata_binding(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        filter_id,
-    );
+    let binding = filters::get_filter_metadata_binding(&stores.storage, sheet_id, filter_id);
     filter_change_metadata(filter, binding.as_ref())
 }
 
@@ -269,39 +253,18 @@ pub(in crate::storage::engine) fn delete_filter(
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> Result<MutationResult, ComputeError> {
-    let existing = filters::get_filter(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        filter_id,
-    );
-    let binding = filters::get_filter_metadata_binding(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        filter_id,
-    );
+    let existing = filters::get_filter(&stores.storage, sheet_id, filter_id);
+    let binding = filters::get_filter_metadata_binding(&stores.storage, sheet_id, filter_id);
     let metadata = filter_change_metadata_for_id(stores, sheet_id, filter_id, existing.as_ref());
     let transitions = dimensions::clear_filter_hidden_rows(
-        stores.storage.doc(),
-        stores.storage.sheets(),
+        &mut stores.storage,
         sheet_id,
         filter_id,
         stores.grid_indexes.get(sheet_id),
     );
     imported_filters::apply_visibility_transitions(stores, mirror, sheet_id, &transitions);
-    filters::delete_filter(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        filter_id,
-    );
-    filters::delete_filter_metadata_binding(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        filter_id,
-    );
+    filters::delete_filter(&mut stores.storage, sheet_id, filter_id);
+    filters::delete_filter_metadata_binding(&mut stores.storage, sheet_id, filter_id);
     if existing
         .as_ref()
         .is_some_and(|filter| filter.filter_kind == filters::FilterKind::AutoFilter)
@@ -337,12 +300,7 @@ fn resolve_header_col(
     filter_id: &str,
     header_col: u32,
 ) -> Option<String> {
-    let filter = filters::get_filter(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        filter_id,
-    )?;
+    let filter = filters::get_filter(&stores.storage, sheet_id, filter_id)?;
     let header_pos =
         resolve_filter_cell_pos(stores, mirror, sheet_id, &filter.header_start_cell_id)?;
     let cell_id = stores
@@ -359,19 +317,16 @@ fn ensure_header_col(
     filter_id: &str,
     header_col: u32,
 ) -> Option<String> {
-    let filter = filters::get_filter(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        filter_id,
-    )?;
+    let filter = filters::get_filter(&stores.storage, sheet_id, filter_id)?;
     let header_pos =
         resolve_filter_cell_pos(stores, mirror, sheet_id, &filter.header_start_cell_id)?;
-    let cell_id = stores
-        .grid_indexes
-        .get_mut(sheet_id)?
-        .ensure_cell_id(header_pos.0, header_col);
-    mirror.register_identity_only(sheet_id, SheetPos::new(header_pos.0, header_col), cell_id);
+    let cell_id = super::cell_editing::ensure_cell_id_mirrored(
+        stores,
+        mirror,
+        sheet_id,
+        header_pos.0,
+        header_col,
+    )?;
     Some(id_to_hex(cell_id.as_u128()).into())
 }
 
@@ -387,8 +342,7 @@ pub(in crate::storage::engine) fn set_column_filter(
     let header_cell_id =
         ensure_header_col(stores, mirror, sheet_id, filter_id, header_col).unwrap_or_default();
     filters::set_column_filter(
-        stores.storage.doc(),
-        stores.storage.sheets(),
+        &mut stores.storage,
         sheet_id,
         filter_id,
         &header_cell_id,
@@ -418,13 +372,7 @@ pub(in crate::storage::engine) fn clear_column_filter(
 ) -> Result<MutationResult, ComputeError> {
     let header_cell_id =
         resolve_header_col(stores, mirror, sheet_id, filter_id, header_col).unwrap_or_default();
-    filters::clear_column_filter(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        filter_id,
-        &header_cell_id,
-    );
+    filters::clear_column_filter(&mut stores.storage, sheet_id, filter_id, &header_cell_id);
     imported_filters::sync_imported_auto_filter_metadata_after_clear_column(
         stores, mirror, sheet_id, filter_id, header_col,
     );
@@ -448,19 +396,14 @@ pub(in crate::storage::engine) fn get_filter(
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> Option<filters::FilterState> {
-    filters::get_filter(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        filter_id,
-    )
+    filters::get_filter(&stores.storage, sheet_id, filter_id)
 }
 
 pub(in crate::storage::engine) fn get_filter_count(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> usize {
-    filters::get_filter_count(stores.storage.doc(), stores.storage.sheets(), sheet_id)
+    filters::get_filter_count(&stores.storage, sheet_id)
 }
 
 pub(in crate::storage::engine) fn get_table_filter(
@@ -468,26 +411,21 @@ pub(in crate::storage::engine) fn get_table_filter(
     sheet_id: &SheetId,
     table_id: &str,
 ) -> Option<filters::FilterState> {
-    filters::get_table_filter(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        table_id,
-    )
+    filters::get_table_filter(&stores.storage, sheet_id, table_id)
 }
 
 pub(in crate::storage::engine) fn get_active_filters(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> Vec<filters::FilterState> {
-    filters::get_active_filters(stores.storage.doc(), stores.storage.sheets(), sheet_id)
+    filters::get_active_filters(&stores.storage, sheet_id)
 }
 
 pub(in crate::storage::engine) fn get_active_filter_count(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> usize {
-    filters::get_active_filter_count(stores.storage.doc(), stores.storage.sheets(), sheet_id)
+    filters::get_active_filter_count(&stores.storage, sheet_id)
 }
 
 pub(in crate::storage::engine) fn set_filter_sort_state(
@@ -496,13 +434,7 @@ pub(in crate::storage::engine) fn set_filter_sort_state(
     filter_id: &str,
     sort_state: Option<filters::FilterSortState>,
 ) -> Result<MutationResult, ComputeError> {
-    filters::set_filter_sort_state(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        filter_id,
-        sort_state,
-    );
+    filters::set_filter_sort_state(&mut stores.storage, sheet_id, filter_id, sort_state);
     Ok(MutationResult::empty())
 }
 
@@ -511,12 +443,7 @@ pub(in crate::storage::engine) fn get_filter_sort_state(
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> Option<filters::FilterSortState> {
-    filters::get_filter_sort_state(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        filter_id,
-    )
+    filters::get_filter_sort_state(&stores.storage, sheet_id, filter_id)
 }
 
 pub(in crate::storage::engine) fn clear_all_filters(
@@ -524,8 +451,7 @@ pub(in crate::storage::engine) fn clear_all_filters(
     mirror: &mut CellMirror,
     sheet_id: &SheetId,
 ) -> Result<MutationResult, ComputeError> {
-    let existing =
-        filters::get_filters_in_sheet(stores.storage.doc(), stores.storage.sheets(), sheet_id);
+    let existing = filters::get_filters_in_sheet(&stores.storage, sheet_id);
     let mut result = MutationResult::empty();
     for filter in existing {
         let mut deleted = delete_filter(stores, mirror, sheet_id, &filter.id)?;
@@ -543,8 +469,7 @@ pub(in crate::storage::engine) fn get_filters_in_sheet(
     mirror: &CellMirror,
     sheet_id: &SheetId,
 ) -> Vec<filters::FilterState> {
-    let mut states =
-        filters::get_filters_in_sheet(stores.storage.doc(), stores.storage.sheets(), sheet_id);
+    let mut states = filters::get_filters_in_sheet(&stores.storage, sheet_id);
     for f in &mut states {
         if let Some((row, col)) =
             resolve_filter_cell_pos(stores, mirror, sheet_id, &f.header_start_cell_id)
@@ -579,12 +504,8 @@ pub(in crate::storage::engine) fn get_filter_header_info(
         if filter.filter_kind == filters::FilterKind::AdvancedFilter {
             continue;
         }
-        let metadata_binding = filters::get_filter_metadata_binding(
-            stores.storage.doc(),
-            stores.storage.sheets(),
-            sheet_id,
-            &filter.id,
-        );
+        let metadata_binding =
+            filters::get_filter_metadata_binding(&stores.storage, sheet_id, &filter.id);
 
         let (Some(start_row), Some(start_col), Some(end_row), Some(end_col)) = (
             filter.start_row,
@@ -782,12 +703,7 @@ fn apply_filter_with_action(
     action: &str,
     diagnostic_operation: Option<&'static str>,
 ) -> Result<MutationResult, ComputeError> {
-    let filter = filters::get_filter(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        filter_id,
-    );
+    let filter = filters::get_filter(&stores.storage, sheet_id, filter_id);
     let filter_kind = filter
         .as_ref()
         .map(|filter| filter_kind_wire(&filter.filter_kind).to_string());
@@ -827,8 +743,7 @@ fn apply_filter_with_action(
 
     let sid = *sheet_id;
     let results = filters::evaluate_filter(
-        stores.storage.doc(),
-        stores.storage.sheets(),
+        &stores.storage,
         sheet_id,
         filter_id,
         |row, col| {
@@ -855,8 +770,7 @@ fn apply_filter_with_action(
     }
 
     let transitions = dimensions::set_filter_hidden_rows(
-        stores.storage.doc(),
-        stores.storage.sheets(),
+        &mut stores.storage,
         sheet_id,
         filter_id,
         &rows_to_hide,
@@ -890,13 +804,8 @@ fn imported_shell_disallows_filter_ownership(
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> bool {
-    filters::get_filter_metadata_binding(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        filter_id,
-    )
-    .is_some_and(|binding| binding_disallows_filter_ownership(Some(&binding)))
+    filters::get_filter_metadata_binding(&stores.storage, sheet_id, filter_id)
+        .is_some_and(|binding| binding_disallows_filter_ownership(Some(&binding)))
 }
 
 fn binding_disallows_filter_ownership(binding: Option<&filters::FilterMetadataBinding>) -> bool {

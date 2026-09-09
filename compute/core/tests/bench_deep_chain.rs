@@ -65,7 +65,13 @@ fn snapshot_linear_chain(depth: u32) -> WorkbookSnapshot {
     }
 
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_uuid(0),
             name: "Sheet1".to_string(),
             rows: depth,
@@ -114,7 +120,13 @@ fn snapshot_iferror_chain(depth: u32) -> WorkbookSnapshot {
     }
 
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_uuid(0),
             name: "Sheet1".to_string(),
             rows: depth,
@@ -191,6 +203,9 @@ fn snapshot_cross_sheet_chain(num_sheets: u32, rows_per_sheet: u32) -> WorkbookS
         }
 
         sheets.push(SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_uuid(si),
             name: sheet_name,
             rows: rows_per_sheet,

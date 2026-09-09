@@ -110,7 +110,7 @@ impl RedactMaybe for CellValue {
 
 // ---------------------------------------------------------------------------
 // Scalar impls — every scope=cell / scope=range read return type on
-// YrsComputeEngine lands here. Missing impls are a compile error at
+// ComputeEngine lands here. Missing impls are a compile error at
 // delegate-macro expansion; that's the point of removing the blanket.
 // ---------------------------------------------------------------------------
 

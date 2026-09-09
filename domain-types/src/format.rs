@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::cell_format::{CellBorderSide, CellBorders, CellFormat, FontSize};
 
-/// A fully-resolved cell format — the shared representation across parser, Yrs, and writer.
+/// A fully-resolved cell format — the shared representation across parser, native storage, and writer.
 ///
 /// Replaces `ResolvedFormat` (import-only) and adds borders (currently dropped).
 /// Static colors are either concrete `#RRGGBB` values or symbolic

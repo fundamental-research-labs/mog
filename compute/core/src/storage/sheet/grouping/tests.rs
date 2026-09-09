@@ -15,7 +15,7 @@ mod queries_tests;
 mod render_tests;
 #[path = "settings_tests.rs"]
 mod settings_tests;
+#[path = "store_tests.rs"]
+mod store_tests;
 #[path = "subtotals_tests.rs"]
 mod subtotals_tests;
-#[path = "yrs_io_tests.rs"]
-mod yrs_io_tests;

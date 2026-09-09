@@ -6,7 +6,6 @@ use domain_types::{CalculationProperties, ImportedCellProjectionRole, SheetData}
 use snapshot_types::{CellData as SnapshotCellData, SheetSnapshot};
 use value_types::CellValue;
 
-use crate::import::phantom::parse_cell_ref;
 use crate::storage::infra::hydration::HydrationIdMap;
 
 fn col_style_range_at(sheet: &SheetData, col: u32) -> Option<u32> {
@@ -55,7 +54,7 @@ pub(crate) fn convert_sheets(
                 .map(|cs| (cs.col, cs.style_id))
                 .collect();
 
-            let mut cells: Vec<SnapshotCellData> = sheet
+            let cells: Vec<SnapshotCellData> = sheet
                 .cells
                 .iter()
                 .enumerate()
@@ -102,40 +101,49 @@ pub(crate) fn convert_sheets(
                 })
                 .collect();
 
-            // Inject synthetic cells for comment targets on empty positions.
-            // Comments in XLSX reference a cell_ref (A1 notation). If the target
-            // cell has no data, it won't appear in ParseOutput.cells, and the
-            // comment will be orphaned during hydration. We create a Null-valued
-            // placeholder cell so the comment has something to attach to.
-            //
-            // Skip injection when id_map is present (hydration path) — hydration
-            // preallocates metadata-only identities for comment targets, and we
-            // must not introduce a second CellId for the same position.
+            let mut identities: Vec<snapshot_types::CellIdentityPosition> = id_map
+                .map(|map| {
+                    map.identities
+                        .iter()
+                        .filter(|(sid, _, _, _)| Some(sid) == map.sheet_ids.get(sheet_idx))
+                        .map(
+                            |(_, cell_id, row, col)| snapshot_types::CellIdentityPosition {
+                                cell_id: *cell_id,
+                                row: *row,
+                                col: *col,
+                            },
+                        )
+                        .collect()
+                })
+                .unwrap_or_default();
             if id_map.is_none() {
-                let mut occupied: HashSet<(u32, u32)> =
-                    cells.iter().map(|c| (c.row, c.col)).collect();
-                for comment in &sheet.comments {
-                    if let Some((row, col)) = parse_cell_ref(&comment.cell_ref)
-                        && occupied.insert((row, col))
-                    {
-                        let cell_uuid =
-                            format!("{:032x}", crate::storage::STORAGE_ID_ALLOC.next_u128());
-                        cells.push(SnapshotCellData {
-                            cell_id: cell_uuid,
+                let occupied: HashSet<(u32, u32)> =
+                    cells.iter().map(|cell| (cell.row, cell.col)).collect();
+                let mut anchors: Vec<_> =
+                    super::anchor_collection::collect_identity_required_anchors(sheet)
+                        .into_keys()
+                        .collect();
+                anchors.sort_unstable();
+                identities.extend(
+                    anchors
+                        .into_iter()
+                        .filter(|position| !occupied.contains(position))
+                        .map(|(row, col)| snapshot_types::CellIdentityPosition {
+                            cell_id: crate::storage::STORAGE_ID_ALLOC.next_cell_id(),
                             row,
                             col,
-                            value: CellValue::Null,
-                            formula: None,
-                            identity_formula: None,
-                            array_ref: None,
-                        });
-                    }
-                }
+                        }),
+                );
             }
-
             SheetSnapshot {
+                identities,
+                row_axis: id_map.and_then(|map| map.row_axes.get(sheet_idx)).cloned(),
+                col_axis: id_map.and_then(|map| map.col_axes.get(sheet_idx)).cloned(),
                 id: sheet_uuid,
                 name: sheet.name.clone(),
+                // Durable metadata anchors can live beyond the declared grid.
+                // Axis capacity carries those identities without growing the
+                // workbook's exported dimensions.
                 rows: sheet.rows,
                 cols: sheet.cols,
                 cells,

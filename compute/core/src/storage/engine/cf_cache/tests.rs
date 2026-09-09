@@ -20,15 +20,10 @@ fn make_format(rules: Vec<cf::CFRule>) -> ConditionalFormat {
         id: "fmt1".to_string(),
         sheet_id: TEST_SHEET_UUID.to_string(),
         pivot: None,
-        range_identities: None,
+
         ranges: vec![SheetRange::new(0, 0, 5, 3)],
         rules,
     }
-}
-
-/// Dummy resolver that always fails - forces fallback to position-based ranges.
-fn no_resolve(_sheet: &str, _cell: &str) -> Option<(u32, u32)> {
-    None
 }
 
 #[test]
@@ -45,7 +40,7 @@ fn test_convert_cell_value_rule() {
         text: None,
     };
     let formats = vec![make_format(vec![rule])];
-    let result = convert_cf_formats_to_rules(&formats, no_resolve, None, &Default::default());
+    let result = convert_cf_formats_to_rules(&formats, None, &Default::default());
     assert_eq!(result.len(), 1);
     assert_eq!(result[0].priority, 1);
     assert!(matches!(
@@ -65,7 +60,7 @@ fn test_convert_formula_rule() {
         text: None,
     };
     let formats = vec![make_format(vec![rule])];
-    let result = convert_cf_formats_to_rules(&formats, no_resolve, None, &Default::default());
+    let result = convert_cf_formats_to_rules(&formats, None, &Default::default());
     assert_eq!(result.len(), 1);
     assert!(result[0].stop_if_true);
     assert!(matches!(
@@ -98,7 +93,7 @@ fn test_convert_multiple_rules_in_format() {
         },
     ];
     let formats = vec![make_format(rules)];
-    let result = convert_cf_formats_to_rules(&formats, no_resolve, None, &Default::default());
+    let result = convert_cf_formats_to_rules(&formats, None, &Default::default());
     assert_eq!(result.len(), 2);
 }
 
@@ -108,7 +103,7 @@ fn test_skip_format_with_no_ranges() {
         id: "fmt1".to_string(),
         sheet_id: TEST_SHEET_UUID.to_string(),
         pivot: None,
-        range_identities: None,
+
         ranges: vec![],
         rules: vec![cf::CFRule::ContainsBlanks {
             id: "r1".to_string(),
@@ -119,7 +114,7 @@ fn test_skip_format_with_no_ranges() {
             formula: None,
         }],
     };
-    let result = convert_cf_formats_to_rules(&[format], no_resolve, None, &Default::default());
+    let result = convert_cf_formats_to_rules(&[format], None, &Default::default());
     assert!(result.is_empty());
 }
 
@@ -154,7 +149,7 @@ fn test_convert_between_cell_value() {
         text: None,
     };
     let formats = vec![make_format(vec![rule])];
-    let result = convert_cf_formats_to_rules(&formats, no_resolve, None, &Default::default());
+    let result = convert_cf_formats_to_rules(&formats, None, &Default::default());
     assert_eq!(result.len(), 1);
     assert!(matches!(
         result[0].kind,
@@ -196,7 +191,7 @@ fn test_convert_color_scale_rule() {
         },
     };
     let formats = vec![make_format(vec![rule])];
-    let result = convert_cf_formats_to_rules(&formats, no_resolve, None, &Default::default());
+    let result = convert_cf_formats_to_rules(&formats, None, &Default::default());
     assert_eq!(result.len(), 1);
     assert!(matches!(
         result[0].kind,
@@ -284,7 +279,7 @@ fn test_theme_only_color_scale_survives_conversion_and_interpolates() {
         },
     };
     let palette = HashMap::from([("accent4".to_string(), "#000000".to_string())]);
-    let rules = convert_cf_formats_to_rules(&[make_format(vec![rule])], no_resolve, None, &palette);
+    let rules = convert_cf_formats_to_rules(&[make_format(vec![rule])], None, &palette);
 
     assert_eq!(rules.len(), 1, "theme-only points must not drop the rule");
     let CFRuleKind::ColorScale(scale) = &rules[0].kind else {
@@ -351,12 +346,12 @@ fn test_convert_data_bar_rule_accepts_ooxml_blank_threshold_colors() {
         id: "fmt1".to_string(),
         sheet_id: TEST_SHEET_UUID.to_string(),
         pivot: None,
-        range_identities: None,
+
         ranges: vec![SheetRange::new(1, 0, 10, 0)],
         rules: vec![rule],
     };
 
-    let result = convert_cf_formats_to_rules(&[format], no_resolve, None, &Default::default());
+    let result = convert_cf_formats_to_rules(&[format], None, &Default::default());
 
     assert_eq!(result.len(), 1);
     assert_eq!(result[0].ranges[0].start_row(), 1);
@@ -387,7 +382,7 @@ fn test_convert_contains_text_rule() {
         formula: None,
     };
     let formats = vec![make_format(vec![rule])];
-    let result = convert_cf_formats_to_rules(&formats, no_resolve, None, &Default::default());
+    let result = convert_cf_formats_to_rules(&formats, None, &Default::default());
     assert_eq!(result.len(), 1);
     assert!(matches!(
         result[0].kind,
@@ -407,7 +402,7 @@ fn test_convert_time_period_rule() {
         formula: None,
     };
     let formats = vec![make_format(vec![rule])];
-    let result = convert_cf_formats_to_rules(&formats, no_resolve, None, &Default::default());
+    let result = convert_cf_formats_to_rules(&formats, None, &Default::default());
     assert_eq!(result.len(), 1);
     assert!(matches!(
         result[0].kind,
@@ -425,7 +420,7 @@ fn test_fallback_to_position_ranges() {
         id: "fmt1".to_string(),
         sheet_id: TEST_SHEET_UUID.to_string(),
         pivot: None,
-        range_identities: None,
+
         ranges: vec![SheetRange::new(2, 1, 10, 4)],
         rules: vec![cf::CFRule::ContainsBlanks {
             id: "r1".to_string(),
@@ -436,7 +431,7 @@ fn test_fallback_to_position_ranges() {
             formula: None,
         }],
     };
-    let result = convert_cf_formats_to_rules(&[format], no_resolve, None, &Default::default());
+    let result = convert_cf_formats_to_rules(&[format], None, &Default::default());
     assert_eq!(result.len(), 1);
 
     let expected_sheet_id = cell_types::SheetId::from_uuid_str(TEST_SHEET_UUID).unwrap();
@@ -446,95 +441,4 @@ fn test_fallback_to_position_ranges() {
     assert_eq!(result[0].ranges[0].start_col(), 1);
     assert_eq!(result[0].ranges[0].end_row(), 10);
     assert_eq!(result[0].ranges[0].end_col(), 4);
-}
-
-#[test]
-fn test_range_identities_resolved_via_closure() {
-    let tl_id = "00000000-0000-0000-0000-000000000001";
-    let br_id = "00000000-0000-0000-0000-000000000002";
-
-    let format = ConditionalFormat {
-        id: "fmt1".to_string(),
-        sheet_id: TEST_SHEET_UUID.to_string(),
-        pivot: None,
-        range_identities: Some(vec![
-            domain_types::domain::conditional_format::CellIdRange {
-                top_left_cell_id: tl_id.to_string(),
-                bottom_right_cell_id: br_id.to_string(),
-            },
-        ]),
-        ranges: vec![],
-        rules: vec![cf::CFRule::ContainsBlanks {
-            id: "r1".to_string(),
-            priority: 1,
-            stop_if_true: None,
-            blanks: true,
-            style: make_style(),
-            formula: None,
-        }],
-    };
-
-    // Resolver that maps our two known cell IDs to positions
-    let resolver = |_sheet: &str, cell: &str| -> Option<(u32, u32)> {
-        match cell {
-            s if s == tl_id => Some((0, 0)),
-            s if s == br_id => Some((5, 3)),
-            _ => None,
-        }
-    };
-
-    let result = convert_cf_formats_to_rules(&[format], resolver, None, &Default::default());
-    assert_eq!(result.len(), 1);
-
-    let expected_sheet_id = cell_types::SheetId::from_uuid_str(TEST_SHEET_UUID).unwrap();
-    assert_eq!(result[0].ranges.len(), 1);
-    assert_eq!(result[0].ranges[0].sheet(), expected_sheet_id);
-    assert_eq!(result[0].ranges[0].start_row(), 0);
-    assert_eq!(result[0].ranges[0].start_col(), 0);
-    assert_eq!(result[0].ranges[0].end_row(), 5);
-    assert_eq!(result[0].ranges[0].end_col(), 3);
-}
-
-#[test]
-fn test_range_identities_preferred_over_position_ranges() {
-    use cell_types::SheetRange;
-
-    let tl_id = "00000000-0000-0000-0000-000000000001";
-    let br_id = "00000000-0000-0000-0000-000000000002";
-
-    let format = ConditionalFormat {
-        id: "fmt1".to_string(),
-        sheet_id: TEST_SHEET_UUID.to_string(),
-        pivot: None,
-        range_identities: Some(vec![
-            domain_types::domain::conditional_format::CellIdRange {
-                top_left_cell_id: tl_id.to_string(),
-                bottom_right_cell_id: br_id.to_string(),
-            },
-        ]),
-        // Position-based ranges are different - should NOT be used
-        ranges: vec![SheetRange::new(99, 99, 100, 100)],
-        rules: vec![cf::CFRule::ContainsBlanks {
-            id: "r1".to_string(),
-            priority: 1,
-            stop_if_true: None,
-            blanks: true,
-            style: make_style(),
-            formula: None,
-        }],
-    };
-
-    let resolver = |_sheet: &str, cell: &str| -> Option<(u32, u32)> {
-        match cell {
-            s if s == tl_id => Some((0, 0)),
-            s if s == br_id => Some((5, 3)),
-            _ => None,
-        }
-    };
-
-    let result = convert_cf_formats_to_rules(&[format], resolver, None, &Default::default());
-    assert_eq!(result.len(), 1);
-    // Should use range_identities (0,0)->(5,3), NOT position ranges (99,99)->(100,100)
-    assert_eq!(result[0].ranges[0].start_row(), 0);
-    assert_eq!(result[0].ranges[0].end_row(), 5);
 }

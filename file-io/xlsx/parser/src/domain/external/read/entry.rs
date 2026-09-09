@@ -38,6 +38,7 @@ pub(super) fn parse_external_link(xml: &[u8], link_id: &str) -> Option<ExternalL
 #[cfg(test)]
 mod tests {
     use super::*;
+    use domain_types::domain::external_link::ExternalLinkType;
 
     #[test]
     fn parse_empty_and_unsupported_xml_returns_none() {

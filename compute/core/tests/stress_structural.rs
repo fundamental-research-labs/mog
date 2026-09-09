@@ -6,7 +6,7 @@ use stress_engine_common::*;
 use cell_types::SheetPos;
 use compute_core::bridge_types::{BridgeSortCriterion, BridgeSortOptions};
 use compute_core::engine_types::fill::{BridgeAutoFillRequest, BridgeFillRangeSpec};
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use domain_types::domain::copy::CopyType;
 use domain_types::domain::filter::{SortBy, SortOrder};
 use snapshot_types::{CellData, CellEdit, RecalcResult, SheetSnapshot, WorkbookSnapshot};
@@ -24,7 +24,7 @@ fn test_insert_row_shifts_data_down() {
         make_cell(1, 0, num(20.0), None), // A2=20
         make_cell(2, 0, num(30.0), None), // A3=30
     ]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     // Insert 1 row at row 0, shift_right=false means shift DOWN
@@ -50,7 +50,7 @@ fn test_insert_row_adjusts_formulas() {
         make_cell(1, 0, num(11.0), Some("=A1+1")), // A2=A1+1=11
         make_cell(2, 0, num(12.0), Some("=A2+1")), // A3=A2+1=12
     ]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     // Insert 1 row at row 1, shift down
@@ -74,7 +74,7 @@ fn test_delete_row_shifts_data_up() {
         make_cell(1, 0, num(20.0), None), // A2=20
         make_cell(2, 0, num(30.0), None), // A3=30
     ]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     // Delete row 1, shift_left=false means shift UP
@@ -98,7 +98,7 @@ fn test_insert_column_adjusts_formulas() {
         make_cell(0, 1, num(20.0), None),           // B1=20
         make_cell(0, 2, num(30.0), Some("=A1+B1")), // C1=A1+B1=30
     ]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     // Insert 1 column at col 1, shift_right=true
@@ -120,7 +120,7 @@ fn test_delete_column_creates_ref_error() {
         make_cell(0, 0, num(100.0), None),           // A1=100
         make_cell(0, 1, num(110.0), Some("=A1+10")), // B1=A1+10=110
     ]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     // Delete col 0, shift_left=true
@@ -140,7 +140,7 @@ fn test_partial_insert_shift_down_preserves_adjacent_columns() {
         make_cell(1, 0, num(30.0), None),
         make_cell(1, 1, num(40.0), None),
     ]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     engine
@@ -162,7 +162,7 @@ fn test_partial_insert_shift_right_preserves_adjacent_rows() {
         make_cell(1, 0, num(30.0), None),
         make_cell(1, 1, num(40.0), None),
     ]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     engine
@@ -186,7 +186,7 @@ fn test_partial_delete_shift_up_preserves_adjacent_columns() {
         make_cell(2, 0, num(50.0), None),
         make_cell(2, 1, num(60.0), None),
     ]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     engine
@@ -210,7 +210,7 @@ fn test_partial_delete_shift_left_preserves_adjacent_rows() {
         make_cell(1, 1, num(50.0), None),
         make_cell(1, 2, num(60.0), None),
     ]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     engine
@@ -235,7 +235,7 @@ fn test_insert_rows_then_autofill() {
         make_cell(0, 0, num(10.0), None), // A1=10
         make_cell(1, 0, num(20.0), None), // A2=20
     ]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     // Insert 3 rows at row 2, shift down
@@ -267,7 +267,7 @@ fn test_delete_then_set_cell_on_shifted() {
         make_cell(2, 0, num(30.0), None), // A3=30
         make_cell(3, 0, num(40.0), None), // A4=40
     ]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     // Delete row 0, shift up
@@ -304,7 +304,7 @@ fn test_insert_100_rows_in_range() {
         make_cell(4, 0, num(4.0), None),                 // A5=4
         make_cell(5, 0, num(5.0), None),                 // A6=5
     ]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     // Verify initial SUM
@@ -331,7 +331,7 @@ fn test_rapid_insert_delete_20_cycles() {
     let snapshot = make_snapshot(vec![
         make_cell(0, 0, num(10.0), None), // A1=10
     ]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     for _ in 0..20 {
@@ -360,7 +360,7 @@ fn test_merge_unmerge_adjacent_to_data() {
         make_cell(0, 0, num(10.0), None), // A1=10
         make_cell(0, 1, num(20.0), None), // B1=20
     ]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     // Merge C1:D1 (row 0, col 2..3)

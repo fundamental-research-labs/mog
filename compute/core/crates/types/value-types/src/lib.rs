@@ -91,3 +91,6 @@ const _: () = {
         assert_send_sync::<KahanSum>();
     }
 };
+
+mod column_view;
+pub use column_view::{ColumnView, ValueGrid};

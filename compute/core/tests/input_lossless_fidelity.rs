@@ -15,14 +15,11 @@
 use cell_types::SheetId;
 use compute_core::bridge_types::{BridgeSortCriterion, BridgeSortMode, BridgeSortOptions};
 use compute_core::engine_types::fill::{BridgeAutoFillRequest, BridgeFillRangeSpec};
-use compute_core::storage::engine::YrsComputeEngine;
-use compute_document::hex::id_to_hex;
-use compute_document::schema::{KEY_CELLS, KEY_FORMULA};
+use compute_core::storage::engine::ComputeEngine;
 use domain_types::domain::copy::CopyType;
 use domain_types::domain::filter::SortOrder;
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellArray, CellError, CellValue};
-use yrs::{Map, Out, Transact};
 
 const SHEET_UUID: &str = "00000000000000000000000000000001";
 
@@ -42,9 +39,12 @@ fn make_cell(row: u32, col: u32, value: CellValue) -> CellData {
     }
 }
 
-fn engine_with(cells: Vec<CellData>) -> (YrsComputeEngine, SheetId) {
+fn engine_with(cells: Vec<CellData>) -> (ComputeEngine, SheetId) {
     let snapshot = WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET_UUID.to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -54,12 +54,12 @@ fn engine_with(cells: Vec<CellData>) -> (YrsComputeEngine, SheetId) {
         }],
         ..Default::default()
     };
-    let (engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (engine, _) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
     let sheet_id = SheetId::from_uuid_str(SHEET_UUID).expect("valid sheet uuid");
     (engine, sheet_id)
 }
 
-fn cell_value_at(engine: &YrsComputeEngine, sheet_id: &SheetId, row: u32, col: u32) -> CellValue {
+fn cell_value_at(engine: &ComputeEngine, sheet_id: &SheetId, row: u32, col: u32) -> CellValue {
     // Position-based lookup — after relocate or paste, the cell at (row, col)
     // may have a cell_id that differs from the seed uuid.
     engine
@@ -218,7 +218,7 @@ fn relocate_preserves_error() {
     );
 
     engine
-        .relocate_cells(&sheet_id, 0, 0, 0, 0, 4, 0)
+        .relocate_values(&sheet_id, 0, 0, 0, 0, 4, 0)
         .expect("relocate_cells");
 
     let got_source = cell_value_at(&engine, &sheet_id, 0, 0);
@@ -279,89 +279,44 @@ fn autofill_down_preserves_error() {
 }
 
 // ---------------------------------------------------------------------------
-// Sort (range_operations.rs) — yrs KEY_FORMULA storage contract
+// Native sort formula source preservation
 // ---------------------------------------------------------------------------
-
-/// Read the raw `KEY_FORMULA` string stored in yrs for the cell at `(row, col)`
-/// on `sheet_id`. Unlike `YrsStorage::read_cell_from_yrs`, this does NOT
-/// re-prepend `=` — it returns the body exactly as it sits in the Yrs document,
-/// which is the contract `KEY_FORMULA` has been documented to satisfy (body
-/// without leading `=`). Used to detect bugs that round-trip formulas through
-/// the yrs layer with the leading `=` incorrectly preserved.
-fn read_raw_key_formula(
-    engine: &YrsComputeEngine,
-    sheet_id: &SheetId,
-    row: u32,
-    col: u32,
-) -> Option<String> {
-    let cell_id = engine
-        .grid_index(sheet_id)
-        .and_then(|g| g.cell_id_at(row, col))?;
-    let storage = engine.storage();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
-    let txn = doc.transact();
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let cell_hex = id_to_hex(cell_id.as_u128());
-
-    let sheet_map = match sheets.get(&txn, &sheet_hex)? {
-        Out::YMap(m) => m,
-        _ => return None,
-    };
-    let cells_map = match sheet_map.get(&txn, KEY_CELLS)? {
-        Out::YMap(m) => m,
-        _ => return None,
-    };
-    let cell_map = match cells_map.get(&txn, &*cell_hex)? {
-        Out::YMap(m) => m,
-        _ => return None,
-    };
-    match cell_map.get(&txn, KEY_FORMULA)? {
-        Out::Any(yrs::Any::String(s)) => Some(s.to_string()),
-        _ => None,
-    }
-}
 
 // ---------------------------------------------------------------------------
 // mutation_relocate_cells (range_operations.rs) — distinct from
 // engine.relocate_cells (structural.rs, already covered by
-// relocate_preserves_error). `relocate_cells_yrs` is the entry that routes
+// relocate_preserves_error). `relocate_cells` is the entry that routes
 // through EngineMutation::RelocateCells → mutation_relocate_cells, which has
 // its own typed-edits vector and its own set_cells_raw call.
 // ---------------------------------------------------------------------------
 
 /// `#DIV/0!` in the source must land intact at the target position after a
-/// `relocate_cells_yrs` (the yrs-routed relocate, distinct from the structural
+/// `relocate_cells` mutation (distinct from the structural
 /// relocate already covered).
 #[test]
-fn relocate_cells_yrs_preserves_error() {
+fn relocate_cells_preserves_error() {
     let err = CellValue::Error(CellError::Div0, None);
     let (mut engine, sheet_id) = engine_with(vec![make_cell(0, 0, err.clone())]);
 
     engine
-        .relocate_cells_yrs(&sheet_id, 0, 0, 0, 0, &sheet_id, 4, 0)
-        .expect("relocate_cells_yrs");
+        .relocate_cells(&sheet_id, 0, 0, 0, 0, &sheet_id, 4, 0)
+        .expect("relocate_cells");
 
     let got = cell_value_at(&engine, &sheet_id, 4, 0);
     assert_eq!(
         got, err,
-        "relocate_cells_yrs must preserve the Error at target; got {:?}",
+        "relocate_cells must preserve the Error at target; got {:?}",
         got,
     );
 }
 
 // ---------------------------------------------------------------------------
-// mutation_remove_duplicates (range_operations.rs) — the "sibling resync"
-// site that reads surviving cells from yrs and pushes typed (value, formula)
-// tuples through set_cells_raw.
+// Duplicate removal must preserve typed values in every surviving row.
 // ---------------------------------------------------------------------------
 
 /// Removing duplicates from a range must not silently wipe errors in the
-/// surviving rows. The sibling-resync loop reads post-dedup cells from yrs
-/// and funnels them through `set_cells_raw`; before lossless import, that loop
-/// rendered typed values via `cell_value_to_input_string` (Error → "") and
-/// re-parsed through the string-typed scheduler, silently replacing the
-/// error with Null.
+/// surviving rows. Values stay typed throughout the operation; converting
+/// an error through an empty input string would incorrectly produce Null.
 #[test]
 fn remove_duplicates_preserves_error_in_surviving_rows() {
     // Column A: two duplicate "x" rows that will be deduped, plus a third
@@ -402,28 +357,14 @@ fn remove_duplicates_preserves_error_in_surviving_rows() {
     );
 }
 
-/// After `sort_range` rewrites the yrs `KEY_FORMULA` sub-key post-sort, the
-/// body MUST NOT start with `=`. The storage contract is "formula body only"
-/// (`read_cell_from_yrs` re-prepends `=` on read; writing the `=`-prefixed
-/// string back would double-prefix on the next read).
-///
-/// This test hits the fallback branch in `mutation_sort_range` where the
-/// mirror has no `IdentityFormula` (because the formula was unparseable, so
-/// `parse_and_register_formula` left `IdentityFormula = None` in the
-/// `CellEntry`). In that branch, `formula_body` comes from
-/// `read_cell_from_yrs` which *has* re-prepended `=`, and the rewrite loop
-/// previously wrote the `=`-prefixed body straight into `KEY_FORMULA`.
+/// An unparsed formula must retain its authored source when its cell moves.
 #[test]
-fn sort_preserves_key_formula_body_contract_on_fallback() {
-    // Build the snapshot with a cell that has a formula body the parser
-    // cannot recover even after `normalize_formula_input` (which auto-closes
-    // parens and quotes sheet names). A trailing operator is unparseable —
-    // `bulk_parse_and_register` will fail and leave the mirror without an
-    // IdentityFormula for this cell, while yrs still stores the raw body.
-    // That's the ONLY state in which `mutation_sort_range` hits the
-    // fallback branch we're testing.
+fn sort_preserves_unparsed_formula_source() {
     let snapshot = WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET_UUID.to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -460,8 +401,7 @@ fn sort_preserves_key_formula_body_contract_on_fallback() {
                     cell_id: cell_uuid(1, 1),
                     row: 1,
                     col: 1,
-                    // `=1+` — trailing operator, unparseable. No IdentityFormula lands
-                    // in the mirror; yrs stores the body verbatim.
+                    // The scheduler preserves this unparseable authored source.
                     value: CellValue::Error(CellError::Name, None),
                     formula: Some("1+".to_string()),
                     identity_formula: None,
@@ -472,16 +412,10 @@ fn sort_preserves_key_formula_body_contract_on_fallback() {
         }],
         ..Default::default()
     };
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
     let sheet_id = SheetId::from_uuid_str(SHEET_UUID).expect("valid sheet uuid");
 
-    // Confirm pre-sort invariant: KEY_FORMULA stored without leading `=`.
-    let pre_sort = read_raw_key_formula(&engine, &sheet_id, 1, 1);
-    assert_eq!(
-        pre_sort.as_deref(),
-        Some("1+"),
-        "pre-sort KEY_FORMULA must be the body without `=`",
-    );
+    assert_eq!(engine.get_raw_value(&sheet_id, 1, 1), "=1+");
 
     // Sort A1:B2 ascending by column A — flips rows so the bad-formula cell
     // lands in row 0.
@@ -499,17 +433,5 @@ fn sort_preserves_key_formula_body_contract_on_fallback() {
         .sort_range(&sheet_id, 0, 0, 1, 1, opts)
         .expect("sort_range");
 
-    // Post-sort: the cell that had the bad formula is now at (0, 1). Its
-    // KEY_FORMULA must STILL be the body without leading `=`.
-    let post_sort = read_raw_key_formula(&engine, &sheet_id, 0, 1);
-    assert!(
-        post_sort.is_some(),
-        "post-sort KEY_FORMULA must still be present",
-    );
-    let body = post_sort.unwrap();
-    assert!(
-        !body.starts_with('='),
-        "sort rewrite must not leave a `=` prefix in yrs KEY_FORMULA; got {:?}",
-        body,
-    );
+    assert_eq!(engine.get_raw_value(&sheet_id, 0, 1), "=1+");
 }

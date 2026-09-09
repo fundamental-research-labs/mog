@@ -1,4 +1,4 @@
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use domain_types::{
     ParseOutput, SheetData, SheetPaneConfig, SheetPaneId, SheetPaneState, SheetView,
 };
@@ -6,7 +6,7 @@ use xlsx_parser::write::write_xlsx_from_parse_output;
 
 fn sheet_xml_after_hydrate_export(output: &ParseOutput) -> String {
     let input = write_xlsx_from_parse_output(output).expect("write input xlsx");
-    let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&input).expect("hydrate xlsx");
+    let (engine, _) = ComputeEngine::from_xlsx_bytes(&input).expect("hydrate xlsx");
     let exported = engine.export_to_xlsx_bytes().expect("export hydrated xlsx");
     let archive = xlsx_parser::XlsxArchive::new(&exported).expect("exported archive");
     String::from_utf8(
@@ -18,7 +18,7 @@ fn sheet_xml_after_hydrate_export(output: &ParseOutput) -> String {
 }
 
 #[test]
-fn split_pane_survives_yrs_hydration_export() {
+fn split_pane_survives_native_hydration_export() {
     let output = ParseOutput {
         sheets: vec![SheetData {
             name: "Sheet1".to_string(),
@@ -79,7 +79,7 @@ fn frozen_split_preserves_active_pane_top_left_cell_and_selections() {
 }
 
 #[test]
-fn extra_sheet_views_survive_yrs_hydration_export() {
+fn extra_sheet_views_survive_native_hydration_export() {
     let output = ParseOutput {
         sheets: vec![SheetData {
             name: "Sheet1".to_string(),

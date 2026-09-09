@@ -22,9 +22,6 @@ pub(in crate::storage::engine) fn merge_mutation_result(
         .old_values
         .extend(source.recalc.old_values.drain());
 
-    target
-        .authored_cell_changes
-        .append(&mut source.authored_cell_changes);
     target.property_changes.append(&mut source.property_changes);
     target
         .dimension_changes
@@ -86,9 +83,6 @@ pub(in crate::storage::engine) fn merge_mutation_result(
 
     if target.sheet_lifecycle_runtime_hint.is_none() {
         target.sheet_lifecycle_runtime_hint = source.sheet_lifecycle_runtime_hint;
-    }
-    if target.undo_description.is_none() {
-        target.undo_description = source.undo_description;
     }
     if target.data.is_none() {
         target.data = source.data;

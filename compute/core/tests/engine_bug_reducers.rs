@@ -67,7 +67,7 @@
 //!   cargo test -p compute-core --test engine_bug_reducers -- --nocapture
 
 use cell_types::SheetPos;
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
 
@@ -137,6 +137,9 @@ fn formula_cell(id_suffix: u32, row: u32, col: u32, formula: &str) -> CellData {
 /// `"USA"` (inverse). `Summary!A1` must equal `350` after the inverse.
 fn sumifs_text_criterion_snapshot() -> WorkbookSnapshot {
     let src = SheetSnapshot {
+        identities: Vec::new(),
+        row_axis: None,
+        col_axis: None,
         id: sheet_id_str(1),
         name: "SourceData".to_string(),
         rows: 10,
@@ -156,6 +159,9 @@ fn sumifs_text_criterion_snapshot() -> WorkbookSnapshot {
         ranges: vec![],
     };
     let summary = SheetSnapshot {
+        identities: Vec::new(),
+        row_axis: None,
+        col_axis: None,
         id: sheet_id_str(2),
         name: "Summary".to_string(),
         rows: 10,
@@ -180,7 +186,7 @@ fn sumifs_text_criterion_snapshot() -> WorkbookSnapshot {
 
 /// Run the Class-1 forward/inverse op pair via `set_cell` both ways,
 /// and return `(pre_op, post_inverse)` values of `Summary!A1`.
-fn run_class1_op_pair_via_set_cell(engine: &mut YrsComputeEngine) -> (CellValue, CellValue) {
+fn run_class1_op_pair_via_set_cell(engine: &mut ComputeEngine) -> (CellValue, CellValue) {
     let src_sid = engine
         .mirror()
         .sheet_by_name("SourceData")
@@ -243,12 +249,12 @@ fn drifted(pre: &CellValue, post: &CellValue) -> bool {
 #[test]
 fn class1_sumifs_text_criterion_xlsx_reducer() {
     let snap = sumifs_text_criterion_snapshot();
-    let (engine0, _) = YrsComputeEngine::from_snapshot(snap).expect("from_snapshot");
+    let (engine0, _) = ComputeEngine::from_snapshot(snap).expect("from_snapshot");
     let xlsx_bytes = engine0
         .export_to_xlsx_bytes()
         .expect("export_to_xlsx_bytes");
 
-    let (mut engine, _) = YrsComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
 
     let (pre, post) = run_class1_op_pair_via_set_cell(&mut engine);
     assert_eq!(
@@ -266,12 +272,12 @@ fn class1_sumifs_text_criterion_xlsx_reducer() {
 #[test]
 fn class1_sumifs_text_criterion_xlsx_reducer_import_values_inverse() {
     let snap = sumifs_text_criterion_snapshot();
-    let (engine0, _) = YrsComputeEngine::from_snapshot(snap).expect("from_snapshot");
+    let (engine0, _) = ComputeEngine::from_snapshot(snap).expect("from_snapshot");
     let xlsx_bytes = engine0
         .export_to_xlsx_bytes()
         .expect("export_to_xlsx_bytes");
 
-    let (mut engine, _) = YrsComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
     let src_sid = engine
         .mirror()
         .sheet_by_name("SourceData")
@@ -324,7 +330,7 @@ fn class1_sumifs_text_criterion_xlsx_reducer_import_values_inverse() {
 #[test]
 fn control_class1_via_from_snapshot_passes() {
     let snap = sumifs_text_criterion_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).expect("from_snapshot");
     let (pre, post) = run_class1_op_pair_via_set_cell(&mut engine);
     assert!(
         !drifted(&pre, &post),
@@ -377,7 +383,7 @@ fn external_sumifs_inverse_leaves_stale_result() {
     let wb = parse_with_options(&bytes, &ParseOptions::new().profiled()).expect("parse");
     let mut allocator = DefaultIdAllocator::new();
     let snapshot = parse_output_to_workbook_snapshot(&wb.output, None, &mut allocator);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
 
     let edit_sheet = engine
         .mirror()

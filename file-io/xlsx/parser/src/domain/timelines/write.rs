@@ -58,6 +58,17 @@ pub fn write_timeline_cache(cache: &ooxml_types::timelines::TimelineCacheDef) ->
         w.attr("xr10:uid", uid);
     }
     w.attr("sourceName", &cache.source_name).end_attrs();
+    // CT_TimelineCacheDefinition places pivotTables before the required state.
+    if !cache.pivot_tables.is_empty() {
+        w.start_element("pivotTables").end_attrs();
+        for pivot in &cache.pivot_tables {
+            w.start_element("pivotTable")
+                .attr("tabId", &pivot.tab_id.to_string())
+                .attr("name", &pivot.name)
+                .self_close();
+        }
+        w.end_element("pivotTables");
+    }
     w.start_element("state");
     if let Some(value) = cache.minimal_refresh_version {
         w.attr("minimalRefreshVersion", &value.to_string());

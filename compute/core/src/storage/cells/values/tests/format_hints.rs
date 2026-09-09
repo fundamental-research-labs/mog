@@ -1,4 +1,5 @@
 use super::*;
+use compute_formats::FormatType;
 
 #[test]
 fn parse_input_value_percent_hint_bare_number() {

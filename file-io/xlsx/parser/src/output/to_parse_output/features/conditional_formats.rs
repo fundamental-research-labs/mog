@@ -30,7 +30,7 @@ pub(crate) fn convert_conditional_formats(
                 sheet_id: String::new(), // Hydration layer sets the real sheet_id
                 pivot: if cf.pivot { Some(true) } else { None },
                 ranges,
-                range_identities: None,
+
                 rules: cf
                     .rules
                     .iter()

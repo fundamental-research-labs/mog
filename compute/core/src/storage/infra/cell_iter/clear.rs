@@ -1,61 +1,27 @@
 use std::collections::HashSet;
 
-use compute_document::hex::id_to_hex;
-use compute_document::identity::GridIndex;
-use compute_document::schema::KEY_VALUE;
-use compute_document::undo::ORIGIN_USER_EDIT;
-use yrs::{Any, Doc, Map, MapPrelim, MapRef, Origin, Transact};
-
-use super::super::grid_helpers::{get_cells_map, get_properties_map};
+use crate::storage::WorkbookStorage;
 use cell_types::{CellId, RangePos, SheetId};
+use compute_document::identity::GridIndex;
 
-/// Clear the `cells` map entries for the given cell hexes.
-///
-/// Position-agnostic: callers resolve `(row, col) → CellId` via
-/// `grid_indexes` and hand the resulting hex strings here. Works on
-/// XLSX-hydrated sheets.
-///
-/// When `clear_properties` is true, the properties map entry is removed
-/// as well ("clear all" semantic). When false, only the value is nulled
-/// and formatting is preserved ("clear contents").
+/// Clear properties for resolved cell identities. Values and formulas are cleared
+/// by the compute mutation that calls this helper.
 pub fn clear_cells_by_hex(
-    doc: &Doc,
-    sheets: &MapRef,
+    storage: &mut WorkbookStorage,
     sheet_id: SheetId,
     cell_hexes: &[String],
     clear_properties: bool,
 ) {
-    if cell_hexes.is_empty() {
-        return;
-    }
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-
-    let Some(cells_map) = get_cells_map(&txn, sheets, &sheet_hex) else {
-        return;
-    };
-    let props_map = if clear_properties {
-        get_properties_map(&txn, sheets, &sheet_hex)
-    } else {
-        None
-    };
-
-    for cell_hex in cell_hexes {
-        // yrs `Map::insert` on an existing key replaces the MapRef,
-        // so stale formula + cached-result keys are dropped. Write a
-        // marker cell with only KEY_VALUE=Null so identity is preserved.
-        let cell_prelim = MapPrelim::from([(KEY_VALUE, Any::Null)]);
-        cells_map.insert(&mut txn, cell_hex.as_str(), cell_prelim);
-
-        if let Some(ref pm) = props_map {
-            pm.remove(&mut txn, cell_hex.as_str());
+    if clear_properties {
+        for hex in cell_hexes {
+            crate::storage::properties::clear_properties(storage, &sheet_id, hex);
         }
     }
 }
 
 /// Clear all cells in a range and return their CellIds.
 ///
-/// Fully deletes cells (removes from cells map + properties) and unbinds
+/// Removes properties and unbinds cell identities
 /// them from the GridIndex. Used for structural operations where `#REF!`
 /// errors are the correct behavior.
 ///
@@ -63,8 +29,7 @@ pub fn clear_cells_by_hex(
 /// moves — the relocation path uses this to avoid wiping cells that are
 /// about to be re-registered at target positions).
 pub fn clear_range_and_return_ids(
-    doc: &Doc,
-    sheets: &MapRef,
+    storage: &mut WorkbookStorage,
     sheet_id: SheetId,
     grid: &mut GridIndex,
     range: &RangePos,
@@ -90,30 +55,57 @@ pub fn clear_range_and_return_ids(
         return Vec::new();
     }
 
-    // Remove yrs cells + properties entries. For full delete we want the
-    // cells map entry gone (not a marker cell), so we don't use
-    // `clear_cells_by_hex` here — inline the minimal removal.
-    {
-        let sheet_hex = id_to_hex(sheet_id.as_u128());
-        let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-        let cells_map = get_cells_map(&txn, sheets, &sheet_hex);
-        let props_map = get_properties_map(&txn, sheets, &sheet_hex);
-
-        for cid in &targets {
-            let cell_hex = id_to_hex(cid.as_u128());
-            if let Some(ref cm) = cells_map {
-                cm.remove(&mut txn, &cell_hex);
-            }
-            if let Some(ref pm) = props_map {
-                pm.remove(&mut txn, &cell_hex);
+    if storage.history.is_active() {
+        for &id in &targets {
+            if storage
+                .sheet_metadata
+                .get(&sheet_id)
+                .is_some_and(|sheet| sheet.cell_properties.contains_key(&id))
+            {
+                crate::storage::engine::history::metadata::capture_cell_properties(
+                    storage, sheet_id, id,
+                );
             }
         }
+    }
+    crate::storage::engine::history::metadata::capture_sheet_field!(storage, sheet_id, hyperlinks);
+    if let Some(sheet) = storage.sheet_metadata.get_mut(&sheet_id) {
+        for id in &targets {
+            sheet.cell_properties.remove(id);
+        }
+    }
+    for id in &targets {
+        storage.clear_cell_metadata(*id);
     }
 
     // Drop identity bindings so these cells no longer resolve at their
     // former positions.
     for cid in &targets {
         grid.remove_cell(cid);
+    }
+    crate::storage::engine::history::metadata::capture_pruned_axis_metadata(
+        storage, sheet_id, grid,
+    );
+    if let Some(sheet) = storage.sheet_metadata.get_mut(&sheet_id) {
+        sheet.hyperlinks.retain(|link| {
+            grid.cell_position(&link.start_id).is_some()
+                && link
+                    .end_id
+                    .is_none_or(|id| grid.cell_position(&id).is_some())
+        });
+        sheet.comments.retain(|comment| {
+            comment
+                .cell_ref
+                .cell()
+                .is_none_or(|id| grid.cell_position(&id).is_some())
+        });
+        for (id, annotation) in &mut sheet.cell_annotations {
+            if grid.cell_position(id).is_none() {
+                annotation.status = crate::engine_types::AnnotationStatus::Stale;
+                annotation.stale_reason = Some("anchorMissing".into());
+                annotation.checked_at = None;
+            }
+        }
     }
 
     targets

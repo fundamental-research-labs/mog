@@ -139,7 +139,6 @@ mod tests {
             capture_policy: CapturePolicyWire::CommitEligible,
             write_admission_mode: VersionWriteAdmissionModeWire::Capture,
             client_request_id: Some("client-request:vc02-public-wire".to_string()),
-            collaboration: None,
         }
     }
 

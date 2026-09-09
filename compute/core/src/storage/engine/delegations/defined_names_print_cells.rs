@@ -1,35 +1,18 @@
-#![allow(unused_imports, unused_variables)]
-use crate::identity::GridIndex;
 use crate::snapshot::{
-    CellEdit, ChangeKind, MutationResult, NamedRangeChange, PageBreakChange, PrintAreaChange,
-    PrintSettingsChange, PrintTitlesChange, RecalcResult, Scenario, ScenarioCreateInput,
-    ScenarioUpdateInput, ScrollPositionChange, SheetChange, SheetChangeField,
-    SheetLifecycleRuntimeHint, SheetSettingsChange, SheetSnapshot,
+    ChangeKind, MutationResult, NamedRangeChange, PrintSettingsChange, RecalcResult,
 };
-use crate::storage::engine::YrsComputeEngine;
+use crate::storage::engine::ComputeEngine;
+use crate::storage::engine::history::metadata::{MetadataImpact, capture_workbook_entry};
 use crate::storage::engine::mutation::{EngineMutation, MutationOutput};
-use crate::storage::engine::mutation_coordinator::SheetLifecycleHistoryHint;
-use crate::storage::engine::{mutation, services};
-use crate::storage::sheet::bindings;
-use crate::storage::sheet::{
-    order, print, properties, protection, settings, split_view, view, visibility,
-};
+use crate::storage::engine::services;
+use crate::storage::sheet::print;
 use crate::storage::workbook::named_ranges;
-use crate::what_if::scenarios;
-use cell_types::{CellId, SheetId};
-use compute_collab as sync;
-use compute_document::hex::id_to_hex;
-use compute_formats;
+use cell_types::SheetId;
 use compute_wire::mutation::serialize_multi_viewport_patches;
-use domain_types::domain::print::PageBreaks;
-use domain_types::domain::sheet::{
-    PrintRange, PrintTitles, SheetProtectionOptions, SheetSettings, SplitViewConfig,
-};
-use formula_types::{IdentityFormula, NamedRangeDef};
 use value_types::ComputeError;
 
 pub(in crate::storage::engine) fn create_named_range(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     input: named_ranges::DefinedNameInput,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
     match engine.apply_mutation(EngineMutation::CreateNamedRange { input })? {
@@ -42,7 +25,7 @@ pub(in crate::storage::engine) fn create_named_range(
 }
 
 pub(in crate::storage::engine) fn update_named_range(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     id: &str,
     updates: named_ranges::NamedRangeUpdate,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
@@ -59,17 +42,13 @@ pub(in crate::storage::engine) fn update_named_range(
 }
 
 pub(in crate::storage::engine) fn remove_named_range_by_id(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     id: &str,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    let existing = named_ranges::get_named_range_by_id(
-        engine.stores.storage.doc(),
-        engine.stores.storage.workbook_map(),
-        id,
-    )
-    .ok_or_else(|| ComputeError::Eval {
-        message: format!("Defined name with ID {} not found", id),
-    })?;
+    let existing = named_ranges::get_named_range_by_id(&engine.stores.storage.metadata, id)
+        .ok_or_else(|| ComputeError::Eval {
+            message: format!("Defined name with ID {} not found", id),
+        })?;
 
     let scope = match &existing.scope {
         Some(sheet_uuid) => {
@@ -89,11 +68,13 @@ pub(in crate::storage::engine) fn remove_named_range_by_id(
         .compute
         .remove_named_range_scoped(&mut engine.mirror, &scope, &existing.name);
 
-    named_ranges::remove_named_range_by_id(
-        engine.stores.storage.doc(),
-        engine.stores.storage.workbook_map(),
-        id,
-    )?;
+    capture_workbook_entry!(
+        engine.stores.storage,
+        named_ranges,
+        named_ranges::get_defined_name_key(&existing.name, existing.scope.as_deref()),
+        MetadataImpact::Names
+    );
+    named_ranges::remove_named_range_by_id(&mut engine.stores.storage.metadata, id)?;
 
     let mut recalc = match seed_id {
         Some(cell_id) => engine
@@ -114,18 +95,22 @@ pub(in crate::storage::engine) fn remove_named_range_by_id(
 }
 
 pub(in crate::storage::engine) fn remove_named_ranges_by_scope(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     scope: Option<String>,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    let removed = named_ranges::get_named_ranges_by_scope(
-        engine.stores.storage.doc(),
-        engine.stores.storage.workbook_map(),
-        scope.as_deref(),
-    );
+    let removed =
+        named_ranges::get_named_ranges_by_scope(&engine.stores.storage.metadata, scope.as_deref());
 
+    for name in &removed {
+        capture_workbook_entry!(
+            engine.stores.storage,
+            named_ranges,
+            named_ranges::get_defined_name_key(&name.name, name.scope.as_deref()),
+            MetadataImpact::Names
+        );
+    }
     named_ranges::remove_named_ranges_by_scope(
-        engine.stores.storage.doc(),
-        engine.stores.storage.workbook_map(),
+        &mut engine.stores.storage.metadata,
         scope.as_deref(),
     );
 
@@ -154,7 +139,7 @@ pub(in crate::storage::engine) fn remove_named_ranges_by_scope(
 }
 
 pub(in crate::storage::engine) fn import_named_ranges(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     names: Vec<named_ranges::DefinedName>,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
     match engine.apply_mutation(EngineMutation::ImportNamedRanges { names })? {
@@ -167,16 +152,11 @@ pub(in crate::storage::engine) fn import_named_ranges(
 }
 
 pub(in crate::storage::engine) fn set_print_settings(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     settings: domain_types::domain::print::PrintSettings,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    print::set_print_settings(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
-        sheet_id,
-        &settings,
-    );
+    print::set_print_settings(&mut engine.stores.storage, sheet_id, &settings);
     let mut result = MutationResult::empty();
     result.print_settings_changes.push(PrintSettingsChange {
         sheet_id: sheet_id.to_uuid_string(),
@@ -186,27 +166,18 @@ pub(in crate::storage::engine) fn set_print_settings(
 }
 
 pub(in crate::storage::engine) fn set_hf_image(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     info: domain_types::domain::print::HeaderFooterImageInfo,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    let mut images = print::get_hf_images(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
-        sheet_id,
-    );
+    let mut images = print::get_hf_images(&engine.stores.storage, sheet_id);
     let pos = info.position;
     if let Some(existing) = images.iter_mut().find(|i| i.position == pos) {
         *existing = info;
     } else {
         images.push(info);
     }
-    print::set_hf_images(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
-        sheet_id,
-        &images,
-    );
+    print::set_hf_images(&mut engine.stores.storage, sheet_id, &images);
     Ok((
         serialize_multi_viewport_patches(&[]),
         MutationResult::empty(),
@@ -214,22 +185,13 @@ pub(in crate::storage::engine) fn set_hf_image(
 }
 
 pub(in crate::storage::engine) fn remove_hf_image(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     position: domain_types::domain::print::HfImagePosition,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    let mut images = print::get_hf_images(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
-        sheet_id,
-    );
+    let mut images = print::get_hf_images(&engine.stores.storage, sheet_id);
     images.retain(|i| i.position != position);
-    print::set_hf_images(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
-        sheet_id,
-        &images,
-    );
+    print::set_hf_images(&mut engine.stores.storage, sheet_id, &images);
     Ok((
         serialize_multi_viewport_patches(&[]),
         MutationResult::empty(),
@@ -237,7 +199,7 @@ pub(in crate::storage::engine) fn remove_hf_image(
 }
 
 pub(in crate::storage::engine) fn clear_range(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,
@@ -260,7 +222,7 @@ pub(in crate::storage::engine) fn clear_range(
 }
 
 pub(in crate::storage::engine) fn clear_range_and_return_ids(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,
@@ -284,7 +246,7 @@ pub(in crate::storage::engine) fn clear_range_and_return_ids(
 
 #[allow(clippy::too_many_arguments)]
 pub(in crate::storage::engine) fn replace_all_in_range(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,
@@ -297,7 +259,6 @@ pub(in crate::storage::engine) fn replace_all_in_range(
     let (count, mut recalc) = services::mutation_handlers::replace_all_in_range(
         &mut engine.stores,
         &mut engine.mirror,
-        &mut engine.mutation,
         sheet_id,
         start_row,
         start_col,

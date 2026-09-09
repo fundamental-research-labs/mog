@@ -1,37 +1,8 @@
-//! Hydration — populating a YrsStorage from external data sources.
+//! Native hydration from snapshots and parsed workbooks.
 //!
-//! Two entry points:
-//!
-//! 1. `populate_yrs_only()` — snapshot path. Reads from a
-//!    `WorkbookSnapshot` (UUID-keyed) and populates the Yrs document.
-//!
-//! 2. `hydrate_from_parse_output()` — XLSX import path. Reads from a
-//!    `ParseOutput` (position-keyed, domain-types) and writes structured
-//!    Y.Maps using the `yrs_schema` modules.
-//!
-//! ## Architecture (XLSX import path)
-//!
-//! ```text
-//! ParseOutput (position-keyed)
-//!     │
-//!     ▼
-//! hydrate_from_parse_output()
-//!     ├── Per sheet:
-//!     │   ├── allocate SheetId
-//!     │   ├── create sheet map with meta, cells, grid_index
-//!     │   ├── allocate CellIds → cells map (via build_cell_prelim)
-//!     │   ├── build grid index (posToId / idToPos)
-//!     │   ├── allocate RowIds / ColIds (registries + indices)
-//!     │   ├── domain objects via yrs_schema modules
-//!     │   └── sheet metadata (frozen pane, view, protection, print)
-//!     └── Workbook-level data (named ranges, tables, theme, protection)
-//! ```
+//! Imports allocate compact row and column runs and sparse cell identities once,
+//! then pass those identities to metadata, range classification, and mirror assembly.
 
-// NOTE: `impl YrsStorage` is intentionally split across `snapshot.rs` (populate/snapshot path)
-// and `import.rs` (XLSX import path). This is valid Rust — impl blocks can span multiple files
-// in the same crate.
-
-mod data_tables;
 mod features;
 mod form_controls;
 mod helpers;
@@ -42,7 +13,6 @@ mod sheet;
 mod snapshot;
 mod styles;
 mod table_styles;
-mod view;
 mod workbook;
 
 pub(crate) use self::sheet::hydrate_sheet;
@@ -50,16 +20,17 @@ pub(crate) use self::sheet::{
     SheetIdAllocation, allocate_sheet_ids, allocate_sheet_ids_with_previous_allocation,
 };
 pub(crate) use self::styles::{
-    ImportedRangeStyle, merge_style_palette_incremental, remap_sheet_style_ids,
+    ImportedRangeStyle, hydrate_cell_styles, merge_style_palette_incremental, remap_sheet_style_ids,
 };
-pub use self::workbook::write_theme_data_to_yrs;
+pub(crate) use self::table_styles::merge_custom_table_styles_from_ooxml;
+pub(crate) use self::workbook::hydrate_workbook_tables;
 
-use cell_types::{CellId, ColId, RowId, SheetId};
+use cell_types::{AxisIdentityId, AxisIdentityStore, CellId, ColId, RowId, SheetId};
 
 use crate::import::parse_output_to_snapshot::anchor_collection::IdentityAnchorReason;
 
 /// A CellId allocated for metadata that is anchored to a grid position without
-/// requiring a physical Yrs cell entry.
+/// requiring an authored cell value.
 #[derive(Debug, Clone)]
 pub(crate) struct AnchoredCellIdentity {
     pub cell_id: CellId,
@@ -76,31 +47,61 @@ pub(crate) struct AnchoredCellIdentity {
 ///
 /// When `hydrate_from_parse_output` runs, it allocates monotonic IDs for
 /// sheets and cells via the `IdAllocator`. Other systems (e.g. the
-/// `WorkbookSnapshot` builder) need the *same* IDs so that Yrs storage and
-/// ComputeCore share a single identity space. This struct captures those
+/// `WorkbookSnapshot` builder) need the *same* IDs so that storage and evaluation share a single identity space. This struct captures those
 /// IDs in parse-order so they can be threaded to downstream consumers.
 #[derive(Debug, Clone, Default)]
 pub struct HydrationIdMap {
+    /// Imported table catalog carried into the native snapshot during construction.
+    pub canonical_tables: Vec<domain_types::domain::table::TableCatalogEntry>,
     /// Sheet IDs in the same order as `ParseOutput.sheets`.
     pub sheet_ids: Vec<SheetId>,
     /// Cell IDs per sheet, in the same order as `SheetData.cells`.
     /// `cell_ids[sheet_index][cell_index]` = CellId for that cell.
     pub cell_ids: Vec<Vec<CellId>>,
-    /// Physical placeholder cells created during hydration for features that
-    /// still require a Yrs cell entry, such as merges and hyperlinks on empty
-    /// cells. Each entry is `(SheetId, CellId, row, col)`.
-    /// These must be registered in the GridIndex so that position-based lookups
-    /// (e.g. `find_cell_id_at`) can find them.
-    pub phantom_cells: Vec<(SheetId, CellId, u32, u32)>,
-    /// Metadata-only identities, such as comment/note anchors on empty cells.
-    /// These are durable in Yrs `gridIndex` but do not have entries under `cells`.
-    pub identity_only_cells: Vec<(SheetId, CellId, u32, u32)>,
-    /// Row IDs per sheet, indexed by positional row index.
-    /// `row_ids[sheet_index][row_position]` = RowId allocated during hydration.
-    pub row_ids: Vec<Vec<RowId>>,
-    /// Column IDs per sheet, indexed by positional column index.
-    /// `col_ids[sheet_index][col_position]` = ColId allocated during hydration.
-    pub col_ids: Vec<Vec<ColId>>,
+    /// Sparse identities needed by metadata anchors, without authored cell values.
+    /// Each entry is `(SheetId, CellId, row, col)` and is installed through the native snapshot.
+    pub identities: Vec<(SheetId, CellId, u32, u32)>,
+    /// Compact or explicit row identities, in sheet order.
+    pub row_axes: Vec<AxisIdentityStore<RowId>>,
+    /// Compact or explicit column identities, in sheet order.
+    pub col_axes: Vec<AxisIdentityStore<ColId>>,
+}
+
+impl HydrationIdMap {
+    /// Add identities discovered by metadata hydration before native index assembly.
+    pub(crate) fn install_snapshot_identities(
+        &self,
+        snapshot: &mut crate::snapshot::WorkbookSnapshot,
+    ) {
+        let mut by_sheet: std::collections::HashMap<
+            SheetId,
+            Vec<snapshot_types::CellIdentityPosition>,
+        > = std::collections::HashMap::new();
+        for &(sheet_id, cell_id, row, col) in &self.identities {
+            by_sheet
+                .entry(sheet_id)
+                .or_default()
+                .push(snapshot_types::CellIdentityPosition { cell_id, row, col });
+        }
+        for sheet in &mut snapshot.sheets {
+            let Ok(sheet_id) = SheetId::from_uuid_str(&sheet.id) else {
+                continue;
+            };
+            let Some(identities) = by_sheet.remove(&sheet_id) else {
+                continue;
+            };
+            let mut known: std::collections::HashSet<_> = sheet
+                .identities
+                .iter()
+                .map(|identity| identity.cell_id)
+                .collect();
+            sheet.identities.extend(
+                identities
+                    .into_iter()
+                    .filter(|identity| known.insert(identity.cell_id)),
+            );
+        }
+    }
 }
 
 // ===========================================================================
@@ -122,6 +123,14 @@ pub trait IdAllocator {
     fn alloc_row_id(&mut self) -> RowId;
     /// Allocate a new unique ColId.
     fn alloc_col_id(&mut self) -> ColId;
+    /// Allocate an ordered row axis. Custom allocators retain explicit identities.
+    fn alloc_row_axis(&mut self, len: u32) -> AxisIdentityStore<RowId> {
+        AxisIdentityStore::Explicit((0..len).map(|_| self.alloc_row_id()).collect())
+    }
+    /// Allocate an ordered column axis. Custom allocators retain explicit identities.
+    fn alloc_col_axis(&mut self, len: u32) -> AxisIdentityStore<ColId> {
+        AxisIdentityStore::Explicit((0..len).map(|_| self.alloc_col_id()).collect())
+    }
 }
 
 /// Default allocator backed by a `cell_types::IdAllocator` instance.
@@ -130,14 +139,19 @@ pub trait IdAllocator {
 /// Each `DefaultIdAllocator` instance has its own counter; for shared global
 /// allocation, wrap in a static or pass the same instance throughout hydration.
 pub struct DefaultIdAllocator {
-    inner: cell_types::IdAllocator,
+    inner: std::sync::Arc<cell_types::IdAllocator>,
 }
 
 impl DefaultIdAllocator {
+    /// Hydrate directly in the engine's existing identity domain.
+    pub(crate) fn with_shared(inner: std::sync::Arc<cell_types::IdAllocator>) -> Self {
+        Self { inner }
+    }
+
     /// Create a new allocator with counter starting at 1.
     pub fn new() -> Self {
         Self {
-            inner: cell_types::IdAllocator::new(),
+            inner: std::sync::Arc::new(cell_types::IdAllocator::new()),
         }
     }
 
@@ -147,8 +161,27 @@ impl DefaultIdAllocator {
     /// ID collisions with already-allocated identities.
     pub fn with_seed(seed: u64) -> Self {
         Self {
-            inner: cell_types::IdAllocator::with_seed(seed),
+            inner: std::sync::Arc::new(cell_types::IdAllocator::with_seed(seed)),
         }
+    }
+
+    pub(crate) fn reserve_axis<Id: AxisIdentityId>(&self, axis: &AxisIdentityStore<Id>) {
+        if let Some(run_id) = axis.max_run_id() {
+            self.inner.ensure_axis_run_past(run_id);
+        }
+    }
+
+    pub(crate) fn stamp_snapshot_counters(&self, snapshot: &mut crate::snapshot::WorkbookSnapshot) {
+        snapshot.identity_high_water_mark = Some(
+            self.inner
+                .high_water_mark()
+                .max(snapshot.next_identity_counter()),
+        );
+        snapshot.axis_run_high_water_mark = Some(
+            self.inner
+                .axis_run_high_water_mark()
+                .max(snapshot.next_axis_run_counter()),
+        );
     }
 
     pub fn alloc_range_id(&mut self) -> cell_types::RangeId {
@@ -163,6 +196,12 @@ impl Default for DefaultIdAllocator {
 }
 
 impl IdAllocator for DefaultIdAllocator {
+    fn alloc_row_axis(&mut self, len: u32) -> AxisIdentityStore<RowId> {
+        AxisIdentityStore::from_runs([self.inner.next_axis_run(len)])
+    }
+    fn alloc_col_axis(&mut self, len: u32) -> AxisIdentityStore<ColId> {
+        AxisIdentityStore::from_runs([self.inner.next_axis_run(len)])
+    }
     fn alloc_cell_id(&mut self) -> CellId {
         CellId::from_raw(self.inner.next_u128())
     }

@@ -423,7 +423,9 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
             && let Some((sheet, col, start_row, end_row)) =
                 try_extract_single_column_range(args, self.meta)
         {
-            let dense = self.meta.get_dense_column(&sheet, col);
+            let dense = self
+                .meta
+                .get_dense_column_for_range(&sheet, col, start_row, end_row);
             let bool_mask = self.meta.get_dense_bool_mask(&sheet, col);
             match try_dense_aggregate(op, dense, bool_mask, start_row, end_row) {
                 DenseAggregateResult::Computed(val) => return Ok(val),
@@ -438,7 +440,9 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
         {
             let columns: Vec<_> = (start_col..=end_col)
                 .map(|col| {
-                    let dense = self.meta.get_dense_column(&sheet, col);
+                    let dense = self
+                        .meta
+                        .get_dense_column_for_range(&sheet, col, start_row, end_row);
                     let mask = self.meta.get_dense_bool_mask(&sheet, col);
                     (dense, mask)
                 })
@@ -457,7 +461,7 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
             let start = start_row as usize;
             let end = (end_row.saturating_add(1) as usize).min(col_values.len());
             if start < end {
-                let slice = &col_values[start..end];
+                let slice = col_values.slice(start..end);
                 let tagged: Vec<TaggedValue> = slice
                     .iter()
                     .map(|v| TaggedValue {

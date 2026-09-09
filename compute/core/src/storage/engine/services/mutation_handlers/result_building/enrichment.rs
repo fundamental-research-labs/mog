@@ -7,7 +7,7 @@ use crate::storage::engine::services::cell_editing::NO_OLD_FORMULA_SENTINEL;
 use crate::storage::engine::services::resolved_formats;
 use crate::storage::engine::settings::EngineSettings;
 use crate::storage::engine::stores::EngineStores;
-use crate::storage::sheet::{comments, hyperlinks, sparklines};
+use crate::storage::sheet::{comments, sparklines};
 use compute_document::hex::hex_to_id;
 use compute_wire::flags as render_flags;
 
@@ -122,11 +122,7 @@ pub(in crate::storage::engine) fn enrich_metadata_flags(
 
         // --- HAS_COMMENT ---
         let comment_ids = comment_cache.entry(sheet_id).or_insert_with(|| {
-            let cell_id_hexes = comments::get_cell_ids_with_comments(
-                stores.storage.doc(),
-                stores.storage.sheets(),
-                &sheet_id,
-            );
+            let cell_id_hexes = comments::get_cell_ids_with_comments(&stores.storage, &sheet_id);
             cell_id_hexes
                 .iter()
                 .filter_map(|hex| hex_to_id(hex))
@@ -137,27 +133,15 @@ pub(in crate::storage::engine) fn enrich_metadata_flags(
         }
 
         // --- HAS_SPARKLINE ---
-        if sparklines::has_sparkline(
-            stores.storage.doc(),
-            &stores.storage.sheets_ref(),
-            &sheet_id,
-            pos.row,
-            pos.col,
-        ) {
+        if sparklines::has_sparkline(&stores.storage, &sheet_id, pos.row, pos.col) {
             change.extra_flags |= render_flags::HAS_SPARKLINE;
         }
 
         // --- HAS_HYPERLINK ---
-        if let Some(grid) = stores.grid_indexes.get(&sheet_id)
-            && hyperlinks::get_hyperlink(
-                stores.storage.doc(),
-                stores.storage.sheets(),
-                &sheet_id,
-                grid,
-                pos.row,
-                pos.col,
-            )
-            .is_some()
+        if crate::storage::engine::services::objects::get_hyperlink(
+            stores, mirror, &sheet_id, pos.row, pos.col,
+        )
+        .is_some()
         {
             change.extra_flags |= render_flags::HAS_HYPERLINK;
         }

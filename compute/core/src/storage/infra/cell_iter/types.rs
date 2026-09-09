@@ -1,5 +1,4 @@
 use cell_types::CellId;
-use value_types::CellValue;
 
 /// How a range's row/column extent should be interpreted.
 ///
@@ -32,16 +31,4 @@ pub struct RelocationResult {
     pub success: bool,
     /// Error message if operation failed.
     pub error: Option<String>,
-}
-
-/// Cell data for iteration callbacks.
-#[derive(Debug, Clone)]
-pub struct IterCellData {
-    pub cell_id: CellId,
-    #[allow(dead_code)] // Populated for callers; engine queries serialize to JSON
-    pub row: u32,
-    #[allow(dead_code)] // Populated for callers; engine queries serialize to JSON
-    pub col: u32,
-    pub value: Option<CellValue>,
-    pub formula: Option<String>,
 }

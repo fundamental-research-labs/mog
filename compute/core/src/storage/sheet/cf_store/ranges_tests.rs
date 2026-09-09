@@ -3,10 +3,9 @@ use super::*;
 
 #[test]
 fn test_update_ranges() {
-    let (storage, sheet_id) = storage_with_sheet();
+    let (mut storage, sheet_id) = storage_with_sheet();
     add_conditional_format(
-        storage.doc(),
-        &storage.sheets_ref(),
+        &mut storage,
         &make_format(
             "cf1",
             &sheet_id,
@@ -16,14 +15,12 @@ fn test_update_ranges() {
     );
     let new_ranges = vec![rng(10, 10, 20, 20), rng(30, 30, 40, 40)];
     assert!(update_cf_ranges(
-        storage.doc(),
-        &storage.sheets_ref(),
+        &mut storage,
         "cf1",
         &sheet_id,
         &new_ranges
     ));
-    let result =
-        get_conditional_format(storage.doc(), &storage.sheets_ref(), "cf1", &sheet_id).unwrap();
+    let result = get_conditional_format(&storage, "cf1", &sheet_id).unwrap();
     assert_eq!(result.ranges.len(), 2);
     assert_eq!(result.ranges[0].start_row(), 10);
     assert_eq!(result.ranges[1].start_row(), 30);
@@ -31,10 +28,9 @@ fn test_update_ranges() {
 
 #[test]
 fn test_update_ranges_empty_deletes_format() {
-    let (storage, sheet_id) = storage_with_sheet();
+    let (mut storage, sheet_id) = storage_with_sheet();
     add_conditional_format(
-        storage.doc(),
-        &storage.sheets_ref(),
+        &mut storage,
         &make_format(
             "cf1",
             &sheet_id,
@@ -42,16 +38,8 @@ fn test_update_ranges_empty_deletes_format() {
             vec![make_rule("r1", 1)],
         ),
     );
-    assert!(update_cf_ranges(
-        storage.doc(),
-        &storage.sheets_ref(),
-        "cf1",
-        &sheet_id,
-        &[]
-    ));
-    assert!(
-        get_conditional_format(storage.doc(), &storage.sheets_ref(), "cf1", &sheet_id).is_none()
-    );
+    assert!(update_cf_ranges(&mut storage, "cf1", &sheet_id, &[]));
+    assert!(get_conditional_format(&storage, "cf1", &sheet_id).is_none());
 }
 
 #[test]
@@ -146,10 +134,9 @@ fn test_is_valid_range() {
 
 #[test]
 fn test_cell_in_multiple_ranges() {
-    let (storage, sheet_id) = storage_with_sheet();
+    let (mut storage, sheet_id) = storage_with_sheet();
     add_conditional_format(
-        storage.doc(),
-        &storage.sheets_ref(),
+        &mut storage,
         &make_format(
             "cf1",
             &sheet_id,
@@ -157,27 +144,9 @@ fn test_cell_in_multiple_ranges() {
             vec![make_rule("r1", 1)],
         ),
     );
-    assert!(has_cf_for_cell(
-        storage.doc(),
-        &storage.sheets_ref(),
-        &sheet_id,
-        3,
-        3
-    ));
-    assert!(has_cf_for_cell(
-        storage.doc(),
-        &storage.sheets_ref(),
-        &sheet_id,
-        12,
-        12
-    ));
-    assert!(!has_cf_for_cell(
-        storage.doc(),
-        &storage.sheets_ref(),
-        &sheet_id,
-        7,
-        7
-    ));
+    assert!(has_cf_for_cell(&storage, &sheet_id, 3, 3));
+    assert!(has_cf_for_cell(&storage, &sheet_id, 12, 12));
+    assert!(!has_cf_for_cell(&storage, &sheet_id, 7, 7));
 }
 
 // =====================================================================

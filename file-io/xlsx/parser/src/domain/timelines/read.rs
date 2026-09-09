@@ -107,6 +107,29 @@ fn parse_timeline_cache(xml: &[u8]) -> Option<ooxml_types::timelines::TimelineCa
         find_gt_simd(xml, bounds_start).map(|bounds_end| &xml[bounds_start..=bounds_end])
     });
 
+    let mut pivot_tables = Vec::new();
+    if let Some(start) = find_tag_simd(xml, b"pivotTables", end) {
+        let content_start = find_gt_simd(xml, start)? + 1;
+        if let Some(close) = find_closing_tag(xml, b"pivotTables", content_start) {
+            let children = &xml[content_start..close];
+            let mut pos = 0;
+            while let Some(start) = find_tag_simd(children, b"pivotTable", pos) {
+                let Some(end) = find_gt_simd(children, start) else {
+                    break;
+                };
+                let element = &children[start..=end];
+                if let (Some(tab_id), Some(name)) = (
+                    parse_u32_attr(element, b"tabId=\""),
+                    parse_string_attr(element, b"name=\""),
+                ) {
+                    pivot_tables
+                        .push(ooxml_types::timelines::TimelinePivotTableRef { tab_id, name });
+                }
+                pos = end + 1;
+            }
+        }
+    }
+
     Some(ooxml_types::timelines::TimelineCacheDef {
         name: parse_string_attr(elem, b"name=\"")?,
         uid: parse_string_attr(elem, b"xr10:uid=\"").or_else(|| parse_string_attr(elem, b"uid=\"")),
@@ -117,7 +140,7 @@ fn parse_timeline_cache(xml: &[u8]) -> Option<ooxml_types::timelines::TimelineCa
         filter_type: state.and_then(|s| parse_string_attr(s, b"filterType=\"")),
         start_date: bounds.and_then(|b| parse_string_attr(b, b"startDate=\"")),
         end_date: bounds.and_then(|b| parse_string_attr(b, b"endDate=\"")),
-        pivot_tables: Vec::new(),
+        pivot_tables,
         ext_lst: extract_ext_lst(xml),
     })
 }
@@ -353,4 +376,34 @@ fn extract_ext_lst(xml: &[u8]) -> Option<String> {
 
 pub(crate) fn timeline_level_attr(value: ooxml_types::timelines::TimelineLevel) -> &'static str {
     timeline_level_value(value)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_timeline_cache;
+
+    #[test]
+    fn timeline_pivot_bindings_survive_parse_native_storage_and_write() {
+        let xml = br#"<x15:timelineCacheDefinition xmlns:x15="http://schemas.microsoft.com/office/spreadsheetml/2010/11/main" name="Dates" sourceName="Date"><x15:pivotTables><x15:pivotTable tabId="7" name="Sales"/><x15:pivotTable tabId="19" name="Costs"/></x15:pivotTables><x15:state pivotCacheId="3"/></x15:timelineCacheDefinition>"#;
+        let parsed = parse_timeline_cache(xml).unwrap();
+        assert_eq!(parsed.pivot_tables.len(), 2);
+        assert_eq!(parsed.pivot_tables[0].tab_id, 7);
+        assert_eq!(parsed.pivot_tables[1].name, "Costs");
+        let stored = domain_types::domain::slicer::xlsx_import_to_stored_timeline(
+            &ooxml_types::timelines::TimelineDef {
+                name: "DateView".into(),
+                cache: "Dates".into(),
+                ..Default::default()
+            },
+            Some(&parsed),
+            None,
+            "sheet",
+        );
+        let exported = domain_types::domain::slicer::stored_timeline_to_cache_def(&stored).unwrap();
+        assert_eq!(exported, parsed);
+        let written = crate::domain::timelines::write::write_timeline_cache(&exported);
+        assert_eq!(parse_timeline_cache(&written), Some(parsed));
+        let written = std::str::from_utf8(&written).unwrap();
+        assert!(written.find("<pivotTables>").unwrap() < written.find("<state").unwrap());
+    }
 }

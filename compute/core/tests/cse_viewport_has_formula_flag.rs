@@ -36,7 +36,7 @@
 //! Run:
 //!   cargo test -p compute-core --test cse_viewport_has_formula_flag -- --nocapture
 
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use compute_wire::flags as render_flags;
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
@@ -97,6 +97,9 @@ fn cse_workbook() -> WorkbookSnapshot {
     ];
 
     let sheet = SheetSnapshot {
+        identities: Vec::new(),
+        row_axis: None,
+        col_axis: None,
         id: SHEET_UUID.to_string(),
         name: "Sheet1".to_string(),
         rows: 50,
@@ -122,7 +125,7 @@ fn cse_workbook() -> WorkbookSnapshot {
 #[test]
 fn cse_anchor_has_formula_flag_is_set() {
     let snap = cse_workbook();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).expect("engine");
+    let (engine, _) = ComputeEngine::from_snapshot(snap).expect("engine");
 
     let sheet_id = cell_types::SheetId::from_uuid_str(SHEET_UUID).unwrap();
 
@@ -150,7 +153,7 @@ fn cse_anchor_has_formula_flag_is_set() {
 #[test]
 fn cse_projection_members_have_formula_flag() {
     let snap = cse_workbook();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).expect("engine");
+    let (engine, _) = ComputeEngine::from_snapshot(snap).expect("engine");
 
     let sheet_id = cell_types::SheetId::from_uuid_str(SHEET_UUID).unwrap();
 
@@ -249,6 +252,9 @@ fn dynamic_spill_workbook() -> WorkbookSnapshot {
     }];
 
     let sheet = SheetSnapshot {
+        identities: Vec::new(),
+        row_axis: None,
+        col_axis: None,
         id: SHEET_UUID.to_string(),
         name: "Sheet1".to_string(),
         rows: 50,
@@ -266,7 +272,7 @@ fn dynamic_spill_workbook() -> WorkbookSnapshot {
 #[test]
 fn dynamic_spill_anchor_has_formula_flag_and_number_value() {
     let snap = dynamic_spill_workbook();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).expect("engine");
+    let (engine, _) = ComputeEngine::from_snapshot(snap).expect("engine");
 
     let sheet_id = cell_types::SheetId::from_uuid_str(SHEET_UUID).unwrap();
 
@@ -352,7 +358,7 @@ fn cse_anchor_active_cell_metadata_has_region_with_cse_kind() {
     use snapshot_types::properties::{CellMetadata, RegionBounds, RegionKind, RegionMeta};
 
     let snap = cse_workbook();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).expect("engine");
+    let (engine, _) = ComputeEngine::from_snapshot(snap).expect("engine");
 
     let sheet_id = cell_types::SheetId::from_uuid_str(SHEET_UUID).unwrap();
     let d1_id = cell_types::CellId::from_uuid_str(&cell_uuid(7)).unwrap();
@@ -393,7 +399,7 @@ fn dynamic_spill_anchor_active_cell_metadata_has_region_with_array_spill_kind() 
     use snapshot_types::properties::{CellMetadata, RegionKind};
 
     let snap = dynamic_spill_workbook();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).expect("engine");
+    let (engine, _) = ComputeEngine::from_snapshot(snap).expect("engine");
 
     let sheet_id = cell_types::SheetId::from_uuid_str(SHEET_UUID).unwrap();
     let a1_id = cell_types::CellId::from_uuid_str(&cell_uuid(101)).unwrap();
@@ -470,6 +476,9 @@ fn interactive_cse_source_workbook() -> WorkbookSnapshot {
     ];
 
     let sheet = SheetSnapshot {
+        identities: Vec::new(),
+        row_axis: None,
+        col_axis: None,
         id: SHEET_UUID.to_string(),
         name: "Sheet1".to_string(),
         rows: 50,
@@ -489,7 +498,7 @@ fn cse_set_array_formula_preserves_array_value_and_projection() {
     // 1. Create engine with source data A1:A3=[10,20,30], B1:B3=[1,2,3]
     //    via snapshot (no CSE formula — just plain number cells).
     let snap = interactive_cse_source_workbook();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).expect("engine");
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).expect("engine");
 
     let sheet_id = cell_types::SheetId::from_uuid_str(SHEET_UUID).unwrap();
 

@@ -345,8 +345,8 @@ fn test_warm_sumifs_result_cache_basic() {
 
     // Now verify the cache was populated by doing a lookup with the same slices
     let sheet = mirror.get_sheet(&s).unwrap();
-    let crit_slice = sheet.get_column_slice(0).unwrap();
-    let sum_slice = sheet.get_column_slice(2).unwrap();
+    let crit_slice = sheet.get_column_view(0).unwrap();
+    let sum_slice = sheet.get_column_view(2).unwrap();
 
     // "X" rows: 0(10), 2(30), 4(50) = 90
     let key_x = vec![NormalizedKey::from_cell_value(&CellValue::Text("X".into()))];
@@ -373,8 +373,8 @@ fn test_warm_sumifs_result_cache_basic() {
     );
     let result = compute_functions::helpers::sumifs_result_cache::sumifs_lookup(
         &cache_key,
-        &[&crit_slice[0..5]],
-        &sum_slice[0..5],
+        &[crit_slice.slice(0..5)],
+        &sum_slice.slice(0..5),
         5,
         &key_x,
     );

@@ -1,5 +1,5 @@
 pub(super) fn now_millis() -> i64 {
-    crate::storage::infra::yrs_helpers::now_millis() as i64
+    crate::storage::infra::time::now_millis() as i64
 }
 
 /// Generate a unique floating object ID: `fobj-{timestamp_millis}-{counter_hex}`.

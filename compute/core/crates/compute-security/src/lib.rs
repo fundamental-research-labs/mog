@@ -2,9 +2,8 @@
 //!
 //! This crate holds the caller-identity, policy, and level types, the
 //! tag-pattern matcher, the resolution engine, the sheet access matrix,
-//! and the built-in template bundles. It has no knowledge of Yrs or
-//! `compute-core`; the matrix cache and `SecurityState` wiring land in
-//! later phases (R2+).
+//! and the built-in template bundles. It has no dependency on workbook
+//! storage; `compute-core` connects the matrix cache and `SecurityState`.
 
 pub mod engine;
 pub mod error;

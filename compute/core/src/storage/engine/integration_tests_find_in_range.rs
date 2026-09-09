@@ -13,7 +13,13 @@ fn text(value: &str) -> CellValue {
 
 fn find_snapshot() -> WorkbookSnapshot {
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -98,7 +104,7 @@ fn options(pattern: &str) -> FindInRangeOptions {
 
 #[test]
 fn find_in_range_interprets_text_as_regex_pattern() {
-    let (engine, _) = YrsComputeEngine::from_snapshot(find_snapshot()).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(find_snapshot()).unwrap();
     let sheet = sheet_id();
 
     assert_eq!(
@@ -141,7 +147,7 @@ fn find_in_range_interprets_text_as_regex_pattern() {
 
 #[test]
 fn find_in_range_applies_regex_to_formula_text_when_requested() {
-    let (engine, _) = YrsComputeEngine::from_snapshot(find_snapshot()).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(find_snapshot()).unwrap();
     let sheet = sheet_id();
     let mut opts = options(r"SUM\(1,2\)");
     opts.include_formulas = Some(true);

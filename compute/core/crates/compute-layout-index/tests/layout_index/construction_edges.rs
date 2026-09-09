@@ -1,10 +1,10 @@
 use crate::helpers::{assert_col_position_invariant, assert_row_position_invariant};
-use compute_layout_index::LayoutIndex;
+use compute_layout_index::PixelLayout;
 use domain_types::units::Pixels;
 
 #[test]
 fn fp_from_sparse_custom_heights_and_widths() {
-    let li = LayoutIndex::from_sparse(
+    let li = PixelLayout::from_sparse(
         5,
         5,
         Pixels(20.0),
@@ -26,7 +26,7 @@ fn fp_from_sparse_custom_heights_and_widths() {
 
 #[test]
 fn fp_from_sparse_hidden_rows_and_cols() {
-    let li = LayoutIndex::from_sparse(
+    let li = PixelLayout::from_sparse(
         5,
         5,
         Pixels(20.0),
@@ -48,7 +48,7 @@ fn fp_from_sparse_hidden_rows_and_cols() {
 
 #[test]
 fn fp_from_sparse_hidden_overrides_custom() {
-    let mut li = LayoutIndex::from_sparse(
+    let mut li = PixelLayout::from_sparse(
         5,
         5,
         Pixels(20.0),
@@ -67,7 +67,7 @@ fn fp_from_sparse_hidden_overrides_custom() {
 
 #[test]
 fn fp_zero_rows_zero_cols() {
-    let li = LayoutIndex::with_defaults(0, 0, Pixels(20.0), Pixels(64.0));
+    let li = PixelLayout::with_defaults(0, 0, Pixels(20.0), Pixels(64.0));
     assert_eq!(li.row_count(), 0);
     assert_eq!(li.col_count(), 0);
     assert_eq!(li.total_row_size(), Pixels(0.0));
@@ -82,7 +82,7 @@ fn fp_zero_rows_zero_cols() {
 
 #[test]
 fn fp_single_row_single_col() {
-    let li = LayoutIndex::with_defaults(1, 1, Pixels(20.0), Pixels(64.0));
+    let li = PixelLayout::with_defaults(1, 1, Pixels(20.0), Pixels(64.0));
     assert_eq!(li.row_count(), 1);
     assert_eq!(li.col_count(), 1);
     assert_eq!(li.get_row_position(0), Pixels(0.0));
@@ -102,7 +102,7 @@ fn fp_single_row_single_col() {
 #[test]
 fn fp_all_rows_hidden() {
     let hidden_rows: Vec<usize> = (0..5).collect();
-    let li = LayoutIndex::from_sparse(
+    let li = PixelLayout::from_sparse(
         5,
         3,
         Pixels(20.0),
@@ -124,7 +124,7 @@ fn fp_all_rows_hidden() {
 #[test]
 fn fp_all_cols_hidden() {
     let hidden_cols: Vec<usize> = (0..4).collect();
-    let li = LayoutIndex::from_sparse(
+    let li = PixelLayout::from_sparse(
         3,
         4,
         Pixels(20.0),
@@ -145,7 +145,7 @@ fn fp_all_cols_hidden() {
 
 #[test]
 fn fp_very_large_custom_dimension() {
-    let mut li = LayoutIndex::with_defaults(5, 5, Pixels(20.0), Pixels(64.0));
+    let mut li = PixelLayout::with_defaults(5, 5, Pixels(20.0), Pixels(64.0));
     li.set_row_height(2, Pixels(1_000_000.0));
     li.set_col_width(0, Pixels(1_000_000.0));
     assert_eq!(li.get_row_height(2), Pixels(1_000_000.0));
@@ -157,7 +157,7 @@ fn fp_very_large_custom_dimension() {
 
 #[test]
 fn fp_set_dimension_while_hidden_takes_effect_on_unhide() {
-    let mut li = LayoutIndex::with_defaults(5, 5, Pixels(20.0), Pixels(64.0));
+    let mut li = PixelLayout::with_defaults(5, 5, Pixels(20.0), Pixels(64.0));
     li.hide_row(2);
     li.set_row_height(2, Pixels(80.0));
     assert_eq!(li.get_row_height(2), Pixels(0.0));

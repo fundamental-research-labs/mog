@@ -17,10 +17,10 @@ impl ComputeEngine {
             return;
         }
         let storage = &self.stores.storage;
-        let mirror = &self.mirror;
+        let cell_store = &self.cell_store;
         let rebase = |patch: &mut HistoryPatch| {
             if let HistoryPatch::Metadata(patch) = patch {
-                patch.rebase_ui_format(storage, mirror, sheet, ranges, &format);
+                patch.rebase_ui_format(storage, cell_store, sheet, ranges, &format);
             }
         };
         for action in self

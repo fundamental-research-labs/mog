@@ -95,7 +95,7 @@ fn delete_row_breaks_ref_should_become_ref_error() {
     // Setup: A1=A2+A3 FIRST (Positional refs to ghosts), then A2=100, A3=200.
     // This matches the app-eval data-tools test order; if A2/A3 were set
     // first the refs would be `Resolved` and the `Resolved`-cleanup path
-    // (mirror's `cell_to_sheet`) would already produce `#REF!` without
+    // (cell_store's `cell_to_sheet`) would already produce `#REF!` without
     // the AST shift fix.
     sheet.set_cell("A1", "=A2+A3").unwrap();
     sheet.set_cell("A2", "100").unwrap();

@@ -5,10 +5,10 @@ pub(super) fn set_row_format(
     sheet_id: &SheetId,
     row: u32,
     format: CellFormat,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let result = services::formatting::set_row_format(&mut engine.stores, sheet_id, row, &format)?;
-    let patches = engine.produce_row_col_format_viewport_patches(sheet_id, &[row], &[]);
-    Ok((patches, result))
+
+    Ok(result)
 }
 
 pub(super) fn patch_row_format(
@@ -17,7 +17,7 @@ pub(super) fn patch_row_format(
     row: u32,
     format: CellFormat,
     clear_fields: Vec<String>,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     validation::format::validate_cell_format(&format)?;
     properties::apply_format_patch(&CellFormat::default(), &format, &clear_fields)?;
     let result = services::formatting::patch_row_format(
@@ -27,8 +27,8 @@ pub(super) fn patch_row_format(
         &format,
         &clear_fields,
     )?;
-    let patches = engine.produce_row_col_format_viewport_patches(sheet_id, &[row], &[]);
-    Ok((patches, result))
+
+    Ok(result)
 }
 
 pub(super) fn set_col_format(
@@ -36,10 +36,10 @@ pub(super) fn set_col_format(
     sheet_id: &SheetId,
     col: u32,
     format: CellFormat,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let result = services::formatting::set_col_format(&mut engine.stores, sheet_id, col, &format)?;
-    let patches = engine.produce_row_col_format_viewport_patches(sheet_id, &[], &[col]);
-    Ok((patches, result))
+
+    Ok(result)
 }
 
 pub(super) fn patch_col_format(
@@ -48,7 +48,7 @@ pub(super) fn patch_col_format(
     col: u32,
     format: CellFormat,
     clear_fields: Vec<String>,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     validation::format::validate_cell_format(&format)?;
     properties::apply_format_patch(&CellFormat::default(), &format, &clear_fields)?;
     let result = services::formatting::patch_col_format(
@@ -58,23 +58,23 @@ pub(super) fn patch_col_format(
         &format,
         &clear_fields,
     )?;
-    let patches = engine.produce_row_col_format_viewport_patches(sheet_id, &[], &[col]);
-    Ok((patches, result))
+
+    Ok(result)
 }
 
 pub(super) fn clear_col_format(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     col: u32,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let result = services::formatting::clear_col_format(
         &mut engine.stores,
-        &mut engine.mirror,
+        &mut engine.cell_store,
         sheet_id,
         col,
     )?;
-    let patches = engine.produce_row_col_format_viewport_patches(sheet_id, &[], &[col]);
-    Ok((patches, result))
+
+    Ok(result)
 }
 
 pub(super) fn set_col_format_range(
@@ -83,7 +83,7 @@ pub(super) fn set_col_format_range(
     start_col: u32,
     end_col: u32,
     format: CellFormat,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     if start_col > end_col || end_col >= cell_types::MAX_COLS {
         return Err(ComputeError::Eval {
             message: format!(
@@ -93,19 +93,14 @@ pub(super) fn set_col_format_range(
     }
     let result = services::formatting::set_col_format_range(
         &mut engine.stores,
-        &mut engine.mirror,
+        &mut engine.cell_store,
         sheet_id,
         start_col,
         end_col,
         &format,
     )?;
-    let cols = if start_col <= end_col {
-        (start_col..=end_col).collect::<Vec<_>>()
-    } else {
-        Vec::new()
-    };
-    let patches = engine.produce_row_col_format_viewport_patches(sheet_id, &[], &cols);
-    Ok((patches, result))
+
+    Ok(result)
 }
 
 pub(super) fn get_row_formats(
@@ -126,23 +121,19 @@ pub(super) fn set_row_formats(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     updates: Vec<(u32, CellFormat)>,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     for (row, format) in &updates {
         services::formatting::set_row_format(&mut engine.stores, sheet_id, *row, format)?;
     }
-    let rows = updates
-        .iter()
-        .map(|(row, _format)| *row)
-        .collect::<Vec<_>>();
-    let patches = engine.produce_row_col_format_viewport_patches(sheet_id, &rows, &[]);
-    Ok((patches, MutationResult::empty()))
+
+    Ok(MutationResult::empty())
 }
 
 pub(super) fn patch_row_formats(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     updates: Vec<(u32, CellFormat, Vec<String>)>,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     for (_, format, clear_fields) in &updates {
         validation::format::validate_cell_format(format)?;
         properties::apply_format_patch(&CellFormat::default(), format, clear_fields)?;
@@ -156,9 +147,8 @@ pub(super) fn patch_row_formats(
             clear_fields,
         )?;
     }
-    let rows = updates.iter().map(|(row, _, _)| *row).collect::<Vec<_>>();
-    let patches = engine.produce_row_col_format_viewport_patches(sheet_id, &rows, &[]);
-    Ok((patches, MutationResult::empty()))
+
+    Ok(MutationResult::empty())
 }
 
 pub(super) fn get_col_formats(
@@ -179,23 +169,19 @@ pub(super) fn set_col_formats(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     updates: Vec<(u32, CellFormat)>,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     for (col, format) in &updates {
         services::formatting::set_col_format(&mut engine.stores, sheet_id, *col, format)?;
     }
-    let cols = updates
-        .iter()
-        .map(|(col, _format)| *col)
-        .collect::<Vec<_>>();
-    let patches = engine.produce_row_col_format_viewport_patches(sheet_id, &[], &cols);
-    Ok((patches, MutationResult::empty()))
+
+    Ok(MutationResult::empty())
 }
 
 pub(super) fn patch_col_formats(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     updates: Vec<(u32, CellFormat, Vec<String>)>,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     for (_, format, clear_fields) in &updates {
         validation::format::validate_cell_format(format)?;
         properties::apply_format_patch(&CellFormat::default(), format, clear_fields)?;
@@ -209,7 +195,6 @@ pub(super) fn patch_col_formats(
             clear_fields,
         )?;
     }
-    let cols = updates.iter().map(|(col, _, _)| *col).collect::<Vec<_>>();
-    let patches = engine.produce_row_col_format_viewport_patches(sheet_id, &[], &cols);
-    Ok((patches, MutationResult::empty()))
+
+    Ok(MutationResult::empty())
 }

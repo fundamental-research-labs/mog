@@ -1,7 +1,6 @@
 //! Custom cell style bridge methods for ComputeEngine.
 
 use bridge_core as bridge;
-use compute_wire::mutation::serialize_multi_viewport_patches;
 use domain_types::domain::cell_style::CellStyleDef;
 use value_types::ComputeError;
 
@@ -28,10 +27,10 @@ impl ComputeEngine {
     pub fn create_custom_cell_style(
         &mut self,
         style: CellStyleDef,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let result = services::styles::create_custom_cell_style(&mut engine.stores, style)?;
-            Ok((serialize_multi_viewport_patches(&[]), result))
+            Ok(result)
         })
     }
 
@@ -41,23 +40,20 @@ impl ComputeEngine {
         &mut self,
         id: String,
         style: CellStyleDef,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let result =
                 services::styles::update_custom_cell_style(&mut engine.stores, &id, style)?;
-            Ok((serialize_multi_viewport_patches(&[]), result))
+            Ok(result)
         })
     }
 
     /// Delete a custom cell style by ID.
     #[bridge::write(scope = "workbook")]
-    pub fn delete_custom_cell_style(
-        &mut self,
-        id: String,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    pub fn delete_custom_cell_style(&mut self, id: String) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let result = services::styles::delete_custom_cell_style(&mut engine.stores, &id)?;
-            Ok((serialize_multi_viewport_patches(&[]), result))
+            Ok(result)
         })
     }
 }

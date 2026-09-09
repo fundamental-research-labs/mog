@@ -26,7 +26,7 @@ fn test_set_and_get_floating_object() {
 
 #[test]
 fn test_get_nonexistent_floating_object() {
-    let (mut storage, sheet_id) = storage_with_sheet();
+    let (storage, sheet_id) = storage_with_sheet();
     assert!(get_floating_object(&storage, &sheet_id, "nope").is_none());
 }
 
@@ -58,7 +58,7 @@ fn test_get_all_floating_objects() {
 
 #[test]
 fn test_get_all_floating_objects_empty() {
-    let (mut storage, sheet_id) = storage_with_sheet();
+    let (storage, sheet_id) = storage_with_sheet();
     assert!(get_all_floating_objects(&storage, &sheet_id).is_empty());
 }
 

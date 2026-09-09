@@ -8,7 +8,7 @@ mod visitor;
 
 pub use self::types::*;
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::scheduler::ComputeCore;
 
 use self::page::{decode_cursor, encode_cursor, snapshot_version};
@@ -16,7 +16,7 @@ use self::rows::{collect_source_rows, sort_key};
 use self::sources::collect_sources;
 
 pub fn collect_formula_reference_diagnostics(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     compute: &ComputeCore,
     options: FormulaReferenceDiagnosticsOptions,
 ) -> Result<FormulaReferenceDiagnosticsPage, value_types::ComputeError> {
@@ -27,12 +27,12 @@ pub fn collect_formula_reference_diagnostics(
         &options.external_links.version,
     );
     let start = decode_cursor(options.cursor.as_deref(), &snapshot_version)?;
-    let mut sources = collect_sources(mirror, compute, &options.document_id, options.sheet_id);
+    let mut sources = collect_sources(cell_store, compute, &options.document_id, options.sheet_id);
     sources.sort_by_key(|s| s.order);
 
     let mut rows = Vec::new();
     for source in &sources {
-        collect_source_rows(mirror, source, &options, &snapshot_version, &mut rows);
+        collect_source_rows(cell_store, source, &options, &snapshot_version, &mut rows);
     }
     rows.sort_by_key(sort_key);
 

@@ -4,7 +4,7 @@ mod stress_common;
 use stress_common::*;
 
 use cell_types::{CellId, SheetId};
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{CellData, CellEdit, RecalcResult, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellError, CellValue};
@@ -18,7 +18,7 @@ use value_types::{CellError, CellValue};
 #[test]
 fn test_sequence_spill_adjacent_to_cycle() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_iterative_snapshot(
         vec![(
             "Sheet1",
@@ -35,33 +35,33 @@ fn test_sequence_spill_adjacent_to_cycle() {
         100,
         0.001,
     );
-    let result = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let result = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // SEQUENCE(5) should spill A1:A5 = 1,2,3,4,5
     // A1 is the origin cell (has CellId); A2:A5 are spill targets (position-based)
-    assert_mirror_number(&mirror, 0, 0, 0, 1.0);
-    assert_pos_number(&mirror, 0, 1, 0, 2.0);
-    assert_pos_number(&mirror, 0, 2, 0, 3.0);
-    assert_pos_number(&mirror, 0, 3, 0, 4.0);
-    assert_pos_number(&mirror, 0, 4, 0, 5.0);
+    assert_store_number(&cell_store, 0, 0, 0, 1.0);
+    assert_pos_number(&cell_store, 0, 1, 0, 2.0);
+    assert_pos_number(&cell_store, 0, 2, 0, 3.0);
+    assert_pos_number(&cell_store, 0, 3, 0, 4.0);
+    assert_pos_number(&cell_store, 0, 4, 0, 5.0);
 
     // Convergent cycle: B1=C1+1, C1=B1*0.5 → B1=2, C1=1
-    assert_mirror_number_tol(&mirror, 0, 0, 1, 2.0, 0.01);
-    assert_mirror_number_tol(&mirror, 0, 0, 2, 1.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 1, 2.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 2, 1.0, 0.01);
     assert!(result.metrics.has_circular_refs);
 
     // Edit A1 to SEQUENCE(10)
-    let _r = set(&mut core, &mut mirror, 0, 0, 0, "=SEQUENCE(10)");
+    let _r = set(&mut core, &mut cell_store, 0, 0, 0, "=SEQUENCE(10)");
 
     // A1:A10 = 1..10 (origin + spill targets)
-    assert_mirror_number(&mirror, 0, 0, 0, 1.0);
+    assert_store_number(&cell_store, 0, 0, 0, 1.0);
     for i in 1u32..10 {
-        assert_pos_number(&mirror, 0, i, 0, (i + 1) as f64);
+        assert_pos_number(&cell_store, 0, i, 0, (i + 1) as f64);
     }
 
     // Cycle cells should be unchanged
-    assert_mirror_number_tol(&mirror, 0, 0, 1, 2.0, 0.01);
-    assert_mirror_number_tol(&mirror, 0, 0, 2, 1.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 1, 2.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 2, 1.0, 0.01);
 }
 
 // ---------------------------------------------------------------------------
@@ -74,7 +74,7 @@ fn test_sequence_spill_adjacent_to_cycle() {
 #[test]
 fn test_sum_over_spill_in_cycle() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_iterative_snapshot(
         vec![(
             "Sheet1",
@@ -89,11 +89,11 @@ fn test_sum_over_spill_in_cycle() {
         100,
         0.001,
     );
-    let result = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let result = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // B1=30, C1=15
-    assert_mirror_number_tol(&mirror, 0, 0, 1, 30.0, 0.01);
-    assert_mirror_number_tol(&mirror, 0, 0, 2, 15.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 1, 30.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 2, 15.0, 0.01);
     assert!(result.metrics.has_circular_refs);
 
     // Edit A1="=SEQUENCE(10)" → SUM(A1:A5) stays 15 but now A1:A10 = 1..10
@@ -116,10 +116,10 @@ fn test_sum_over_spill_in_cycle() {
     // After edit A1="=SEQUENCE(10)" (1..10, SUM=55). But SUM(A1:A5) = 1+2+3+4+5 = 15 still.
     // The spec must intend SUM over the spill range. Let's use A1:A10 in the formula.
     drop(core);
-    drop(mirror);
+    drop(cell_store);
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_iterative_snapshot(
         vec![(
             "Sheet1",
@@ -135,19 +135,19 @@ fn test_sum_over_spill_in_cycle() {
         100,
         0.001,
     );
-    let result = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let result = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // SEQUENCE(5) → A1:A5=1..5, A6:A10=0. SUM(A1:A10)=15.
     // B1=15+C1, C1=B1/2 → B1=30, C1=15
-    assert_mirror_number_tol(&mirror, 0, 0, 1, 30.0, 0.01);
-    assert_mirror_number_tol(&mirror, 0, 0, 2, 15.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 1, 30.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 2, 15.0, 0.01);
     assert!(result.metrics.has_circular_refs);
 
     // Edit A1="=SEQUENCE(10)" → SUM(A1:A10)=55
     // B1=55+C1, C1=B1/2 → B1=110, C1=55
-    let _r = set(&mut core, &mut mirror, 0, 0, 0, "=SEQUENCE(10)");
-    assert_mirror_number_tol(&mirror, 0, 0, 1, 110.0, 0.01);
-    assert_mirror_number_tol(&mirror, 0, 0, 2, 55.0, 0.01);
+    let _r = set(&mut core, &mut cell_store, 0, 0, 0, "=SEQUENCE(10)");
+    assert_store_number_tol(&cell_store, 0, 0, 1, 110.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 2, 55.0, 0.01);
 }
 
 // ---------------------------------------------------------------------------
@@ -159,7 +159,7 @@ fn test_sum_over_spill_in_cycle() {
 #[test]
 fn test_spill_shrink_stale_projection() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![(
         "Sheet1",
         100,
@@ -169,31 +169,31 @@ fn test_spill_shrink_stale_projection() {
             (0, 1, CellValue::number(0.0), Some("SUM(A1:A10)")),
         ],
     )]);
-    let _r = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let _r = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // Initial: A1:A10 = 1..10, B1 = 55
-    assert_mirror_number(&mirror, 0, 0, 0, 1.0);
-    assert_pos_number(&mirror, 0, 9, 0, 10.0);
-    assert_mirror_number(&mirror, 0, 0, 1, 55.0);
+    assert_store_number(&cell_store, 0, 0, 0, 1.0);
+    assert_pos_number(&cell_store, 0, 9, 0, 10.0);
+    assert_store_number(&cell_store, 0, 0, 1, 55.0);
 
     // Shrink spill: A1="=SEQUENCE(5)"
-    let _r = set(&mut core, &mut mirror, 0, 0, 0, "=SEQUENCE(5)");
+    let _r = set(&mut core, &mut cell_store, 0, 0, 0, "=SEQUENCE(5)");
 
     // A1:A5 = 1..5
-    assert_mirror_number(&mirror, 0, 0, 0, 1.0);
+    assert_store_number(&cell_store, 0, 0, 0, 1.0);
     for i in 1u32..5 {
-        assert_pos_number(&mirror, 0, i, 0, (i + 1) as f64);
+        assert_pos_number(&cell_store, 0, i, 0, (i + 1) as f64);
     }
 
     // A6:A10 must be Null (stale projection cleared)
-    assert_pos_null(&mirror, 0, 5, 0);
-    assert_pos_null(&mirror, 0, 6, 0);
-    assert_pos_null(&mirror, 0, 7, 0);
-    assert_pos_null(&mirror, 0, 8, 0);
-    assert_pos_null(&mirror, 0, 9, 0);
+    assert_pos_null(&cell_store, 0, 5, 0);
+    assert_pos_null(&cell_store, 0, 6, 0);
+    assert_pos_null(&cell_store, 0, 7, 0);
+    assert_pos_null(&cell_store, 0, 8, 0);
+    assert_pos_null(&cell_store, 0, 9, 0);
 
     // B1 must be 15, NOT 55
-    assert_mirror_number(&mirror, 0, 0, 1, 15.0);
+    assert_store_number(&cell_store, 0, 0, 1, 15.0);
 }
 
 // ---------------------------------------------------------------------------
@@ -204,7 +204,7 @@ fn test_spill_shrink_stale_projection() {
 #[test]
 fn test_dynamic_sequence_resize() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![(
         "Sheet1",
         100,
@@ -214,26 +214,26 @@ fn test_dynamic_sequence_resize() {
             (0, 1, CellValue::number(5.0), None),
         ],
     )]);
-    let _r = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let _r = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // SEQUENCE(5) → A1:A5 = 1..5
-    assert_mirror_number(&mirror, 0, 0, 0, 1.0);
-    assert_pos_number(&mirror, 0, 1, 0, 2.0);
-    assert_pos_number(&mirror, 0, 2, 0, 3.0);
-    assert_pos_number(&mirror, 0, 3, 0, 4.0);
-    assert_pos_number(&mirror, 0, 4, 0, 5.0);
+    assert_store_number(&cell_store, 0, 0, 0, 1.0);
+    assert_pos_number(&cell_store, 0, 1, 0, 2.0);
+    assert_pos_number(&cell_store, 0, 2, 0, 3.0);
+    assert_pos_number(&cell_store, 0, 3, 0, 4.0);
+    assert_pos_number(&cell_store, 0, 4, 0, 5.0);
 
     // set B1=3
-    let _r = set(&mut core, &mut mirror, 0, 0, 1, "3");
+    let _r = set(&mut core, &mut cell_store, 0, 0, 1, "3");
 
     // A1:A3 = 1..3
-    assert_mirror_number(&mirror, 0, 0, 0, 1.0);
-    assert_pos_number(&mirror, 0, 1, 0, 2.0);
-    assert_pos_number(&mirror, 0, 2, 0, 3.0);
+    assert_store_number(&cell_store, 0, 0, 0, 1.0);
+    assert_pos_number(&cell_store, 0, 1, 0, 2.0);
+    assert_pos_number(&cell_store, 0, 2, 0, 3.0);
 
     // A4, A5 should be Null
-    assert_pos_null(&mirror, 0, 3, 0);
-    assert_pos_null(&mirror, 0, 4, 0);
+    assert_pos_null(&cell_store, 0, 3, 0);
+    assert_pos_null(&cell_store, 0, 4, 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -245,7 +245,7 @@ fn test_dynamic_sequence_resize() {
 #[test]
 fn test_transpose_cross_sheet() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![
         (
             "Sheet1",
@@ -272,20 +272,20 @@ fn test_transpose_cross_sheet() {
             ],
         ),
     ]);
-    let _r = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let _r = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // Sheet2: A1=10 (origin), B1=20 (spill target), C1=30 (spill target)
-    assert_mirror_number(&mirror, 1, 0, 0, 10.0);
-    assert_pos_number(&mirror, 1, 0, 1, 20.0);
-    assert_pos_number(&mirror, 1, 0, 2, 30.0);
+    assert_store_number(&cell_store, 1, 0, 0, 10.0);
+    assert_pos_number(&cell_store, 1, 0, 1, 20.0);
+    assert_pos_number(&cell_store, 1, 0, 2, 30.0);
 
     // Edit Sheet1!A2 (row=1, col=0) = 99
-    let _r = set(&mut core, &mut mirror, 0, 1, 0, "99");
+    let _r = set(&mut core, &mut cell_store, 0, 1, 0, "99");
 
     // Sheet2 should update: A1=10, B1=99, C1=30
-    assert_mirror_number(&mirror, 1, 0, 0, 10.0);
-    assert_pos_number(&mirror, 1, 0, 1, 99.0);
-    assert_pos_number(&mirror, 1, 0, 2, 30.0);
+    assert_store_number(&cell_store, 1, 0, 0, 10.0);
+    assert_pos_number(&cell_store, 1, 0, 1, 99.0);
+    assert_pos_number(&cell_store, 1, 0, 2, 30.0);
 }
 
 // ---------------------------------------------------------------------------
@@ -296,7 +296,7 @@ fn test_transpose_cross_sheet() {
 #[test]
 fn test_spill_collision_with_cycle_cell() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     // First set up the cycle via snapshot
     let snapshot = build_iterative_snapshot(
         vec![(
@@ -311,18 +311,18 @@ fn test_spill_collision_with_cycle_cell() {
         100,
         0.001,
     );
-    let result = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let result = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
     assert!(result.metrics.has_circular_refs);
 
     // B1≈2, C1≈1
-    assert_mirror_number_tol(&mirror, 0, 0, 1, 2.0, 0.01);
-    assert_mirror_number_tol(&mirror, 0, 0, 2, 1.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 1, 2.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 2, 1.0, 0.01);
 
     // Now set A1="=SEQUENCE(1,3)" — tries to spill into A1,B1,C1 but B1 is occupied
-    let _r = set(&mut core, &mut mirror, 0, 0, 0, "=SEQUENCE(1,3)");
+    let _r = set(&mut core, &mut cell_store, 0, 0, 0, "=SEQUENCE(1,3)");
 
     // A1 should be #SPILL!
-    assert_mirror_error(&mirror, 0, 0, 0, CellError::Spill);
+    assert_store_error(&cell_store, 0, 0, 0, CellError::Spill);
 }
 
 // ---------------------------------------------------------------------------
@@ -333,7 +333,7 @@ fn test_spill_collision_with_cycle_cell() {
 #[test]
 fn test_array_literal_sum() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![(
         "Sheet1",
         100,
@@ -345,15 +345,15 @@ fn test_array_literal_sum() {
             (0, 3, CellValue::number(0.0), Some("SUM(A1:C1)")),
         ],
     )]);
-    let _r = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let _r = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // A1=1 (origin), B1=2 (spill target), C1=3 (spill target)
-    assert_mirror_number(&mirror, 0, 0, 0, 1.0);
-    assert_pos_number(&mirror, 0, 0, 1, 2.0);
-    assert_pos_number(&mirror, 0, 0, 2, 3.0);
+    assert_store_number(&cell_store, 0, 0, 0, 1.0);
+    assert_pos_number(&cell_store, 0, 0, 1, 2.0);
+    assert_pos_number(&cell_store, 0, 0, 2, 3.0);
 
     // D1=SUM(A1:C1)=6
-    assert_mirror_number(&mirror, 0, 0, 3, 6.0);
+    assert_store_number(&cell_store, 0, 0, 3, 6.0);
 }
 
 // ---------------------------------------------------------------------------
@@ -365,7 +365,7 @@ fn test_array_literal_sum() {
 #[test]
 fn test_filter_feeding_sum() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![(
         "Sheet1",
         100,
@@ -382,13 +382,13 @@ fn test_filter_feeding_sum() {
             (0, 2, CellValue::number(0.0), Some("SUM(B1:B3)")),
         ],
     )]);
-    let _r = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let _r = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // FILTER returns [30, 40, 50] spilling into B1 (origin), B2, B3 (spill targets)
-    assert_mirror_number(&mirror, 0, 0, 1, 30.0);
-    assert_pos_number(&mirror, 0, 1, 1, 40.0);
-    assert_pos_number(&mirror, 0, 2, 1, 50.0);
+    assert_store_number(&cell_store, 0, 0, 1, 30.0);
+    assert_pos_number(&cell_store, 0, 1, 1, 40.0);
+    assert_pos_number(&cell_store, 0, 2, 1, 50.0);
 
     // C1 = SUM(B1:B3) = 120
-    assert_mirror_number(&mirror, 0, 0, 2, 120.0);
+    assert_store_number(&cell_store, 0, 0, 2, 120.0);
 }

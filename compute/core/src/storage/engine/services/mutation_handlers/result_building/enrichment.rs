@@ -1,7 +1,7 @@
 use cell_types::{CellId, SheetId, SheetPos};
 use value_types::CellValue;
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::snapshot::RecalcResult;
 use crate::storage::engine::services::cell_editing::NO_OLD_FORMULA_SENTINEL;
 use crate::storage::engine::services::resolved_formats;
@@ -19,7 +19,7 @@ use compute_wire::flags as render_flags;
 /// `format_value_at_cell` method.
 pub(in crate::storage::engine) fn enrich_display_text(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     settings: &EngineSettings,
     result: &mut RecalcResult,
     format_value_fn: &dyn Fn(&CellValue, &SheetId, u32, u32) -> String,
@@ -44,7 +44,7 @@ pub(in crate::storage::engine) fn enrich_display_text(
         change.display_text = Some(format_value_fn(&change.value, &sheet_id, pos.row, pos.col));
 
         let effective_format = resolved_formats::get_resolved_cell_format(
-            stores, mirror, settings, &sheet_id, pos.row, pos.col,
+            stores, cell_store, settings, &sheet_id, pos.row, pos.col,
         );
         change.number_format = Some(
             effective_format
@@ -75,7 +75,7 @@ pub(in crate::storage::engine) fn enrich_display_text(
 /// (HAS_FORMULA, HAS_COMMENT, HAS_SPARKLINE, HAS_HYPERLINK).
 pub(in crate::storage::engine) fn enrich_metadata_flags(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     recalc: &mut RecalcResult,
 ) {
     let mut comment_cache: std::collections::HashMap<SheetId, std::collections::HashSet<u128>> =
@@ -103,18 +103,18 @@ pub(in crate::storage::engine) fn enrich_metadata_flags(
         //    Dynamic-array spill members are associated projected values, not
         //    formula owners, and are marked through IS_SPILL_MEMBER patches.
         let has_formula = stores.compute.get_formula(&cell_id).is_some()
-            || mirror
+            || cell_store
                 .get_sheet(&sheet_id)
                 .and_then(|sheet| {
                     sheet
                         .cell_id_at(SheetPos::new(pos.row, pos.col))
-                        .and_then(|cid| sheet.get_cell(&cid))
+                        .and_then(|cid| sheet.formula(&cid))
                 })
-                .is_some_and(|entry| entry.formula.is_some())
-            || mirror
+                .is_some()
+            || cell_store
                 .projection_registry
                 .resolve(&sheet_id, pos.row, pos.col)
-                .is_some_and(|(anchor_id, _, _)| mirror.is_cse_anchor(&anchor_id));
+                .is_some_and(|(anchor_id, _, _)| cell_store.is_cse_anchor(&anchor_id));
 
         if has_formula {
             change.extra_flags |= render_flags::HAS_FORMULA;
@@ -139,7 +139,7 @@ pub(in crate::storage::engine) fn enrich_metadata_flags(
 
         // --- HAS_HYPERLINK ---
         if crate::storage::engine::services::objects::get_hyperlink(
-            stores, mirror, &sheet_id, pos.row, pos.col,
+            stores, cell_store, &sheet_id, pos.row, pos.col,
         )
         .is_some()
         {

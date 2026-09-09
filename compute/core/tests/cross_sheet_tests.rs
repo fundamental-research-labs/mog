@@ -4,7 +4,7 @@
 //!   cargo test -p compute-core --test cross_sheet_tests -- --nocapture
 
 use cell_types::{CellId, SheetId};
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{CellData, RecalcResult, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellError, CellValue};
@@ -179,10 +179,10 @@ fn test_cross_sheet_circular_ref_two_sheets() {
             vec![(0, 0, CellValue::Null, Some("Sheet1!A1"))],
         ),
     ]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     assert!(cell_is_error(&result, 0, 0, 0) || has_circular_error(&result, 0, 0, 0));
     assert!(cell_is_error(&result, 1, 0, 0) || has_circular_error(&result, 1, 0, 0));
@@ -218,10 +218,10 @@ fn test_cross_sheet_circular_ref_text_cached_value_preserved() {
             )],
         ),
     ]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     for sheet_idx in [0u32, 1u32] {
@@ -255,10 +255,10 @@ fn test_cross_sheet_circular_ref_three_sheets() {
             vec![(0, 0, CellValue::Null, Some("Sheet1!A1"))],
         ),
     ]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     assert!(cell_is_error(&result, 0, 0, 0) || has_circular_error(&result, 0, 0, 0));
     assert!(cell_is_error(&result, 1, 0, 0) || has_circular_error(&result, 1, 0, 0));
@@ -281,17 +281,17 @@ fn test_delete_referenced_sheet() {
             vec![(0, 0, CellValue::number(42.0), None)],
         ),
     ]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let init_result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     assert_num(&init_result, 0, 0, 0, 52.0);
     let sheet2_id = SheetId::from_uuid_str(&sheet_uuid(1)).unwrap();
-    core.remove_sheet(&mut mirror, &sheet2_id)
+    core.remove_sheet(&mut cell_store, &sheet2_id)
         .expect("remove_sheet failed");
     let a1_cell_id = CellId::from_uuid_str(&cell_uuid(0, 0, 0)).unwrap();
-    let val = mirror.get_cell_value(&a1_cell_id);
+    let val = cell_store.get_cell_value(&a1_cell_id);
     println!("After sheet deletion, Sheet1!A1 = {:?}", val);
 }
 
@@ -306,10 +306,10 @@ fn test_error_propagation_div0() {
         ),
         ("Sheet2", 10, 10, vec![(0, 0, CellValue::Null, Some("1/0"))]),
     ]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     assert_cell_error(&result, 1, 0, 0, CellError::Div0);
     assert_cell_error(&result, 0, 0, 0, CellError::Div0);
@@ -334,10 +334,10 @@ fn test_error_propagation_value() {
             ],
         ),
     ]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     assert_cell_error(&result, 1, 0, 1, CellError::Value);
 }
@@ -350,10 +350,10 @@ fn test_ref_error_missing_sheet() {
         10,
         vec![(0, 0, CellValue::Null, Some("NonExistent!A1"))],
     )]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     assert_cell_error(&result, 0, 0, 0, CellError::Ref);
 }
@@ -380,10 +380,10 @@ fn test_multi_level_indirection() {
             vec![(0, 0, CellValue::number(100.0), None)],
         ),
     ]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     assert_num(&result, 1, 0, 0, 105.0);
     assert_num(&result, 0, 0, 0, 210.0);
@@ -417,10 +417,10 @@ fn test_four_level_chain() {
             vec![(0, 0, CellValue::number(10.0), None)],
         ),
     ]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     assert_num(&result, 2, 0, 0, 11.0);
     assert_num(&result, 1, 0, 0, 12.0);
@@ -443,10 +443,10 @@ fn test_quoted_sheet_spaces() {
             vec![(0, 0, CellValue::number(50.0), None)],
         ),
     ]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     assert_num(&result, 0, 0, 0, 150.0);
 }
@@ -467,10 +467,10 @@ fn test_quoted_sheet_special_chars() {
             vec![(0, 0, CellValue::number(999.0), None)],
         ),
     ]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     assert_num(&result, 0, 0, 0, 999.0);
 }
@@ -497,10 +497,10 @@ fn test_cross_sheet_sum() {
             ],
         ),
     ]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     assert_num(&result, 0, 0, 0, 60.0);
 }
@@ -526,10 +526,10 @@ fn test_cross_sheet_average() {
             ],
         ),
     ]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     assert_num(&result, 0, 0, 0, 25.0);
 }
@@ -545,15 +545,17 @@ fn test_cross_sheet_recalc() {
         ),
         ("Sheet2", 10, 10, vec![(0, 0, CellValue::number(7.0), None)]),
     ]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let ir = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     assert_num(&ir, 0, 0, 0, 21.0);
     let sid = SheetId::from_uuid_str(&sheet_uuid(1)).unwrap();
     let cid = CellId::from_uuid_str(&cell_uuid(1, 0, 0)).unwrap();
-    let r = core.set_cell(&mut mirror, &sid, cid, 0, 0, "10").unwrap();
+    let r = core
+        .set_cell(&mut cell_store, &sid, cid, 0, 0, "10")
+        .unwrap();
     let a1 = cell_uuid(0, 0, 0);
     let ch = r.changed_cells.iter().find(|cc| cc.cell_id == a1);
     assert!(ch.is_some(), "Sheet1 A1 should recalc");
@@ -590,17 +592,17 @@ fn test_3d_reference_evaluates_and_recalculates_each_sheet_in_span() {
             vec![(0, 0, CellValue::number(30.0), None)],
         ),
     ]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let init = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     assert_num(&init, 0, 0, 1, 60.0);
 
     let sheet2 = SheetId::from_uuid_str(&sheet_uuid(1)).unwrap();
     let sheet2_a1 = CellId::from_uuid_str(&cell_uuid(1, 0, 0)).unwrap();
     let result = core
-        .set_cell(&mut mirror, &sheet2, sheet2_a1, 0, 0, "50")
+        .set_cell(&mut cell_store, &sheet2, sheet2_a1, 0, 0, "50")
         .unwrap();
     assert_num(&result, 0, 0, 1, 90.0);
 }
@@ -624,16 +626,18 @@ fn test_cross_sheet_recalc_chain() {
             ],
         ),
     ]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let ir = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     assert_num(&ir, 1, 0, 1, 10.0);
     assert_num(&ir, 0, 0, 0, 110.0);
     let sid = SheetId::from_uuid_str(&sheet_uuid(1)).unwrap();
     let cid = CellId::from_uuid_str(&cell_uuid(1, 0, 0)).unwrap();
-    let r = core.set_cell(&mut mirror, &sid, cid, 0, 0, "20").unwrap();
+    let r = core
+        .set_cell(&mut cell_store, &sid, cid, 0, 0, "20")
+        .unwrap();
     if let Some(cc) = r
         .changed_cells
         .iter()
@@ -730,10 +734,10 @@ fn test_cross_sheet_maxifs_full_column_gt_zero() {
         ("Transactions", 10, 10, txn_cells),
     ]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     // Alpha rows with C > 0: row 0 (amount=100, C=10), row 2 (amount=300, C=20), row 4 (amount=500, C=30)
@@ -820,10 +824,10 @@ fn test_cross_sheet_maxifs_full_column_agg_prepass() {
         ("Transactions", 30, 10, txn_cells),
     ]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     // Verify specific expected results.

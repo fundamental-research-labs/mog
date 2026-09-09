@@ -129,7 +129,7 @@ pub struct MutationResult {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data: Option<serde_json::Value>,
     /// Old cell values keyed by `"sheetId:cellId"` (UUID strings).
-    /// Populated via read-before-write from CellMirror for direct edits and
+    /// Populated via read-before-write from CellStore for direct edits and
     /// cascade recalc changes. Used by TS ChangeAccumulator to populate
     /// `DirtyCell.oldValue` for `old → new` transition display.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]

@@ -36,9 +36,7 @@ fn sheet_id() -> SheetId {
 fn add_horizontal_page_break_returns_page_break_changes() {
     let mut engine = build_engine();
     let sid = sheet_id();
-    let result = engine
-        .add_horizontal_page_break(&sid, 5)
-        .map(|(_, result)| result);
+    let result = engine.add_horizontal_page_break(&sid, 5);
     let result = result.expect("add_horizontal_page_break");
     assert_eq!(result.page_break_changes.len(), 1);
     assert_eq!(result.page_break_changes[0].sheet_id, sid.to_uuid_string());
@@ -56,9 +54,7 @@ fn add_horizontal_page_break_returns_page_break_changes() {
 fn add_vertical_page_break_returns_page_break_changes() {
     let mut engine = build_engine();
     let sid = sheet_id();
-    let result = engine
-        .add_vertical_page_break(&sid, 7)
-        .map(|(_, result)| result);
+    let result = engine.add_vertical_page_break(&sid, 7);
     let result = result.expect("add_vertical_page_break");
     assert_eq!(result.page_break_changes.len(), 1);
     assert!(
@@ -75,14 +71,10 @@ fn remove_horizontal_page_break_returns_page_break_changes() {
     let mut engine = build_engine();
     let sid = sheet_id();
     // Seed a break first so the removal path observes a transition.
-    engine
-        .add_horizontal_page_break(&sid, 3)
-        .map(|(_, result)| result)
-        .expect("seed");
+    engine.add_horizontal_page_break(&sid, 3).expect("seed");
 
     let result = engine
         .remove_horizontal_page_break(&sid, 3)
-        .map(|(_, result)| result)
         .expect("remove_horizontal_page_break");
     assert_eq!(result.page_break_changes.len(), 1);
     assert!(
@@ -99,14 +91,10 @@ fn remove_horizontal_page_break_returns_page_break_changes() {
 fn remove_vertical_page_break_returns_page_break_changes() {
     let mut engine = build_engine();
     let sid = sheet_id();
-    engine
-        .add_vertical_page_break(&sid, 4)
-        .map(|(_, result)| result)
-        .expect("seed");
+    engine.add_vertical_page_break(&sid, 4).expect("seed");
 
     let result = engine
         .remove_vertical_page_break(&sid, 4)
-        .map(|(_, result)| result)
         .expect("remove_vertical_page_break");
     assert_eq!(result.page_break_changes.len(), 1);
     assert!(
@@ -123,18 +111,11 @@ fn remove_vertical_page_break_returns_page_break_changes() {
 fn clear_all_page_breaks_returns_page_break_changes() {
     let mut engine = build_engine();
     let sid = sheet_id();
-    engine
-        .add_horizontal_page_break(&sid, 1)
-        .map(|(_, result)| result)
-        .expect("seed h");
-    engine
-        .add_vertical_page_break(&sid, 2)
-        .map(|(_, result)| result)
-        .expect("seed v");
+    engine.add_horizontal_page_break(&sid, 1).expect("seed h");
+    engine.add_vertical_page_break(&sid, 2).expect("seed v");
 
     let result = engine
         .clear_all_page_breaks(&sid)
-        .map(|(_, result)| result)
         .expect("clear_all_page_breaks");
     assert_eq!(result.page_break_changes.len(), 1);
     let breaks = &result.page_break_changes[0].breaks;
@@ -156,7 +137,6 @@ fn set_print_area_returns_print_area_change() {
     };
     let result = engine
         .set_print_area(&sid, Some(area.clone()))
-        .map(|(_, result)| result)
         .expect("set_print_area");
     assert_eq!(result.print_area_changes.len(), 1);
     let change = &result.print_area_changes[0];
@@ -166,7 +146,6 @@ fn set_print_area_returns_print_area_change() {
     // Removal path → kind must be Removed.
     let result = engine
         .set_print_area(&sid, None)
-        .map(|(_, result)| result)
         .expect("set_print_area(None)");
     assert_eq!(result.print_area_changes.len(), 1);
     assert_eq!(result.print_area_changes[0].kind, SnapChangeKind::Removed);
@@ -183,7 +162,6 @@ fn set_print_titles_returns_print_titles_change() {
     };
     let result = engine
         .set_print_titles(&sid, titles)
-        .map(|(_, result)| result)
         .expect("set_print_titles");
     assert_eq!(result.print_titles_changes.len(), 1);
     assert_eq!(
@@ -200,7 +178,6 @@ fn set_print_settings_returns_print_settings_change() {
     settings.orientation = Some("landscape".to_string());
     let result = engine
         .set_print_settings(&sid, settings)
-        .map(|(_, result)| result)
         .expect("set_print_settings");
     assert_eq!(result.print_settings_changes.len(), 1);
     assert_eq!(
@@ -222,7 +199,6 @@ fn set_split_config_returns_split_config_change() {
     };
     let result = engine
         .set_split_config(&sid, Some(config.clone()))
-        .map(|(_, result)| result)
         .expect("set_split_config");
     assert_eq!(result.split_config_changes.len(), 1);
     let change = &result.split_config_changes[0];
@@ -235,7 +211,6 @@ fn set_split_config_returns_split_config_change() {
     // Removal path → kind == Removed.
     let result = engine
         .set_split_config(&sid, None)
-        .map(|(_, result)| result)
         .expect("set_split_config(None)");
     assert_eq!(result.split_config_changes.len(), 1);
     assert_eq!(result.split_config_changes[0].kind, SnapChangeKind::Removed);
@@ -252,12 +227,10 @@ fn set_split_config_reports_frozen_panes_cleared() {
     };
     engine
         .set_frozen_panes(&sid, 3, 2)
-        .map(|(_, result)| result)
         .expect("set_frozen_panes");
 
     let result = engine
         .set_split_config(&sid, Some(config.clone()))
-        .map(|(_, result)| result)
         .expect("set_split_config");
 
     assert_eq!(result.split_config_changes.len(), 1);
@@ -282,7 +255,7 @@ fn native_bridge_set_split_config_returns_split_config_change() {
         vertical_position: 1,
     };
 
-    let (_patches, result) = engine
+    let result = engine
         .set_split_config(&sid, Some(config))
         .expect("bridge set_split_config");
 
@@ -300,7 +273,6 @@ fn set_scroll_position_returns_scroll_position_change() {
     let sid = sheet_id();
     let result = engine
         .set_scroll_position(&sid, 12, 7)
-        .map(|(_, result)| result)
         .expect("set_scroll_position");
     assert_eq!(result.scroll_position_changes.len(), 1);
     let change = &result.scroll_position_changes[0];

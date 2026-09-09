@@ -18,10 +18,14 @@ pub(in crate::storage::engine) fn build_imported_range_style_plan(
     std::collections::HashSet<(u32, u32)>,
     Vec<crate::storage::infra::hydration::ImportedRangeStyle>,
 ) {
-    let mut style_by_pos: HashMap<(u32, u32), Option<u32>> =
-        HashMap::with_capacity(sheet_data.cells.len());
+    let mut styles_by_col: HashMap<u32, Vec<(u32, u32)>> = HashMap::new();
     for cell in &sheet_data.cells {
-        style_by_pos.insert((cell.row, cell.col), cell.style_id);
+        if let Some(style) = cell.style_id {
+            styles_by_col
+                .entry(cell.col)
+                .or_default()
+                .push((cell.row, style));
+        }
     }
 
     let mut positions = std::collections::HashSet::new();
@@ -30,21 +34,50 @@ pub(in crate::storage::engine) fn build_imported_range_style_plan(
     for range in ranges {
         let mut positions_by_style: HashMap<u32, Vec<(u32, u32)>> = HashMap::new();
 
-        for row_id in &range.row_ids {
-            let Some(row) = alloc.row_axis.position_of(alloc.sheet_id, *row_id) else {
+        use crate::cells::range_view::RangeOffsets;
+        let rows = range
+            .row_axis
+            .as_ref()
+            .and_then(|reference| {
+                RangeOffsets::from_axis_ref(alloc.sheet_id, reference, &alloc.row_axis)
+            })
+            .unwrap_or_else(|| {
+                range
+                    .row_ids
+                    .iter()
+                    .enumerate()
+                    .map(|(i, id)| (*id, i as u32))
+                    .collect()
+            });
+        let cols = range
+            .col_axis
+            .as_ref()
+            .and_then(|reference| {
+                RangeOffsets::from_axis_ref(alloc.sheet_id, reference, &alloc.col_axis)
+            })
+            .unwrap_or_else(|| {
+                range
+                    .col_ids
+                    .iter()
+                    .enumerate()
+                    .map(|(i, id)| (*id, i as u32))
+                    .collect()
+            });
+        for col_id in cols.keys() {
+            let Some(col) = alloc.col_axis.position_of(alloc.sheet_id, col_id) else {
                 continue;
             };
-            for col_id in &range.col_ids {
-                let Some(col) = alloc.col_axis.position_of(alloc.sheet_id, *col_id) else {
-                    continue;
-                };
-                let Some(cell_style) = style_by_pos.get(&(row, col)).copied().flatten() else {
-                    continue;
-                };
-                positions_by_style
-                    .entry(cell_style)
-                    .or_default()
-                    .push((row, col));
+            for &(row, style) in styles_by_col.get(&col).into_iter().flatten() {
+                if alloc
+                    .row_axis
+                    .identity_at(alloc.sheet_id, row)
+                    .is_some_and(|id| rows.contains_key(&id))
+                {
+                    positions_by_style
+                        .entry(style)
+                        .or_default()
+                        .push((row, col));
+                }
             }
         }
 

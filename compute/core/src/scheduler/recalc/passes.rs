@@ -19,7 +19,7 @@ impl ComputeCore {
     ///    duplication cost. Any changes to the per-level body must be mirrored.
     pub(in super::super) fn topo_evaluate_pass(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         cells: &[CellId],
         deadline: &Deadline,
         epoch_range_store: &mut crate::eval::cache::range_store::RangeStore,
@@ -51,7 +51,7 @@ impl ComputeCore {
         };
 
         // Aggregation prepass: resolve COUNTIFS/SUMIFS/AVERAGEIFS groups before
-        // level-based evaluation. Resolved cells are written to the mirror and
+        // level-based evaluation. Resolved cells are written to the cell store and
         // removed from the evaluation set.
         //
         // Pre-eval blocker cells: formula cells in agg data columns (e.g.,
@@ -69,7 +69,7 @@ impl ComputeCore {
                 let groups = crate::scheduler::agg_prepass::detect_agg_groups(
                     &dirty_set,
                     get_ast,
-                    &*mirror,
+                    &*cell_store,
                     agg_prepass::AGG_MIN_GROUP_SIZE,
                 );
                 if !groups.is_empty() {
@@ -78,7 +78,7 @@ impl ComputeCore {
                         .flat_map(|g| g.cell_ids.iter().copied())
                         .collect();
                     let blocker_cells = self.collect_agg_data_column_blockers(
-                        &*mirror,
+                        &*cell_store,
                         &agg_group_cell_ids,
                         &already_evaluated,
                     );
@@ -94,7 +94,7 @@ impl ComputeCore {
                         // that read from their spill columns (e.g., XLOOKUP).
                         let (blocker_levels, _blocker_cycles) = self
                             .graph
-                            .subset_levels(&blocker_cells, &*mirror)
+                            .subset_levels(&blocker_cells, &*cell_store)
                             .into_value();
 
                         for level in &blocker_levels {
@@ -105,13 +105,13 @@ impl ComputeCore {
                                     .filter_map(|cid| self.cell_range_keys.get(cid))
                                     .flat_map(|keys| keys.iter().copied())
                                     .collect();
-                                epoch_range_store.pre_materialize_additive(&plan, mirror);
+                                epoch_range_store.pre_materialize_additive(&plan, cell_store);
                             }
 
                             let deltas_before = projection_deltas.len();
 
                             self.topo_evaluate_level_sequential(
-                                mirror,
+                                cell_store,
                                 level,
                                 &mut changed_cells,
                                 &mut projection_changes,
@@ -125,14 +125,14 @@ impl ComputeCore {
                             let dirty_positions: Vec<(SheetId, u32, u32)> = level
                                 .iter()
                                 .filter_map(|cid| {
-                                    let sid = mirror.sheet_for_cell(cid)?;
-                                    let pos = mirror.resolve_position(cid)?;
+                                    let sid = cell_store.sheet_for_cell(cid)?;
+                                    let pos = cell_store.resolve_position(cid)?;
                                     Some((sid, pos.row(), pos.col()))
                                 })
                                 .collect();
 
                             // Also invalidate spill target regions so the next
-                            // level reads fresh data from the mirror, not stale
+                            // level reads fresh data from the cell store, not stale
                             // range store cache. Use range-based invalidation to
                             // avoid materializing every cell position.
                             let mut dirty_ranges: Vec<(SheetId, u32, u32, u32, u32)> = Vec::new();
@@ -164,7 +164,7 @@ impl ComputeCore {
             }
 
             let (agg_resolved, warm_data) =
-                self.run_agg_prepass(&*mirror, &dirty_set, &already_evaluated, sumifs_epoch);
+                self.run_agg_prepass(&*cell_store, &dirty_set, &already_evaluated, sumifs_epoch);
             if agg_resolved.is_empty() {
                 (eval_cells, warm_data)
             } else {
@@ -186,14 +186,14 @@ impl ComputeCore {
                         });
                     }
 
-                    let old = mirror
+                    let old = cell_store
                         .get_cell_value(&cell_id)
                         .cloned()
                         .unwrap_or(CellValue::Null);
-                    mirror.set_value_mut(&cell_id, new_value.clone());
+                    cell_store.set_value_mut(&cell_id, new_value.clone());
                     if !values_equal(&old, &new_value)
                         && let Some((_sid, change)) =
-                            self.make_cell_change(mirror, &cell_id, &new_value)
+                            self.make_cell_change(cell_store, &cell_id, &new_value)
                     {
                         changed_cells.push(change);
                     }
@@ -216,7 +216,7 @@ impl ComputeCore {
         // Reuses the dirty_set maintained above (already updated by agg prepass
         // removals), avoiding a redundant O(N) FxHashSet construction.
         let eval_cells = {
-            let dt_resolved = self.run_data_table_prepass(mirror, &dirty_set);
+            let dt_resolved = self.run_data_table_prepass(cell_store, &dirty_set);
             if dt_resolved.is_empty() {
                 eval_cells
             } else {
@@ -227,14 +227,14 @@ impl ComputeCore {
                         new_value = CellValue::number(0.0);
                     }
 
-                    let old = mirror
+                    let old = cell_store
                         .get_cell_value(&cell_id)
                         .cloned()
                         .unwrap_or(CellValue::Null);
-                    mirror.set_value_mut(&cell_id, new_value.clone());
+                    cell_store.set_value_mut(&cell_id, new_value.clone());
                     if !values_equal(&old, &new_value)
                         && let Some((_sid, change)) =
-                            self.make_cell_change(mirror, &cell_id, &new_value)
+                            self.make_cell_change(cell_store, &cell_id, &new_value)
                     {
                         changed_cells.push(change);
                     }
@@ -255,7 +255,9 @@ impl ComputeCore {
         let (levels, cycle_cells) = {
             let _span =
                 tracing::info_span!("topo_levels", input_cells = eval_cells.len()).entered();
-            self.graph.subset_levels(&eval_cells, &*mirror).into_value()
+            self.graph
+                .subset_levels(&eval_cells, &*cell_store)
+                .into_value()
         };
 
         let _level_count_span =
@@ -277,7 +279,7 @@ impl ComputeCore {
                     .filter_map(|cid| self.cell_range_keys.get(cid))
                     .flat_map(|keys| keys.iter().copied())
                     .collect();
-                epoch_range_store.pre_materialize_additive(&plan, mirror);
+                epoch_range_store.pre_materialize_additive(&plan, cell_store);
             }
 
             // Check timeout before each level (cheap: single clock read per level)
@@ -291,13 +293,13 @@ impl ComputeCore {
                 for remaining_level in &levels[level_idx..] {
                     for &cell_id in remaining_level {
                         let timeout_value = CellValue::Error(CellError::Calc, None);
-                        mirror.set_value_mut(&cell_id, timeout_value.clone());
+                        cell_store.set_value_mut(&cell_id, timeout_value.clone());
                         if let Some((_sid, change)) =
-                            self.make_cell_change(mirror, &cell_id, &timeout_value)
+                            self.make_cell_change(cell_store, &cell_id, &timeout_value)
                         {
                             changed_cells.push(change);
                         }
-                        if let Some(sheet_id) = self.find_sheet_for_cell(mirror, &cell_id) {
+                        if let Some(sheet_id) = self.find_sheet_for_cell(cell_store, &cell_id) {
                             errors.push(CellErrorInfo {
                                 cell_id: cell_id.to_uuid_string(),
                                 sheet_id: sheet_id.to_uuid_string(),
@@ -339,7 +341,7 @@ impl ComputeCore {
                     let _span = tracing::info_span!("evaluate_level_parallel", cells = level.len())
                         .entered();
                     self.topo_evaluate_level_parallel(
-                        mirror,
+                        cell_store,
                         level,
                         &mut changed_cells,
                         &mut projection_changes,
@@ -355,7 +357,7 @@ impl ComputeCore {
                 let _span =
                     tracing::info_span!("evaluate_level_sequential", cells = level.len()).entered();
                 self.topo_evaluate_level_sequential(
-                    mirror,
+                    cell_store,
                     level,
                     &mut changed_cells,
                     &mut projection_changes,
@@ -378,7 +380,7 @@ impl ComputeCore {
                 .collect();
 
             // Also invalidate spill target regions so subsequent levels and
-            // projection stabilization read fresh data from the mirror, not
+            // projection stabilization read fresh data from the cell store, not
             // stale range store cache. Without this, formulas like SUM(D4:D5)
             // where D4/D5 are TRANSPOSE spill targets will read cached zeros.
             // Use range-based invalidation to avoid materializing every cell position.
@@ -406,7 +408,7 @@ impl ComputeCore {
             // Invalidate LookupIndexCache for columns written by spill
             // materialization in this level. materialize_projection writes
             // spill target values to col_data but cannot invalidate the
-            // LookupIndexCache (it lives in EpochRangeStore, not CellMirror).
+            // LookupIndexCache (it lives in EpochRangeStore, not CellStore).
             // Without this, XLOOKUP/VLOOKUP on spill-populated columns may
             // hit a stale index that was built before the spill values existed.
             // Note: invalidate_dirty_ranges already handles lookup cache
@@ -460,7 +462,7 @@ impl ComputeCore {
     /// See `topo_evaluate_pass` doc comment for why these loops are kept separate.
     pub(in super::super) fn topo_evaluate_pass_with_levels(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         pre_levels: Vec<Vec<CellId>>,
         deadline: &Deadline,
         epoch_range_store: &mut crate::eval::cache::range_store::RangeStore,
@@ -502,7 +504,7 @@ impl ComputeCore {
 
         // Data table prepass: resolve TABLE cells before level-based evaluation.
         let dt_resolved_set = {
-            let dt_resolved = self.run_data_table_prepass(mirror, &dirty_set);
+            let dt_resolved = self.run_data_table_prepass(cell_store, &dirty_set);
             if dt_resolved.is_empty() {
                 FxHashSet::default()
             } else {
@@ -513,14 +515,14 @@ impl ComputeCore {
                         new_value = CellValue::number(0.0);
                     }
 
-                    let old = mirror
+                    let old = cell_store
                         .get_cell_value(&cell_id)
                         .cloned()
                         .unwrap_or(CellValue::Null);
-                    mirror.set_value_mut(&cell_id, new_value.clone());
+                    cell_store.set_value_mut(&cell_id, new_value.clone());
                     if !values_equal(&old, &new_value)
                         && let Some((_sid, change)) =
-                            self.make_cell_change(mirror, &cell_id, &new_value)
+                            self.make_cell_change(cell_store, &cell_id, &new_value)
                     {
                         changed_cells.push(change);
                     }
@@ -568,7 +570,7 @@ impl ComputeCore {
             let groups = crate::scheduler::agg_prepass::detect_agg_groups(
                 &dirty_set,
                 get_ast,
-                &*mirror,
+                &*cell_store,
                 agg_prepass::AGG_MIN_GROUP_SIZE,
             );
             if groups.is_empty() {
@@ -638,7 +640,7 @@ impl ComputeCore {
                 // outside the topo levels entirely (orphan formulas) or at the
                 // current/later levels.
                 let blocker_cells = self.collect_agg_data_column_blockers(
-                    &*mirror,
+                    &*cell_store,
                     &agg_group_cell_ids,
                     &already_evaluated,
                 );
@@ -655,11 +657,11 @@ impl ComputeCore {
                             .filter_map(|cid| self.cell_range_keys.get(cid))
                             .flat_map(|keys| keys.iter().copied())
                             .collect();
-                        epoch_range_store.pre_materialize_additive(&plan, mirror);
+                        epoch_range_store.pre_materialize_additive(&plan, cell_store);
                     }
 
                     self.topo_evaluate_level_sequential(
-                        mirror,
+                        cell_store,
                         &blocker_cells,
                         &mut changed_cells,
                         &mut projection_changes,
@@ -679,8 +681,8 @@ impl ComputeCore {
                     let pre_eval_dirty: Vec<(SheetId, u32, u32)> = blocker_cells
                         .iter()
                         .filter_map(|cid| {
-                            let sid = mirror.sheet_for_cell(cid)?;
-                            let pos = mirror.resolve_position(cid)?;
+                            let sid = cell_store.sheet_for_cell(cid)?;
+                            let pos = cell_store.resolve_position(cid)?;
                             Some((sid, pos.row(), pos.col()))
                         })
                         .collect();
@@ -705,7 +707,7 @@ impl ComputeCore {
                     s
                 };
                 let (agg_resolved, warm_data) = self.run_agg_prepass(
-                    &*mirror,
+                    &*cell_store,
                     &remaining_dirty,
                     &already_evaluated,
                     self.current_sumifs_cache_epoch()
@@ -734,14 +736,14 @@ impl ComputeCore {
                             );
                         }
 
-                        let old = mirror
+                        let old = cell_store
                             .get_cell_value(&cell_id)
                             .cloned()
                             .unwrap_or(CellValue::Null);
-                        mirror.set_value_mut(&cell_id, new_value.clone());
+                        cell_store.set_value_mut(&cell_id, new_value.clone());
                         if !values_equal(&old, &new_value)
                             && let Some((_sid, change)) =
-                                self.make_cell_change(mirror, &cell_id, &new_value)
+                                self.make_cell_change(cell_store, &cell_id, &new_value)
                         {
                             changed_cells.push(change);
                         }
@@ -764,7 +766,7 @@ impl ComputeCore {
                     .filter_map(|cid| self.cell_range_keys.get(cid))
                     .flat_map(|keys| keys.iter().copied())
                     .collect();
-                epoch_range_store.pre_materialize_additive(&plan, mirror);
+                epoch_range_store.pre_materialize_additive(&plan, cell_store);
             }
 
             // Check timeout before each level (cheap: single clock read per level)
@@ -778,13 +780,13 @@ impl ComputeCore {
                 for remaining_level in &levels[level_idx..] {
                     for &cell_id in remaining_level {
                         let timeout_value = CellValue::Error(CellError::Calc, None);
-                        mirror.set_value_mut(&cell_id, timeout_value.clone());
+                        cell_store.set_value_mut(&cell_id, timeout_value.clone());
                         if let Some((_sid, change)) =
-                            self.make_cell_change(mirror, &cell_id, &timeout_value)
+                            self.make_cell_change(cell_store, &cell_id, &timeout_value)
                         {
                             changed_cells.push(change);
                         }
-                        if let Some(sheet_id) = self.find_sheet_for_cell(mirror, &cell_id) {
+                        if let Some(sheet_id) = self.find_sheet_for_cell(cell_store, &cell_id) {
                             errors.push(CellErrorInfo {
                                 cell_id: cell_id.to_uuid_string(),
                                 sheet_id: sheet_id.to_uuid_string(),
@@ -826,7 +828,7 @@ impl ComputeCore {
                     let _span = tracing::info_span!("evaluate_level_parallel", cells = level.len())
                         .entered();
                     self.topo_evaluate_level_parallel(
-                        mirror,
+                        cell_store,
                         level,
                         &mut changed_cells,
                         &mut projection_changes,
@@ -842,7 +844,7 @@ impl ComputeCore {
                 let _span =
                     tracing::info_span!("evaluate_level_sequential", cells = level.len()).entered();
                 self.topo_evaluate_level_sequential(
-                    mirror,
+                    cell_store,
                     level,
                     &mut changed_cells,
                     &mut projection_changes,
@@ -865,7 +867,7 @@ impl ComputeCore {
                 .collect();
 
             // Also invalidate spill target regions so subsequent levels and
-            // projection stabilization read fresh data from the mirror, not
+            // projection stabilization read fresh data from the cell store, not
             // stale range store cache. Without this, formulas like SUM(D4:D5)
             // where D4/D5 are TRANSPOSE spill targets will read cached zeros.
             // Use range-based invalidation to avoid materializing every cell position.

@@ -1,4 +1,4 @@
-//! Class IV — integration mirror of the parse/render round-trip.
+//! Class IV — integration cell_store of the parse/render round-trip.
 //!
 //! Shares the case table from `compute_core::test_support::class_iv` and
 //! exercises the full engine surface:
@@ -7,10 +7,10 @@
 //!     vs.
 //!   `engine.import_values(C, v)` (raw CellValue path)
 //!
-//! For the `set_cell` path (`mod engine_mirror`), `RoundTrips` cases
-//! assert the mirror value equals the original input and `CoercesTo(v')`
+//! For the `set_cell` path (`mod engine_store`), `RoundTrips` cases
+//! assert the cell store value equals the original input and `CoercesTo(v')`
 //! cases assert it equals `v'`. For the `import_values` path
-//! (`mod import_lossless`), every non-deferred case asserts the mirror
+//! (`mod import_lossless`), every non-deferred case asserts the cell store
 //! value equals the original input regardless of declared expectation —
 //! the import path is nominally raw, so any divergence is a Finding-2
 //! structural bug. `Deferred` cases are inspection-only and do not have
@@ -23,7 +23,7 @@
 //! table's `wouldbe_cellref_formula` expectation depends on this layout
 //! — keep them in sync if the target moves.
 //!
-//! **Each non-deferred case is its own `#[test]`** — see `mod engine_mirror`
+//! **Each non-deferred case is its own `#[test]`** — see `mod engine_store`
 //! and `mod import_lossless` below. Known bugs surface as named failing
 //! tests; failing tests ARE the bug tracker. Do NOT silence with
 //! `#[ignore]` or failure budgets — fix the bug or leave the test red.
@@ -124,7 +124,7 @@ fn fresh_engine() -> (ComputeEngine, SheetId, CellId) {
 }
 
 /// Apply `set_cell` with the rendered input string; return the resulting
-/// mirror value.
+/// cell_store value.
 fn value_via_set_cell(input: &CellValue) -> Result<CellValue, String> {
     let (mut engine, sid, cid) = fresh_engine();
     let rendered = cell_value_to_input_string(input);
@@ -132,35 +132,35 @@ fn value_via_set_cell(input: &CellValue) -> Result<CellValue, String> {
         .set_cell(&sid, cid, TARGET_ROW, TARGET_COL, rendered.as_str().into())
         .map_err(|e| format!("set_cell err: {:?}", e))?;
     Ok(engine
-        .mirror()
+        .cell_store()
         .get_cell_value(&cid)
         .cloned()
         .unwrap_or(CellValue::Null))
 }
 
 /// Apply `import_values` with the raw CellValue; return the resulting
-/// mirror value.
+/// cell_store value.
 fn value_via_import(input: &CellValue) -> Result<CellValue, String> {
     let (mut engine, sid, cid) = fresh_engine();
     engine
         .import_values(&sid, vec![(TARGET_ROW, TARGET_COL, input.clone(), None)])
         .map_err(|e| format!("import_values err: {:?}", e))?;
     Ok(engine
-        .mirror()
+        .cell_store()
         .get_cell_value(&cid)
         .cloned()
         .unwrap_or(CellValue::Null))
 }
 
-/// Per-case runner used by `mod engine_mirror`. Each non-deferred case in
-/// `cases()` becomes one `#[test]` that asserts the mirror value after
+/// Per-case runner used by `mod engine_store`. Each non-deferred case in
+/// `cases()` becomes one `#[test]` that asserts the cell store value after
 /// `engine.set_cell(render(v))` matches the case's declared expectation
 /// (`RoundTrips(v)` = `v`, `CoercesTo(v')` = `v'`).
 ///
 /// Failures surface by name in `cargo test` output — they are the bug
 /// tracker. Cases that currently fail represent either engine bugs or
 /// case-table drift where the declared expectation needs a product call.
-fn run_engine_mirror_case(name: &str) {
+fn run_engine_store_case(name: &str) {
     let case = cases()
         .into_iter()
         .find(|c| c.name == name)
@@ -179,7 +179,7 @@ fn run_engine_mirror_case(name: &str) {
     assert_eq!(
         got,
         expected,
-        "\n[{}] set_cell mirror mismatch: input={} rendered={:?} got={} want={}",
+        "\n[{}] set_cell store mismatch: input={} rendered={:?} got={} want={}",
         case.name,
         describe_value(&case.input),
         cell_value_to_input_string(&case.input),
@@ -189,15 +189,15 @@ fn run_engine_mirror_case(name: &str) {
 }
 
 /// One `#[test]` per non-deferred Class IV case, asserting that
-/// `engine.set_cell(render(v))` produces the declared expected mirror
+/// `engine.set_cell(render(v))` produces the declared expected cell_store
 /// value. Case list mirrors `mod import_lossless` below — the two modules
 /// exercise different production paths over the same case table.
-mod engine_mirror {
+mod engine_store {
     macro_rules! case {
         ($name:ident) => {
             #[test]
             fn $name() {
-                super::run_engine_mirror_case(stringify!($name));
+                super::run_engine_store_case(stringify!($name));
             }
         };
     }
@@ -276,7 +276,7 @@ mod engine_mirror {
 
 /// Per-case runner used by `mod import_lossless`. `import_values` should
 /// be the *raw* path — values go in, values come back out, no coercion.
-/// For every non-Deferred case, the mirror value after `import_values(v)`
+/// For every non-Deferred case, the cell store value after `import_values(v)`
 /// must equal `v`. Each case in `cases()` becomes one `#[test]` that
 /// calls this with its name. Known bugs (whitespace
 /// collapse, leading apostrophe stripping, type coercion on strings,

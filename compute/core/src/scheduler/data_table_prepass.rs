@@ -5,7 +5,7 @@
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use cell_types::{CellId, SheetId, SheetPos};
 use compute_parser::ASTNode;
 use formula_types::CellRef;
@@ -59,11 +59,14 @@ fn clear_data_table_eval_caches() {
     compute_functions::helpers::sumifs_result_cache::clear();
 }
 
-fn restore_data_table_saved_values(mirror: &mut CellMirror, saved_values: &[(CellId, CellValue)]) {
+fn restore_data_table_saved_values(
+    cell_store: &mut CellStore,
+    saved_values: &[(CellId, CellValue)],
+) {
     #[cfg(test)]
     DATA_TABLE_RESTORE_CALLS.fetch_add(1, Ordering::SeqCst);
     for (cid, val) in saved_values {
-        mirror.set_value_mut(cid, val.clone());
+        cell_store.set_value_mut(cid, val.clone());
     }
     clear_data_table_eval_caches();
 }
@@ -75,7 +78,7 @@ fn restore_data_table_saved_values(mirror: &mut CellMirror, saved_values: &[(Cel
 /// a registered region, keep those cells resolved to their current values so
 /// they do not fall through to ordinary formula evaluation as `#CALC!`.
 fn current_data_table_region_values(
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     region: &DataTableRegionDef,
     id_alloc: &cell_types::IdAllocator,
@@ -84,12 +87,13 @@ fn current_data_table_region_values(
     for row in region.start_row..=region.end_row {
         for col in region.start_col..=region.end_col {
             let pos = SheetPos::new(row, col);
-            let Some(cell_id) = mirror.ensure_cell_id_identity_only(sheet_id, pos, id_alloc) else {
+            let Some(cell_id) = cell_store.ensure_cell_id_identity_only(sheet_id, pos, id_alloc)
+            else {
                 continue;
             };
-            let value = mirror
+            let value = cell_store
                 .get_cell_value_raw(&cell_id)
-                .or_else(|| mirror.get_cell_value_at(sheet_id, pos))
+                .or_else(|| cell_store.get_cell_value_at(sheet_id, pos))
                 .cloned()
                 .unwrap_or(CellValue::Null);
             values.push((cell_id, value));
@@ -103,16 +107,16 @@ pub(super) fn is_table_formula(ast: &ASTNode) -> bool {
     matches!(ast, ASTNode::Function { name, .. } if name.eq_ignore_ascii_case("TABLE"))
 }
 
-/// Resolve a typed `CellRef` to its (row, col) on the given mirror.
+/// Resolve a typed `CellRef` to its (row, col) on the given cell_store.
 ///
 /// `Positional` refs return their stored (row, col) directly.
-/// `Resolved` refs look up the cell's current position via the mirror.
-fn cell_ref_to_position(r: &CellRef, mirror: &CellMirror) -> Option<(u32, u32)> {
+/// `Resolved` refs look up the cell's current position via the cell store.
+fn cell_ref_to_position(r: &CellRef, cell_store: &CellStore) -> Option<(u32, u32)> {
     match r {
         CellRef::Positional { row, col, .. } => Some((*row, *col)),
         CellRef::Resolved(cell_id) => {
-            let sheet_id = mirror.sheet_for_cell(cell_id)?;
-            let sheet = mirror.get_sheet(&sheet_id)?;
+            let sheet_id = cell_store.sheet_for_cell(cell_id)?;
+            let sheet = cell_store.get_sheet(&sheet_id)?;
             let pos = sheet.position_of(cell_id)?;
             Some((pos.row(), pos.col()))
         }
@@ -128,7 +132,7 @@ impl super::ComputeCore {
     /// Returns `Vec<(CellId, CellValue)>` of resolved cells (same contract as `run_agg_prepass`).
     pub(super) fn run_data_table_prepass(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         dirty_set: &FxHashSet<CellId>,
     ) -> Vec<(CellId, CellValue)> {
         // Guard: skip if we're already inside a data table evaluation
@@ -146,7 +150,7 @@ impl super::ComputeCore {
                     sheet: sheet_id,
                     row,
                     col,
-                }) = compute_graph::PositionResolver::resolve(mirror, &cell_id)
+                }) = compute_graph::PositionResolver::resolve(cell_store, &cell_id)
             {
                 table_cells.push((cell_id, sheet_id, row, col));
             }
@@ -161,7 +165,7 @@ impl super::ComputeCore {
         // fall through to evaluator-level #CALC! handling.
         let mut region_groups: RegionGroupMap = FxHashMap::default();
         for &(cell_id, sheet_id, row, col) in &table_cells {
-            if let Some(region) = mirror.find_data_table_at(&sheet_id, row, col) {
+            if let Some(region) = cell_store.find_data_table_at(&sheet_id, row, col) {
                 let key = (region.sheet.clone(), region.start_row, region.start_col);
                 let entry = region_groups
                     .entry(key)
@@ -203,7 +207,7 @@ impl super::ComputeCore {
                 // Excel convention, we try the corner first, then fall back.
                 if region.start_row == 0 || region.start_col == 0 {
                     results.extend(current_data_table_region_values(
-                        mirror,
+                        cell_store,
                         &sheet_id,
                         region,
                         &self.id_alloc,
@@ -216,7 +220,7 @@ impl super::ComputeCore {
                     (region.start_row, region.start_col - 1),     // one-var col fallback
                 ];
                 let (formula_cell_id, ast) = match candidate_positions.iter().find_map(|&(r, c)| {
-                    let cid = mirror.resolve_cell_id(&sheet_id, SheetPos::new(r, c))?;
+                    let cid = cell_store.resolve_cell_id(&sheet_id, SheetPos::new(r, c))?;
                     let entry = self.ast_cache.get(&cid)?;
                     if is_table_formula(&entry.ast) {
                         return None; // skip TABLE cells — they're body cells, not the formula
@@ -226,7 +230,7 @@ impl super::ComputeCore {
                     Some(pair) => pair,
                     None => {
                         results.extend(current_data_table_region_values(
-                            mirror,
+                            cell_store,
                             &sheet_id,
                             region,
                             &self.id_alloc,
@@ -241,18 +245,18 @@ impl super::ComputeCore {
                 // typed `Option<CellRef>`; resolve directly to (row, col) via
                 // `cell_ref_to_position` — no `parse_a1_ref` shadow parser.
                 let row_input_cell = region.row_input_ref.as_ref().and_then(|cr| {
-                    let (row, col) = cell_ref_to_position(cr, mirror)?;
-                    mirror.resolve_cell_id(&sheet_id, SheetPos::new(row, col))
+                    let (row, col) = cell_ref_to_position(cr, cell_store)?;
+                    cell_store.resolve_cell_id(&sheet_id, SheetPos::new(row, col))
                 });
                 let col_input_cell = region.col_input_ref.as_ref().and_then(|cr| {
-                    let (row, col) = cell_ref_to_position(cr, mirror)?;
-                    mirror.resolve_cell_id(&sheet_id, SheetPos::new(row, col))
+                    let (row, col) = cell_ref_to_position(cr, cell_store)?;
+                    cell_store.resolve_cell_id(&sheet_id, SheetPos::new(row, col))
                 });
 
                 // Must have at least one input cell
                 if row_input_cell.is_none() && col_input_cell.is_none() {
                     results.extend(current_data_table_region_values(
-                        mirror,
+                        cell_store,
                         &sheet_id,
                         region,
                         &self.id_alloc,
@@ -260,7 +264,7 @@ impl super::ComputeCore {
                     continue;
                 }
 
-                // 3d: Read header values from mirror.
+                // 3d: Read header values from cell_store.
                 //
                 // For a two-variable data table with region (start_row, start_col)-(end_row, end_col):
                 //   Row header values: column (start_col - 1), rows start_row..=end_row
@@ -284,7 +288,7 @@ impl super::ComputeCore {
                         0
                     };
                     for r in region.start_row..=region.end_row {
-                        let val = mirror
+                        let val = cell_store
                             .get_cell_value_at(&sheet_id, SheetPos::new(r, header_col))
                             .cloned()
                             .unwrap_or(CellValue::Null);
@@ -300,7 +304,7 @@ impl super::ComputeCore {
                         0
                     };
                     for c in region.start_col..=region.end_col {
-                        let val = mirror
+                        let val = cell_store
                             .get_cell_value_at(&sheet_id, SheetPos::new(header_row, c))
                             .cloned()
                             .unwrap_or(CellValue::Null);
@@ -320,7 +324,7 @@ impl super::ComputeCore {
                 for r in region.start_row..=region.end_row {
                     let mut row_ids = Vec::with_capacity(body_cols);
                     for c in region.start_col..=region.end_col {
-                        let cid = mirror.ensure_cell_id_identity_only(
+                        let cid = cell_store.ensure_cell_id_identity_only(
                             &sheet_id,
                             SheetPos::new(r, c),
                             &self.id_alloc,
@@ -344,7 +348,7 @@ impl super::ComputeCore {
                 let affected_levels: Vec<Vec<CellId>> = {
                     let (mut levels, cycle_cells) = self
                         .graph
-                        .affected_cells_levels(&input_cell_ids, &*mirror)
+                        .affected_cells_levels(&input_cell_ids, &*cell_store)
                         .into_value();
                     if !cycle_cells.is_empty() {
                         levels.push(cycle_cells);
@@ -384,14 +388,14 @@ impl super::ComputeCore {
                 // cells where ghost cells should be, producing false #SPILL! errors.
                 let mut saved_values: Vec<(CellId, CellValue)> = Vec::new();
                 for &cid in affected_chain.iter().chain(input_cell_ids.iter()) {
-                    let val = mirror
+                    let val = cell_store
                         .get_cell_value_raw(&cid)
                         .cloned()
                         .unwrap_or(CellValue::Null);
                     saved_values.push((cid, val));
                 }
                 if !has_formula_cell {
-                    let val = mirror
+                    let val = cell_store
                         .get_cell_value_raw(&formula_cell_id)
                         .cloned()
                         .unwrap_or(CellValue::Null);
@@ -409,7 +413,8 @@ impl super::ComputeCore {
                                 let entry = self.ast_cache.get(&cid)?;
                                 let chain_ast = entry.ast.clone();
                                 let sid =
-                                    compute_graph::PositionResolver::resolve(mirror, &cid)?.sheet;
+                                    compute_graph::PositionResolver::resolve(cell_store, &cid)?
+                                        .sheet;
                                 Some((cid, chain_ast, sid))
                             })
                             .collect::<Vec<_>>()
@@ -421,7 +426,7 @@ impl super::ComputeCore {
                 let sumifs_epoch = self.current_sumifs_cache_epoch();
 
                 // 3f: Build evaluator closure — mutate-recalc-restore approach.
-                // The closure mutates the mirror directly instead of using OverrideContext.
+                // The closure mutates the cell store directly instead of using OverrideContext.
 
                 let mut eval_count = 0u32;
                 let mut evaluate = |overrides: &FxHashMap<CellId, CellValue>| -> CellValue {
@@ -436,9 +441,9 @@ impl super::ComputeCore {
                                 .collect::<Vec<_>>()
                         );
                     }
-                    // 1. Write overrides to mirror
+                    // 1. Write overrides to cell_store
                     for (cell_id, value) in overrides {
-                        mirror.set_value_mut(cell_id, value.clone());
+                        cell_store.set_value_mut(cell_id, value.clone());
                     }
 
                     #[cfg(test)]
@@ -455,8 +460,8 @@ impl super::ComputeCore {
                     //    overrides, so correctness > cache throughput here.
                     for level in &chain_levels {
                         for &(chain_cell, ref chain_ast, chain_sheet_id) in level {
-                            let ctx = crate::eval_bridge::MirrorContext::new(
-                                mirror,
+                            let ctx = crate::eval_bridge::EvalContext::new(
+                                cell_store,
                                 chain_cell,
                                 chain_sheet_id,
                             )
@@ -467,7 +472,7 @@ impl super::ComputeCore {
                                 Ok(v) => v,
                                 Err(_) => CellValue::Error(CellError::Calc, None),
                             };
-                            mirror.set_value_mut(&chain_cell, result);
+                            cell_store.set_value_mut(&chain_cell, result);
                             // Clear ALL caches after each write to prevent any stale entries.
                             clear_data_table_eval_caches();
                         }
@@ -475,7 +480,7 @@ impl super::ComputeCore {
 
                     // 4. Read result — re-evaluate result formula directly
                     let result_ctx =
-                        crate::eval_bridge::MirrorContext::new(mirror, formula_cell_id, sheet_id)
+                        crate::eval_bridge::EvalContext::new(cell_store, formula_cell_id, sheet_id)
                             .with_sumifs_cache_epoch(sumifs_epoch);
                     let result = match crate::eval::sync_block_on(crate::eval::Evaluator::evaluate(
                         &ast_clone,
@@ -503,12 +508,12 @@ impl super::ComputeCore {
                         &mut evaluate,
                     )
                 }));
-                // Let the closure go out of scope to release the mutable borrow on mirror
+                // Let the closure go out of scope to release the mutable borrow on cell_store
                 let _ = evaluate;
 
                 // Pass 4: Restore original values and clear the same caches on
                 // normal and unwind paths.
-                restore_data_table_saved_values(mirror, &saved_values);
+                restore_data_table_saved_values(cell_store, &saved_values);
                 let dt_result = match dt_result {
                     Ok(result) => result,
                     Err(payload) => std::panic::resume_unwind(payload),
@@ -545,7 +550,7 @@ impl super::ComputeCore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mirror::CellMirror;
+    use crate::cells::CellStore;
     use crate::scheduler::ComputeCore;
     use crate::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
     use rustc_hash::FxHashSet;
@@ -668,27 +673,30 @@ mod tests {
         }
     }
 
-    fn data_table_core() -> (ComputeCore, CellMirror, SheetId, FxHashSet<CellId>) {
+    fn data_table_core() -> (ComputeCore, CellStore, SheetId, FxHashSet<CellId>) {
         let mut core = ComputeCore::new();
-        let mut mirror = CellMirror::new();
+        let mut cell_store = CellStore::new();
         let sheet_id = test_sheet_id();
-        core.init_from_snapshot(&mut mirror, data_table_snapshot())
+        core.init_from_snapshot(&mut cell_store, data_table_snapshot())
             .expect("data table snapshot should initialize");
         let mut dirty = FxHashSet::default();
         for suffix in [8, 9, 10, 11] {
             dirty.insert(test_cell_id(suffix));
         }
-        (core, mirror, sheet_id, dirty)
+        (core, cell_store, sheet_id, dirty)
     }
 
     #[test]
     fn data_table_prepass_empty_dirty_set_does_not_toggle_flag() {
         let _guard = data_table_test_lock();
-        let (mut core, mut mirror, _, _) = data_table_core();
+        let (mut core, mut cell_store, _, _) = data_table_core();
         reset_data_table_eval_scope_entries_for_tests();
         let dirty = FxHashSet::default();
 
-        assert!(core.run_data_table_prepass(&mut mirror, &dirty).is_empty());
+        assert!(
+            core.run_data_table_prepass(&mut cell_store, &dirty)
+                .is_empty()
+        );
         assert!(!core.in_data_table_eval);
         assert_eq!(data_table_eval_scope_entries_for_tests(), 0);
     }
@@ -696,12 +704,15 @@ mod tests {
     #[test]
     fn data_table_prepass_non_table_dirty_set_does_not_toggle_flag() {
         let _guard = data_table_test_lock();
-        let (mut core, mut mirror, _, _) = data_table_core();
+        let (mut core, mut cell_store, _, _) = data_table_core();
         reset_data_table_eval_scope_entries_for_tests();
         let mut dirty = FxHashSet::default();
         dirty.insert(test_cell_id(1));
 
-        assert!(core.run_data_table_prepass(&mut mirror, &dirty).is_empty());
+        assert!(
+            core.run_data_table_prepass(&mut cell_store, &dirty)
+                .is_empty()
+        );
         assert!(!core.in_data_table_eval);
         assert_eq!(data_table_eval_scope_entries_for_tests(), 0);
     }
@@ -710,16 +721,19 @@ mod tests {
     fn data_table_prepass_orphan_table_dirty_set_does_not_toggle_flag() {
         let _guard = data_table_test_lock();
         let mut core = ComputeCore::new();
-        let mut mirror = CellMirror::new();
+        let mut cell_store = CellStore::new();
         let mut snapshot = data_table_snapshot();
         snapshot.data_table_regions.clear();
-        core.init_from_snapshot(&mut mirror, snapshot)
+        core.init_from_snapshot(&mut cell_store, snapshot)
             .expect("orphan TABLE snapshot should initialize");
         reset_data_table_eval_scope_entries_for_tests();
         let mut dirty = FxHashSet::default();
         dirty.insert(test_cell_id(8));
 
-        assert!(core.run_data_table_prepass(&mut mirror, &dirty).is_empty());
+        assert!(
+            core.run_data_table_prepass(&mut cell_store, &dirty)
+                .is_empty()
+        );
         assert!(!core.in_data_table_eval);
         assert_eq!(data_table_eval_scope_entries_for_tests(), 0);
     }
@@ -727,7 +741,7 @@ mod tests {
     #[test]
     fn data_table_prepass_unresolvable_table_dirty_set_does_not_toggle_flag() {
         let _guard = data_table_test_lock();
-        let (mut core, mut mirror, _, _) = data_table_core();
+        let (mut core, mut cell_store, _, _) = data_table_core();
         reset_data_table_eval_scope_entries_for_tests();
         let missing_id = test_cell_id(0xfff);
         core.ast_cache.insert(
@@ -743,7 +757,10 @@ mod tests {
         let mut dirty = FxHashSet::default();
         dirty.insert(missing_id);
 
-        assert!(core.run_data_table_prepass(&mut mirror, &dirty).is_empty());
+        assert!(
+            core.run_data_table_prepass(&mut cell_store, &dirty)
+                .is_empty()
+        );
         assert!(!core.in_data_table_eval);
         assert_eq!(data_table_eval_scope_entries_for_tests(), 0);
     }
@@ -751,11 +768,14 @@ mod tests {
     #[test]
     fn data_table_prepass_already_in_eval_leaves_flag_unchanged() {
         let _guard = data_table_test_lock();
-        let (mut core, mut mirror, _, dirty) = data_table_core();
+        let (mut core, mut cell_store, _, dirty) = data_table_core();
         reset_data_table_eval_scope_entries_for_tests();
         core.in_data_table_eval = true;
 
-        assert!(core.run_data_table_prepass(&mut mirror, &dirty).is_empty());
+        assert!(
+            core.run_data_table_prepass(&mut cell_store, &dirty)
+                .is_empty()
+        );
         assert!(core.in_data_table_eval);
         assert_eq!(data_table_eval_scope_entries_for_tests(), 0);
     }
@@ -763,31 +783,31 @@ mod tests {
     #[test]
     fn data_table_prepass_normal_return_restores_flag_and_saved_values() {
         let _guard = data_table_test_lock();
-        let (mut core, mut mirror, _, _) = data_table_core();
+        let (mut core, mut cell_store, _, _) = data_table_core();
         reset_data_table_restore_calls_for_tests();
         let mut dirty = FxHashSet::default();
         dirty.insert(test_cell_id(8));
         let row_input = test_cell_id(6);
         let col_input = test_cell_id(7);
         let result_formula = test_cell_id(1);
-        let original_row_input = mirror.get_cell_value_raw(&row_input).cloned();
-        let original_col_input = mirror.get_cell_value_raw(&col_input).cloned();
-        let original_result_formula = mirror.get_cell_value_raw(&result_formula).cloned();
+        let original_row_input = cell_store.get_cell_value_raw(&row_input).cloned();
+        let original_col_input = cell_store.get_cell_value_raw(&col_input).cloned();
+        let original_result_formula = cell_store.get_cell_value_raw(&result_formula).cloned();
 
-        let resolved = core.run_data_table_prepass(&mut mirror, &dirty);
+        let resolved = core.run_data_table_prepass(&mut cell_store, &dirty);
 
         assert!(!core.in_data_table_eval);
         assert_eq!(data_table_restore_calls_for_tests(), 1);
         assert_eq!(
-            mirror.get_cell_value_raw(&row_input).cloned(),
+            cell_store.get_cell_value_raw(&row_input).cloned(),
             original_row_input
         );
         assert_eq!(
-            mirror.get_cell_value_raw(&col_input).cloned(),
+            cell_store.get_cell_value_raw(&col_input).cloned(),
             original_col_input
         );
         assert_eq!(
-            mirror.get_cell_value_raw(&result_formula).cloned(),
+            cell_store.get_cell_value_raw(&result_formula).cloned(),
             original_result_formula
         );
         assert_eq!(resolved.len(), 4);
@@ -807,7 +827,7 @@ mod tests {
     #[test]
     fn data_table_prepass_panic_after_override_restores_flag_values_and_cleanup_path() {
         let _guard = data_table_test_lock();
-        let (mut core, mut mirror, _, _) = data_table_core();
+        let (mut core, mut cell_store, _, _) = data_table_core();
         reset_data_table_restore_calls_for_tests();
         let mut dirty = FxHashSet::default();
         dirty.insert(test_cell_id(8));
@@ -815,12 +835,12 @@ mod tests {
         let row_input = test_cell_id(6);
         let col_input = test_cell_id(7);
         let result_formula = test_cell_id(1);
-        let original_row_input = mirror.get_cell_value_raw(&row_input).cloned();
-        let original_col_input = mirror.get_cell_value_raw(&col_input).cloned();
-        let original_result_formula = mirror.get_cell_value_raw(&result_formula).cloned();
+        let original_row_input = cell_store.get_cell_value_raw(&row_input).cloned();
+        let original_col_input = cell_store.get_cell_value_raw(&col_input).cloned();
+        let original_result_formula = cell_store.get_cell_value_raw(&result_formula).cloned();
 
         let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            core.run_data_table_prepass(&mut mirror, &dirty);
+            core.run_data_table_prepass(&mut cell_store, &dirty);
         }));
 
         assert!(panic.is_err());
@@ -831,15 +851,15 @@ mod tests {
             "panic path must use the same saved-value restore/cache cleanup helper"
         );
         assert_eq!(
-            mirror.get_cell_value_raw(&row_input).cloned(),
+            cell_store.get_cell_value_raw(&row_input).cloned(),
             original_row_input
         );
         assert_eq!(
-            mirror.get_cell_value_raw(&col_input).cloned(),
+            cell_store.get_cell_value_raw(&col_input).cloned(),
             original_col_input
         );
         assert_eq!(
-            mirror.get_cell_value_raw(&result_formula).cloned(),
+            cell_store.get_cell_value_raw(&result_formula).cloned(),
             original_result_formula
         );
     }

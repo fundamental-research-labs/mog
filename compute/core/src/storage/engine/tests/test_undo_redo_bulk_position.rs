@@ -62,8 +62,10 @@ fn duplicate_set_cells_by_position_uses_last_write_and_one_identity() {
         .unwrap();
 
     assert_eq!(cell_value_at(&engine, &sid, 0, 0), num(2.0));
-    let grid = engine.grid_index(&sid).expect("grid index");
-    let cell_id = grid.cell_id_at(0, 0).expect("winning cell id");
+    let grid = engine.cell_store().get_sheet(&sid).expect("grid index");
+    let cell_id = grid
+        .cell_id_at(cell_types::SheetPos::new(0, 0))
+        .expect("winning cell id");
     assert_eq!(
         grid.cells().filter(|(id, _, _)| *id == cell_id).count(),
         1,
@@ -94,7 +96,7 @@ fn undo_redo_restores_bulk_dimension_growth() {
     assert!(engine.grid_index(&sid).unwrap().row_count() >= 100_000);
     assert!(engine.grid_index(&sid).unwrap().col_count() >= 28);
 
-    let (_patches, undo_result) = engine.undo().unwrap();
+    let undo_result = engine.undo().unwrap();
     assert_eq!(cell_value_at(&engine, &sid, 99_999, 27), CellValue::Null);
     assert_eq!(engine.grid_index(&sid).unwrap().row_count(), 0);
     assert_eq!(engine.grid_index(&sid).unwrap().col_count(), 0);
@@ -103,7 +105,7 @@ fn undo_redo_restores_bulk_dimension_growth() {
         "undo of implicit sparse capacity grow must stay incremental"
     );
 
-    let (_patches, redo_result) = engine.redo().unwrap();
+    let redo_result = engine.redo().unwrap();
     assert_eq!(cell_value_at(&engine, &sid, 99_999, 27), num(7.0));
     assert!(engine.grid_index(&sid).unwrap().row_count() >= 100_000);
     assert!(engine.grid_index(&sid).unwrap().col_count() >= 28);
@@ -158,7 +160,7 @@ fn undo_redo_restores_single_axis_col_growth_on_pre_sized_sheet() {
     assert_eq!(engine.grid_index(&sid).unwrap().row_count(), 1_335);
     assert_eq!(engine.grid_index(&sid).unwrap().col_count(), 19);
 
-    let (_patches, undo_result) = engine.undo().unwrap();
+    let undo_result = engine.undo().unwrap();
     assert_eq!(cell_value_at(&engine, &sid, 79, 18), CellValue::Null);
     assert_eq!(engine.grid_index(&sid).unwrap().row_count(), 1_335);
     assert_eq!(engine.grid_index(&sid).unwrap().col_count(), 18);
@@ -167,7 +169,7 @@ fn undo_redo_restores_single_axis_col_growth_on_pre_sized_sheet() {
         "undo of implicit single-axis capacity grow must stay incremental"
     );
 
-    let (_patches, redo_result) = engine.redo().unwrap();
+    let redo_result = engine.redo().unwrap();
     assert_eq!(
         cell_value_at(&engine, &sid, 79, 18),
         CellValue::Text("atlas91 paste alpha".into())
@@ -210,14 +212,14 @@ fn explicit_tail_row_delete_undo_redo_stays_structural() {
 
     assert_eq!(cell_value_at(&engine, &sid, 0, 0), CellValue::Null);
 
-    let (_patches, undo_result) = engine.undo().expect("undo explicit tail row delete");
+    let undo_result = engine.undo().expect("undo explicit tail row delete");
     assert_eq!(cell_value_at(&engine, &sid, 0, 0), num(11.0));
     assert!(
         !undo_result.structure_changes.is_empty(),
         "undo of explicit tail row delete must stay on the structural refresh path"
     );
 
-    let (_patches, redo_result) = engine.redo().expect("redo explicit tail row delete");
+    let redo_result = engine.redo().expect("redo explicit tail row delete");
     assert_eq!(cell_value_at(&engine, &sid, 0, 0), CellValue::Null);
     assert!(
         !redo_result.structure_changes.is_empty(),

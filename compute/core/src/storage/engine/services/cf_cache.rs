@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::snapshot::RecalcResult;
 use crate::storage::engine::CFCacheEntry;
 use crate::storage::engine::cf_cache::convert_cf_formats_to_rules;
@@ -25,7 +25,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 /// must be patched even though their cell value didn't change.
 pub(in crate::storage::engine) fn refresh_cf_caches_after_recalc(
     stores: &mut EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     theme_palette: &HashMap<String, String>,
     recalc: &RecalcResult,
 ) -> FxHashMap<SheetId, Vec<(u32, u32)>> {
@@ -75,7 +75,7 @@ pub(in crate::storage::engine) fn refresh_cf_caches_after_recalc(
             .map(|e| e.results.clone())
             .unwrap_or_default();
 
-        refresh_cf_cache(stores, mirror, theme_palette, sheet_id);
+        refresh_cf_cache(stores, cell_store, theme_palette, sheet_id);
 
         // Snapshot new results (clone to avoid borrow overlap).
         let new_results: FxHashMap<(u32, u32), crate::cf::types::CellCFResult> = stores
@@ -122,7 +122,7 @@ pub(in crate::storage::engine) fn refresh_cf_caches_after_recalc(
 /// in `cf_cache` keyed by `(row, col)`.
 pub(in crate::storage::engine) fn refresh_cf_cache(
     stores: &mut EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     theme_palette: &HashMap<String, String>,
     sheet_id: &SheetId,
 ) {
@@ -138,7 +138,7 @@ pub(in crate::storage::engine) fn refresh_cf_cache(
     }
 
     // 4. Evaluate CF rules
-    let results = stores.compute.eval_cf(mirror, sheet_id, &rules);
+    let results = stores.compute.eval_cf(cell_store, sheet_id, &rules);
 
     // 5. Convert Vec<CellCFResult> to HashMap keyed by (row, col)
     let mut result_map = FxHashMap::default();

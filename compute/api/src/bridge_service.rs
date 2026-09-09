@@ -1,21 +1,6 @@
-//! Bridge service — auto-generated delegate facade for FFI bindings (WASM, N-API, Tauri).
+//! Generated Rust delegate facade for the compute engine.
 //!
-//! `ComputeService` is the **single bridge surface** for all FFI consumers.
-//! WASM, N-API, and Tauri binding crates consume descriptors from `ComputeService`,
-//! not from `ComputeEngine` directly.
-//!
-//! **How it works:**
-//! - `bridge_delegate::delegate!()` consumes bridge descriptors from `compute-core`
-//!   (on `ComputeEngine`) and auto-generates delegate methods on `ComputeService`
-//!   that call through `Dispatch`.
-//! - The macro also re-emits descriptor macros (`__bridge_descriptor_ComputeService_*`)
-//!   that WASM/NAPI/Tauri binding crates consume via `generate!()`.
-//! - Return types are passed through as-is (including `(Vec<u8>, MutationResult)` for
-//!   write methods) so binding crates get viewport patches for TS compatibility.
-//!
-//! **Result:** Zero hand-written boilerplate. Adding a method to `ComputeEngine`
-//! with `#[bridge::api]` automatically makes it available on `ComputeService` and
-//! across all FFI targets.
+//! Mutation methods return domain results directly; rendering is requested explicitly.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -110,8 +95,7 @@ impl ComputeService {
         }
     }
 
-    /// Access the underlying dispatch handle (for binding crates that need
-    /// to call `flush_viewport_patches()` on the engine directly).
+    /// Access the underlying dispatch handle.
     pub fn dispatch(&self) -> &Dispatch {
         &self.dispatch
     }

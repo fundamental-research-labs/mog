@@ -82,7 +82,7 @@ fn create_two_variable(engine: &mut ComputeEngine) -> Result<(), ComputeError> {
         row_input_cell: Some("A1".to_string()),
         col_input_cell: Some("A2".to_string()),
     };
-    let (_patches, result) = engine.create_data_table(&sheet_id, 1, 1, 3, 3, &input)?;
+    let result = engine.create_data_table(&sheet_id, 1, 1, 3, 3, &input)?;
     let data = result.data.expect("create result data");
     assert_eq!(data["bodyRange"], "C3:D4");
     assert_eq!(data["rowsComputed"], 2);
@@ -102,7 +102,7 @@ fn assert_number_at(engine: &ComputeEngine, row: u32, col: u32, expected: f64) {
     let sheet_id = SheetId::from_uuid_str(SHEET_UUID).unwrap();
     assert_eq!(
         engine
-            .mirror()
+            .cell_store()
             .get_cell_value_at(&sheet_id, SheetPos::new(row, col)),
         Some(&CellValue::Number(FiniteF64::must(expected)))
     );
@@ -114,7 +114,7 @@ fn create_data_table_preserves_regions_and_evaluation_across_xlsx_roundtrips() {
 
     create_two_variable(&mut engine).unwrap();
 
-    let regions = engine.mirror().all_data_table_regions();
+    let regions = engine.cell_store().all_data_table_regions();
     assert_eq!(regions.len(), 1);
     let region = &regions[0];
     assert_eq!((region.start_row, region.start_col), (2, 2));
@@ -131,7 +131,7 @@ fn create_data_table_preserves_regions_and_evaluation_across_xlsx_roundtrips() {
     for _ in 0..2 {
         let bytes = engine.export_to_xlsx_bytes().expect("export data table");
         let (mut hydrated, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("import data table");
-        let hydrated_regions = hydrated.mirror().all_data_table_regions();
+        let hydrated_regions = hydrated.cell_store().all_data_table_regions();
         assert_eq!(hydrated_regions.len(), 1);
         let region = &hydrated_regions[0];
         assert_eq!(
@@ -158,7 +158,7 @@ fn create_data_table_preserves_regions_and_evaluation_across_xlsx_roundtrips() {
         for (row, col, expected) in [(2, 2, 300.0), (2, 3, 600.0), (3, 2, 400.0), (3, 3, 800.0)] {
             assert_eq!(
                 hydrated
-                    .mirror()
+                    .cell_store()
                     .get_cell_value_at(&sheet, SheetPos::new(row, col)),
                 Some(&CellValue::Number(FiniteF64::must(expected)))
             );
@@ -199,7 +199,7 @@ fn create_data_table_materializes_one_variable_column_layout() {
         col_input_cell: Some("A1".to_string()),
     };
 
-    let (_patches, result) = engine
+    let result = engine
         .create_data_table(&sheet_id, 0, 1, 2, 2, &input)
         .unwrap();
 
@@ -227,7 +227,7 @@ fn create_data_table_rejects_overlap_atomically() {
         .create_data_table(&sheet_id, 1, 1, 3, 3, &input)
         .unwrap_err();
     expect_invalid_code(err, "DATA_TABLE_REGION_OVERLAP");
-    assert_eq!(engine.mirror().all_data_table_regions().len(), 1);
+    assert_eq!(engine.cell_store().all_data_table_regions().len(), 1);
 }
 
 #[test]
@@ -247,7 +247,7 @@ fn create_data_table_rejects_non_empty_body_atomically() {
         .create_data_table(&sheet_id, 1, 1, 3, 3, &input)
         .unwrap_err();
     expect_invalid_code(err, "DATA_TABLE_BODY_NOT_EMPTY");
-    assert!(engine.mirror().all_data_table_regions().is_empty());
+    assert!(engine.cell_store().all_data_table_regions().is_empty());
 }
 
 #[test]
@@ -265,7 +265,7 @@ fn create_data_table_rejects_input_refs_inside_table_range() {
         .create_data_table(&sheet_id, 1, 1, 3, 3, &input)
         .unwrap_err();
     expect_invalid_code(err, "DATA_TABLE_INPUT_INSIDE_TABLE");
-    assert!(engine.mirror().all_data_table_regions().is_empty());
+    assert!(engine.cell_store().all_data_table_regions().is_empty());
 }
 
 #[test]
@@ -283,7 +283,7 @@ fn create_data_table_requires_at_least_one_input_ref() {
         .create_data_table(&sheet_id, 1, 1, 3, 3, &input)
         .unwrap_err();
     expect_invalid_code(err, "DATA_TABLE_INPUT_REQUIRED");
-    assert!(engine.mirror().all_data_table_regions().is_empty());
+    assert!(engine.cell_store().all_data_table_regions().is_empty());
 }
 
 #[test]
@@ -301,7 +301,7 @@ fn create_data_table_rejects_selection_without_body() {
         .create_data_table(&sheet_id, 1, 1, 1, 3, &input)
         .unwrap_err();
     expect_invalid_code(err, "DATA_TABLE_INVALID_LAYOUT");
-    assert!(engine.mirror().all_data_table_regions().is_empty());
+    assert!(engine.cell_store().all_data_table_regions().is_empty());
 }
 
 #[test]
@@ -319,7 +319,7 @@ fn create_data_table_rejects_duplicate_input_refs() {
         .create_data_table(&sheet_id, 1, 1, 3, 3, &input)
         .unwrap_err();
     expect_invalid_code(err, "DATA_TABLE_INPUT_DUPLICATE");
-    assert!(engine.mirror().all_data_table_regions().is_empty());
+    assert!(engine.cell_store().all_data_table_regions().is_empty());
 }
 
 #[test]
@@ -337,5 +337,5 @@ fn create_data_table_requires_layout_specific_formula_sources() {
         .create_data_table(&sheet_id, 1, 1, 3, 3, &input)
         .unwrap_err();
     expect_invalid_code(err, "DATA_TABLE_FORMULA_REQUIRED");
-    assert!(engine.mirror().all_data_table_regions().is_empty());
+    assert!(engine.cell_store().all_data_table_regions().is_empty());
 }

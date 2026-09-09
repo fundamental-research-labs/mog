@@ -27,14 +27,14 @@ fn sheet_id() -> SheetId {
 }
 
 #[test]
-fn hydration_emits_mirror_backed_families_with_populated_payloads() {
+fn hydration_emits_store_backed_families_with_populated_payloads() {
     // Build engine, mutate state to non-defaults, then call the
     // hydration builder directly to exercise the cold-load path.
     let (mut engine, _) =
         ComputeEngine::from_snapshot(empty_snapshot_with_one_sheet()).expect("from_snapshot");
     let sid = sheet_id();
 
-    // Establish non-default values across mirror-backed families.
+    // Establish non-default values across cell_store-backed families.
     engine
         .set_view_option(&sid, "showGridlines", false)
         .expect("set_view_option");
@@ -46,8 +46,8 @@ fn hydration_emits_mirror_backed_families_with_populated_payloads() {
         .expect("set_tab_color");
 
     let recalc = crate::snapshot::RecalcResult::empty();
-    let result = engine.with_internals_for_test(|stores, mirror, _| {
-        super::build_mutation_result_for_hydration(stores, mirror, recalc)
+    let result = engine.with_internals_for_test(|stores, cell_store| {
+        super::build_mutation_result_for_hydration(stores, cell_store, recalc)
     });
 
     // 1. SheetChange families on hydration must use Set (not Created).
@@ -94,10 +94,10 @@ fn hydration_emits_mirror_backed_families_with_populated_payloads() {
 
     // 5b. Canonical creation event: `field:Sheet, kind:Set` must be
     // emitted per registered sheet with both name and index populated.
-    // Without it, the kernel mirror's `sheetOrder` stays empty after
+    // Without it, the kernel cell_store's `sheetOrder` stays empty after
     // hydration — the per-field `Name`/`Order` arms only touch the
     // meta map and `Order`'s move arm requires `oldIndex`. See
-    // `kernel/src/document/state-mirror.ts:applySheetChange`.
+    // `kernel/src/document/state-cell_store.ts:applySheetChange`.
     let sheet_create = result
         .sheet_changes
         .iter()
@@ -145,7 +145,7 @@ fn hydration_emits_mirror_backed_families_with_populated_payloads() {
         "WorkbookSettingsChange.settings must be a serialized object"
     );
 
-    // 8. Print settings always emitted (defaults populate the mirror).
+    // 8. Print settings always emitted (defaults populate the cell store).
     assert!(
         !result.print_settings_changes.is_empty(),
         "hydration must emit print_settings_changes"

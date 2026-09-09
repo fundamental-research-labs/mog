@@ -15,90 +15,8 @@ pub(crate) enum StoredCellProperties {
     Detailed(Box<StoredDetailedProperties>),
 }
 
-/// Imported cache metadata does not allocate the large optional format DTO.
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct StoredDetailedProperties {
-    format: Option<Box<CellFormat>>,
-    provenance: Option<String>,
-    validation: Option<String>,
-    connection_id: Option<String>,
-    style_id: Option<u32>,
-    cell_metadata_index: Option<u32>,
-    vm: Option<u32>,
-    phonetic: bool,
-    date_lexical_value: Option<String>,
-    formula_result_type: Option<u8>,
-    has_empty_cached_value: bool,
-    formula_cache_provenance: Option<Box<domain_types::FormulaCacheProvenance>>,
-    original_sst_index: Option<u32>,
-    original_value: Option<String>,
-    is_array_formula: bool,
-    is_cse_anchor: bool,
-}
-impl StoredDetailedProperties {
-    fn from_properties(props: CellProperties) -> Self {
-        Self {
-            format: props.format.map(Box::new),
-            provenance: props.provenance,
-            validation: props.validation,
-            connection_id: props.connection_id,
-            style_id: props.style_id,
-            cell_metadata_index: props.cell_metadata_index,
-            vm: props.vm,
-            phonetic: props.phonetic,
-            date_lexical_value: props.date_lexical_value,
-            formula_result_type: props.formula_result_type,
-            has_empty_cached_value: props.has_empty_cached_value,
-            formula_cache_provenance: (!props.formula_cache_provenance.is_absent_or_unknown())
-                .then(|| Box::new(props.formula_cache_provenance)),
-            original_sst_index: props.original_sst_index,
-            original_value: props.original_value,
-            is_array_formula: props.is_array_formula,
-            is_cse_anchor: props.is_cse_anchor,
-        }
-    }
-    fn properties(&self) -> CellProperties {
-        CellProperties {
-            format: self.format.as_deref().cloned(),
-            provenance: self.provenance.clone(),
-            validation: self.validation.clone(),
-            connection_id: self.connection_id.clone(),
-            style_id: self.style_id.clone(),
-            cell_metadata_index: self.cell_metadata_index.clone(),
-            vm: self.vm.clone(),
-            phonetic: self.phonetic.clone(),
-            date_lexical_value: self.date_lexical_value.clone(),
-            formula_result_type: self.formula_result_type.clone(),
-            has_empty_cached_value: self.has_empty_cached_value.clone(),
-            formula_cache_provenance: self
-                .formula_cache_provenance
-                .as_deref()
-                .cloned()
-                .unwrap_or_default(),
-            original_sst_index: self.original_sst_index.clone(),
-            original_value: self.original_value.clone(),
-            is_array_formula: self.is_array_formula.clone(),
-            is_cse_anchor: self.is_cse_anchor.clone(),
-        }
-    }
-    fn metadata_is_empty(&self) -> bool {
-        self.provenance.is_none()
-            && self.validation.is_none()
-            && self.connection_id.is_none()
-            && self.style_id.is_none()
-            && self.cell_metadata_index.is_none()
-            && self.vm.is_none()
-            && !self.phonetic
-            && self.date_lexical_value.is_none()
-            && self.formula_result_type.is_none()
-            && !self.has_empty_cached_value
-            && self.formula_cache_provenance.is_none()
-            && self.original_sst_index.is_none()
-            && self.original_value.is_none()
-            && !self.is_array_formula
-            && !self.is_cse_anchor
-    }
-}
+mod packed;
+pub(crate) use packed::StoredDetailedProperties;
 
 impl StoredCellProperties {
     /// Rebase an inverse onto a later session-only format patch without retaining
@@ -156,17 +74,17 @@ impl StoredCellProperties {
         match self {
             Self::ImportedStyle(id) => palette.get(*id as usize).map(|format| (format, true)),
             Self::Detailed(props) => props
-                .style_id
+                .style_id()
                 .and_then(|id| palette.get(id as usize))
-                .or(props.format.as_deref())
-                .map(|format| (format, props.style_id.is_some())),
+                .or(props.format())
+                .map(|format| (format, props.style_id().is_some())),
         }
     }
 
     pub(crate) fn has_format(&self) -> bool {
         match self {
             Self::ImportedStyle(_) => true,
-            Self::Detailed(props) => props.style_id.is_some() || props.format.is_some(),
+            Self::Detailed(props) => props.has_format(),
         }
     }
 }
@@ -322,10 +240,7 @@ pub fn clear_formula_cache_metadata_for_cell_ids(
                 .is_some_and(|entry| match entry {
                     StoredCellProperties::ImportedStyle(_) => false,
                     StoredCellProperties::Detailed(props) => {
-                        props.formula_result_type.is_some()
-                            || props.has_empty_cached_value
-                            || props.formula_cache_provenance.is_some()
-                            || (props.format.is_none() && props.metadata_is_empty())
+                        props.has_formula_cache() || props.is_empty()
                     }
                 })
             {
@@ -342,10 +257,8 @@ pub fn clear_formula_cache_metadata_for_cell_ids(
         let Some(StoredCellProperties::Detailed(props)) = sheet.cell_properties.get_mut(id) else {
             continue;
         };
-        props.formula_result_type = None;
-        props.has_empty_cached_value = false;
-        props.formula_cache_provenance = Default::default();
-        if props.format.is_none() && props.metadata_is_empty() {
+        props.clear_formula_cache();
+        if props.is_empty() {
             sheet.cell_properties.remove(id);
         }
     }

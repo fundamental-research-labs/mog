@@ -1,4 +1,3 @@
-use super::shared;
 use crate::engine_types::SerializedFloatingObjectGroup;
 use crate::snapshot::MutationResult;
 use crate::storage::engine::ComputeEngine;
@@ -21,7 +20,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         group_id: &str,
         json: serde_json::Value,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             services::objects::set_floating_object_group(
                 &mut engine.stores,
@@ -29,7 +28,6 @@ impl ComputeEngine {
                 group_id,
                 json,
             )
-            .map(shared::with_empty_patches)
         })
     }
 
@@ -55,10 +53,9 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         group_id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             services::objects::delete_floating_object_group(&mut engine.stores, sheet_id, group_id)
-                .map(shared::with_empty_patches)
         })
     }
 
@@ -68,10 +65,9 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         config: &serde_json::Value,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             services::objects::create_floating_object_group(&mut engine.stores, sheet_id, config)
-                .map(shared::with_empty_patches)
         })
     }
 
@@ -82,7 +78,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         group_id: &str,
         updates: &serde_json::Value,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             services::objects::update_floating_object_group(
                 &mut engine.stores,
@@ -90,7 +86,6 @@ impl ComputeEngine {
                 group_id,
                 updates,
             )
-            .map(shared::with_empty_patches)
         })
     }
 

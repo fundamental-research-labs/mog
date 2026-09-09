@@ -20,6 +20,7 @@ import zipfile
 
 WORKLOADS = (
     "blank_one", "numeric_100k", "chain_10k", "xlsx_100k", "officejs_1k", "sum_100k", "history_1k",
+    "properties_100k",
 )
 
 

@@ -80,10 +80,10 @@ pub(crate) fn sheet_snap(idx: u32, name: &str, cells: Vec<CellData>) -> SheetSna
     }
 }
 
-/// Read the (cloned) value at a specific cell directly from the mirror.
+/// Read the (cloned) value at a specific cell directly from the cell store.
 pub(crate) fn read_value(engine: &ComputeEngine, cell: &CellId) -> CellValue {
     engine
-        .mirror()
+        .cell_store()
         .get_cell_value(cell)
         .cloned()
         .unwrap_or(CellValue::Null)

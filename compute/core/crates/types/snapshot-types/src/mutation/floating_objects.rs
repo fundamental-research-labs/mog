@@ -4,7 +4,7 @@ use super::primitives::FloatingObjectChangeKind;
 use domain_types::domain::floating_object::{FloatingObject, FloatingObjectKind};
 use value_types::FiniteF64;
 
-/// Absolute pixel coordinates in sheet space, computed from LayoutIndex (Fenwick tree).
+/// Absolute pixel coordinates in sheet space, computed from sparse PixelLayout.
 /// Not to be confused with SerializedFloatingObject.x/y which are anchor-relative offsets.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -36,7 +36,7 @@ pub struct FloatingObjectChange {
     /// a re-read round-trip back to Rust.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data: Option<FloatingObject>,
-    /// Pre-computed pixel bounds from LayoutIndex. Present when the mutation
+    /// Pre-computed pixel bounds from PixelLayout. Present when the mutation
     /// affects object position/size and the layout is available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bounds: Option<FloatingObjectBounds>,

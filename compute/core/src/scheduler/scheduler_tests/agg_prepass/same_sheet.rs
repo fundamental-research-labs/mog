@@ -66,14 +66,14 @@ fn expected_agg_values() -> Vec<(f64, f64, f64)> {
 
 #[test]
 fn test_agg_prepass_same_sheet_countifs() {
-    let (core, mirror) = init_core(agg_same_sheet_snapshot());
+    let (core, cell_store) = init_core(agg_same_sheet_snapshot());
     let expected = expected_agg_values();
     let sheet_id = sid(1);
 
     for row in 0..10u32 {
         assert_number_at(
             &core,
-            &mirror,
+            &cell_store,
             &sheet_id,
             row,
             4,
@@ -85,14 +85,14 @@ fn test_agg_prepass_same_sheet_countifs() {
 
 #[test]
 fn test_agg_prepass_same_sheet_sumifs() {
-    let (core, mirror) = init_core(agg_same_sheet_snapshot());
+    let (core, cell_store) = init_core(agg_same_sheet_snapshot());
     let expected = expected_agg_values();
     let sheet_id = sid(1);
 
     for row in 0..10u32 {
         assert_number_at(
             &core,
-            &mirror,
+            &cell_store,
             &sheet_id,
             row,
             5,
@@ -104,14 +104,14 @@ fn test_agg_prepass_same_sheet_sumifs() {
 
 #[test]
 fn test_agg_prepass_same_sheet_averageifs() {
-    let (core, mirror) = init_core(agg_same_sheet_snapshot());
+    let (core, cell_store) = init_core(agg_same_sheet_snapshot());
     let expected = expected_agg_values();
     let sheet_id = sid(1);
 
     for row in 0..10u32 {
         assert_number_at(
             &core,
-            &mirror,
+            &cell_store,
             &sheet_id,
             row,
             6,

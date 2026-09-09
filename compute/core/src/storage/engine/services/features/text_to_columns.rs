@@ -1,4 +1,4 @@
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::snapshot::MutationResult;
 use crate::storage::cells::data_ops as cell_ops;
 use crate::storage::engine::stores::EngineStores;
@@ -6,7 +6,7 @@ use cell_types::{SheetId, SheetPos};
 use value_types::{CellValue, ComputeError};
 
 pub(in crate::storage::engine) fn preview_text_to_columns(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: SheetId,
     source_start_row: u32,
     source_end_row: u32,
@@ -15,7 +15,7 @@ pub(in crate::storage::engine) fn preview_text_to_columns(
     max_preview_rows: u32,
 ) -> Vec<Vec<String>> {
     cell_ops::preview_text_to_columns(
-        mirror,
+        cell_store,
         sheet_id,
         source_start_row,
         source_end_row,
@@ -85,7 +85,7 @@ fn col_format_is_numeric(format: Option<&domain_types::CellFormat>) -> bool {
 #[allow(clippy::too_many_arguments)]
 pub(in crate::storage::engine) fn text_to_columns(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: SheetId,
     start_row: u32,
     end_row: u32,
@@ -134,12 +134,12 @@ pub(in crate::storage::engine) fn text_to_columns(
         fixed_width_breaks,
     };
 
-    // 1. Read source values from the mirror as strings — text cells preserve
+    // 1. Read source values from the cell store as strings — text cells preserve
     //    leading zeros, numeric cells render to canonical strings.
     let source_values: Vec<String> = (start_row..=end_row)
         .map(|row| {
             let pos = SheetPos::new(row, source_col);
-            match mirror.get_cell_value_at(&sheet_id, pos) {
+            match cell_store.get_cell_value_at(&sheet_id, pos) {
                 Some(CellValue::Text(s)) => s.to_string(),
                 Some(CellValue::Number(n)) => value_types::format_number(n.get()),
                 Some(CellValue::Boolean(true)) => "TRUE".to_string(),
@@ -199,12 +199,12 @@ pub(in crate::storage::engine) fn text_to_columns(
         }
     }
 
-    // 5. Route through the standard mutation pipeline so the mirror, viewport
+    // 5. Route through the standard mutation pipeline so the cell store, viewport
     //    buffer, and dependencies all stay in sync. Skip per-edge cycle
     //    detection — a structural split can't introduce a formula cycle, and
     //    bulk routing keeps the path consistent with other batch writes.
     let recalc_result = super::super::mutation_handlers::mutation_set_cells_by_position(
-        stores, mirror, edits, true,
+        stores, cell_store, edits, true,
     );
     let recalc = recalc_result?;
     Ok(

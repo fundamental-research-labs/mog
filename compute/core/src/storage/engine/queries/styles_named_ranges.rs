@@ -1,5 +1,6 @@
 #![allow(unused_imports, unused_variables)]
 use super::helpers::diff_top_level_keys;
+use crate::cells::StorePositionLookup;
 use crate::diagnostics::formula_references::{
     FormulaReferenceDiagnosticsOptions, FormulaReferenceDiagnosticsPage,
 };
@@ -10,8 +11,7 @@ use crate::engine_types::{
 };
 use crate::eval::Evaluator;
 use crate::eval::sync_block_on;
-use crate::eval_bridge::MirrorContext;
-use crate::mirror::MirrorPositionLookup;
+use crate::eval_bridge::EvalContext;
 use crate::range_manager::{self, A1CellRef, A1RangeRef};
 use crate::snapshot::{
     BatchRangeEntry, BatchRangeRequest, BatchRangeResponse, BatchRangeResult, CalculationSettings,
@@ -28,7 +28,6 @@ use crate::storage::sheet::{hyperlinks, merges, properties as sheets};
 use crate::storage::workbook::settings as workbook;
 use cell_types::{CellId, SheetId, SheetPos};
 use compute_document::hex::{hex_to_id, id_to_hex};
-use compute_wire::mutation::serialize_multi_viewport_patches;
 use domain_types::domain::merge::{CellMergeInfo, MergeRegion, ResolvedMergedRegion};
 use domain_types::domain::sheet::{FrozenPanes, SheetMeta, SheetScrollPosition, SheetViewOptions};
 use domain_types::domain::slicer::{NamedSlicerStyle, SlicerCustomStyle};
@@ -59,7 +58,7 @@ pub(in crate::storage::engine) fn add_slicer_style(
     name: &str,
     style: SlicerCustomStyle,
     make_unique_name: bool,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let captured_name = if make_unique_name {
         workbook::unique_style_name(&engine.stores.storage.metadata, name)
     } else {
@@ -72,52 +71,40 @@ pub(in crate::storage::engine) fn add_slicer_style(
         style,
         make_unique_name,
     )?;
-    Ok((
-        serialize_multi_viewport_patches(&[]),
-        MutationResult::empty().with_data(&final_name)?,
-    ))
+    Ok(MutationResult::empty().with_data(&final_name)?)
 }
 
 pub(in crate::storage::engine) fn delete_slicer_style(
     engine: &mut ComputeEngine,
     name: &str,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     capture_workbook_entry!(engine.stores.storage, named_slicer_styles, name);
     workbook::delete_named_slicer_style(&mut engine.stores.storage.metadata, name)?;
-    Ok((
-        serialize_multi_viewport_patches(&[]),
-        MutationResult::empty(),
-    ))
+    Ok(MutationResult::empty())
 }
 
 pub(in crate::storage::engine) fn duplicate_slicer_style(
     engine: &mut ComputeEngine,
     name: &str,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let captured_name =
         workbook::unique_style_name(&engine.stores.storage.metadata, &format!("{name} Copy"));
     capture_workbook_entry!(engine.stores.storage, named_slicer_styles, captured_name);
     let new_name =
         workbook::duplicate_named_slicer_style(&mut engine.stores.storage.metadata, name)?;
-    Ok((
-        serialize_multi_viewport_patches(&[]),
-        MutationResult::empty().with_data(&new_name)?,
-    ))
+    Ok(MutationResult::empty().with_data(&new_name)?)
 }
 
 pub(in crate::storage::engine) fn set_default_pivot_table_style(
     engine: &mut ComputeEngine,
     style_id: Option<String>,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     capture_workbook_field!(engine.stores.storage, default_pivot_table_style);
     workbook::set_default_pivot_table_style(
         &mut engine.stores.storage.metadata,
         style_id.as_deref(),
     );
-    Ok((
-        serialize_multi_viewport_patches(&[]),
-        MutationResult::empty(),
-    ))
+    Ok(MutationResult::empty())
 }
 
 pub(in crate::storage::engine) fn get_default_pivot_table_style(
@@ -137,7 +124,7 @@ pub(in crate::storage::engine) fn set_custom_setting(
     engine: &mut ComputeEngine,
     key: &str,
     value: Option<String>,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let pre = workbook::get_settings(&engine.stores.storage.metadata);
     let pre_json = serde_json::to_value(&pre).expect("WorkbookSettings must serialize");
 
@@ -147,10 +134,7 @@ pub(in crate::storage::engine) fn set_custom_setting(
     let post_json = serde_json::to_value(&post).expect("WorkbookSettings must serialize");
     let changed_keys = diff_top_level_keys(&pre_json, &post_json);
     if changed_keys.is_empty() {
-        return Ok((
-            serialize_multi_viewport_patches(&[]),
-            MutationResult::empty(),
-        ));
+        return Ok(MutationResult::empty());
     }
 
     let mut result = MutationResult::empty();
@@ -161,7 +145,7 @@ pub(in crate::storage::engine) fn set_custom_setting(
             changed_keys,
             settings: post_json,
         });
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }
 
 pub(in crate::storage::engine) fn list_custom_settings(

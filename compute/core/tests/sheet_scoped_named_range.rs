@@ -9,7 +9,7 @@
 //! Run:
 //!   cargo test -p compute-core --test sheet_scoped_named_range -- --nocapture
 
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{CellData, RecalcResult, SheetSnapshot, WorkbookSnapshot};
 use formula_types::{NamedRangeDef, Scope};
@@ -151,10 +151,10 @@ fn sheet_qualified_named_range_same_sheet() {
         calculation_settings: None,
     };
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== sheet_qualified_named_range_same_sheet ===");
@@ -225,10 +225,10 @@ fn unqualified_named_range_same_sheet() {
         calculation_settings: None,
     };
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== unqualified_named_range_same_sheet ===");
@@ -320,10 +320,10 @@ fn sheet_qualified_named_range_cross_sheet() {
         calculation_settings: None,
     };
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== sheet_qualified_named_range_cross_sheet ===");
@@ -393,10 +393,10 @@ fn sheet_qualified_named_range_unquoted_sheet() {
         calculation_settings: None,
     };
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== sheet_qualified_named_range_unquoted_sheet ===");
@@ -466,10 +466,10 @@ fn sheet_qualified_named_range_in_expression() {
         calculation_settings: None,
     };
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== sheet_qualified_named_range_in_expression ===");
@@ -539,10 +539,10 @@ fn sheet_qualified_workbook_scoped_named_range() {
         calculation_settings: None,
     };
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== sheet_qualified_workbook_scoped_named_range ===");

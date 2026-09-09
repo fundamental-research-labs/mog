@@ -111,7 +111,7 @@ pub(in crate::storage::engine) fn import_sheets_from_xlsx(
         .collect();
 
     let existing_table_names: std::collections::HashSet<String> = engine
-        .mirror
+        .cell_store
         .all_tables()
         .iter()
         .map(|table| table.name.to_ascii_lowercase())
@@ -322,7 +322,7 @@ pub(in crate::storage::engine) fn import_sheets_from_xlsx(
             engine
                 .stores
                 .compute
-                .set_table(&mut engine.mirror, table.clone());
+                .set_table(&mut engine.cell_store, table.clone());
         }
     }
 
@@ -355,25 +355,17 @@ pub(in crate::storage::engine) fn import_sheets_from_xlsx(
             cells: vec![],
             ranges: vec![],
         };
-        let mut grid = crate::storage::engine::build_grid_from_native_sheet(
-            &engine.mirror,
+        let grid = crate::storage::engine::build_grid_from_native_sheet(
+            &engine.cell_store,
             hs.sheet_id,
             &snap_for_grid,
             engine.stores.grid_id_alloc.clone(),
         )?;
 
-        // Register all cell positions in the grid.
-        // cell_ids from hydrate_sheet are in the same order as SheetData.cells.
-        for (idx, cell_id) in hs.cell_ids.iter().enumerate() {
-            if idx < hs.cells_data.len() {
-                let cd = &hs.cells_data[idx];
-                grid.register_cell(*cell_id, cd.row, cd.col);
-            }
-        }
         engine.stores.grid_indexes.insert(hs.sheet_id, grid);
 
         // 5b. MergeIndex
-        let resolved = match engine.stores.grid_indexes.get(&hs.sheet_id) {
+        let resolved = match engine.cell_store.get_sheet(&hs.sheet_id) {
             Some(grid) => merges::get_all_merges(&engine.stores.storage, hs.sheet_id, grid),
             None => Vec::new(),
         };
@@ -396,18 +388,7 @@ pub(in crate::storage::engine) fn import_sheets_from_xlsx(
         engine
             .stores
             .merge_indexes
-            .insert(hs.sheet_id, RangeSpatialIndex::with_items(items));
-
-        // 5c. LayoutIndex
-        let layout = build_layout_index_for_sheet(
-            &engine.stores.storage,
-            &hs.sheet_id,
-            hs.rows,
-            hs.cols,
-            engine.stores.grid_indexes.get(&hs.sheet_id),
-            engine.stores.layout_metrics,
-        );
-        engine.stores.layout_indexes.insert(hs.sheet_id, layout);
+            .insert(hs.sheet_id, MergeList::with_items(items));
 
         // 5d. ComputeCore — build SheetSnapshot and add
         let snap_cells: Vec<crate::snapshot::CellData> = hs
@@ -457,13 +438,13 @@ pub(in crate::storage::engine) fn import_sheets_from_xlsx(
         engine
             .stores
             .compute
-            .add_sheet(&mut engine.mirror, sheet_snap)?;
+            .add_sheet(&mut engine.cell_store, sheet_snap)?;
         if let Some(grid) = engine.stores.grid_indexes.get(&hs.sheet_id) {
             engine
-                .mirror
+                .cell_store
                 .install_sheet_axes(hs.sheet_id, grid.row_axis(), grid.col_axis());
         }
-        if let Some(sheet) = engine.mirror.get_sheet_mut(&hs.sheet_id) {
+        if let Some(sheet) = engine.cell_store.get_sheet_mut(&hs.sheet_id) {
             hs.formats
                 .install(sheet, &engine.stores.storage.metadata.style_palette);
         }
@@ -472,10 +453,10 @@ pub(in crate::storage::engine) fn import_sheets_from_xlsx(
     engine
         .stores
         .compute
-        .structure_change_with_formula_refresh(&mut engine.mirror, None, &[])?;
+        .structure_change_with_formula_refresh(&mut engine.cell_store, None, &[])?;
     materialize_table_auto_filters_for_sheets(
         &mut engine.stores,
-        &mut engine.mirror,
+        &mut engine.cell_store,
         &hydrated_sheets
             .iter()
             .map(|sheet| sheet.sheet_id)
@@ -483,7 +464,7 @@ pub(in crate::storage::engine) fn import_sheets_from_xlsx(
     );
     for sheet in &hydrated_sheets {
         crate::storage::engine::services::imported_filters::normalize_imported_auto_filter_visibility_for_sheet(
-            &mut engine.stores, &mut engine.mirror, &sheet.sheet_id, None, domain_types::ImportPhase::FullHydration,
+            &mut engine.stores, &mut engine.cell_store, &sheet.sheet_id, None, domain_types::ImportPhase::FullHydration,
         );
     }
 

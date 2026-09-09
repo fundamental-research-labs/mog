@@ -7,31 +7,27 @@ use value_types::{CellValue, ComputeError};
 impl HistoryPatch {
     fn swap(&mut self, engine: &mut ComputeEngine, effects: &mut HistoryEffects) {
         match self {
-            Self::Cell(p) => p.swap(&mut engine.stores, &mut engine.mirror, effects),
-            Self::Relocate(p) => p.swap(&mut engine.stores, &mut engine.mirror, effects),
-            Self::Structure(p) => p.swap(&mut engine.stores, &mut engine.mirror, effects),
-            Self::Sheet(p) => p.swap(&mut engine.stores, &mut engine.mirror, effects),
-            Self::SheetExtent(p) => p.swap(&mut engine.stores, &mut engine.mirror, effects),
-            Self::Metadata(p) => p.swap(&mut engine.stores.storage, &mut engine.mirror, effects),
+            Self::Cell(p) => p.swap(&mut engine.stores, &mut engine.cell_store, effects),
+            Self::Relocate(p) => p.swap(&mut engine.stores, &mut engine.cell_store, effects),
+            Self::Structure(p) => p.swap(&mut engine.stores, &mut engine.cell_store, effects),
+            Self::Sheet(p) => p.swap(&mut engine.stores, &mut engine.cell_store, effects),
+            Self::SheetExtent(p) => p.swap(&mut engine.stores, &mut engine.cell_store, effects),
+            Self::Metadata(p) => {
+                p.swap(&mut engine.stores.storage, &mut engine.cell_store, effects)
+            }
         }
     }
 }
 
 impl ComputeEngine {
-    pub(super) fn replay_history(
-        &mut self,
-        redo: bool,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    pub(super) fn replay_history(&mut self, redo: bool) -> Result<MutationResult, ComputeError> {
         let action = if redo {
             self.history.redo.pop()
         } else {
             self.history.undo.pop()
         };
         let Some(mut action) = action else {
-            return Ok((
-                compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-                MutationResult::empty(),
-            ));
+            return Ok(MutationResult::empty());
         };
         self.history.replaying = true;
         let mut effects = HistoryEffects::default();
@@ -64,15 +60,15 @@ impl ComputeEngine {
     fn finish_history_replay(
         &mut self,
         effects: &mut HistoryEffects,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         for sheet in &effects.sheets {
             if let Some(meta) = self.stores.storage.sheet_metadata.get(sheet)
                 && self
-                    .mirror
+                    .cell_store
                     .get_sheet(sheet)
                     .is_some_and(|source| source.name != meta.name)
             {
-                self.mirror.rename_sheet(sheet, &meta.name);
+                self.cell_store.rename_sheet(sheet, &meta.name);
                 effects.topology = true;
             }
         }
@@ -80,14 +76,14 @@ impl ComputeEngine {
         self.settings = construction::derive_settings(&self.stores.storage);
         if effects.named_ranges || effects.topology {
             let previous: Vec<_> = self
-                .mirror
+                .cell_store
                 .all_named_ranges_for_diagnostics()
                 .map(|(scope, name, _)| (scope.clone(), name.clone()))
                 .collect();
             for (scope, name) in previous {
                 self.stores
                     .compute
-                    .remove_named_range_scoped(&mut self.mirror, &scope, &name);
+                    .remove_named_range_scoped(&mut self.cell_store, &scope, &name);
             }
             let definitions = construction::defined_names_to_named_range_defs(
                 crate::storage::workbook::named_ranges::get_all_named_ranges(
@@ -95,7 +91,7 @@ impl ComputeEngine {
                 ),
                 |identity| {
                     self.stores.compute.to_a1_display_qualified(
-                        &self.mirror,
+                        &self.cell_store,
                         &SheetId::from_raw(0),
                         identity,
                     )
@@ -104,7 +100,7 @@ impl ComputeEngine {
             for def in definitions {
                 self.stores
                     .compute
-                    .set_named_range(&mut self.mirror, def.name.clone(), def);
+                    .set_named_range(&mut self.cell_store, def.name.clone(), def);
             }
         }
         for sheet in &effects.sparkline_sheets {
@@ -115,37 +111,29 @@ impl ComputeEngine {
         let format_sheets: rustc_hash::FxHashSet<_> =
             effects.format_rects.iter().map(|r| r.0).collect();
         for sheet in format_sheets {
-            if let Some(source) = self.mirror.get_sheet_mut(&sheet) {
+            if let Some(source) = self.cell_store.get_sheet_mut(&sheet) {
                 source.rebuild_format_range_spatial_index();
                 source.rebuild_col_format_range_spatial_index();
             }
         }
         for sheet in &effects.sheets {
-            if let Some(grid) = self.stores.grid_indexes.get(sheet) {
-                let layout = construction::build_layout_index_for_sheet(
-                    &self.stores.storage,
-                    sheet,
-                    grid.row_count(),
-                    grid.col_count(),
-                    Some(grid),
-                    self.stores.layout_metrics,
-                );
-                self.stores.layout_indexes.insert(*sheet, layout);
-                services::mutation::rebuild_merge_index(&mut self.stores, sheet);
-                services::mutation::sync_mirror_merge_regions(
+            if self.stores.grid_indexes.contains_key(sheet) {
+                self.stores.invalidate_pixel_layout(sheet);
+                services::mutation::rebuild_merge_index(&mut self.stores, &self.cell_store, sheet);
+                services::mutation::sync_store_merge_regions(
                     &self.stores,
-                    &mut self.mirror,
+                    &mut self.cell_store,
                     sheet,
                 );
             } else {
-                self.stores.layout_indexes.remove(sheet);
+                self.stores.invalidate_pixel_layout(sheet);
                 self.stores.merge_indexes.remove(sheet);
                 self.stores.cf_cache.remove(sheet);
             }
         }
         super::metadata::emit_events(
             &self.stores.storage,
-            &self.mirror,
+            &self.cell_store,
             &self.stores.grid_indexes,
             self.stores.layout_metrics,
             effects,
@@ -170,7 +158,7 @@ impl ComputeEngine {
             effects.topology || effects.named_ranges || effects.tables || effects.settings;
         let mut recalc = if effects.recalc || topology {
             self.stores.compute.replay_native_history(
-                &mut self.mirror,
+                &mut self.cell_store,
                 &effects.formula_texts,
                 &seeds,
                 topology,
@@ -188,12 +176,12 @@ impl ComputeEngine {
             .filter_map(|change| CellId::from_uuid_str(&change.cell_id).ok())
             .collect();
         for (cell, (sheet, row, col)) in &effects.cells {
-            if self.mirror.get_sheet(sheet).is_none() {
+            if self.cell_store.get_sheet(sheet).is_none() {
                 continue;
             }
             if !reported_cells.contains(cell) {
                 let value = self
-                    .mirror
+                    .cell_store
                     .get_cell_value_at(sheet, SheetPos::new(*row, *col))
                     .cloned()
                     .unwrap_or(CellValue::Null);
@@ -233,22 +221,14 @@ impl ComputeEngine {
                 }
             }
         }
-        super::structure::emit_lifecycle(&self.stores, &self.mirror, effects);
+        super::structure::emit_lifecycle(&self.stores, &self.cell_store, effects);
         self.append_history_format_changes(effects, &mut recalc);
-        self.prepare_recalc_for_flush(&mut recalc);
+        self.postprocess_mutation_recalc(&mut recalc);
         effects.result.recalc = recalc;
-        let has_formats =
-            !effects.format_rects.is_empty() || !effects.result.property_changes.is_empty();
-        let patches = if has_formats {
-            self.mutation.pending_recalc = None;
-            self.mutation.pending_format_patches = None;
-            self.produce_history_viewport_patches(&mut effects.result.recalc)
-        } else {
-            self.flush_viewport_patches()
-        };
-        Ok((
-            patches,
-            std::mem::replace(&mut effects.result, MutationResult::empty()),
+
+        Ok(std::mem::replace(
+            &mut effects.result,
+            MutationResult::empty(),
         ))
     }
 }
@@ -296,13 +276,13 @@ impl ComputeEngine {
                 continue;
             }
             let pos = SheetPos::new(row, col);
-            let cell = self.mirror.resolve_cell_id(&sheet, pos);
+            let cell = self.cell_store.resolve_cell_id(&sheet, pos);
             recalc.changed_cells.push(crate::snapshot::CellChange {
                 cell_id: cell.map(|id| id.to_uuid_string()).unwrap_or_default(),
                 sheet_id: sheet.to_uuid_string(),
                 position: Some(crate::snapshot::CellPosition { row, col }),
                 value: self
-                    .mirror
+                    .cell_store
                     .get_cell_value_at(&sheet, pos)
                     .cloned()
                     .unwrap_or(CellValue::Null),
@@ -326,14 +306,14 @@ impl ComputeEngine {
     /// scalar or a smaller array. Recalculation may replace its derived spill.
     fn restore_history_cse_selections(&mut self) {
         let selections: Vec<_> = self
-            .mirror
+            .cell_store
             .cse_anchors
             .iter()
             .filter_map(|cell| {
                 let metadata = self.stores.storage.cell_metadata.get(cell)?;
                 let range = crate::range_manager::parse_range(metadata.array_ref.as_deref()?)?;
-                let sheet = self.mirror.sheet_for_cell(cell)?;
-                let pos = self.mirror.resolve_position(cell)?;
+                let sheet = self.cell_store.sheet_for_cell(cell)?;
+                let pos = self.cell_store.resolve_position(cell)?;
                 let rows = range.end.row.checked_sub(range.start.row)?.checked_add(1)?;
                 let cols = range.end.col.checked_sub(range.start.col)?.checked_add(1)?;
                 Some((*cell, sheet, pos, rows, cols))
@@ -341,13 +321,18 @@ impl ComputeEngine {
             .collect();
         for (cell, sheet, pos, rows, cols) in selections {
             if rows == 1 && cols == 1 {
-                self.mirror.cse_single_cell.insert(cell);
+                self.cell_store.cse_single_cell.insert(cell);
             } else {
-                self.mirror.cse_single_cell.remove(&cell);
+                self.cell_store.cse_single_cell.remove(&cell);
             }
-            self.mirror
-                .projection_registry
-                .register(cell, sheet, pos.row(), pos.col(), rows, cols);
+            self.cell_store.projection_registry.register(
+                cell,
+                sheet,
+                pos.row(),
+                pos.col(),
+                rows,
+                cols,
+            );
         }
     }
 }

@@ -32,7 +32,7 @@ fn test_range_dep_chain_broken_by_missing_position() {
     graph.set_precedents(&sink, vec![DepTarget::Range(range, RangeAccess::Aggregate)]);
 
     // resolve_position returns None for mid — simulating the data table
-    // prepass where the mirror cannot resolve the cell's position.
+    // prepass where the cell store cannot resolve the cell's position.
     // mid is actually at (sheet, 5, 0) inside the range, but the
     // closure doesn't know that.
     //
@@ -77,7 +77,7 @@ fn test_range_dep_chain_broken_by_missing_position() {
 ///           -> `s5_cell` (range) -> `result` (cell)
 ///
 /// `resolve_position` returns `None` for `s3_cell` (simulating a cell whose
-/// sheet isn't in the mirror). This breaks the second range hop:
+/// sheet isn't in the cell store). This breaks the second range hop:
 /// `s5_cell` depends on a range containing `s4_cell`, but `s4_cell` was
 /// discovered via a cell edge from `s3_cell`. Since `s3_cell` has no
 /// position, the range lookup that would find `s3_cell` inside the
@@ -127,7 +127,7 @@ fn test_deep_chain_broken_when_intermediate_position_missing() {
     // result depends on s5_cell: cell edge
     graph.set_precedents(&result, vec![DepTarget::Cell(s5_cell)]);
 
-    // resolve_position: returns None for s4_cell — the mirror doesn't
+    // resolve_position: returns None for s4_cell — the cell store doesn't
     // know this cell's position. This means when the BFS reaches s4_cell,
     // it won't do a range-index lookup, so s5_cell is never discovered.
     let resolve = move |cell: &CellId| -> Option<CellPosition> {
@@ -265,7 +265,7 @@ fn test_stale_propagation_with_partial_position_resolution() {
     );
 
     // resolve_position returns None for sheet3_cell — simulating the
-    // data table prepass where the mirror for sheet3 is stale or the
+    // data table prepass where the cell store for sheet3 is stale or the
     // cell hasn't been placed yet.
     let resolve = move |cell: &CellId| -> Option<CellPosition> {
         if *cell == input_cell {
@@ -281,7 +281,7 @@ fn test_stale_propagation_with_partial_position_resolution() {
                 col: 0,
             })
         } else if *cell == sheet3_cell {
-            // BUG: returns None — mirror doesn't know this cell's position
+            // BUG: returns None — cell_store doesn't know this cell's position
             None
         } else if *cell == sheet4_cell {
             Some(CellPosition {

@@ -6,7 +6,7 @@
 //! Run:
 //!   cargo test -p compute-core --test byrow_bycol_nested_array -- --nocapture
 
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{CellData, RecalcResult, SheetSnapshot, WorkbookSnapshot};
 use value_types::CellValue;
@@ -136,10 +136,10 @@ fn test_byrow_max_scalar_result() {
         ],
     )]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     assert_cell_number(&result, 0, 0, 0, 30.0);
@@ -160,10 +160,10 @@ fn test_byrow_sum_scalar_result() {
         )],
     )]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     assert_cell_number(&result, 0, 0, 0, 60.0);
@@ -185,10 +185,10 @@ fn test_byrow_identity_sum() {
         )],
     )]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     assert_cell_number(&result, 0, 0, 0, 6.0);
@@ -213,10 +213,10 @@ fn test_bycol_max_scalar_result() {
         )],
     )]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     assert_cell_number(&result, 0, 0, 0, 30.0);
@@ -237,10 +237,10 @@ fn test_bycol_sum_scalar_result() {
         )],
     )]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     assert_cell_number(&result, 0, 0, 0, 60.0);
@@ -263,10 +263,10 @@ fn test_byrow_multicolumn_sum() {
         )],
     )]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     assert_cell_number(&result, 0, 0, 0, 11.0);

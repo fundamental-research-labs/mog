@@ -1,4 +1,4 @@
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::snapshot::{ChangeKind, FilterChange, MutationResult};
 use crate::storage::engine::services::filter_results::append_row_visibility_changes;
 use crate::storage::engine::services::imported_filters;
@@ -10,14 +10,14 @@ use value_types::ComputeError;
 
 pub(super) fn clear_all_column_filters(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     _settings: &EngineSettings,
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> Result<MutationResult, ComputeError> {
     filters::clear_all_column_filters(&mut stores.storage, sheet_id, filter_id);
     imported_filters::sync_imported_auto_filter_metadata_from_runtime(
-        stores, mirror, sheet_id, filter_id,
+        stores, cell_store, sheet_id, filter_id,
     );
     let filter = filters::get_filter(&stores.storage, sheet_id, filter_id);
     let filter_kind = filter
@@ -25,7 +25,7 @@ pub(super) fn clear_all_column_filters(
         .map(|filter| super::filter_kind_wire(&filter.filter_kind).to_string());
     let metadata =
         super::filter_change_metadata_for_id(stores, sheet_id, filter_id, filter.as_ref());
-    let visible_row_count = filter_data_row_count(stores, mirror, sheet_id, filter.as_ref());
+    let visible_row_count = filter_data_row_count(cell_store, sheet_id, filter.as_ref());
 
     let transitions = dimensions::clear_filter_hidden_rows(
         &mut stores.storage,
@@ -33,7 +33,7 @@ pub(super) fn clear_all_column_filters(
         filter_id,
         stores.grid_indexes.get(sheet_id),
     );
-    imported_filters::apply_visibility_transitions(stores, mirror, sheet_id, &transitions);
+    imported_filters::apply_visibility_transitions(stores, cell_store, sheet_id, &transitions);
 
     let mut result = MutationResult::empty();
     append_row_visibility_changes(&mut result, sheet_id, &transitions);
@@ -56,15 +56,13 @@ pub(super) fn clear_all_column_filters(
 }
 
 fn filter_data_row_count(
-    stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     filter: Option<&filters::FilterState>,
 ) -> Option<u32> {
     let filter = filter?;
     let header_start =
-        super::resolve_filter_cell_pos(stores, mirror, sheet_id, &filter.header_start_cell_id)?;
-    let data_end =
-        super::resolve_filter_cell_pos(stores, mirror, sheet_id, &filter.data_end_cell_id)?;
+        super::resolve_filter_cell_pos(cell_store, sheet_id, &filter.header_start_cell_id)?;
+    let data_end = super::resolve_filter_cell_pos(cell_store, sheet_id, &filter.data_end_cell_id)?;
     Some(data_end.0.saturating_sub(header_start.0))
 }

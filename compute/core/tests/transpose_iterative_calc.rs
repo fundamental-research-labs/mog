@@ -21,7 +21,7 @@
 //!   cargo test -p compute-core --test transpose_iterative_calc -- --nocapture
 
 use cell_types::{CellId, SheetId};
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::CellValue;
@@ -96,8 +96,8 @@ fn build_snapshot_iterative(
     }
 }
 
-fn assert_mirror_number(mirror: &CellMirror, cell_id: &CellId, expected: f64, label: &str) {
-    match mirror.get_cell_value(cell_id) {
+fn assert_store_number(cell_store: &CellStore, cell_id: &CellId, expected: f64, label: &str) {
+    match cell_store.get_cell_value(cell_id) {
         Some(CellValue::Number(n)) => {
             assert!(
                 (n.get() - expected).abs() < 1e-6,
@@ -109,24 +109,24 @@ fn assert_mirror_number(mirror: &CellMirror, cell_id: &CellId, expected: f64, la
         }
         Some(other) => panic!("{}: expected Number({}), got {:?}", label, expected, other),
         None => panic!(
-            "{}: cell not found in mirror (expected Number({}))",
+            "{}: cell not found in cell_store (expected Number({}))",
             label, expected
         ),
     }
 }
 
 fn assert_col_data_number(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
     expected: f64,
     label: &str,
 ) {
-    let sheet_mirror = mirror
+    let sheet_store = cell_store
         .get_sheet(sheet_id)
         .unwrap_or_else(|| panic!("{}: sheet not found", label));
-    let col_slice = sheet_mirror
+    let col_slice = sheet_store
         .get_column_view(col)
         .unwrap_or_else(|| panic!("{}: col_data for column {} not found", label, col));
     assert!(
@@ -181,20 +181,20 @@ fn test_transpose_spill_iterative_calc_basic() {
         )],
         true, // iterative_calc = true
     );
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
-    core.init_from_snapshot(&mut mirror, snapshot)
+    core.init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     let sid = SheetId::from_uuid_str(&sheet_uuid(0)).expect("sid");
     let b1 = CellId::from_uuid_str(&cell_uuid(0, 0, 1)).expect("b1");
     let g1 = CellId::from_uuid_str(&cell_uuid(0, 0, 6)).expect("g1");
 
-    assert_mirror_number(&mirror, &b1, 10.0, "B1 TRANSPOSE source");
-    assert_col_data_number(&mirror, &sid, 0, 2, 20.0, "C1 spill");
-    assert_col_data_number(&mirror, &sid, 0, 3, 30.0, "D1 spill");
-    assert_col_data_number(&mirror, &sid, 0, 4, 40.0, "E1 spill");
-    assert_col_data_number(&mirror, &sid, 0, 5, 50.0, "F1 spill");
-    assert_mirror_number(&mirror, &g1, 150.0, "G1 SUM over spill");
+    assert_store_number(&cell_store, &b1, 10.0, "B1 TRANSPOSE source");
+    assert_col_data_number(&cell_store, &sid, 0, 2, 20.0, "C1 spill");
+    assert_col_data_number(&cell_store, &sid, 0, 3, 30.0, "D1 spill");
+    assert_col_data_number(&cell_store, &sid, 0, 4, 40.0, "E1 spill");
+    assert_col_data_number(&cell_store, &sid, 0, 5, 50.0, "F1 spill");
+    assert_store_number(&cell_store, &g1, 150.0, "G1 SUM over spill");
 }
 
 // ---------------------------------------------------------------------------
@@ -230,25 +230,25 @@ fn test_transpose_array_ref_iterative_calc() {
         )],
         true, // iterative_calc
     );
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
-    core.init_from_snapshot(&mut mirror, snapshot)
+    core.init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     let sid = SheetId::from_uuid_str(&sheet_uuid(0)).expect("sid");
     let b1 = CellId::from_uuid_str(&cell_uuid(0, 0, 1)).expect("b1");
     let g1 = CellId::from_uuid_str(&cell_uuid(0, 0, 6)).expect("g1");
 
-    assert_mirror_number(
-        &mirror,
+    assert_store_number(
+        &cell_store,
         &b1,
         10.0,
         "B1 TRANSPOSE source (array_ref+iterative)",
     );
-    assert_col_data_number(&mirror, &sid, 0, 2, 20.0, "C1 spill");
-    assert_col_data_number(&mirror, &sid, 0, 3, 30.0, "D1 spill");
-    assert_col_data_number(&mirror, &sid, 0, 4, 40.0, "E1 spill");
-    assert_col_data_number(&mirror, &sid, 0, 5, 50.0, "F1 spill");
-    assert_mirror_number(&mirror, &g1, 150.0, "G1 SUM (array_ref+iterative)");
+    assert_col_data_number(&cell_store, &sid, 0, 2, 20.0, "C1 spill");
+    assert_col_data_number(&cell_store, &sid, 0, 3, 30.0, "D1 spill");
+    assert_col_data_number(&cell_store, &sid, 0, 4, 40.0, "E1 spill");
+    assert_col_data_number(&cell_store, &sid, 0, 5, 50.0, "F1 spill");
+    assert_store_number(&cell_store, &g1, 150.0, "G1 SUM (array_ref+iterative)");
 }
 
 // ---------------------------------------------------------------------------
@@ -287,20 +287,20 @@ fn test_transpose_cross_sheet_iterative_calc() {
         ],
         true,
     );
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
-    core.init_from_snapshot(&mut mirror, snapshot)
+    core.init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     let sid1 = SheetId::from_uuid_str(&sheet_uuid(1)).expect("sid1");
     let b1 = CellId::from_uuid_str(&cell_uuid(1, 0, 1)).expect("b1");
     let g1 = CellId::from_uuid_str(&cell_uuid(1, 0, 6)).expect("g1");
 
-    assert_mirror_number(&mirror, &b1, 10.0, "Output B1 TRANSPOSE source");
-    assert_col_data_number(&mirror, &sid1, 0, 2, 20.0, "Output C1 spill");
-    assert_col_data_number(&mirror, &sid1, 0, 3, 30.0, "Output D1 spill");
-    assert_col_data_number(&mirror, &sid1, 0, 4, 40.0, "Output E1 spill");
-    assert_col_data_number(&mirror, &sid1, 0, 5, 50.0, "Output F1 spill");
-    assert_mirror_number(&mirror, &g1, 150.0, "Output G1 SUM");
+    assert_store_number(&cell_store, &b1, 10.0, "Output B1 TRANSPOSE source");
+    assert_col_data_number(&cell_store, &sid1, 0, 2, 20.0, "Output C1 spill");
+    assert_col_data_number(&cell_store, &sid1, 0, 3, 30.0, "Output D1 spill");
+    assert_col_data_number(&cell_store, &sid1, 0, 4, 40.0, "Output E1 spill");
+    assert_col_data_number(&cell_store, &sid1, 0, 5, 50.0, "Output F1 spill");
+    assert_store_number(&cell_store, &g1, 150.0, "Output G1 SUM");
 }
 
 // ---------------------------------------------------------------------------
@@ -349,26 +349,26 @@ fn test_transpose_cross_sheet_array_ref_iterative_calc() {
         ],
         true,
     );
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
-    core.init_from_snapshot(&mut mirror, snapshot)
+    core.init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     let sid1 = SheetId::from_uuid_str(&sheet_uuid(1)).expect("sid1");
     let b1 = CellId::from_uuid_str(&cell_uuid(1, 0, 1)).expect("b1");
     let g1 = CellId::from_uuid_str(&cell_uuid(1, 0, 6)).expect("g1");
 
-    assert_mirror_number(
-        &mirror,
+    assert_store_number(
+        &cell_store,
         &b1,
         10.0,
         "Output B1 TRANSPOSE source (cross-sheet+array_ref+iterative)",
     );
-    assert_col_data_number(&mirror, &sid1, 0, 2, 20.0, "Output C1 spill");
-    assert_col_data_number(&mirror, &sid1, 0, 3, 30.0, "Output D1 spill");
-    assert_col_data_number(&mirror, &sid1, 0, 4, 40.0, "Output E1 spill");
-    assert_col_data_number(&mirror, &sid1, 0, 5, 50.0, "Output F1 spill");
-    assert_mirror_number(
-        &mirror,
+    assert_col_data_number(&cell_store, &sid1, 0, 2, 20.0, "Output C1 spill");
+    assert_col_data_number(&cell_store, &sid1, 0, 3, 30.0, "Output D1 spill");
+    assert_col_data_number(&cell_store, &sid1, 0, 4, 40.0, "Output E1 spill");
+    assert_col_data_number(&cell_store, &sid1, 0, 5, 50.0, "Output F1 spill");
+    assert_store_number(
+        &cell_store,
         &g1,
         150.0,
         "Output G1 SUM (cross-sheet+array_ref+iterative)",
@@ -451,29 +451,34 @@ fn test_three_sheet_transpose_cascade_iterative_calc() {
         ],
         true,
     );
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
-    core.init_from_snapshot(&mut mirror, snapshot)
+    core.init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     let sid2 = SheetId::from_uuid_str(&sheet_uuid(2)).expect("sid Output");
 
     // TRANSPOSE anchors
     let p1 = CellId::from_uuid_str(&cell_uuid(2, 0, 15)).expect("p1");
     let p2 = CellId::from_uuid_str(&cell_uuid(2, 1, 15)).expect("p2");
-    assert_mirror_number(&mirror, &p1, 0.0, "Output!P1 SourceA TRANSPOSE anchor");
-    assert_mirror_number(&mirror, &p2, 197.0, "Output!P2 SourceB TRANSPOSE anchor");
+    assert_store_number(&cell_store, &p1, 0.0, "Output!P1 SourceA TRANSPOSE anchor");
+    assert_store_number(
+        &cell_store,
+        &p2,
+        197.0,
+        "Output!P2 SourceB TRANSPOSE anchor",
+    );
 
     // SourceA spill (row 0): Q1=0, R1=1, S1=7, T1=192
-    assert_col_data_number(&mirror, &sid2, 0, 16, 0.0, "Output!Q1 SourceA spill");
-    assert_col_data_number(&mirror, &sid2, 0, 17, 1.0, "Output!R1 SourceA spill");
-    assert_col_data_number(&mirror, &sid2, 0, 18, 7.0, "Output!S1 SourceA spill");
-    assert_col_data_number(&mirror, &sid2, 0, 19, 192.0, "Output!T1 SourceA spill");
+    assert_col_data_number(&cell_store, &sid2, 0, 16, 0.0, "Output!Q1 SourceA spill");
+    assert_col_data_number(&cell_store, &sid2, 0, 17, 1.0, "Output!R1 SourceA spill");
+    assert_col_data_number(&cell_store, &sid2, 0, 18, 7.0, "Output!S1 SourceA spill");
+    assert_col_data_number(&cell_store, &sid2, 0, 19, 192.0, "Output!T1 SourceA spill");
 
     // SourceB spill (row 1): Q2=448, R2=475, S2=529, T2=377
-    assert_col_data_number(&mirror, &sid2, 1, 16, 448.0, "Output!Q2 SourceB spill");
-    assert_col_data_number(&mirror, &sid2, 1, 17, 475.0, "Output!R2 SourceB spill");
-    assert_col_data_number(&mirror, &sid2, 1, 18, 529.0, "Output!S2 SourceB spill");
-    assert_col_data_number(&mirror, &sid2, 1, 19, 377.0, "Output!T2 SourceB spill");
+    assert_col_data_number(&cell_store, &sid2, 1, 16, 448.0, "Output!Q2 SourceB spill");
+    assert_col_data_number(&cell_store, &sid2, 1, 17, 475.0, "Output!R2 SourceB spill");
+    assert_col_data_number(&cell_store, &sid2, 1, 18, 529.0, "Output!S2 SourceB spill");
+    assert_col_data_number(&cell_store, &sid2, 1, 19, 377.0, "Output!T2 SourceB spill");
 
     // SUM row: P3 through T3
     let p3 = CellId::from_uuid_str(&cell_uuid(2, 2, 15)).expect("p3");
@@ -482,11 +487,11 @@ fn test_three_sheet_transpose_cascade_iterative_calc() {
     let s3 = CellId::from_uuid_str(&cell_uuid(2, 2, 18)).expect("s3");
     let t3 = CellId::from_uuid_str(&cell_uuid(2, 2, 19)).expect("t3");
 
-    assert_mirror_number(&mirror, &p3, 197.0, "P3 SUM(P1:P2) = 0+197");
-    assert_mirror_number(&mirror, &q3, 448.0, "Q3 SUM(Q1:Q2) = 0+448");
-    assert_mirror_number(&mirror, &r3, 476.0, "R3 SUM(R1:R2) = 1+475");
-    assert_mirror_number(&mirror, &s3, 536.0, "S3 SUM(S1:S2) = 7+529");
-    assert_mirror_number(&mirror, &t3, 569.0, "T3 SUM(T1:T2) = 192+377");
+    assert_store_number(&cell_store, &p3, 197.0, "P3 SUM(P1:P2) = 0+197");
+    assert_store_number(&cell_store, &q3, 448.0, "Q3 SUM(Q1:Q2) = 0+448");
+    assert_store_number(&cell_store, &r3, 476.0, "R3 SUM(R1:R2) = 1+475");
+    assert_store_number(&cell_store, &s3, 536.0, "S3 SUM(S1:S2) = 7+529");
+    assert_store_number(&cell_store, &t3, 569.0, "T3 SUM(T1:T2) = 192+377");
 }
 
 // ---------------------------------------------------------------------------
@@ -591,9 +596,9 @@ fn test_full_four_sheet_cascade_iterative_calc() {
         ],
         true,
     );
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
-    core.init_from_snapshot(&mut mirror, snapshot)
+    core.init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     let sid2 = SheetId::from_uuid_str(&sheet_uuid(2)).expect("sid Output");
     let sid3 = SheetId::from_uuid_str(&sheet_uuid(3)).expect("sid Projection");
@@ -601,37 +606,65 @@ fn test_full_four_sheet_cascade_iterative_calc() {
     // === Output ===
     let rb_b1 = CellId::from_uuid_str(&cell_uuid(2, 0, 1)).expect("rb b1");
     let rb_b2 = CellId::from_uuid_str(&cell_uuid(2, 1, 1)).expect("rb b2");
-    assert_mirror_number(&mirror, &rb_b1, 0.0, "Output!B1 SourceA anchor");
-    assert_mirror_number(&mirror, &rb_b2, 197.0, "Output!B2 SourceB anchor");
+    assert_store_number(&cell_store, &rb_b1, 0.0, "Output!B1 SourceA anchor");
+    assert_store_number(&cell_store, &rb_b2, 197.0, "Output!B2 SourceB anchor");
 
     // SourceB spill: C2=448, D2=475, E2=529, F2=377
-    assert_col_data_number(&mirror, &sid2, 1, 2, 448.0, "Output!C2 SourceB spill");
-    assert_col_data_number(&mirror, &sid2, 1, 3, 475.0, "Output!D2 SourceB spill");
-    assert_col_data_number(&mirror, &sid2, 1, 4, 529.0, "Output!E2 SourceB spill");
-    assert_col_data_number(&mirror, &sid2, 1, 5, 377.0, "Output!F2 SourceB spill");
+    assert_col_data_number(&cell_store, &sid2, 1, 2, 448.0, "Output!C2 SourceB spill");
+    assert_col_data_number(&cell_store, &sid2, 1, 3, 475.0, "Output!D2 SourceB spill");
+    assert_col_data_number(&cell_store, &sid2, 1, 4, 529.0, "Output!E2 SourceB spill");
+    assert_col_data_number(&cell_store, &sid2, 1, 5, 377.0, "Output!F2 SourceB spill");
 
     // SUM row
     let rb_b3 = CellId::from_uuid_str(&cell_uuid(2, 2, 1)).expect("rb b3");
     let rb_c3 = CellId::from_uuid_str(&cell_uuid(2, 2, 2)).expect("rb c3");
     let rb_d3 = CellId::from_uuid_str(&cell_uuid(2, 2, 3)).expect("rb d3");
-    assert_mirror_number(&mirror, &rb_b3, 197.0, "Output!B3 SUM");
-    assert_mirror_number(&mirror, &rb_c3, 448.0, "Output!C3 SUM");
-    assert_mirror_number(&mirror, &rb_d3, 476.0, "Output!D3 SUM");
+    assert_store_number(&cell_store, &rb_b3, 197.0, "Output!B3 SUM");
+    assert_store_number(&cell_store, &rb_c3, 448.0, "Output!C3 SUM");
+    assert_store_number(&cell_store, &rb_d3, 476.0, "Output!D3 SUM");
 
     // === Projection ===
     let fc_a1 = CellId::from_uuid_str(&cell_uuid(3, 0, 0)).expect("fc a1");
-    assert_mirror_number(
-        &mirror,
+    assert_store_number(
+        &cell_store,
         &fc_a1,
         197.0,
         "Projection!A1 chained TRANSPOSE anchor",
     );
 
     // Chained spill targets: A2=448, A3=475, A4=529, A5=377
-    assert_col_data_number(&mirror, &sid3, 1, 0, 448.0, "Projection!A2 chained spill");
-    assert_col_data_number(&mirror, &sid3, 2, 0, 475.0, "Projection!A3 chained spill");
-    assert_col_data_number(&mirror, &sid3, 3, 0, 529.0, "Projection!A4 chained spill");
-    assert_col_data_number(&mirror, &sid3, 4, 0, 377.0, "Projection!A5 chained spill");
+    assert_col_data_number(
+        &cell_store,
+        &sid3,
+        1,
+        0,
+        448.0,
+        "Projection!A2 chained spill",
+    );
+    assert_col_data_number(
+        &cell_store,
+        &sid3,
+        2,
+        0,
+        475.0,
+        "Projection!A3 chained spill",
+    );
+    assert_col_data_number(
+        &cell_store,
+        &sid3,
+        3,
+        0,
+        529.0,
+        "Projection!A4 chained spill",
+    );
+    assert_col_data_number(
+        &cell_store,
+        &sid3,
+        4,
+        0,
+        377.0,
+        "Projection!A5 chained spill",
+    );
 
     // IF formulas
     let fc_b1 = CellId::from_uuid_str(&cell_uuid(3, 0, 1)).expect("fc b1");
@@ -639,11 +672,16 @@ fn test_full_four_sheet_cascade_iterative_calc() {
     let fc_b3 = CellId::from_uuid_str(&cell_uuid(3, 2, 1)).expect("fc b3");
     let fc_b4 = CellId::from_uuid_str(&cell_uuid(3, 3, 1)).expect("fc b4");
     let fc_b5 = CellId::from_uuid_str(&cell_uuid(3, 4, 1)).expect("fc b5");
-    assert_mirror_number(&mirror, &fc_b1, 394.0, "Projection!B1 IF(A1>0) = 197*2");
-    assert_mirror_number(&mirror, &fc_b2, 896.0, "Projection!B2 IF(A2>0) = 448*2");
-    assert_mirror_number(&mirror, &fc_b3, 950.0, "Projection!B3 IF(A3>0) = 475*2");
-    assert_mirror_number(&mirror, &fc_b4, 1058.0, "Projection!B4 IF(A4>0) = 529*2");
-    assert_mirror_number(&mirror, &fc_b5, 754.0, "Projection!B5 IF(A5>0) = 377*2");
+    assert_store_number(&cell_store, &fc_b1, 394.0, "Projection!B1 IF(A1>0) = 197*2");
+    assert_store_number(&cell_store, &fc_b2, 896.0, "Projection!B2 IF(A2>0) = 448*2");
+    assert_store_number(&cell_store, &fc_b3, 950.0, "Projection!B3 IF(A3>0) = 475*2");
+    assert_store_number(
+        &cell_store,
+        &fc_b4,
+        1058.0,
+        "Projection!B4 IF(A4>0) = 529*2",
+    );
+    assert_store_number(&cell_store, &fc_b5, 754.0, "Projection!B5 IF(A5>0) = 377*2");
 }
 
 // ---------------------------------------------------------------------------
@@ -837,29 +875,85 @@ fn test_transpose_25_elements_high_offset_iterative_calc() {
         calculation_settings: None,
     };
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
-    core.init_from_snapshot(&mut mirror, snapshot)
+    core.init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     let sid2 = SheetId::from_uuid_str(&sheet_uuid(2)).expect("sid Output");
 
     // Verify TRANSPOSE anchors
     let p28 = CellId::from_uuid_str(&cell_uuid(2, 27, 15)).expect("p28");
     let p29 = CellId::from_uuid_str(&cell_uuid(2, 28, 15)).expect("p29");
-    assert_mirror_number(&mirror, &p28, monthly_data[0], "P28 SourceA anchor");
-    assert_mirror_number(&mirror, &p29, annual_data[0], "P29 SourceB anchor");
+    assert_store_number(&cell_store, &p28, monthly_data[0], "P28 SourceA anchor");
+    assert_store_number(&cell_store, &p29, annual_data[0], "P29 SourceB anchor");
 
     // Verify spill targets for row 28 (SourceA): Q28=0, R28=0, S28=1, T28=7, U28=192
-    assert_col_data_number(&mirror, &sid2, 27, 16, monthly_data[1], "Q28 SourceA spill");
-    assert_col_data_number(&mirror, &sid2, 27, 17, monthly_data[2], "R28 SourceA spill");
-    assert_col_data_number(&mirror, &sid2, 27, 18, monthly_data[3], "S28 SourceA spill");
-    assert_col_data_number(&mirror, &sid2, 27, 19, monthly_data[4], "T28 SourceA spill");
+    assert_col_data_number(
+        &cell_store,
+        &sid2,
+        27,
+        16,
+        monthly_data[1],
+        "Q28 SourceA spill",
+    );
+    assert_col_data_number(
+        &cell_store,
+        &sid2,
+        27,
+        17,
+        monthly_data[2],
+        "R28 SourceA spill",
+    );
+    assert_col_data_number(
+        &cell_store,
+        &sid2,
+        27,
+        18,
+        monthly_data[3],
+        "S28 SourceA spill",
+    );
+    assert_col_data_number(
+        &cell_store,
+        &sid2,
+        27,
+        19,
+        monthly_data[4],
+        "T28 SourceA spill",
+    );
 
     // Verify spill targets for row 29 (SourceB): Q29=448, R29=475, S29=529, T29=377
-    assert_col_data_number(&mirror, &sid2, 28, 16, annual_data[1], "Q29 SourceB spill");
-    assert_col_data_number(&mirror, &sid2, 28, 17, annual_data[2], "R29 SourceB spill");
-    assert_col_data_number(&mirror, &sid2, 28, 18, annual_data[3], "S29 SourceB spill");
-    assert_col_data_number(&mirror, &sid2, 28, 19, annual_data[4], "T29 SourceB spill");
+    assert_col_data_number(
+        &cell_store,
+        &sid2,
+        28,
+        16,
+        annual_data[1],
+        "Q29 SourceB spill",
+    );
+    assert_col_data_number(
+        &cell_store,
+        &sid2,
+        28,
+        17,
+        annual_data[2],
+        "R29 SourceB spill",
+    );
+    assert_col_data_number(
+        &cell_store,
+        &sid2,
+        28,
+        18,
+        annual_data[3],
+        "S29 SourceB spill",
+    );
+    assert_col_data_number(
+        &cell_store,
+        &sid2,
+        28,
+        19,
+        annual_data[4],
+        "T29 SourceB spill",
+    );
 
     // Verify SUM row (row 21): P22 through T22
     let p22 = CellId::from_uuid_str(&cell_uuid(2, 21, 15)).expect("p22");
@@ -869,21 +963,21 @@ fn test_transpose_25_elements_high_offset_iterative_calc() {
     let t22 = CellId::from_uuid_str(&cell_uuid(2, 21, 19)).expect("t22");
 
     // P22 = SUM(P28:P29) = monthly[0] + annual[0] = 0 + 197 = 197
-    assert_mirror_number(&mirror, &p22, 197.0, "P22 SUM(P28:P29)");
+    assert_store_number(&cell_store, &p22, 197.0, "P22 SUM(P28:P29)");
     // Q22 = SUM(Q28:Q29) = monthly[1] + annual[1] = 0 + 448 = 448
-    assert_mirror_number(&mirror, &q22, 448.0, "Q22 SUM(Q28:Q29)");
+    assert_store_number(&cell_store, &q22, 448.0, "Q22 SUM(Q28:Q29)");
     // R22 = SUM(R28:R29) = monthly[2] + annual[2] = 0 + 475 = 475
-    assert_mirror_number(&mirror, &r22, 475.0, "R22 SUM(R28:R29)");
+    assert_store_number(&cell_store, &r22, 475.0, "R22 SUM(R28:R29)");
     // S22 = SUM(S28:S29) = monthly[3] + annual[3] = 1 + 529 = 530
-    assert_mirror_number(&mirror, &s22, 530.0, "S22 SUM(S28:S29)");
+    assert_store_number(&cell_store, &s22, 530.0, "S22 SUM(S28:S29)");
     // T22 = SUM(T28:T29) = monthly[4] + annual[4] = 7 + 377 = 384
-    assert_mirror_number(&mirror, &t22, 384.0, "T22 SUM(T28:T29)");
+    assert_store_number(&cell_store, &t22, 384.0, "T22 SUM(T28:T29)");
 
     // Verify further spill targets (checking the 25-element range)
     let an29 = 28u32; // row 28 (0-indexed)
     let an_col = 39u32; // AN = col 39 (0-indexed)
     assert_col_data_number(
-        &mirror,
+        &cell_store,
         &sid2,
         an29,
         an_col,
@@ -975,9 +1069,9 @@ fn test_index_reads_transpose_spill_iterative_calc() {
         ],
         true,
     );
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
-    core.init_from_snapshot(&mut mirror, snapshot)
+    core.init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     let rb_a1 = CellId::from_uuid_str(&cell_uuid(2, 0, 0)).expect("rb a1");
@@ -986,9 +1080,9 @@ fn test_index_reads_transpose_spill_iterative_calc() {
     let rb_a4 = CellId::from_uuid_str(&cell_uuid(2, 3, 0)).expect("rb a4");
     let rb_a5 = CellId::from_uuid_str(&cell_uuid(2, 4, 0)).expect("rb a5");
 
-    assert_mirror_number(&mirror, &rb_a1, 10.0, "INDEX(A:A,1)");
-    assert_mirror_number(&mirror, &rb_a2, 20.0, "INDEX(A:A,2)");
-    assert_mirror_number(&mirror, &rb_a3, 30.0, "INDEX(A:A,3)");
-    assert_mirror_number(&mirror, &rb_a4, 40.0, "INDEX(A:A,4)");
-    assert_mirror_number(&mirror, &rb_a5, 50.0, "INDEX(A:A,5)");
+    assert_store_number(&cell_store, &rb_a1, 10.0, "INDEX(A:A,1)");
+    assert_store_number(&cell_store, &rb_a2, 20.0, "INDEX(A:A,2)");
+    assert_store_number(&cell_store, &rb_a3, 30.0, "INDEX(A:A,3)");
+    assert_store_number(&cell_store, &rb_a4, 40.0, "INDEX(A:A,4)");
+    assert_store_number(&cell_store, &rb_a5, 50.0, "INDEX(A:A,5)");
 }

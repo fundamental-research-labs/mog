@@ -68,7 +68,7 @@ fn first_format(
 fn add_cf_rule_accepts_contains_blanks_default_blanks_true() {
     let snapshot = make_snapshot(vec![]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     let payload = cf_payload(
         &sheet_id,
@@ -95,7 +95,7 @@ fn add_cf_rule_accepts_contains_blanks_default_blanks_true() {
 fn add_cf_rule_promotes_not_contains_blanks_to_contains_blanks_false() {
     let snapshot = make_snapshot(vec![]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     let payload = cf_payload(
         &sheet_id,
@@ -124,7 +124,7 @@ fn add_cf_rule_promotes_not_contains_blanks_to_contains_blanks_false() {
 fn add_cf_rule_accepts_top10_with_value1_and_operator() {
     let snapshot = make_snapshot(vec![]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     let payload = cf_payload(
         &sheet_id,
@@ -156,7 +156,7 @@ fn add_cf_rule_accepts_top10_with_value1_and_operator() {
 fn add_cf_rule_promotes_cell_value_with_text_op_to_contains_text() {
     let snapshot = make_snapshot(vec![]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     let payload = cf_payload(
         &sheet_id,
@@ -189,7 +189,7 @@ fn add_cf_rule_promotes_cell_value_with_text_op_to_contains_text() {
 fn add_cf_rule_accepts_expression_alias_for_formula() {
     let snapshot = make_snapshot(vec![]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     let payload = cf_payload(
         &sheet_id,
@@ -221,7 +221,7 @@ fn add_cf_rule_accepts_expression_alias_for_formula() {
 fn add_cf_rule_puts_new_format_at_priority_one() {
     let snapshot = make_snapshot(vec![]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     add_cf(
         &mut engine,
@@ -255,7 +255,7 @@ fn add_cf_rule_puts_new_format_at_priority_one() {
 fn add_cf_rule_bumps_existing_format_priorities_so_new_is_first() {
     let snapshot = make_snapshot(vec![]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // Add two formats. Each has one rule.
     add_cf(
@@ -318,7 +318,7 @@ fn sort_range_with_overlapping_cf_format_re_evaluates_cf_cache() {
         make_cell(5, 0, num(75.0), None),
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     add_cf(
         &mut engine,
@@ -373,15 +373,15 @@ fn sort_range_with_overlapping_cf_format_re_evaluates_cf_cache() {
 
     // The decisive correctness check: read back the top-three sorted values.
     let v0 = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sheet_id, SheetPos::new(0, 0))
         .cloned();
     let v1 = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sheet_id, SheetPos::new(1, 0))
         .cloned();
     let v2 = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sheet_id, SheetPos::new(2, 0))
         .cloned();
     let to_num = |v: Option<CellValue>| match v {

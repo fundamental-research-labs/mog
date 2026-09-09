@@ -4,23 +4,23 @@ use super::*;
 impl ComputeCore {
     pub(crate) fn replay_native_history(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         texts: &FxHashMap<CellId, Option<String>>,
         seeds: &[CellId],
         topology: bool,
         sheet_order: &[SheetId],
     ) -> Result<RecalcResult, ComputeError> {
-        self.ensure_graph_built(mirror)?;
+        self.ensure_graph_built(cell_store)?;
         let mut changed = seeds.to_vec();
         let mut teardowns = Vec::new();
         for cell in seeds {
             if let Some(source) = self.spill_blockers.remove(cell) {
                 changed.push(source);
             }
-            if let Some(sheet) = mirror.sheet_for_cell(cell)
-                && let Some(pos) = mirror.resolve_position(cell)
+            if let Some(sheet) = cell_store.sheet_for_cell(cell)
+                && let Some(pos) = cell_store.resolve_position(cell)
                 && let Some((source, projection)) =
-                    self.invalidate_projection_at(mirror, &sheet, pos.row(), pos.col(), *cell)
+                    self.invalidate_projection_at(cell_store, &sheet, pos.row(), pos.col(), *cell)
             {
                 changed.push(source);
                 if let Some(change) =
@@ -39,22 +39,20 @@ impl ComputeCore {
                 .collect();
             self.rebuild_ordered_sheets_cache();
             self.workbook_cache.clear_all();
-            self.regenerate_formula_strings_and_cell_formula_text(mirror);
+            self.regenerate_formula_strings_and_cell_formula_text(cell_store);
             for cell in self.cell_formula_text.keys().copied().collect::<Vec<_>>() {
                 refresh.entry(cell).or_insert_with(|| {
-                    mirror
+                    cell_store
                         .sheet_for_cell(&cell)
                         .and_then(|_| self.cell_formula_text.get(&cell).cloned())
                 });
             }
-            for sheet in mirror.sheet_ids() {
-                if let Some(source) = mirror.get_sheet(sheet) {
-                    for (cell, entry) in source.cells_iter() {
-                        if entry.formula.is_some() {
-                            refresh
-                                .entry(*cell)
-                                .or_insert_with(|| self.get_formula(cell).map(str::to_owned));
-                        }
+            for sheet in cell_store.sheet_ids() {
+                if let Some(source) = cell_store.get_sheet(sheet) {
+                    for cell in source.formulas.keys() {
+                        refresh
+                            .entry(*cell)
+                            .or_insert_with(|| self.get_formula(cell).map(str::to_owned));
                     }
                 }
             }
@@ -63,25 +61,25 @@ impl ComputeCore {
         // Parsing refreshes derived AST/graph state; it never reimports scalar cells.
         let mut formulas = Vec::new();
         for (cell, text) in refresh {
-            let identity = mirror.get_formula(&cell).cloned();
-            self.clear_formula_deps(mirror, cell);
-            if let Some(sheet) = mirror.sheet_for_cell(&cell)
+            let identity = cell_store.get_formula(&cell).cloned();
+            self.clear_formula_deps(cell_store, cell);
+            if let Some(sheet) = cell_store.sheet_for_cell(&cell)
                 && let Some(text) = text
             {
                 formulas.push((cell, sheet, text, identity));
             }
         }
         for (cell, sheet, text, identity) in formulas {
-            self.parse_and_register_formula(mirror, cell, sheet, text, true);
+            self.parse_and_register_formula(cell_store, cell, sheet, text, true);
             if let Some(identity) = identity {
-                mirror.set_formula(&cell, Some(identity));
+                cell_store.set_formula(&cell, Some(identity));
             }
         }
         self.mark_dirty();
         let mut result = if topology {
-            self.full_recalc(mirror)?
+            self.full_recalc(cell_store)?
         } else {
-            self.recalc(mirror, &changed)?
+            self.recalc(cell_store, &changed)?
         };
         super::spill::append_filtered_teardowns(&mut result, teardowns);
         Ok(result)

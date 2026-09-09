@@ -24,7 +24,7 @@ impl WorkbookNames {
         input: DefinedNameInput,
     ) -> Result<MutationResult, ComputeApiError> {
         self.dispatch
-            .call_engine(move |e| e.create_named_range(input).map(|(_, r)| r))
+            .call_engine(move |e| e.create_named_range(input))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -38,7 +38,7 @@ impl WorkbookNames {
     ) -> Result<MutationResult, ComputeApiError> {
         let owned_id = id.to_owned();
         self.dispatch
-            .call_engine(move |e| e.update_named_range(&owned_id, updates).map(|(_, r)| r))
+            .call_engine(move |e| e.update_named_range(&owned_id, updates))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -46,7 +46,7 @@ impl WorkbookNames {
     pub fn remove_named_range_by_id(&self, id: &str) -> Result<MutationResult, ComputeApiError> {
         let owned_id = id.to_owned();
         self.dispatch
-            .call_engine(move |e| e.remove_named_range_by_id(&owned_id).map(|(_, r)| r))
+            .call_engine(move |e| e.remove_named_range_by_id(&owned_id))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -58,7 +58,7 @@ impl WorkbookNames {
         scope: Option<String>,
     ) -> Result<MutationResult, ComputeApiError> {
         self.dispatch
-            .call_engine(move |e| e.remove_named_ranges_by_scope(scope).map(|(_, r)| r))
+            .call_engine(move |e| e.remove_named_ranges_by_scope(scope))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -71,7 +71,7 @@ impl WorkbookNames {
         def: NamedRangeDef,
     ) -> Result<MutationResult, ComputeApiError> {
         self.dispatch
-            .call_engine(move |e| e.set_named_range(name, def).map(|(_, r)| r))
+            .call_engine(move |e| e.set_named_range(name, def))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -79,7 +79,7 @@ impl WorkbookNames {
     pub fn remove_named_range(&self, name: &str) -> Result<MutationResult, ComputeApiError> {
         let owned_name = name.to_owned();
         self.dispatch
-            .call_engine(move |e| e.remove_named_range(&owned_name).map(|(_, r)| r))
+            .call_engine(move |e| e.remove_named_range(&owned_name))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 }

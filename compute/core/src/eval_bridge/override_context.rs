@@ -1,20 +1,20 @@
 //! OverrideContext — EvaluationContext wrapper with cell value override map.
 //!
 //! Composes MirrorAccess with an override map. Value access methods check
-//! overrides first, falling through to the mirror. Structural/positional
+//! overrides first, falling through to the cell store. Structural/positional
 //! queries delegate directly to MirrorAccess.
 
 use std::cell::RefCell;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use super::mirror_access::MirrorAccess;
-use super::mirror_context::root_ast_produces_dynamic_array;
+use super::eval_context::root_ast_produces_dynamic_array;
+use super::store_access::MirrorAccess;
+use crate::cells::CellStore;
 use crate::eval::Evaluator;
 use crate::eval::context::traits::{EvalDataAccess, EvalMetadata};
 use crate::eval::sync_block_on;
 use crate::formula_text::{FormulaTextLookup, FormulaTextProvider};
-use crate::mirror::CellMirror;
 use crate::scheduler::AstEntry;
 use crate::table::structured_refs::ResolvedStructuredRef;
 use cell_types::{CellId, SheetId, SheetPos};
@@ -23,8 +23,8 @@ use snapshot_types::PivotTableDef;
 use value_types::{CellArray, CellError, CellValue};
 use value_types::{DenseBoolMask, DenseColumn};
 
-/// Wraps a `&CellMirror` and an override map. When a cell value is requested,
-/// the override map is checked first; if the cell is not overridden, the mirror
+/// Wraps a `&CellStore` and an override map. When a cell value is requested,
+/// the override map is checked first; if the cell is not overridden, the cell store
 /// is consulted. Used by What-If analysis tools (Goal Seek, Data Tables).
 pub struct OverrideContext<'a> {
     pub access: MirrorAccess<'a>,
@@ -36,7 +36,7 @@ pub struct OverrideContext<'a> {
 
 impl<'a> OverrideContext<'a> {
     pub fn new(
-        mirror: &'a CellMirror,
+        cell_store: &'a CellStore,
         current_cell_id: CellId,
         current_sheet: SheetId,
         overrides: &'a FxHashMap<CellId, CellValue>,
@@ -45,7 +45,7 @@ impl<'a> OverrideContext<'a> {
         evaluating: &'a RefCell<FxHashSet<CellId>>,
     ) -> Self {
         Self {
-            access: MirrorAccess::new(mirror, current_cell_id, current_sheet),
+            access: MirrorAccess::new(cell_store, current_cell_id, current_sheet),
             overrides,
             ast_cache,
             eval_cache,
@@ -54,7 +54,7 @@ impl<'a> OverrideContext<'a> {
     }
 
     pub fn with_formula_text_provider(
-        mirror: &'a CellMirror,
+        cell_store: &'a CellStore,
         current_cell_id: CellId,
         current_sheet: SheetId,
         overrides: &'a FxHashMap<CellId, CellValue>,
@@ -65,7 +65,7 @@ impl<'a> OverrideContext<'a> {
     ) -> Self {
         Self {
             access: MirrorAccess::with_formula_text_provider(
-                mirror,
+                cell_store,
                 current_cell_id,
                 current_sheet,
                 formula_text_provider,
@@ -81,7 +81,7 @@ impl<'a> OverrideContext<'a> {
     /// 1. Check overrides map
     /// 2. Check eval_cache (already computed this probe)
     /// 3. If cell has an AST in ast_cache, recursively evaluate it
-    /// 4. Fall through to mirror cached value
+    /// 4. Fall through to cell_store cached value
     fn resolve_cell_value(&self, cell_id: &CellId) -> CellValue {
         // 1. Direct override
         if let Some(val) = self.overrides.get(cell_id) {
@@ -116,9 +116,9 @@ impl<'a> OverrideContext<'a> {
             return result;
         }
 
-        // 4. Fall through to mirror
+        // 4. Fall through to cell_store
         self.access
-            .mirror
+            .cell_store
             .get_cell_value(cell_id)
             .cloned()
             .unwrap_or(CellValue::Null)
@@ -132,7 +132,7 @@ impl<'a> EvalDataAccess for OverrideContext<'a> {
             CellRef::Positional { sheet, row, col } => {
                 if let Some(cell_id) = self
                     .access
-                    .mirror
+                    .cell_store
                     .resolve_cell_id(sheet, SheetPos::new(*row, *col))
                 {
                     self.resolve_cell_value(&cell_id)
@@ -178,7 +178,7 @@ impl<'a> EvalDataAccess for OverrideContext<'a> {
             _ => {}
         }
 
-        if let Some(sheet) = self.access.mirror.get_sheet(&s_sheet) {
+        if let Some(sheet) = self.access.cell_store.get_sheet(&s_sheet) {
             let formula_rows = sheet.formula_rows();
             let formula_cols = sheet.formula_cols();
             if max_row >= formula_rows {
@@ -207,7 +207,7 @@ impl<'a> EvalDataAccess for OverrideContext<'a> {
             for c in min_col..=max_col {
                 let val = if let Some(cell_id) = self
                     .access
-                    .mirror
+                    .cell_store
                     .resolve_cell_id(&s_sheet, SheetPos::new(r, c))
                 {
                     self.resolve_cell_value(&cell_id)

@@ -2,7 +2,7 @@ use cell_types::SheetId;
 use compute_document::hex::id_to_hex;
 use value_types::CellValue;
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::storage::engine::settings::EngineSettings;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::properties;
@@ -10,7 +10,7 @@ use crate::storage::sheet::merges;
 
 pub(in crate::storage::engine::viewport) fn get_active_cell(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     settings: &EngineSettings,
     sheet_id: &SheetId,
     cell_id: &cell_types::CellId,
@@ -18,14 +18,17 @@ pub(in crate::storage::engine::viewport) fn get_active_cell(
 ) -> crate::snapshot::ActiveCellData {
     // Merge-aware: if this cell is a child of a merge, redirect to origin
     let effective_cell_id = {
-        let pos = mirror.resolve_position(cell_id);
-        if let (Some(p), Some(grid)) = (pos, stores.grid_indexes.get(sheet_id)) {
+        let pos = cell_store.resolve_position(cell_id);
+        if let (Some(p), Some(grid)) = (pos, cell_store.get_sheet(sheet_id)) {
             if let Some(merge_info) =
                 merges::get_merge_for_cell(&stores.storage, *sheet_id, grid, p.row(), p.col())
             {
                 if !merge_info.is_origin {
-                    grid.cell_id_at(merge_info.merge.start_row, merge_info.merge.start_col)
-                        .unwrap_or(*cell_id)
+                    grid.cell_id_at(cell_types::SheetPos::new(
+                        merge_info.merge.start_row,
+                        merge_info.merge.start_col,
+                    ))
+                    .unwrap_or(*cell_id)
                 } else {
                     *cell_id
                 }
@@ -36,15 +39,15 @@ pub(in crate::storage::engine::viewport) fn get_active_cell(
             *cell_id
         }
     };
-    let effective_pos = mirror.resolve_position(&effective_cell_id);
+    let effective_pos = cell_store.resolve_position(&effective_cell_id);
 
-    // Prefer ComputeCore's value (includes formula results) over mirror's raw value.
+    // Prefer ComputeCore's value (includes formula results) over cell_store's raw value.
     let value = stores
         .compute
-        .get_cell_value(mirror, &effective_cell_id)
+        .get_cell_value(cell_store, &effective_cell_id)
         .cloned()
         .unwrap_or_else(|| {
-            mirror
+            cell_store
                 .get_cell_value_in_sheet(sheet_id, &effective_cell_id)
                 .cloned()
                 .unwrap_or(CellValue::Null)
@@ -54,7 +57,7 @@ pub(in crate::storage::engine::viewport) fn get_active_cell(
         .and_then(|p| {
             crate::storage::engine::formula_read::formula_text_at(
                 stores,
-                mirror,
+                cell_store,
                 sheet_id,
                 p.row(),
                 p.col(),
@@ -64,7 +67,7 @@ pub(in crate::storage::engine::viewport) fn get_active_cell(
         .or_else(|| {
             crate::storage::engine::formula_read::formula_text_for_cell_id(
                 stores,
-                mirror,
+                cell_store,
                 sheet_id,
                 &effective_cell_id,
             )
@@ -72,10 +75,10 @@ pub(in crate::storage::engine::viewport) fn get_active_cell(
 
     // Resolve format and metadata from properties.
     let cell_id_hex = id_to_hex(cell_id.as_u128());
-    let pos = mirror.resolve_position(cell_id);
+    let pos = cell_store.resolve_position(cell_id);
     let table_fmt = pos.and_then(|p| {
         crate::storage::engine::services::resolve_structured_format_at_cell(
-            mirror,
+            cell_store,
             sheet_id,
             p.row(),
             p.col(),
@@ -91,7 +94,7 @@ pub(in crate::storage::engine::viewport) fn get_active_cell(
             p.col(),
             table_fmt.as_ref(),
             stores.grid_indexes.get(sheet_id),
-            mirror.get_sheet(sheet_id),
+            cell_store.get_sheet(sheet_id),
         );
         domain_types::theme_color::resolve_theme_refs(&mut effective, &settings.theme_palette);
         serde_json::to_value(effective).ok()
@@ -100,8 +103,8 @@ pub(in crate::storage::engine::viewport) fn get_active_cell(
     // Region metadata comes from the projection registry and Data Table rectangles, which
     // are populated at hydration / runtime. Excel `<f t="array">` on
     // hydration inserts into both the projection registry and
-    // `mirror.cse_anchors`; XLSX `<f t="dataTable">` populates
-    // `mirror.data_table_regions`. Post-hydration reads see consistent
+    // `cell_store.cse_anchors`; XLSX `<f t="dataTable">` populates
+    // `cell_store.data_table_regions`. Post-hydration reads see consistent
     // shapes via the unified `cell_render_at` chokepoint.
     //
     // `is_array_formula`, `is_cse_anchor`, `is_array_member` are
@@ -112,14 +115,14 @@ pub(in crate::storage::engine::viewport) fn get_active_cell(
     // `cellData.formula`. (D5 will swap the formula bar to read `region`
     // directly and deprecate the back-compat flags.)
     let region_meta: Option<crate::storage::properties::RegionMeta> = match pos {
-        Some(p) => match mirror.cell_render_at(sheet_id, p.row(), p.col()) {
+        Some(p) => match cell_store.cell_render_at(sheet_id, p.row(), p.col()) {
             crate::projection::CellRender::Projection(view) => {
                 let kind = if view.is_cse {
                     crate::storage::properties::RegionKind::CseArray
                 } else {
                     crate::storage::properties::RegionKind::ArraySpill
                 };
-                let bounds = mirror
+                let bounds = cell_store
                     .projection_registry
                     .get(&view.anchor_id)
                     .map(|p| crate::storage::properties::RegionBounds {
@@ -137,7 +140,7 @@ pub(in crate::storage::engine::viewport) fn get_active_cell(
             }
             crate::projection::CellRender::Plain(plain) => plain.region.map(|r| {
                 // Bounds come from the `RegionRef` returned by the
-                // chokepoint — no parallel `mirror.data_table_regions`
+                // chokepoint — no parallel `cell_store.data_table_regions`
                 // read from render code. The kind enum is forward-
                 // compatible: today only `DataTable` is plumbed, but
                 // the discriminant carries the future Pivot/TableColumn/
@@ -236,7 +239,7 @@ pub(in crate::storage::engine::viewport) fn get_active_cell(
             p.col(),
             table_fmt.as_ref(),
             stores.grid_indexes.get(sheet_id),
-            mirror.get_sheet(sheet_id),
+            cell_store.get_sheet(sheet_id),
         );
         let format_code = effective.number_format.as_deref().unwrap_or("General");
         if compute_formats::is_date_format(format_code) {
@@ -277,7 +280,7 @@ pub(in crate::storage::engine::viewport) fn get_active_cell(
     let hyperlink_url = pos.and_then(|p| {
         crate::storage::engine::services::objects::get_hyperlink(
             stores,
-            mirror,
+            cell_store,
             sheet_id,
             p.row(),
             p.col(),
@@ -294,7 +297,7 @@ pub(in crate::storage::engine::viewport) fn get_active_cell(
             p.col(),
             table_fmt.as_ref(),
             stores.grid_indexes.get(sheet_id),
-            mirror.get_sheet(sheet_id),
+            cell_store.get_sheet(sheet_id),
         );
         effective.number_format
     });

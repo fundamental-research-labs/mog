@@ -95,7 +95,7 @@ fn test_extract_deps_deduplication() {
 fn test_group_by_level_linear_chain() {
     // A1=5, B1=A1*2, C1=B1+10 => 2 levels: [B1], [C1]
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
 
     let snap = WorkbookSnapshot {
         axis_run_high_water_mark: None,
@@ -150,12 +150,15 @@ fn test_group_by_level_linear_chain() {
         calculation_settings: None,
     };
 
-    core.init_from_snapshot(&mut mirror, snap).unwrap();
+    core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     let b1 = cid(0x11);
     let c1 = cid(0x12);
 
-    let (levels, _cycle_cells) = core.graph.subset_levels(&[b1, c1], &mirror).into_value();
+    let (levels, _cycle_cells) = core
+        .graph
+        .subset_levels(&[b1, c1], &cell_store)
+        .into_value();
     assert_eq!(levels.len(), 2);
     assert_eq!(levels[0], vec![b1]);
     assert_eq!(levels[1], vec![c1]);
@@ -166,7 +169,7 @@ fn test_group_by_level_parallel() {
     // C1=A1+B1, D1=C1+10, E1=C1*2
     // D1 and E1 both depend on C1. Levels: [C1], [D1, E1]
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
 
     let snap = WorkbookSnapshot {
         axis_run_high_water_mark: None,
@@ -239,7 +242,7 @@ fn test_group_by_level_parallel() {
         calculation_settings: None,
     };
 
-    core.init_from_snapshot(&mut mirror, snap).unwrap();
+    core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     let c1 = cid(0x12);
     let d1 = cid(0x13);
@@ -247,7 +250,7 @@ fn test_group_by_level_parallel() {
 
     let (levels, _cycle_cells) = core
         .graph
-        .subset_levels(&[c1, d1, e1], &mirror)
+        .subset_levels(&[c1, d1, e1], &cell_store)
         .into_value();
     assert_eq!(levels.len(), 2);
     assert_eq!(levels[0], vec![c1]);
@@ -259,12 +262,12 @@ fn test_group_by_level_parallel() {
 #[test]
 fn test_group_by_level_single() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, basic_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, basic_snapshot())
         .unwrap();
 
     let c1 = cid(0x12);
-    let (levels, _cycle_cells) = core.graph.subset_levels(&[c1], &mirror).into_value();
+    let (levels, _cycle_cells) = core.graph.subset_levels(&[c1], &cell_store).into_value();
     assert_eq!(levels.len(), 1);
     assert_eq!(levels[0], vec![c1]);
 }
@@ -272,7 +275,7 @@ fn test_group_by_level_single() {
 #[test]
 fn test_group_by_level_empty() {
     let core = ComputeCore::new();
-    let mirror = CellMirror::new();
-    let (levels, _cycle_cells) = core.graph.subset_levels(&[], &mirror).into_value();
+    let cell_store = CellStore::new();
+    let (levels, _cycle_cells) = core.graph.subset_levels(&[], &cell_store).into_value();
     assert!(levels.is_empty());
 }

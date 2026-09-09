@@ -13,20 +13,20 @@ pub(super) fn set_column_schema(
     sheet_id: &SheetId,
     col_index: u32,
     schema: &ColumnSchema,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let result =
         services::formatting::set_column_schema(&mut engine.stores, sheet_id, col_index, schema)?;
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }
 
 pub(super) fn clear_column_schema(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     col_index: u32,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let result =
         services::formatting::clear_column_schema(&mut engine.stores, sheet_id, col_index)?;
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }
 
 pub(super) fn get_all_column_schemas(
@@ -55,9 +55,9 @@ pub(super) fn set_range_schema(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     schema: &RangeSchema,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let result = services::formatting::set_range_schema(&mut engine.stores, sheet_id, schema)?;
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }
 
 pub(super) fn update_range_schema(
@@ -65,24 +65,24 @@ pub(super) fn update_range_schema(
     sheet_id: &SheetId,
     schema_id: &str,
     updates: &RangeSchema,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let result = services::formatting::update_range_schema(
         &mut engine.stores,
         sheet_id,
         schema_id,
         updates,
     )?;
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }
 
 pub(super) fn delete_range_schema(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     schema_id: &str,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let result =
         services::formatting::delete_range_schema(&mut engine.stores, sheet_id, schema_id)?;
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }
 
 pub(super) fn validate_cell_value(
@@ -94,7 +94,7 @@ pub(super) fn validate_cell_value(
 ) -> CellValidationResult {
     services::formatting::validate_cell_value(
         &engine.stores,
-        &engine.mirror,
+        &engine.cell_store,
         sheet_id,
         row,
         col,

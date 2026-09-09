@@ -66,7 +66,7 @@ fn install_minimal_compute(engine: &mut ComputeEngine, snapshot: WorkbookSnapsho
     let mut compute = ComputeCore::new();
     compute.set_id_alloc(engine.stores.grid_id_alloc.clone());
     compute
-        .init_from_snapshot_minimal(&mut engine.mirror, snapshot)
+        .init_from_snapshot_minimal(&mut engine.cell_store, snapshot)
         .expect("minimal init should succeed");
     engine.stores.compute = compute;
 }

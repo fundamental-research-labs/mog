@@ -27,7 +27,7 @@ impl SheetProtection {
     ) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.protect_sheet(&sid, password_hash).map(|(_, r)| r))
+            .call_engine(move |e| e.protect_sheet(&sid, password_hash))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -38,7 +38,7 @@ impl SheetProtection {
     ) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.unprotect_sheet(&sid, password_hash).map(|(_, r)| r))
+            .call_engine(move |e| e.unprotect_sheet(&sid, password_hash))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 

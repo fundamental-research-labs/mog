@@ -8,7 +8,7 @@
 //! IDs via `IdAllocator::new()` (starts at 1). For a sheet with
 //! `rows: N, cols: M`, the allocator produces RowIds 1..N then
 //! ColIds (N+1)..(N+M). The range's `row_ids`/`col_ids` in the
-//! snapshot must match these exact values so the mirror's
+//! snapshot must match these exact values so the cell store's
 //! `index_to_row`/`index_to_col` maps align with the range's
 //! `row_offset_by_id`/`col_offset_by_id`.
 //!
@@ -194,23 +194,43 @@ fn range_sort_reorders_roworder() {
 
     // Before sort: col 1 (range-only) reads [50, 30, 10, 40, 20]
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(0, 1))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(0, 1))
+        ),
         Some(50.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(1, 1))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(1, 1))
+        ),
         Some(30.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(2, 1))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(2, 1))
+        ),
         Some(10.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(3, 1))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(3, 1))
+        ),
         Some(40.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(4, 1))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(4, 1))
+        ),
         Some(20.0)
     );
 
@@ -220,23 +240,43 @@ fn range_sort_reorders_roworder() {
 
     // After sort: col 1 (range-only) should reorder to [10, 20, 30, 40, 50]
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(0, 1))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(0, 1))
+        ),
         Some(10.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(1, 1))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(1, 1))
+        ),
         Some(20.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(2, 1))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(2, 1))
+        ),
         Some(30.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(3, 1))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(3, 1))
+        ),
         Some(40.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(4, 1))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(4, 1))
+        ),
         Some(50.0)
     );
 }
@@ -258,7 +298,7 @@ fn range_sort_uses_range_backed_sort_key_column() {
         assert_eq!(
             as_f64(
                 engine
-                    .mirror()
+                    .cell_store()
                     .get_cell_value_at(&sid, SheetPos::new(row, 1))
             ),
             Some(expected),
@@ -275,7 +315,7 @@ fn range_sort_uses_range_backed_sort_key_column() {
         assert_eq!(
             as_f64(
                 engine
-                    .mirror()
+                    .cell_store()
                     .get_cell_value_at(&sid, SheetPos::new(row, 1))
             ),
             Some(expected),
@@ -331,7 +371,7 @@ fn sparse_sort_on_sheet_with_unrelated_range_uses_per_cell_path() {
         assert_eq!(
             as_f64(
                 engine
-                    .mirror()
+                    .cell_store()
                     .get_cell_value_at(&sid, SheetPos::new(row, 3))
             ),
             Some(expected),
@@ -345,7 +385,7 @@ fn sparse_sort_on_sheet_with_unrelated_range_uses_per_cell_path() {
         assert_eq!(
             as_f64(
                 engine
-                    .mirror()
+                    .cell_store()
                     .get_cell_value_at(&sid, SheetPos::new(row, 1))
             ),
             Some(expected),
@@ -394,7 +434,11 @@ fn range_sort_mixed_sheet() {
 
     // Before: col 1 = [50,30,10,40,20]
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(0, 1))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(0, 1))
+        ),
         Some(50.0)
     );
 
@@ -404,23 +448,43 @@ fn range_sort_mixed_sheet() {
 
     // After sort by col 0: range-backed col 1 → [10, 20, 30, 40, 50]
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(0, 1))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(0, 1))
+        ),
         Some(10.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(1, 1))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(1, 1))
+        ),
         Some(20.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(2, 1))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(2, 1))
+        ),
         Some(30.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(3, 1))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(3, 1))
+        ),
         Some(40.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(4, 1))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(4, 1))
+        ),
         Some(50.0)
     );
 }
@@ -482,14 +546,14 @@ fn range_sort_gridindex_coherence() {
 }
 
 // ===================================================================
-// Test 6: range_sort_remaps_formula_cell_positions_in_mirror
+// Test 6: range_sort_remaps_formula_cell_positions_in_store
 // ===================================================================
 
 /// Range-backed sorts update rowOrder instead of rewriting payload bytes.
-/// Sparse/formula cells still move with their RowIds, so the live CellMirror
+/// Sparse/formula cells still move with their RowIds, so the live CellStore
 /// must remap their numeric positions before formula recalc.
 #[test]
-fn range_sort_remaps_formula_cell_positions_in_mirror() {
+fn range_sort_remaps_formula_cell_positions_in_store() {
     let mut snap = sort_range_snapshot();
 
     let formula_cell_uuid = "f4000000-0000-4000-8000-000000000001";
@@ -509,14 +573,15 @@ fn range_sort_remaps_formula_cell_positions_in_mirror() {
 
     assert_eq!(
         engine
-            .grid_index(&sid)
+            .cell_store()
+            .get_sheet(&sid)
             .unwrap()
             .cell_position(&formula_cell_id),
         Some((0, 2))
     );
     assert_eq!(
         engine
-            .mirror()
+            .cell_store()
             .get_sheet(&sid)
             .and_then(|sheet| sheet.position_for_diagnostics(&formula_cell_id)),
         Some(SheetPos::new(0, 2))
@@ -528,14 +593,15 @@ fn range_sort_remaps_formula_cell_positions_in_mirror() {
 
     assert_eq!(
         engine
-            .grid_index(&sid)
+            .cell_store()
+            .get_sheet(&sid)
             .unwrap()
             .cell_position(&formula_cell_id),
         Some((4, 2))
     );
     assert_eq!(
         engine
-            .mirror()
+            .cell_store()
             .get_sheet(&sid)
             .and_then(|sheet| sheet.position_for_diagnostics(&formula_cell_id)),
         Some(SheetPos::new(4, 2))
@@ -574,14 +640,22 @@ fn range_sort_formula_survives() {
 
     // Verify range values are readable pre-sort.
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(0, 1))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(0, 1))
+        ),
         Some(50.0),
         "Pre-sort B1 (range-backed) should be 50.0"
     );
 
     // Verify formula evaluates pre-sort: SUM(A1:A5) = 5+3+1+4+2 = 15
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(5, 2))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(5, 2))
+        ),
         Some(15.0),
         "Pre-sort SUM(A1:A5) should be 15.0"
     );
@@ -592,7 +666,11 @@ fn range_sort_formula_survives() {
 
     // After sort: the range-backed col 1 should be reordered.
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(0, 1))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(0, 1))
+        ),
         Some(10.0),
         "Post-sort B1 (range-backed) should be 10.0"
     );
@@ -600,7 +678,11 @@ fn range_sort_formula_survives() {
     // The SUM formula is outside the sort range; it should still be at row 5.
     // The values it sums haven't changed (same numbers, just reordered),
     // so the result should still be 15.
-    let formula_val = as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(5, 2)));
+    let formula_val = as_f64(
+        engine
+            .cell_store()
+            .get_cell_value_at(&sid, SheetPos::new(5, 2)),
+    );
     assert!(
         formula_val.is_some(),
         "Post-sort: formula at C6 should produce a numeric result, got {:?}",
@@ -629,7 +711,7 @@ fn xlsx_sort_roundtrip() {
         assert_eq!(
             as_f64(
                 engine
-                    .mirror()
+                    .cell_store()
                     .get_cell_value_at(&sid, SheetPos::new(row, 1))
             ),
             Some(expected),

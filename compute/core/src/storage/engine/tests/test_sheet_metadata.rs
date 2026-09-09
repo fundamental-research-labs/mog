@@ -10,7 +10,7 @@ fn test_set_tab_color_returns_mutation_result_with_sheet_changes() {
     let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
-    let (_patches, result) = engine
+    let result = engine
         .set_tab_color(&sid, Some("#ff0000".to_string()))
         .unwrap();
 
@@ -37,7 +37,7 @@ fn test_set_tab_color_preserves_old_color() {
         .unwrap();
 
     // Change to new color -- old_color should be the previous one
-    let (_patches, result) = engine
+    let result = engine
         .set_tab_color(&sid, Some("#00ff00".to_string()))
         .unwrap();
     assert_eq!(result.sheet_changes.len(), 1);
@@ -58,7 +58,7 @@ fn test_set_tab_color_clear_returns_sheet_changes() {
     engine
         .set_tab_color(&sid, Some("#ff0000".to_string()))
         .unwrap();
-    let (_patches, result) = engine.set_tab_color(&sid, None).unwrap();
+    let result = engine.set_tab_color(&sid, None).unwrap();
 
     assert_eq!(result.sheet_changes.len(), 1);
     let change = &result.sheet_changes[0];
@@ -120,7 +120,7 @@ fn test_set_sheet_hidden_returns_non_empty_sheet_changes() {
     let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
-    let (_patches, result) = engine.set_sheet_hidden(&sid, true).unwrap();
+    let result = engine.set_sheet_hidden(&sid, true).unwrap();
 
     assert!(
         !result.sheet_changes.is_empty(),
@@ -139,7 +139,7 @@ fn test_move_sheet_returns_non_empty_sheet_changes() {
 
     let sid = sheet_id();
     // Move to same position (index 0) -- should still produce a sheet change
-    let (_patches, result) = engine.move_sheet(&sid, 0).unwrap();
+    let result = engine.move_sheet(&sid, 0).unwrap();
 
     assert!(
         !result.sheet_changes.is_empty(),
@@ -157,7 +157,7 @@ fn test_set_frozen_panes_returns_non_empty_sheet_changes() {
     let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
-    let (_patches, result) = engine.set_frozen_panes(&sid, 2, 3).unwrap();
+    let result = engine.set_frozen_panes(&sid, 2, 3).unwrap();
 
     assert!(
         !result.sheet_changes.is_empty(),
@@ -175,7 +175,7 @@ fn test_set_scroll_position_returns_scroll_position_change() {
     let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
-    let (_patches, result) = engine.set_scroll_position(&sid, 10, 5).unwrap();
+    let result = engine.set_scroll_position(&sid, 10, 5).unwrap();
 
     assert_eq!(result.scroll_position_changes.len(), 1);
     let change = &result.scroll_position_changes[0];
@@ -190,7 +190,7 @@ fn test_set_sheet_visibility_returns_non_empty_sheet_changes() {
     let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
-    let (_patches, result) = engine.set_sheet_visibility(&sid, "hidden").unwrap();
+    let result = engine.set_sheet_visibility(&sid, "hidden").unwrap();
 
     assert!(
         !result.sheet_changes.is_empty(),

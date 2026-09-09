@@ -11,10 +11,10 @@ fn make_sheet_id(n: u128) -> SheetId {
 
 fn setup() -> (WorkbookStorage, SheetId, GridIndex) {
     let mut storage = WorkbookStorage::new();
-    let mut mirror = crate::mirror::CellMirror::new();
+    let mut cell_store = crate::cells::CellStore::new();
     let sid = make_sheet_id(1);
     storage
-        .add_sheet(&mut mirror, sid, "Sheet1", 100, 26)
+        .add_sheet(&mut cell_store, sid, "Sheet1", 100, 26)
         .unwrap();
     let id_alloc = Arc::new(cell_types::IdAllocator::new());
     let gi = GridIndex::new(sid, 100, 26, id_alloc);

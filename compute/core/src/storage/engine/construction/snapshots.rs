@@ -2,7 +2,7 @@ use super::*;
 
 pub(in crate::storage::engine) fn build_sheet_snapshot(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     name: &str,
 ) -> SheetSnapshot {
@@ -13,16 +13,16 @@ pub(in crate::storage::engine) fn build_sheet_snapshot(
         .unwrap_or((100, 26));
 
     let mut cells = Vec::new();
-    if let Some(sheet) = mirror.get_sheet(sheet_id) {
+    if let Some(sheet) = cell_store.get_sheet(sheet_id) {
         for (cell_id, entry) in sheet.cells_iter() {
-            if let Some(pos) = mirror.resolve_position(cell_id) {
+            if let Some(pos) = cell_store.resolve_position(cell_id) {
                 let formula = stores.compute.get_formula(cell_id).map(|s| s.to_string());
 
                 // Reconstruct array_ref from the projection registry so that
                 // rebuild_compute_core() preserves dynamic array metadata.
                 // Without this, projections are not pre-registered on the
                 // second full_recalc, causing false #SPILL! errors.
-                let array_ref = mirror.projection_registry.get(cell_id).map(|proj| {
+                let array_ref = cell_store.projection_registry.get(cell_id).map(|proj| {
                     let end_row = proj.origin_row + proj.rows - 1;
                     let end_col = proj.origin_col + proj.cols - 1;
                     let start =
@@ -37,7 +37,7 @@ pub(in crate::storage::engine) fn build_sheet_snapshot(
                     col: pos.col(),
                     value: entry.value.clone(),
                     formula,
-                    identity_formula: entry.formula.as_deref().cloned(),
+                    identity_formula: sheet.formula(cell_id).cloned(),
                     array_ref,
                 });
             }
@@ -60,18 +60,11 @@ pub(in crate::storage::engine) fn build_sheet_snapshot(
             });
         }
     };
-    if let Some(sheet) = mirror.get_sheet(sheet_id) {
-        for (&id, &pos) in &sheet.id_to_pos {
-            include_identity(id, pos.row(), pos.col());
-        }
-    }
-    if let Some(grid) = stores.grid_indexes.get(sheet_id) {
-        for (id, row, col) in grid.cells() {
-            include_identity(id, row, col);
-        }
+    for (id, row, col) in cell_store.cells(sheet_id) {
+        include_identity(id, row, col);
     }
 
-    let ranges = mirror
+    let ranges = cell_store
         .get_sheet(sheet_id)
         .map(|sheet| {
             sheet
@@ -102,16 +95,16 @@ pub(in crate::storage::engine) fn build_sheet_snapshot(
 
 /// Build a complete `WorkbookSnapshot` from the engine's internal state.
 ///
-/// Reads cell data from the `CellMirror` (via `build_sheet_snapshot`),
+/// Reads cell data from the `CellStore` (via `build_sheet_snapshot`),
 /// named ranges from `WorkbookStorage` (native metadata), and
-/// tables/pivot tables from the `CellMirror` metadata, and data table regions
+/// tables/pivot tables from the `CellStore` metadata, and data table regions
 /// from the native metadata.
 ///
 /// This MUST be called before replacing `ComputeCore`, since
 /// `build_sheet_snapshot` reads formula strings from `ComputeCore`.
 pub(in crate::storage::engine) fn build_workbook_snapshot(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
 ) -> WorkbookSnapshot {
     use crate::storage::sheet::properties;
     // 1. Build sheet snapshots
@@ -120,7 +113,7 @@ pub(in crate::storage::engine) fn build_workbook_snapshot(
         .iter()
         .filter_map(|sheet_id| {
             let name = properties::get_sheet_name(&stores.storage, sheet_id)?;
-            Some(build_sheet_snapshot(stores, mirror, sheet_id, &name))
+            Some(build_sheet_snapshot(stores, cell_store, sheet_id, &name))
         })
         .collect();
 
@@ -130,14 +123,14 @@ pub(in crate::storage::engine) fn build_workbook_snapshot(
     let named_ranges_vec = defined_names_to_named_range_defs(defined_names, |identity| {
         stores
             .compute
-            .to_a1_display_qualified(mirror, &nil_sheet, identity)
+            .to_a1_display_qualified(cell_store, &nil_sheet, identity)
     });
 
-    // 3. Tables, pivot tables, data table regions from mirror (before rebuild)
+    // 3. Tables, pivot tables, data table regions from cell_store (before rebuild)
     let canonical_tables =
-        crate::storage::engine::services::export::table_catalog_for_snapshot(stores, mirror);
-    let pivot_tables = mirror.all_pivot_tables().to_vec();
-    let data_table_regions = mirror.all_data_table_regions().to_vec();
+        crate::storage::engine::services::export::table_catalog_for_snapshot(stores, cell_store);
+    let pivot_tables = cell_store.all_pivot_tables().to_vec();
+    let data_table_regions = cell_store.all_data_table_regions().to_vec();
 
     // 4. Iterative calc settings
     let iterative_calc = stores.compute.iterative_calc();

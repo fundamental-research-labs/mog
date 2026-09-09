@@ -1,6 +1,6 @@
 use compute_parser::ReferenceTokenClass;
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::range_manager::pos_to_a1;
 
 use super::edges::{PendingEdge, edge_code, external_mapping};
@@ -17,7 +17,7 @@ use super::types::{
 use super::visitor::collect_ast_edges;
 
 pub(super) fn collect_source_rows(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     source: &SourceFormula,
     options: &FormulaReferenceDiagnosticsOptions,
     snapshot_version: &str,
@@ -26,10 +26,10 @@ pub(super) fn collect_source_rows(
     let formula = normalize_display_formula(&source.formula);
     let tokens = compute_parser::collect_reference_tokens(&formula);
     let parsed =
-        compute_parser::parse_formula(&formula, Some(&DiagnosticResolver { mirror, source }));
+        compute_parser::parse_formula(&formula, Some(&DiagnosticResolver { cell_store, source }));
     match parsed {
         Ok(ast) => {
-            for edge in collect_ast_edges(mirror, source, &tokens, &ast.node) {
+            for edge in collect_ast_edges(cell_store, source, &tokens, &ast.node) {
                 push_edge(rows, source, snapshot_version, edge);
             }
         }

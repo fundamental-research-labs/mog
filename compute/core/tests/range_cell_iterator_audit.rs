@@ -1,6 +1,6 @@
 //! # Cell Iterator Call-Site Audit
 //!
-//! This test exists to document which consumers of SheetMirror cell iteration
+//! This test exists to document which consumers of SheetStore cell iteration
 //! will need updates when Range-backed cells exist. Each entry is a call site
 //! classified as:
 //!   COLUMN_ALIGNED — reads via get_column_slice, automatically Range-aware
@@ -21,24 +21,24 @@
 #[test]
 fn cell_iterator_call_site_audit() {
     // ═══════════════════════════════════════════════════════════════════════
-    //  METHOD DEFINITIONS (mirror/types.rs) — not call sites, but matched
+    //  METHOD DEFINITIONS (cell_store/types.rs) — not call sites, but matched
     //  by the grep pattern. Included for completeness.
     // ═══════════════════════════════════════════════════════════════════════
     //
-    //  1. mirror/types.rs:218 — VERIFIED (method definition)
+    //  1. cell_store/types.rs:218 — VERIFIED (method definition)
     //     `pub fn cell_ids()` — defines the cell_ids() accessor
     //
-    //  2. mirror/types.rs:219 — VERIFIED (method body)
+    //  2. cell_store/types.rs:219 — VERIFIED (method body)
     //     `self.cells.keys()` — implementation of cell_ids()
     //
-    //  3. mirror/types.rs:223 — VERIFIED (method definition)
+    //  3. cell_store/types.rs:223 — VERIFIED (method definition)
     //     `pub fn cells_iter()` — defines the cells_iter() accessor
     //
-    //  4. mirror/types.rs:224 — VERIFIED (method body)
+    //  4. cell_store/types.rs:224 — VERIFIED (method body)
     //     `self.cells.iter()` — implementation of cells_iter()
     //
     // ═══════════════════════════════════════════════════════════════════════
-    //  cells_iter() call sites on SheetMirror
+    //  cells_iter() call sites on SheetStore
     // ═══════════════════════════════════════════════════════════════════════
     //
     //  5. scheduler/edit.rs:906 — SPARSE_ONLY
@@ -92,7 +92,7 @@ fn cell_iterator_call_site_audit() {
     //     cells own formulas.
     //
     // ═══════════════════════════════════════════════════════════════════════
-    //  cell_ids() call sites on SheetMirror
+    //  cell_ids() call sites on SheetStore
     // ═══════════════════════════════════════════════════════════════════════
     //
     // 17. scheduler/mod.rs:397 — FULL_SHEET
@@ -100,46 +100,46 @@ fn cell_iterator_call_site_audit() {
     //     recalc dependents. Must include Range-backed virtual CellIds.
     //
     // ═══════════════════════════════════════════════════════════════════════
-    //  .cells.keys() direct access (within mirror module, pub(super))
+    //  .cells.keys() direct access (within cell_store module, pub(super))
     // ═══════════════════════════════════════════════════════════════════════
     //
-    // 18. mirror/sheet.rs:14 — SPARSE_ONLY
+    // 18. cell_store/sheet.rs:14 — SPARSE_ONLY
     //     remove_sheet: iterates cell_ids to remove cell_to_sheet entries.
     //     Cleanup of identity bookkeeping; Range removal handled separately.
     //
-    // 19. mirror/snapshot.rs:339 — VERIFIED (test-only)
-    //     add_sheet_mirror (#[cfg(test)]): populates cell_to_sheet for a
-    //     pre-built SheetMirror in tests. Test-only, not production code.
+    // 19. cell_store/snapshot.rs:339 — VERIFIED (test-only)
+    //     add_sheet_store (#[cfg(test)]): populates cell_to_sheet for a
+    //     pre-built SheetStore in tests. Test-only, not production code.
     //
     // ═══════════════════════════════════════════════════════════════════════
-    //  Non-SheetMirror matches (different `.cells` struct — snapshot, etc.)
+    //  Non-SheetStore matches (different `.cells` struct — snapshot, etc.)
     //  Included because the grep pattern matches them.
     // ═══════════════════════════════════════════════════════════════════════
     //
-    // 20. import/parse_output_to_snapshot/tests.rs:330 — VERIFIED (not SheetMirror)
+    // 20. import/parse_output_to_snapshot/tests.rs:330 — VERIFIED (not SheetStore)
     //     Test: iterates SheetSnapshot.cells (Vec<CellData>) to find a cell.
     //
-    // 21. import/parse_output_to_snapshot/tests.rs:340 — VERIFIED (not SheetMirror)
+    // 21. import/parse_output_to_snapshot/tests.rs:340 — VERIFIED (not SheetStore)
     //     Test: iterates SheetSnapshot.cells (Vec<CellData>) to find a cell.
     //
-    // 22. scheduler/init.rs:176 — VERIFIED (not SheetMirror)
+    // 22. scheduler/init.rs:176 — VERIFIED (not SheetStore)
     //     Snapshot init: iterates sheet_snap.cells (Vec<CellData>) to extract
-    //     formulas for pre-parse. Operates on import snapshot, not mirror.
+    //     formulas for pre-parse. Operates on import snapshot, not cell_store.
     //
-    // 23. scheduler/init.rs:192 — VERIFIED (not SheetMirror)
+    // 23. scheduler/init.rs:192 — VERIFIED (not SheetStore)
     //     Snapshot init: counts formula cells in snapshot for capacity hint.
     //     Operates on SheetSnapshot.cells (Vec<CellData>).
     //
-    // 24. storage/engine/tests/test_queries.rs:65 — VERIFIED (not SheetMirror)
+    // 24. storage/engine/tests/test_queries.rs:65 — VERIFIED (not SheetStore)
     //     Test: iterates range result cells to find cell by column.
     //
-    // 25. storage/engine/tests/test_queries.rs:68 — VERIFIED (not SheetMirror)
+    // 25. storage/engine/tests/test_queries.rs:68 — VERIFIED (not SheetStore)
     //     Test: iterates range result cells to find cell by column.
     //
-    // 26. storage/engine/tests/test_xlsx_export.rs:111 — VERIFIED (not SheetMirror)
+    // 26. storage/engine/tests/test_xlsx_export.rs:111 — VERIFIED (not SheetStore)
     //     Test: maps SheetSnapshot.cells to a lookup by (row, col).
     //
-    // 27. storage/engine/tests/test_xlsx_export.rs:184 — VERIFIED (not SheetMirror)
+    // 27. storage/engine/tests/test_xlsx_export.rs:184 — VERIFIED (not SheetStore)
     //     Test: maps SheetSnapshot.cells to a lookup by (row, col).
     //
     // ═══════════════════════════════════════════════════════════════════════
@@ -153,55 +153,55 @@ fn cell_iterator_call_site_audit() {
     //     `fn test_sort_preserves_cell_ids()` — name contains `cell_ids(`,
     //     not a call to the method.
     //
-    // 30. mirror/types.rs:405 — VERIFIED (method body)
+    // 30. cell_store/types.rs:405 — VERIFIED (method body)
     //     `iter_anchored_cells()` intentionally exposes only anchored
     //     per-cell entries. Range-backed values are exposed separately via
     //     `iter_ranges()`.
     //
-    // 31. import/parse_output_to_snapshot/tests.rs:646 — VERIFIED (not SheetMirror)
+    // 31. import/parse_output_to_snapshot/tests.rs:646 — VERIFIED (not SheetStore)
     //     Test: iterates SheetSnapshot.cells to collect anchored rows.
     //
     // 32. storage/properties.rs:452 — VERIFIED (function name)
     //     `iter_formatted_property_cell_ids()` name contains `cell_ids(`,
-    //     not a call to `SheetMirror::cell_ids`.
+    //     not a call to `SheetStore::cell_ids`.
     //
-    // 33. storage/engine/mod.rs:1094 — VERIFIED (not SheetMirror)
+    // 33. storage/engine/mod.rs:1094 — VERIFIED (not SheetStore)
     //     Observer change collection iterates `DocumentChanges.cells`.
     //
-    // 34. storage/engine/tests/test_deferred_xlsx_import.rs:239 — VERIFIED (not SheetMirror)
+    // 34. storage/engine/tests/test_deferred_xlsx_import.rs:239 — VERIFIED (not SheetStore)
     //     Test: iterates query result cells.
     //
-    // 35. storage/engine/tests/test_deferred_xlsx_import.rs:248 — VERIFIED (not SheetMirror)
+    // 35. storage/engine/tests/test_deferred_xlsx_import.rs:248 — VERIFIED (not SheetStore)
     //     Test: iterates query result cells.
     //
-    // 36. storage/engine/tests/test_deferred_xlsx_import.rs:257 — VERIFIED (not SheetMirror)
+    // 36. storage/engine/tests/test_deferred_xlsx_import.rs:257 — VERIFIED (not SheetStore)
     //     Test: iterates query result cells.
     //
-    // 37. storage/engine/construction.rs:1406 — VERIFIED (not SheetMirror)
+    // 37. storage/engine/construction.rs:1406 — VERIFIED (not SheetStore)
     //     Deferred import snapshot bookkeeping over SheetSnapshot.cells.
     //
-    // 38. storage/engine/construction.rs:1606 — VERIFIED (not SheetMirror)
+    // 38. storage/engine/construction.rs:1606 — VERIFIED (not SheetStore)
     //     Deferred hydration snapshot bookkeeping over SheetSnapshot.cells.
     //
-    // 39. storage/engine/construction.rs:2148 — VERIFIED (not SheetMirror)
+    // 39. storage/engine/construction.rs:2148 — VERIFIED (not SheetStore)
     //     Snapshot rebuild bookkeeping over SheetSnapshot.cells.
     //
-    // 40. import/parse_output_to_snapshot/classifier.rs:106 — VERIFIED (not SheetMirror)
+    // 40. import/parse_output_to_snapshot/classifier.rs:106 — VERIFIED (not SheetStore)
     //     Parse-output classifier iterates SheetSnapshot.cells.
     //
-    // 41. import/parse_output_to_snapshot/classifier.rs:876 — VERIFIED (not SheetMirror)
+    // 41. import/parse_output_to_snapshot/classifier.rs:876 — VERIFIED (not SheetStore)
     //     Classifier test iterates SheetSnapshot.cells.
     //
     // 42. storage/engine/services/queries.rs:234 — VERIFIED (helper false positive)
-    //     Calls `iter_formatted_property_cell_ids()`; not SheetMirror iteration.
+    //     Calls `iter_formatted_property_cell_ids()`; not SheetStore iteration.
     //
     // 43. storage/engine/services/queries.rs:1156 — VERIFIED (helper false positive)
-    //     Calls `iter_formatted_property_cell_ids()`; not SheetMirror iteration.
+    //     Calls `iter_formatted_property_cell_ids()`; not SheetStore iteration.
     //
     // 44. storage/engine/services/queries.rs:1215 — VERIFIED (helper false positive)
-    //     Calls `iter_formatted_property_cell_ids()`; not SheetMirror iteration.
+    //     Calls `iter_formatted_property_cell_ids()`; not SheetStore iteration.
 
-    // Count of call sites by category (SheetMirror iteration sites only, #5-#19):
+    // Count of call sites by category (SheetStore iteration sites only, #5-#19):
     //
     // FULL_SHEET:       8  (#6, #7, #9, #10, #11, #12, #13, #14, #17)
     //                      — but #10 (find_cells_by_formula) may stay SPARSE_ONLY
@@ -209,14 +209,14 @@ fn cell_iterator_call_site_audit() {
     // SPARSE_ONLY:      5  (#5, #8, #15, #16, #18)
     // VERIFIED:         2  (#19 test-only, plus method defs #1-#4)
     //
-    // Non-SheetMirror / false positives (grep noise): 24 (#20-#29, #31-#44)
+    // Non-SheetStore / false positives (grep noise): 24 (#20-#29, #31-#44)
     //
     // ─── Summary ───
     // COLUMN_ALIGNED:   0
     // FULL_SHEET:       8
     // SPARSE_ONLY:      5
     // IDENTITY_LOOKUP:  0
-    // VERIFIED:        31  (5 method defs + 2 SheetMirror + 19 non-mirror + 5 false positives)
+    // VERIFIED:        31  (5 method defs + 2 SheetStore + 19 non-cell_store + 5 false positives)
     // TOTAL:           44  (grep matches)
 }
 

@@ -68,7 +68,7 @@ fn test_undo_reverts_per_cell_sort_positions() {
     let sorted: Vec<CellValue> = (0..5)
         .map(|row| {
             engine
-                .mirror()
+                .cell_store()
                 .get_cell_value_at(&sid, SheetPos::new(row, 0))
                 .cloned()
                 .unwrap()
@@ -83,12 +83,12 @@ fn test_undo_reverts_per_cell_sort_positions() {
     );
 
     assert!(engine.can_undo());
-    let undo_result = engine.undo().unwrap().1;
+    let undo_result = engine.undo().unwrap();
 
     let restored: Vec<CellValue> = (0..5)
         .map(|row| {
             engine
-                .mirror()
+                .cell_store()
                 .get_cell_value_at(&sid, SheetPos::new(row, 0))
                 .cloned()
                 .unwrap()

@@ -4,7 +4,7 @@ mod stress_common;
 use stress_common::*;
 
 use cell_types::{CellId, SheetId};
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{CellData, CellEdit, RecalcResult, SheetSnapshot, WorkbookSnapshot};
 use formula_types::{NamedRangeDef, Scope};
@@ -18,7 +18,7 @@ use value_types::{CellError, CellValue, FiniteF64};
 #[test]
 fn test_edit_feeder_shifts_fixed_point() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_iterative_snapshot(
         vec![(
             "Sheet1",
@@ -43,17 +43,17 @@ fn test_edit_feeder_shifts_fixed_point() {
         200,
         0.001,
     );
-    let _result = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let _result = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
-    assert_mirror_number(&mirror, 0, 0, 0, 10.0); // A1=10
-    assert_mirror_number_tol(&mirror, 0, 0, 1, 20.0, 0.01); // B1=20
-    assert_mirror_number_tol(&mirror, 0, 0, 2, 10.0, 0.01); // C1=10
+    assert_store_number(&cell_store, 0, 0, 0, 10.0); // A1=10
+    assert_store_number_tol(&cell_store, 0, 0, 1, 20.0, 0.01); // B1=20
+    assert_store_number_tol(&cell_store, 0, 0, 2, 10.0, 0.01); // C1=10
 
     // Now set A1=20 (feeder edit, no cycle involvement)
-    let _r = set(&mut core, &mut mirror, 0, 0, 0, "20");
-    assert_mirror_number(&mirror, 0, 0, 0, 20.0); // A1=20
-    assert_mirror_number_tol(&mirror, 0, 0, 1, 40.0, 0.01); // B1=40
-    assert_mirror_number_tol(&mirror, 0, 0, 2, 20.0, 0.01); // C1=20
+    let _r = set(&mut core, &mut cell_store, 0, 0, 0, "20");
+    assert_store_number(&cell_store, 0, 0, 0, 20.0); // A1=20
+    assert_store_number_tol(&cell_store, 0, 0, 1, 40.0, 0.01); // B1=40
+    assert_store_number_tol(&cell_store, 0, 0, 2, 20.0, 0.01); // C1=20
 }
 
 // ---------------------------------------------------------------------------
@@ -67,7 +67,7 @@ fn test_edit_feeder_shifts_fixed_point() {
 #[test]
 fn test_change_contraction_factor() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_iterative_snapshot(
         vec![(
             "Sheet1",
@@ -91,10 +91,10 @@ fn test_change_contraction_factor() {
         200,
         0.001,
     );
-    let _r = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let _r = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
-    assert_mirror_number_tol(&mirror, 0, 0, 0, 10.0, 0.1); // A1≈10
-    assert_mirror_number_tol(&mirror, 0, 0, 1, 10.0, 0.1); // B1≈10
+    assert_store_number_tol(&cell_store, 0, 0, 0, 10.0, 0.1); // A1≈10
+    assert_store_number_tol(&cell_store, 0, 0, 1, 10.0, 0.1); // B1≈10
 
     // Change A1's formula to weaker contraction
     let s = sid(0);
@@ -107,11 +107,11 @@ fn test_change_contraction_factor() {
             text: "=B1*0.1+1".to_string(),
         },
     )];
-    let _r2 = core.set_cells(&mut mirror, &edits, true).unwrap();
+    let _r2 = core.set_cells(&mut cell_store, &edits, true).unwrap();
 
     // New fixed point: x = 1.1/0.91 ≈ 1.2088, y = 0.9*1.2088+1 ≈ 2.0879
-    assert_mirror_number_tol(&mirror, 0, 0, 0, 1.2088, 0.1);
-    assert_mirror_number_tol(&mirror, 0, 0, 1, 2.0879, 0.1);
+    assert_store_number_tol(&cell_store, 0, 0, 0, 1.2088, 0.1);
+    assert_store_number_tol(&cell_store, 0, 0, 1, 2.0879, 0.1);
 }
 
 // ---------------------------------------------------------------------------
@@ -122,7 +122,7 @@ fn test_change_contraction_factor() {
 #[test]
 fn test_make_convergent_divergent() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_iterative_snapshot(
         vec![(
             "Sheet1",
@@ -146,9 +146,9 @@ fn test_make_convergent_divergent() {
         100,
         0.001,
     );
-    let _r = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
-    assert_mirror_number_tol(&mirror, 0, 0, 0, 2.0, 0.01);
-    assert_mirror_number_tol(&mirror, 0, 0, 1, 2.0, 0.01);
+    let _r = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
+    assert_store_number_tol(&cell_store, 0, 0, 0, 2.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 1, 2.0, 0.01);
 
     // Change A1 to divergent multiplier
     let s = sid(0);
@@ -161,12 +161,12 @@ fn test_make_convergent_divergent() {
             text: "=B1*2+1".to_string(),
         },
     )];
-    let r2 = core.set_cells(&mut mirror, &edits, true).unwrap();
+    let r2 = core.set_cells(&mut cell_store, &edits, true).unwrap();
 
     // After edit with skip_cycle_check=true, the iterative solver runs.
     // Both cells should still be Numbers (divergent cycle capped at max_iterations).
-    let a1 = read_mirror_number(&mirror, 0, 0, 0);
-    let b1 = read_mirror_number(&mirror, 0, 0, 1);
+    let a1 = read_store_number(&cell_store, 0, 0, 0);
+    let b1 = read_store_number(&cell_store, 0, 0, 1);
     // A1="=B1*2+1" with large multiplier → divergent. Values should be large.
     // Just verify they're finite numbers and the formula relationship approximately holds
     // within divergent slack.
@@ -187,7 +187,7 @@ fn test_make_convergent_divergent() {
 #[test]
 fn test_break_cycle_with_plain_value() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![(
         "Sheet1",
         100,
@@ -197,13 +197,13 @@ fn test_break_cycle_with_plain_value() {
             (0, 1, CellValue::Number(FiniteF64::must(0.0)), Some("=A1+1")),
         ],
     )]);
-    let r = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let r = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
     assert!(r.metrics.has_circular_refs, "Init should detect cycle");
 
     // Break cycle: A1="5"
-    let _r2 = set(&mut core, &mut mirror, 0, 0, 0, "5");
-    assert_mirror_number(&mirror, 0, 0, 0, 5.0);
-    assert_mirror_number(&mirror, 0, 0, 1, 6.0); // B1="=A1+1"=5+1=6
+    let _r2 = set(&mut core, &mut cell_store, 0, 0, 0, "5");
+    assert_store_number(&cell_store, 0, 0, 0, 5.0);
+    assert_store_number(&cell_store, 0, 0, 1, 6.0); // B1="=A1+1"=5+1=6
 }
 
 // ---------------------------------------------------------------------------
@@ -213,7 +213,7 @@ fn test_break_cycle_with_plain_value() {
 #[test]
 fn test_break_then_reform_cycle() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![(
         "Sheet1",
         100,
@@ -223,17 +223,17 @@ fn test_break_then_reform_cycle() {
             (0, 1, CellValue::Number(FiniteF64::must(0.0)), Some("=A1+1")),
         ],
     )]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // Break cycle
-    let _r = set(&mut core, &mut mirror, 0, 0, 0, "5");
-    assert_mirror_number(&mirror, 0, 0, 0, 5.0);
-    assert_mirror_number(&mirror, 0, 0, 1, 6.0);
+    let _r = set(&mut core, &mut cell_store, 0, 0, 0, "5");
+    assert_store_number(&cell_store, 0, 0, 0, 5.0);
+    assert_store_number(&cell_store, 0, 0, 1, 6.0);
 
     // Reform cycle: A1="=B1+1" → #REF! (incremental detection)
-    let _r2 = set(&mut core, &mut mirror, 0, 0, 0, "=B1+1");
+    let _r2 = set(&mut core, &mut cell_store, 0, 0, 0, "=B1+1");
     assert!(
-        is_ref_error(&mirror, 0, 0, 0),
+        is_ref_error(&cell_store, 0, 0, 0),
         "A1 should be #REF! after reforming cycle"
     );
 }
@@ -246,7 +246,7 @@ fn test_break_then_reform_cycle() {
 #[test]
 fn test_break_three_cell_cycle_link() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![(
         "Sheet1",
         100,
@@ -257,17 +257,17 @@ fn test_break_three_cell_cycle_link() {
             (0, 2, CellValue::Number(FiniteF64::must(0.0)), Some("=B1+1")),
         ],
     )]);
-    let r = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let r = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
     assert!(
         r.metrics.has_circular_refs,
         "Init should detect 3-cell cycle"
     );
 
     // Break cycle by setting B1 to a plain value
-    let _r2 = set(&mut core, &mut mirror, 0, 0, 1, "99");
-    assert_mirror_number(&mirror, 0, 0, 1, 99.0); // B1=99
-    assert_mirror_number(&mirror, 0, 0, 2, 100.0); // C1="=B1+1"=100
-    assert_mirror_number(&mirror, 0, 0, 0, 101.0); // A1="=C1+1"=101
+    let _r2 = set(&mut core, &mut cell_store, 0, 0, 1, "99");
+    assert_store_number(&cell_store, 0, 0, 1, 99.0); // B1=99
+    assert_store_number(&cell_store, 0, 0, 2, 100.0); // C1="=B1+1"=100
+    assert_store_number(&cell_store, 0, 0, 0, 101.0); // A1="=C1+1"=101
 }
 
 // ---------------------------------------------------------------------------
@@ -278,7 +278,7 @@ fn test_break_three_cell_cycle_link() {
 #[test]
 fn test_clear_cell_breaks_cycle() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![(
         "Sheet1",
         100,
@@ -288,12 +288,12 @@ fn test_clear_cell_breaks_cycle() {
             (0, 1, CellValue::Number(FiniteF64::must(0.0)), Some("=A1+1")),
         ],
     )]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // Clear A1
-    let _r = core.clear_cells(&mut mirror, &[cid(0, 0, 0)]).unwrap();
-    assert_mirror_null(&mirror, 0, 0, 0); // A1 cleared
-    assert_mirror_number(&mirror, 0, 0, 1, 1.0); // B1="=A1+1"=0+1=1
+    let _r = core.clear_cells(&mut cell_store, &[cid(0, 0, 0)]).unwrap();
+    assert_store_null(&cell_store, 0, 0, 0); // A1 cleared
+    assert_store_number(&cell_store, 0, 0, 1, 1.0); // B1="=A1+1"=0+1=1
 }
 
 // ---------------------------------------------------------------------------
@@ -303,7 +303,7 @@ fn test_clear_cell_breaks_cycle() {
 #[test]
 fn test_clear_and_reset_cycle() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![(
         "Sheet1",
         100,
@@ -313,17 +313,17 @@ fn test_clear_and_reset_cycle() {
             (0, 1, CellValue::Number(FiniteF64::must(0.0)), Some("=A1+1")),
         ],
     )]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // Clear A1 first
-    let _r = core.clear_cells(&mut mirror, &[cid(0, 0, 0)]).unwrap();
-    assert_mirror_null(&mirror, 0, 0, 0);
-    assert_mirror_number(&mirror, 0, 0, 1, 1.0);
+    let _r = core.clear_cells(&mut cell_store, &[cid(0, 0, 0)]).unwrap();
+    assert_store_null(&cell_store, 0, 0, 0);
+    assert_store_number(&cell_store, 0, 0, 1, 1.0);
 
     // Re-set A1 with formula that creates cycle with B1
-    let _r2 = set(&mut core, &mut mirror, 0, 0, 0, "=B1*0.5");
+    let _r2 = set(&mut core, &mut cell_store, 0, 0, 0, "=B1*0.5");
     assert!(
-        is_ref_error(&mirror, 0, 0, 0),
+        is_ref_error(&cell_store, 0, 0, 0),
         "A1 should be #REF! after re-creating cycle"
     );
 }
@@ -338,31 +338,31 @@ fn test_clear_and_reset_cycle() {
 #[test]
 fn test_parse_error_preserves_dependent_edges() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![("Sheet1", 100, 26, vec![])]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // Step 1: B1=10
-    let _r = set(&mut core, &mut mirror, 0, 0, 1, "10");
-    assert_mirror_number(&mirror, 0, 0, 1, 10.0);
+    let _r = set(&mut core, &mut cell_store, 0, 0, 1, "10");
+    assert_store_number(&cell_store, 0, 0, 1, 10.0);
 
     // A1="=B1+1" → A1=11
-    let _r = set(&mut core, &mut mirror, 0, 0, 0, "=B1+1");
-    assert_mirror_number(&mirror, 0, 0, 0, 11.0);
+    let _r = set(&mut core, &mut cell_store, 0, 0, 0, "=B1+1");
+    assert_store_number(&cell_store, 0, 0, 0, 11.0);
 
     // Step 2: C1="=A1*2" → C1=22
-    let _r = set(&mut core, &mut mirror, 0, 0, 2, "=A1*2");
-    assert_mirror_number(&mirror, 0, 0, 2, 22.0);
+    let _r = set(&mut core, &mut cell_store, 0, 0, 2, "=A1*2");
+    assert_store_number(&cell_store, 0, 0, 2, 22.0);
 
     // Step 3: A1="=@@@" → parse error
-    let _r = set(&mut core, &mut mirror, 0, 0, 0, "=@@@");
+    let _r = set(&mut core, &mut cell_store, 0, 0, 0, "=@@@");
     // A1 should have some error value now
-    assert_mirror_is_any_error(&mirror, 0, 0, 0);
+    assert_store_is_any_error(&cell_store, 0, 0, 0);
 
     // Step 4: A1="=B1+1" → A1=11 again. C1 MUST update to 22.
-    let _r = set(&mut core, &mut mirror, 0, 0, 0, "=B1+1");
-    assert_mirror_number(&mirror, 0, 0, 0, 11.0);
-    assert_mirror_number(&mirror, 0, 0, 2, 22.0); // C1 must propagate
+    let _r = set(&mut core, &mut cell_store, 0, 0, 0, "=B1+1");
+    assert_store_number(&cell_store, 0, 0, 0, 11.0);
+    assert_store_number(&cell_store, 0, 0, 2, 22.0); // C1 must propagate
 }
 
 // ---------------------------------------------------------------------------
@@ -372,18 +372,18 @@ fn test_parse_error_preserves_dependent_edges() {
 #[test]
 fn test_rapid_sequential_edits() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![("Sheet1", 100, 26, vec![])]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // Set B1="=A1*2" first
-    let _r = set(&mut core, &mut mirror, 0, 0, 1, "=A1*2");
-    assert_mirror_number(&mirror, 0, 0, 1, 0.0); // A1 empty=0, B1=0
+    let _r = set(&mut core, &mut cell_store, 0, 0, 1, "=A1*2");
+    assert_store_number(&cell_store, 0, 0, 1, 0.0); // A1 empty=0, B1=0
 
     for i in 1u32..=10 {
-        let _r = set(&mut core, &mut mirror, 0, 0, 0, &i.to_string());
-        assert_mirror_number(&mirror, 0, 0, 0, i as f64);
-        assert_mirror_number(&mirror, 0, 0, 1, (i * 2) as f64);
+        let _r = set(&mut core, &mut cell_store, 0, 0, 0, &i.to_string());
+        assert_store_number(&cell_store, 0, 0, 0, i as f64);
+        assert_store_number(&cell_store, 0, 0, 1, (i * 2) as f64);
     }
 }
 
@@ -396,7 +396,7 @@ fn test_rapid_sequential_edits() {
 #[test]
 fn test_external_cell_in_divergent_cycle() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![(
         "Sheet1",
         100,
@@ -412,21 +412,21 @@ fn test_external_cell_in_divergent_cycle() {
             (0, 2, CellValue::Number(FiniteF64::must(5.0)), None),
         ],
     )]);
-    let r = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let r = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
     assert!(r.metrics.has_circular_refs, "Should detect cycle");
-    assert_mirror_number(&mirror, 0, 0, 2, 5.0); // C1=5
+    assert_store_number(&cell_store, 0, 0, 2, 5.0); // C1=5
 
     // Imported non-iterative circular formulas preserve their cached values on load.
-    assert_mirror_number(&mirror, 0, 0, 0, 0.0);
-    assert_mirror_number(&mirror, 0, 0, 1, 0.0);
+    assert_store_number(&cell_store, 0, 0, 0, 0.0);
+    assert_store_number(&cell_store, 0, 0, 1, 0.0);
 
     // Edit external feeder C1=100, cycle re-evaluated
-    let _r2 = set(&mut core, &mut mirror, 0, 0, 2, "100");
-    assert_mirror_number(&mirror, 0, 0, 2, 100.0);
+    let _r2 = set(&mut core, &mut cell_store, 0, 0, 2, "100");
+    assert_store_number(&cell_store, 0, 0, 2, 100.0);
 
     // Still circular after changing the feeder because iterative calc is disabled.
-    assert_mirror_error(&mirror, 0, 0, 0, CellError::Circ);
-    assert_mirror_error(&mirror, 0, 0, 1, CellError::Circ);
+    assert_store_error(&cell_store, 0, 0, 0, CellError::Circ);
+    assert_store_error(&cell_store, 0, 0, 1, CellError::Circ);
 }
 
 // ---------------------------------------------------------------------------
@@ -441,7 +441,7 @@ fn test_external_cell_in_divergent_cycle() {
 #[test]
 fn test_swap_cycle_formulas() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_iterative_snapshot(
         vec![(
             "Sheet1",
@@ -465,11 +465,11 @@ fn test_swap_cycle_formulas() {
         200,
         0.001,
     );
-    let _r = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let _r = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // FP: A1≈2.3529, B1≈2.7059
-    assert_mirror_number_tol(&mirror, 0, 0, 0, 2.3529, 0.01);
-    assert_mirror_number_tol(&mirror, 0, 0, 1, 2.7059, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 0, 2.3529, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 1, 2.7059, 0.01);
 
     // Swap formulas
     let s = sid(0);
@@ -493,11 +493,11 @@ fn test_swap_cycle_formulas() {
             },
         ),
     ];
-    let _r2 = core.set_cells(&mut mirror, &edits, true).unwrap();
+    let _r2 = core.set_cells(&mut cell_store, &edits, true).unwrap();
 
     // New FP: A1≈2.7059, B1≈2.3529
-    assert_mirror_number_tol(&mirror, 0, 0, 0, 2.7059, 0.01);
-    assert_mirror_number_tol(&mirror, 0, 0, 1, 2.3529, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 0, 2.7059, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 1, 2.3529, 0.01);
 }
 
 // ---------------------------------------------------------------------------
@@ -507,7 +507,7 @@ fn test_swap_cycle_formulas() {
 #[test]
 fn test_add_dependent_to_cycle() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_iterative_snapshot(
         vec![(
             "Sheet1",
@@ -531,13 +531,13 @@ fn test_add_dependent_to_cycle() {
         100,
         0.001,
     );
-    let _r = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
-    assert_mirror_number_tol(&mirror, 0, 0, 0, 2.0, 0.01); // A1=2
-    assert_mirror_number_tol(&mirror, 0, 0, 1, 2.0, 0.01); // B1=2
+    let _r = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
+    assert_store_number_tol(&cell_store, 0, 0, 0, 2.0, 0.01); // A1=2
+    assert_store_number_tol(&cell_store, 0, 0, 1, 2.0, 0.01); // B1=2
 
     // Add dependent D1="=A1*2" (D1 is row=0, col=3)
-    let _r2 = set(&mut core, &mut mirror, 0, 0, 3, "=A1*2");
-    assert_mirror_number_tol(&mirror, 0, 0, 3, 4.0, 0.02); // D1=A1*2=2*2=4
+    let _r2 = set(&mut core, &mut cell_store, 0, 0, 3, "=A1*2");
+    assert_store_number_tol(&cell_store, 0, 0, 3, 4.0, 0.02); // D1=A1*2=2*2=4
 }
 
 // ---------------------------------------------------------------------------
@@ -548,7 +548,7 @@ fn test_add_dependent_to_cycle() {
 #[test]
 fn test_remove_dependent_from_cycle() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_iterative_snapshot(
         vec![(
             "Sheet1",
@@ -572,15 +572,15 @@ fn test_remove_dependent_from_cycle() {
         100,
         0.001,
     );
-    let _r = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let _r = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // Add D1="=A1*2"
-    let _r2 = set(&mut core, &mut mirror, 0, 0, 3, "=A1*2");
-    assert_mirror_number_tol(&mirror, 0, 0, 3, 4.0, 0.02);
+    let _r2 = set(&mut core, &mut cell_store, 0, 0, 3, "=A1*2");
+    assert_store_number_tol(&cell_store, 0, 0, 3, 4.0, 0.02);
 
     // Clear D1
-    let _r3 = core.clear_cells(&mut mirror, &[cid(0, 0, 3)]).unwrap();
-    assert_mirror_null(&mirror, 0, 0, 3);
+    let _r3 = core.clear_cells(&mut cell_store, &[cid(0, 0, 3)]).unwrap();
+    assert_store_null(&cell_store, 0, 0, 3);
 
     // Modify A1 within cycle via set_cells(skip_cycle_check=true)
     let s = sid(0);
@@ -593,13 +593,13 @@ fn test_remove_dependent_from_cycle() {
             text: "=B1*0.5+2".to_string(),
         },
     )];
-    let _r4 = core.set_cells(&mut mirror, &edits, true).unwrap();
+    let _r4 = core.set_cells(&mut cell_store, &edits, true).unwrap();
 
     // New FP: A1=0.5*B1+2, B1=0.5*A1+1 → A1=0.5(0.5A1+1)+2=0.25A1+2.5 → 0.75A1=2.5 → A1≈3.333
     // B1=0.5*3.333+1≈2.667
-    assert_mirror_number_tol(&mirror, 0, 0, 0, 3.333, 0.02);
-    assert_mirror_number_tol(&mirror, 0, 0, 1, 2.667, 0.02);
+    assert_store_number_tol(&cell_store, 0, 0, 0, 3.333, 0.02);
+    assert_store_number_tol(&cell_store, 0, 0, 1, 2.667, 0.02);
 
     // D1 should still be Null (was cleared, no formula)
-    assert_mirror_null(&mirror, 0, 0, 3);
+    assert_store_null(&cell_store, 0, 0, 3);
 }

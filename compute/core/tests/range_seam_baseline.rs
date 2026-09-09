@@ -15,8 +15,8 @@ use support::fixtures::{
 };
 
 use cell_types::{CellId, SheetId, SheetPos};
-use compute_core::mirror::CellMirror;
-use compute_core::mirror::dense::DenseColumnCache;
+use compute_core::cells::CellStore;
+use compute_core::cells::dense::DenseColumnCache;
 use compute_core::scheduler::ComputeCore;
 use snapshot_types::CellData;
 use value_types::CellValue;
@@ -69,9 +69,9 @@ fn assert_cell_number(
 #[test]
 fn get_column_slice_returns_col_data() {
     let snapshot = numeric_column_snapshot(100);
-    let mirror = CellMirror::from_snapshot(snapshot).expect("from_snapshot");
+    let cell_store = CellStore::from_snapshot(snapshot).expect("from_snapshot");
     let sid = sheet_id();
-    let sheet = mirror.get_sheet(&sid).expect("sheet must exist");
+    let sheet = cell_store.get_sheet(&sid).expect("sheet must exist");
 
     let col_slice = sheet.get_column_view(0).expect("col 0 must have data");
 
@@ -99,9 +99,9 @@ fn get_column_slice_returns_col_data() {
 #[test]
 fn get_column_slice_returns_none_for_empty() {
     let snapshot = numeric_column_snapshot(100);
-    let mirror = CellMirror::from_snapshot(snapshot).expect("from_snapshot");
+    let cell_store = CellStore::from_snapshot(snapshot).expect("from_snapshot");
     let sid = sheet_id();
-    let sheet = mirror.get_sheet(&sid).expect("sheet must exist");
+    let sheet = cell_store.get_sheet(&sid).expect("sheet must exist");
 
     // Column 5 has no data in the snapshot.
     let col_slice = sheet.get_column_view(5);
@@ -118,11 +118,11 @@ fn get_column_slice_returns_none_for_empty() {
 #[test]
 fn resolve_cell_id_returns_none_for_missing_pos() {
     let snapshot = numeric_column_snapshot(10);
-    let mirror = CellMirror::from_snapshot(snapshot).expect("from_snapshot");
+    let cell_store = CellStore::from_snapshot(snapshot).expect("from_snapshot");
     let sid = sheet_id();
 
     // Row 99999, col 99 — far outside any populated cell.
-    let result = mirror.resolve_cell_id(&sid, SheetPos::new(99999, 99));
+    let result = cell_store.resolve_cell_id(&sid, SheetPos::new(99999, 99));
     assert!(result.is_none(), "expected None for missing pos");
 }
 
@@ -133,11 +133,11 @@ fn resolve_cell_id_returns_none_for_missing_pos() {
 #[test]
 fn resolve_cell_id_returns_some_for_present_pos() {
     let snapshot = numeric_column_snapshot(10);
-    let mirror = CellMirror::from_snapshot(snapshot).expect("from_snapshot");
+    let cell_store = CellStore::from_snapshot(snapshot).expect("from_snapshot");
     let sid = sheet_id();
 
     // Row 0, col 0 has data.
-    let result = mirror.resolve_cell_id(&sid, SheetPos::new(0, 0));
+    let result = cell_store.resolve_cell_id(&sid, SheetPos::new(0, 0));
     assert!(result.is_some(), "expected Some for present pos (0,0)");
 
     // Verify the CellId matches what we expect from the fixture builder.
@@ -164,10 +164,10 @@ fn materialize_range_tier1_via_sum() {
     cells.push(formula_cell(0, 1, "SUM(A1:A100)"));
     let snapshot = one_sheet_snapshot(cells);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     // SUM(1..100) = 5050
@@ -195,10 +195,10 @@ fn materialize_range_tier2_via_sumproduct() {
     cells.push(formula_cell(0, 2, "SUMPRODUCT(A1:A10,B1:B10)"));
     let snapshot = one_sheet_snapshot(cells);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     // SUMPRODUCT = 1*10 + 2*9 + 3*8 + 4*7 + 5*6 + 6*5 + 7*4 + 8*3 + 9*2 + 10*1 = 220
@@ -213,11 +213,11 @@ fn materialize_range_tier2_via_sumproduct() {
 #[test]
 fn col_version_zero_for_untracked() {
     let snapshot = numeric_column_snapshot(10);
-    let mirror = CellMirror::from_snapshot(snapshot).expect("from_snapshot");
+    let cell_store = CellStore::from_snapshot(snapshot).expect("from_snapshot");
     let sid = sheet_id();
 
     // Column 99 has no data and no writes — version should be 0.
-    let v = mirror.col_version(&sid, 99);
+    let v = cell_store.col_version(&sid, 99);
     assert_eq!(v, 0, "expected version 0 for untracked col 99");
 }
 
@@ -230,22 +230,22 @@ fn col_version_monotonic_on_edits() {
     let cells = vec![value_cell(0, 0, 1.0), value_cell(1, 0, 2.0)];
     let snapshot = one_sheet_snapshot(cells);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let _init = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     let sid = sheet_id();
     let cell_id = CellId::from_uuid_str(&cell_uuid(0, 0)).expect("valid uuid");
 
-    let v0 = mirror.col_version(&sid, 0);
+    let v0 = cell_store.col_version(&sid, 0);
 
     // Edit cell A1 (row=0, col=0): "10"
     let _r1 = core
-        .set_cell(&mut mirror, &sid, cell_id, 0, 0, "10")
+        .set_cell(&mut cell_store, &sid, cell_id, 0, 0, "10")
         .expect("set_cell");
-    let v1 = mirror.col_version(&sid, 0);
+    let v1 = cell_store.col_version(&sid, 0);
     assert!(
         v1 > v0,
         "version must increase after first edit: {v0} -> {v1}"
@@ -253,9 +253,9 @@ fn col_version_monotonic_on_edits() {
 
     // Edit again: "20"
     let _r2 = core
-        .set_cell(&mut mirror, &sid, cell_id, 0, 0, "20")
+        .set_cell(&mut cell_store, &sid, cell_id, 0, 0, "20")
         .expect("set_cell");
-    let v2 = mirror.col_version(&sid, 0);
+    let v2 = cell_store.col_version(&sid, 0);
     assert!(
         v2 > v1,
         "version must increase after second edit: {v1} -> {v2}"
@@ -269,9 +269,9 @@ fn col_version_monotonic_on_edits() {
 #[test]
 fn dense_cache_materialize_returns_correct_data() {
     let snapshot = numeric_column_snapshot(50);
-    let mirror = CellMirror::from_snapshot(snapshot).expect("from_snapshot");
+    let cell_store = CellStore::from_snapshot(snapshot).expect("from_snapshot");
     let sid = sheet_id();
-    let sheet = mirror.get_sheet(&sid).expect("sheet exists");
+    let sheet = cell_store.get_sheet(&sid).expect("sheet exists");
 
     let mut cache = DenseColumnCache::new();
     let dense_col = cache.materialize(&sid, 0, sheet);
@@ -309,10 +309,10 @@ fn dep_extract_expands_small_range() {
     cells.push(formula_cell(0, 1, "SUM(A1:A10)"));
     let snapshot = one_sheet_snapshot(cells);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     // SUM(1..10) = 55
@@ -323,7 +323,7 @@ fn dep_extract_expands_small_range() {
     let sid = sheet_id();
     let a5_cid = CellId::from_uuid_str(&cell_uuid(4, 0)).expect("valid uuid");
     let result2 = core
-        .set_cell(&mut mirror, &sid, a5_cid, 4, 0, "105")
+        .set_cell(&mut cell_store, &sid, a5_cid, 4, 0, "105")
         .expect("set_cell");
 
     // New SUM = 55 - 5 + 105 = 155
@@ -344,10 +344,10 @@ fn dep_extract_keeps_large_range() {
     cells.push(formula_cell(0, 1, "SUM(A1:A1000)"));
     let snapshot = one_sheet_snapshot(cells);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     // SUM(1..1000) = 500500
@@ -358,7 +358,7 @@ fn dep_extract_keeps_large_range() {
     let sid = sheet_id();
     let a500_cid = CellId::from_uuid_str(&cell_uuid(499, 0)).expect("valid uuid");
     let result2 = core
-        .set_cell(&mut mirror, &sid, a500_cid, 499, 0, "1500")
+        .set_cell(&mut cell_store, &sid, a500_cid, 499, 0, "1500")
         .expect("set_cell");
 
     // New SUM = 500500 - 500 + 1500 = 501500
@@ -379,10 +379,10 @@ fn dep_extract_selective_never_expands() {
     cells.push(formula_cell(0, 1, "INDEX(A1:A100,50)"));
     let snapshot = one_sheet_snapshot(cells);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     // INDEX(A1:A100,50) returns the 50th element = 50.0
@@ -393,7 +393,7 @@ fn dep_extract_selective_never_expands() {
     let sid = sheet_id();
     let a50_cid = CellId::from_uuid_str(&cell_uuid(49, 0)).expect("valid uuid");
     let result2 = core
-        .set_cell(&mut mirror, &sid, a50_cid, 49, 0, "999")
+        .set_cell(&mut cell_store, &sid, a50_cid, 49, 0, "999")
         .expect("set_cell");
 
     // INDEX should now return 999.0
@@ -416,17 +416,17 @@ fn dense_cache_invalidated_after_edit() {
     ];
     let snapshot = one_sheet_snapshot(cells);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let _init = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     let sid = sheet_id();
 
     // First materialize — should see 10.0, 20.0, 30.0.
     {
-        let sheet = mirror.get_sheet(&sid).expect("sheet exists");
+        let sheet = cell_store.get_sheet(&sid).expect("sheet exists");
         let mut cache = DenseColumnCache::new();
         let dense_col = cache.materialize(&sid, 0, sheet);
         let values = dense_col.values();
@@ -450,12 +450,12 @@ fn dense_cache_invalidated_after_edit() {
     // Edit cell A1 (row=0, col=0) to 999.
     let cell_id = CellId::from_uuid_str(&cell_uuid(0, 0)).expect("valid uuid");
     let _edit_result = core
-        .set_cell(&mut mirror, &sid, cell_id, 0, 0, "999")
+        .set_cell(&mut cell_store, &sid, cell_id, 0, 0, "999")
         .expect("set_cell");
 
     // Re-materialize on a fresh cache — should see updated value.
     {
-        let sheet = mirror.get_sheet(&sid).expect("sheet exists after edit");
+        let sheet = cell_store.get_sheet(&sid).expect("sheet exists after edit");
         let mut cache = DenseColumnCache::new();
         let dense_col = cache.materialize(&sid, 0, sheet);
         let values = dense_col.values();
@@ -500,10 +500,10 @@ fn materialize_range_tier3_sparse_fallback() {
     ];
     let snapshot = one_sheet_snapshot(cells);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     let sum_uuid = cell_uuid(0, 1);
@@ -524,7 +524,7 @@ fn materialize_range_tier3_sparse_fallback() {
     ];
     let snapshot2 = one_sheet_snapshot(cells2);
 
-    let mut mirror2 = CellMirror::new();
+    let mut mirror2 = CellStore::new();
     let mut core2 = ComputeCore::new();
     let result2 = core2
         .init_from_snapshot(&mut mirror2, snapshot2)

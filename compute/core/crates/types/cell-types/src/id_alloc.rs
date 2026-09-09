@@ -223,6 +223,17 @@ impl IdAllocator {
         }
     }
 
+    /// Retain allocation history when owners adopt a shared allocator.
+    /// This includes identities that have since been deleted.
+    pub fn reserve_from(&self, previous: &Self) {
+        if self.high_bits == previous.high_bits {
+            self.next
+                .fetch_max(previous.high_water_mark(), Ordering::Relaxed);
+        }
+        self.next_axis_run
+            .fetch_max(previous.axis_run_high_water_mark(), Ordering::Relaxed);
+    }
+
     /// Allocate a compact axis run independently of arbitrary cell UUIDs.
     /// Panics if the 48-bit run domain is exhausted.
     pub fn next_axis_run(&self, len: u32) -> crate::AxisIdentityRun {

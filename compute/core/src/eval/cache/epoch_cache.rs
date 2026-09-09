@@ -6,7 +6,7 @@
 //!
 //! ## Old-value snapshots
 //!
-//! Before recalc writes new results to the mirror, `snapshot_old_value` captures
+//! Before recalc writes new results to the cell store, `snapshot_old_value` captures
 //! the pre-recalc value for each dirty cell. These old values enable incremental
 //! incremental cache maintenance: instead of a full rebuild, caches can apply
 //! O(delta) updates by comparing old vs new values.
@@ -19,7 +19,7 @@
 //!   goes through thread-local in `subexpr_cache.rs` for zero-refactor ergonomics;
 //!   `EpochCache::new()` clears it, and `stats()` reports hit/miss counts.
 //! - **sheet_names**: Sheet name normalization cache. Actual access still goes
-//!   through thread-local in `mirror/mod.rs`; `EpochCache::new()` clears it.
+//!   through thread-local in `cell_store/mod.rs`; `EpochCache::new()` clears it.
 //!
 //! ## Future consolidation
 //!
@@ -31,7 +31,7 @@
 //!
 //! When the evaluator is refactored to pass `&EpochCache` through the evaluation
 //! call stack (touches evaluator.rs, eval_primitives.rs, and all call sites),
-//! the thread-local backing stores in `subexpr_cache.rs` and `mirror/mod.rs`
+//! the thread-local backing stores in `subexpr_cache.rs` and `cell_store/mod.rs`
 //! can be replaced with direct field access on this struct.
 
 use cell_types::CellId;
@@ -72,7 +72,7 @@ pub(crate) struct SubexprEntry {
 /// - **sheet_names**: Sheet name normalization (NFC + lowercase) cache.
 ///
 /// These fields represent the canonical ownership of epoch-scoped cache data.
-/// The thread-local accessors in `subexpr_cache.rs` and `mirror/mod.rs` remain
+/// The thread-local accessors in `subexpr_cache.rs` and `cell_store/mod.rs` remain
 /// the actual access path during evaluation; `EpochCache` clears them at epoch
 /// boundaries and collects stats at epoch end.
 pub struct EpochCache {
@@ -96,11 +96,11 @@ pub struct EpochCache {
     /// Tier 2: sheet name normalization cache (raw name -> NFC+lowercase).
     ///
     /// Canonical data container. During evaluation, the thread-local in
-    /// `mirror/mod.rs` is the actual access path. This field is populated
+    /// `cell_store/mod.rs` is the actual access path. This field is populated
     /// at epoch end via `capture_stats()` for diagnostics.
     ///
     /// TODO(full-migration): When the evaluator threads `&EpochCache` through
-    /// the call stack, the mirror thread-local will be replaced by direct
+    /// the call stack, the cell store thread-local will be replaced by direct
     /// access to this field.
     sheet_names: RefCell<FxHashMap<String, String>>,
 }
@@ -115,7 +115,7 @@ impl EpochCache {
         // during evaluation. This replaces the scattered clear() calls
         // that previously lived at recalc entry points.
         crate::eval::cache::subexpr_cache::clear();
-        crate::mirror::clear_caches();
+        crate::cells::clear_caches();
 
         Self {
             old_values: RefCell::new(FxHashMap::default()),
@@ -134,7 +134,7 @@ impl EpochCache {
 
         // Also clear the thread-local backing stores
         crate::eval::cache::subexpr_cache::clear();
-        crate::mirror::clear_caches();
+        crate::cells::clear_caches();
     }
 
     /// Snapshot the old (pre-recalc) value for a cell before writing the new result.
@@ -156,7 +156,7 @@ impl EpochCache {
     /// information about cache effectiveness.
     pub fn stats(&self) -> EpochCacheStats {
         let subexpr_entries = crate::eval::cache::subexpr_cache::entry_count();
-        let sheet_name_entries = crate::mirror::sheet_name_cache_entry_count();
+        let sheet_name_entries = crate::cells::sheet_name_cache_entry_count();
 
         EpochCacheStats {
             subexpr_entries,

@@ -19,16 +19,16 @@ fn test_control_multi_column_sum_no_spill() {
             (0, 6, CellValue::Null, None),         // G1 placeholder
         ],
     )]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
-    core.init_from_snapshot(&mut mirror, snapshot)
+    core.init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     let sid = SheetId::from_uuid_str(&sheet_uuid(0)).expect("sid");
     let g1 = CellId::from_uuid_str(&cell_uuid(0, 0, 6)).expect("g1");
 
-    core.set_cell(&mut mirror, &sid, g1, 0, 6, "=SUM(B1:F1)")
+    core.set_cell(&mut cell_store, &sid, g1, 0, 6, "=SUM(B1:F1)")
         .expect("set G1");
-    assert_mirror_number(&mirror, &g1, 150.0, "G1 SUM(B1:F1) no spill");
+    assert_store_number(&cell_store, &g1, 150.0, "G1 SUM(B1:F1) no spill");
 }
 
 /// Control: multi-column SUM set interactively AFTER a SEQUENCE (vertical) spill.
@@ -50,21 +50,21 @@ fn test_control_sequence_vertical_then_multi_column_sum() {
             (0, 6, CellValue::Null, None),         // G1 placeholder
         ],
     )]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
-    core.init_from_snapshot(&mut mirror, snapshot)
+    core.init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     let sid = SheetId::from_uuid_str(&sheet_uuid(0)).expect("sid");
     let a1 = CellId::from_uuid_str(&cell_uuid(0, 0, 0)).expect("a1");
     let g1 = CellId::from_uuid_str(&cell_uuid(0, 0, 6)).expect("g1");
 
     // A1 = SEQUENCE(5) → vertical spill A1:A5 (single column, doesn't touch B:D)
-    core.set_cell(&mut mirror, &sid, a1, 0, 0, "=SEQUENCE(5)")
+    core.set_cell(&mut cell_store, &sid, a1, 0, 0, "=SEQUENCE(5)")
         .expect("set A1");
     // G1 = SUM(B1:D1) — multi-column range, doesn't overlap the SEQUENCE spill
-    core.set_cell(&mut mirror, &sid, g1, 0, 6, "=SUM(B1:D1)")
+    core.set_cell(&mut cell_store, &sid, g1, 0, 6, "=SUM(B1:D1)")
         .expect("set G1");
-    assert_mirror_number(&mirror, &g1, 60.0, "G1 SUM(B1:D1) after SEQUENCE");
+    assert_store_number(&cell_store, &g1, 60.0, "G1 SUM(B1:D1) after SEQUENCE");
 }
 
 /// Control: TRANSPOSE first, then multi-column SUM that does NOT overlap the spill.
@@ -90,19 +90,19 @@ fn test_control_transpose_then_non_overlapping_multi_col_sum() {
             (0, 8, CellValue::Null, None),          // I1 placeholder for SUM
         ],
     )]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
-    core.init_from_snapshot(&mut mirror, snapshot)
+    core.init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     let sid = SheetId::from_uuid_str(&sheet_uuid(0)).expect("sid");
     let b1 = CellId::from_uuid_str(&cell_uuid(0, 0, 1)).expect("b1");
     let i1 = CellId::from_uuid_str(&cell_uuid(0, 0, 8)).expect("i1");
 
     // B1 = TRANSPOSE(A1:A3) → B1=10, C1=20, D1=30
-    core.set_cell(&mut mirror, &sid, b1, 0, 1, "=TRANSPOSE(A1:A3)")
+    core.set_cell(&mut cell_store, &sid, b1, 0, 1, "=TRANSPOSE(A1:A3)")
         .expect("set B1");
     // I1 = SUM(F1:H1) — completely separate from the spill range
-    core.set_cell(&mut mirror, &sid, i1, 0, 8, "=SUM(F1:H1)")
+    core.set_cell(&mut cell_store, &sid, i1, 0, 8, "=SUM(F1:H1)")
         .expect("set I1");
-    assert_mirror_number(&mirror, &i1, 600.0, "I1 SUM(F1:H1) non-overlapping");
+    assert_store_number(&cell_store, &i1, 600.0, "I1 SUM(F1:H1) non-overlapping");
 }

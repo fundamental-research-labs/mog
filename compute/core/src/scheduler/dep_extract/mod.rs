@@ -48,8 +48,8 @@
 
 use super::*;
 
+use crate::cells::CellStore;
 use crate::formula_text::FormulaTextDepTarget;
-use crate::mirror::CellMirror;
 use cell_types::SheetId;
 use compute_parser::{ASTNode, AstVisitor};
 #[cfg(test)]
@@ -69,7 +69,7 @@ use refs::cell_ref_to_dep_targets;
 use visitor::DepExtractor;
 
 /// Walk the AST tree, collecting all cell and range references as `DepTarget` entries.
-/// The `mirror` parameter enables position lookup for Resolved CellRefs in ranges.
+/// The `cell_store` parameter enables position lookup for Resolved CellRefs in ranges.
 #[cfg(test)]
 pub(super) fn extract_dependencies(ast: &ASTNode, current_sheet: &SheetId) -> Vec<DepTarget> {
     let mut deps = Vec::new();
@@ -82,20 +82,20 @@ pub(super) fn extract_dependencies(ast: &ASTNode, current_sheet: &SheetId) -> Ve
 
 #[cfg(test)]
 pub(super) fn collect_deps(node: &ASTNode, current_sheet: &SheetId, deps: &mut Vec<DepTarget>) {
-    collect_deps_with_mirror(node, current_sheet, &CellMirror::new(), deps);
+    collect_deps_with_store(node, current_sheet, &CellStore::new(), deps);
 }
 
 /// Thin wrapper: delegates to the production `collect_deps_and_volatility`,
 /// discarding the volatility and current_row parameters.
 /// This avoids duplicating ~220 lines of AST-walking logic.
 #[cfg(test)]
-pub(super) fn collect_deps_with_mirror(
+pub(super) fn collect_deps_with_store(
     node: &ASTNode,
     current_sheet: &SheetId,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     deps: &mut Vec<DepTarget>,
 ) {
-    collect_deps_and_volatility(node, current_sheet, mirror, deps, &mut false, None);
+    collect_deps_and_volatility(node, current_sheet, cell_store, deps, &mut false, None);
 }
 
 /// Extract dependencies and check volatility in a single AST walk.
@@ -105,11 +105,11 @@ pub(super) fn collect_deps_with_mirror(
 pub(super) fn extract_deps_and_volatility(
     ast: &ASTNode,
     current_sheet: &SheetId,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     ordered_sheets: &[SheetId],
     current_row: Option<u32>,
 ) -> ExtractedFormulaDeps {
-    let mut extractor = DepExtractor::new(current_sheet, mirror, ordered_sheets, current_row);
+    let mut extractor = DepExtractor::new(current_sheet, cell_store, ordered_sheets, current_row);
     extractor.visit(ast);
     let mut deps = extractor.deps;
     // Deduplicate — pre-size to avoid inner FxHashSet rehash storms.
@@ -138,12 +138,12 @@ pub(super) struct ExtractedFormulaDeps {
 pub(super) fn collect_deps_and_volatility(
     node: &ASTNode,
     current_sheet: &SheetId,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     deps: &mut Vec<DepTarget>,
     is_volatile: &mut bool,
     current_row: Option<u32>,
 ) {
-    let mut extractor = DepExtractor::new(current_sheet, mirror, &[], current_row);
+    let mut extractor = DepExtractor::new(current_sheet, cell_store, &[], current_row);
     extractor.visit(node);
     deps.extend(extractor.deps);
     *is_volatile |= extractor.is_volatile;

@@ -36,7 +36,7 @@ impl SheetPrint {
     pub fn add_horizontal_page_break(&self, row: u32) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.add_horizontal_page_break(&sid, row).map(|(_, r)| r))
+            .call_engine(move |e| e.add_horizontal_page_break(&sid, row))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -47,7 +47,7 @@ impl SheetPrint {
     ) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.remove_horizontal_page_break(&sid, row).map(|(_, r)| r))
+            .call_engine(move |e| e.remove_horizontal_page_break(&sid, row))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -55,7 +55,7 @@ impl SheetPrint {
     pub fn add_vertical_page_break(&self, col: u32) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.add_vertical_page_break(&sid, col).map(|(_, r)| r))
+            .call_engine(move |e| e.add_vertical_page_break(&sid, col))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -63,7 +63,7 @@ impl SheetPrint {
     pub fn remove_vertical_page_break(&self, col: u32) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.remove_vertical_page_break(&sid, col).map(|(_, r)| r))
+            .call_engine(move |e| e.remove_vertical_page_break(&sid, col))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -71,7 +71,7 @@ impl SheetPrint {
     pub fn clear_all_page_breaks(&self) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.clear_all_page_breaks(&sid).map(|(_, r)| r))
+            .call_engine(move |e| e.clear_all_page_breaks(&sid))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -92,7 +92,7 @@ impl SheetPrint {
     ) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.set_print_area(&sid, area).map(|(_, r)| r))
+            .call_engine(move |e| e.set_print_area(&sid, area))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -111,7 +111,7 @@ impl SheetPrint {
     pub fn set_print_titles(&self, titles: PrintTitles) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.set_print_titles(&sid, titles).map(|(_, r)| r))
+            .call_engine(move |e| e.set_print_titles(&sid, titles))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -126,7 +126,7 @@ impl SheetPrint {
     ) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.set_print_settings(&sid, settings).map(|(_, r)| r))
+            .call_engine(move |e| e.set_print_settings(&sid, settings))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -149,7 +149,7 @@ impl SheetPrint {
     ) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.set_hf_image(&sid, info).map(|(_, r)| r))
+            .call_engine(move |e| e.set_hf_image(&sid, info))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -160,7 +160,7 @@ impl SheetPrint {
     ) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.remove_hf_image(&sid, position).map(|(_, r)| r))
+            .call_engine(move |e| e.remove_hf_image(&sid, position))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 }

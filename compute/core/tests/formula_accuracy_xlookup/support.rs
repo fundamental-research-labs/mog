@@ -1,5 +1,5 @@
 use cell_types::SheetId;
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
 use formula_types::TableDef;
@@ -144,9 +144,9 @@ pub fn query_plus_investments_snapshot(
 }
 
 pub fn recalc_snapshot(snapshot: WorkbookSnapshot) -> compute_core::RecalcResult {
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
-    core.init_from_snapshot(&mut mirror, snapshot)
+    core.init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed")
 }
 

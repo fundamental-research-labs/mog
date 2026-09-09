@@ -123,7 +123,11 @@ fn sort_options_single(col: u32, order: SortOrder) -> BridgeSortOptions {
 fn xlsx_sort_range_ascending_shifts_formula_refs() {
     let bytes = xlsx_bytes_for(mixed_10x4_fixture());
     let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
-    let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
+    let sid = *engine
+        .cell_store()
+        .sheet_ids()
+        .next()
+        .expect("sheet present");
 
     // Sort rows 0..=9 by column A ascending. Col-A values go 10..1; ascending
     // should reverse them, so the formula originally at D1 (=A1+C1) should now
@@ -159,7 +163,11 @@ fn xlsx_sort_range_ascending_shifts_formula_refs() {
 fn xlsx_sort_range_descending_shifts_formula_refs() {
     let bytes = xlsx_bytes_for(mixed_10x4_fixture());
     let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
-    let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
+    let sid = *engine
+        .cell_store()
+        .sheet_ids()
+        .next()
+        .expect("sheet present");
 
     // Col A values start already descending (10..1) — descending sort is a no-op
     // on col A values, but the engine must still re-emit correct refs on export.

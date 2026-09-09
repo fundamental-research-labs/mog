@@ -1,7 +1,6 @@
 use super::*;
 use crate::snapshot::{Scenario, ScenarioCreateInput, ScenarioUpdateInput};
 use crate::storage::WorkbookStorage;
-use std::sync::Arc;
 use value_types::{CellValue, FiniteF64};
 
 /// Helper: create a fresh WorkbookStorage for testing.

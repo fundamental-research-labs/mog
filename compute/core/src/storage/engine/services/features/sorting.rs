@@ -4,6 +4,7 @@ use cell_types::SheetId;
 
 pub(in crate::storage::engine) fn check_sort_range_merges(
     stores: &EngineStores,
+    cell_store: &crate::cells::CellStore,
     sheet_id: SheetId,
     start_row: u32,
     start_col: u32,
@@ -11,7 +12,7 @@ pub(in crate::storage::engine) fn check_sort_range_merges(
     end_col: u32,
 ) -> serde_json::Value {
     let range = sorting::CellRange::new(start_row, start_col, end_row, end_col);
-    let (has_merges, message) = match stores.grid_indexes.get(&sheet_id) {
+    let (has_merges, message) = match cell_store.get_sheet(&sheet_id) {
         Some(grid) => sorting::check_sort_range_merges(&stores.storage, sheet_id, grid, &range),
         None => (false, None),
     };

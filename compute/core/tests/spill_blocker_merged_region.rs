@@ -4,8 +4,8 @@
 //! Bug (currently exposed by this test):
 //!   `ProjectionRegistry::check_conflict` (compute/core/src/projection.rs:267-313)
 //!   only recognizes two blocker classes — foreign-projection overlap and existing
-//!   non-null cell content via `mirror.resolve_cell_id`. It never queries
-//!   `mirror.get_merge_regions(sheet_id)`. As a result, a formula like
+//!   non-null cell content via `cell_store.resolve_cell_id`. It never queries
+//!   `cell_store.get_merge_regions(sheet_id)`. As a result, a formula like
 //!   `=SEQUENCE(5)` placed at A1 will happily project values into A1:A5 even when
 //!   A3:B3 is already merged. Excel's behavior, and the behavior every other
 //!   spreadsheet engine ships, is to refuse the spill: the anchor displays
@@ -21,7 +21,7 @@
 //! Expected before the fix: FAILS at the A1 == #SPILL! assertion.
 
 use cell_types::{CellId, SheetId};
-use compute_core::mirror::{CellMirror, MergeRegion};
+use compute_core::cells::{CellStore, MergeRegion};
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellError, CellValue};
@@ -73,8 +73,8 @@ fn empty_snapshot() -> WorkbookSnapshot {
 
 /// Build a single-sheet workbook with a 2-cell horizontal merge at A3:B3
 /// represented as plain content cells. The merge metadata itself is injected
-/// post-init via `mirror.add_merge_region`, since the public `WorkbookSnapshot`
-/// type doesn't yet carry merges (see `mirror/snapshot.rs::hydrate_domain_maps`).
+/// post-init via `cell_store.add_merge_region`, since the public `WorkbookSnapshot`
+/// type doesn't yet carry merges (see `cell_store/snapshot.rs::hydrate_domain_maps`).
 fn snapshot_with_merge_anchor() -> WorkbookSnapshot {
     // We deliberately leave the merge anchor at A3 *empty* (no value, no
     // formula) so the existing "non-null cell content" blocker class in
@@ -92,7 +92,7 @@ fn snapshot_with_merge_anchor() -> WorkbookSnapshot {
 /// Sequence:
 ///  1. Bootstrap empty Sheet1 (100x26).
 ///  2. Pre-merge A3:B3.
-///  3. Sanity-check the merge is registered in the mirror.
+///  3. Sanity-check the merge is registered in the cell store.
 ///  4. Set A1 = `=SEQUENCE(5)`.
 ///  5. Assert A1 evaluates to `#SPILL!` (currently it evaluates to `1`).
 ///  6. Assert A2 was NOT populated (must be Null, not 2). This is the
@@ -106,15 +106,15 @@ fn snapshot_with_merge_anchor() -> WorkbookSnapshot {
 #[test]
 fn sequence_spill_blocked_by_merged_region() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
 
     // Step 1: bootstrap.
-    core.init_from_snapshot(&mut mirror, snapshot_with_merge_anchor())
+    core.init_from_snapshot(&mut cell_store, snapshot_with_merge_anchor())
         .expect("init_from_snapshot failed");
     let sheet_id = sid(1);
 
     // Step 2: pre-merge A3:B3 (zero-based row=2, cols=0..=1).
-    mirror.add_merge_region(
+    cell_store.add_merge_region(
         &sheet_id,
         MergeRegion {
             start_row: 2,
@@ -125,7 +125,7 @@ fn sequence_spill_blocked_by_merged_region() {
     );
 
     // Step 3: sanity-check.
-    let merges = mirror.get_merge_regions(&sheet_id);
+    let merges = cell_store.get_merge_regions(&sheet_id);
     assert_eq!(merges.len(), 1, "merge region should be registered");
     assert_eq!(merges[0].start_row, 2);
     assert_eq!(merges[0].start_col, 0);
@@ -134,27 +134,27 @@ fn sequence_spill_blocked_by_merged_region() {
 
     // Step 4: set A1 = SEQUENCE(5). Natural spill target is A1:A5.
     let a1_id = cid(0xa1);
-    core.set_cell(&mut mirror, &sheet_id, a1_id, 0, 0, "=SEQUENCE(5)")
+    core.set_cell(&mut cell_store, &sheet_id, a1_id, 0, 0, "=SEQUENCE(5)")
         .expect("set_cell A1 = SEQUENCE(5) failed");
 
     // Step 5: A1 must be #SPILL! because A3 sits inside the merge.
     let a1_val = core
-        .get_cell_value(&mirror, &a1_id)
-        .expect("A1 should be present in mirror after set_cell");
+        .get_cell_value(&cell_store, &a1_id)
+        .expect("A1 should be present in cell_store after set_cell");
     assert_eq!(
         *a1_val,
         CellValue::Error(CellError::Spill, None),
         "A1 should evaluate to #SPILL! when SEQUENCE(5) target overlaps merged A3:B3, \
-         got {:?}. Bug: ProjectionRegistry::check_conflict ignores mirror.merge_regions.",
+         got {:?}. Bug: ProjectionRegistry::check_conflict ignores cell_store.merge_regions.",
         a1_val
     );
 
     // Step 6: A2 must be Null — the spill must not have been written at all.
     // We read column 0's dense slice; index 1 corresponds to A2.
-    let sheet_mirror = mirror
+    let sheet_store = cell_store
         .get_sheet(&sheet_id)
-        .expect("Sheet1 should exist in mirror");
-    if let Some(col_a) = sheet_mirror.get_column_view(0) {
+        .expect("Sheet1 should exist in cell_store");
+    if let Some(col_a) = sheet_store.get_column_view(0) {
         // It's fine for the column to be too short to address row 1 — that
         // also means "A2 was not written". Treat that as Null.
         let a2_val = col_a.get(1).cloned().unwrap_or(CellValue::Null);
@@ -173,26 +173,26 @@ fn sequence_spill_blocked_by_merged_region() {
     // formula must now succeed end-to-end. Proves the test isn't broken
     // structurally; the merge is genuinely the lone blocker.
     // ---------------------------------------------------------------------
-    mirror.remove_merge_region(&sheet_id, 2, 0, 2, 1);
+    cell_store.remove_merge_region(&sheet_id, 2, 0, 2, 1);
     assert!(
-        mirror.get_merge_regions(&sheet_id).is_empty(),
+        cell_store.get_merge_regions(&sheet_id).is_empty(),
         "merge should be removed before baseline re-spill"
     );
 
     // Re-set the formula (same anchor cell id) to retrigger spill evaluation
     // now that the blocker is gone.
-    core.set_cell(&mut mirror, &sheet_id, a1_id, 0, 0, "=SEQUENCE(5)")
+    core.set_cell(&mut cell_store, &sheet_id, a1_id, 0, 0, "=SEQUENCE(5)")
         .expect("set_cell A1 = SEQUENCE(5) (post-unmerge) failed");
 
-    let a1_val = core.get_cell_value(&mirror, &a1_id).unwrap();
+    let a1_val = core.get_cell_value(&cell_store, &a1_id).unwrap();
     assert_eq!(
         *a1_val,
         CellValue::number(1.0),
         "after unmerge, A1 should be 1 (top-left of SEQUENCE(5))"
     );
 
-    let sheet_mirror = mirror.get_sheet(&sheet_id).unwrap();
-    let col_a = sheet_mirror
+    let sheet_store = cell_store.get_sheet(&sheet_id).unwrap();
+    let col_a = sheet_store
         .get_column_view(0)
         .expect("col A should exist after successful spill");
     for row in 0..5u32 {

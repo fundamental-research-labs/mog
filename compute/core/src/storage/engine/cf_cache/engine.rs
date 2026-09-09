@@ -16,7 +16,7 @@ impl ComputeEngine {
     ) -> rustc_hash::FxHashMap<cell_types::SheetId, Vec<(u32, u32)>> {
         super::super::services::cf_cache::refresh_cf_caches_after_recalc(
             &mut self.stores,
-            &self.mirror,
+            &self.cell_store,
             &self.settings.theme_palette,
             recalc,
         )
@@ -26,7 +26,7 @@ impl ComputeEngine {
     pub(crate) fn refresh_cf_cache(&mut self, sheet_id: &cell_types::SheetId) {
         super::super::services::cf_cache::refresh_cf_cache(
             &mut self.stores,
-            &self.mirror,
+            &self.cell_store,
             &self.settings.theme_palette,
             sheet_id,
         );

@@ -1,50 +1,7 @@
-use cell_types::SheetId;
 use compute_cf::types::{CFUnderlineType, CellCFResult};
-use compute_wire::mutation::CfColorOverrides;
 use domain_types::CellFormat;
 
-use super::super::render::color_to_u32;
-use crate::storage::engine::stores::{CFCacheEntry, EngineStores};
-
-pub(in crate::storage::engine::viewport) fn build_cf_color_overrides(
-    stores: &EngineStores,
-    sheet_id: &SheetId,
-) -> Option<CfColorOverrides> {
-    let cache_entry = stores.cf_cache.get(sheet_id)?;
-    if cache_entry.results.is_empty() {
-        return None;
-    }
-    let mut overrides = CfColorOverrides::with_capacity(cache_entry.results.len());
-    for (&(row, col), cf_result) in &cache_entry.results {
-        let mut bg: u32 = 0;
-        let mut fc: u32 = 0;
-
-        // Background color: color_scale takes priority over style.background_color
-        if let Some(cs) = &cf_result.color_scale {
-            bg = color_to_u32(&cs.color);
-        } else if let Some(style) = &cf_result.style
-            && let Some(ref bg_color) = style.background_color
-        {
-            bg = color_to_u32(bg_color);
-        }
-
-        // Font color
-        if let Some(style) = &cf_result.style
-            && let Some(ref font_color) = style.font_color
-        {
-            fc = color_to_u32(font_color);
-        }
-
-        if bg != 0 || fc != 0 {
-            overrides.insert(row, col, bg, fc);
-        }
-    }
-    if overrides.is_empty() {
-        None
-    } else {
-        Some(overrides)
-    }
-}
+use crate::storage::engine::stores::CFCacheEntry;
 
 // ---------------------------------------------------------------------------
 // CF → CellFormat merge (6th cascade layer)

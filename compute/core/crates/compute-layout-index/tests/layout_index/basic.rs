@@ -1,9 +1,9 @@
-use compute_layout_index::{DEFAULT_COL_WIDTH, DEFAULT_ROW_HEIGHT, LayoutIndex};
+use compute_layout_index::{DEFAULT_COL_WIDTH, DEFAULT_ROW_HEIGHT, PixelLayout};
 use domain_types::units::Pixels;
 
 #[test]
 fn layout_index_default() {
-    let li = LayoutIndex::with_defaults(100, 50, DEFAULT_ROW_HEIGHT, DEFAULT_COL_WIDTH);
+    let li = PixelLayout::with_defaults(100, 50, DEFAULT_ROW_HEIGHT, DEFAULT_COL_WIDTH);
     assert_eq!(li.get_row_position(0), Pixels(0.0));
     assert_eq!(li.get_row_position(1), DEFAULT_ROW_HEIGHT);
     assert_eq!(li.get_col_position(0), Pixels(0.0));
@@ -14,7 +14,7 @@ fn layout_index_default() {
 
 #[test]
 fn layout_index_from_sparse() {
-    let li = LayoutIndex::from_sparse(
+    let li = PixelLayout::from_sparse(
         100,
         50,
         DEFAULT_ROW_HEIGHT,
@@ -32,7 +32,7 @@ fn layout_index_from_sparse() {
 
 #[test]
 fn layout_index_mutations() {
-    let mut li = LayoutIndex::new(100, 50);
+    let mut li = PixelLayout::new(100, 50);
     li.set_row_height(5, Pixels(40.0));
     assert_eq!(li.get_row_height(5), Pixels(40.0));
     assert_eq!(
@@ -51,7 +51,7 @@ fn layout_index_mutations() {
 
 #[test]
 fn layout_index_inverse_queries() {
-    let li = LayoutIndex::with_defaults(100, 50, DEFAULT_ROW_HEIGHT, DEFAULT_COL_WIDTH);
+    let li = PixelLayout::with_defaults(100, 50, DEFAULT_ROW_HEIGHT, DEFAULT_COL_WIDTH);
     assert_eq!(li.get_row_at_pixel(Pixels(0.0)), 0);
     assert_eq!(li.get_row_at_pixel(DEFAULT_ROW_HEIGHT), 1);
     assert_eq!(li.get_col_at_pixel(Pixels(0.0)), 0);
@@ -60,7 +60,7 @@ fn layout_index_inverse_queries() {
 
 #[test]
 fn build_row_positions_empty_range() {
-    let li = LayoutIndex::with_defaults(10, 5, DEFAULT_ROW_HEIGHT, DEFAULT_COL_WIDTH);
+    let li = PixelLayout::with_defaults(10, 5, DEFAULT_ROW_HEIGHT, DEFAULT_COL_WIDTH);
     assert!(li.build_row_positions(5, 5).is_empty());
     assert!(li.build_row_positions(7, 3).is_empty());
     assert!(li.build_col_positions(2, 2).is_empty());
@@ -68,7 +68,7 @@ fn build_row_positions_empty_range() {
 
 #[test]
 fn build_row_positions_single_row_range() {
-    let li = LayoutIndex::with_defaults(10, 5, Pixels(20.0), Pixels(64.0));
+    let li = PixelLayout::with_defaults(10, 5, Pixels(20.0), Pixels(64.0));
     let pos = li.build_row_positions(3, 4);
     assert_eq!(pos.len(), 2);
     assert_eq!(pos[0], 60.0);
@@ -77,14 +77,14 @@ fn build_row_positions_single_row_range() {
 
 #[test]
 fn fp_row_col_count() {
-    let li = LayoutIndex::with_defaults(42, 17, Pixels(20.0), Pixels(64.0));
+    let li = PixelLayout::with_defaults(42, 17, Pixels(20.0), Pixels(64.0));
     assert_eq!(li.row_count(), 42);
     assert_eq!(li.col_count(), 17);
 }
 
 #[test]
 fn fp_default_sizes_returned() {
-    let li = LayoutIndex::with_defaults(10, 10, Pixels(25.0), Pixels(80.0));
+    let li = PixelLayout::with_defaults(10, 10, Pixels(25.0), Pixels(80.0));
     assert_eq!(li.default_row_height(), Pixels(25.0));
     assert_eq!(li.default_col_width(), Pixels(80.0));
 }

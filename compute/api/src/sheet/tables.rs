@@ -83,7 +83,6 @@ impl SheetTables {
                     columns,
                     has_headers,
                 )
-                .map(|(_, r)| r)
             })
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
@@ -92,7 +91,7 @@ impl SheetTables {
     pub fn delete(&self, table_name: &str) -> Result<MutationResult, ComputeApiError> {
         let name = table_name.to_string();
         self.dispatch
-            .call_engine(move |e| e.delete_table(&name).map(|(_, r)| r))
+            .call_engine(move |e| e.delete_table(&name))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -105,7 +104,7 @@ impl SheetTables {
         let old = old_name.to_string();
         let new = new_name.to_string();
         self.dispatch
-            .call_engine(move |e| e.rename_table(&old, &new).map(|(_, r)| r))
+            .call_engine(move |e| e.rename_table(&old, &new))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -128,7 +127,6 @@ impl SheetTables {
                     new_end_row,
                     new_end_col,
                 )
-                .map(|(_, r)| r)
             })
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
@@ -147,14 +145,14 @@ impl SheetTables {
         let style = style_name.to_string();
         self.dispatch
             .call_engine(move |e| e.set_table_style(&name, &style))
-            .and_then(|r| r.map(|(_vp, m)| m).map_err(ComputeApiError::from))
+            .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
     /// Toggle the totals row on/off.
     pub fn toggle_totals_row(&self, table_name: &str) -> Result<MutationResult, ComputeApiError> {
         let name = table_name.to_string();
         self.dispatch
-            .call_engine(move |e| e.toggle_totals_row(&name).map(|(_, r)| r))
+            .call_engine(move |e| e.toggle_totals_row(&name))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -162,7 +160,7 @@ impl SheetTables {
     pub fn toggle_header_row(&self, table_name: &str) -> Result<MutationResult, ComputeApiError> {
         let name = table_name.to_string();
         self.dispatch
-            .call_engine(move |e| e.toggle_header_row(&name).map(|(_, r)| r))
+            .call_engine(move |e| e.toggle_header_row(&name))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -171,7 +169,7 @@ impl SheetTables {
         let name = table_name.to_string();
         self.dispatch
             .call_engine(move |e| e.toggle_banded_rows(&name))
-            .and_then(|r| r.map(|(_vp, m)| m).map_err(ComputeApiError::from))
+            .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
     /// Toggle banded columns.
@@ -179,7 +177,7 @@ impl SheetTables {
         let name = table_name.to_string();
         self.dispatch
             .call_engine(move |e| e.toggle_banded_cols(&name))
-            .and_then(|r| r.map(|(_vp, m)| m).map_err(ComputeApiError::from))
+            .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
     // -----------------------------------------------------------------
@@ -196,10 +194,7 @@ impl SheetTables {
         let name = table_name.to_string();
         let col_name = column_name.to_string();
         self.dispatch
-            .call_engine(move |e| {
-                e.add_table_column(&name, &col_name, position)
-                    .map(|(_, r)| r)
-            })
+            .call_engine(move |e| e.add_table_column(&name, &col_name, position))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -213,10 +208,7 @@ impl SheetTables {
         let name = table_name.to_string();
         let col_name = new_column_name.to_string();
         self.dispatch
-            .call_engine(move |e| {
-                e.rename_table_column(&name, column_index, &col_name)
-                    .map(|(_, r)| r)
-            })
+            .call_engine(move |e| e.rename_table_column(&name, column_index, &col_name))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -228,7 +220,7 @@ impl SheetTables {
     ) -> Result<MutationResult, ComputeApiError> {
         let name = table_name.to_string();
         self.dispatch
-            .call_engine(move |e| e.remove_table_column(&name, column_index).map(|(_, r)| r))
+            .call_engine(move |e| e.remove_table_column(&name, column_index))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -247,7 +239,7 @@ impl SheetTables {
         let f = formula.to_string();
         self.dispatch
             .call_engine(move |e| e.set_calculated_column_formula(&name, column_index, &f))
-            .and_then(|r| r.map(|(_vp, m)| m).map_err(ComputeApiError::from))
+            .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
     /// Add a calculated column to a table.
@@ -261,10 +253,7 @@ impl SheetTables {
         let col_name = column_name.to_string();
         let f = formula.to_string();
         self.dispatch
-            .call_engine(move |e| {
-                e.add_calculated_column(&name, &col_name, &f)
-                    .map(|(_, r)| r)
-            })
+            .call_engine(move |e| e.add_calculated_column(&name, &col_name, &f))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -276,10 +265,7 @@ impl SheetTables {
     ) -> Result<MutationResult, ComputeApiError> {
         let name = table_name.to_string();
         self.dispatch
-            .call_engine(move |e| {
-                e.remove_calculated_column(&name, column_index)
-                    .map(|(_, r)| r)
-            })
+            .call_engine(move |e| e.remove_calculated_column(&name, column_index))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -291,7 +277,7 @@ impl SheetTables {
     pub fn convert_to_range(&self, table_name: &str) -> Result<MutationResult, ComputeApiError> {
         let name = table_name.to_string();
         self.dispatch
-            .call_engine(move |e| e.convert_table_to_range(&name).map(|(_, r)| r))
+            .call_engine(move |e| e.convert_table_to_range(&name))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 }

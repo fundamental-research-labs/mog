@@ -1,7 +1,7 @@
 //! Dense columnar value types for SIMD-accelerated aggregation.
 //!
 //! Pure data types with zero internal dependencies. The materialization
-//! logic and cache management live in `mirror/dense.rs`.
+//! logic and cache management live in `cell_store/dense.rs`.
 
 mod bool_mask;
 mod column;

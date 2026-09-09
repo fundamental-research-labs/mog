@@ -40,7 +40,7 @@ pub(in crate::storage::engine) fn regex_search(
     }
 
     // 2. Get data bounds and clamp to optional range constraint
-    let bounds = match get_data_bounds(&engine.stores, &engine.mirror, sheet_id) {
+    let bounds = match get_data_bounds(&engine.stores, &engine.cell_store, sheet_id) {
         Some(b) => b,
         None => {
             return RegexSearchResult {
@@ -446,7 +446,7 @@ pub(in crate::storage::engine) fn regex_search_all_sheets(
         let sheet_name = properties::get_sheet_name(&engine.stores.storage, sheet_id)
             .unwrap_or_else(|| id_to_hex(sheet_id.as_u128()).into());
 
-        let bounds = match get_data_bounds(&engine.stores, &engine.mirror, sheet_id) {
+        let bounds = match get_data_bounds(&engine.stores, &engine.cell_store, sheet_id) {
             Some(b) => b,
             None => continue,
         };

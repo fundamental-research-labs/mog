@@ -284,7 +284,7 @@ impl WorkbookCache {
     /// and inserts it into the cache.
     ///
     /// `key`: (sheet_id, col, row_start, row_end) identifying the range.
-    /// `mirror`: current cell mirror for version validation.
+    /// `cell_store`: current cell store for version validation.
     /// `sheet`: sheet containing the range.
     /// `col`: column of the range (for `RangeVersion` capture).
     /// `values`: cell values to extract numerics from and sort.
@@ -353,7 +353,7 @@ impl WorkbookCache {
     /// `VersionedEntry`, and inserts it into the cache.
     ///
     /// `key`: (sheet_id, col, row_start, row_end) identifying the range.
-    /// `mirror`: current cell mirror for version validation.
+    /// `cell_store`: current cell store for version validation.
     /// `sheet`: sheet containing the range.
     /// `col_start`/`col_end`: column span for `RangeVersion` capture.
     /// `values`: cell value refs to build the frequency map from.
@@ -413,7 +413,7 @@ impl WorkbookCache {
     /// `VersionedEntry`, and inserts it.
     ///
     /// `key`: (criteria_range_key, sum_range_key).
-    /// `mirror`: current cell mirror for version validation.
+    /// `cell_store`: current cell store for version validation.
     /// `sheet`: sheet containing the ranges.
     /// `col_start`/`col_end`: combined column span covering both ranges.
     /// `crit_values`/`sum_values`: cell value refs for building the map.

@@ -1,7 +1,7 @@
 //! Range lifecycle regression suite.
 //!
 //! Tests every lifecycle path that Range-backed data must survive through the
-//! public `ComputeEngine` APIs and mirror reads.
+//! public `ComputeEngine` APIs and cell_store reads.
 //!
 //! Run:
 //!   cargo test -p compute-core --test range_lifecycle_regression
@@ -14,12 +14,12 @@ mod basic_lifecycle;
 mod copy_sheet_lifecycle;
 #[path = "range_lifecycle_regression/cross_sheet_dependencies.rs"]
 mod cross_sheet_dependencies;
-#[path = "range_lifecycle_regression/mirror_column_invariants.rs"]
-mod mirror_column_invariants;
 #[path = "range_lifecycle_regression/persistence_roundtrip.rs"]
 mod persistence_roundtrip;
 #[path = "range_lifecycle_regression/range_payload_lifecycle.rs"]
 mod range_payload_lifecycle;
+#[path = "range_lifecycle_regression/store_column_invariants.rs"]
+mod store_column_invariants;
 #[path = "range_lifecycle_regression/structural_lifecycle.rs"]
 mod structural_lifecycle;
 #[path = "range_lifecycle_regression/support.rs"]

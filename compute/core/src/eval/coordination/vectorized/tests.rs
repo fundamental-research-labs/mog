@@ -1,4 +1,3 @@
-use super::*;
 use crate::eval::coordination::vectorized::exec::execute_group;
 use crate::eval::coordination::vectorized::groups::{detect_groups, order_groups};
 use crate::eval::coordination::vectorized::pattern::extract_vec_pattern;

@@ -3,7 +3,7 @@
 //! Run:
 //!   cargo test -p compute-core --test error_messages_demo -- --nocapture
 
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{CellData, RecalcResult, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellError, CellValue};
@@ -151,10 +151,10 @@ fn demo_error_messages() {
         ],
     )]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("--- Engine-Level Errors ---");

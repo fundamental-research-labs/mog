@@ -55,7 +55,7 @@ use crate::flags::{
     VALUE_TYPE_BOOL, VALUE_TYPE_ERROR, VALUE_TYPE_MASK, VALUE_TYPE_NUMBER, VALUE_TYPE_TEXT,
 };
 
-// Header field byte offsets (mirror of what `write_viewport_header` writes).
+// Header field byte offsets (cell_store of what `write_viewport_header` writes).
 const OFF_HDR_START_ROW: usize = 0;
 const OFF_HDR_START_COL: usize = 4;
 const OFF_HDR_CELL_COUNT: usize = 8;

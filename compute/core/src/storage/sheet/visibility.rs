@@ -125,14 +125,14 @@ pub(crate) fn get_hidden_sheets(storage: &WorkbookStorage) -> Vec<SheetId> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mirror::CellMirror;
+    use crate::cells::CellStore;
     use crate::storage::WorkbookStorage;
     use crate::storage::sheet::properties::get_sheet_meta;
     use crate::storage::sheet::test_support::{make_sheet_id, setup};
 
     #[test]
     fn test_tab_color() {
-        let (mut storage, _mirror, sid) = setup();
+        let (mut storage, _store, sid) = setup();
 
         set_tab_color(&mut storage, &sid, Some("#4285f4"));
         let meta = get_sheet_meta(&storage, &sid).unwrap();
@@ -145,7 +145,7 @@ mod tests {
 
     #[test]
     fn test_sheet_hidden() {
-        let (mut storage, _mirror, sid) = setup();
+        let (mut storage, _store, sid) = setup();
         assert!(!get_sheet_meta(&storage, &sid).unwrap().hidden);
 
         set_sheet_hidden(&mut storage, &sid, true);
@@ -158,13 +158,13 @@ mod tests {
     #[test]
     fn test_count_visible_sheets() {
         let mut storage = WorkbookStorage::new();
-        let mut mirror = CellMirror::new();
+        let mut cell_store = CellStore::new();
         let s1 = make_sheet_id(1);
         let s2 = make_sheet_id(2);
         let s3 = make_sheet_id(3);
-        storage.add_sheet(&mut mirror, s1, "A", 10, 5).unwrap();
-        storage.add_sheet(&mut mirror, s2, "B", 10, 5).unwrap();
-        storage.add_sheet(&mut mirror, s3, "C", 10, 5).unwrap();
+        storage.add_sheet(&mut cell_store, s1, "A", 10, 5).unwrap();
+        storage.add_sheet(&mut cell_store, s2, "B", 10, 5).unwrap();
+        storage.add_sheet(&mut cell_store, s3, "C", 10, 5).unwrap();
 
         assert_eq!(count_visible_sheets(&storage), 3);
 
@@ -175,13 +175,13 @@ mod tests {
     #[test]
     fn test_visible_and_hidden_sheets() {
         let mut storage = WorkbookStorage::new();
-        let mut mirror = CellMirror::new();
+        let mut cell_store = CellStore::new();
         let s1 = make_sheet_id(1);
         let s2 = make_sheet_id(2);
         let s3 = make_sheet_id(3);
-        storage.add_sheet(&mut mirror, s1, "A", 10, 5).unwrap();
-        storage.add_sheet(&mut mirror, s2, "B", 10, 5).unwrap();
-        storage.add_sheet(&mut mirror, s3, "C", 10, 5).unwrap();
+        storage.add_sheet(&mut cell_store, s1, "A", 10, 5).unwrap();
+        storage.add_sheet(&mut cell_store, s2, "B", 10, 5).unwrap();
+        storage.add_sheet(&mut cell_store, s3, "C", 10, 5).unwrap();
 
         set_sheet_hidden(&mut storage, &s2, true);
 

@@ -19,7 +19,7 @@ impl ComputeCore {
     /// Perform a partial recalculation starting from the given changed cells.
     ///
     /// The returned `RecalcResult.changed_cells` includes **both**:
-    /// - Directly-edited non-formula seed cells (values already written to the mirror)
+    /// - Directly-edited non-formula seed cells (values already written to the cell store)
     /// - Formula cells whose computed values changed as a result of recalculation
     ///
     /// This ensures downstream consumers (e.g. viewport buffer patching) see the
@@ -28,33 +28,33 @@ impl ComputeCore {
     /// Visibility: `pub` so the engine layer (`ComputeEngine`) can drive
     /// incremental recalcs from non-cell mutation entry points (named-range
     /// CRUD, etc.). Within the scheduler, prefer `set_cell` / `apply_changes`
-    /// which combine the mirror write with the recalc call.
+    /// which combine the cell store write with the recalc call.
     pub fn recalc(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         changed_cells: &[CellId],
     ) -> Result<RecalcResult, ComputeError> {
         if self.is_manual_calculation() {
-            return self.recalc_manual_edit(mirror, changed_cells);
+            return self.recalc_manual_edit(cell_store, changed_cells);
         }
 
-        self.recalc_automatic(mirror, changed_cells)
+        self.recalc_automatic(cell_store, changed_cells)
     }
 
     fn recalc_automatic(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         changed_cells: &[CellId],
     ) -> Result<RecalcResult, ComputeError> {
         // Deferred graph build: if init_from_snapshot_minimal was used, the
         // dependency graph hasn't been built yet. Build it now before recalc.
-        self.ensure_graph_built(mirror)?;
+        self.ensure_graph_built(cell_store)?;
 
         let changed_with_formula_text: Vec<CellId> = {
             let mut changed = changed_cells.to_vec();
             let mut seen: FxHashSet<CellId> = changed.iter().copied().collect();
             for cell_id in changed_cells {
-                for dependent in self.mark_formula_text_changed(mirror, *cell_id) {
+                for dependent in self.mark_formula_text_changed(cell_store, *cell_id) {
                     if seen.insert(dependent) {
                         changed.push(dependent);
                     }
@@ -64,13 +64,13 @@ impl ComputeCore {
         };
 
         // Include non-formula seed cells in the result. These are cells whose
-        // values were written to the mirror before recalc was called (plain-value
+        // values were written to the cell store before recalc was called (plain-value
         // edits, clears). Formula seeds are handled by topo_evaluate_cells below.
         let mut seed_changes = Vec::new();
         for cell_id in &changed_with_formula_text {
             if !self.ast_cache.contains_key(cell_id)
-                && let Some(value) = mirror.get_cell_value(cell_id).cloned()
-                && let Some((_sid, change)) = self.make_cell_change(mirror, cell_id, &value)
+                && let Some(value) = cell_store.get_cell_value(cell_id).cloned()
+                && let Some((_sid, change)) = self.make_cell_change(cell_store, cell_id, &value)
             {
                 seed_changes.push(change);
             }
@@ -79,7 +79,7 @@ impl ComputeCore {
         // Range-aware affected-cell computation
         let affected = self
             .graph
-            .affected_cells(&changed_with_formula_text, &*mirror)
+            .affected_cells(&changed_with_formula_text, &*cell_store)
             .into_value();
         // Filter out cells whose sheet has calculation disabled.
         // These cells stay in the dependency graph but skip evaluation,
@@ -87,12 +87,12 @@ impl ComputeCore {
         let affected: Vec<CellId> = affected
             .into_iter()
             .filter(|cell_id| {
-                mirror
+                cell_store
                     .sheet_for_cell(cell_id)
-                    .is_none_or(|sid| mirror.is_calculation_enabled(&sid))
+                    .is_none_or(|sid| cell_store.is_calculation_enabled(&sid))
             })
             .collect();
-        let mut result = self.topo_evaluate_cells(mirror, &affected)?;
+        let mut result = self.topo_evaluate_cells(cell_store, &affected)?;
 
         // Prepend seed changes (edits first, then formula dependents), deduplicating
         // against any formula cells that recalc may have also reported.
@@ -113,7 +113,7 @@ impl ComputeCore {
         // path, but needed here for direct ComputeCore usage and tests.
         if let Some(ref schemas) = self.schema_map {
             result.validation_annotations =
-                self.validate_dirty_cells(mirror, &changed_with_formula_text, schemas);
+                self.validate_dirty_cells(cell_store, &changed_with_formula_text, schemas);
         }
 
         Ok(result)
@@ -121,16 +121,16 @@ impl ComputeCore {
 
     fn recalc_manual_edit(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         changed_cells: &[CellId],
     ) -> Result<RecalcResult, ComputeError> {
-        self.ensure_graph_built(mirror)?;
+        self.ensure_graph_built(cell_store)?;
         let changed_cells: Vec<CellId> = {
             let mut changed = changed_cells.to_vec();
             let mut seen: FxHashSet<CellId> = changed.iter().copied().collect();
             let seeds = changed.clone();
             for cell_id in seeds {
-                for dependent in self.mark_formula_text_changed(mirror, cell_id) {
+                for dependent in self.mark_formula_text_changed(cell_store, cell_id) {
                     if seen.insert(dependent) {
                         changed.push(dependent);
                     }
@@ -150,8 +150,8 @@ impl ComputeCore {
         for cell_id in &changed_cells {
             if self.ast_cache.contains_key(cell_id) {
                 formula_seeds.push(*cell_id);
-            } else if let Some(value) = mirror.get_cell_value(cell_id).cloned()
-                && let Some((_sid, change)) = self.make_cell_change(mirror, cell_id, &value)
+            } else if let Some(value) = cell_store.get_cell_value(cell_id).cloned()
+                && let Some((_sid, change)) = self.make_cell_change(cell_store, cell_id, &value)
             {
                 seed_changes.push(change);
             }
@@ -163,7 +163,7 @@ impl ComputeCore {
             // A newly-entered or edited formula should calculate its own cell so
             // the user sees a value immediately. Downstream dependents remain
             // pending because we intentionally do not call affected_cells().
-            self.topo_evaluate_cells(mirror, &formula_seeds)?
+            self.topo_evaluate_cells(cell_store, &formula_seeds)?
         };
 
         if !seed_changes.is_empty() {
@@ -182,7 +182,7 @@ impl ComputeCore {
         if let Some(ref schemas) = self.schema_map {
             let mut dirty: Vec<CellId> = changed_cells.to_vec();
             dirty.extend(formula_seeds);
-            result.validation_annotations = self.validate_dirty_cells(mirror, &dirty, schemas);
+            result.validation_annotations = self.validate_dirty_cells(cell_store, &dirty, schemas);
         }
 
         Ok(result)
@@ -192,9 +192,9 @@ impl ComputeCore {
     #[tracing::instrument(name = "full_recalc", skip_all)]
     pub(crate) fn full_recalc(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
     ) -> Result<RecalcResult, ComputeError> {
-        self.ensure_graph_built(mirror)?;
+        self.ensure_graph_built(cell_store)?;
         let deadline = make_deadline(self.recalc_timeout);
 
         #[cfg(feature = "journal")]
@@ -217,13 +217,13 @@ impl ComputeCore {
             .map(|(cid, s)| (*cid, s.clone()))
             .collect();
         for (cell_id, formula) in orphaned {
-            if let Some(sheet_id) = mirror.sheet_for_cell(&cell_id) {
+            if let Some(sheet_id) = cell_store.sheet_for_cell(&cell_id) {
                 // Clear the stale #REF! error set during incremental edit rejection.
                 // The cycle handler seeds Null cells to 0.0 for convergence; leaving
                 // #REF! would cause every formula referencing this cell to propagate
                 // the error instead of converging.
-                mirror.set_value_mut(&cell_id, CellValue::Null);
-                self.parse_and_register_formula(mirror, cell_id, sheet_id, formula, true);
+                cell_store.set_value_mut(&cell_id, CellValue::Null);
+                self.parse_and_register_formula(cell_store, cell_id, sheet_id, formula, true);
             }
         }
 
@@ -234,9 +234,9 @@ impl ComputeCore {
                     level
                         .into_iter()
                         .filter(|cell_id| {
-                            mirror
+                            cell_store
                                 .sheet_for_cell(cell_id)
-                                .is_none_or(|sid| mirror.is_calculation_enabled(&sid))
+                                .is_none_or(|sid| cell_store.is_calculation_enabled(&sid))
                         })
                         .collect()
                 })
@@ -245,18 +245,18 @@ impl ComputeCore {
         };
 
         let (levels, cycle_cores, downstream_levels) =
-            self.graph.evaluation_levels_full(&*mirror).into_value();
+            self.graph.evaluation_levels_full(&*cell_store).into_value();
         let levels = filter_calc_enabled(levels);
 
         let mut result: RecalcResult = if cycle_cores.is_empty() {
             let cell_count: usize = levels.iter().map(|l| l.len()).sum();
             let _eval_count =
                 tracing::info_span!("full_recalc_eval_count", count = cell_count).entered();
-            self.topo_evaluate_levels_with_deadline(mirror, levels, &deadline)?
+            self.topo_evaluate_levels_with_deadline(cell_store, levels, &deadline)?
         } else {
             let downstream_levels = filter_calc_enabled(downstream_levels);
             return self.handle_cycles_with_precomputed_levels(
-                mirror,
+                cell_store,
                 levels,
                 cycle_cores,
                 downstream_levels,
@@ -271,7 +271,8 @@ impl ComputeCore {
                 .iter()
                 .filter_map(|c| CellId::from_uuid_str(&c.cell_id).ok())
                 .collect();
-            result.validation_annotations = self.validate_dirty_cells(mirror, &all_dirty, schemas);
+            result.validation_annotations =
+                self.validate_dirty_cells(cell_store, &all_dirty, schemas);
         }
 
         Ok(result)
@@ -283,7 +284,7 @@ impl ComputeCore {
     /// for the duration of this call, then restores the workbook-level settings.
     pub(crate) fn full_recalc_with_options(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         options: &snapshot_types::RecalcOptions,
     ) -> Result<RecalcResult, ComputeError> {
         // Save workbook-level settings
@@ -308,7 +309,7 @@ impl ComputeCore {
                 panic!("test panic before full_recalc_with_options production recalc");
             }
 
-            self.full_recalc(mirror)
+            self.full_recalc(cell_store)
         }));
 
         self.iterative_calc = saved_iterative;

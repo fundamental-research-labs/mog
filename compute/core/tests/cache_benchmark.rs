@@ -13,7 +13,7 @@
 //!   cargo test -p compute-core --test cache_benchmark -- --nocapture
 
 use cell_types::{CellId, SheetId};
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::CellValue;
@@ -186,10 +186,10 @@ fn sorted_cache_persists_across_recalc_epochs() {
 
     let snapshot = build_snapshot(vec![("Sheet1", 101, 3, cells)]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== sorted_cache_persists_across_recalc_epochs (init) ===");
@@ -239,7 +239,7 @@ fn sorted_cache_persists_across_recalc_epochs() {
     let cell_a50 = CellId::from_uuid_str(&cell_uuid(0, 49, 0)).expect("parse cell uuid");
 
     let result2 = core
-        .set_cell(&mut mirror, &sheet_id, cell_a50, 49, 0, "0.5")
+        .set_cell(&mut cell_store, &sheet_id, cell_a50, 49, 0, "0.5")
         .expect("set_cell failed");
 
     println!("\n=== After editing A50 (col A, the referenced range) ===");
@@ -274,7 +274,7 @@ fn sorted_cache_persists_across_recalc_epochs() {
     let cell_c1 = CellId::from_uuid_str(&cell_uuid(0, 0, 2)).expect("parse cell uuid");
 
     let _result3 = core
-        .set_cell(&mut mirror, &sheet_id, cell_c1, 0, 2, "888")
+        .set_cell(&mut cell_store, &sheet_id, cell_c1, 0, 2, "888")
         .expect("set_cell failed");
 
     let stats3 = core.workbook_cache_stats();
@@ -338,10 +338,10 @@ fn sorted_cache_unrelated_edits_no_rebuilds() {
 
     let snapshot = build_snapshot(vec![("Sheet1", 51, 3, cells)]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let _result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     let stats_init = core.workbook_cache_stats();
@@ -358,7 +358,7 @@ fn sorted_cache_unrelated_edits_no_rebuilds() {
     for round in 1..=5u32 {
         let _ = core
             .set_cell(
-                &mut mirror,
+                &mut cell_store,
                 &sheet_id,
                 cell_c1,
                 0,
@@ -408,10 +408,10 @@ fn cache_memory_estimation_nonzero_after_sorted_use() {
 
     let snapshot = build_snapshot(vec![("Sheet1", 21, 2, cells)]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let _result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     let stats = core.workbook_cache_stats();
@@ -463,10 +463,10 @@ fn sorted_cache_distinct_ranges_independent_entries() {
 
     let snapshot = build_snapshot(vec![("Sheet1", 11, 4, cells)]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     // SMALL(A1:A10, 1) = 1.0
@@ -490,7 +490,7 @@ fn sorted_cache_distinct_ranges_independent_entries() {
     let sheet_id = SheetId::from_uuid_str(&sheet_uuid(0)).expect("parse sheet uuid");
     let cell_a5 = CellId::from_uuid_str(&cell_uuid(0, 4, 0)).expect("parse cell uuid");
     let result2 = core
-        .set_cell(&mut mirror, &sheet_id, cell_a5, 4, 0, "0.1")
+        .set_cell(&mut cell_store, &sheet_id, cell_a5, 4, 0, "0.1")
         .expect("set_cell failed");
 
     // SMALL(A1:A10, 1) should now be 0.1

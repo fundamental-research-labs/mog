@@ -1,6 +1,6 @@
 //! Tests for SUBTOTAL and AGGREGATE hidden-row filtering.
 //!
-//! The test mirror has a 5x5 grid with values Number(row*10 + col).
+//! The test cell_store has a 5x5 grid with values Number(row*10 + col).
 //! Column 0 values: row0=0, row1=10, row2=20, row3=30, row4=40.
 
 use super::*;
@@ -36,7 +36,7 @@ fn range_ref(sheet: SheetId, r0: u32, c0: u32, r1: u32, c1: u32) -> ASTNode {
 
 #[test]
 fn subtotal_9_sum_includes_hidden_rows() {
-    let (mut m, s) = test_mirror();
+    let (mut m, s) = test_store();
     // Hide rows 1 and 3
     m.set_row_hidden(&s, 1, true);
     m.set_row_hidden(&s, 3, true);
@@ -52,7 +52,7 @@ fn subtotal_9_sum_includes_hidden_rows() {
 
 #[test]
 fn subtotal_1_average_includes_hidden_rows() {
-    let (mut m, s) = test_mirror();
+    let (mut m, s) = test_store();
     m.set_row_hidden(&s, 1, true);
     m.set_row_hidden(&s, 3, true);
     let ctx = make_ctx(&m, s);
@@ -71,7 +71,7 @@ fn subtotal_1_average_includes_hidden_rows() {
 
 #[test]
 fn subtotal_109_sum_skips_hidden_rows() {
-    let (mut m, s) = test_mirror();
+    let (mut m, s) = test_store();
     // Hide rows 1 and 3 (values 10, 30)
     m.set_row_hidden(&s, 1, true);
     m.set_row_hidden(&s, 3, true);
@@ -87,7 +87,7 @@ fn subtotal_109_sum_skips_hidden_rows() {
 
 #[test]
 fn subtotal_101_average_skips_hidden_rows() {
-    let (mut m, s) = test_mirror();
+    let (mut m, s) = test_store();
     // Hide rows 1 and 3
     m.set_row_hidden(&s, 1, true);
     m.set_row_hidden(&s, 3, true);
@@ -103,7 +103,7 @@ fn subtotal_101_average_skips_hidden_rows() {
 
 #[test]
 fn subtotal_102_count_skips_hidden_rows() {
-    let (mut m, s) = test_mirror();
+    let (mut m, s) = test_store();
     // Hide rows 1 and 3
     m.set_row_hidden(&s, 1, true);
     m.set_row_hidden(&s, 3, true);
@@ -119,7 +119,7 @@ fn subtotal_102_count_skips_hidden_rows() {
 
 #[test]
 fn subtotal_104_max_skips_hidden_rows() {
-    let (mut m, s) = test_mirror();
+    let (mut m, s) = test_store();
     // Hide row 4 (value 40, the max)
     m.set_row_hidden(&s, 4, true);
     let ctx = make_ctx(&m, s);
@@ -134,7 +134,7 @@ fn subtotal_104_max_skips_hidden_rows() {
 
 #[test]
 fn subtotal_105_min_skips_hidden_rows() {
-    let (mut m, s) = test_mirror();
+    let (mut m, s) = test_store();
     // Hide row 0 (value 0, the min)
     m.set_row_hidden(&s, 0, true);
     let ctx = make_ctx(&m, s);
@@ -153,7 +153,7 @@ fn subtotal_105_min_skips_hidden_rows() {
 
 #[test]
 fn subtotal_109_no_hidden_rows_equals_subtotal_9() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
 
     let node_9 = func(
@@ -173,7 +173,7 @@ fn subtotal_109_no_hidden_rows_equals_subtotal_9() {
 
 #[test]
 fn subtotal_109_all_hidden_returns_zero() {
-    let (mut m, s) = test_mirror();
+    let (mut m, s) = test_store();
     for r in 0..5 {
         m.set_row_hidden(&s, r, true);
     }
@@ -193,7 +193,7 @@ fn subtotal_109_all_hidden_returns_zero() {
 
 #[test]
 fn subtotal_109_multi_column_skips_full_row() {
-    let (mut m, s) = test_mirror();
+    let (mut m, s) = test_store();
     // Hide row 2 (values: col0=20, col1=21, col2=22)
     m.set_row_hidden(&s, 2, true);
     let ctx = make_ctx(&m, s);
@@ -213,7 +213,7 @@ fn subtotal_109_multi_column_skips_full_row() {
 
 #[test]
 fn aggregate_option_5_ignore_hidden_and_nested() {
-    let (mut m, s) = test_mirror();
+    let (mut m, s) = test_store();
     // Hide rows 1 and 3 (values 10, 30)
     m.set_row_hidden(&s, 1, true);
     m.set_row_hidden(&s, 3, true);
@@ -234,7 +234,7 @@ fn aggregate_option_5_ignore_hidden_and_nested() {
 
 #[test]
 fn aggregate_option_4_no_hidden_skipping() {
-    let (mut m, s) = test_mirror();
+    let (mut m, s) = test_store();
     // Hide rows 1 and 3
     m.set_row_hidden(&s, 1, true);
     m.set_row_hidden(&s, 3, true);

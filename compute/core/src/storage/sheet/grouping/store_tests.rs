@@ -46,7 +46,7 @@ fn test_axis_serde() {
 #[test]
 fn test_multi_sheet_isolation() {
     let mut s = WorkbookStorage::new();
-    let mut m = crate::mirror::CellMirror::new();
+    let mut m = crate::cells::CellStore::new();
     let a = make_sheet_id(10);
     let b = make_sheet_id(20);
     s.add_sheet(&mut m, a, "S1", 100, 26).unwrap();

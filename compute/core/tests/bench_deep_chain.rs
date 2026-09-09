@@ -10,7 +10,7 @@
 
 #![cfg(feature = "perf-tests")]
 
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
 use std::time::Instant;
@@ -255,10 +255,10 @@ fn bench_linear_chain_1000() {
     println!("Snapshot build: {}ms", snapshot_ms);
 
     let t1 = Instant::now();
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     let init_ms = t1.elapsed().as_millis();
 
@@ -304,10 +304,10 @@ fn bench_linear_chain_5000() {
     println!("Snapshot build: {}ms", snapshot_ms);
 
     let t1 = Instant::now();
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     let init_ms = t1.elapsed().as_millis();
 
@@ -354,10 +354,10 @@ fn bench_iferror_chain_5000() {
     println!("Snapshot build: {}ms", snapshot_ms);
 
     let t1 = Instant::now();
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     let init_ms = t1.elapsed().as_millis();
 
@@ -408,10 +408,10 @@ fn bench_cross_sheet_chain_5000() {
     println!("Snapshot build: {}ms", snapshot_ms);
 
     let t1 = Instant::now();
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     let init_ms = t1.elapsed().as_millis();
 

@@ -195,11 +195,11 @@ pub struct ViewportRenderData {
     /// Length = `viewport_rows + 1` for non-empty viewports, 0 otherwise.
     /// The sentinel lets consumers derive `height_of(end_row - 1)` as
     /// `row_positions[viewport_rows] - row_positions[viewport_rows - 1]`.
-    /// Empty when `LayoutIndex` is not yet available.
+    /// Empty when `PixelLayout` is not yet available.
     pub row_positions: Vec<f64>,
     /// Cumulative pixel position of each column's left edge in the viewport range,
     /// plus a trailing sentinel (left edge of the column after the range).
     /// Length = `viewport_cols + 1` for non-empty viewports, 0 otherwise.
-    /// Empty when `LayoutIndex` is not yet available.
+    /// Empty when `PixelLayout` is not yet available.
     pub col_positions: Vec<f64>,
 }

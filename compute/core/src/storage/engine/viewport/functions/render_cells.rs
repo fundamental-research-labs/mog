@@ -7,7 +7,7 @@ use value_types::CellValue;
 
 use super::cf_format::{apply_cf_to_format, apply_number_format_color};
 use super::materialized_cells::build_materialized_cell_material;
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::storage::engine::settings::EngineSettings;
 use crate::storage::engine::stores::{CFCacheEntry, EngineStores};
 use crate::storage::properties;
@@ -254,7 +254,7 @@ fn apply_cell_rich_text_aggregate_font(
 }
 
 pub(super) fn apply_pivot_display_format(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -262,7 +262,7 @@ pub(super) fn apply_pivot_display_format(
 ) {
     let Some(pivot_format) =
         crate::storage::engine::services::objects::resolve_pivot_format_at_cell(
-            mirror, sheet_id, row, col,
+            cell_store, sheet_id, row, col,
         )
     else {
         return;
@@ -273,7 +273,7 @@ pub(super) fn apply_pivot_display_format(
 #[allow(clippy::too_many_arguments)]
 pub(super) fn build_render_cell_materials(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     settings: &EngineSettings,
     cf_cache_entry: Option<&CFCacheEntry>,
     sheet_id: &SheetId,
@@ -301,7 +301,7 @@ pub(super) fn build_render_cell_materials(
     };
 
     // Iterate in dense row-major order
-    if let Some(grid) = stores.grid_indexes.get(sheet_id) {
+    if let Some(grid) = cell_store.get_sheet(sheet_id) {
         // Build merge child→origin lookup for this viewport
         let merge_origins: std::collections::HashMap<(u32, u32), (u32, u32)> = {
             let all_merges = merges::get_all_merges(&stores.storage, *sheet_id, grid);
@@ -333,7 +333,7 @@ pub(super) fn build_render_cell_materials(
                     .copied()
                     .unwrap_or((row, col));
 
-                let render = mirror.cell_render_at(sheet_id, eff_row, eff_col);
+                let render = cell_store.cell_render_at(sheet_id, eff_row, eff_col);
 
                 let mut sparkline_flag = 0u16;
                 if sparklines::has_sparkline(&stores.storage, sheet_id, row, col) {
@@ -341,7 +341,7 @@ pub(super) fn build_render_cell_materials(
                 }
                 let mut hyperlink_flag = 0u16;
                 if crate::storage::engine::services::objects::get_hyperlink(
-                    stores, mirror, sheet_id, row, col,
+                    stores, cell_store, sheet_id, row, col,
                 )
                 .is_some()
                 {
@@ -355,8 +355,8 @@ pub(super) fn build_render_cell_materials(
                         // identity when present; purely generated spill cells
                         // fall back to the formula anchor's format.
                         let anchor_id_hex = id_to_hex(proj.anchor_id.as_u128());
-                        let format_cell_id_hex = grid
-                            .cell_id_at(eff_row, eff_col)
+                        let format_cell_id_hex = cell_store
+                            .resolve_cell_id(sheet_id, cell_types::SheetPos::new(eff_row, eff_col))
                             .map(|cell_id| id_to_hex(cell_id.as_u128()))
                             .unwrap_or_else(|| anchor_id_hex.clone());
                         let table_fmt = resolve_table_format(sheet_id, row, col);
@@ -368,7 +368,7 @@ pub(super) fn build_render_cell_materials(
                             col,
                             table_fmt.as_ref(),
                             stores.grid_indexes.get(sheet_id),
-                            mirror.get_sheet(sheet_id),
+                            cell_store.get_sheet(sheet_id),
                         );
                         domain_types::theme_color::resolve_theme_refs(
                             &mut effective,
@@ -381,7 +381,7 @@ pub(super) fn build_render_cell_materials(
                             &mut effective,
                             &settings.theme_palette,
                         );
-                        apply_pivot_display_format(mirror, sheet_id, row, col, &mut effective);
+                        apply_pivot_display_format(cell_store, sheet_id, row, col, &mut effective);
                         apply_cf_to_format(cf_cache_entry, &mut effective, row, col);
 
                         let formula_str = stores.compute.get_formula(&proj.anchor_id);
@@ -478,7 +478,7 @@ pub(super) fn build_render_cell_materials(
                         // D2's job — until that lands, body cells expose
                         // HAS_FORMULA but `formula_str` may be None for body.
                         let has_formula = formula_str.is_some()
-                            || mirror.get_formula(&cell_id).is_some()
+                            || cell_store.get_formula(&cell_id).is_some()
                             || region.is_some();
 
                         let cell_id_hex = id_to_hex(cell_id.as_u128());
@@ -491,7 +491,7 @@ pub(super) fn build_render_cell_materials(
                             col,
                             table_fmt.as_ref(),
                             stores.grid_indexes.get(sheet_id),
-                            mirror.get_sheet(sheet_id),
+                            cell_store.get_sheet(sheet_id),
                         );
 
                         // No runtime formula format inheritance: a formula cell
@@ -512,7 +512,7 @@ pub(super) fn build_render_cell_materials(
                             &mut effective,
                             &settings.theme_palette,
                         );
-                        apply_pivot_display_format(mirror, sheet_id, row, col, &mut effective);
+                        apply_pivot_display_format(cell_store, sheet_id, row, col, &mut effective);
                         apply_cf_to_format(cf_cache_entry, &mut effective, row, col);
 
                         let is_null_no_formula = matches!(value, CellValue::Null) && !has_formula;
@@ -596,7 +596,7 @@ pub(super) fn build_render_cell_materials(
                     crate::projection::CellRender::Materialized(materialized) => {
                         cells.push(build_materialized_cell_material(
                             stores,
-                            mirror,
+                            cell_store,
                             settings,
                             cf_cache_entry,
                             sheet_id,
@@ -609,7 +609,9 @@ pub(super) fn build_render_cell_materials(
                         ));
                     }
                     crate::projection::CellRender::Empty => {
-                        let mut positional_fmt = if let Some(cell_id) = grid.cell_id_at(row, col) {
+                        let mut positional_fmt = if let Some(cell_id) = cell_store
+                            .resolve_cell_id(sheet_id, cell_types::SheetPos::new(row, col))
+                        {
                             let cell_id_hex = id_to_hex(cell_id.as_u128());
                             let table_fmt = resolve_table_format(sheet_id, row, col);
                             properties::get_effective_format(
@@ -620,7 +622,7 @@ pub(super) fn build_render_cell_materials(
                                 col,
                                 table_fmt.as_ref(),
                                 stores.grid_indexes.get(sheet_id),
-                                mirror.get_sheet(sheet_id),
+                                cell_store.get_sheet(sheet_id),
                             )
                         } else {
                             properties::get_positional_format(
@@ -629,14 +631,20 @@ pub(super) fn build_render_cell_materials(
                                 row,
                                 col,
                                 stores.grid_indexes.get(sheet_id),
-                                mirror.get_sheet(sheet_id),
+                                cell_store.get_sheet(sheet_id),
                             )
                         };
                         domain_types::theme_color::resolve_theme_refs(
                             &mut positional_fmt,
                             &settings.theme_palette,
                         );
-                        apply_pivot_display_format(mirror, sheet_id, row, col, &mut positional_fmt);
+                        apply_pivot_display_format(
+                            cell_store,
+                            sheet_id,
+                            row,
+                            col,
+                            &mut positional_fmt,
+                        );
                         // CF is the 6th cascade layer — applies to truly-blank
                         // cells too (e.g. `containsBlanks` rules).
                         apply_cf_to_format(cf_cache_entry, &mut positional_fmt, row, col);

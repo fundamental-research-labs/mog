@@ -30,43 +30,43 @@ fn test_single_cell_cse_transpose_implicit_intersection() {
             ),
         ],
     )]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
-    core.init_from_snapshot(&mut mirror, snapshot)
+    core.init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     let sid = SheetId::from_uuid_str(&sheet_uuid(0)).expect("sid");
     let b1 = CellId::from_uuid_str(&cell_uuid(0, 0, 1)).expect("b1");
     // B1 should contain the scalar 10.0, not an array
-    assert_mirror_number(
-        &mirror,
+    assert_store_number(
+        &cell_store,
         &b1,
         10.0,
         "B1 single-cell CSE TRANSPOSE should implicit-intersect",
     );
     // No vertical spill should occur — B2:B5 should remain empty
     assert_col_data_null_or_zero(
-        &mirror,
+        &cell_store,
         &sid,
         1,
         1,
         "B2 should be empty (no spill from single-cell CSE)",
     );
     assert_col_data_null_or_zero(
-        &mirror,
+        &cell_store,
         &sid,
         2,
         1,
         "B3 should be empty (no spill from single-cell CSE)",
     );
     assert_col_data_null_or_zero(
-        &mirror,
+        &cell_store,
         &sid,
         3,
         1,
         "B4 should be empty (no spill from single-cell CSE)",
     );
     assert_col_data_null_or_zero(
-        &mirror,
+        &cell_store,
         &sid,
         4,
         1,
@@ -107,15 +107,15 @@ fn test_single_cell_cse_negated_transpose() {
             ),
         ],
     )]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
-    core.init_from_snapshot(&mut mirror, snapshot)
+    core.init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     let sid = SheetId::from_uuid_str(&sheet_uuid(0)).expect("sid");
     let d20 = CellId::from_uuid_str(&cell_uuid(0, 19, 3)).expect("d20");
     // D20 should be -0.0 = 0.0 (negation of first element)
-    assert_mirror_number(
-        &mirror,
+    assert_store_number(
+        &cell_store,
         &d20,
         0.0,
         "D20 single-cell CSE -TRANSPOSE should be 0",
@@ -123,7 +123,7 @@ fn test_single_cell_cse_negated_transpose() {
     // No spill below D20
     for row in 20..=31 {
         assert_col_data_null_or_zero(
-            &mirror,
+            &cell_store,
             &sid,
             row,
             3,
@@ -162,18 +162,18 @@ fn test_multi_cell_cse_transpose_with_downstream_dependency() {
             (3, 1, CellValue::Null, Some("B3-1"), None),
         ],
     )]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
-    core.init_from_snapshot(&mut mirror, snapshot)
+    core.init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     let sid = SheetId::from_uuid_str(&sheet_uuid(0)).expect("sid");
     let b1 = CellId::from_uuid_str(&cell_uuid(0, 0, 1)).expect("b1");
     let b4 = CellId::from_uuid_str(&cell_uuid(0, 3, 1)).expect("b4");
     // B1 = -0 = 0
-    assert_mirror_number(&mirror, &b1, 0.0, "B1 CSE anchor");
+    assert_store_number(&cell_store, &b1, 0.0, "B1 CSE anchor");
     // B2 = -1, B3 = -2 (spill within CSE range)
-    assert_col_data_number(&mirror, &sid, 1, 1, -1.0, "B2 CSE spill target");
-    assert_col_data_number(&mirror, &sid, 2, 1, -2.0, "B3 CSE spill target");
+    assert_col_data_number(&cell_store, &sid, 1, 1, -1.0, "B2 CSE spill target");
+    assert_col_data_number(&cell_store, &sid, 2, 1, -2.0, "B3 CSE spill target");
     // B4 = B3 - 1 = -2 - 1 = -3
-    assert_mirror_number(&mirror, &b4, -3.0, "B4 downstream of CSE spill");
+    assert_store_number(&cell_store, &b4, -3.0, "B4 downstream of CSE spill");
 }

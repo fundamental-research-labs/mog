@@ -3,7 +3,7 @@
 use super::super::test_helpers::*;
 use super::super::*;
 use super::helpers::*;
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::snapshot::CellData;
 use std::sync::Arc;
 use value_types::CellValue;
@@ -36,8 +36,8 @@ fn test_stable_projection_phase2_skipped() {
     ]);
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     let sheet_id = sid(1);
     let a1_id = cell_id_from_str(&a1_str);
@@ -45,38 +45,38 @@ fn test_stable_projection_phase2_skipped() {
 
     // A1 should have value 1 (top-left of SEQUENCE(5))
     assert_eq!(
-        *core.get_cell_value(&mirror, &a1_id).unwrap(),
+        *core.get_cell_value(&cell_store, &a1_id).unwrap(),
         CellValue::number(1.0),
         "A1 should be 1 initially"
     );
 
     // Projection should be registered
-    assert!(mirror.projection_registry.is_source(&a1_id));
-    let proj = mirror.projection_registry.get(&a1_id).unwrap();
+    assert!(cell_store.projection_registry.is_source(&a1_id));
+    let proj = cell_store.projection_registry.get(&a1_id).unwrap();
     assert_eq!(proj.rows, 5);
     assert_eq!(proj.cols, 1);
 
     // Edit B1 (unrelated) — triggers recalc but A1's SEQUENCE(5) still produces 5x1
     // Stabilization should NOT trigger because projection shape is unchanged
     let result = core
-        .set_cell(&mut mirror, &sheet_id, b1_id, 0, 1, "20")
+        .set_cell(&mut cell_store, &sheet_id, b1_id, 0, 1, "20")
         .unwrap();
 
     // A1 still 1, projection still 5x1
     assert_eq!(
-        *core.get_cell_value(&mirror, &a1_id).unwrap(),
+        *core.get_cell_value(&cell_store, &a1_id).unwrap(),
         CellValue::number(1.0),
         "A1 should still be 1 after unrelated edit"
     );
     assert_eq!(
-        mirror.projection_registry.get(&a1_id).unwrap().rows,
+        cell_store.projection_registry.get(&a1_id).unwrap().rows,
         5,
         "Projection should still be 5 rows"
     );
 
     // B1 should be updated
     assert_eq!(
-        *core.get_cell_value(&mirror, &b1_id).unwrap(),
+        *core.get_cell_value(&cell_store, &b1_id).unwrap(),
         CellValue::number(20.0),
     );
 
@@ -123,8 +123,8 @@ fn test_new_projection_triggers_phase2_correction() {
     ]);
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     let sheet_id = sid(1);
     let a1_id = cell_id_from_str(&a1_str);
@@ -132,7 +132,7 @@ fn test_new_projection_triggers_phase2_correction() {
 
     // Initially B1 = SUM(empty range) = 0
     assert_eq!(
-        *core.get_cell_value(&mirror, &b1_id).unwrap(),
+        *core.get_cell_value(&cell_store, &b1_id).unwrap(),
         CellValue::number(0.0),
         "B1 should be 0 initially"
     );
@@ -141,11 +141,11 @@ fn test_new_projection_triggers_phase2_correction() {
     // Topo evaluation evaluates both A1 and B1, but B1 might read stale range values.
     // Projection stabilization should correct B1 = SUM(1+2+3+4+5) = 15
     let _result = core
-        .set_cell(&mut mirror, &sheet_id, a1_id, 0, 0, "=SEQUENCE(5)")
+        .set_cell(&mut cell_store, &sheet_id, a1_id, 0, 0, "=SEQUENCE(5)")
         .unwrap();
 
     // B1 should now be SUM(1..5) = 15
-    let b1_val = core.get_cell_value(&mirror, &b1_id).unwrap();
+    let b1_val = core.get_cell_value(&cell_store, &b1_id).unwrap();
     assert_eq!(
         *b1_val,
         CellValue::number(15.0),
@@ -197,8 +197,8 @@ fn test_self_eliminating_property() {
     ]);
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     let sheet_id = sid(1);
     let a1_id = cell_id_from_str(&a1_str);
@@ -206,24 +206,24 @@ fn test_self_eliminating_property() {
     let c1_id = cell_id_from_str(&c1_str);
 
     // First recalc: enter SEQUENCE(5) — stabilization runs, adds Cell(source) edges
-    core.set_cell(&mut mirror, &sheet_id, a1_id, 0, 0, "=SEQUENCE(5)")
+    core.set_cell(&mut cell_store, &sheet_id, a1_id, 0, 0, "=SEQUENCE(5)")
         .unwrap();
     assert_eq!(
-        *core.get_cell_value(&mirror, &b1_id).unwrap(),
+        *core.get_cell_value(&cell_store, &b1_id).unwrap(),
         CellValue::number(15.0),
     );
 
     // Second recalc: edit unrelated C1 — projection is stable, stabilization should not trigger
     // We verify correctness: B1 should still be 15, A1 still 1
-    core.set_cell(&mut mirror, &sheet_id, c1_id, 0, 2, "99")
+    core.set_cell(&mut cell_store, &sheet_id, c1_id, 0, 2, "99")
         .unwrap();
     assert_eq!(
-        *core.get_cell_value(&mirror, &b1_id).unwrap(),
+        *core.get_cell_value(&cell_store, &b1_id).unwrap(),
         CellValue::number(15.0),
         "B1 should still be 15 after stable recalc (self-eliminating)"
     );
     assert_eq!(
-        *core.get_cell_value(&mirror, &a1_id).unwrap(),
+        *core.get_cell_value(&cell_store, &a1_id).unwrap(),
         CellValue::number(1.0),
         "A1 should still be 1"
     );
@@ -251,30 +251,30 @@ fn test_projection_stabilization_recursion_bound() {
     }]);
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     let sheet_id = sid(1);
     let a1_id = cell_id_from_str(&a1_str);
 
     // Set A1 = SEQUENCE(10) — large projection, stabilization should complete
-    let result = core.set_cell(&mut mirror, &sheet_id, a1_id, 0, 0, "=SEQUENCE(10)");
+    let result = core.set_cell(&mut cell_store, &sheet_id, a1_id, 0, 0, "=SEQUENCE(10)");
     assert!(result.is_ok(), "SEQUENCE(10) should complete without panic");
 
     // Verify the projection is correct
-    assert!(mirror.projection_registry.is_source(&a1_id));
-    let proj = mirror.projection_registry.get(&a1_id).unwrap();
+    assert!(cell_store.projection_registry.is_source(&a1_id));
+    let proj = cell_store.projection_registry.get(&a1_id).unwrap();
     assert_eq!(proj.rows, 10);
     assert_eq!(proj.cols, 1);
 
     // Verify values via col_data (no phantom CellIds)
     assert_eq!(
-        *core.get_cell_value(&mirror, &a1_id).unwrap(),
+        *core.get_cell_value(&cell_store, &a1_id).unwrap(),
         CellValue::number(1.0)
     );
     {
-        let sheet_mirror = mirror.get_sheet(&sheet_id).unwrap();
-        let col_slice = sheet_mirror
+        let sheet_store = cell_store.get_sheet(&sheet_id).unwrap();
+        let col_slice = sheet_store
             .get_column_view(0)
             .expect("col_data should exist");
         for row in 1..10u32 {
@@ -289,13 +289,13 @@ fn test_projection_stabilization_recursion_bound() {
     }
 
     // Now resize from 10 to 3 and back to 10 rapidly
-    core.set_cell(&mut mirror, &sheet_id, a1_id, 0, 0, "=SEQUENCE(3)")
+    core.set_cell(&mut cell_store, &sheet_id, a1_id, 0, 0, "=SEQUENCE(3)")
         .unwrap();
-    assert_eq!(mirror.projection_registry.get(&a1_id).unwrap().rows, 3);
+    assert_eq!(cell_store.projection_registry.get(&a1_id).unwrap().rows, 3);
 
-    let result = core.set_cell(&mut mirror, &sheet_id, a1_id, 0, 0, "=SEQUENCE(10)");
+    let result = core.set_cell(&mut cell_store, &sheet_id, a1_id, 0, 0, "=SEQUENCE(10)");
     assert!(result.is_ok(), "Rapid resize should complete without panic");
-    assert_eq!(mirror.projection_registry.get(&a1_id).unwrap().rows, 10);
+    assert_eq!(cell_store.projection_registry.get(&a1_id).unwrap().rows, 10);
 }
 
 // ---------------------------------------------------------------------------

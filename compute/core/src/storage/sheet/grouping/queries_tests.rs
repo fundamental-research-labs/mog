@@ -13,7 +13,7 @@ fn test_get_group_in_sheet() {
 #[test]
 fn test_get_group_across_sheets() {
     let mut s = WorkbookStorage::new();
-    let mut m = crate::mirror::CellMirror::new();
+    let mut m = crate::cells::CellStore::new();
     let a = make_sheet_id(1);
     let b = make_sheet_id(2);
     s.add_sheet(&mut m, a, "S1", 100, 26).unwrap();

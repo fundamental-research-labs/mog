@@ -81,7 +81,7 @@ impl SheetCharts {
         let sid = self.sheet_id;
         let cfg = config.clone();
         self.dispatch
-            .call_engine(move |e| e.create_chart(&sid, &cfg).map(|(_, r)| r))
+            .call_engine(move |e| e.create_chart(&sid, &cfg))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -95,7 +95,7 @@ impl SheetCharts {
         let cid = chart_id.to_string();
         let upd = updates.clone();
         self.dispatch
-            .call_engine(move |e| e.update_chart(&sid, &cid, &upd).map(|(_, r)| r))
+            .call_engine(move |e| e.update_chart(&sid, &cid, &upd))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -104,7 +104,7 @@ impl SheetCharts {
         let sid = self.sheet_id;
         let cid = chart_id.to_string();
         self.dispatch
-            .call_engine(move |e| e.delete_chart(&sid, &cid).map(|(_, r)| r))
+            .call_engine(move |e| e.delete_chart(&sid, &cid))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -113,7 +113,7 @@ impl SheetCharts {
         let sid = self.sheet_id;
         let cid = chart_id.to_string();
         self.dispatch
-            .call_engine(move |e| e.bring_chart_to_front(&sid, &cid).map(|(_, r)| r))
+            .call_engine(move |e| e.bring_chart_to_front(&sid, &cid))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -122,7 +122,7 @@ impl SheetCharts {
         let sid = self.sheet_id;
         let cid = chart_id.to_string();
         self.dispatch
-            .call_engine(move |e| e.send_chart_to_back(&sid, &cid).map(|(_, r)| r))
+            .call_engine(move |e| e.send_chart_to_back(&sid, &cid))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -131,7 +131,7 @@ impl SheetCharts {
         let sid = self.sheet_id;
         let cid = chart_id.to_string();
         self.dispatch
-            .call_engine(move |e| e.bring_chart_forward(&sid, &cid).map(|(_, r)| r))
+            .call_engine(move |e| e.bring_chart_forward(&sid, &cid))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -140,7 +140,7 @@ impl SheetCharts {
         let sid = self.sheet_id;
         let cid = chart_id.to_string();
         self.dispatch
-            .call_engine(move |e| e.send_chart_backward(&sid, &cid).map(|(_, r)| r))
+            .call_engine(move |e| e.send_chart_backward(&sid, &cid))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -154,7 +154,7 @@ impl SheetCharts {
         let cid = chart_id.to_string();
         let tid = table_id.to_string();
         self.dispatch
-            .call_engine(move |e| e.link_chart_to_table(&sid, &cid, &tid).map(|(_, r)| r))
+            .call_engine(move |e| e.link_chart_to_table(&sid, &cid, &tid))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -163,7 +163,7 @@ impl SheetCharts {
         let sid = self.sheet_id;
         let cid = chart_id.to_string();
         self.dispatch
-            .call_engine(move |e| e.unlink_chart_from_table(&sid, &cid).map(|(_, r)| r))
+            .call_engine(move |e| e.unlink_chart_from_table(&sid, &cid))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 }

@@ -37,7 +37,7 @@ fn test_agg_prepass_maxifs_minifs() {
         ));
     }
 
-    let (core, mirror) = init_core(single_sheet_snapshot("Sheet1", 15, 5, cells));
+    let (core, cell_store) = init_core(single_sheet_snapshot("Sheet1", 15, 5, cells));
     let sheet_id = sid(1);
 
     for row in 0..10u32 {
@@ -47,8 +47,8 @@ fn test_agg_prepass_maxifs_minifs() {
             (140.0, 20.0)
         };
 
-        assert_number_at(&core, &mirror, &sheet_id, row, 3, exp_max, "MAXIFS");
-        assert_number_at(&core, &mirror, &sheet_id, row, 4, exp_min, "MINIFS");
+        assert_number_at(&core, &cell_store, &sheet_id, row, 3, exp_max, "MAXIFS");
+        assert_number_at(&core, &cell_store, &sheet_id, row, 4, exp_min, "MINIFS");
     }
 }
 
@@ -73,13 +73,13 @@ fn test_agg_prepass_averageifs_no_match_div0() {
         ));
     }
 
-    let (core, mirror) = init_core(single_sheet_snapshot("Sheet1", 10, 4, cells));
+    let (core, cell_store) = init_core(single_sheet_snapshot("Sheet1", 10, 4, cells));
     let sheet_id = sid(1);
 
     for row in 0..10u32 {
         assert_error_at(
             &core,
-            &mirror,
+            &cell_store,
             &sheet_id,
             row,
             3,

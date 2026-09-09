@@ -2,7 +2,7 @@
 //!
 //! `ComputeEngine::recalculate*()` must materialize stored pivot output before
 //! full formula recalculation. GETPIVOTDATA reads the rendered pivot region
-//! through the cell mirror, so stale or absent pivot output would make the
+//! through the cell store, so stale or absent pivot output would make the
 //! formula evaluate to the wrong value.
 
 use cell_types::{SheetId, SheetPos};
@@ -127,7 +127,7 @@ fn pivot_sheet_id() -> SheetId {
 
 fn getpivotdata_value(engine: &ComputeEngine) -> f64 {
     match engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&pivot_sheet_id(), SheetPos::new(0, 6))
     {
         Some(CellValue::Number(n)) => n.get(),
@@ -137,7 +137,7 @@ fn getpivotdata_value(engine: &ComputeEngine) -> f64 {
                     (0..3)
                         .map(|col| {
                             engine
-                                .mirror()
+                                .cell_store()
                                 .get_cell_value_at(&pivot_sheet_id(), SheetPos::new(row, col))
                                 .cloned()
                         })
@@ -146,7 +146,7 @@ fn getpivotdata_value(engine: &ComputeEngine) -> f64 {
                 .collect();
             panic!(
                 "expected GETPIVOTDATA formula to evaluate to 30, got {other:?}; pivot cells: {pivot_cells:?}; pivot defs: {:?}",
-                engine.mirror().all_pivot_tables()
+                engine.cell_store().all_pivot_tables()
             );
         }
     }

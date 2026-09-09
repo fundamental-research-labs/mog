@@ -1,5 +1,5 @@
 use cell_types::SheetPos;
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellError, CellValue};
@@ -77,18 +77,18 @@ pub fn workbook_snapshot(sheets: Vec<SheetSnapshot>) -> WorkbookSnapshot {
 
 pub fn init_core(
     snapshot: WorkbookSnapshot,
-) -> (CellMirror, ComputeCore, compute_core::RecalcResult) {
-    let mut mirror = CellMirror::new();
+) -> (CellStore, ComputeCore, compute_core::RecalcResult) {
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init_from_snapshot failed");
-    (mirror, core, result)
+    (cell_store, core, result)
 }
 
-pub fn mirror_value(mirror: &CellMirror, sheet_uuid: &str, row: u32, col: u32) -> CellValue {
+pub fn store_value(cell_store: &CellStore, sheet_uuid: &str, row: u32, col: u32) -> CellValue {
     let sheet_id = compute_core::SheetId::from_uuid_str(sheet_uuid).unwrap();
-    mirror
+    cell_store
         .get_cell_value_at(&sheet_id, SheetPos::new(row, col))
         .cloned()
         .unwrap_or(CellValue::Null)
@@ -108,7 +108,7 @@ pub fn assert_no_recalc_errors(result: &compute_core::RecalcResult, context: &st
 }
 
 pub fn assert_number_value(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     result: &compute_core::RecalcResult,
     sheet_uuid: &str,
     row: u32,
@@ -117,7 +117,7 @@ pub fn assert_number_value(
     context: &str,
 ) {
     assert_cell_value(
-        mirror,
+        cell_store,
         result,
         sheet_uuid,
         row,
@@ -128,7 +128,7 @@ pub fn assert_number_value(
 }
 
 pub fn assert_text_value(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     result: &compute_core::RecalcResult,
     sheet_uuid: &str,
     row: u32,
@@ -137,7 +137,7 @@ pub fn assert_text_value(
     context: &str,
 ) {
     assert_cell_value(
-        mirror,
+        cell_store,
         result,
         sheet_uuid,
         row,
@@ -148,7 +148,7 @@ pub fn assert_text_value(
 }
 
 pub fn assert_error_value(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     result: &compute_core::RecalcResult,
     sheet_uuid: &str,
     row: u32,
@@ -157,7 +157,7 @@ pub fn assert_error_value(
     context: &str,
 ) {
     assert_cell_value(
-        mirror,
+        cell_store,
         result,
         sheet_uuid,
         row,
@@ -168,7 +168,7 @@ pub fn assert_error_value(
 }
 
 fn assert_cell_value(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     result: &compute_core::RecalcResult,
     sheet_uuid: &str,
     row: u32,
@@ -176,7 +176,7 @@ fn assert_cell_value(
     expected: CellValue,
     context: &str,
 ) {
-    let actual = mirror_value(mirror, sheet_uuid, row, col);
+    let actual = store_value(cell_store, sheet_uuid, row, col);
     assert_eq!(
         actual,
         expected,

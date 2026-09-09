@@ -10,7 +10,7 @@ impl ComputeCore {
     /// evaluates them before the prepass so the guard passes.
     pub(super) fn collect_agg_data_column_blockers(
         &self,
-        mirror: &CellMirror,
+        cell_store: &CellStore,
         agg_group_cell_ids: &FxHashSet<CellId>,
         already_evaluated: &FxHashSet<CellId>,
     ) -> Vec<CellId> {
@@ -23,7 +23,7 @@ impl ComputeCore {
         let groups = agg_prepass::detect_agg_groups(
             agg_group_cell_ids,
             get_ast,
-            mirror,
+            cell_store,
             agg_prepass::AGG_MIN_GROUP_SIZE,
         );
 
@@ -47,7 +47,7 @@ impl ComputeCore {
         let mut blockers: Vec<CellId> = Vec::new();
         let mut blocker_set: FxHashSet<CellId> = FxHashSet::default();
         for &(sheet, col, start_row, end_row) in &seen_ranges {
-            let Some(sh) = mirror.get_sheet(&sheet) else {
+            let Some(sh) = cell_store.get_sheet(&sheet) else {
                 continue;
             };
             let clamped_end = if end_row == u32::MAX {
@@ -56,7 +56,7 @@ impl ComputeCore {
                 end_row.min(sh.rows)
             };
             for row in start_row..clamped_end {
-                if let Some(cell_id) = mirror.resolve_cell_id(&sheet, SheetPos::new(row, col))
+                if let Some(cell_id) = cell_store.resolve_cell_id(&sheet, SheetPos::new(row, col))
                     && ast_cache.contains_key(&cell_id)
                     && !already_evaluated.contains(&cell_id)
                     && !blocker_set.contains(&cell_id)
@@ -95,7 +95,7 @@ impl ComputeCore {
                             }
                         }
                         compute_graph::DepTarget::Range(range, _) => {
-                            let Some(sh) = mirror.get_sheet(&range.sheet()) else {
+                            let Some(sh) = cell_store.get_sheet(&range.sheet()) else {
                                 continue;
                             };
                             let clamped_end = if range.end_row() == u32::MAX {
@@ -105,7 +105,7 @@ impl ComputeCore {
                             };
                             for col in range.start_col()..=range.end_col() {
                                 for row in range.start_row()..clamped_end {
-                                    if let Some(dep_id) = mirror
+                                    if let Some(dep_id) = cell_store
                                         .resolve_cell_id(&range.sheet(), SheetPos::new(row, col))
                                         && ast_cache.contains_key(&dep_id)
                                         && !already_evaluated.contains(&dep_id)

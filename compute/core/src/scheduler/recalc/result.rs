@@ -6,27 +6,28 @@ impl ComputeCore {
     /// Find which sheet a cell belongs to (O(1) via reverse index).
     pub(in super::super) fn find_sheet_for_cell(
         &self,
-        mirror: &CellMirror,
+        cell_store: &CellStore,
         cell_id: &CellId,
     ) -> Option<SheetId> {
-        mirror.sheet_for_cell(cell_id)
+        cell_store.sheet_for_cell(cell_id)
     }
 
     /// Create a CellChange for IPC serialization.
     pub(in super::super) fn make_cell_change(
         &self,
-        mirror: &CellMirror,
+        cell_store: &CellStore,
         cell_id: &CellId,
         value: &CellValue,
     ) -> Option<(SheetId, CellChange)> {
-        let sheet_id = self.find_sheet_for_cell(mirror, cell_id)?;
-        // Resolve position from mirror; `None` when unavailable.
-        let position = mirror
-            .resolve_position(cell_id)
-            .map(|pos| snapshot_types::CellPosition {
-                row: pos.row(),
-                col: pos.col(),
-            });
+        let sheet_id = self.find_sheet_for_cell(cell_store, cell_id)?;
+        // Resolve position from cell_store; `None` when unavailable.
+        let position =
+            cell_store
+                .resolve_position(cell_id)
+                .map(|pos| snapshot_types::CellPosition {
+                    row: pos.row(),
+                    col: pos.col(),
+                });
         Some((
             sheet_id,
             CellChange {

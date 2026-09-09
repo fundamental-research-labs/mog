@@ -13,7 +13,7 @@ use domain_types::units::{Pixels, points_to_pixels};
 use rustc_hash::FxHashMap;
 use value_types::{CellValue, ComputeError};
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::snapshot::MutationResult;
 use crate::storage::engine::settings::EngineSettings;
 use crate::storage::engine::stores::EngineStores;
@@ -38,7 +38,7 @@ const MIN_ROW_HEIGHT: Pixels = Pixels(16.0);
 /// Compute the optimal width for a single column.
 pub(in crate::storage::engine) fn auto_fit_column(
     stores: &mut EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     settings: &EngineSettings,
     sheet_id: &SheetId,
     col: u32,
@@ -51,11 +51,16 @@ pub(in crate::storage::engine) fn auto_fit_column(
     let max_row = grid.row_count();
 
     // Collect cells to measure (avoids borrow conflict with stores.measurement_cache)
-    let cells_to_measure: Vec<_> = grid
-        .cells_in_range(0, col, max_row.saturating_sub(1), col)
+    let cells_to_measure: Vec<_> = cell_store
+        .get_sheet(sheet_id)
+        .into_iter()
+        .flat_map(|sheet| sheet.cells_in_range(0, col, max_row.saturating_sub(1), col))
         .collect();
 
-    let all_merges = merges::get_all_merges(&stores.storage, *sheet_id, grid);
+    let all_merges = cell_store
+        .get_sheet(sheet_id)
+        .map(|sheet| merges::get_all_merges(&stores.storage, *sheet_id, sheet))
+        .unwrap_or_default();
 
     // Build merge lookup: (row, col) → index into all_merges. O(total merge area).
     let merge_at = build_merge_lookup(&all_merges);
@@ -84,7 +89,7 @@ pub(in crate::storage::engine) fn auto_fit_column(
         }
 
         let width = Pixels(measure_cell_width_for_autofit(
-            stores, mirror, settings, sheet_id, &cell_id, row, cell_col,
+            stores, cell_store, settings, sheet_id, &cell_id, row, cell_col,
         ));
         if width.0 > max_width.0 {
             max_width = width;
@@ -99,14 +104,14 @@ pub(in crate::storage::engine) fn auto_fit_column(
 /// Compute optimal widths for multiple columns in a single call.
 pub(in crate::storage::engine) fn auto_fit_columns(
     stores: &mut EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     settings: &EngineSettings,
     sheet_id: &SheetId,
     cols: &[u32],
 ) -> Result<Vec<(u32, Pixels)>, ComputeError> {
     let mut results = Vec::with_capacity(cols.len());
     for &col in cols {
-        let width = auto_fit_column(stores, mirror, settings, sheet_id, col)?;
+        let width = auto_fit_column(stores, cell_store, settings, sheet_id, col)?;
         results.push((col, width));
     }
     Ok(results)
@@ -115,7 +120,7 @@ pub(in crate::storage::engine) fn auto_fit_columns(
 /// Compute the optimal height for a single row.
 pub(in crate::storage::engine) fn auto_fit_row(
     stores: &mut EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     settings: &EngineSettings,
     sheet_id: &SheetId,
     row: u32,
@@ -127,11 +132,16 @@ pub(in crate::storage::engine) fn auto_fit_row(
 
     let max_col = grid.col_count();
 
-    let cells_to_measure: Vec<_> = grid
-        .cells_in_range(row, 0, row, max_col.saturating_sub(1))
+    let cells_to_measure: Vec<_> = cell_store
+        .get_sheet(sheet_id)
+        .into_iter()
+        .flat_map(|sheet| sheet.cells_in_range(row, 0, row, max_col.saturating_sub(1)))
         .collect();
 
-    let all_merges = merges::get_all_merges(&stores.storage, *sheet_id, grid);
+    let all_merges = cell_store
+        .get_sheet(sheet_id)
+        .map(|sheet| merges::get_all_merges(&stores.storage, *sheet_id, sheet))
+        .unwrap_or_default();
 
     // Build merge lookup: (row, col) → index into all_merges. O(total merge area).
     let merge_at = build_merge_lookup(&all_merges);
@@ -159,7 +169,7 @@ pub(in crate::storage::engine) fn auto_fit_row(
         }
 
         let height = Pixels(measure_cell_height_for_autofit(
-            stores, mirror, settings, sheet_id, &cell_id, cell_row, col,
+            stores, cell_store, settings, sheet_id, &cell_id, cell_row, col,
         ));
         if height.0 > max_height.0 {
             max_height = height;
@@ -179,14 +189,14 @@ pub(in crate::storage::engine) fn auto_fit_row(
 /// Compute optimal heights for multiple rows in a single call.
 pub(in crate::storage::engine) fn auto_fit_rows(
     stores: &mut EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     settings: &EngineSettings,
     sheet_id: &SheetId,
     rows: &[u32],
 ) -> Result<Vec<(u32, Pixels)>, ComputeError> {
     let mut results = Vec::with_capacity(rows.len());
     for &row in rows {
-        let height = auto_fit_row(stores, mirror, settings, sheet_id, row)?;
+        let height = auto_fit_row(stores, cell_store, settings, sheet_id, row)?;
         results.push((row, height));
     }
     Ok(results)
@@ -199,27 +209,27 @@ pub(in crate::storage::engine) fn auto_fit_rows(
 /// Compute and set optimal widths for a single column.
 pub(in crate::storage::engine) fn auto_fit_column_and_set(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     settings: &EngineSettings,
     sheet_id: &SheetId,
     col: u32,
 ) -> Result<MutationResult, ComputeError> {
-    let width = auto_fit_column(stores, mirror, settings, sheet_id, col)?;
-    super::structural::set_col_width(stores, mirror, sheet_id, col, width)
+    let width = auto_fit_column(stores, cell_store, settings, sheet_id, col)?;
+    super::structural::set_col_width(stores, cell_store, sheet_id, col, width)
 }
 
 /// Compute and set optimal widths for multiple columns.
 pub(in crate::storage::engine) fn auto_fit_columns_and_set(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     settings: &EngineSettings,
     sheet_id: &SheetId,
     cols: &[u32],
 ) -> Result<MutationResult, ComputeError> {
-    let widths = auto_fit_columns(stores, mirror, settings, sheet_id, cols)?;
+    let widths = auto_fit_columns(stores, cell_store, settings, sheet_id, cols)?;
     let mut combined = MutationResult::empty();
     for (col, width) in widths {
-        let result = super::structural::set_col_width(stores, mirror, sheet_id, col, width)?;
+        let result = super::structural::set_col_width(stores, cell_store, sheet_id, col, width)?;
         merge_mutation_results(&mut combined, result);
     }
     Ok(combined)
@@ -228,15 +238,15 @@ pub(in crate::storage::engine) fn auto_fit_columns_and_set(
 /// Compute and set optimal heights for multiple rows.
 pub(in crate::storage::engine) fn auto_fit_rows_and_set(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     settings: &EngineSettings,
     sheet_id: &SheetId,
     rows: &[u32],
 ) -> Result<MutationResult, ComputeError> {
-    let heights = auto_fit_rows(stores, mirror, settings, sheet_id, rows)?;
+    let heights = auto_fit_rows(stores, cell_store, settings, sheet_id, rows)?;
     let mut combined = MutationResult::empty();
     for (row, height) in heights {
-        let result = super::structural::set_row_height(stores, mirror, sheet_id, row, height)?;
+        let result = super::structural::set_row_height(stores, cell_store, sheet_id, row, height)?;
         merge_mutation_results(&mut combined, result);
     }
     Ok(combined)
@@ -277,19 +287,19 @@ fn build_merge_lookup(
 /// Measure the width a cell needs for its content.
 fn measure_cell_width_for_autofit(
     stores: &mut EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     settings: &EngineSettings,
     sheet_id: &SheetId,
     cell_id: &cell_types::CellId,
     row: u32,
     col: u32,
 ) -> f64 {
-    let value = get_cell_value(stores, mirror, sheet_id, cell_id);
+    let value = get_cell_value(stores, cell_store, sheet_id, cell_id);
     if matches!(value, CellValue::Null) {
         return 0.0;
     }
 
-    let effective = get_effective_format(stores, mirror, settings, sheet_id, cell_id, row, col);
+    let effective = get_effective_format(stores, cell_store, settings, sheet_id, cell_id, row, col);
     let format_code = effective.number_format.as_deref().unwrap_or("General");
     let display_text = compute_formats::format_value(&value, format_code, &settings.locale).text;
 
@@ -309,7 +319,9 @@ fn measure_cell_width_for_autofit(
 
     if rotation != 0 {
         let (w, _h) = text_measure::measure_rotated_cell(
-            &stores.font_db,
+            stores
+                .font_db
+                .get_or_init(compute_text_measurement::FontDb::with_defaults),
             font_family,
             font_size,
             bold,
@@ -321,7 +333,10 @@ fn measure_cell_width_for_autofit(
     }
 
     // Check cache
-    if let Some((font_id, _)) = stores.font_db.resolve_styled(font_family, bold, italic)
+    if let Some((font_id, _)) = stores
+        .font_db
+        .get_or_init(compute_text_measurement::FontDb::with_defaults)
+        .resolve_styled(font_family, bold, italic)
         && let Some(cached) = stores
             .measurement_cache
             .get(font_id, font_size, &display_text)
@@ -334,7 +349,9 @@ fn measure_cell_width_for_autofit(
     }
 
     let width = text_measure::measure_cell_width(
-        &stores.font_db,
+        stores
+            .font_db
+            .get_or_init(compute_text_measurement::FontDb::with_defaults),
         font_family,
         font_size,
         bold,
@@ -349,19 +366,19 @@ fn measure_cell_width_for_autofit(
 /// Measure the height a cell needs for its content.
 fn measure_cell_height_for_autofit(
     stores: &mut EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     settings: &EngineSettings,
     sheet_id: &SheetId,
     cell_id: &cell_types::CellId,
     row: u32,
     col: u32,
 ) -> f64 {
-    let value = get_cell_value(stores, mirror, sheet_id, cell_id);
+    let value = get_cell_value(stores, cell_store, sheet_id, cell_id);
     if matches!(value, CellValue::Null) {
         return 0.0;
     }
 
-    let effective = get_effective_format(stores, mirror, settings, sheet_id, cell_id, row, col);
+    let effective = get_effective_format(stores, cell_store, settings, sheet_id, cell_id, row, col);
     let format_code = effective.number_format.as_deref().unwrap_or("General");
     let display_text = compute_formats::format_value(&value, format_code, &settings.locale).text;
 
@@ -381,7 +398,9 @@ fn measure_cell_height_for_autofit(
 
     if rotation != 0 {
         let (_w, h) = text_measure::measure_rotated_cell(
-            &stores.font_db,
+            stores
+                .font_db
+                .get_or_init(compute_text_measurement::FontDb::with_defaults),
             font_family,
             font_size,
             bold,
@@ -393,13 +412,15 @@ fn measure_cell_height_for_autofit(
     }
 
     let available_width = stores
-        .layout_indexes
-        .get(sheet_id)
+        .pixel_layout(sheet_id)
+        .as_deref()
         .map(|li| li.get_col_width(col as usize).0 as f32)
         .unwrap_or(stores.layout_metrics.default_column_width_px as f32);
 
     let height = text_measure::measure_cell_height(
-        &stores.font_db,
+        stores
+            .font_db
+            .get_or_init(compute_text_measurement::FontDb::with_defaults),
         font_family,
         font_size,
         bold,
@@ -412,19 +433,19 @@ fn measure_cell_height_for_autofit(
     height as f64
 }
 
-/// Get cell value: ComputeCore first, mirror fallback.
+/// Get cell value: ComputeCore first, cell_store fallback.
 fn get_cell_value(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     cell_id: &cell_types::CellId,
 ) -> CellValue {
     stores
         .compute
-        .get_cell_value(mirror, cell_id)
+        .get_cell_value(cell_store, cell_id)
         .cloned()
         .unwrap_or_else(|| {
-            mirror
+            cell_store
                 .get_cell_value_in_sheet(sheet_id, cell_id)
                 .cloned()
                 .unwrap_or(CellValue::Null)
@@ -434,7 +455,7 @@ fn get_cell_value(
 /// Get effective format for a cell (resolves col > row > table > cell cascade).
 fn get_effective_format(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     settings: &EngineSettings,
     sheet_id: &SheetId,
     cell_id: &cell_types::CellId,
@@ -442,7 +463,7 @@ fn get_effective_format(
     col: u32,
 ) -> domain_types::CellFormat {
     let cell_id_hex = id_to_hex(cell_id.as_u128());
-    let table_fmt = super::resolve_structured_format_at_cell(mirror, sheet_id, row, col);
+    let table_fmt = super::resolve_structured_format_at_cell(cell_store, sheet_id, row, col);
     let mut effective = properties::get_effective_format(
         &stores.storage,
         sheet_id,
@@ -451,7 +472,7 @@ fn get_effective_format(
         col,
         table_fmt.as_ref(),
         stores.grid_indexes.get(sheet_id),
-        mirror.get_sheet(sheet_id),
+        cell_store.get_sheet(sheet_id),
     );
     domain_types::theme_color::resolve_theme_refs(&mut effective, &settings.theme_palette);
     effective

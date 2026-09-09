@@ -11,13 +11,13 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         change: &StructureChange,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.complete_deferred_hydration_for_structure_change()?;
 
         // Pass 1: Suppress observer, apply structural ops + merge rebuild + formula recalc.
         let apply_result = services::structural::apply_structure_change(
             &mut self.stores,
-            &mut self.mirror,
+            &mut self.cell_store,
             sheet_id,
             change,
         );
@@ -41,7 +41,7 @@ impl ComputeEngine {
         if completion.calculation.full_calc_on_load || completion.calculation.force_full_calc {
             Self::materialize_all_pivots_for_import_open(
                 &mut completion.stores,
-                &mut completion.mirror,
+                &mut completion.cell_store,
             );
         }
         construction::commit_deferred_hydration(self, completion);
@@ -53,57 +53,25 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         mut recalc: RecalcResult,
         change: Option<&StructureChange>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        // Pass 2: Row/column changes are represented by `structure_changes`
-        // below. The TS bridge invalidates structural prefetch before the
-        // mutation and force-refreshes registered viewports after it returns,
-        // so shifted-but-unchanged cells should not be expanded into a
-        // viewport-sized synthetic patch payload.
-        //
-        // Partial cell shifts use the same remap machinery but do not emit a
-        // StructureChangeResult, so they still need explicit patches for
-        // shifted-but-unchanged cells.
-        let needs_explicit_shift_patches =
-            matches!(change, None | Some(StructureChange::RemapPositions { .. }));
-        if needs_explicit_shift_patches {
-            let structural_patches = self.produce_structural_patches(sheet_id);
-            services::structural::merge_viewport_patches_into_recalc(
-                &mut recalc,
-                structural_patches,
-            );
-        }
-
-        // Pass 3: Flush viewport patches, build result.
-        //
-        // CF re-eval through structural mutations (filter viewport finding 10):
-        // row/column Insert/Delete shifts CF target ranges, while the
-        // incremental recalc patch path only covers `recalc.changed_cells`.
-        // Refresh the CF cache at the new positions and return a full viewport
-        // rebuild when CF is active. Incremental recalc patches only cover
-        // value changes, while structural shifts can move unchanged cells into
-        // or out of a CF range.
-        self.prepare_recalc_for_flush(&mut recalc);
+    ) -> Result<MutationResult, ComputeError> {
+        self.postprocess_mutation_recalc(&mut recalc);
         let cf_active = !services::formatting::get_all_cf_rules(&self.stores, sheet_id).is_empty();
         if cf_active {
             self.refresh_cf_cache(sheet_id);
         }
-        let patches = if cf_active {
-            // Discard the pending incremental recalc — the full-viewport
-            // rebuild below subsumes it.
-            self.mutation.pending_recalc = None;
-            self.produce_cf_viewport_patches(sheet_id)
-        } else {
-            self.flush_viewport_patches()
-        };
+
         let mut result = MutationResult::from_recalc(recalc);
-        result.floating_object_changes =
-            services::structural::recompute_floating_object_bounds(&self.stores, sheet_id);
+        result.floating_object_changes = services::structural::recompute_floating_object_bounds(
+            &self.stores,
+            &self.cell_store,
+            sheet_id,
+        );
         if let Some(change) = change
             && let Some(sc) = services::structural::build_structure_change_result(sheet_id, change)
         {
             result.structure_changes = vec![sc];
         }
-        Ok((patches, result))
+        Ok(result)
     }
 
     /// Recompute pixel bounds for all cell-anchored floating objects on a sheet.
@@ -114,6 +82,10 @@ impl ComputeEngine {
         &self,
         sheet_id: &SheetId,
     ) -> Vec<FloatingObjectChange> {
-        services::structural::recompute_floating_object_bounds(&self.stores, sheet_id)
+        services::structural::recompute_floating_object_bounds(
+            &self.stores,
+            &self.cell_store,
+            sheet_id,
+        )
     }
 }

@@ -1,7 +1,6 @@
 //! Headless sheet screenshot — renders a cell range to a PNG buffer.
 //!
-//! Wires `compute_screenshot::render_sheet_to_png` into the bridge system so
-//! that Node.js (via NAPI) and Python (via PyO3) can call it directly.
+//! Builds sparse pixel geometry and loads bundled fonts on demand.
 
 use cell_types::SheetId;
 use compute_screenshot::ScreenshotOptions;
@@ -109,7 +108,9 @@ impl ComputeEngine {
 
         compute_screenshot::render_sheet_to_png_with_charts(
             &viewport_data,
-            &self.stores.font_db,
+            self.stores
+                .font_db
+                .get_or_init(compute_text_measurement::FontDb::with_defaults),
             &options,
             &chart_overlays,
         )
@@ -123,8 +124,8 @@ impl ComputeEngine {
         data_width: f64,
         data_height: f64,
     ) -> Vec<ChartOverlay> {
-        let grid = self.stores.grid_indexes.get(sheet_id);
-        let layout = self.stores.layout_indexes.get(sheet_id);
+        let sheet = self.cell_store.get_sheet(sheet_id);
+        let layout = self.stores.pixel_layout(sheet_id);
 
         super::services::objects::get_all_charts(&self.stores, sheet_id)
             .into_iter()
@@ -132,7 +133,9 @@ impl ComputeEngine {
             .filter_map(|chart| {
                 let json = serde_json::to_value(&chart).ok()?;
                 let bounds = crate::storage::sheet::floating_objects::compute_object_pixel_bounds(
-                    grid, layout, &json,
+                    sheet,
+                    layout.as_deref(),
+                    &json,
                 )?;
                 let x = bounds.x.get();
                 let y = bounds.y.get();

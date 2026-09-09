@@ -89,10 +89,10 @@ pub(in crate::storage::engine) fn get_hidden_columns(
 
 pub(in crate::storage::engine) fn get_data_bounds(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
 ) -> Option<DataBounds> {
-    let sheet = mirror.get_sheet(sheet_id)?;
+    let sheet = cell_store.get_sheet(sheet_id)?;
 
     let mut min_row = u32::MAX;
     let mut max_row = 0u32;
@@ -100,9 +100,9 @@ pub(in crate::storage::engine) fn get_data_bounds(
     let mut max_col = 0u32;
     let mut found = false;
 
-    // 1. Bounds from mirror cells (value / formula cells)
-    for (cell_id, entry) in sheet.cells_iter() {
-        if entry.is_ghost() {
+    // 1. Bounds from cell_store cells (value / formula cells)
+    for cell_id in sheet.cell_ids() {
+        if sheet.is_ghost(cell_id) {
             continue;
         }
         if let Some(pos) = sheet.position_of(cell_id) {
@@ -129,8 +129,8 @@ pub(in crate::storage::engine) fn get_data_bounds(
 
     // Merge rectangles contribute to the used range even when their interior
     // cells are blank. Resolve native merge anchors through the sheet axes.
-    if let Some(grid) = stores.grid_indexes.get(sheet_id) {
-        for (sr, sc, er, ec) in merges::iter_merge_bounds(&stores.storage, *sheet_id, grid) {
+    if let Some(cells) = cell_store.get_sheet(sheet_id) {
+        for (sr, sc, er, ec) in merges::iter_merge_bounds(&stores.storage, *sheet_id, cells) {
             found = true;
             min_row = min_row.min(sr);
             max_row = max_row.max(er);
@@ -311,12 +311,12 @@ pub(in crate::storage::engine) fn get_col_widths_batch(
 
 pub(in crate::storage::engine) fn get_current_region(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,
 ) -> RectBounds {
-    if mirror.get_sheet(sheet_id).is_none() {
+    if cell_store.get_sheet(sheet_id).is_none() {
         return RectBounds {
             start_row,
             start_col,
@@ -325,7 +325,7 @@ pub(in crate::storage::engine) fn get_current_region(
         };
     };
     let region = cell_iter::get_current_region(*sheet_id, start_row, start_col, |r, c| {
-        mirror_render_has_data(stores, mirror, sheet_id, r, c)
+        store_render_has_data(stores, cell_store, sheet_id, r, c)
     });
     RectBounds {
         start_row: region.start_row(),
@@ -337,7 +337,7 @@ pub(in crate::storage::engine) fn get_current_region(
 
 pub(in crate::storage::engine) fn find_data_edge(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -350,73 +350,72 @@ pub(in crate::storage::engine) fn find_data_edge(
         &stores.storage,
         *sheet_id,
         grid,
+        cell_store,
         row,
         col,
         direction,
-        |r, c| mirror_render_has_data(stores, mirror, sheet_id, r, c),
+        |r, c| store_render_has_data(stores, cell_store, sheet_id, r, c),
     )
 }
 
-pub(super) fn mirror_render_has_data(
+pub(super) fn store_render_has_data(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
 ) -> bool {
     let pos = SheetPos::new(row, col);
 
-    let cell_id = stores
-        .grid_indexes
-        .get(sheet_id)
-        .and_then(|grid| grid.cell_id_at(row, col))
-        .or_else(|| mirror.resolve_cell_id(sheet_id, pos));
+    let cell_id = cell_store.resolve_cell_id(sheet_id, cell_types::SheetPos::new(row, col));
 
     if let Some(cell_id) = cell_id {
         if stores
             .compute
-            .get_cell_value(mirror, &cell_id)
+            .get_cell_value(cell_store, &cell_id)
             .is_some_and(|value| !value.is_null())
         {
             return true;
         }
 
-        if mirror
+        if cell_store
             .get_cell_value_in_sheet(sheet_id, &cell_id)
             .is_some_and(|value| !value.is_null())
         {
             return true;
         }
 
-        if stores.compute.get_formula(&cell_id).is_some() || mirror.get_formula(&cell_id).is_some()
+        if stores.compute.get_formula(&cell_id).is_some()
+            || cell_store.get_formula(&cell_id).is_some()
         {
             return true;
         }
     }
 
-    if mirror
+    if cell_store
         .get_cell_value_at(sheet_id, pos)
         .is_some_and(|value| !value.is_null())
     {
         return true;
     }
 
-    if crate::storage::engine::data_table_formula::formula_at(mirror, sheet_id, row, col).is_some()
+    if crate::storage::engine::data_table_formula::formula_at(cell_store, sheet_id, row, col)
+        .is_some()
     {
         return true;
     }
 
-    match mirror.cell_render_at(sheet_id, row, col) {
+    match cell_store.cell_render_at(sheet_id, row, col) {
         CellRender::Plain(view) => {
             !view.value.is_null()
                 || stores.compute.get_formula(&view.cell_id).is_some()
-                || mirror.get_formula(&view.cell_id).is_some()
+                || cell_store.get_formula(&view.cell_id).is_some()
         }
         CellRender::Projection(view) => {
             !view.value.is_null()
                 || view.is_cse
                 || stores.compute.get_formula(&view.anchor_id).is_some()
-                || mirror.get_formula(&view.anchor_id).is_some()
+                || cell_store.get_formula(&view.anchor_id).is_some()
         }
         CellRender::Materialized(view) => !view.value.is_null(),
         CellRender::Empty => false,
@@ -426,16 +425,16 @@ pub(super) fn mirror_render_has_data(
 /// Find the last populated row in a column. Returns data and formatting edges.
 pub(in crate::storage::engine) fn find_last_row(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     col: u32,
 ) -> ColumnEdge {
     let mut last_data_row: Option<u32> = None;
 
-    // 1. Scan CellMirror cells (value / formula cells) for this column.
-    if let Some(sheet) = mirror.get_sheet(sheet_id) {
-        for (cell_id, entry) in sheet.cells_iter() {
-            if entry.is_ghost() {
+    // 1. Scan CellStore cells (value / formula cells) for this column.
+    if let Some(sheet) = cell_store.get_sheet(sheet_id) {
+        for cell_id in sheet.cell_ids() {
+            if sheet.is_ghost(cell_id) {
                 continue;
             }
             if let Some(pos) = sheet.position_of(cell_id)
@@ -461,10 +460,9 @@ pub(in crate::storage::engine) fn find_last_row(
     {
         use crate::storage::properties;
 
-        let grid = stores.grid_indexes.get(sheet_id);
-
         for cell_id_hex in properties::iter_formatted_property_cell_ids(&stores.storage, sheet_id) {
-            if let Some((row, c)) = resolve_pos_from_grid(grid, cell_id_hex.as_str())
+            if let Some((row, c)) =
+                resolve_cell_position(cell_store.get_sheet(sheet_id), cell_id_hex.as_str())
                 && c == col
             {
                 last_format_row = Some(last_format_row.map_or(row, |cur| cur.max(row)));
@@ -481,16 +479,16 @@ pub(in crate::storage::engine) fn find_last_row(
 /// Find the last populated column in a row. Returns data and formatting edges.
 pub(in crate::storage::engine) fn find_last_column(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     row: u32,
 ) -> RowEdge {
     let mut last_data_col: Option<u32> = None;
 
-    // 1. Scan CellMirror cells (value / formula cells) for this row.
-    if let Some(sheet) = mirror.get_sheet(sheet_id) {
-        for (cell_id, entry) in sheet.cells_iter() {
-            if entry.is_ghost() {
+    // 1. Scan CellStore cells (value / formula cells) for this row.
+    if let Some(sheet) = cell_store.get_sheet(sheet_id) {
+        for cell_id in sheet.cell_ids() {
+            if sheet.is_ghost(cell_id) {
                 continue;
             }
             if let Some(pos) = sheet.position_of(cell_id)
@@ -518,10 +516,9 @@ pub(in crate::storage::engine) fn find_last_column(
     {
         use crate::storage::properties;
 
-        let grid = stores.grid_indexes.get(sheet_id);
-
         for cell_id_hex in properties::iter_formatted_property_cell_ids(&stores.storage, sheet_id) {
-            if let Some((r, c)) = resolve_pos_from_grid(grid, cell_id_hex.as_str())
+            if let Some((r, c)) =
+                resolve_cell_position(cell_store.get_sheet(sheet_id), cell_id_hex.as_str())
                 && r == row
             {
                 last_format_col = Some(last_format_col.map_or(c, |cur| cur.max(c)));

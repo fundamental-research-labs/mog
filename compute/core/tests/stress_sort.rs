@@ -29,7 +29,7 @@ fn test_sort_two_column_ascending() {
         make_cell(2, 1, num(20.0), None), // B3=20
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // Sort A1:B3 by col A (col 0) ascending
     engine
@@ -63,7 +63,7 @@ fn test_sort_with_formula_column() {
         make_cell(2, 0, num(2.0), None), // A3=2
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // Set formulas B1:B3
     engine
@@ -122,7 +122,7 @@ fn test_sort_preserves_sum() {
         make_cell(2, 0, num(7.0), None), // A3=7
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // Sort A1:A3 by col A asc
     engine
@@ -155,7 +155,7 @@ fn test_sort_then_autofill() {
         make_cell(2, 0, num(2.0), None), // A3=2
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // Sort A1:A3 asc
     engine
@@ -198,7 +198,7 @@ fn test_sort_within_table() {
         make_cell(3, 1, num(20.0), None),                      // B4=20
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // Sort A1:B4 with headers by col A (col 0) ascending
     let options = BridgeSortOptions {
@@ -238,7 +238,7 @@ fn test_multiple_sorts_with_edits() {
         make_cell(2, 0, num(2.0), None), // A3=2
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // Sort asc
     engine
@@ -279,7 +279,7 @@ fn test_sort_with_zero_values() {
         make_cell(3, 0, num(2.0), None), // A4=2
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // Sort A1:A4 asc
     engine
@@ -310,7 +310,7 @@ fn test_sort_by_secondary_column() {
         make_cell(2, 1, num(200.0), None), // B3=200
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // Sort A1:B3 by col B (col 1) ascending
     engine
@@ -350,7 +350,7 @@ fn test_sort_five_row_range() {
         make_cell(4, 1, num(2.0), None),
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // Sort A1:B5 by col B (col 1) ascending
     engine
@@ -386,7 +386,7 @@ fn test_repeated_sort_10_times() {
         make_cell(2, 0, num(2.0), None), // A3=2
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     for i in 0..10u32 {
         if i % 2 == 0 {

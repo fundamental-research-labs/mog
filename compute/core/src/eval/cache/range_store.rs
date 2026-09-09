@@ -1,6 +1,6 @@
 //! RangeStore — unified data scheduling layer for range materialization.
 //!
-//! Sits between the mirror (raw data) and evaluation contexts, providing
+//! Sits between the cell store (raw data) and evaluation contexts, providing
 //! a strategy-agnostic cache for materialized range data. Supports three modes:
 //! - Eager: bulk pre-materialize via DataPlan (topo/ready-queue)
 //! - Lazy: on-demand materialization on first access (demand)
@@ -215,7 +215,7 @@ fn resolve_range_to_key(
         _ => {}
     }
 
-    // Clamp to actual sheet dimensions (same as mirror_access.rs get_range_values)
+    // Clamp to actual sheet dimensions (same as store_access.rs get_range_values)
     let sheet_rows = source.sheet_rows(&s_sheet);
     let sheet_cols = source.sheet_cols(&s_sheet);
     if let (Some(rows), Some(cols)) = (sheet_rows, sheet_cols) {
@@ -328,12 +328,12 @@ impl RangeStore {
         }
     }
 
-    /// Look up a materialized range, or materialize it on-demand from the mirror.
+    /// Look up a materialized range, or materialize it on-demand from the cell store.
     ///
     /// Check order:
     /// 1. Pre-materialized map (populated before compute — zero sync cost)
     /// 2. On-demand cache (DashMap on native, RefCell<FxHashMap> on WASM)
-    /// 3. Cache miss: materialize from mirror and insert into on-demand cache
+    /// 3. Cache miss: materialize from cell_store and insert into on-demand cache
     pub fn get_or_materialize(&self, key: RangeKey, source: &dyn DataSource) -> Arc<CellArray> {
         // 1. Check pre-materialized (fast, no sync)
         if let Some(data) = self.pre_materialized.get(&key) {

@@ -27,24 +27,24 @@ pub(super) fn query_range_properties(
     }
 
     let grid_index = engine.stores.grid_indexes.get(sheet_id);
-    let sheet_mirror = engine.mirror.get_sheet(sheet_id);
+    let sheet_store = engine.cell_store.get_sheet(sheet_id);
     let mut result = Vec::with_capacity(num_rows as usize);
 
     for row in start_row..=end_row {
         let mut row_formats = Vec::with_capacity(num_cols as usize);
         for col in start_col..=end_col {
-            let cell_id = grid_index
-                .and_then(|grid| grid.cell_id_at(row, col))
-                .or_else(|| {
-                    engine
-                        .mirror
-                        .resolve_cell_id(sheet_id, SheetPos::new(row, col))
-                });
+            let cell_id = engine
+                .cell_store
+                .resolve_cell_id(sheet_id, SheetPos::new(row, col));
 
             let fmt = if let Some(cid) = cell_id {
                 let cell_hex = id_to_hex(cid.as_u128());
-                let table_fmt =
-                    services::resolve_structured_format_at_cell(&engine.mirror, sheet_id, row, col);
+                let table_fmt = services::resolve_structured_format_at_cell(
+                    &engine.cell_store,
+                    sheet_id,
+                    row,
+                    col,
+                );
                 Some(properties::get_effective_format(
                     &engine.stores.storage,
                     sheet_id,
@@ -53,7 +53,7 @@ pub(super) fn query_range_properties(
                     col,
                     table_fmt.as_ref(),
                     grid_index,
-                    sheet_mirror,
+                    sheet_store,
                 ))
             } else {
                 // No cell at this position — return positional format if non-default
@@ -63,7 +63,7 @@ pub(super) fn query_range_properties(
                     row,
                     col,
                     grid_index,
-                    sheet_mirror,
+                    sheet_store,
                 );
                 if positional == CellFormat::default() {
                     None

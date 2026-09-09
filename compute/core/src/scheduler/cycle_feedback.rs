@@ -60,7 +60,7 @@ impl ComputeCore {
 
     pub(super) fn replace_final_changes_for_cells(
         &self,
-        mirror: &CellMirror,
+        cell_store: &CellStore,
         changed_cells: &mut Vec<CellChange>,
         cell_ids: &[CellId],
         skip_cells: &FxHashSet<CellId>,
@@ -80,11 +80,12 @@ impl ComputeCore {
             if skip_cells.contains(&cell_id) {
                 continue;
             }
-            let final_value = mirror
+            let final_value = cell_store
                 .get_cell_value(&cell_id)
                 .cloned()
                 .unwrap_or(CellValue::Null);
-            if let Some((_sid, change)) = self.make_cell_change(mirror, &cell_id, &final_value) {
+            if let Some((_sid, change)) = self.make_cell_change(cell_store, &cell_id, &final_value)
+            {
                 changed_cells.push(change);
             }
         }

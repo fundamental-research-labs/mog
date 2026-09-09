@@ -83,7 +83,7 @@ fn forward_delete_sheet_hints_provider_reconciliation() {
     let (mut engine, _) = ComputeEngine::from_snapshot(two_sheet_snapshot()).unwrap();
     let target = second_sheet_id();
 
-    let (_patches, result) = engine.delete_sheet(&target).unwrap();
+    let result = engine.delete_sheet(&target).unwrap();
 
     assert_reconcile_only(result.sheet_lifecycle_runtime_hint.as_ref());
 }
@@ -93,9 +93,9 @@ fn hide_and_show_sheet_emit_visibility_hints() {
     let (mut engine, _) = ComputeEngine::from_snapshot(two_sheet_snapshot()).unwrap();
     let target = second_sheet_id();
 
-    let (_patches, hide_result) = engine.set_sheet_visibility(&target, "hidden").unwrap();
+    let hide_result = engine.set_sheet_visibility(&target, "hidden").unwrap();
     assert_reconcile_only(hide_result.sheet_lifecycle_runtime_hint.as_ref());
 
-    let (_patches, show_result) = engine.set_sheet_visibility(&target, "visible").unwrap();
+    let show_result = engine.set_sheet_visibility(&target, "visible").unwrap();
     assert_focus(show_result.sheet_lifecycle_runtime_hint.as_ref(), target);
 }

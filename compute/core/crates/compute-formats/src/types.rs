@@ -93,7 +93,7 @@ pub(crate) fn is_digit_placeholder(tok: &Token) -> bool {
 
 /// A single section of a format code.
 #[derive(Debug, Clone)]
-#[allow(clippy::struct_excessive_bools)] // These flags mirror Excel's section properties
+#[allow(clippy::struct_excessive_bools)] // These flags cell_store Excel's section properties
 pub(crate) struct FormatSection {
     pub(crate) tokens: Vec<Token>,
     pub(crate) is_datetime: bool,

@@ -49,7 +49,7 @@ fn xlsx_bytes_for(snapshot: WorkbookSnapshot) -> Vec<u8> {
 }
 
 fn sheet_dims(engine: &ComputeEngine, sid: &cell_types::SheetId) -> (u32, u32) {
-    let sm = engine.mirror().get_sheet(sid).expect("SheetMirror");
+    let sm = engine.cell_store().get_sheet(sid).expect("SheetStore");
     (sm.rows, sm.cols)
 }
 
@@ -57,7 +57,11 @@ fn sheet_dims(engine: &ComputeEngine, sid: &cell_types::SheetId) -> (u32, u32) {
 fn xlsx_insert_row_grows_row_count_by_delta() {
     let bytes = xlsx_bytes_for(fixture());
     let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
-    let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
+    let sid = *engine
+        .cell_store()
+        .sheet_ids()
+        .next()
+        .expect("sheet present");
 
     let (pre_rows, pre_cols) = sheet_dims(&engine, &sid);
     let delta: u32 = 3;
@@ -91,7 +95,11 @@ fn xlsx_insert_row_grows_row_count_by_delta() {
 fn xlsx_delete_row_shrinks_row_count_by_delta() {
     let bytes = xlsx_bytes_for(fixture());
     let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
-    let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
+    let sid = *engine
+        .cell_store()
+        .sheet_ids()
+        .next()
+        .expect("sheet present");
 
     let (pre_rows, pre_cols) = sheet_dims(&engine, &sid);
     let delta: u32 = 2;
@@ -125,7 +133,11 @@ fn xlsx_delete_row_shrinks_row_count_by_delta() {
 fn xlsx_insert_col_grows_col_count_by_delta() {
     let bytes = xlsx_bytes_for(fixture());
     let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
-    let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
+    let sid = *engine
+        .cell_store()
+        .sheet_ids()
+        .next()
+        .expect("sheet present");
 
     let (pre_rows, pre_cols) = sheet_dims(&engine, &sid);
     let delta: u32 = 4;
@@ -159,7 +171,11 @@ fn xlsx_insert_col_grows_col_count_by_delta() {
 fn xlsx_delete_col_shrinks_col_count_by_delta() {
     let bytes = xlsx_bytes_for(fixture());
     let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
-    let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
+    let sid = *engine
+        .cell_store()
+        .sheet_ids()
+        .next()
+        .expect("sheet present");
 
     let (pre_rows, pre_cols) = sheet_dims(&engine, &sid);
     let delta: u32 = 1;

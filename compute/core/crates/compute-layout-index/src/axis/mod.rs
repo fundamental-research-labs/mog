@@ -1,22 +1,12 @@
-//! Per-axis spatial index using a sparse Fenwick tree over dimension deltas.
-//!
-//! Decomposes cumulative position as:
-//!   `get_position(i) = i * default_size + fenwick.prefix_sum(i - 1)`
-//! where the Fenwick tree stores `delta[i] = actual_size[i] - default_size`
-//! (only non-zero for rows/cols with custom dimensions or hidden state).
-//!
-//! With k custom entries out of n total:
-//! - `get_position(i)`:      O(log n)
-//! - `get_index_at(px)`:     O(log n) via Fenwick descent
-//! - `set_dimension(i, v)`:  O(log n)
-//! - `build_position_array`: O(v * log n) for v entries
-//! - Memory:                 O(n) for the Fenwick tree (but sparse BTreeMap for k entries)
+//! Sparse axis dimensions with lazily rebuilt delta prefixes.
+//! Position queries cost O(log k), inverse queries O(log n * log k), and
+//! storage O(k) for k custom/hidden entries on an axis of n positions.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use domain_types::units::Pixels;
 
-use crate::fenwick::FenwickTree;
+use std::sync::OnceLock;
 
 mod dimensions;
 mod lookup;
@@ -37,9 +27,8 @@ pub struct AxisIndex {
     pub(super) custom: BTreeMap<usize, f64>,
     /// Set of hidden indices (these have effective size 0).
     pub(super) hidden: BTreeSet<usize>,
-    /// Fenwick tree storing deltas: `delta[i] = effective_size[i] - default_size`.
-    /// `effective_size[i]` = 0 if hidden, `custom[i]` if custom, else `default_size`.
-    pub(super) fenwick: FenwickTree,
+    /// Sorted (axis index, cumulative delta) pairs; allocated only for overrides.
+    pub(super) prefixes: OnceLock<Vec<(usize, f64)>>,
 }
 
 impl AxisIndex {
@@ -50,7 +39,7 @@ impl AxisIndex {
             count,
             custom: BTreeMap::new(),
             hidden: BTreeSet::new(),
-            fenwick: FenwickTree::new(count),
+            prefixes: OnceLock::new(),
         }
     }
 

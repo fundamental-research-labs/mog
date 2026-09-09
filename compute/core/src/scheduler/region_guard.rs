@@ -7,7 +7,7 @@ use crate::storage::engine::mutation::CellInput;
 ///
 /// **Stream A' trust marker** (per `cse-display-and-batch-write.md`).
 /// `set_cells_raw` is value-typed: there's no string parser between the
-/// caller's intent and the mirror, which means it has historically been an
+/// caller's intent and the cell store, which means it has historically been an
 /// unguarded backdoor for partial-array writes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WriteTrust {
@@ -21,12 +21,12 @@ pub(super) enum RegionGuardOutcome {
 }
 
 fn pivot_output_write_error(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
 ) -> Option<ComputeError> {
-    let pivot = mirror.find_pivot_table_at(sheet_id, row, col)?;
+    let pivot = cell_store.find_pivot_table_at(sheet_id, row, col)?;
     Some(ComputeError::PartialArrayWrite {
         sheet_id: sheet_id.to_uuid_string(),
         row,
@@ -40,17 +40,17 @@ fn pivot_output_write_error(
 /// Data Table regions are rejected atomically before storage is mutated. The
 /// one allowed CSE case is clearing the CSE anchor, which tears down the CSE.
 pub(super) fn check_region_partial_write(
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     cell_id: CellId,
     row: u32,
     col: u32,
     input: &CellInput,
 ) -> Result<RegionGuardOutcome, ComputeError> {
-    if let Some((anchor_id, anchor_pos)) = mirror.cse_anchor_covering(sheet_id, row, col) {
+    if let Some((anchor_id, anchor_pos)) = cell_store.cse_anchor_covering(sheet_id, row, col) {
         if input.is_clear_intent() && anchor_id == cell_id {
-            mirror.unmark_cse_anchor(&anchor_id);
-            mirror.cse_single_cell.remove(&anchor_id);
+            cell_store.unmark_cse_anchor(&anchor_id);
+            cell_store.cse_single_cell.remove(&anchor_id);
             return Ok(RegionGuardOutcome::Continue);
         }
         return Err(ComputeError::PartialArrayWrite {
@@ -62,7 +62,8 @@ pub(super) fn check_region_partial_write(
         });
     }
 
-    if let Some((_anchor_id, anchor_pos)) = mirror.dynamic_spill_member_covering(sheet_id, row, col)
+    if let Some((_anchor_id, anchor_pos)) =
+        cell_store.dynamic_spill_member_covering(sheet_id, row, col)
     {
         return Err(ComputeError::PartialArrayWrite {
             sheet_id: sheet_id.to_uuid_string(),
@@ -73,7 +74,7 @@ pub(super) fn check_region_partial_write(
         });
     }
 
-    if let Some(dt) = mirror.find_data_table_at(sheet_id, row, col) {
+    if let Some(dt) = cell_store.find_data_table_at(sheet_id, row, col) {
         return Err(ComputeError::PartialArrayWrite {
             sheet_id: sheet_id.to_uuid_string(),
             row,
@@ -83,7 +84,7 @@ pub(super) fn check_region_partial_write(
         });
     }
 
-    if let Some(err) = pivot_output_write_error(mirror, sheet_id, row, col) {
+    if let Some(err) = pivot_output_write_error(cell_store, sheet_id, row, col) {
         return Err(err);
     }
 
@@ -92,17 +93,17 @@ pub(super) fn check_region_partial_write(
 
 impl ComputeCore {
     /// Validate user-originating cell edits against region atomicity rules
-    /// before any storage or mirror mutation happens.
+    /// before any storage or cell_store mutation happens.
     pub fn validate_region_partial_writes(
         &self,
-        mirror: &CellMirror,
+        cell_store: &CellStore,
         edits: &[(SheetId, CellId, u32, u32, CellInput)],
     ) -> Result<(), ComputeError> {
         let anchors_being_cleared: std::collections::HashSet<CellId> = edits
             .iter()
             .filter(|(_, _, _, _, input)| input.is_clear_intent())
             .filter_map(|(sheet_id, cell_id, row, col, _)| {
-                mirror
+                cell_store
                     .cse_anchor_covering(sheet_id, *row, *col)
                     .filter(|(anchor_id, _)| *anchor_id == *cell_id)
                     .map(|(anchor_id, _)| anchor_id)
@@ -112,16 +113,17 @@ impl ComputeCore {
             .iter()
             .filter(|(_, _, _, _, input)| input.is_clear_intent())
             .filter_map(|(_, cell_id, _, _, _)| {
-                mirror
+                cell_store
                     .projection_registry
                     .get(cell_id)
-                    .filter(|_| !mirror.is_cse_anchor(cell_id))
+                    .filter(|_| !cell_store.is_cse_anchor(cell_id))
                     .map(|_| *cell_id)
             })
             .collect();
 
         for (sheet_id, cell_id, row, col, input) in edits {
-            if let Some((anchor_id, anchor_pos)) = mirror.cse_anchor_covering(sheet_id, *row, *col)
+            if let Some((anchor_id, anchor_pos)) =
+                cell_store.cse_anchor_covering(sheet_id, *row, *col)
             {
                 let allowed_cse_clear = input.is_clear_intent()
                     && (*cell_id == anchor_id || anchors_being_cleared.contains(&anchor_id));
@@ -137,7 +139,7 @@ impl ComputeCore {
             }
 
             if let Some((anchor_id, anchor_pos)) =
-                mirror.dynamic_spill_member_covering(sheet_id, *row, *col)
+                cell_store.dynamic_spill_member_covering(sheet_id, *row, *col)
             {
                 if input.is_clear_intent() && dynamic_sources_being_cleared.contains(&anchor_id) {
                     continue;
@@ -151,7 +153,7 @@ impl ComputeCore {
                 });
             }
 
-            if let Some(dt) = mirror.find_data_table_at(sheet_id, *row, *col) {
+            if let Some(dt) = cell_store.find_data_table_at(sheet_id, *row, *col) {
                 return Err(ComputeError::PartialArrayWrite {
                     sheet_id: sheet_id.to_uuid_string(),
                     row: *row,
@@ -161,7 +163,7 @@ impl ComputeCore {
                 });
             }
 
-            if let Some(err) = pivot_output_write_error(mirror, sheet_id, *row, *col) {
+            if let Some(err) = pivot_output_write_error(cell_store, sheet_id, *row, *col) {
                 return Err(err);
             }
         }
@@ -173,11 +175,12 @@ impl ComputeCore {
     /// storage writes. Trusted replay paths intentionally skip this method.
     pub fn validate_raw_user_edit_region_writes(
         &self,
-        mirror: &CellMirror,
+        cell_store: &CellStore,
         edits: &[(SheetId, CellId, u32, u32, CellValue, Option<String>)],
     ) -> Result<(), ComputeError> {
         for (sheet_id, _cell_id, row, col, _value, _formula) in edits {
-            if let Some((_anchor_id, anchor_pos)) = mirror.cse_anchor_covering(sheet_id, *row, *col)
+            if let Some((_anchor_id, anchor_pos)) =
+                cell_store.cse_anchor_covering(sheet_id, *row, *col)
             {
                 return Err(ComputeError::PartialArrayWrite {
                     sheet_id: sheet_id.to_uuid_string(),
@@ -189,7 +192,7 @@ impl ComputeCore {
             }
 
             if let Some((_anchor_id, anchor_pos)) =
-                mirror.dynamic_spill_member_covering(sheet_id, *row, *col)
+                cell_store.dynamic_spill_member_covering(sheet_id, *row, *col)
             {
                 return Err(ComputeError::PartialArrayWrite {
                     sheet_id: sheet_id.to_uuid_string(),
@@ -200,7 +203,7 @@ impl ComputeCore {
                 });
             }
 
-            if let Some(dt) = mirror.find_data_table_at(sheet_id, *row, *col) {
+            if let Some(dt) = cell_store.find_data_table_at(sheet_id, *row, *col) {
                 return Err(ComputeError::PartialArrayWrite {
                     sheet_id: sheet_id.to_uuid_string(),
                     row: *row,
@@ -210,7 +213,7 @@ impl ComputeCore {
                 });
             }
 
-            if let Some(err) = pivot_output_write_error(mirror, sheet_id, *row, *col) {
+            if let Some(err) = pivot_output_write_error(cell_store, sheet_id, *row, *col) {
                 return Err(err);
             }
         }

@@ -23,5 +23,5 @@ pub(in crate::storage::engine) use self::merges::{
     merge_range, unmerge_range, validate_and_clean_merges,
 };
 pub(in crate::storage::engine) use self::structure_change::{
-    apply_structure_change, build_structure_change_result, merge_viewport_patches_into_recalc,
+    apply_structure_change, build_structure_change_result,
 };

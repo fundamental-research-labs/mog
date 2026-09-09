@@ -1,4 +1,4 @@
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{CellData, RecalcResult, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellError, CellValue};
@@ -81,9 +81,9 @@ pub(crate) fn build_iterative_snapshot(
 }
 
 pub(crate) fn run_snapshot(snapshot: WorkbookSnapshot) -> RecalcResult {
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
-    core.init_from_snapshot(&mut mirror, snapshot)
+    core.init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed")
 }
 

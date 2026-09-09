@@ -81,38 +81,38 @@ pub(super) fn single_sheet_snapshot(
     }])
 }
 
-pub(super) fn init_core(snapshot: WorkbookSnapshot) -> (ComputeCore, CellMirror) {
+pub(super) fn init_core(snapshot: WorkbookSnapshot) -> (ComputeCore, CellStore) {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
-    (core, mirror)
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
+    (core, cell_store)
 }
 
 pub(super) fn value_at(
     core: &ComputeCore,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
 ) -> CellValue {
-    let cell_id = mirror
+    let cell_id = cell_store
         .resolve_cell_id(sheet_id, cell_types::SheetPos::new(row, col))
         .unwrap_or_else(|| panic!("No cell at sheet {sheet_id:?}, row {row}, col {col}"));
-    core.get_cell_value(mirror, &cell_id)
+    core.get_cell_value(cell_store, &cell_id)
         .cloned()
         .unwrap_or(CellValue::Null)
 }
 
 pub(super) fn assert_number_at(
     core: &ComputeCore,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
     expected: f64,
     label: &str,
 ) {
-    match value_at(core, mirror, sheet_id, row, col) {
+    match value_at(core, cell_store, sheet_id, row, col) {
         CellValue::Number(actual) => assert!(
             (actual.get() - expected).abs() < TOLERANCE,
             "{label} row {row}: expected {expected}, got {}",
@@ -124,14 +124,14 @@ pub(super) fn assert_number_at(
 
 pub(super) fn assert_error_at(
     core: &ComputeCore,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
     expected: CellError,
     label: &str,
 ) {
-    let actual = value_at(core, mirror, sheet_id, row, col);
+    let actual = value_at(core, cell_store, sheet_id, row, col);
     assert_eq!(
         actual,
         CellValue::Error(expected, None),

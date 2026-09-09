@@ -1,6 +1,6 @@
 use cell_types::{CellId, SheetId};
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::snapshot::{
     Axis, CellPosition, CfChange, ChangeKind, CommentChange, FilterChange, FloatingObjectChange,
     FloatingObjectChangeKind, GroupingChange, MutationResult, PageBreakChange, PivotTableChange,
@@ -26,7 +26,7 @@ use formula_types::CellRef;
 /// This is the canonical "introduce a sheet to observable state" emit. It
 /// owns the `SheetChange { field: Sheet, kind: Set }` creation event itself
 /// (threading `source_sheet_id` provenance for copies) and enumerates every
-/// per-sheet mirror dimension: floating objects, tables, filters, comments,
+/// per-sheet store dimension: floating objects, tables, filters, comments,
 /// sparklines, conditional formats, grouping, pivots, sheet identity (Sheet
 /// / Name / Order / Visibility / TabColor / Frozen), per-sheet settings,
 /// page breaks, print area / titles / settings, split config, scroll
@@ -47,15 +47,13 @@ use formula_types::CellRef;
 /// which calls this helper once per sheet and then appends them.
 pub(in crate::storage::engine) fn build_sheet_hydration_changes(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     source_sheet_id: Option<&SheetId>,
     result: &mut MutationResult,
 ) {
     let sid = sheet_id;
     let sheet_id_str = sid.to_uuid_string();
-    let grid = stores.grid_indexes.get(sid);
-    let layout = stores.layout_indexes.get(sid);
 
     // ----- Floating objects (drawings, charts, shapes, pictures, ...) -----
     //
@@ -66,10 +64,13 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
     let all_objects_json =
         crate::storage::sheet::floating_objects::get_all_floating_objects(&stores.storage, sid);
     if !all_objects_json.is_empty() {
+        let layout = stores.pixel_layout(sid);
         let mut bounds_map = std::collections::HashMap::with_capacity(all_objects_json.len());
         for (object_id, obj_json) in &all_objects_json {
             if let Some(b) = crate::storage::sheet::floating_objects::compute_object_pixel_bounds(
-                grid, layout, obj_json,
+                cell_store.get_sheet(sid),
+                layout.as_deref(),
+                obj_json,
             ) {
                 bounds_map.insert(object_id.clone(), b);
             }
@@ -95,7 +96,7 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
     }
 
     // ----- Native tables -----
-    let tables = crate::storage::engine::services::tables::get_all_tables_in_sheet(mirror, sid);
+    let tables = crate::storage::engine::services::tables::get_all_tables_in_sheet(cell_store, sid);
     for table in tables {
         result.table_changes.push(TableChange {
             name: table.name,
@@ -141,8 +142,11 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
         let cell_id_hex = comment.cell_ref.clone();
         let position = hex_to_id(&cell_id_hex)
             .map(CellId::from_raw)
-            .and_then(|cid| grid.and_then(|g| g.cell_position(&cid)))
-            .map(|(row, col)| CellPosition { row, col });
+            .and_then(|cid| cell_store.resolve_position(&cid))
+            .map(|pos| CellPosition {
+                row: pos.row(),
+                col: pos.col(),
+            });
         result.comment_changes.push(CommentChange {
             sheet_id: sheet_id_str.clone(),
             cell_id: cell_id_hex,
@@ -159,8 +163,8 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
         // SparklineChange handler currently only consumes sheet/position).
         let row = sparkline.cell.row;
         let col = sparkline.cell.col;
-        let cell_id_hex = grid
-            .and_then(|g| g.cell_id_at(row, col))
+        let cell_id_hex = cell_store
+            .resolve_cell_id(sid, cell_types::SheetPos::new(row, col))
             .map(|cid| String::from(id_to_hex(cid.as_u128())))
             .unwrap_or_default();
         result.sparkline_changes.push(SparklineChange {
@@ -210,32 +214,24 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
     }
 
     // ----- Ranges -----
-    if let Some(sheet_mirror) = mirror.get_sheet(sid) {
-        for (range_id, rv) in sheet_mirror.iter_ranges() {
+    if let Some(sheet_store) = cell_store.get_sheet(sid) {
+        for (range_id, rv) in sheet_store.iter_ranges() {
             let metadata = compute_document::range::RangeMetadata {
                 range_id: *range_id,
                 kind: rv.kind,
                 anchor: rv.anchor.clone(),
                 encoding: rv.encoding,
-                row_axis: None,
-                col_axis: None,
-                row_ids: {
-                    let mut pairs: Vec<_> = rv
-                        .row_offset_by_id
-                        .iter()
-                        .map(|(&id, &off)| (off, id))
-                        .collect();
-                    pairs.sort_by_key(|(off, _)| *off);
-                    pairs.into_iter().map(|(_, id)| id).collect()
+                row_axis: rv.row_offset_by_id.axis_ref(),
+                col_axis: rv.col_offset_by_id.axis_ref(),
+                row_ids: if rv.row_offset_by_id.axis_ref().is_none() {
+                    rv.row_offset_by_id.ordered_ids()
+                } else {
+                    Vec::new()
                 },
-                col_ids: {
-                    let mut pairs: Vec<_> = rv
-                        .col_offset_by_id
-                        .iter()
-                        .map(|(&id, &off)| (off, id))
-                        .collect();
-                    pairs.sort_by_key(|(off, _)| *off);
-                    pairs.into_iter().map(|(_, id)| id).collect()
+                col_ids: if rv.col_offset_by_id.axis_ref().is_none() {
+                    rv.col_offset_by_id.ordered_ids()
+                } else {
+                    Vec::new()
                 },
             };
             let data = serde_json::to_vec(&metadata).unwrap_or_default();
@@ -250,11 +246,11 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
 
     // ----- Sheet identity (name / order / visibility / tab-color / frozen) -----
     //
-    // One SheetChange per direct-state field. The mirror needs the
+    // One SheetChange per direct-state field. The cell store needs the
     // post-state payload populated (no observer involved on hydration,
     // so there is no `old_*` to thread). Defaults (no tab color, no
     // freeze) are skipped to keep the payload small — the kernel
-    // mirror initializes those fields from `DEFAULT_SHEET_META`.
+    // cell_store initializes those fields from `DEFAULT_SHEET_META`.
     let sheet_index = stores
         .storage
         .sheet_order()
@@ -265,7 +261,7 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
     let source_sheet_id_str = source_sheet_id.map(|s| s.to_uuid_string());
 
     // Canonical creation event: `field:Sheet, kind:Set` is what the
-    // kernel mirror's `applySheetChange` consumes to insert into
+    // kernel cell_store's `applySheetChange` consumes to insert into
     // `sheetOrder` (per-field `Name`/`Order` arms only update the meta
     // map and `Order` requires an `oldIndex` to move — neither
     // populates `sheetOrder` on cold load). Emitted before the
@@ -333,7 +329,7 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
     let is_hidden = visibility::is_sheet_hidden(&stores.storage, sid);
     let visibility_state = visibility::get_sheet_visibility(&stores.storage, sid);
     if is_hidden || visibility_state == "veryHidden" {
-        // Only emit when non-default (visible). The kernel mirror's
+        // Only emit when non-default (visible). The kernel cell_store's
         // sheet-meta default is `visibility: "visible"`, so emitting
         // every sheet would just confirm the default.
         result.sheet_changes.push(SheetChange {
@@ -401,8 +397,8 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
     // ----- Sheet settings (full snapshot per sheet) -----
     //
     // Sentinel `changed_key = "*hydration*"` signals to the kernel
-    // mirror that this is an initial-hydration "everything" emit, not
-    // a single-key update. The mirror replaces its full settings
+    // cell_store that this is an initial-hydration "everything" emit, not
+    // a single-key update. The cell store replaces its full settings
     // payload from `settings` rather than diffing against the prior
     // state (which is empty on hydration).
     let sheet_settings = settings::get_sheet_settings_with_layout_metrics(
@@ -419,7 +415,7 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
         settings: settings_value,
     });
 
-    // ----- Page breaks (skip if empty — kernel mirror has empty default) -----
+    // ----- Page breaks (skip if empty — kernel cell_store has empty default) -----
     let page_breaks = print::get_page_breaks(&stores.storage, sid);
     if !page_breaks.row_breaks.is_empty() || !page_breaks.col_breaks.is_empty() {
         result.page_break_changes.push(PageBreakChange {
@@ -447,7 +443,7 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
         });
     }
 
-    // ----- Print settings (always emit — defaults populate the mirror) -----
+    // ----- Print settings (always emit — defaults populate the cell store) -----
     let print_settings = print::get_print_settings(&stores.storage, sid);
     result.print_settings_changes.push(PrintSettingsChange {
         sheet_id: sheet_id_str.clone(),
@@ -475,7 +471,7 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
         });
     }
 
-    // ----- Scroll position (always emit — defaults populate the mirror) -----
+    // ----- Scroll position (always emit — defaults populate the cell store) -----
     let scroll = view::get_scroll_position(&stores.storage, sid);
     result.scroll_position_changes.push(ScrollPositionChange {
         sheet_id: sheet_id_str,

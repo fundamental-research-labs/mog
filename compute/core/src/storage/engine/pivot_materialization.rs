@@ -6,7 +6,7 @@ use domain_types::CellFormat;
 use domain_types::domain::pivot::{PivotTableConfig, ShowValuesAs, ShowValuesAsConfig};
 use value_types::ComputeError;
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::storage::properties;
 
 use super::{ComputeEngine, services, stores::EngineStores};
@@ -44,7 +44,7 @@ fn pivot_value_number_formats(config: &PivotTableConfig) -> Vec<Option<String>> 
 
 pub(in crate::storage::engine) fn apply_pivot_value_number_formats(
     stores: &mut EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     output_sheet_id: &SheetId,
     anchor_row: u32,
     anchor_col: u32,
@@ -69,7 +69,8 @@ pub(in crate::storage::engine) fn apply_pivot_value_number_formats(
         else {
             return;
         };
-        let Some(cell_id) = mirror.resolve_cell_id(output_sheet_id, SheetPos::new(row, col)) else {
+        let Some(cell_id) = cell_store.resolve_cell_id(output_sheet_id, SheetPos::new(row, col))
+        else {
             return;
         };
         cells_by_format
@@ -140,12 +141,12 @@ impl ComputeEngine {
     /// Materialize all pivot tables across all sheets after recalc.
     pub(in crate::storage::engine) fn materialize_all_pivots_for_import_open(
         stores: &mut EngineStores,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
     ) {
         use compute_pivot::{PivotEngineConfig, PivotTableDefExt};
 
         fn source_sheet_id(
-            mirror: &CellMirror,
+            cell_store: &CellStore,
             config: &domain_types::domain::pivot::PivotTableConfig,
         ) -> Result<SheetId, ComputeError> {
             if let Some(source_sheet_id) = config.source_sheet_id.as_deref() {
@@ -154,7 +155,7 @@ impl ComputeEngine {
                         message: format!("Invalid pivot sourceSheetId '{source_sheet_id}': {e}"),
                     }
                 })?;
-                if mirror.get_sheet(&source_id).is_some() {
+                if cell_store.get_sheet(&source_id).is_some() {
                     return Ok(source_id);
                 }
                 return Err(ComputeError::SheetNotFound {
@@ -162,7 +163,7 @@ impl ComputeEngine {
                 });
             }
 
-            mirror
+            cell_store
                 .sheet_by_name(&config.source_sheet_name)
                 .ok_or_else(|| ComputeError::SheetNotFound {
                     sheet_id: config.source_sheet_name.clone(),
@@ -171,7 +172,7 @@ impl ComputeEngine {
 
         fn compute_from_source(
             stores: &EngineStores,
-            mirror: &CellMirror,
+            cell_store: &CellStore,
             sheet_id: &SheetId,
             pivot_id: &str,
         ) -> Result<compute_pivot::PivotTableResult, ComputeError> {
@@ -191,14 +192,14 @@ impl ComputeEngine {
                 });
             }
 
-            let source_sid = source_sheet_id(mirror, &config)?;
+            let source_sid = source_sheet_id(cell_store, &config)?;
             let mut data = Vec::with_capacity((range.end_row() - range.start_row() + 1) as usize);
             for row in range.start_row()..=range.end_row() {
                 let mut row_values =
                     Vec::with_capacity((range.end_col() - range.start_col() + 1) as usize);
                 for col in range.start_col()..=range.end_col() {
                     let value = crate::storage::cells::values::get_effective_value(
-                        mirror,
+                        cell_store,
                         &source_sid,
                         row,
                         col,
@@ -242,18 +243,18 @@ impl ComputeEngine {
         }
 
         fn output_sheet_id(
-            mirror: &CellMirror,
+            cell_store: &CellStore,
             config: &domain_types::domain::pivot::PivotTableConfig,
         ) -> Option<SheetId> {
             config
                 .output_sheet_id
                 .as_deref()
                 .and_then(|sheet_id| SheetId::from_uuid_str(sheet_id).ok())
-                .filter(|sheet_id| mirror.get_sheet(sheet_id).is_some())
-                .or_else(|| mirror.sheet_by_name(&config.output_sheet_name))
+                .filter(|sheet_id| cell_store.get_sheet(sheet_id).is_some())
+                .or_else(|| cell_store.sheet_by_name(&config.output_sheet_name))
         }
 
-        let sheet_ids: Vec<SheetId> = mirror.sheet_ids().copied().collect();
+        let sheet_ids: Vec<SheetId> = cell_store.sheet_ids().copied().collect();
         let mut pivot_pairs: Vec<(
             SheetId,
             String,
@@ -267,20 +268,20 @@ impl ComputeEngine {
         }
 
         for (sheet_id, pivot_id, config) in &pivot_pairs {
-            let output_sheet_id = match output_sheet_id(mirror, config) {
+            let output_sheet_id = match output_sheet_id(cell_store, config) {
                 Some(id) => id,
                 None => continue,
             };
 
             let output_sheet_uuid = output_sheet_id.to_uuid_string();
-            let old_def = mirror
+            let old_def = cell_store
                 .find_pivot_table_def(pivot_id, &config.name, &output_sheet_uuid)
                 .cloned();
             if let Some(def) = old_def {
                 let old_rows = def.rendered_row_count();
                 let old_cols = def.rendered_col_count();
                 if old_rows > 0 && old_cols > 0 {
-                    mirror.clear_pivot_region(
+                    cell_store.clear_pivot_region(
                         &output_sheet_id,
                         def.start_row,
                         def.start_col,
@@ -290,7 +291,7 @@ impl ComputeEngine {
                 }
             }
 
-            match compute_from_source(stores, mirror, sheet_id, pivot_id) {
+            match compute_from_source(stores, cell_store, sheet_id, pivot_id) {
                 Ok(result) => {
                     let engine_config = match PivotEngineConfig::try_from(config.clone()) {
                         Ok(config) => config,
@@ -324,7 +325,7 @@ impl ComputeEngine {
                         .as_ref()
                         .and_then(|layout| layout.repeat_row_labels)
                         .unwrap_or(false);
-                    mirror.materialize_pivot_with_identities(
+                    cell_store.materialize_pivot_with_identities(
                         &output_sheet_id,
                         config.output_location.row,
                         config.output_location.col,
@@ -335,7 +336,7 @@ impl ComputeEngine {
                     );
                     apply_pivot_value_number_formats(
                         stores,
-                        mirror,
+                        cell_store,
                         &output_sheet_id,
                         config.output_location.row,
                         config.output_location.col,
@@ -344,7 +345,7 @@ impl ComputeEngine {
                     );
                     let def =
                         engine_config.to_pivot_table_def(&result.rendered_bounds, &output_sheet_id);
-                    mirror.upsert_pivot_table_def(def);
+                    cell_store.upsert_pivot_table_def(def);
                 }
                 Err(e) => {
                     tracing::warn!(
@@ -360,7 +361,7 @@ impl ComputeEngine {
     /// Materialize all pivot tables across all sheets after recalc.
     pub(in crate::storage::engine) fn materialize_all_pivots(&mut self) {
         use compute_pivot::{PivotEngineConfig, PivotTableDefExt};
-        let sheet_ids: Vec<SheetId> = self.mirror.sheet_ids().copied().collect();
+        let sheet_ids: Vec<SheetId> = self.cell_store.sheet_ids().copied().collect();
         let mut pivot_pairs: Vec<(
             SheetId,
             String,
@@ -379,8 +380,8 @@ impl ComputeEngine {
                 .output_sheet_id
                 .as_deref()
                 .and_then(|sheet_id| SheetId::from_uuid_str(sheet_id).ok())
-                .filter(|sheet_id| self.mirror.get_sheet(sheet_id).is_some())
-                .or_else(|| self.mirror.sheet_by_name(&config.output_sheet_name))
+                .filter(|sheet_id| self.cell_store.get_sheet(sheet_id).is_some())
+                .or_else(|| self.cell_store.sheet_by_name(&config.output_sheet_name))
             {
                 Some(id) => id,
                 None => continue,
@@ -390,14 +391,14 @@ impl ComputeEngine {
             {
                 let output_sheet_uuid = output_sheet_id.to_uuid_string();
                 let old_def = self
-                    .mirror
+                    .cell_store
                     .find_pivot_table_def(pivot_id, &config.name, &output_sheet_uuid)
                     .cloned();
                 if let Some(def) = old_def {
                     let old_rows = def.rendered_row_count();
                     let old_cols = def.rendered_col_count();
                     if old_rows > 0 && old_cols > 0 {
-                        self.mirror.clear_pivot_region(
+                        self.cell_store.clear_pivot_region(
                             &output_sheet_id,
                             def.start_row,
                             def.start_col,
@@ -443,7 +444,7 @@ impl ComputeEngine {
                         .as_ref()
                         .and_then(|layout| layout.repeat_row_labels)
                         .unwrap_or(false);
-                    self.mirror.materialize_pivot_with_identities(
+                    self.cell_store.materialize_pivot_with_identities(
                         &output_sheet_id,
                         config.output_location.row,
                         config.output_location.col,
@@ -454,7 +455,7 @@ impl ComputeEngine {
                     );
                     apply_pivot_value_number_formats(
                         &mut self.stores,
-                        &self.mirror,
+                        &self.cell_store,
                         &output_sheet_id,
                         config.output_location.row,
                         config.output_location.col,
@@ -463,7 +464,7 @@ impl ComputeEngine {
                     );
                     let def =
                         engine_config.to_pivot_table_def(&result.rendered_bounds, &output_sheet_id);
-                    self.mirror.upsert_pivot_table_def(def);
+                    self.cell_store.upsert_pivot_table_def(def);
                 }
                 Err(e) => {
                     tracing::warn!(

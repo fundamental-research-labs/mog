@@ -12,7 +12,7 @@ use super::*;
 
 #[test]
 fn test_null_eq_zero() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // Null = 0 → TRUE (blank coerces to 0)
     assert_eq!(
@@ -26,7 +26,7 @@ fn test_null_eq_zero() {
 
 #[test]
 fn test_null_neq_zero() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // Null <> 0 → FALSE
     assert_eq!(
@@ -40,7 +40,7 @@ fn test_null_neq_zero() {
 
 #[test]
 fn test_null_lt_positive() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // Null < 5 → TRUE (0 < 5)
     assert_eq!(
@@ -54,7 +54,7 @@ fn test_null_lt_positive() {
 
 #[test]
 fn test_null_gt_negative() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // Null > -1 → TRUE (0 > -1)
     assert_eq!(
@@ -68,7 +68,7 @@ fn test_null_gt_negative() {
 
 #[test]
 fn test_null_gte_zero() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // Null >= 0 → TRUE (0 >= 0)
     assert_eq!(
@@ -82,7 +82,7 @@ fn test_null_gte_zero() {
 
 #[test]
 fn test_null_lte_zero() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // Null <= 0 → TRUE (0 <= 0)
     assert_eq!(
@@ -96,7 +96,7 @@ fn test_null_lte_zero() {
 
 #[test]
 fn test_null_eq_false() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // Null = FALSE → TRUE (blank coerces to false)
     assert_eq!(
@@ -110,7 +110,7 @@ fn test_null_eq_false() {
 
 #[test]
 fn test_null_neq_false() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // Null <> FALSE → FALSE
     assert_eq!(
@@ -124,7 +124,7 @@ fn test_null_neq_false() {
 
 #[test]
 fn test_null_lt_true() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // Null < TRUE → TRUE (false < true)
     assert_eq!(
@@ -138,7 +138,7 @@ fn test_null_lt_true() {
 
 #[test]
 fn test_null_eq_empty_string() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // Null = "" → TRUE (Null coerces to Text(""), "" = "")
     assert_eq!(
@@ -152,7 +152,7 @@ fn test_null_eq_empty_string() {
 
 #[test]
 fn test_null_neq_text() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // Null <> "a" → TRUE (blank coerces to "", "" ≠ "a")
     assert_eq!(
@@ -166,7 +166,7 @@ fn test_null_neq_text() {
 
 #[test]
 fn test_null_lt_text() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // Null < "a" → TRUE (blank coerces to "", "" < "a")
     assert_eq!(
@@ -180,7 +180,7 @@ fn test_null_lt_text() {
 
 #[test]
 fn test_null_comparisons_symmetric() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // 0 = Null → TRUE (symmetric)
     assert_eq!(
@@ -218,7 +218,7 @@ fn test_null_comparisons_symmetric() {
 
 #[test]
 fn test_non_null_cross_type_unchanged() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // Non-null cross-type ordering: Number < Text < Boolean (unchanged by Null fix)
     assert_eq!(
@@ -252,7 +252,7 @@ fn test_non_null_cross_type_unchanged() {
 
 #[test]
 fn test_number_eq_empty_string_is_false() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // 0 = "" → FALSE (cross-type: Number ≠ Text)
     assert_eq!(
@@ -266,7 +266,7 @@ fn test_number_eq_empty_string_is_false() {
 
 #[test]
 fn test_number_neq_empty_string_is_true() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // 0 <> "" → TRUE (cross-type: Number ≠ Text)
     assert_eq!(
@@ -280,7 +280,7 @@ fn test_number_neq_empty_string_is_true() {
 
 #[test]
 fn test_nonzero_number_eq_empty_string_is_false() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // 1 = "" → FALSE (cross-type)
     assert_eq!(
@@ -294,7 +294,7 @@ fn test_nonzero_number_eq_empty_string_is_false() {
 
 #[test]
 fn test_empty_string_eq_number_is_false() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // "" = 0 → FALSE (symmetric cross-type)
     assert_eq!(
@@ -308,7 +308,7 @@ fn test_empty_string_eq_number_is_false() {
 
 #[test]
 fn test_empty_string_neq_number_is_true() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // "" <> 0 → TRUE (symmetric cross-type)
     assert_eq!(
@@ -322,7 +322,7 @@ fn test_empty_string_neq_number_is_true() {
 
 #[test]
 fn test_empty_string_eq_empty_string() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // "" = "" → TRUE (same type, equal)
     assert_eq!(
@@ -340,7 +340,7 @@ fn test_empty_string_eq_empty_string() {
 
 #[test]
 fn test_empty_string_neq_empty_string() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // "" <> "" → FALSE (same type, equal)
     assert_eq!(
@@ -358,7 +358,7 @@ fn test_empty_string_neq_empty_string() {
 
 #[test]
 fn test_null_neq_empty_string() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // Null <> "" → FALSE (Null coerces to Text(""), "" = "")
     assert_eq!(
@@ -378,7 +378,7 @@ fn test_null_neq_empty_string() {
 
 #[test]
 fn test_empty_string_add_number_is_value_error() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // "" + 1 → #VALUE! (Text("") is not numeric)
     assert_eq!(
@@ -392,7 +392,7 @@ fn test_empty_string_add_number_is_value_error() {
 
 #[test]
 fn test_number_add_empty_string_is_value_error() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // 1 + "" → #VALUE! (symmetric)
     assert_eq!(
@@ -406,7 +406,7 @@ fn test_number_add_empty_string_is_value_error() {
 
 #[test]
 fn test_empty_string_mul_number_is_value_error() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // "" * 5 → #VALUE!
     assert_eq!(
@@ -420,7 +420,7 @@ fn test_empty_string_mul_number_is_value_error() {
 
 #[test]
 fn test_empty_string_pow_is_value_error() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // "" ^ 2 → #VALUE!
     assert_eq!(
@@ -434,7 +434,7 @@ fn test_empty_string_pow_is_value_error() {
 
 #[test]
 fn test_empty_string_sub_is_value_error() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // "" - 0 → #VALUE!
     assert_eq!(
@@ -448,7 +448,7 @@ fn test_empty_string_sub_is_value_error() {
 
 #[test]
 fn test_empty_string_div_is_value_error() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // "" / 1 → #VALUE!
     assert_eq!(
@@ -462,7 +462,7 @@ fn test_empty_string_div_is_value_error() {
 
 #[test]
 fn test_unary_minus_empty_string_is_value_error() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // -"" → #VALUE!
     let node = ASTNode::UnaryOp {
@@ -474,7 +474,7 @@ fn test_unary_minus_empty_string_is_value_error() {
 
 #[test]
 fn test_unary_percent_empty_string_is_value_error() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // ""% → #VALUE!
     let node = ASTNode::UnaryOp {
@@ -486,7 +486,7 @@ fn test_unary_percent_empty_string_is_value_error() {
 
 #[test]
 fn test_null_arithmetic_still_zero() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // Null * 5 → 0 (empty cell coerces to 0 — unchanged)
     assert_eq!(
@@ -508,7 +508,7 @@ fn test_null_arithmetic_still_zero() {
 
 #[test]
 fn test_numeric_string_still_coerces() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // "5" + 1 → 6 (parseable numeric strings still coerce)
     assert_eq!(

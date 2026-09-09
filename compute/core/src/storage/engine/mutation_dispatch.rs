@@ -1,4 +1,4 @@
-use cell_types::{CellId, SheetId, SheetPos};
+use cell_types::{CellId, SheetId};
 use compute_document::hex::id_to_hex;
 use snapshot_types::DataTableRegionDef;
 use value_types::{CellValue, ComputeError};
@@ -14,11 +14,11 @@ type RawCellEdit = (SheetId, CellId, u32, u32, CellValue, Option<String>);
 
 fn materialize_data_table_body_edits(
     stores: &mut EngineStores,
-    mirror: &mut crate::mirror::CellMirror,
+    cell_store: &mut crate::cells::CellStore,
     sheet_id: &SheetId,
     region: &DataTableRegionDef,
 ) -> Result<Vec<RawCellEdit>, ComputeError> {
-    let formula = super::data_table_formula::formula_for_region(mirror, sheet_id, region)
+    let formula = super::data_table_formula::formula_for_region(cell_store, sheet_id, region)
         .ok_or_else(|| ComputeError::InvalidInput {
             message: "create_data_table could not synthesize TABLE formula text".to_string(),
         })?;
@@ -26,7 +26,7 @@ fn materialize_data_table_body_edits(
     for row in region.start_row..=region.end_row {
         for col in region.start_col..=region.end_col {
             let cell_id =
-                services::cell_editing::ensure_cell_id_mirrored(stores, mirror, sheet_id, row, col)
+                services::cell_editing::ensure_cell_id(stores, cell_store, sheet_id, row, col)
                     .ok_or_else(|| ComputeError::SheetNotFound {
                         sheet_id: sheet_id.to_uuid_string(),
                     })?;
@@ -44,7 +44,7 @@ fn materialize_data_table_body_edits(
 }
 
 impl ComputeEngine {
-    /// Central dispatch for all mutations. Keeps all five stores in sync.
+    /// Central dispatch for all mutations. Keeps the native stores and scheduler in sync.
     pub(crate) fn apply_mutation(
         &mut self,
         mutation: EngineMutation,
@@ -59,8 +59,7 @@ impl ComputeEngine {
                 col,
                 input,
             } => {
-                let (_patches, mutation_result) =
-                    self.set_cell(&sheet_id, cell_id, row, col, input)?;
+                let mutation_result = self.set_cell(&sheet_id, cell_id, row, col, input)?;
                 MutationOutput::Recalc(mutation_result)
             }
 
@@ -76,13 +75,13 @@ impl ComputeEngine {
                     .collect();
                 let mut recalc = services::mutation_handlers::mutation_set_cells(
                     &mut self.stores,
-                    &mut self.mirror,
+                    &mut self.cell_store,
                     edits,
                     skip_cycle_check,
                 )?;
                 let format_result =
                     self.apply_formula_inherited_number_formats(&formula_format_candidates)?;
-                self.prepare_recalc_for_flush(&mut recalc);
+                self.postprocess_mutation_recalc(&mut recalc);
                 let mut result = MutationResult::from_recalc(recalc);
                 result
                     .property_changes
@@ -93,10 +92,10 @@ impl ComputeEngine {
             EngineMutation::ClearCells { cell_ids } => {
                 let mut recalc = services::mutation_handlers::mutation_clear_cells(
                     &mut self.stores,
-                    &mut self.mirror,
+                    &mut self.cell_store,
                     cell_ids,
                 )?;
-                self.prepare_recalc_for_flush(&mut recalc);
+                self.postprocess_mutation_recalc(&mut recalc);
                 MutationOutput::Recalc(MutationResult::from_recalc(recalc))
             }
 
@@ -114,7 +113,7 @@ impl ComputeEngine {
                 )?;
 
                 // Snapshot Parse-text edits so we can run locale-aware date format
-                // inference after the value writes land in the mirror. Doing this
+                // inference after the value writes land in the cell store. Doing this
                 // here (rather than in TS) keeps the value write and the format
                 // application atomic from the caller's perspective.
                 let inferred_format_candidates: Vec<(SheetId, u32, u32, String)> = edits
@@ -135,13 +134,13 @@ impl ComputeEngine {
 
                 let mut recalc = services::mutation_handlers::mutation_set_cells_by_position(
                     &mut self.stores,
-                    &mut self.mirror,
+                    &mut self.cell_store,
                     edits,
                     skip_cycle_check,
                 )?;
                 let format_result =
                     self.apply_formula_inherited_number_formats(&formula_format_candidates)?;
-                self.prepare_recalc_for_flush(&mut recalc);
+                self.postprocess_mutation_recalc(&mut recalc);
 
                 if !inferred_format_candidates.is_empty() {
                     self.apply_inferred_date_formats(&inferred_format_candidates)?;
@@ -166,35 +165,35 @@ impl ComputeEngine {
             } => {
                 let mut recalc = services::mutation_handlers::mutation_clear_range_by_position(
                     &mut self.stores,
-                    &mut self.mirror,
+                    &mut self.cell_store,
                     sheet_id,
                     start_row,
                     start_col,
                     end_row,
                     end_col,
                 )?;
-                self.prepare_recalc_for_flush(&mut recalc);
+                self.postprocess_mutation_recalc(&mut recalc);
                 MutationOutput::Recalc(MutationResult::from_recalc(recalc))
             }
 
             EngineMutation::CreateDataTable { input } => {
                 let (region, data) =
-                    crate::data_table::prepare_data_table_creation(&self.mirror, &input)?;
+                    crate::data_table::prepare_data_table_creation(&self.cell_store, &input)?;
                 let edits = materialize_data_table_body_edits(
                     &mut self.stores,
-                    &mut self.mirror,
+                    &mut self.cell_store,
                     &input.sheet_id,
                     &region,
                 )?;
-                self.mirror.upsert_data_table_region(region.clone());
+                self.cell_store.upsert_data_table_region(region.clone());
                 let mut recalc = services::mutation_handlers::mutation_set_cells_raw_with_trust(
                     &mut self.stores,
-                    &mut self.mirror,
+                    &mut self.cell_store,
                     edits,
                     true,
                     crate::scheduler::WriteTrust::TrustedReplay,
                 )?;
-                self.prepare_recalc_for_flush(&mut recalc);
+                self.postprocess_mutation_recalc(&mut recalc);
                 MutationOutput::Recalc(MutationResult::from_recalc(recalc).with_data(&data)?)
             }
 
@@ -203,7 +202,7 @@ impl ComputeEngine {
                     cell_types::CellId::from_raw(self.stores.id_alloc.next_u128()).to_uuid_string();
                 let plan = match crate::what_if::scenarios::prepare_apply(
                     &self.stores.storage,
-                    &self.mirror,
+                    &self.cell_store,
                     &self.stores.compute,
                     &self.scenario_session,
                     &scenario_id,
@@ -219,11 +218,11 @@ impl ComputeEngine {
 
                 let mut recalc = services::mutation_handlers::mutation_set_cells_raw(
                     &mut self.stores,
-                    &mut self.mirror,
+                    &mut self.cell_store,
                     plan.edits,
                     true,
                 )?;
-                self.prepare_recalc_for_flush(&mut recalc);
+                self.postprocess_mutation_recalc(&mut recalc);
 
                 self.scenario_session.active = Some(crate::snapshot::ScenarioActiveState {
                     scenario_id: plan.result.scenario_id.clone(),
@@ -241,7 +240,7 @@ impl ComputeEngine {
 
             EngineMutation::RestoreScenario { baseline_id } => {
                 let plan = match crate::what_if::scenarios::prepare_restore(
-                    &self.mirror,
+                    &self.cell_store,
                     &self.stores.compute,
                     &self.scenario_session,
                     &baseline_id,
@@ -256,11 +255,11 @@ impl ComputeEngine {
 
                 let mut recalc = services::mutation_handlers::mutation_set_cells_raw(
                     &mut self.stores,
-                    &mut self.mirror,
+                    &mut self.cell_store,
                     plan.edits,
                     true,
                 )?;
-                self.prepare_recalc_for_flush(&mut recalc);
+                self.postprocess_mutation_recalc(&mut recalc);
 
                 self.scenario_session.baselines.remove(&plan.baseline_id);
                 if self
@@ -281,7 +280,7 @@ impl ComputeEngine {
             } => {
                 let (hex, result) = services::mutation_handlers::mutation_create_sheet(
                     &mut self.stores,
-                    &mut self.mirror,
+                    &mut self.cell_store,
                     &name,
                     default_col_width_px,
                 )?;
@@ -304,7 +303,7 @@ impl ComputeEngine {
                 // Default creation returns complete initial workbook state.
                 let (hex, result) = services::mutation_handlers::mutation_create_default_sheet(
                     &mut self.stores,
-                    &mut self.mirror,
+                    &mut self.cell_store,
                     &name,
                     default_col_width_px,
                 )?;
@@ -316,10 +315,10 @@ impl ComputeEngine {
             EngineMutation::DeleteSheet { sheet_id } => {
                 let (mut result, mut recalc) = services::mutation_handlers::mutation_delete_sheet(
                     &mut self.stores,
-                    &mut self.mirror,
+                    &mut self.cell_store,
                     &sheet_id,
                 )?;
-                self.prepare_recalc_for_flush(&mut recalc);
+                self.postprocess_mutation_recalc(&mut recalc);
                 result.recalc = recalc;
                 // R2.3 — sheet gone; every cached matrix for that
                 // sheet id is now a lie. Let the LRU age them out.
@@ -334,7 +333,7 @@ impl ComputeEngine {
             } => {
                 let (hex, result) = services::mutation_handlers::mutation_copy_sheet(
                     &mut self.stores,
-                    &mut self.mirror,
+                    &mut self.cell_store,
                     &source_sheet_id,
                     &new_name,
                 )?;
@@ -349,7 +348,7 @@ impl ComputeEngine {
             EngineMutation::RenameSheet { sheet_id, name } => {
                 let result = services::mutation_handlers::mutation_rename_sheet(
                     &mut self.stores,
-                    &mut self.mirror,
+                    &mut self.cell_store,
                     &sheet_id,
                     &name,
                 )?;
@@ -375,7 +374,7 @@ impl ComputeEngine {
             } => {
                 let mut recalc = services::mutation_handlers::mutation_sort_range(
                     &mut self.stores,
-                    &mut self.mirror,
+                    &mut self.cell_store,
                     &self.settings,
                     &sheet_id,
                     start_row,
@@ -384,7 +383,7 @@ impl ComputeEngine {
                     end_col,
                     &options,
                 )?;
-                self.prepare_recalc_for_flush(&mut recalc);
+                self.postprocess_mutation_recalc(&mut recalc);
                 let rows_moved = recalc.changed_cells.len() as u32;
                 let mut result = MutationResult::from_recalc(recalc);
                 result.sorting_changes.push(SortingChange {
@@ -410,7 +409,7 @@ impl ComputeEngine {
             } => {
                 let (mut recalc, data) = services::mutation_handlers::mutation_remove_duplicates(
                     &mut self.stores,
-                    &mut self.mirror,
+                    &mut self.cell_store,
                     &sheet_id,
                     start_row,
                     start_col,
@@ -419,7 +418,7 @@ impl ComputeEngine {
                     &columns,
                     has_headers,
                 )?;
-                self.prepare_recalc_for_flush(&mut recalc);
+                self.postprocess_mutation_recalc(&mut recalc);
                 MutationOutput::Recalc(MutationResult::from_recalc(recalc).with_data(&data)?)
             }
 
@@ -432,14 +431,14 @@ impl ComputeEngine {
             } => {
                 let mut recalc = services::mutation_handlers::mutation_clear_range(
                     &mut self.stores,
-                    &mut self.mirror,
+                    &mut self.cell_store,
                     sheet_id,
                     start_row,
                     start_col,
                     end_row,
                     end_col,
                 )?;
-                self.prepare_recalc_for_flush(&mut recalc);
+                self.postprocess_mutation_recalc(&mut recalc);
                 MutationOutput::Recalc(MutationResult::from_recalc(recalc))
             }
 
@@ -451,7 +450,7 @@ impl ComputeEngine {
                 end_col,
             } => {
                 let cell_ids = services::mutation_handlers::collect_cell_ids_in_range(
-                    &self.stores,
+                    &self.cell_store,
                     &sheet_id,
                     start_row,
                     start_col,
@@ -468,10 +467,10 @@ impl ComputeEngine {
                 } else {
                     let mut recalc = services::mutation_handlers::mutation_clear_cells(
                         &mut self.stores,
-                        &mut self.mirror,
+                        &mut self.cell_store,
                         cell_ids,
                     )?;
-                    self.prepare_recalc_for_flush(&mut recalc);
+                    self.postprocess_mutation_recalc(&mut recalc);
                     MutationOutput::Recalc(MutationResult::from_recalc(recalc).with_data(&hex_ids)?)
                 }
             }
@@ -479,26 +478,26 @@ impl ComputeEngine {
             EngineMutation::CreateNamedRange { input } => {
                 services::mutation_handlers::mutation_named_range_create(
                     &mut self.stores,
-                    &mut self.mirror,
+                    &mut self.cell_store,
                     input,
                 )?
             }
             EngineMutation::UpdateNamedRange { id, updates } => {
                 let mut output = services::mutation_handlers::mutation_named_range_update(
                     &mut self.stores,
-                    &mut self.mirror,
+                    &mut self.cell_store,
                     id,
                     updates,
                 )?;
                 if let MutationOutput::Recalc(result) = &mut output {
-                    self.prepare_recalc_for_flush(&mut result.recalc);
+                    self.postprocess_mutation_recalc(&mut result.recalc);
                 }
                 output
             }
             EngineMutation::ImportNamedRanges { names } => {
                 services::mutation_handlers::mutation_named_ranges_import(
                     &mut self.stores,
-                    &mut self.mirror,
+                    &mut self.cell_store,
                     names,
                 )?
             }
@@ -514,7 +513,7 @@ impl ComputeEngine {
                 let (mut recalc, subtotal_result) = self.mutation_create_subtotals(
                     &sheet_id, start_row, start_col, end_row, end_col, options,
                 )?;
-                self.prepare_recalc_for_flush(&mut recalc);
+                self.postprocess_mutation_recalc(&mut recalc);
                 MutationOutput::Recalc(
                     MutationResult::from_recalc(recalc).with_data(&subtotal_result)?,
                 )
@@ -523,22 +522,22 @@ impl ComputeEngine {
             EngineMutation::AutoFill { sheet_id, request } => {
                 let (mut recalc, summary) = services::mutation_handlers::mutation_auto_fill(
                     &mut self.stores,
-                    &mut self.mirror,
+                    &mut self.cell_store,
                     &sheet_id,
                     request,
                 )?;
-                self.prepare_recalc_for_flush(&mut recalc);
+                self.postprocess_mutation_recalc(&mut recalc);
                 MutationOutput::Recalc(MutationResult::from_recalc(recalc).with_data(&summary)?)
             }
 
             EngineMutation::FlashFill { sheet_id, request } => {
                 let (mut recalc, summary) = services::mutation_handlers::mutation_flash_fill(
                     &mut self.stores,
-                    &mut self.mirror,
+                    &mut self.cell_store,
                     &sheet_id,
                     request,
                 )?;
-                self.prepare_recalc_for_flush(&mut recalc);
+                self.postprocess_mutation_recalc(&mut recalc);
                 MutationOutput::Recalc(MutationResult::from_recalc(recalc).with_data(&summary)?)
             }
 
@@ -555,7 +554,7 @@ impl ComputeEngine {
                 let (mut recalc, relocate_result, table_changes, pivot_changes) =
                     services::mutation_handlers::mutation_relocate_cells(
                         &mut self.stores,
-                        &mut self.mirror,
+                        &mut self.cell_store,
                         &source_sheet_id,
                         src_start_row,
                         src_start_col,
@@ -565,7 +564,7 @@ impl ComputeEngine {
                         target_row,
                         target_col,
                     )?;
-                self.prepare_recalc_for_flush(&mut recalc);
+                self.postprocess_mutation_recalc(&mut recalc);
                 let mut result = MutationResult::from_recalc(recalc).with_data(&relocate_result)?;
                 result.table_changes.extend(table_changes);
                 result.pivot_changes.extend(pivot_changes);
@@ -587,7 +586,7 @@ impl ComputeEngine {
             } => {
                 let mut recalc = services::mutation_handlers::mutation_copy_range(
                     &mut self.stores,
-                    &mut self.mirror,
+                    &mut self.cell_store,
                     &source_sheet_id,
                     src_start_row,
                     src_start_col,
@@ -600,7 +599,7 @@ impl ComputeEngine {
                     skip_blanks,
                     transpose,
                 )?;
-                self.prepare_recalc_for_flush(&mut recalc);
+                self.postprocess_mutation_recalc(&mut recalc);
                 MutationOutput::Recalc(MutationResult::from_recalc(recalc))
             }
         };
@@ -615,7 +614,7 @@ impl ComputeEngine {
     ) -> Result<(String, MutationResult), ComputeError> {
         services::mutation_handlers::mutation_create_sheet(
             &mut self.stores,
-            &mut self.mirror,
+            &mut self.cell_store,
             name,
             None,
         )
@@ -646,83 +645,14 @@ impl ComputeEngine {
 
         let range = grouping::CellRange::new(start_row, start_col, end_row, end_col);
 
-        // The Accessor struct needs &mut ComputeEngine because set_cell and
-        // structure_change are engine methods that coordinate all five stores.
-        struct Accessor<'a> {
-            engine: &'a mut ComputeEngine,
-        }
-        impl<'a> grouping::SubtotalsCellAccessor for Accessor<'a> {
-            fn group_rows(
-                &mut self,
-                sheet_id: &SheetId,
-                start: u32,
-                end: u32,
-            ) -> Result<grouping::GroupDefinition, String> {
-                grouping::group_rows(&mut self.engine.stores.storage, sheet_id, start, end)
-            }
-            fn clear_row_grouping(&mut self, sheet_id: &SheetId, start: u32, end: u32) {
-                grouping::clear_row_grouping(&mut self.engine.stores.storage, sheet_id, start, end);
-            }
-            fn get_row_groups(&self, sheet_id: &SheetId) -> Vec<grouping::GroupDefinition> {
-                grouping::get_groups(
-                    &self.engine.stores.storage,
-                    sheet_id,
-                    grouping::GroupAxis::Row,
-                )
-            }
-
-            fn get_cell_value(&self, sid: &SheetId, row: u32, col: u32) -> String {
-                self.engine
-                    .mirror
-                    .get_cell_value_at(sid, SheetPos::new(row, col))
-                    .map(|v| format!("{}", v))
-                    .unwrap_or_default()
-            }
-            fn set_cell_value(&mut self, sid: &SheetId, row: u32, col: u32, value: &str) {
-                if let Some(grid) = self.engine.stores.grid_indexes.get_mut(sid) {
-                    let cell_id = grid.ensure_cell_id(row, col);
-                    let _ = self.engine.set_cell(sid, cell_id, row, col, value.into());
-                }
-            }
-            fn insert_rows(&mut self, sid: &SheetId, at_row: u32, count: u32) {
-                let change = formula_types::StructureChange::InsertRows {
-                    at: at_row,
-                    count,
-                    new_row_ids: Vec::new(),
-                };
-                let _ = self.engine.structure_change(sid, &change);
-            }
-            fn delete_rows(&mut self, sid: &SheetId, at_row: u32, count: u32) {
-                let change = formula_types::StructureChange::DeleteRows {
-                    at: at_row,
-                    count,
-                    deleted_cell_ids: Vec::new(),
-                };
-                let _ = self.engine.structure_change(sid, &change);
-            }
-            fn get_cell_raw_value(&self, sid: &SheetId, row: u32, col: u32) -> String {
-                if let Some(grid) = self.engine.grid_index(sid)
-                    && let Some(cell_id) = grid.cell_id_at(row, col)
-                    && let Some(formula) = self.engine.compute().get_formula(&cell_id)
-                {
-                    return formula.to_string();
-                }
-                self.engine
-                    .mirror
-                    .get_cell_value_at(sid, SheetPos::new(row, col))
-                    .map(|v| format!("{}", v))
-                    .unwrap_or_default()
-            }
-        }
-
-        let mut accessor = Accessor { engine: self };
+        let mut accessor = super::features::grouping::EngineSubtotalAccessor { engine: self };
         let subtotal_result = grouping::create_subtotals(&mut accessor, sheet_id, &range, &options);
 
         // Sync all cells in the expanded range with compute.
         let affected = subtotal_result.affected_range;
         let recalc = services::cell_editing::sync_range_with_compute(
             &mut self.stores,
-            &mut self.mirror,
+            &mut self.cell_store,
             sheet_id,
             affected.start_row(),
             affected.start_col(),

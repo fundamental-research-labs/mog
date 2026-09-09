@@ -6,7 +6,6 @@
 //! live in the sibling modules.
 
 pub mod construction;
-mod mutation_coordinator;
 mod mutation_dispatch;
 mod pivot_materialization;
 mod recalc;
@@ -89,10 +88,9 @@ use snapshot_types::MutationResult;
 // captured.
 pub use csv_parser::CsvImportOptions;
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 
 pub(in crate::storage::engine) use grid_indexing::build_grid_from_native_sheet;
-use mutation_coordinator::MutationCoordinator;
 use settings::EngineSettings;
 pub(crate) use stores::CFCacheEntry;
 use stores::EngineStores;
@@ -100,9 +98,8 @@ use viewport::service::ViewportService;
 
 /// Native spreadsheet state, identity tracking, and the formula scheduler.
 pub struct ComputeEngine {
-    mirror: CellMirror,
+    cell_store: CellStore,
     pub(crate) stores: EngineStores,
-    pub(crate) mutation: MutationCoordinator,
     history: history::HistoryStack,
     pub(crate) viewport: ViewportService,
     pub(crate) settings: EngineSettings,

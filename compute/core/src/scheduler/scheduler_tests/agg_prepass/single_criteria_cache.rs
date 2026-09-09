@@ -20,23 +20,31 @@ fn mapped_text_sumif_reuses_grouped_sums_and_refreshes_after_edits() {
         3,
         "=LET(keys,UNIQUE(A1:A200),SUM(MAP(keys,LAMBDA(key,SUMIF(A1:A200,key,B1:B200)))))".into(),
     ));
-    let (mut core, mut mirror) = init_core(single_sheet_snapshot("Sheet1", 210, 5, cells));
+    let (mut core, mut cell_store) = init_core(single_sheet_snapshot("Sheet1", 210, 5, cells));
     let sheet = sid(1);
-    assert_number_at(&core, &mirror, &sheet, 0, 3, 200.0, "mapped SUMIF");
-    let value_id = mirror
+    assert_number_at(&core, &cell_store, &sheet, 0, 3, 200.0, "mapped SUMIF");
+    let value_id = cell_store
         .resolve_cell_id(&sheet, cell_types::SheetPos::new(0, 1))
         .unwrap();
-    core.set_cell(&mut mirror, &sheet, value_id, 0, 1, "9")
-        .unwrap();
-    assert_number_at(&core, &mirror, &sheet, 0, 3, 208.0, "updated sum column");
-    let category_id = mirror
-        .resolve_cell_id(&sheet, cell_types::SheetPos::new(0, 0))
-        .unwrap();
-    core.set_cell(&mut mirror, &sheet, category_id, 0, 0, "Gamma")
+    core.set_cell(&mut cell_store, &sheet, value_id, 0, 1, "9")
         .unwrap();
     assert_number_at(
         &core,
-        &mirror,
+        &cell_store,
+        &sheet,
+        0,
+        3,
+        208.0,
+        "updated sum column",
+    );
+    let category_id = cell_store
+        .resolve_cell_id(&sheet, cell_types::SheetPos::new(0, 0))
+        .unwrap();
+    core.set_cell(&mut cell_store, &sheet, category_id, 0, 0, "Gamma")
+        .unwrap();
+    assert_number_at(
+        &core,
+        &cell_store,
         &sheet,
         0,
         3,
@@ -59,31 +67,39 @@ fn mapped_numeric_sumif_reuses_groups_and_invalidates_source_columns() {
         3,
         "=LET(keys,UNIQUE(A1:A200),SUM(MAP(keys,LAMBDA(key,SUMIF(A1:A200,key,B1:B200)))))".into(),
     ));
-    let (mut core, mut mirror) = init_core(single_sheet_snapshot("Sheet1", 210, 5, cells));
+    let (mut core, mut cell_store) = init_core(single_sheet_snapshot("Sheet1", 210, 5, cells));
     let sheet = sid(1);
-    assert_number_at(&core, &mirror, &sheet, 0, 3, 200.0, "mapped numeric SUMIF");
-    let value_id = mirror
+    assert_number_at(
+        &core,
+        &cell_store,
+        &sheet,
+        0,
+        3,
+        200.0,
+        "mapped numeric SUMIF",
+    );
+    let value_id = cell_store
         .resolve_cell_id(&sheet, cell_types::SheetPos::new(0, 1))
         .unwrap();
-    core.set_cell(&mut mirror, &sheet, value_id, 0, 1, "9")
+    core.set_cell(&mut cell_store, &sheet, value_id, 0, 1, "9")
         .unwrap();
     assert_number_at(
         &core,
-        &mirror,
+        &cell_store,
         &sheet,
         0,
         3,
         208.0,
         "updated numeric sum column",
     );
-    let category_id = mirror
+    let category_id = cell_store
         .resolve_cell_id(&sheet, cell_types::SheetPos::new(0, 0))
         .unwrap();
-    core.set_cell(&mut mirror, &sheet, category_id, 0, 0, "18")
+    core.set_cell(&mut cell_store, &sheet, category_id, 0, 0, "18")
         .unwrap();
     assert_number_at(
         &core,
-        &mirror,
+        &cell_store,
         &sheet,
         0,
         3,

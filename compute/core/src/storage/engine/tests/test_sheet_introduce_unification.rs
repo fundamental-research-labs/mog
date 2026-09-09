@@ -2,11 +2,11 @@
 //! to observable state" handler — bootstrap, user-edit add, and copy —
 //! flows through `build_sheet_hydration_changes` and emits the full
 //! per-sheet hydration shape, not the slim "creation event only" shape
-//! that left eight of nine per-sheet mirror dimensions uninitialized.
+//! that left eight of nine per-sheet store dimensions uninitialized.
 //!
 //! Bootstrap byte-for-byte coverage lives in
 //! `test_bootstrap_hydration.rs` and the inline
-//! `hydration_emits_mirror_backed_families_with_populated_payloads` test
+//! `hydration_emits_store_backed_families_with_populated_payloads` test
 //! in `result_building.rs`. This file covers the user-edit add and copy
 //! paths specifically.
 
@@ -117,8 +117,8 @@ fn user_edit_sheet_add_emits_full_per_sheet_families() {
 
     // ----- The fix: SheetSettingsChange for the new sheet -----
     //
-    // This is the actual mirror-drift closure. Without this emit, the TS
-    // mirror's `settingsBySheet[newId]` falls back to DEFAULT_SHEET_SETTINGS
+    // This is the actual cell_store-drift closure. Without this emit, the TS
+    // cell_store's `settingsBySheet[newId]` falls back to DEFAULT_SHEET_SETTINGS
     // — which disagrees with Rust's wire shape on `gridlineColor`,
     // `defaultRowHeight`, `defaultColWidth`, `showFormulas`, `zoomScale`.
     let settings_events: Vec<_> = result

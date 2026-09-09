@@ -4,14 +4,14 @@ use value_types::CellValue;
 
 use super::cf_format::{apply_cf_to_format, apply_number_format_color};
 use super::render_cells::{RenderCellMaterial, apply_pivot_display_format};
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::storage::engine::settings::EngineSettings;
 use crate::storage::engine::stores::{CFCacheEntry, EngineStores};
 use crate::storage::properties;
 
 pub(super) fn build_materialized_cell_material(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     settings: &EngineSettings,
     cf_cache_entry: Option<&CFCacheEntry>,
     sheet_id: &SheetId,
@@ -32,10 +32,10 @@ pub(super) fn build_materialized_cell_material(
         col,
         table_fmt.as_ref(),
         stores.grid_indexes.get(sheet_id),
-        mirror.get_sheet(sheet_id),
+        cell_store.get_sheet(sheet_id),
     );
     domain_types::theme_color::resolve_theme_refs(&mut effective, &settings.theme_palette);
-    apply_pivot_display_format(mirror, sheet_id, row, col, &mut effective);
+    apply_pivot_display_format(cell_store, sheet_id, row, col, &mut effective);
     apply_cf_to_format(cf_cache_entry, &mut effective, row, col);
 
     let format_code = effective.number_format.as_deref().unwrap_or("General");

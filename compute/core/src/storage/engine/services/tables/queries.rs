@@ -7,11 +7,11 @@ use super::*;
 
 /// Get all tables in a specific sheet.
 pub(in crate::storage::engine) fn get_all_tables_in_sheet(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
 ) -> Vec<CanonicalTable> {
     let sheet_hex = sheet_id.to_uuid_string();
-    mirror
+    cell_store
         .all_tables()
         .iter()
         .filter(|t| t.sheet_id == sheet_hex)
@@ -21,13 +21,13 @@ pub(in crate::storage::engine) fn get_all_tables_in_sheet(
 
 /// Get the table containing a specific cell, if any.
 pub(in crate::storage::engine) fn get_table_at_cell(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
 ) -> Option<CanonicalTable> {
     let sheet_hex = sheet_id.to_uuid_string();
-    mirror
+    cell_store
         .all_tables()
         .iter()
         .find(|t| {
@@ -42,21 +42,21 @@ pub(in crate::storage::engine) fn get_table_at_cell(
 
 /// Look up a table definition by name (case-insensitive).
 pub(in crate::storage::engine) fn get_table_by_name(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     table_name: &str,
 ) -> Option<CanonicalTable> {
-    mirror.get_table(table_name).cloned()
+    cell_store.get_table(table_name).cloned()
 }
 
 /// Get which table region a cell falls in (header, data, or totals).
 pub(in crate::storage::engine) fn get_table_hit_region(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
 ) -> Option<TableHitRegion> {
     let sheet_hex = sheet_id.to_uuid_string();
-    let t = mirror.all_tables().iter().find(|t| {
+    let t = cell_store.all_tables().iter().find(|t| {
         t.sheet_id == sheet_hex
             && row >= t.range.start_row()
             && row <= t.range.end_row()
@@ -94,12 +94,12 @@ pub(in crate::storage::engine) fn get_table_hit_region(
 
 /// Detect if a table should auto-expand based on adjacent data.
 pub(in crate::storage::engine) fn detect_auto_expansion(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     table_name: &str,
 ) -> Result<AutoExpansionResult, ComputeError> {
     let sheet_hex = sheet_id.to_uuid_string();
-    let table = &mirror
+    let table = &cell_store
         .all_tables()
         .iter()
         .find(|t| t.name == table_name && t.sheet_id == sheet_hex)
@@ -116,13 +116,13 @@ pub(in crate::storage::engine) fn detect_auto_expansion(
 
 /// Resolve the table-derived CellFormat for a cell, if it is inside a table.
 pub(in crate::storage::engine) fn resolve_table_format_at_cell(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
 ) -> Option<CellFormat> {
     let sheet_hex = sheet_id.to_uuid_string();
-    let table = &mirror.all_tables().iter().find(|t| {
+    let table = &cell_store.all_tables().iter().find(|t| {
         t.sheet_id == sheet_hex
             && row >= t.range.start_row()
             && row <= t.range.end_row()

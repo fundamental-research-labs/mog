@@ -69,20 +69,20 @@ pub(crate) fn reorder_sheets(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mirror::CellMirror;
+    use crate::cells::CellStore;
     use crate::storage::WorkbookStorage;
     use crate::storage::sheet::test_support::make_sheet_id;
 
     #[test]
     fn test_get_sheet_order() {
         let mut storage = WorkbookStorage::new();
-        let mut mirror = CellMirror::new();
+        let mut cell_store = CellStore::new();
         let s1 = make_sheet_id(1);
         let s2 = make_sheet_id(2);
         let s3 = make_sheet_id(3);
-        storage.add_sheet(&mut mirror, s1, "A", 10, 5).unwrap();
-        storage.add_sheet(&mut mirror, s2, "B", 10, 5).unwrap();
-        storage.add_sheet(&mut mirror, s3, "C", 10, 5).unwrap();
+        storage.add_sheet(&mut cell_store, s1, "A", 10, 5).unwrap();
+        storage.add_sheet(&mut cell_store, s2, "B", 10, 5).unwrap();
+        storage.add_sheet(&mut cell_store, s3, "C", 10, 5).unwrap();
 
         let order = get_sheet_order(&storage);
         assert_eq!(order, vec![s1, s2, s3]);
@@ -91,13 +91,13 @@ mod tests {
     #[test]
     fn test_move_sheet() {
         let mut storage = WorkbookStorage::new();
-        let mut mirror = CellMirror::new();
+        let mut cell_store = CellStore::new();
         let s1 = make_sheet_id(1);
         let s2 = make_sheet_id(2);
         let s3 = make_sheet_id(3);
-        storage.add_sheet(&mut mirror, s1, "A", 10, 5).unwrap();
-        storage.add_sheet(&mut mirror, s2, "B", 10, 5).unwrap();
-        storage.add_sheet(&mut mirror, s3, "C", 10, 5).unwrap();
+        storage.add_sheet(&mut cell_store, s1, "A", 10, 5).unwrap();
+        storage.add_sheet(&mut cell_store, s2, "B", 10, 5).unwrap();
+        storage.add_sheet(&mut cell_store, s3, "C", 10, 5).unwrap();
 
         // Move s1 to end
         assert!(move_sheet(&mut storage, &s1, 2));
@@ -110,13 +110,13 @@ mod tests {
     #[test]
     fn test_reorder_sheets() {
         let mut storage = WorkbookStorage::new();
-        let mut mirror = CellMirror::new();
+        let mut cell_store = CellStore::new();
         let s1 = make_sheet_id(1);
         let s2 = make_sheet_id(2);
         let s3 = make_sheet_id(3);
-        storage.add_sheet(&mut mirror, s1, "A", 10, 5).unwrap();
-        storage.add_sheet(&mut mirror, s2, "B", 10, 5).unwrap();
-        storage.add_sheet(&mut mirror, s3, "C", 10, 5).unwrap();
+        storage.add_sheet(&mut cell_store, s1, "A", 10, 5).unwrap();
+        storage.add_sheet(&mut cell_store, s2, "B", 10, 5).unwrap();
+        storage.add_sheet(&mut cell_store, s3, "C", 10, 5).unwrap();
 
         reorder_sheets(&mut storage, &[s3, s1, s2]).unwrap();
         assert_eq!(get_sheet_order(&storage), vec![s3, s1, s2]);
@@ -125,11 +125,11 @@ mod tests {
     #[test]
     fn test_reorder_sheets_wrong_length() {
         let mut storage = WorkbookStorage::new();
-        let mut mirror = CellMirror::new();
+        let mut cell_store = CellStore::new();
         let s1 = make_sheet_id(1);
         let s2 = make_sheet_id(2);
-        storage.add_sheet(&mut mirror, s1, "A", 10, 5).unwrap();
-        storage.add_sheet(&mut mirror, s2, "B", 10, 5).unwrap();
+        storage.add_sheet(&mut cell_store, s1, "A", 10, 5).unwrap();
+        storage.add_sheet(&mut cell_store, s2, "B", 10, 5).unwrap();
 
         let result = reorder_sheets(&mut storage, &[s1]);
         assert!(result.is_err());
@@ -138,11 +138,11 @@ mod tests {
     #[test]
     fn test_move_sheet_same_position() {
         let mut storage = WorkbookStorage::new();
-        let mut mirror = CellMirror::new();
+        let mut cell_store = CellStore::new();
         let s1 = make_sheet_id(1);
         let s2 = make_sheet_id(2);
-        storage.add_sheet(&mut mirror, s1, "A", 10, 5).unwrap();
-        storage.add_sheet(&mut mirror, s2, "B", 10, 5).unwrap();
+        storage.add_sheet(&mut cell_store, s1, "A", 10, 5).unwrap();
+        storage.add_sheet(&mut cell_store, s2, "B", 10, 5).unwrap();
 
         assert!(!move_sheet(&mut storage, &s1, 0));
     }
@@ -150,11 +150,11 @@ mod tests {
     #[test]
     fn test_reorder_duplicate_ids_fails() {
         let mut storage = WorkbookStorage::new();
-        let mut mirror = CellMirror::new();
+        let mut cell_store = CellStore::new();
         let s1 = make_sheet_id(1);
         let s2 = make_sheet_id(2);
-        storage.add_sheet(&mut mirror, s1, "A", 10, 5).unwrap();
-        storage.add_sheet(&mut mirror, s2, "B", 10, 5).unwrap();
+        storage.add_sheet(&mut cell_store, s1, "A", 10, 5).unwrap();
+        storage.add_sheet(&mut cell_store, s2, "B", 10, 5).unwrap();
 
         let result = reorder_sheets(&mut storage, &[s1, s1]);
         assert!(result.is_err());
@@ -163,11 +163,11 @@ mod tests {
     #[test]
     fn test_reorder_unknown_sheet_fails() {
         let mut storage = WorkbookStorage::new();
-        let mut mirror = CellMirror::new();
+        let mut cell_store = CellStore::new();
         let s1 = make_sheet_id(1);
         let s2 = make_sheet_id(2);
-        storage.add_sheet(&mut mirror, s1, "A", 10, 5).unwrap();
-        storage.add_sheet(&mut mirror, s2, "B", 10, 5).unwrap();
+        storage.add_sheet(&mut cell_store, s1, "A", 10, 5).unwrap();
+        storage.add_sheet(&mut cell_store, s2, "B", 10, 5).unwrap();
 
         let result = reorder_sheets(&mut storage, &[s1, make_sheet_id(999)]);
         assert!(result.is_err());
@@ -176,11 +176,11 @@ mod tests {
     #[test]
     fn test_reorder_same_order_noop() {
         let mut storage = WorkbookStorage::new();
-        let mut mirror = CellMirror::new();
+        let mut cell_store = CellStore::new();
         let s1 = make_sheet_id(1);
         let s2 = make_sheet_id(2);
-        storage.add_sheet(&mut mirror, s1, "A", 10, 5).unwrap();
-        storage.add_sheet(&mut mirror, s2, "B", 10, 5).unwrap();
+        storage.add_sheet(&mut cell_store, s1, "A", 10, 5).unwrap();
+        storage.add_sheet(&mut cell_store, s2, "B", 10, 5).unwrap();
 
         reorder_sheets(&mut storage, &[s1, s2]).unwrap();
         assert_eq!(get_sheet_order(&storage), vec![s1, s2]);

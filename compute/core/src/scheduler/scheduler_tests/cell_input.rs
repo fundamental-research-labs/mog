@@ -8,8 +8,8 @@ use super::*;
 fn cell_input_literal_empty_stores_text_not_null() {
     use crate::storage::engine::mutation::CellInput;
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, basic_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, basic_snapshot())
         .unwrap();
 
     let sheet_id = sid(1);
@@ -19,10 +19,10 @@ fn cell_input_literal_empty_stores_text_not_null() {
     let input = CellInput::Literal {
         text: String::new(),
     };
-    core.set_cell(&mut mirror, &sheet_id, cell_id, 5, 0, &input)
+    core.set_cell(&mut cell_store, &sheet_id, cell_id, 5, 0, &input)
         .unwrap();
 
-    let val = core.get_cell_value(&mirror, &cell_id).unwrap();
+    let val = core.get_cell_value(&cell_store, &cell_id).unwrap();
     assert_eq!(
         *val,
         CellValue::Text("".into()),
@@ -34,23 +34,23 @@ fn cell_input_literal_empty_stores_text_not_null() {
 fn cell_input_clear_yields_null() {
     use crate::storage::engine::mutation::CellInput;
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, basic_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, basic_snapshot())
         .unwrap();
 
     let sheet_id = sid(1);
     let cell_id = cid(0x51);
 
     // First set a value
-    core.set_cell(&mut mirror, &sheet_id, cell_id, 6, 0, "hello")
+    core.set_cell(&mut cell_store, &sheet_id, cell_id, 6, 0, "hello")
         .unwrap();
-    let val = core.get_cell_value(&mirror, &cell_id).unwrap();
+    let val = core.get_cell_value(&cell_store, &cell_id).unwrap();
     assert_eq!(*val, CellValue::Text("hello".into()));
 
     // Now clear with CellInput::Clear
-    core.set_cell(&mut mirror, &sheet_id, cell_id, 6, 0, &CellInput::Clear)
+    core.set_cell(&mut cell_store, &sheet_id, cell_id, 6, 0, &CellInput::Clear)
         .unwrap();
-    let val = core.get_cell_value(&mirror, &cell_id).unwrap();
+    let val = core.get_cell_value(&cell_store, &cell_id).unwrap();
     assert_eq!(
         *val,
         CellValue::Null,
@@ -65,8 +65,8 @@ fn cell_input_parse_nul_is_plain_text() {
     // legacy empty-string sentinel.
     use crate::storage::engine::mutation::CellInput;
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, basic_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, basic_snapshot())
         .unwrap();
 
     let sheet_id = sid(1);
@@ -75,10 +75,10 @@ fn cell_input_parse_nul_is_plain_text() {
     let input = CellInput::Parse {
         text: "\x00".to_string(),
     };
-    core.set_cell(&mut mirror, &sheet_id, cell_id, 7, 0, &input)
+    core.set_cell(&mut cell_store, &sheet_id, cell_id, 7, 0, &input)
         .unwrap();
 
-    let val = core.get_cell_value(&mirror, &cell_id).unwrap();
+    let val = core.get_cell_value(&cell_store, &cell_id).unwrap();
     assert_eq!(
         *val,
         CellValue::Text("\x00".into()),

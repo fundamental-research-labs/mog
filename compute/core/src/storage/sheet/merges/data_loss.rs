@@ -1,21 +1,21 @@
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use cell_types::SheetId;
 
 /// Count nonempty native values and formulas that a merge would clear.
 pub fn check_merge_data_loss(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: SheetId,
     sr: u32,
     sc: u32,
     er: u32,
     ec: u32,
 ) -> (bool, u32) {
-    let Some(sheet) = mirror.get_sheet(&sheet_id) else {
+    let Some(sheet) = cell_store.get_sheet(&sheet_id) else {
         return (false, 0);
     };
     let mut occupied = std::collections::HashSet::new();
-    for (id, entry) in sheet.cells_iter() {
-        if entry.is_ghost() {
+    for id in sheet.cell_ids() {
+        if sheet.is_ghost(id) {
             continue;
         }
         let Some(pos) = sheet.position_of(id) else {
@@ -29,13 +29,13 @@ pub fn check_merge_data_loss(
         {
             continue;
         }
-        if mirror
+        if cell_store
             .get_cell_value_at(&sheet_id, pos)
             .is_some_and(|value| {
                 !value.is_null()
                     && !matches!(value, value_types::CellValue::Text(text) if text.is_empty())
             })
-            || mirror.get_formula(id).is_some()
+            || cell_store.get_formula(id).is_some()
         {
             occupied.insert((pos.row(), pos.col()));
         }

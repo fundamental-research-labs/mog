@@ -5,8 +5,8 @@ use super::cell_fixtures::{
 };
 use super::support::{cell_uuid, sheet_uuid};
 use cell_types::{CellId, SheetId};
-use compute_core::mirror::CellMirror;
-use compute_core::mirror::dense::DenseColumnCache;
+use compute_core::cells::CellStore;
+use compute_core::cells::dense::DenseColumnCache;
 use compute_core::scheduler::ComputeCore;
 use criterion::{BenchmarkId, Criterion, black_box};
 use std::time::Duration;
@@ -20,8 +20,8 @@ pub(crate) fn bench_sum_column(c: &mut Criterion) {
             || sum_snapshot(100_000),
             |snapshot| {
                 let mut core = ComputeCore::new();
-                let mut mirror = CellMirror::new();
-                black_box(core.init_from_snapshot(&mut mirror, snapshot).unwrap())
+                let mut cell_store = CellStore::new();
+                black_box(core.init_from_snapshot(&mut cell_store, snapshot).unwrap())
             },
         );
     });
@@ -33,8 +33,8 @@ pub(crate) fn bench_sum_column(c: &mut Criterion) {
             || sum_snapshot(500_000),
             |snapshot| {
                 let mut core = ComputeCore::new();
-                let mut mirror = CellMirror::new();
-                black_box(core.init_from_snapshot(&mut mirror, snapshot).unwrap())
+                let mut cell_store = CellStore::new();
+                black_box(core.init_from_snapshot(&mut cell_store, snapshot).unwrap())
             },
         );
     });
@@ -44,8 +44,8 @@ pub(crate) fn bench_sum_column(c: &mut Criterion) {
             || sum_snapshot(1_000_000),
             |snapshot| {
                 let mut core = ComputeCore::new();
-                let mut mirror = CellMirror::new();
-                black_box(core.init_from_snapshot(&mut mirror, snapshot).unwrap())
+                let mut cell_store = CellStore::new();
+                black_box(core.init_from_snapshot(&mut cell_store, snapshot).unwrap())
             },
         );
     });
@@ -62,8 +62,8 @@ pub(crate) fn bench_match(c: &mut Criterion) {
             || match_snapshot(100_000),
             |snapshot| {
                 let mut core = ComputeCore::new();
-                let mut mirror = CellMirror::new();
-                black_box(core.init_from_snapshot(&mut mirror, snapshot).unwrap())
+                let mut cell_store = CellStore::new();
+                black_box(core.init_from_snapshot(&mut cell_store, snapshot).unwrap())
             },
         );
     });
@@ -80,8 +80,8 @@ pub(crate) fn bench_index(c: &mut Criterion) {
             || index_snapshot(100_000),
             |snapshot| {
                 let mut core = ComputeCore::new();
-                let mut mirror = CellMirror::new();
-                black_box(core.init_from_snapshot(&mut mirror, snapshot).unwrap())
+                let mut cell_store = CellStore::new();
+                black_box(core.init_from_snapshot(&mut cell_store, snapshot).unwrap())
             },
         );
     });
@@ -98,8 +98,8 @@ pub(crate) fn bench_vlookup(c: &mut Criterion) {
             || vlookup_snapshot(100_000),
             |snapshot| {
                 let mut core = ComputeCore::new();
-                let mut mirror = CellMirror::new();
-                black_box(core.init_from_snapshot(&mut mirror, snapshot).unwrap())
+                let mut cell_store = CellStore::new();
+                black_box(core.init_from_snapshot(&mut cell_store, snapshot).unwrap())
             },
         );
     });
@@ -116,8 +116,8 @@ pub(crate) fn bench_countifs(c: &mut Criterion) {
             || countifs_snapshot(100_000),
             |snapshot| {
                 let mut core = ComputeCore::new();
-                let mut mirror = CellMirror::new();
-                black_box(core.init_from_snapshot(&mut mirror, snapshot).unwrap())
+                let mut cell_store = CellStore::new();
+                black_box(core.init_from_snapshot(&mut cell_store, snapshot).unwrap())
             },
         );
     });
@@ -131,13 +131,13 @@ pub(crate) fn bench_dense_cache_materialize(c: &mut Criterion) {
 
     group.bench_function(BenchmarkId::new("materialize", "100k"), |b| {
         let snapshot = numeric_column_snapshot(100_000);
-        let (_core, mirror) = init_snapshot(snapshot);
+        let (_core, cell_store) = init_snapshot(snapshot);
         let sheet_id = sheet_id(0);
 
         b.iter(|| {
             let mut cache = DenseColumnCache::new();
-            let sheet_mirror = mirror.get_sheet(&sheet_id).unwrap();
-            cache.materialize(&sheet_id, 0, sheet_mirror);
+            let sheet_store = cell_store.get_sheet(&sheet_id).unwrap();
+            cache.materialize(&sheet_id, 0, sheet_store);
             black_box(&cache);
         });
     });
@@ -151,19 +151,19 @@ pub(crate) fn bench_col_version_bump(c: &mut Criterion) {
 
     group.bench_function("col_version_read_10k", |b| {
         let snapshot = small_snapshot();
-        let (_core, mirror) = init_snapshot(snapshot);
+        let (_core, cell_store) = init_snapshot(snapshot);
         let sheet_id = sheet_id(0);
 
         b.iter(|| {
             for col in 0..10_000u32 {
-                black_box(mirror.col_version(&sheet_id, col));
+                black_box(cell_store.col_version(&sheet_id, col));
             }
         });
     });
 
     group.bench_function("cell_edit_10k", |b| {
         let snapshot = small_snapshot();
-        let (mut core, mut mirror) = init_snapshot(snapshot);
+        let (mut core, mut cell_store) = init_snapshot(snapshot);
         let sheet_id = SheetId::from_uuid_str(&sheet_uuid(0)).expect("sheet id");
         let cell_id = CellId::from_uuid_str(&cell_uuid(0, 0, 0)).expect("cell id");
 
@@ -172,7 +172,7 @@ pub(crate) fn bench_col_version_bump(c: &mut Criterion) {
             for _ in 0..10_000 {
                 let val = if toggle { "999" } else { "1" };
                 toggle = !toggle;
-                let _ = black_box(core.set_cell(&mut mirror, &sheet_id, cell_id, 0, 0, val));
+                let _ = black_box(core.set_cell(&mut cell_store, &sheet_id, cell_id, 0, 0, val));
             }
         });
     });
@@ -186,7 +186,7 @@ pub(crate) fn bench_eval_only(c: &mut Criterion) {
 
     group.bench_function(BenchmarkId::new("eval_sum", "100k"), |b| {
         let snapshot = sum_snapshot(100_000);
-        let (mut core, mut mirror) = init_snapshot(snapshot);
+        let (mut core, mut cell_store) = init_snapshot(snapshot);
         let sheet_id = sheet_id(0);
         let cell_id = cell_id(0, 0, 0);
         let mut toggle = true;
@@ -195,7 +195,7 @@ pub(crate) fn bench_eval_only(c: &mut Criterion) {
             let val = if toggle { "999" } else { "1" };
             toggle = !toggle;
             black_box(
-                core.set_cell(&mut mirror, &sheet_id, cell_id, 0, 0, val)
+                core.set_cell(&mut cell_store, &sheet_id, cell_id, 0, 0, val)
                     .unwrap(),
             )
         });
@@ -203,7 +203,7 @@ pub(crate) fn bench_eval_only(c: &mut Criterion) {
 
     group.bench_function(BenchmarkId::new("eval_match", "100k"), |b| {
         let snapshot = match_snapshot(100_000);
-        let (mut core, mut mirror) = init_snapshot(snapshot);
+        let (mut core, mut cell_store) = init_snapshot(snapshot);
         let sheet_id = sheet_id(0);
         let cell_id = cell_id(0, 0, 0);
         let mut toggle = true;
@@ -212,7 +212,7 @@ pub(crate) fn bench_eval_only(c: &mut Criterion) {
             let val = if toggle { "999" } else { "1" };
             toggle = !toggle;
             black_box(
-                core.set_cell(&mut mirror, &sheet_id, cell_id, 0, 0, val)
+                core.set_cell(&mut cell_store, &sheet_id, cell_id, 0, 0, val)
                     .unwrap(),
             )
         });
@@ -220,7 +220,7 @@ pub(crate) fn bench_eval_only(c: &mut Criterion) {
 
     group.bench_function(BenchmarkId::new("eval_index", "100k"), |b| {
         let snapshot = index_snapshot(100_000);
-        let (mut core, mut mirror) = init_snapshot(snapshot);
+        let (mut core, mut cell_store) = init_snapshot(snapshot);
         let sheet_id = sheet_id(0);
         let cell_id = cell_id(0, 0, 0);
         let mut toggle = true;
@@ -229,7 +229,7 @@ pub(crate) fn bench_eval_only(c: &mut Criterion) {
             let val = if toggle { "999" } else { "1" };
             toggle = !toggle;
             black_box(
-                core.set_cell(&mut mirror, &sheet_id, cell_id, 0, 0, val)
+                core.set_cell(&mut cell_store, &sheet_id, cell_id, 0, 0, val)
                     .unwrap(),
             )
         });
@@ -237,7 +237,7 @@ pub(crate) fn bench_eval_only(c: &mut Criterion) {
 
     group.bench_function(BenchmarkId::new("eval_vlookup", "100k"), |b| {
         let snapshot = vlookup_snapshot(100_000);
-        let (mut core, mut mirror) = init_snapshot(snapshot);
+        let (mut core, mut cell_store) = init_snapshot(snapshot);
         let sheet_id = sheet_id(0);
         let cell_id = cell_id(0, 0, 0);
         let mut toggle = true;
@@ -246,7 +246,7 @@ pub(crate) fn bench_eval_only(c: &mut Criterion) {
             let val = if toggle { "999" } else { "1" };
             toggle = !toggle;
             black_box(
-                core.set_cell(&mut mirror, &sheet_id, cell_id, 0, 0, val)
+                core.set_cell(&mut cell_store, &sheet_id, cell_id, 0, 0, val)
                     .unwrap(),
             )
         });
@@ -254,7 +254,7 @@ pub(crate) fn bench_eval_only(c: &mut Criterion) {
 
     group.bench_function(BenchmarkId::new("eval_countifs", "100k"), |b| {
         let snapshot = countifs_snapshot(100_000);
-        let (mut core, mut mirror) = init_snapshot(snapshot);
+        let (mut core, mut cell_store) = init_snapshot(snapshot);
         let sheet_id = sheet_id(0);
         let cell_id = cell_id(0, 0, 0);
         let mut toggle = true;
@@ -263,7 +263,7 @@ pub(crate) fn bench_eval_only(c: &mut Criterion) {
             let val = if toggle { "999" } else { "1" };
             toggle = !toggle;
             black_box(
-                core.set_cell(&mut mirror, &sheet_id, cell_id, 0, 0, val)
+                core.set_cell(&mut cell_store, &sheet_id, cell_id, 0, 0, val)
                     .unwrap(),
             )
         });

@@ -453,7 +453,7 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
             }
         }
 
-        // Borrowed CellValue fast path: borrow column data directly from mirror
+        // Borrowed CellValue fast path: borrow column data directly from cell_store
         if let Some((sheet, col, start_row, end_row)) =
             try_extract_single_column_range(args, self.meta)
             && let Some(col_values) = self.meta.get_column_values(&sheet, col)

@@ -33,7 +33,7 @@ mod types;
 #[cfg(test)]
 mod tests;
 
-pub(crate) use clear::clear_cells_by_hex;
+pub(crate) use clear::{clear_cells_by_hex, clear_metadata_for_cell_ids};
 pub(crate) use navigation::find_data_edge;
 pub(crate) use region::{get_current_region, get_data_bounds_for_range};
 pub(crate) use relocation::relocate_cells;

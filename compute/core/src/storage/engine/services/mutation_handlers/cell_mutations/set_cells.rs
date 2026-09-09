@@ -3,13 +3,11 @@ use std::collections::HashMap;
 use cell_types::{CellId, SheetId, SheetPos};
 use value_types::{CellValue, ComputeError};
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::snapshot::{CellChange, CellPosition, PolicyPreservedParseOutcome, RecalcResult};
 use crate::storage::cells::values::InputParseContext;
 use crate::storage::engine::mutation::CellInput;
-use crate::storage::engine::services::cell_editing::{
-    NO_OLD_FORMULA_SENTINEL, register_formula_cell_identities,
-};
+use crate::storage::engine::services::cell_editing::{NO_OLD_FORMULA_SENTINEL, sync_grid_axes};
 use crate::storage::engine::stores::EngineStores;
 
 use super::edits::{canonicalize_resolved_cell_inputs, validate_edit_bounds};
@@ -34,9 +32,9 @@ impl DirectEditRecord {
     }
 }
 
-fn resolved_post_edit_value(mirror: &CellMirror, record: &DirectEditRecord) -> CellValue {
+fn resolved_post_edit_value(cell_store: &CellStore, record: &DirectEditRecord) -> CellValue {
     if record.prepared_formula.is_some() {
-        mirror
+        cell_store
             .get_cell_value(&record.cell_id)
             .cloned()
             .unwrap_or(CellValue::Null)
@@ -47,7 +45,7 @@ fn resolved_post_edit_value(mirror: &CellMirror, record: &DirectEditRecord) -> C
 
 fn append_missing_direct_edit_changes(
     result: &mut RecalcResult,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     records: &[DirectEditRecord],
 ) {
     let mut changed_ids = rustc_hash::FxHashSet::default();
@@ -69,7 +67,7 @@ fn append_missing_direct_edit_changes(
             continue;
         }
 
-        let value = resolved_post_edit_value(mirror, record);
+        let value = resolved_post_edit_value(cell_store, record);
         let new_formula = record.new_formula();
         if record.old_value == value && record.old_formula == new_formula {
             continue;
@@ -130,7 +128,7 @@ fn patch_direct_edit_before_snapshots(
 /// Batch-set cells with full store synchronization.
 pub(in crate::storage::engine) fn mutation_set_cells(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     edits: Vec<(SheetId, CellId, u32, u32, CellInput)>,
     skip_cycle_check: bool,
 ) -> Result<RecalcResult, ComputeError> {
@@ -142,10 +140,12 @@ pub(in crate::storage::engine) fn mutation_set_cells(
     )?;
     stores
         .compute
-        .validate_region_partial_writes(mirror, &edits)?;
+        .validate_region_partial_writes(cell_store, &edits)?;
 
     for (sheet, cell, row, col, _) in &edits {
-        crate::storage::engine::history::cells::capture_cell(stores, mirror, *sheet, *cell, *row, *col);
+        crate::storage::engine::history::cells::capture_cell(
+            stores, cell_store, *sheet, *cell, *row, *col,
+        );
     }
 
     // Resolve format hints from the pre-edit state before parsing inputs.
@@ -157,29 +157,30 @@ pub(in crate::storage::engine) fn mutation_set_cells(
             }
             let grid = stores.grid_indexes.get(sheet_id)?;
             use crate::storage::properties;
-            let format = match grid.cell_id_at(*row, *col) {
-                Some(cid) => {
-                    let cell_hex = compute_document::hex::id_to_hex(cid.as_u128());
-                    properties::get_effective_format(
+            let format =
+                match cell_store.resolve_cell_id(sheet_id, cell_types::SheetPos::new(*row, *col)) {
+                    Some(cid) => {
+                        let cell_hex = compute_document::hex::id_to_hex(cid.as_u128());
+                        properties::get_effective_format(
+                            &stores.storage,
+                            sheet_id,
+                            &cell_hex,
+                            *row,
+                            *col,
+                            None,
+                            Some(grid),
+                            cell_store.get_sheet(sheet_id),
+                        )
+                    }
+                    None => properties::get_positional_format(
                         &stores.storage,
                         sheet_id,
-                        &cell_hex,
                         *row,
                         *col,
-                        None,
                         Some(grid),
-                        mirror.get_sheet(sheet_id),
-                    )
-                }
-                None => properties::get_positional_format(
-                    &stores.storage,
-                    sheet_id,
-                    *row,
-                    *col,
-                    Some(grid),
-                    mirror.get_sheet(sheet_id),
-                ),
-            };
+                        cell_store.get_sheet(sheet_id),
+                    ),
+                };
             format
                 .number_format
                 .as_deref()
@@ -248,12 +249,20 @@ pub(in crate::storage::engine) fn mutation_set_cells(
                 }
             }
         };
-        let old_value = mirror
+        let old_value = cell_store
             .get_cell_value(&cell_id)
-            .or_else(|| mirror.get_cell_value_at(sheet_id, SheetPos::new(row, col)))
+            .or_else(|| cell_store.get_cell_value_at(sheet_id, SheetPos::new(row, col)))
             .cloned()
             .unwrap_or(CellValue::Null);
-        let old_formula = stores.compute.get_formula(&cell_id).map(str::to_owned);
+        let old_formula = stores
+            .compute
+            .get_formula(&cell_id)
+            .or_else(|| {
+                cell_store
+                    .resolve_cell_id(sheet_id, SheetPos::new(row, col))
+                    .and_then(|id| stores.compute.get_formula(&id))
+            })
+            .map(str::to_owned);
         direct_edit_records.push(DirectEditRecord {
             sheet_id: *sheet_id,
             cell_id,
@@ -278,7 +287,7 @@ pub(in crate::storage::engine) fn mutation_set_cells(
 
     register_cell_positions(
         stores,
-        mirror,
+        cell_store,
         edits
             .iter()
             .map(|(sheet_id, cell_id, row, col, _)| (*sheet_id, *cell_id, *row, *col)),
@@ -303,13 +312,11 @@ pub(in crate::storage::engine) fn mutation_set_cells(
     // The scheduler owns the sole cell write and preserves iterative formula seeds.
     let mut result = stores
         .compute
-        .set_cells(mirror, &prepared_edits, skip_cycle_check)?;
-    for (_, cell_id, _, _, _) in &edits {
-        register_formula_cell_identities(stores, mirror, *cell_id);
-    }
+        .set_cells(cell_store, &prepared_edits, skip_cycle_check)?;
+    sync_grid_axes(stores, cell_store);
 
     patch_direct_edit_before_snapshots(&mut result, &direct_edit_records_by_cell);
-    append_missing_direct_edit_changes(&mut result, mirror, &direct_edit_records);
+    append_missing_direct_edit_changes(&mut result, cell_store, &direct_edit_records);
 
     attach_policy_preserved_outcomes(&mut result, preserved_outcomes);
     Ok(result)

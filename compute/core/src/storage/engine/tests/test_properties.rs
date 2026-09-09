@@ -588,7 +588,7 @@ fn test_get_displayed_range_properties_with_cf() {
     );
 }
 
-// Range-flavored mirror of test_get_displayed_cell_properties_with_cf_on_truly_blank_cell:
+// Range-flavored cell_store of test_get_displayed_cell_properties_with_cf_on_truly_blank_cell:
 // a `containsBlanks` rule's painted cells must surface in the batch
 // (`getDisplayedRangeProperties`) read path that the harness's
 // `readDisplayedFormatsViaBridge` prefers. Regression for `cf-blanks`.
@@ -689,11 +689,10 @@ fn displayed_format_projection_preserves_order_duplicates_and_scalar_semantics()
         )
         .unwrap();
     {
-        let (stores, mirror) = (&mut engine.stores, &mut engine.mirror);
-        let sheet_mirror = mirror.get_sheet_mut(&sid).unwrap();
+        let sheet_store = engine.cell_store.get_sheet_mut(&sid).unwrap();
         crate::storage::properties::add_format_range(
-            sheet_mirror,
-            crate::mirror::RangeId::from_raw(100),
+            sheet_store,
+            crate::cells::RangeId::from_raw(100),
             0,
             0,
             0,
@@ -705,8 +704,8 @@ fn displayed_format_projection_preserves_order_duplicates_and_scalar_semantics()
             },
         );
         crate::storage::properties::add_format_range(
-            sheet_mirror,
-            crate::mirror::RangeId::from_raw(200),
+            sheet_store,
+            crate::cells::RangeId::from_raw(200),
             0,
             0,
             0,

@@ -544,7 +544,7 @@ fn hydrate_and_snapshot(
 /// This is the end-to-end regression test for the DATA TABLE constant-collapse.
 #[test]
 fn named_range_creates_dependency_graph_edge() {
-    use crate::mirror::CellMirror;
+    use crate::cells::CellStore;
     use crate::scheduler::ComputeCore;
 
     // Build a two-sheet ParseOutput:
@@ -601,16 +601,16 @@ fn named_range_creates_dependency_graph_edge() {
 
     // Init compute-core and check the formula evaluates correctly
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    let _result = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let mut cell_store = CellStore::new();
+    let _result = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // Find Model!A1's CellId and check its computed value.
     // If the named range resolved correctly, =InputVal*2 = 100*2 = 200.
-    let model_a1 = mirror
+    let model_a1 = cell_store
         .resolve_cell_id(&model_sheet_id, cell_types::SheetPos::new(0, 0))
         .expect("Model!A1 should exist");
     let value = core
-        .get_cell_value(&mirror, &model_a1)
+        .get_cell_value(&cell_store, &model_a1)
         .expect("Should have value");
 
     assert_eq!(
@@ -746,7 +746,15 @@ fn gate1_range_anchor_exclusion() {
         "Non-anchored cells should form Range payloads"
     );
 
-    let range_row_count: usize = sheet.ranges.iter().map(|r| r.row_ids.len()).sum();
+    let range_row_count: usize = sheet
+        .ranges
+        .iter()
+        .map(|r| {
+            r.row_axis
+                .as_ref()
+                .map_or(r.row_ids.len(), |axis| axis.len() as usize)
+        })
+        .sum();
     let total = sheet.cells.len() + range_row_count;
     assert_eq!(
         total, N as usize,
@@ -803,7 +811,8 @@ fn gate4_anchor_gap_in_middle_of_run() {
         .unwrap();
     for range in &sheet.ranges {
         assert!(
-            !range.row_ids.contains(&anchor_row_id),
+            !range_row_offsets(range, id_map.sheet_ids[0], &id_map.row_axes[0])
+                .contains_key(&anchor_row_id),
             "Range row_ids must not contain the anchored row's RowId"
         );
     }
@@ -813,7 +822,10 @@ fn gate4_anchor_gap_in_middle_of_run() {
             .identity_at(id_map.sheet_ids[0], (target_row as usize) as u32)
             .unwrap();
         for range in &sheet.ranges {
-            if let Some(idx) = range.row_ids.iter().position(|rid| *rid == target_row_id) {
+            if let Some(idx) = range_row_offsets(range, id_map.sheet_ids[0], &id_map.row_axes[0])
+                .get(&target_row_id)
+            {
+                let idx = idx as usize;
                 if range.encoding == cell_types::PayloadEncoding::F64Le {
                     let bytes = &range.payload[idx * 8..(idx + 1) * 8];
                     let val = f64::from_le_bytes(bytes.try_into().unwrap());
@@ -875,9 +887,9 @@ fn gate5_hydration_id_map_extension() {
     );
 
     for range in &sheet.ranges {
-        for rid in &range.row_ids {
+        for rid in range_row_offsets(range, id_map.sheet_ids[0], &id_map.row_axes[0]).keys() {
             assert!(
-                id_map.row_axes[0].contains_identity(id_map.sheet_ids[0], *rid),
+                id_map.row_axes[0].contains_identity(id_map.sheet_ids[0], rid),
                 "Every RangeData row_id must exist in id_map.row_axes"
             );
         }
@@ -922,7 +934,15 @@ fn gate8_large_import_produces_range_backed_snapshot() {
         "Numeric column must use F64Le encoding"
     );
 
-    let range_row_count: usize = sheet.ranges.iter().map(|r| r.row_ids.len()).sum();
+    let range_row_count: usize = sheet
+        .ranges
+        .iter()
+        .map(|r| {
+            r.row_axis
+                .as_ref()
+                .map_or(r.row_ids.len(), |axis| axis.len() as usize)
+        })
+        .sum();
     let total = sheet.cells.len() + range_row_count;
     assert_eq!(
         total,
@@ -930,4 +950,25 @@ fn gate8_large_import_produces_range_backed_snapshot() {
         "cells ({}) + range rows ({range_row_count}) must equal {N}",
         sheet.cells.len()
     );
+}
+
+fn range_row_offsets(
+    range: &snapshot_types::RangeData,
+    sheet: cell_types::SheetId,
+    axis: &cell_types::AxisIdentityStore<cell_types::RowId>,
+) -> crate::cells::range_view::RangeOffsets<cell_types::RowId> {
+    range
+        .row_axis
+        .as_ref()
+        .and_then(|reference| {
+            crate::cells::range_view::RangeOffsets::from_axis_ref(sheet, reference, axis)
+        })
+        .unwrap_or_else(|| {
+            range
+                .row_ids
+                .iter()
+                .enumerate()
+                .map(|(i, id)| (*id, i as u32))
+                .collect()
+        })
 }

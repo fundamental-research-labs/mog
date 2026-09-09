@@ -17,8 +17,8 @@ use value_types::ComputeError;
 /// `create_subtotals`/`remove_subtotals` need `&mut dyn SubtotalsCellAccessor`
 /// while also borrowing `doc` and `sheets` immutably.  A thin wrapper that
 /// captures the necessary references avoids the borrow-conflict.
-struct EngineSubtotalAccessor<'a> {
-    engine: &'a mut ComputeEngine,
+pub(in crate::storage::engine) struct EngineSubtotalAccessor<'a> {
+    pub(in crate::storage::engine) engine: &'a mut ComputeEngine,
 }
 
 impl<'a> grouping::SubtotalsCellAccessor for EngineSubtotalAccessor<'a> {
@@ -43,19 +43,14 @@ impl<'a> grouping::SubtotalsCellAccessor for EngineSubtotalAccessor<'a> {
 
     fn get_cell_value(&self, sheet_id: &SheetId, row: u32, col: u32) -> String {
         self.engine
-            .mirror
+            .cell_store
             .get_cell_value_at(sheet_id, SheetPos::new(row, col))
             .map(|v| format!("{}", v))
             .unwrap_or_default()
     }
 
     fn set_cell_value(&mut self, sheet_id: &SheetId, row: u32, col: u32, value: &str) {
-        if let Some(grid) = self.engine.stores.grid_indexes.get_mut(sheet_id) {
-            let cell_id = grid.ensure_cell_id(row, col);
-            let _ = self
-                .engine
-                .set_cell(sheet_id, cell_id, row, col, value.into());
-        }
+        let _ = self.engine.set_cell_value_parsed(sheet_id, row, col, value);
     }
 
     fn insert_rows(&mut self, sheet_id: &SheetId, start_row: u32, count: u32) {
@@ -80,38 +75,20 @@ impl<'a> grouping::SubtotalsCellAccessor for EngineSubtotalAccessor<'a> {
 
     fn get_cell_raw_value(&self, sheet_id: &SheetId, row: u32, col: u32) -> String {
         // Try to get formula first (raw value for SUBTOTAL detection)
-        if let Some(grid) = self.engine.grid_index(sheet_id)
-            && let Some(cell_id) = grid.cell_id_at(row, col)
+        if let Some(cell_id) = self
+            .engine
+            .cell_store
+            .resolve_cell_id(sheet_id, SheetPos::new(row, col))
             && let Some(f) = self.engine.compute().get_formula(&cell_id)
         {
             return f.to_string();
         }
         // Fall back to computed value
         self.engine
-            .mirror
+            .cell_store
             .get_cell_value_at(sheet_id, SheetPos::new(row, col))
             .map(|v| format!("{}", v))
             .unwrap_or_default()
-    }
-}
-
-fn empty_viewport_patches() -> Vec<u8> {
-    compute_wire::mutation::serialize_multi_viewport_patches(&[])
-}
-
-fn grouping_viewport_patches(
-    engine: &mut ComputeEngine,
-    sheet_id: &SheetId,
-    result: &MutationResult,
-) -> Vec<u8> {
-    // Visibility-changing grouping mutations already drive a client-side
-    // geometry refresh from MutationResult.visibility_changes. Returning a full
-    // viewport here duplicates that fetch and serializes buffers that the
-    // client immediately replaces.
-    if result.visibility_changes.is_empty() {
-        engine.produce_full_viewport_patches(sheet_id)
-    } else {
-        empty_viewport_patches()
     }
 }
 
@@ -120,9 +97,8 @@ pub(super) fn group_rows(
     sheet_id: &SheetId,
     start_row: u32,
     end_row: u32,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     svc::group_rows(&mut engine.stores, sheet_id, start_row, end_row)
-        .map(|r| (empty_viewport_patches(), r))
 }
 
 pub(super) fn ungroup_rows(
@@ -130,10 +106,10 @@ pub(super) fn ungroup_rows(
     sheet_id: &SheetId,
     start_row: u32,
     end_row: u32,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let result = svc::ungroup_rows(&mut engine.stores, sheet_id, start_row, end_row)?;
-    let patches = grouping_viewport_patches(engine, sheet_id, &result);
-    Ok((patches, result))
+
+    Ok(result)
 }
 
 pub(super) fn group_columns(
@@ -141,9 +117,8 @@ pub(super) fn group_columns(
     sheet_id: &SheetId,
     start_col: u32,
     end_col: u32,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     svc::group_columns(&mut engine.stores, sheet_id, start_col, end_col)
-        .map(|r| (empty_viewport_patches(), r))
 }
 
 pub(super) fn ungroup_columns(
@@ -151,10 +126,10 @@ pub(super) fn ungroup_columns(
     sheet_id: &SheetId,
     start_col: u32,
     end_col: u32,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let result = svc::ungroup_columns(&mut engine.stores, sheet_id, start_col, end_col)?;
-    let patches = grouping_viewport_patches(engine, sheet_id, &result);
-    Ok((patches, result))
+
+    Ok(result)
 }
 
 pub(super) fn set_group_collapsed(
@@ -162,38 +137,38 @@ pub(super) fn set_group_collapsed(
     sheet_id: &SheetId,
     group_id: &str,
     collapsed: bool,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let result = svc::set_group_collapsed(&mut engine.stores, sheet_id, group_id, collapsed)?;
-    let patches = grouping_viewport_patches(engine, sheet_id, &result);
-    Ok((patches, result))
+
+    Ok(result)
 }
 
 pub(super) fn toggle_group_collapsed(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     group_id: &str,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let result = svc::toggle_group_collapsed(&mut engine.stores, sheet_id, group_id)?;
-    let patches = grouping_viewport_patches(engine, sheet_id, &result);
-    Ok((patches, result))
+
+    Ok(result)
 }
 
 pub(super) fn expand_all_groups(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let result = svc::expand_all_groups(&mut engine.stores, sheet_id)?;
-    let patches = grouping_viewport_patches(engine, sheet_id, &result);
-    Ok((patches, result))
+
+    Ok(result)
 }
 
 pub(super) fn collapse_all_groups(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let result = svc::collapse_all_groups(&mut engine.stores, sheet_id)?;
-    let patches = grouping_viewport_patches(engine, sheet_id, &result);
-    Ok((patches, result))
+
+    Ok(result)
 }
 
 pub(super) fn get_sheet_grouping_config(
@@ -219,7 +194,7 @@ pub(super) fn create_subtotals(
     end_row: u32,
     end_col: u32,
     options: grouping::SubtotalOptions,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     match engine.apply_mutation(EngineMutation::CreateSubtotals {
         sheet_id: *sheet_id,
         start_row,
@@ -228,11 +203,8 @@ pub(super) fn create_subtotals(
         end_col,
         options,
     })? {
-        MutationOutput::Recalc(result) => {
-            engine.mutation.pending_recalc = None;
-            Ok((engine.produce_full_viewport_patches(sheet_id), result))
-        }
-        _ => Ok((empty_viewport_patches(), MutationResult::empty())),
+        MutationOutput::Recalc(result) => Ok(result),
+        _ => Ok(MutationResult::empty()),
     }
 }
 
@@ -243,15 +215,12 @@ pub(super) fn remove_subtotals(
     start_col: u32,
     end_row: u32,
     end_col: u32,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let range = grouping::CellRange::new(start_row, start_col, end_row, end_col);
 
     let mut accessor = EngineSubtotalAccessor { engine };
     grouping::remove_subtotals(&mut accessor, sheet_id, &range);
-    Ok((
-        engine.produce_full_viewport_patches(sheet_id),
-        MutationResult::empty(),
-    ))
+    Ok(MutationResult::empty())
 }
 
 pub(super) fn auto_outline(
@@ -261,7 +230,7 @@ pub(super) fn auto_outline(
     start_col: u32,
     end_row: u32,
     end_col: u32,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let range = grouping::CellRange::new(start_row, start_col, end_row, end_col);
 
     let mut accessor = EngineSubtotalAccessor { engine };
@@ -272,7 +241,7 @@ pub(super) fn auto_outline(
         axis: Axis::Row,
         kind: ChangeKind::Set,
     });
-    Ok((empty_viewport_patches(), result.with_data(&count)?))
+    Ok(result.with_data(&count)?)
 }
 
 pub(super) fn get_subtotal_config(
@@ -386,20 +355,20 @@ pub(super) fn set_level_collapsed(
     axis: &str,
     level: u32,
     collapsed: bool,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let result = svc::set_level_collapsed(&mut engine.stores, sheet_id, axis, level, collapsed)?;
-    let patches = grouping_viewport_patches(engine, sheet_id, &result);
-    Ok((patches, result))
+
+    Ok(result)
 }
 
 pub(super) fn set_outline_settings(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     settings: grouping::OutlineSettingsUpdate,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let result = svc::set_outline_settings(&mut engine.stores, sheet_id, &settings)?;
-    let patches = grouping_viewport_patches(engine, sheet_id, &result);
-    Ok((patches, result))
+
+    Ok(result)
 }
 
 pub(super) fn clear_row_grouping(
@@ -407,10 +376,10 @@ pub(super) fn clear_row_grouping(
     sheet_id: &SheetId,
     start_row: u32,
     end_row: u32,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let result = svc::clear_row_grouping(&mut engine.stores, sheet_id, start_row, end_row)?;
-    let patches = grouping_viewport_patches(engine, sheet_id, &result);
-    Ok((patches, result))
+
+    Ok(result)
 }
 
 pub(super) fn clear_column_grouping(
@@ -418,17 +387,17 @@ pub(super) fn clear_column_grouping(
     sheet_id: &SheetId,
     start_col: u32,
     end_col: u32,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let result = svc::clear_column_grouping(&mut engine.stores, sheet_id, start_col, end_col)?;
-    let patches = grouping_viewport_patches(engine, sheet_id, &result);
-    Ok((patches, result))
+
+    Ok(result)
 }
 
 pub(super) fn clear_all_grouping(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let result = svc::clear_all_grouping(&mut engine.stores, sheet_id)?;
-    let patches = grouping_viewport_patches(engine, sheet_id, &result);
-    Ok((patches, result))
+
+    Ok(result)
 }

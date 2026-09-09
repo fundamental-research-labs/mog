@@ -1,9 +1,6 @@
 //! Range Manager Utilities
 //!
-//! Port of `spreadsheet-model/src/utils/range-manager.ts` (spreadsheet-model elimination).
-//!
-//! Centralized utility for parsing and stringifying A1-style range references,
-//! plus a spatial index for efficient range lookups.
+//! A1 reference helpers and a list of resolved merge rectangles.
 //!
 //! ## Type naming
 //!
@@ -12,11 +9,8 @@
 //! identity-based references used in the formula AST. The A1 types carry absolute/relative
 //! markers and represent user-visible spreadsheet references like `$A$1:B10`.
 //!
-//! ## Spatial Index
-//!
-//! `RangeSpatialIndex<T>` provides efficient lookups of "which items contain this cell?"
-//! using a trait-based position lookup. This supports the Cell Identity Model where
-//! range schemas reference cells by CellId and positions are resolved at query time.
+//! Merge queries scan the stored rectangles and resolve their bounds through
+//! the supplied lookup. Query cost is linear in the number of ranges.
 
 use std::collections::HashMap;
 
@@ -172,7 +166,7 @@ pub(crate) fn stringify_range(range: &A1RangeRef) -> String {
 }
 
 // =============================================================================
-// Spatial Index
+// Merge list
 // =============================================================================
 
 /// Resolved range bounds from CellId-based refs.
@@ -212,54 +206,41 @@ pub(crate) trait SpatialItem {
     fn range_refs(&self) -> &[Self::RangeRef];
 }
 
-/// Spatial index for efficient range lookups.
-///
-/// Uses a simple scan approach suitable for spreadsheet use cases.
-/// For typical usage (hundreds of validation rules, thousands of visible cells),
-/// this provides excellent performance without the complexity of R-trees.
-///
-/// ## Cell Identity Model
-///
-/// Items' range references are identity-based (CellId). The spatial index
-/// resolves CellIds to positions at query time via a `RangeBoundsResolver`. This
-/// ensures:
-/// - Concurrent structure changes compose correctly (no adjustment needed)
-/// - Position resolution is always current (no stale cached positions)
-/// - Deleted cells result in invalid ranges (item is effectively disabled for that range)
-pub(crate) struct RangeSpatialIndex<T> {
+/// Merge rectangles queried by a linear scan of their resolved bounds.
+pub(crate) struct MergeList<T> {
     items: Vec<T>,
 }
 
-impl<T> Default for RangeSpatialIndex<T> {
+impl<T> Default for MergeList<T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T> RangeSpatialIndex<T> {
-    /// Create a new empty spatial index.
+impl<T> MergeList<T> {
+    /// Create an empty merge list.
     pub fn new() -> Self {
         Self { items: Vec::new() }
     }
 
-    /// Create a spatial index with the given items.
+    /// Store the given merge rectangles.
     pub fn with_items(items: Vec<T>) -> Self {
         Self { items }
     }
 
-    /// Rebuild the index with new items.
+    /// Replace the merge rectangles.
     pub fn rebuild(&mut self, items: Vec<T>) {
         self.items = items;
     }
 
-    /// Get a reference to all items in the index.
+    /// Get the stored merge rectangles.
     #[allow(dead_code)] // Public API accessor — used by tests and future callers
     pub fn items(&self) -> &[T] {
         &self.items
     }
 }
 
-impl<T: SpatialItem> RangeSpatialIndex<T>
+impl<T: SpatialItem> MergeList<T>
 where
     T::RangeRef: Sized,
 {
@@ -571,7 +552,7 @@ mod tests {
     }
 
     // -------------------------------------------------------------------------
-    // Spatial Index
+    // Merge list
     // -------------------------------------------------------------------------
 
     /// A test schema item for spatial index tests.
@@ -641,7 +622,7 @@ mod tests {
             },
         ];
 
-        let index = RangeSpatialIndex::with_items(schemas);
+        let index = MergeList::with_items(schemas);
         let resolver = DirectResolver;
 
         // Cell (1,1) is in s1
@@ -691,7 +672,7 @@ mod tests {
             },
         ];
 
-        let index = RangeSpatialIndex::with_items(schemas);
+        let index = MergeList::with_items(schemas);
         let resolver = DirectResolver;
 
         // Viewport that intersects s1 and s3 but not s2
@@ -728,7 +709,7 @@ mod tests {
             ],
         }];
 
-        let index = RangeSpatialIndex::with_items(schemas);
+        let index = MergeList::with_items(schemas);
         let resolver = DirectResolver;
 
         // Cell in first range
@@ -746,7 +727,7 @@ mod tests {
 
     #[test]
     fn test_spatial_index_rebuild() {
-        let mut index: RangeSpatialIndex<TestSchema> = RangeSpatialIndex::new();
+        let mut index: MergeList<TestSchema> = MergeList::new();
         let resolver = DirectResolver;
 
         assert!(index.get_items_for_cell(0, 0, &resolver).is_empty());
@@ -787,7 +768,7 @@ mod tests {
             }],
         }];
 
-        let index = RangeSpatialIndex::with_items(schemas);
+        let index = MergeList::with_items(schemas);
         let resolver = NullResolver;
 
         // Even though cell is in range, resolver returns None -> no match
@@ -849,7 +830,7 @@ mod tests {
 
     #[test]
     fn test_default_spatial_index() {
-        let index: RangeSpatialIndex<TestSchema> = RangeSpatialIndex::default();
+        let index: MergeList<TestSchema> = MergeList::default();
         assert!(index.items().is_empty());
     }
 }

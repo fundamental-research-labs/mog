@@ -11,14 +11,14 @@ struct StylePaletteAppend {
 }
 
 impl MetadataSwap for StylePaletteAppend {
-    fn is_changed(&self, storage: &WorkbookStorage, _: &CellMirror) -> bool {
+    fn is_changed(&self, storage: &WorkbookStorage, _: &CellStore) -> bool {
         storage.metadata.style_palette.len() != self.start
     }
 
     fn swap(
         &mut self,
         storage: &mut WorkbookStorage,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         effects: &mut HistoryEffects,
     ) {
         if let Some(mut values) = self.removed.take() {
@@ -27,11 +27,11 @@ impl MetadataSwap for StylePaletteAppend {
             self.removed = Some(storage.metadata.style_palette.split_off(self.start));
         }
         effects.format_rects.extend(
-            mirror
+            cell_store
                 .sheet_ids()
                 .map(|sheet| (*sheet, 0, 0, u32::MAX, u32::MAX)),
         );
-        MetadataImpact::Settings.mark(mirror, effects);
+        MetadataImpact::Settings.mark(cell_store, effects);
     }
 }
 

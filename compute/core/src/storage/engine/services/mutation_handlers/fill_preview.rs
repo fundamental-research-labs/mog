@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use cell_types::{CellId, ColId, RowId, SheetId};
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 
 pub(super) fn pattern_type_to_wire(pattern_type: &compute_fill::types::FillPatternType) -> String {
     match pattern_type {
@@ -48,16 +48,16 @@ pub(super) fn warning_to_bridge(
 }
 
 pub(super) fn source_formula_text(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     source_formula: &formula_types::IdentityFormula,
 ) -> String {
-    let lookup = PreviewPositionLookup::new(mirror, *sheet_id);
+    let lookup = PreviewPositionLookup::new(cell_store, *sheet_id);
     compute_parser::to_a1_string(source_formula, &lookup)
 }
 
 pub(super) fn render_preview_formula(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     source: &formula_types::IdentityFormula,
     adjusted_refs: &[compute_fill::types::AdjustedRef],
@@ -66,7 +66,7 @@ pub(super) fn render_preview_formula(
         IdentityCellRef, IdentityFormulaRef, IdentityRangeRef, IdentityRectRangeRef,
     };
 
-    let mut lookup = PreviewPositionLookup::new(mirror, *sheet_id);
+    let mut lookup = PreviewPositionLookup::new(cell_store, *sheet_id);
     let mut new_refs = Vec::with_capacity(source.refs.len());
 
     for (index, src_ref) in source.refs.iter().enumerate() {
@@ -74,7 +74,7 @@ pub(super) fn render_preview_formula(
         match adjusted {
             Some(adjusted) if !adjusted.out_of_bounds => match src_ref {
                 IdentityFormulaRef::Cell(cell_ref) => {
-                    let ref_sheet = mirror.sheet_for_cell(&cell_ref.id).unwrap_or(*sheet_id);
+                    let ref_sheet = cell_store.sheet_for_cell(&cell_ref.id).unwrap_or(*sheet_id);
                     let fake_id = fake_cell_id(index, 0);
                     lookup.cell_positions.insert(
                         fake_id,
@@ -87,7 +87,7 @@ pub(super) fn render_preview_formula(
                     }));
                 }
                 IdentityFormulaRef::Range(range_ref) => {
-                    let ref_sheet = mirror
+                    let ref_sheet = cell_store
                         .sheet_for_cell(&range_ref.start_id)
                         .unwrap_or(*sheet_id);
                     let start_id = fake_cell_id(index, 0);
@@ -190,7 +190,7 @@ fn fake_col_id(ref_index: usize, endpoint: u128) -> ColId {
 }
 
 struct PreviewPositionLookup<'a> {
-    mirror: &'a CellMirror,
+    cell_store: &'a CellStore,
     formula_sheet: SheetId,
     cell_positions: HashMap<CellId, (SheetId, u32, u32)>,
     row_positions: HashMap<RowId, (SheetId, u32)>,
@@ -198,9 +198,9 @@ struct PreviewPositionLookup<'a> {
 }
 
 impl<'a> PreviewPositionLookup<'a> {
-    fn new(mirror: &'a CellMirror, formula_sheet: SheetId) -> Self {
+    fn new(cell_store: &'a CellStore, formula_sheet: SheetId) -> Self {
         Self {
-            mirror,
+            cell_store,
             formula_sheet,
             cell_positions: HashMap::new(),
             row_positions: HashMap::new(),
@@ -214,8 +214,8 @@ impl formula_types::WorkbookLookup for PreviewPositionLookup<'_> {
         if let Some(pos) = self.cell_positions.get(cell_id) {
             return Some(*pos);
         }
-        let sheet_id = self.mirror.sheet_for_cell(cell_id)?;
-        let pos = self.mirror.resolve_position(cell_id)?;
+        let sheet_id = self.cell_store.sheet_for_cell(cell_id)?;
+        let pos = self.cell_store.resolve_position(cell_id)?;
         Some((sheet_id, pos.row(), pos.col()))
     }
 
@@ -223,18 +223,18 @@ impl formula_types::WorkbookLookup for PreviewPositionLookup<'_> {
         self.row_positions
             .get(row_id)
             .copied()
-            .or_else(|| self.mirror.row_index_lookup(row_id))
+            .or_else(|| self.cell_store.row_index_lookup(row_id))
     }
 
     fn col_index(&self, col_id: &ColId) -> Option<(SheetId, u32)> {
         self.col_positions
             .get(col_id)
             .copied()
-            .or_else(|| self.mirror.col_index_lookup(col_id))
+            .or_else(|| self.cell_store.col_index_lookup(col_id))
     }
 
     fn sheet_name(&self, sheet_id: &SheetId) -> Option<&str> {
-        self.mirror.get_sheet(sheet_id).map(|s| s.name.as_str())
+        self.cell_store.get_sheet(sheet_id).map(|s| s.name.as_str())
     }
 
     fn formula_sheet(&self) -> SheetId {

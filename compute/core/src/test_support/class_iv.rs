@@ -2,7 +2,7 @@
 //!
 //! This module is the single source of truth for the ~150 declarative
 //! round-trip cases for iterative-recalc input coercion. The
-//! integration-mirror surface (`tests/cell_value_round_trip_via_engine.rs`)
+//! integration-cell_store surface (`tests/cell_value_round_trip_via_engine.rs`)
 //! iterates over [`cases()`] to exercise the full `engine.set_cell` path —
 //! the same path production callers use (UI, TS bridge, external SDK).
 //!

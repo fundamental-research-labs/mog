@@ -2,7 +2,9 @@
 
 use cell_types::SheetId;
 use compute_core::storage::engine::ComputeEngine as Engine;
-use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
+use compute_core::storage::{WorkbookStorage, properties};
+use compute_document::hex::id_to_hex;
+use snapshot_types::{CellData, CellProperties, SheetSnapshot, WorkbookSnapshot};
 use std::{hint::black_box, time::Instant};
 use value_types::CellValue;
 
@@ -54,9 +56,57 @@ fn assert_number(engine: &Engine, sid: &SheetId, row: u32, col: u32, expected: f
     );
 }
 
+fn live_rss() {
+    if let Ok(status) = std::fs::read_to_string("/proc/self/status") {
+        if let Some(rss) = status.lines().find(|line| line.starts_with("VmRSS:")) {
+            println!("live_rss_kib\t{}", rss.split_whitespace().nth(1).unwrap());
+        }
+    }
+}
+
+fn properties_100k(sid: &SheetId) {
+    let mut storage = WorkbookStorage::from_snapshot(snapshot(100_000, 1, vec![])).unwrap();
+    // Imported shared strings preserve their source index and lexical value.
+    // Exercise the real metadata store without retaining an input DTO collection.
+    measured("write_properties", || {
+        for row in 0..100_000 {
+            properties::set_properties(
+                &mut storage,
+                sid,
+                &id_to_hex(u128::from(row) + 1),
+                &CellProperties {
+                    original_sst_index: Some(row + 1),
+                    original_value: Some(format!("shared string {row}")),
+                    ..Default::default()
+                },
+            );
+        }
+    });
+    let checksum = measured("read_properties", || {
+        (0..100_000)
+            .map(|row| {
+                let props =
+                    properties::get_properties(&storage, sid, &id_to_hex(u128::from(row) + 1))
+                        .expect("stored properties");
+                assert_eq!(props.original_value, Some(format!("shared string {row}")));
+                assert_eq!(props.original_sst_index, Some(row + 1));
+                u64::from(props.original_sst_index.unwrap())
+            })
+            .sum::<u64>()
+    });
+    assert_eq!(checksum, 5_000_050_000);
+    println!("checksum\t{checksum}");
+    live_rss();
+    black_box(&storage);
+}
+
 fn main() {
     let workload = std::env::args().nth(1).expect("workload argument");
     let sid = SheetId::from_uuid_str(SHEET_ID).unwrap();
+    if workload == "properties_100k" {
+        properties_100k(&sid);
+        return;
+    }
     let engine = match workload.as_str() {
         "blank_one" => {
             let mut engine = measured("create", || {
@@ -105,9 +155,11 @@ fn main() {
                     .unwrap()
                     .0
             });
-            for row in 0..100_000 {
-                assert_number(&engine, &sid, row, 0, f64::from(row + 1));
-            }
+            measured("read_100k", || {
+                for row in 0..100_000 {
+                    assert_number(&engine, &sid, row, 0, f64::from(row + 1));
+                }
+            });
             engine
         }
         "chain_10k" => {
@@ -166,28 +218,26 @@ fn main() {
             let engine = measured("parse_hydrate", || {
                 Engine::from_xlsx_bytes(&bytes).unwrap().0
             });
-            let imported_sid = *engine.mirror().sheet_ids().next().unwrap();
-            for row in 0..10_000 {
-                for col in 0..10 {
-                    assert_number(
-                        &engine,
-                        &imported_sid,
-                        row,
-                        col,
-                        f64::from(row * 10 + col + 1),
-                    );
+            let imported_sid = *engine.cell_store().sheet_ids().next().unwrap();
+            measured("read_100k", || {
+                for row in 0..10_000 {
+                    for col in 0..10 {
+                        assert_number(
+                            &engine,
+                            &imported_sid,
+                            row,
+                            col,
+                            f64::from(row * 10 + col + 1),
+                        );
+                    }
                 }
-            }
+            });
             engine
         }
         _ => panic!("unknown workload: {workload}"),
     };
     // Sample while the complete live document is retained. Process peak RSS
     // (including setup, validation, and teardown) is measured by the runner.
-    if let Ok(status) = std::fs::read_to_string("/proc/self/status") {
-        if let Some(rss) = status.lines().find(|line| line.starts_with("VmRSS:")) {
-            println!("live_rss_kib\t{}", rss.split_whitespace().nth(1).unwrap());
-        }
-    }
+    live_rss();
     black_box(&engine);
 }

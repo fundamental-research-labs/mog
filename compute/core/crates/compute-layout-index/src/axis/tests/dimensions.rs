@@ -286,3 +286,29 @@ fn fp_zero_default_with_custom() {
     assert_eq!(axis.total_size(), Pixels(80.0));
     assert_position_dimension_invariant(&axis, "zero_default_with_custom");
 }
+
+#[test]
+fn excel_axis_prefix_storage_scales_with_overrides() {
+    let axis = AxisIndex::from_sparse(
+        1_048_576,
+        Pixels(20.0),
+        [(123, Pixels(40.0)), (900_000, Pixels(30.0))],
+        [4, 900_000, 900_000],
+    );
+    assert_eq!(axis.get_position(1_048_576).0, 1_048_576.0 * 20.0 - 20.0);
+    assert_eq!(axis.prefixes.get().unwrap().len(), 3);
+    assert_eq!(axis.get_index_at(Pixels(2460.0)), 123);
+}
+
+#[test]
+fn repeated_sparse_overrides_use_last_size_and_idempotent_visibility() {
+    let axis = AxisIndex::from_sparse(
+        10,
+        Pixels(20.0),
+        [(2, Pixels(50.0)), (2, Pixels(30.0)), (4, Pixels(60.0))],
+        [4, 4],
+    );
+    assert_eq!(axis.get_dimension(2), Pixels(30.0));
+    assert_eq!(axis.get_position(5), Pixels(90.0));
+    assert_eq!(axis.get_index_at(Pixels(90.0)), 5);
+}

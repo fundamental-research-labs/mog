@@ -3,7 +3,7 @@
 use super::super::test_helpers::*;
 use super::super::*;
 use super::helpers::*;
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::snapshot::CellData;
 use std::sync::Arc;
 use value_types::{CellValue, ComputeError};
@@ -24,19 +24,19 @@ fn test_interactive_sequence_spills() {
     }]);
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     let sheet_id = sid(1);
     let a1_id = cell_id_from_str(&a1_str);
 
     // Set A1 = SEQUENCE(5) — should spill values 1..5 into A1:A5
     let result = core
-        .set_cell(&mut mirror, &sheet_id, a1_id, 0, 0, "=SEQUENCE(5)")
+        .set_cell(&mut cell_store, &sheet_id, a1_id, 0, 0, "=SEQUENCE(5)")
         .unwrap();
 
     // A1 should hold the top-left value (1)
-    let a1_val = core.get_cell_value(&mirror, &a1_id).unwrap();
+    let a1_val = core.get_cell_value(&cell_store, &a1_id).unwrap();
     assert_eq!(*a1_val, CellValue::number(1.0), "A1 should be 1");
 
     // Verify that projection changes were reported
@@ -46,8 +46,8 @@ fn test_interactive_sequence_spills() {
     );
 
     // Check projected values via col_data (no phantom CellIds created)
-    let sheet_mirror = mirror.get_sheet(&sheet_id).unwrap();
-    let col_slice = sheet_mirror
+    let sheet_store = cell_store.get_sheet(&sheet_id).unwrap();
+    let col_slice = sheet_store
         .get_column_view(0)
         .expect("col_data for column 0 should exist");
     for row in 1..5u32 {
@@ -93,24 +93,24 @@ fn test_dependent_of_phantom_recalcs() {
     ]);
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     let sheet_id = sid(1);
     let a1_id = cell_id_from_str(&a1_str);
     let b1_id = cell_id_from_str(&b1_str);
 
     // B1 = A3*2, but A3 is empty so B1 = 0*2 = 0
-    let b1_val = core.get_cell_value(&mirror, &b1_id).unwrap();
+    let b1_val = core.get_cell_value(&cell_store, &b1_id).unwrap();
     assert_eq!(*b1_val, CellValue::number(0.0), "B1 should be 0 initially");
 
     // Now set A1 = SEQUENCE(5) — A3 becomes phantom with value 3
     let _result = core
-        .set_cell(&mut mirror, &sheet_id, a1_id, 0, 0, "=SEQUENCE(5)")
+        .set_cell(&mut cell_store, &sheet_id, a1_id, 0, 0, "=SEQUENCE(5)")
         .unwrap();
 
     // B1 = A3 * 2 = 3 * 2 = 6
-    let b1_val = core.get_cell_value(&mirror, &b1_id).unwrap();
+    let b1_val = core.get_cell_value(&cell_store, &b1_id).unwrap();
     assert_eq!(
         *b1_val,
         CellValue::number(6.0),
@@ -137,20 +137,20 @@ fn test_spill_shrinkage_clears_old_phantoms() {
     }]);
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     let sheet_id = sid(1);
     let a1_id = cell_id_from_str(&a1_str);
 
     // Set A1 = SEQUENCE(5) — spills to A2:A5
-    core.set_cell(&mut mirror, &sheet_id, a1_id, 0, 0, "=SEQUENCE(5)")
+    core.set_cell(&mut cell_store, &sheet_id, a1_id, 0, 0, "=SEQUENCE(5)")
         .unwrap();
 
     // Verify A4 and A5 have values via col_data
     {
-        let sheet_mirror = mirror.get_sheet(&sheet_id).unwrap();
-        let col_slice = sheet_mirror
+        let sheet_store = cell_store.get_sheet(&sheet_id).unwrap();
+        let col_slice = sheet_store
             .get_column_view(0)
             .expect("col_data should exist");
         assert_eq!(col_slice[3], CellValue::number(4.0), "A4 should be 4");
@@ -158,13 +158,13 @@ fn test_spill_shrinkage_clears_old_phantoms() {
     }
 
     // Now shrink: A1 = SEQUENCE(3) — A4 and A5 should be cleared
-    core.set_cell(&mut mirror, &sheet_id, a1_id, 0, 0, "=SEQUENCE(3)")
+    core.set_cell(&mut cell_store, &sheet_id, a1_id, 0, 0, "=SEQUENCE(3)")
         .unwrap();
 
     // A4 and A5 should now be Null in col_data
     {
-        let sheet_mirror = mirror.get_sheet(&sheet_id).unwrap();
-        let col_slice = sheet_mirror
+        let sheet_store = cell_store.get_sheet(&sheet_id).unwrap();
+        let col_slice = sheet_store
             .get_column_view(0)
             .expect("col_data should exist");
         assert_eq!(
@@ -198,44 +198,44 @@ fn test_editing_dynamic_spill_member_is_rejected() {
     }]);
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     let sheet_id = sid(1);
     let a1_id = cell_id_from_str(&a1_str);
 
     // Set A1 = SEQUENCE(5) — spills to A2:A5
-    core.set_cell(&mut mirror, &sheet_id, a1_id, 0, 0, "=SEQUENCE(5)")
+    core.set_cell(&mut cell_store, &sheet_id, a1_id, 0, 0, "=SEQUENCE(5)")
         .unwrap();
 
     // Verify A3 is a projected position (no phantom CellIds created)
     assert!(
-        mirror.projection_registry.is_projected(&sheet_id, 2, 0),
+        cell_store.projection_registry.is_projected(&sheet_id, 2, 0),
         "A3 should be a projected position before editing"
     );
 
-    // Projected positions don't have CellIds in the mirror.
+    // Projected positions don't have CellIds in the cell store.
     // To edit A3, get or create a CellId at that position (simulates client behavior).
     let a3_id = core
-        .ensure_cell_id(&mut mirror, &sheet_id, SheetPos::new(2, 0))
+        .ensure_cell_id(&mut cell_store, &sheet_id, SheetPos::new(2, 0))
         .unwrap();
 
     let err = core
-        .set_cell(&mut mirror, &sheet_id, a3_id, 2, 0, "hello")
+        .set_cell(&mut cell_store, &sheet_id, a3_id, 2, 0, "hello")
         .expect_err("editing a dynamic-array spill member should reject");
 
     assert!(
         matches!(err, ComputeError::PartialArrayWrite { .. }),
         "expected PartialArrayWrite, got {err:?}",
     );
-    let a1_val = core.get_cell_value(&mirror, &a1_id).unwrap();
+    let a1_val = core.get_cell_value(&cell_store, &a1_id).unwrap();
     assert_eq!(
         *a1_val,
         CellValue::number(1.0),
         "A1 should remain the spill anchor value after rejected member edit"
     );
     assert_eq!(
-        mirror
+        cell_store
             .get_cell_value_at(&sheet_id, SheetPos::new(2, 0))
             .cloned(),
         Some(CellValue::number(3.0)),
@@ -275,8 +275,8 @@ fn test_same_array_no_unnecessary_changes() {
     ]);
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     let sheet_id = sid(1);
     let b1_id = cell_id_from_str(&b1_str);
@@ -284,7 +284,7 @@ fn test_same_array_no_unnecessary_changes() {
     // Verify initial spill
     let a1_id = cell_id_from_str(&a1_str);
     assert_eq!(
-        *core.get_cell_value(&mirror, &a1_id).unwrap(),
+        *core.get_cell_value(&cell_store, &a1_id).unwrap(),
         CellValue::number(1.0)
     );
 
@@ -292,18 +292,18 @@ fn test_same_array_no_unnecessary_changes() {
     // A1 will re-evaluate SEQUENCE(3) but produce the same array.
     // The expand_spill diff should detect no changes.
     let result = core
-        .set_cell(&mut mirror, &sheet_id, b1_id, 0, 1, "42")
+        .set_cell(&mut cell_store, &sheet_id, b1_id, 0, 1, "42")
         .unwrap();
 
     // A1 should still be 1
     assert_eq!(
-        *core.get_cell_value(&mirror, &a1_id).unwrap(),
+        *core.get_cell_value(&cell_store, &a1_id).unwrap(),
         CellValue::number(1.0)
     );
 
     // B1 should be 42
     assert_eq!(
-        *core.get_cell_value(&mirror, &b1_id).unwrap(),
+        *core.get_cell_value(&cell_store, &b1_id).unwrap(),
         CellValue::number(42.0)
     );
 
@@ -341,22 +341,22 @@ fn test_projection_cleared_on_non_array() {
     }]);
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     let sheet_id = sid(1);
     let a1_id = cell_id_from_str(&a1_str);
 
     // First, set A1 = SEQUENCE(3) — creates projection
-    core.set_cell(&mut mirror, &sheet_id, a1_id, 0, 0, "=SEQUENCE(3)")
+    core.set_cell(&mut cell_store, &sheet_id, a1_id, 0, 0, "=SEQUENCE(3)")
         .unwrap();
-    assert!(mirror.projection_registry.is_source(&a1_id));
+    assert!(cell_store.projection_registry.is_source(&a1_id));
 
     // Now change A1 to a plain value — projection should be cleared
-    core.set_cell(&mut mirror, &sheet_id, a1_id, 0, 0, "42")
+    core.set_cell(&mut cell_store, &sheet_id, a1_id, 0, 0, "42")
         .unwrap();
     assert!(
-        !mirror.projection_registry.is_source(&a1_id),
+        !cell_store.projection_registry.is_source(&a1_id),
         "Projection should be cleared when formula produces non-array result"
     );
 }

@@ -275,7 +275,7 @@ fn table_column_add_materializes_header_cell_after_structural_insert() {
 
     assert_eq!(
         engine
-            .mirror()
+            .cell_store()
             .get_cell_value_at(&sid, SheetPos::new(0, 2))
             .cloned(),
         Some(CellValue::Text("Units".into()))

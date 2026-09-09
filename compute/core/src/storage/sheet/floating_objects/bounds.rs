@@ -1,7 +1,7 @@
+use crate::cells::SheetStore;
 use cell_types::CellId;
 use compute_document::hex::hex_to_id;
-use compute_document::identity::GridIndex;
-use compute_layout_index::LayoutIndex;
+use compute_layout_index::PixelLayout;
 use snapshot_types::FloatingObjectBounds;
 
 use super::keys::{
@@ -11,8 +11,8 @@ use super::keys::{
 use super::units::emu_to_px;
 
 pub fn compute_object_pixel_bounds(
-    grid_index: Option<&GridIndex>,
-    layout_index: Option<&LayoutIndex>,
+    grid_index: Option<&SheetStore>,
+    layout_index: Option<&PixelLayout>,
     obj_json: &serde_json::Value,
 ) -> Option<FloatingObjectBounds> {
     let layout = layout_index?;
@@ -66,7 +66,7 @@ pub fn compute_object_pixel_bounds(
 
     /// Resolve anchor position from CellId or raw row/col, supporting both nested and flat JSON.
     fn resolve_anchor_pos(
-        grid_index: Option<&GridIndex>,
+        grid_index: Option<&SheetStore>,
         obj_json: &serde_json::Value,
         anchor_obj: Option<&serde_json::Value>,
         cell_id_key: &str,

@@ -1,57 +1,15 @@
+//! Formula number-format inheritance is visible in explicit render reads.
+
 use super::helpers::*;
 use crate::storage::engine::ComputeEngine;
-use compute_wire::constants::{MUTATION_HEADER_SIZE, PATCH_STRIDE};
 use domain_types::CellFormat;
 
-fn patch_display_text_at(mutation_bytes: &[u8], row: u32, col: u32) -> Option<String> {
-    let patch_count = u32::from_le_bytes([
-        mutation_bytes[0],
-        mutation_bytes[1],
-        mutation_bytes[2],
-        mutation_bytes[3],
-    ]) as usize;
-    let sheet_id_len = u16::from_le_bytes([mutation_bytes[8], mutation_bytes[9]]) as usize;
-    let patches_start = MUTATION_HEADER_SIZE + sheet_id_len;
-    let string_pool_start = patches_start + patch_count * PATCH_STRIDE;
-
-    for i in 0..patch_count {
-        let patch_off = patches_start + i * PATCH_STRIDE;
-        let patch_row = u32::from_le_bytes([
-            mutation_bytes[patch_off],
-            mutation_bytes[patch_off + 1],
-            mutation_bytes[patch_off + 2],
-            mutation_bytes[patch_off + 3],
-        ]);
-        let patch_col = u32::from_le_bytes([
-            mutation_bytes[patch_off + 4],
-            mutation_bytes[patch_off + 5],
-            mutation_bytes[patch_off + 6],
-            mutation_bytes[patch_off + 7],
-        ]);
-        if patch_row != row || patch_col != col {
-            continue;
-        }
-
-        let record_off = patch_off + 8;
-        let display_off = u32::from_le_bytes([
-            mutation_bytes[record_off + 8],
-            mutation_bytes[record_off + 9],
-            mutation_bytes[record_off + 10],
-            mutation_bytes[record_off + 11],
-        ]);
-        let display_len = u16::from_le_bytes([
-            mutation_bytes[record_off + 20],
-            mutation_bytes[record_off + 21],
-        ]);
-        if display_off == compute_wire::constants::NO_STRING || display_len == 0 {
-            return None;
-        }
-        let start = string_pool_start + display_off as usize;
-        let end = start + display_len as usize;
-        return Some(String::from_utf8_lossy(&mutation_bytes[start..end]).to_string());
-    }
-
-    None
+fn rendered_text_at(engine: &ComputeEngine, row: u32, col: u32) -> Option<String> {
+    engine
+        .build_viewport_render_data(&sheet_id(), row, col, row + 1, col + 1)
+        .cells
+        .first()
+        .and_then(|cell| cell.formatted.clone())
 }
 
 #[test]
@@ -81,7 +39,7 @@ fn bulk_parsed_formula_edit_copies_single_referenced_number_format() {
 }
 
 #[test]
-fn formula_format_inheritance_flushes_format_only_viewport_patch() {
+fn formula_format_inheritance_updates_rendered_text() {
     let snap = simple_snapshot();
     let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
@@ -103,8 +61,6 @@ fn formula_format_inheritance_flushes_format_only_viewport_patch() {
     let result = engine
         .apply_formula_inherited_number_formats(&[(sid, 1, 0)])
         .expect("inherit formula format");
-    let patches = engine.flush_viewport_patches();
-    let mutation = extract_first_viewport_mutation(&patches).expect("format patch");
 
     assert!(
         result.property_changes.iter().any(|change| change
@@ -114,10 +70,7 @@ fn formula_format_inheritance_flushes_format_only_viewport_patch() {
         "formula format inheritance should report A2 as a property change; got {:?}",
         result.property_changes
     );
-    assert_eq!(
-        patch_display_text_at(&mutation, 1, 0).as_deref(),
-        Some("$30.00")
-    );
+    assert_eq!(rendered_text_at(&engine, 1, 0).as_deref(), Some("$30.00"));
 }
 
 #[test]
@@ -154,22 +107,15 @@ fn bulk_value_paste_formats_formula_dependents_with_sparse_column_style_range() 
         )
         .expect("seed formulas");
 
-    let (patches, _) = engine
+    let _ = engine
         .set_cell_values_parsed(
             &sid,
             vec![(10, 2, "899.4".to_string()), (10, 3, "773.8".to_string())],
         )
         .expect("seed source values");
-    let mutation = extract_first_viewport_mutation(&patches).expect("mutation patch");
 
     assert_eq!(engine.format_cell_display(&sid, 24, 2), "$15.3 ");
     assert_eq!(engine.format_cell_display(&sid, 31, 3), "($0.1)");
-    assert_eq!(
-        patch_display_text_at(&mutation, 24, 2).as_deref(),
-        Some("$15.3 ")
-    );
-    assert_eq!(
-        patch_display_text_at(&mutation, 31, 3).as_deref(),
-        Some("($0.1)")
-    );
+    assert_eq!(rendered_text_at(&engine, 24, 2).as_deref(), Some("$15.3 "));
+    assert_eq!(rendered_text_at(&engine, 31, 3).as_deref(), Some("($0.1)"));
 }

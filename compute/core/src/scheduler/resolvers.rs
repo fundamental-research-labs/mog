@@ -1,7 +1,7 @@
 //! Identity resolvers for formula persistence.
 //!
 //! Immutable parse-time cell references use the shared
-//! [`MirrorCellRefResolver`](crate::eval_bridge::MirrorCellRefResolver).
+//! [`StoreCellRefResolver`](crate::eval_bridge::StoreCellRefResolver).
 //! These resolvers create stable identities for empty referenced cells.
 
 use super::*;
@@ -14,14 +14,14 @@ use super::*;
 use dashmap::DashMap;
 use std::cell::RefCell;
 
-/// Resolver that wraps a `CellMirror` behind `RefCell` for building [`IdentityFormula`]s.
+/// Resolver that wraps a `CellStore` behind `RefCell` for building [`IdentityFormula`]s.
 ///
 /// # Why `RefCell`?
 ///
 /// The [`IdentityResolver`] trait (defined in `compute-parser`) requires `&self` on all
-/// methods — `compute-parser` cannot depend on `CellMirror`, so the trait must stay
+/// methods — `compute-parser` cannot depend on `CellStore`, so the trait must stay
 /// object-safe and borrow-agnostic. However, [`IdentityResolver::get_or_create_cell_id`]
-/// needs to *mutate* the mirror to allocate [`CellId`]s for empty cells. `RefCell`
+/// needs to *mutate* the cell store to allocate [`CellId`]s for empty cells. `RefCell`
 /// bridges this gap by providing interior mutability checked at runtime.
 ///
 /// The same `&self` constraint is also required by [`ConcurrentIdentityResolver`], which
@@ -39,29 +39,29 @@ use std::cell::RefCell;
 /// caller, or holds one across a call to another method on `self` will violate this
 /// invariant and cause a runtime panic.
 pub(super) struct CoreIdentityResolver<'a> {
-    pub mirror: RefCell<&'a mut CellMirror>,
+    pub cell_store: RefCell<&'a mut CellStore>,
     pub id_alloc: &'a IdAllocator,
     pub current_sheet: SheetId,
 }
 
 impl IdentityResolver for CoreIdentityResolver<'_> {
     fn get_or_create_cell_id(&self, sheet: &SheetId, row: u32, col: u32) -> CellId {
-        self.mirror
+        self.cell_store
             .borrow_mut()
             .ensure_cell_id(sheet, SheetPos::new(row, col), self.id_alloc)
             .unwrap()
     }
 
     fn get_row_id(&self, sheet: &SheetId, row: u32) -> Option<RowId> {
-        self.mirror.borrow().row_id_lookup(sheet, row)
+        self.cell_store.borrow().row_id_lookup(sheet, row)
     }
 
     fn get_col_id(&self, sheet: &SheetId, col: u32) -> Option<ColId> {
-        self.mirror.borrow().col_id_lookup(sheet, col)
+        self.cell_store.borrow().col_id_lookup(sheet, col)
     }
 
     fn resolve_sheet_name(&self, name: &str) -> Option<SheetId> {
-        self.mirror.borrow().sheet_by_name(name)
+        self.cell_store.borrow().sheet_by_name(name)
     }
 
     fn current_sheet(&self) -> SheetId {
@@ -76,11 +76,11 @@ impl IdentityResolver for CoreIdentityResolver<'_> {
 #[cfg(feature = "native")]
 /// Thread-safe identity resolver for parallel identity resolution during bulk init.
 ///
-/// Uses the immutable `CellMirror` for lookups and a shared `DashMap` for
+/// Uses the immutable `CellStore` for lookups and a shared `DashMap` for
 /// concurrent ghost cell ID allocation. Ghost cells are flushed into the
-/// mirror after the parallel phase completes.
+/// cell_store after the parallel phase completes.
 pub(super) struct ConcurrentIdentityResolver<'a> {
-    pub mirror: &'a CellMirror,
+    pub cell_store: &'a CellStore,
     pub ghost_cells: &'a DashMap<(SheetId, SheetPos), CellId>,
     pub id_alloc: &'a IdAllocator,
     pub current_sheet: SheetId,
@@ -90,8 +90,8 @@ pub(super) struct ConcurrentIdentityResolver<'a> {
 impl IdentityResolver for ConcurrentIdentityResolver<'_> {
     fn get_or_create_cell_id(&self, sheet: &SheetId, row: u32, col: u32) -> CellId {
         let pos = SheetPos::new(row, col);
-        // Fast path: cell already exists in mirror (read-only, no lock)
-        if let Some(id) = self.mirror.resolve_cell_id(sheet, pos) {
+        // Fast path: cell already exists in cell_store (read-only, no lock)
+        if let Some(id) = self.cell_store.resolve_cell_id(sheet, pos) {
             return id;
         }
         // Check/allocate in concurrent ghost map
@@ -103,15 +103,15 @@ impl IdentityResolver for ConcurrentIdentityResolver<'_> {
     }
 
     fn get_row_id(&self, sheet: &SheetId, row: u32) -> Option<RowId> {
-        self.mirror.row_id_lookup(sheet, row)
+        self.cell_store.row_id_lookup(sheet, row)
     }
 
     fn get_col_id(&self, sheet: &SheetId, col: u32) -> Option<ColId> {
-        self.mirror.col_id_lookup(sheet, col)
+        self.cell_store.col_id_lookup(sheet, col)
     }
 
     fn resolve_sheet_name(&self, name: &str) -> Option<SheetId> {
-        self.mirror.sheet_by_name(name)
+        self.cell_store.sheet_by_name(name)
     }
 
     fn current_sheet(&self) -> SheetId {

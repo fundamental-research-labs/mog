@@ -170,7 +170,7 @@ fn test_execute_agg_group_with_gaps_uses_correct_criteria() {
     // Demonstrates that execute_agg_group needs consecutive rows.
     // With the fix in detect_agg_groups, groups will always have consecutive rows,
     // so execute_agg_group's `start_row + idx` is correct.
-    let mirror = test_mirror();
+    let cell_store = test_store();
     let s = sheet_id_1();
 
     // Create a group of consecutive rows 0-4. This should work correctly.
@@ -199,7 +199,7 @@ fn test_execute_agg_group_with_gaps_uses_correct_criteria() {
 
     let no_formulas = |_: &SheetId, _: u32, _: u32, _: u32| false;
     let no_stale = |_: &SheetId, _: u32, _: u32, _: u32| false;
-    let results = execute_agg_group(&group, &mirror, no_formulas, no_stale).unwrap();
+    let results = execute_agg_group(&group, &cell_store, no_formulas, no_stale).unwrap();
 
     // Criteria col 4 has: "X","Y","X","Y","X"
     // Col A has: "X","Y","X","Y","X"  -> X=3, Y=2

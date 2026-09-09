@@ -190,7 +190,7 @@ pub(super) fn contains_volatile_function(ast: &ASTNode) -> bool {
 // ---------------
 // The scheduler caches an `ASTNode` per formula cell. References to cells
 // that *did* exist at parse time are stored as `CellRef::Resolved(CellId)` —
-// those auto-track post-shift positions via `mirror.resolve_position`, no
+// those auto-track post-shift positions via `cell_store.resolve_position`, no
 // rewrite needed. References to cells that did *not* exist at parse time
 // are stored as `CellRef::Positional { sheet, row, col }` — these encode a
 // snapshot position that has no implicit shift on a structural op.
@@ -201,7 +201,7 @@ pub(super) fn contains_volatile_function(ast: &ASTNode) -> bool {
 //   - A positional ref **past** a deleted band still reads the original
 //     column/row (now containing a different cell after the shift).
 //
-// The transform mirrors `mirror.apply_structure_change`'s position model:
+// The transform mirrors `cell_store.apply_structure_change`'s position model:
 //   - For deletes: positional refs in `[at, at+count)` on the affected
 //     sheet/axis become `ASTNode::Error(CellError::Ref)`; refs past the
 //     band shift back by `count`.
@@ -210,7 +210,7 @@ pub(super) fn contains_volatile_function(ast: &ASTNode) -> bool {
 //   - Absolute (`$`) flags do not exempt a ref from the shift here — Excel
 //     parity rewrites both relative and absolute refs on row/col delete.
 //
-// `Resolved` refs are left alone (the mirror's `id_to_pos` is already the
+// `Resolved` refs are left alone (the cell store's `id_to_pos` is already the
 // shifted truth) except the **deletion-by-identity** case: a `Resolved`
 // ref to a cell whose backing `CellId` has been retired surfaces `#REF!`
 // at eval time naturally, via `get_cell_value_by_ref`'s

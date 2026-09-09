@@ -19,7 +19,7 @@ pub struct DeferredHydrationData {
 /// succeeded.
 pub(in crate::storage::engine) struct DeferredHydrationCompletion {
     pub(in crate::storage::engine) stores: EngineStores,
-    pub(in crate::storage::engine) mirror: CellMirror,
+    pub(in crate::storage::engine) cell_store: CellStore,
     pub(in crate::storage::engine) settings: EngineSettings,
     pub(in crate::storage::engine) calculation: domain_types::CalculationProperties,
     pub(in crate::storage::engine) import_report: domain_types::ImportReport,

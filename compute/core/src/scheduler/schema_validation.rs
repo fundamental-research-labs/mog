@@ -29,7 +29,7 @@ impl ComputeCore {
     ///    columns (transitive revalidation).
     pub(crate) fn validate_dirty_cells(
         &self,
-        mirror: &CellMirror,
+        cell_store: &CellStore,
         dirty: &[CellId],
         schemas: &SchemaMap,
     ) -> Vec<RecalcValidationAnnotation> {
@@ -45,7 +45,7 @@ impl ComputeCore {
                 sheet: sheet_id,
                 row,
                 col,
-            } = match compute_graph::PositionResolver::resolve(mirror, &cell_id) {
+            } = match compute_graph::PositionResolver::resolve(cell_store, &cell_id) {
                 Some(pos) => pos,
                 None => continue,
             };
@@ -56,7 +56,7 @@ impl ComputeCore {
                 None => continue,
             };
 
-            let value = match mirror.get_cell_value(&cell_id) {
+            let value = match cell_store.get_cell_value(&cell_id) {
                 Some(v) => v,
                 None => continue,
             };
@@ -69,7 +69,7 @@ impl ComputeCore {
 
             // Validate (with formula constraint support)
             let result =
-                self.validate_cell_value_at(mirror, value, column_schema, cell_id, sheet_id);
+                self.validate_cell_value_at(cell_store, value, column_schema, cell_id, sheet_id);
             let inferred = result
                 .inferred_type
                 .unwrap_or_else(|| inference::infer_type(value));
@@ -126,7 +126,7 @@ impl ComputeCore {
             // when the sheet is mostly empty), iterate only over cells that
             // actually exist in the sheet. This is O(populated_cells) instead
             // of O(rows), a significant win for large sparse sheets.
-            let sheet = match mirror.get_sheet(&key.sheet_id) {
+            let sheet = match cell_store.get_sheet(&key.sheet_id) {
                 Some(s) => s,
                 None => continue,
             };
@@ -146,7 +146,7 @@ impl ComputeCore {
                     continue;
                 }
 
-                let value = match mirror.get_cell_value(&cell_id) {
+                let value = match cell_store.get_cell_value(&cell_id) {
                     Some(v) => v,
                     None => continue,
                 };
@@ -156,7 +156,7 @@ impl ComputeCore {
                 }
 
                 let result = self.validate_cell_value_at(
-                    mirror,
+                    cell_store,
                     value,
                     column_schema,
                     cell_id,
@@ -184,7 +184,7 @@ impl ComputeCore {
     /// evaluator callback if the schema has a formula constraint.
     fn validate_cell_value_at(
         &self,
-        mirror: &CellMirror,
+        cell_store: &CellStore,
         value: &CellValue,
         column_schema: &crate::schema::types::ColumnSchema,
         cell_id: CellId,
@@ -199,7 +199,7 @@ impl ComputeCore {
 
         if has_formula_constraint {
             validator::validate_with_formula_evaluator(value, column_schema, |formula_str| {
-                self.evaluate_formula_for_validation(mirror, formula_str, cell_id, sheet_id)
+                self.evaluate_formula_for_validation(cell_store, formula_str, cell_id, sheet_id)
             })
         } else {
             validator::validate(value, column_schema)
@@ -214,14 +214,14 @@ impl ComputeCore {
     /// fails.
     fn evaluate_formula_for_validation(
         &self,
-        mirror: &CellMirror,
+        cell_store: &CellStore,
         formula_str: &str,
         cell_id: CellId,
         sheet_id: SheetId,
     ) -> Option<CellValue> {
         // parse_formula handles leading '=' internally.
         let spanned = parse_formula(formula_str, None).ok()?;
-        let ctx = crate::eval_bridge::MirrorContext::new(mirror, cell_id, sheet_id);
+        let ctx = crate::eval_bridge::EvalContext::new(cell_store, cell_id, sheet_id);
         crate::eval::sync_block_on(crate::eval::Evaluator::evaluate(&spanned.node, &ctx, &ctx)).ok()
     }
 
@@ -258,7 +258,7 @@ impl ComputeCore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mirror::CellMirror;
+    use crate::cells::CellStore;
     use crate::schema::schema_map::SchemaKey;
     use crate::schema::types::{ColumnSchema, SchemaType, ValidationErrorCode};
     use crate::snapshot::CellData;
@@ -292,7 +292,7 @@ mod tests {
     #[test]
     fn value_violating_constraint_produces_annotation() {
         let mut core = ComputeCore::new();
-        let mut mirror = CellMirror::new();
+        let mut cell_store = CellStore::new();
         let snapshot = WorkbookSnapshot {
             axis_run_high_water_mark: None,
             identity_high_water_mark: None,
@@ -325,7 +325,7 @@ mod tests {
             max_change: value_types::FiniteF64::must(0.001),
             calculation_settings: None,
         };
-        let _result = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+        let _result = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
         // Set column 0 to Number schema with min=100 -- value 42 violates this
         let sheet_id = SheetId::from_uuid_str("00000000-0000-0000-0000-000000000001").unwrap();
@@ -349,7 +349,7 @@ mod tests {
         // Set cell A1 to 42, which is below min=100
         let cell_a1 = CellId::from_uuid_str("00000000-0000-0000-0000-000000000010").unwrap();
         let result = core
-            .set_cell(&mut mirror, &sheet_id, cell_a1, 0, 0, "42")
+            .set_cell(&mut cell_store, &sheet_id, cell_a1, 0, 0, "42")
             .unwrap();
 
         // The result should contain validation annotations for column 0
@@ -367,7 +367,7 @@ mod tests {
     #[test]
     fn no_schema_map_means_no_annotations() {
         let mut core = ComputeCore::new();
-        let mut mirror = CellMirror::new();
+        let mut cell_store = CellStore::new();
         let snapshot = WorkbookSnapshot {
             axis_run_high_water_mark: None,
             identity_high_water_mark: None,
@@ -400,12 +400,12 @@ mod tests {
             max_change: value_types::FiniteF64::must(0.001),
             calculation_settings: None,
         };
-        let _result = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+        let _result = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
         let sheet_id = SheetId::from_uuid_str("00000000-0000-0000-0000-000000000001").unwrap();
         let cell_a1 = CellId::from_uuid_str("00000000-0000-0000-0000-000000000010").unwrap();
         let result = core
-            .set_cell(&mut mirror, &sheet_id, cell_a1, 0, 0, "hello")
+            .set_cell(&mut cell_store, &sheet_id, cell_a1, 0, 0, "hello")
             .unwrap();
         assert!(result.validation_annotations.is_empty());
     }
@@ -413,7 +413,7 @@ mod tests {
     #[test]
     fn valid_value_produces_annotation_with_empty_errors() {
         let mut core = ComputeCore::new();
-        let mut mirror = CellMirror::new();
+        let mut cell_store = CellStore::new();
         let snapshot = WorkbookSnapshot {
             axis_run_high_water_mark: None,
             identity_high_water_mark: None,
@@ -446,7 +446,7 @@ mod tests {
             max_change: value_types::FiniteF64::must(0.001),
             calculation_settings: None,
         };
-        let _result = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+        let _result = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
         let sheet_id = SheetId::from_uuid_str("00000000-0000-0000-0000-000000000001").unwrap();
         let mut schemas = std::collections::HashMap::new();
@@ -461,7 +461,7 @@ mod tests {
 
         let cell_a1 = CellId::from_uuid_str("00000000-0000-0000-0000-000000000010").unwrap();
         let result = core
-            .set_cell(&mut mirror, &sheet_id, cell_a1, 0, 0, "42")
+            .set_cell(&mut cell_store, &sheet_id, cell_a1, 0, 0, "42")
             .unwrap();
         // Valid cells now produce an annotation with empty errors (for TS pass/fail diffing)
         assert_eq!(
@@ -582,12 +582,12 @@ mod tests {
     fn formula_producing_decimal_violates_integer_schema() {
         // A formula that produces a non-integer result should fail Integer schema validation.
         let mut core = ComputeCore::new();
-        let mut mirror = CellMirror::new();
+        let mut cell_store = CellStore::new();
         let snapshot = one_cell_snapshot(
             "00000000-0000-0000-0000-000000000001",
             "00000000-0000-0000-0000-000000000010",
         );
-        let _init = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+        let _init = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
         let sheet_id = SheetId::from_uuid_str("00000000-0000-0000-0000-000000000001").unwrap();
 
@@ -605,7 +605,7 @@ mod tests {
         // Set cell to formula =1/3 which produces 0.3333...
         let cell_a1 = CellId::from_uuid_str("00000000-0000-0000-0000-000000000010").unwrap();
         let result = core
-            .set_cell(&mut mirror, &sheet_id, cell_a1, 0, 0, "=1/3")
+            .set_cell(&mut cell_store, &sheet_id, cell_a1, 0, 0, "=1/3")
             .unwrap();
 
         assert!(
@@ -630,19 +630,19 @@ mod tests {
         // Initially no schema => no annotations. After loading a schema, the
         // next cell edit should produce annotations if the value violates.
         let mut core = ComputeCore::new();
-        let mut mirror = CellMirror::new();
+        let mut cell_store = CellStore::new();
         let snapshot = one_cell_snapshot(
             "00000000-0000-0000-0000-000000000001",
             "00000000-0000-0000-0000-000000000010",
         );
-        let _init = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+        let _init = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
         let sheet_id = SheetId::from_uuid_str("00000000-0000-0000-0000-000000000001").unwrap();
         let cell_a1 = CellId::from_uuid_str("00000000-0000-0000-0000-000000000010").unwrap();
 
         // Set cell to "hello" with no schema -- should have no annotations
         let r1 = core
-            .set_cell(&mut mirror, &sheet_id, cell_a1, 0, 0, "hello")
+            .set_cell(&mut cell_store, &sheet_id, cell_a1, 0, 0, "hello")
             .unwrap();
         assert!(
             r1.validation_annotations.is_empty(),
@@ -662,7 +662,7 @@ mod tests {
 
         // Re-set the same text value -- should now produce a type mismatch annotation
         let r2 = core
-            .set_cell(&mut mirror, &sheet_id, cell_a1, 0, 0, "hello")
+            .set_cell(&mut cell_store, &sheet_id, cell_a1, 0, 0, "hello")
             .unwrap();
         assert!(
             !r2.validation_annotations.is_empty(),
@@ -678,12 +678,12 @@ mod tests {
     fn schema_removal_stops_producing_annotations() {
         // Load schema, set violating value (annotations). Clear schemas, set again (no annotations).
         let mut core = ComputeCore::new();
-        let mut mirror = CellMirror::new();
+        let mut cell_store = CellStore::new();
         let snapshot = one_cell_snapshot(
             "00000000-0000-0000-0000-000000000001",
             "00000000-0000-0000-0000-000000000010",
         );
-        let _init = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+        let _init = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
         let sheet_id = SheetId::from_uuid_str("00000000-0000-0000-0000-000000000001").unwrap();
         let cell_a1 = CellId::from_uuid_str("00000000-0000-0000-0000-000000000010").unwrap();
@@ -701,7 +701,7 @@ mod tests {
 
         // Set cell to decimal -- should produce annotation
         let r1 = core
-            .set_cell(&mut mirror, &sheet_id, cell_a1, 0, 0, "3.14")
+            .set_cell(&mut cell_store, &sheet_id, cell_a1, 0, 0, "3.14")
             .unwrap();
         assert!(
             !r1.validation_annotations.is_empty(),
@@ -713,7 +713,7 @@ mod tests {
 
         // Set cell to decimal again -- should have no annotations now
         let r2 = core
-            .set_cell(&mut mirror, &sheet_id, cell_a1, 0, 0, "2.71")
+            .set_cell(&mut cell_store, &sheet_id, cell_a1, 0, 0, "2.71")
             .unwrap();
         assert!(
             r2.validation_annotations.is_empty(),
@@ -726,14 +726,14 @@ mod tests {
         // Sheet1 has Currency column (col 0), Sheet2 has Integer column (col 0).
         // Each sheet validates its own cells against its own schemas.
         let mut core = ComputeCore::new();
-        let mut mirror = CellMirror::new();
+        let mut cell_store = CellStore::new();
         let snapshot = two_sheet_snapshot(
             "00000000-0000-0000-0000-000000000001",
             "00000000-0000-0000-0000-000000000010",
             "00000000-0000-0000-0000-000000000002",
             "00000000-0000-0000-0000-000000000020",
         );
-        let _init = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+        let _init = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
         let sheet1 = SheetId::from_uuid_str("00000000-0000-0000-0000-000000000001").unwrap();
         let sheet2 = SheetId::from_uuid_str("00000000-0000-0000-0000-000000000002").unwrap();
@@ -760,7 +760,7 @@ mod tests {
 
         // Sheet1: set a number (valid for Currency since numbers are accepted)
         let r1 = core
-            .set_cell(&mut mirror, &sheet1, cell_s1, 0, 0, "100")
+            .set_cell(&mut cell_store, &sheet1, cell_s1, 0, 0, "100")
             .unwrap();
         assert_eq!(
             r1.validation_annotations.len(),
@@ -774,7 +774,7 @@ mod tests {
 
         // Sheet2: set a decimal (violates Integer schema)
         let r2 = core
-            .set_cell(&mut mirror, &sheet2, cell_s2, 0, 0, "3.14")
+            .set_cell(&mut cell_store, &sheet2, cell_s2, 0, 0, "3.14")
             .unwrap();
         assert!(
             !r2.validation_annotations.is_empty(),
@@ -794,12 +794,12 @@ mod tests {
     fn min_max_constraint_violation_via_formula() {
         // Column with min=0 max=100 constraints; formula produces out-of-range value.
         let mut core = ComputeCore::new();
-        let mut mirror = CellMirror::new();
+        let mut cell_store = CellStore::new();
         let snapshot = one_cell_snapshot(
             "00000000-0000-0000-0000-000000000001",
             "00000000-0000-0000-0000-000000000010",
         );
-        let _init = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+        let _init = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
         let sheet_id = SheetId::from_uuid_str("00000000-0000-0000-0000-000000000001").unwrap();
 
@@ -825,7 +825,7 @@ mod tests {
 
         // Formula =200 produces 200, which exceeds max=100
         let result = core
-            .set_cell(&mut mirror, &sheet_id, cell_a1, 0, 0, "=100+101")
+            .set_cell(&mut cell_store, &sheet_id, cell_a1, 0, 0, "=100+101")
             .unwrap();
         assert!(
             !result.validation_annotations.is_empty(),
@@ -845,12 +845,12 @@ mod tests {
     fn valid_formula_result_produces_annotation_with_empty_errors() {
         // Column with Number schema; formula produces a valid number.
         let mut core = ComputeCore::new();
-        let mut mirror = CellMirror::new();
+        let mut cell_store = CellStore::new();
         let snapshot = one_cell_snapshot(
             "00000000-0000-0000-0000-000000000001",
             "00000000-0000-0000-0000-000000000010",
         );
-        let _init = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+        let _init = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
         let sheet_id = SheetId::from_uuid_str("00000000-0000-0000-0000-000000000001").unwrap();
 
@@ -868,7 +868,7 @@ mod tests {
 
         // Formula =2+3 produces 5, valid for Number schema
         let result = core
-            .set_cell(&mut mirror, &sheet_id, cell_a1, 0, 0, "=2+3")
+            .set_cell(&mut cell_store, &sheet_id, cell_a1, 0, 0, "=2+3")
             .unwrap();
         // Valid cells produce an annotation with empty errors
         assert_eq!(
@@ -892,12 +892,12 @@ mod tests {
         // This means the "required" constraint is not enforced at the recalc level.
         // This test documents that behavior.
         let mut core = ComputeCore::new();
-        let mut mirror = CellMirror::new();
+        let mut cell_store = CellStore::new();
         let snapshot = one_cell_snapshot(
             "00000000-0000-0000-0000-000000000001",
             "00000000-0000-0000-0000-000000000010",
         );
-        let _init = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+        let _init = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
         let sheet_id = SheetId::from_uuid_str("00000000-0000-0000-0000-000000000001").unwrap();
 
@@ -923,7 +923,7 @@ mod tests {
         // Clear cell (sets to Null) -- validate_dirty_cells skips Null values,
         // so no annotation even though required=true.
         let result = core
-            .set_cell(&mut mirror, &sheet_id, cell_a1, 0, 0, "")
+            .set_cell(&mut cell_store, &sheet_id, cell_a1, 0, 0, "")
             .unwrap();
         assert!(
             result.validation_annotations.is_empty(),

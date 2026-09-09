@@ -12,7 +12,7 @@ use super::*;
 /// Baseline: LET("x", 1/0, x+1) — error without message propagates.
 #[test]
 fn let_error_propagation_none_message() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let div_by_zero = binop(BinOp::Div, ASTNode::Number(1.0), ASTNode::Number(0.0));
     let body = binop(BinOp::Add, ident("x"), ASTNode::Number(1.0));
@@ -26,7 +26,7 @@ fn let_error_propagation_none_message() {
 /// Baseline: LET("x", #N/A, x+1) — error literal propagates.
 #[test]
 fn let_error_literal_propagation() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let body = binop(BinOp::Add, ident("x"), ASTNode::Number(1.0));
     let node = func(
@@ -44,10 +44,10 @@ fn let_error_literal_propagation() {
 /// also propagate. This is the broken path.
 #[test]
 fn let_error_with_message_should_propagate() {
-    use crate::mirror::CellMirror;
+    use crate::cells::CellStore;
     use crate::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
 
-    // Build mirror where cell (0,0) has Error(Div0, Some("division by zero"))
+    // Build cell_store where cell (0,0) has Error(Div0, Some("division by zero"))
     let mut cells = Vec::new();
     for r in 0..5u32 {
         for c in 0..5u32 {
@@ -91,7 +91,7 @@ fn let_error_with_message_should_propagate() {
         max_change: value_types::FiniteF64::must(0.001),
         calculation_settings: None,
     };
-    let m = CellMirror::from_snapshot(snapshot).unwrap();
+    let m = CellStore::from_snapshot(snapshot).unwrap();
     let s = m.sheet_by_name("Sheet1").unwrap();
     let ctx = make_ctx(&m, s);
 
@@ -129,7 +129,7 @@ fn let_error_with_message_should_propagate() {
 /// Baseline: SCAN(0, {1,2,3}, LAMBDA(acc,x, acc+x)) → {1, 3, 6}
 #[test]
 fn scan_cumulative_sum() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let array = ASTNode::Array {
         rows: vec![vec![
@@ -167,7 +167,7 @@ fn scan_cumulative_sum() {
 /// Key assertion: error stays in the array (not returned as scalar).
 #[test]
 fn scan_error_mid_array_returns_array_not_scalar() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let array = ASTNode::Array {
         rows: vec![vec![
@@ -207,7 +207,7 @@ fn scan_error_mid_array_returns_array_not_scalar() {
 /// accumulator. Excel: {0.5, #DIV/0!, #DIV/0!}
 #[test]
 fn scan_error_propagates_through_accumulator() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let array = ASTNode::Array {
         rows: vec![vec![

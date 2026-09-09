@@ -1,79 +1,58 @@
 //! Range storage operations — create, remove, replace Range entries.
 
-use cell_types::{CellId, PayloadEncoding, RowId, SheetId, SheetPos};
-use rustc_hash::FxHashMap;
-use value_types::CellValue;
+use cell_types::{CellId, PayloadEncoding, SheetPos};
 
-use crate::mirror::CellEntry;
-use crate::mirror::range_view::RangeView;
+use crate::cells::range_view::RangeView;
+use crate::cells::{CellEntry, SheetStore};
 
-/// Fold a Range's payload data into per-cell entries before removal.
-///
-/// For each position in the Range extent, decode the payload value and insert
-/// it as a regular cell entry -- unless an override cell already exists (user
-/// edits take priority). Also registers `pos_to_id` and `id_to_pos` entries
-/// for each folded cell so that position-based lookups succeed after the Range
-/// is removed.
-///
-/// Returns the list of virtual CellIds that were newly inserted (callers use
-/// this to update workbook-level `cell_to_sheet`).
-pub fn fold_range_to_cells(
-    range_view: &RangeView,
-    cells: &mut FxHashMap<CellId, CellEntry>,
-    pos_to_id: &mut FxHashMap<SheetPos, CellId>,
-    id_to_pos: &mut FxHashMap<CellId, SheetPos>,
-    row_to_index: &compute_document::identity::AxisIndex<RowId>,
-    col_to_index: &compute_document::identity::AxisIndex<cell_types::ColId>,
-    sheet_id: &SheetId,
-) -> Vec<CellId> {
-    if range_view.encoding == PayloadEncoding::None {
+/// Move active range values into authored storage before removing the range.
+/// Existing authored entries take priority; blank payload slots remain absent.
+pub fn fold_range_to_cells(range: &RangeView, sheet: &mut SheetStore) -> Vec<CellId> {
+    if range.encoding == PayloadEncoding::None {
         return Vec::new();
     }
-    let mut folded_ids = Vec::new();
-    range_view.visit_values(|row_id, col_id, value| {
-        let virtual_id = CellId::virtual_at(*sheet_id, row_id, col_id);
-        if cells.contains_key(&virtual_id) || matches!(value, CellValue::Null) {
+    let mut folded = Vec::new();
+    range.visit_values(|row_id, col_id, value| {
+        if value.is_null() {
             return;
         }
-
-        cells.insert(
-            virtual_id,
-            CellEntry {
-                value,
-                formula: None,
-            },
-        );
-        // Register position maps so lookups via pos_to_id / id_to_pos
-        // succeed after the Range is removed.
-        if let (Some(row_idx), Some(col_idx)) = (
-            row_to_index.position_of(*sheet_id, row_id),
-            col_to_index.position_of(*sheet_id, col_id),
-        ) {
-            let pos = SheetPos::new(row_idx, col_idx);
-            pos_to_id.insert(pos, virtual_id);
-            id_to_pos.insert(virtual_id, pos);
-        }
-        folded_ids.push(virtual_id);
+        let (Some(row), Some(col)) = (sheet.row_index_of(&row_id), sheet.col_index_of(&col_id))
+        else {
+            return;
+        };
+        let pos = SheetPos::new(row, col);
+        let id = if let Some(id) = sheet.authored_cell_id_at(pos) {
+            if !sheet.is_ghost(&id) || (id.is_virtual() && sheet.get_cell(&id).is_some()) {
+                return;
+            }
+            id
+        } else {
+            CellId::virtual_at(sheet.id, row_id, col_id)
+        };
+        sheet.register_cell(id, row, col);
+        sheet.cells.insert(id, CellEntry { value });
+        folded.push(id);
     });
-    folded_ids
+    folded
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mirror::range_view::RangeView;
+    use crate::cells::range_view::RangeView;
     use cell_types::{ColId, PayloadEncoding, RangeAnchor, RangeId, RangeKind, RowId, SheetId};
     use std::sync::Arc;
+    use value_types::CellValue;
 
     // -----------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------
 
     fn make_none_range_view() -> RangeView {
-        let mut row_offset_by_id = FxHashMap::default();
+        let mut row_offset_by_id = crate::cells::range_view::RangeOffsets::default();
         row_offset_by_id.insert(RowId::from_raw(1), 0);
         row_offset_by_id.insert(RowId::from_raw(2), 1);
-        let mut col_offset_by_id = FxHashMap::default();
+        let mut col_offset_by_id = crate::cells::range_view::RangeOffsets::default();
         col_offset_by_id.insert(ColId::from_raw(1), 0);
         RangeView {
             range_id: RangeId::from_raw(100),
@@ -93,32 +72,14 @@ mod tests {
     #[test]
     fn fold_none_encoding_returns_empty() {
         let rv = make_none_range_view();
-        let mut cells = FxHashMap::default();
-        let mut pos_to_id = FxHashMap::default();
-        let mut id_to_pos = FxHashMap::default();
-        let row_to_index = compute_document::identity::AxisIndex::new(
-            cell_types::AxisIdentityStore::Explicit(Vec::new()),
-        );
-        let col_to_index = compute_document::identity::AxisIndex::new(
-            cell_types::AxisIdentityStore::Explicit(Vec::new()),
-        );
-        let sheet_id = SheetId::from_raw(1);
-
-        let folded = fold_range_to_cells(
-            &rv,
-            &mut cells,
-            &mut pos_to_id,
-            &mut id_to_pos,
-            &row_to_index,
-            &col_to_index,
-            &sheet_id,
-        );
+        let mut sheet = SheetStore::new(SheetId::from_raw(1), "Sheet1".into(), 2, 1);
+        let folded = fold_range_to_cells(&rv, &mut sheet);
         assert!(
             folded.is_empty(),
             "PayloadEncoding::None should not fold any cells"
         );
         assert!(
-            cells.is_empty(),
+            sheet.cells.is_empty(),
             "No cells should be created for None encoding"
         );
     }
@@ -128,5 +89,105 @@ mod tests {
         let rv = make_none_range_view();
         let val = rv.decode_value(0, 0);
         assert!(matches!(val, CellValue::Null));
+    }
+
+    #[test]
+    fn folding_retains_metadata_identities_and_preserves_value_and_formula_overrides() {
+        let mut sheet = SheetStore::new(SheetId::from_raw(1), "Sheet1".into(), 6, 1);
+        let rows: Vec<_> = (0..6).map(|row| sheet.row_id_at(row).unwrap()).collect();
+        let col = sheet.col_id_at(0).unwrap();
+        let ids: Vec<_> = rows
+            .iter()
+            .enumerate()
+            .map(|(row, row_id)| {
+                if row == 0 || row == 5 {
+                    CellId::virtual_at(sheet.id, *row_id, col)
+                } else {
+                    CellId::from_raw(100 + row as u128)
+                }
+            })
+            .collect();
+        for (row, id) in ids.iter().enumerate() {
+            sheet.register_cell(*id, row as u32, 0);
+        }
+        // Metadata-only virtual and explicit IDs, followed by an old blank
+        // ghost, retain their identity when the range payload becomes authored.
+        sheet.cells.insert(
+            ids[2],
+            CellEntry {
+                value: CellValue::Null,
+            },
+        );
+        sheet.cells.insert(
+            ids[3],
+            CellEntry {
+                value: CellValue::number(99.0),
+            },
+        );
+        sheet.cells.insert(
+            ids[4],
+            CellEntry {
+                value: CellValue::Null,
+            },
+        );
+        sheet.formulas.insert(
+            ids[4],
+            formula_types::IdentityFormula {
+                template: "1".into(),
+                refs: Vec::new(),
+                is_dynamic_array: false,
+                is_volatile: false,
+                is_aggregate: false,
+            },
+        );
+        // An explicit null override of a range virtual cell remains cleared.
+        sheet.cells.insert(
+            ids[5],
+            CellEntry {
+                value: CellValue::Null,
+            },
+        );
+        let range = RangeView {
+            range_id: RangeId::from_raw(100),
+            kind: RangeKind::Data,
+            anchor: RangeAnchor::Elastic {
+                start_row: rows[0],
+                end_row: rows[5],
+                start_col: col,
+                end_col: col,
+            },
+            encoding: PayloadEncoding::F64Le,
+            values: (1..=6)
+                .map(|value| CellValue::number(f64::from(value)))
+                .collect(),
+            payload_cols: 1,
+            row_offset_by_id: rows
+                .into_iter()
+                .enumerate()
+                .map(|(offset, id)| (id, offset as u32))
+                .collect(),
+            col_offset_by_id: [(col, 0)].into_iter().collect(),
+        };
+        let folded = fold_range_to_cells(&range, &mut sheet);
+        assert_eq!(folded, ids[..3]);
+        for row in 0..6 {
+            assert_eq!(
+                sheet.authored_cell_id_at(SheetPos::new(row, 0)),
+                Some(ids[row as usize])
+            );
+        }
+        for row in 0..3 {
+            assert_eq!(
+                sheet.value_at(SheetPos::new(row, 0)),
+                Some(&CellValue::number(f64::from(row + 1)))
+            );
+        }
+        assert_eq!(
+            sheet.value_at(SheetPos::new(3, 0)),
+            Some(&CellValue::number(99.0))
+        );
+        assert_eq!(sheet.value_at(SheetPos::new(4, 0)), Some(&CellValue::Null));
+        assert!(sheet.formula(&ids[4]).is_some());
+        assert_eq!(sheet.value_at(SheetPos::new(5, 0)), Some(&CellValue::Null));
     }
 }

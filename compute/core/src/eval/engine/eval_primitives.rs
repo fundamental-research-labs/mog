@@ -226,7 +226,7 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
             // 1. Evaluate range arguments directly from AST (avoiding registry overhead)
             // 2. Share the epoch-scoped sorted cache (`get_or_sort_asc`) with
             //    PERCENTILE/QUARTILE/MEDIAN calls on the same range
-            // 3. Prepare for future WorkbookCache integration when mirror access
+            // 3. Prepare for future WorkbookCache integration when cell_store access
             //    is available from EvalMetadata
             //
             "SMALL" => self.eval_small(args).await,
@@ -243,13 +243,13 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
             // -- SUMPRODUCT: vectorized special dispatch (avoids intermediate arrays) --
             "SUMPRODUCT" => self.eval_sumproduct(args).await,
 
-            // -- GETPIVOTDATA: needs AST access for cell ref + mirror pivot metadata --
+            // -- GETPIVOTDATA: needs AST access for cell ref + cell_store pivot metadata --
             "GETPIVOTDATA" => self.eval_getpivotdata(args).await,
 
             // -- Fallback: delegate to FunctionRegistry for all other functions --
             other => {
                 // Try borrowed fast paths for conditional aggregate functions.
-                // These borrow &[CellValue] column slices directly from the mirror,
+                // These borrow &[CellValue] column slices directly from the cell store,
                 // avoiding full range materialization. Falls back to normal dispatch
                 // if ranges are not single-column or column data is unavailable.
                 match other {

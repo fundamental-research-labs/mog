@@ -3,7 +3,7 @@
 use super::super::test_helpers::*;
 use super::super::*;
 use super::helpers::*;
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::snapshot::CellData;
 use std::sync::Arc;
 use value_types::CellValue;
@@ -23,15 +23,15 @@ fn test_clear_anchor_surfaces_cleared_spill_targets_in_recalc() {
     }]);
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     let sheet_id = sid(1);
     let a1_id = cell_id_from_str(&a1_str);
 
     // Step 1: A1 = SEQUENCE(4) → spills to A1:A4 = 1,2,3,4
     let create_result = core
-        .set_cell(&mut mirror, &sheet_id, a1_id, 0, 0, "=SEQUENCE(4)")
+        .set_cell(&mut cell_store, &sheet_id, a1_id, 0, 0, "=SEQUENCE(4)")
         .unwrap();
     assert!(
         !create_result.projection_changes.is_empty(),
@@ -48,11 +48,11 @@ fn test_clear_anchor_surfaces_cleared_spill_targets_in_recalc() {
 
     // Step 2: Clear A1 (the anchor). The spilled values at A2:A4 must be
     // surfaced in the RecalcResult so the viewport patches them to empty.
-    let clear_result = core.clear_cells(&mut mirror, &[a1_id]).unwrap();
+    let clear_result = core.clear_cells(&mut cell_store, &[a1_id]).unwrap();
 
     // Verify col_data was cleared (engine-level invariant — already known to work).
-    let sheet_mirror = mirror.get_sheet(&sheet_id).unwrap();
-    let col_slice = sheet_mirror.get_column_view(0).expect("col_data");
+    let sheet_store = cell_store.get_sheet(&sheet_id).unwrap();
+    let col_slice = sheet_store.get_column_view(0).expect("col_data");
     for r in 1..4u32 {
         assert_eq!(
             col_slice[r as usize],
@@ -116,25 +116,25 @@ fn test_write_to_spill_member_rejects_without_tearing_down_projection() {
     }]);
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     let sheet_id = sid(1);
     let a1_id = cell_id_from_str(&a1_str);
 
     // Step 1: A1 = SEQUENCE(5) → spills to A1:A5 = 1,2,3,4,5
-    core.set_cell(&mut mirror, &sheet_id, a1_id, 0, 0, "=SEQUENCE(5)")
+    core.set_cell(&mut cell_store, &sheet_id, a1_id, 0, 0, "=SEQUENCE(5)")
         .unwrap();
     assert!(
-        mirror.projection_registry.is_projected(&sheet_id, 1, 0),
+        cell_store.projection_registry.is_projected(&sheet_id, 1, 0),
         "A2 should be a projected position before user edit"
     );
 
     let a2_id = core
-        .ensure_cell_id(&mut mirror, &sheet_id, SheetPos::new(1, 0))
+        .ensure_cell_id(&mut cell_store, &sheet_id, SheetPos::new(1, 0))
         .unwrap();
     let err = core
-        .set_cell(&mut mirror, &sheet_id, a2_id, 1, 0, "X")
+        .set_cell(&mut cell_store, &sheet_id, a2_id, 1, 0, "X")
         .expect_err("editing a dynamic-array spill member should reject");
 
     assert!(
@@ -143,12 +143,12 @@ fn test_write_to_spill_member_rejects_without_tearing_down_projection() {
     );
 
     assert_eq!(
-        *core.get_cell_value(&mirror, &a1_id).unwrap(),
+        *core.get_cell_value(&cell_store, &a1_id).unwrap(),
         CellValue::number(1.0),
-        "A1 mirror should remain the spill anchor value"
+        "A1 cell_store should remain the spill anchor value"
     );
     assert_eq!(
-        mirror
+        cell_store
             .get_cell_value_at(&sheet_id, SheetPos::new(1, 0))
             .cloned(),
         Some(CellValue::number(2.0)),
@@ -171,20 +171,20 @@ fn test_formula_write_to_spill_member_is_rejected() {
     }]);
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     let sheet_id = sid(1);
     let a1_id = cell_id_from_str(&a1_str);
 
-    core.set_cell(&mut mirror, &sheet_id, a1_id, 0, 0, "=SEQUENCE(3)")
+    core.set_cell(&mut cell_store, &sheet_id, a1_id, 0, 0, "=SEQUENCE(3)")
         .unwrap();
 
     let a2_id = core
-        .ensure_cell_id(&mut mirror, &sheet_id, SheetPos::new(1, 0))
+        .ensure_cell_id(&mut cell_store, &sheet_id, SheetPos::new(1, 0))
         .unwrap();
     let err = core
-        .set_cell(&mut mirror, &sheet_id, a2_id, 1, 0, "=SEQUENCE(2)")
+        .set_cell(&mut cell_store, &sheet_id, a2_id, 1, 0, "=SEQUENCE(2)")
         .expect_err("formula write into an active spill member should reject");
 
     assert!(
@@ -192,12 +192,12 @@ fn test_formula_write_to_spill_member_is_rejected() {
         "expected PartialArrayWrite, got {err:?}",
     );
     assert_eq!(
-        *core.get_cell_value(&mirror, &a1_id).unwrap(),
+        *core.get_cell_value(&cell_store, &a1_id).unwrap(),
         CellValue::number(1.0),
         "A1 should remain the original spill anchor"
     );
     assert_eq!(
-        mirror
+        cell_store
             .get_cell_value_at(&sheet_id, SheetPos::new(2, 0))
             .cloned(),
         Some(CellValue::number(3.0)),
@@ -239,19 +239,19 @@ fn test_clearing_blocker_restores_spill_via_clear_cells() {
     ]);
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     let sheet_id = sid(1);
     let a1_id = cell_id_from_str(&a1_str);
     let a2_id = cell_id_from_str(&a2_str);
 
     // Write SEQUENCE(3) — A1 should be #SPILL! because A2 is blocking.
-    core.set_cell(&mut mirror, &sheet_id, a1_id, 0, 0, "=SEQUENCE(3)")
+    core.set_cell(&mut cell_store, &sheet_id, a1_id, 0, 0, "=SEQUENCE(3)")
         .unwrap();
     assert!(
         matches!(
-            *core.get_cell_value(&mirror, &a1_id).unwrap(),
+            *core.get_cell_value(&cell_store, &a1_id).unwrap(),
             CellValue::Error(CellError::Spill, _)
         ),
         "A1 must be #SPILL! while A2 blocks"
@@ -259,7 +259,7 @@ fn test_clearing_blocker_restores_spill_via_clear_cells() {
 
     // Clear A2 via clear_cells. This should re-dirty A1 (via spill_blockers)
     // and surface the spill restoration.
-    let result = core.clear_cells(&mut mirror, &[a2_id]).unwrap();
+    let result = core.clear_cells(&mut cell_store, &[a2_id]).unwrap();
 
     // A1 transitions back to a number (top-left of the spill = 1).
     let a1_change = result
@@ -311,7 +311,7 @@ fn test_clearing_blocker_restores_spill_via_clear_cells() {
 // CSE (Ctrl+Shift+Enter) array-formula entry + partial-write rejection.
 //
 // `set_array_formula` is the new authoritative path for CSE entries; it
-// marks the anchor in `mirror.cse_anchors` and registers the projection
+// marks the anchor in `cell_store.cse_anchors` and registers the projection
 // extent the user selected. `set_cell` then rejects any write that
 // falls inside that extent (anchor or member) with
 // `ComputeError::PartialArrayWrite`. Tearing down the CSE is exactly

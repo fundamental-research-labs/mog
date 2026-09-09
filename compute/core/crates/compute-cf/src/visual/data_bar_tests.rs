@@ -733,7 +733,7 @@ fn test_match_positive_border_color_on_negative_bar() {
 
     let r = compute_data_bar(-5.0, &db, &stats);
     assert!(r.is_negative);
-    // With match_positive_border_color=true, negative_border_color should mirror the positive border
+    // With match_positive_border_color=true, negative_border_color should cell_store the positive border
     assert_eq!(
         r.negative_border_color,
         Some(Color::rgb(0x00, 0x00, 0xFF)),

@@ -117,7 +117,7 @@ pub enum ComputeApiError {
 //
 // `ComputeApiError` is the type returned by every `#[bridge::api]` method
 // on `ComputeService`, so its `to_bridge_value` defines the wire shape
-// the TS `BridgeError` discriminated union must mirror.
+// the TS `BridgeError` discriminated union must cell_store.
 //
 // Variants are camelCase-fielded; the discriminator is `kind` and uses
 // the variant name as PascalCase. `Compute(ComputeError)` flattens —

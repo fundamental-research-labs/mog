@@ -219,6 +219,7 @@ mod cell_format_drift_tests {
             "backgroundColorTint",
             "bold",
             "borders",
+            "extensions",
             "fontCharset",
             "fontColor",
             "fontColorTint",

@@ -47,10 +47,10 @@ fn compact_values_participate_in_queries_and_replacement_without_replacing_formu
     })
     .unwrap();
     let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).unwrap();
-    let sheet_id = *engine.mirror().sheet_ids().next().unwrap();
+    let sheet_id = *engine.cell_store().sheet_ids().next().unwrap();
     assert!(
         engine
-            .mirror()
+            .cell_store()
             .get_sheet(&sheet_id)
             .unwrap()
             .iter_ranges()
@@ -64,7 +64,7 @@ fn compact_values_participate_in_queries_and_replacement_without_replacing_formu
         10.0
     );
 
-    let (_, result) = engine
+    let result = engine
         .replace_all_in_range(
             &sheet_id,
             0,
@@ -85,14 +85,14 @@ fn compact_values_participate_in_queries_and_replacement_without_replacing_formu
     assert_eq!(engine.get_cell_count(&sheet_id), 514);
     assert_eq!(
         engine
-            .mirror()
+            .cell_store()
             .get_cell_value_at(&sheet_id, SheetPos::new(0, 1)),
         Some(&number(10240.0))
     );
     assert_eq!(engine.get_raw_value(&sheet_id, 1, 1), "=10");
     assert_eq!(
         engine
-            .mirror()
+            .cell_store()
             .get_cell_value_at(&sheet_id, SheetPos::new(1, 1)),
         Some(&number(10.0))
     );
@@ -177,7 +177,7 @@ fn all_input_paths_share_lossless_native_values_and_formula_dependencies() {
             .unwrap();
         assert_eq!(
             engine
-                .mirror()
+                .cell_store()
                 .get_cell_value_at(&sid, SheetPos::new(0, col as u32)),
             Some(&expected)
         );
@@ -193,23 +193,34 @@ fn all_input_paths_share_lossless_native_values_and_formula_dependencies() {
         .set_cell_value_as_text(&sid, 1, 0, "'42".into())
         .unwrap();
     assert_eq!(
-        engine.mirror().get_cell_value_at(&sid, SheetPos::new(1, 0)),
+        engine
+            .cell_store()
+            .get_cell_value_at(&sid, SheetPos::new(1, 0)),
         Some(&CellValue::Text("42".into()))
     );
     engine
         .set_cell_values_parsed(&sid, vec![(2, 0, "2".into()), (2, 1, "=A3*3".into())])
         .unwrap();
-    let formula_id = engine.grid_index(&sid).unwrap().cell_id_at(2, 1).unwrap();
-    assert!(engine.mirror().get_formula(&formula_id).is_some());
+    let formula_id = engine
+        .cell_store()
+        .get_sheet(&sid)
+        .unwrap()
+        .cell_id_at(cell_types::SheetPos::new(2, 1))
+        .unwrap();
+    assert!(engine.cell_store().get_formula(&formula_id).is_some());
     assert_eq!(
-        engine.mirror().get_cell_value_at(&sid, SheetPos::new(2, 1)),
+        engine
+            .cell_store()
+            .get_cell_value_at(&sid, SheetPos::new(2, 1)),
         Some(&number(6.0))
     );
-    let (_, result) = engine
+    let result = engine
         .set_cell_value_parsed(&sid, 2, 0, "4".into())
         .unwrap();
     assert_eq!(
-        engine.mirror().get_cell_value_at(&sid, SheetPos::new(2, 1)),
+        engine
+            .cell_store()
+            .get_cell_value_at(&sid, SheetPos::new(2, 1)),
         Some(&number(12.0))
     );
     assert!(
@@ -235,15 +246,21 @@ fn all_input_paths_share_lossless_native_values_and_formula_dependencies() {
         )
         .unwrap();
     assert_eq!(
-        engine.mirror().get_cell_value_at(&sid, SheetPos::new(3, 0)),
+        engine
+            .cell_store()
+            .get_cell_value_at(&sid, SheetPos::new(3, 0)),
         Some(&CellValue::Text("0042".into()))
     );
     assert_eq!(
-        engine.mirror().get_cell_value_at(&sid, SheetPos::new(3, 1)),
+        engine
+            .cell_store()
+            .get_cell_value_at(&sid, SheetPos::new(3, 1)),
         Some(&number(5.0))
     );
     assert_eq!(
-        engine.mirror().get_cell_value_at(&sid, SheetPos::new(3, 2)),
+        engine
+            .cell_store()
+            .get_cell_value_at(&sid, SheetPos::new(3, 2)),
         Some(&CellValue::Error(value_types::CellError::Div0, None))
     );
     engine
@@ -251,15 +268,18 @@ fn all_input_paths_share_lossless_native_values_and_formula_dependencies() {
         .unwrap();
     assert!(
         engine
-            .mirror()
+            .cell_store()
             .get_cell_value_at(&sid, SheetPos::new(1, 0))
             .is_none_or(CellValue::is_null)
     );
-    let registered = engine.grid_index(&sid).unwrap().cell_count();
+    let registered = engine.cell_store().get_sheet(&sid).unwrap().cells().count();
     engine
         .set_cell_value_parsed(&sid, 90, 20, "   ".into())
         .unwrap();
-    assert_eq!(engine.grid_index(&sid).unwrap().cell_count(), registered);
+    assert_eq!(
+        engine.cell_store().get_sheet(&sid).unwrap().cells().count(),
+        registered
+    );
 }
 
 #[test]
@@ -268,23 +288,40 @@ fn clearing_contents_preserves_identity_for_existing_formula_references() {
     engine
         .set_cell_values_parsed(&sid, vec![(0, 0, "7".into()), (0, 1, "=A1+1".into())])
         .unwrap();
-    let source_id = engine.grid_index(&sid).unwrap().cell_id_at(0, 0).unwrap();
+    let source_id = engine
+        .cell_store()
+        .get_sheet(&sid)
+        .unwrap()
+        .cell_id_at(cell_types::SheetPos::new(0, 0))
+        .unwrap();
     engine.batch_clear_cells(vec![source_id]).unwrap();
     assert_eq!(
-        engine.grid_index(&sid).unwrap().cell_id_at(0, 0),
+        engine
+            .cell_store()
+            .get_sheet(&sid)
+            .unwrap()
+            .cell_id_at(cell_types::SheetPos::new(0, 0)),
         Some(source_id)
     );
     assert_eq!(
-        engine.mirror().get_cell_value_at(&sid, SheetPos::new(0, 1)),
+        engine
+            .cell_store()
+            .get_cell_value_at(&sid, SheetPos::new(0, 1)),
         Some(&number(1.0))
     );
     engine.set_cell_value_parsed(&sid, 0, 0, "12").unwrap();
     assert_eq!(
-        engine.grid_index(&sid).unwrap().cell_id_at(0, 0),
+        engine
+            .cell_store()
+            .get_sheet(&sid)
+            .unwrap()
+            .cell_id_at(cell_types::SheetPos::new(0, 0)),
         Some(source_id)
     );
     assert_eq!(
-        engine.mirror().get_cell_value_at(&sid, SheetPos::new(0, 1)),
+        engine
+            .cell_store()
+            .get_cell_value_at(&sid, SheetPos::new(0, 1)),
         Some(&number(13.0))
     );
 }
@@ -318,17 +355,19 @@ fn merging_and_clearing_compact_values_updates_dependents_and_xlsx() {
     })
     .unwrap();
     let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).unwrap();
-    let sid = *engine.mirror().sheet_ids().next().unwrap();
+    let sid = *engine.cell_store().sheet_ids().next().unwrap();
     assert!(
         !engine
-            .mirror()
+            .cell_store()
             .get_sheet(&sid)
             .unwrap()
             .range_views_is_empty()
     );
-    let (_, merged) = engine.merge_range(&sid, 0, 0, 2, 0).unwrap();
+    let merged = engine.merge_range(&sid, 0, 0, 2, 0).unwrap();
     assert_eq!(
-        engine.mirror().get_cell_value_at(&sid, SheetPos::new(0, 1)),
+        engine
+            .cell_store()
+            .get_cell_value_at(&sid, SheetPos::new(0, 1)),
         Some(&number(5100.0))
     );
     assert!(merged.recalc.changed_cells.iter().any(|change| {
@@ -342,7 +381,7 @@ fn merging_and_clearing_compact_values_updates_dependents_and_xlsx() {
     engine.unmerge_range(&sid, 0, 0, 2, 0).unwrap();
     assert_eq!(
         engine
-            .mirror()
+            .cell_store()
             .get_cell_value_at(&sid, SheetPos::new(1, 0))
             .cloned()
             .unwrap_or_default(),
@@ -350,21 +389,23 @@ fn merging_and_clearing_compact_values_updates_dependents_and_xlsx() {
     );
     engine.clear_range(&sid, 3, 0, 511, 0).unwrap();
     assert_eq!(
-        engine.mirror().get_cell_value_at(&sid, SheetPos::new(0, 1)),
+        engine
+            .cell_store()
+            .get_cell_value_at(&sid, SheetPos::new(0, 1)),
         Some(&number(10.0))
     );
     let bytes = engine.export_to_xlsx_bytes().unwrap();
     let (reloaded, _) = ComputeEngine::from_xlsx_bytes(&bytes).unwrap();
-    let sid = *reloaded.mirror().sheet_ids().next().unwrap();
+    let sid = *reloaded.cell_store().sheet_ids().next().unwrap();
     assert_eq!(
         reloaded
-            .mirror()
+            .cell_store()
             .get_cell_value_at(&sid, SheetPos::new(0, 1)),
         Some(&number(10.0))
     );
     assert_eq!(
         reloaded
-            .mirror()
+            .cell_store()
             .get_cell_value_at(&sid, SheetPos::new(400, 0))
             .cloned()
             .unwrap_or_default(),

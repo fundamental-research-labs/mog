@@ -6,19 +6,21 @@ use super::*;
 
 pub(in crate::storage::engine) fn get_merge_at_cell_query(
     stores: &EngineStores,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
 ) -> Option<CellMergeInfo> {
-    let grid = stores.grid_indexes.get(sheet_id)?;
+    let grid = cell_store.get_sheet(sheet_id)?;
     merges::get_merge_for_cell(&stores.storage, *sheet_id, grid, row, col)
 }
 
 pub(in crate::storage::engine) fn get_all_merges_in_sheet(
     stores: &EngineStores,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
 ) -> Vec<ResolvedMergedRegion> {
-    match stores.grid_indexes.get(sheet_id) {
+    match cell_store.get_sheet(sheet_id) {
         Some(grid) => merges::get_all_merges(&stores.storage, *sheet_id, grid),
         None => Vec::new(),
     }
@@ -50,6 +52,7 @@ pub(in crate::storage::engine) fn stringify_cell_ref(cell: &A1CellRef) -> Option
 
 pub(in crate::storage::engine) fn get_merges_in_range_spatial(
     stores: &EngineStores,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,
@@ -77,7 +80,7 @@ pub(in crate::storage::engine) fn get_merges_in_range_spatial(
             .collect();
     }
 
-    let merges_vec = match stores.grid_indexes.get(sheet_id) {
+    let merges_vec = match cell_store.get_sheet(sheet_id) {
         Some(grid) => merges::get_merges_in_range(
             &stores.storage,
             *sheet_id,
@@ -102,6 +105,7 @@ pub(in crate::storage::engine) fn get_merges_in_range_spatial(
 
 pub(in crate::storage::engine) fn get_merge_at_cell_spatial(
     stores: &EngineStores,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -128,7 +132,7 @@ pub(in crate::storage::engine) fn get_merge_at_cell_spatial(
         return None;
     }
 
-    let grid = stores.grid_indexes.get(sheet_id)?;
+    let grid = cell_store.get_sheet(sheet_id)?;
     merges::get_merge_for_cell(&stores.storage, *sheet_id, grid, row, col)
 }
 
@@ -150,7 +154,7 @@ pub(in crate::storage::engine) struct CellVisit {
 
 fn formula_text_for_cell(
     engine: &crate::storage::engine::ComputeEngine,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     cell_id: &CellId,
 ) -> Option<String> {
     engine
@@ -159,7 +163,7 @@ fn formula_text_for_cell(
         .get_formula(cell_id)
         .map(|s| s.to_string())
         .or_else(|| {
-            mirror
+            cell_store
                 .get_formula(cell_id)
                 .map(|f| format!("={}", f.template))
         })
@@ -187,10 +191,10 @@ pub(in crate::storage::engine) fn for_each_cell_in_range(
     use value_types::CellValue;
 
     let locale = &engine.settings.locale;
-    let mirror = &engine.mirror;
-    let sheet_mirror = mirror.get_sheet(sheet_id);
+    let cell_store = &engine.cell_store;
+    let sheet_store = cell_store.get_sheet(sheet_id);
 
-    if let Some(grid) = engine.stores.grid_indexes.get(sheet_id) {
+    if let Some(grid) = engine.cell_store.get_sheet(sheet_id) {
         // Build merge child→origin lookup for this range
         let merge_origins: HashMap<(u32, u32), (u32, u32)> = {
             let all_merges = merges::get_all_merges(&engine.stores.storage, *sheet_id, grid);
@@ -234,16 +238,21 @@ pub(in crate::storage::engine) fn for_each_cell_in_range(
 
             for col in start_col..=end_col {
                 let has_col_fmt = col_fmt_cache.get(&col).copied().unwrap_or(false);
-                let has_range_fmt = sheet_mirror
+                let has_range_fmt = sheet_store
                     .map(|sm| !sm.format_ranges_at(row, col).is_empty())
                     .unwrap_or(false);
 
-                let cell_id_raw = grid.cell_id_at(row, col);
+                let cell_id_raw = engine
+                    .cell_store
+                    .resolve_cell_id(sheet_id, SheetPos::new(row, col));
 
                 // Merge-aware: redirect child cells to origin
                 let cell_id_opt =
                     if let Some(&(origin_row, origin_col)) = merge_origins.get(&(row, col)) {
-                        grid.cell_id_at(origin_row, origin_col).or(cell_id_raw)
+                        engine
+                            .cell_store
+                            .resolve_cell_id(sheet_id, SheetPos::new(origin_row, origin_col))
+                            .or(cell_id_raw)
                     } else {
                         cell_id_raw
                     };
@@ -255,28 +264,33 @@ pub(in crate::storage::engine) fn for_each_cell_in_range(
                     let identity_value = engine
                         .stores
                         .compute
-                        .get_cell_value(&engine.mirror, &cell_id)
+                        .get_cell_value(&engine.cell_store, &cell_id)
                         .cloned()
-                        .or_else(|| mirror.get_cell_value_in_sheet(sheet_id, &cell_id).cloned());
+                        .or_else(|| {
+                            cell_store
+                                .get_cell_value_in_sheet(sheet_id, &cell_id)
+                                .cloned()
+                        });
                     let value = match identity_value {
                         Some(value) if !value.is_null() => value,
-                        Some(value) => mirror
+                        Some(value) => cell_store
                             .get_cell_value_at(sheet_id, SheetPos::new(row, col))
                             .filter(|pos_value| !pos_value.is_null())
                             .cloned()
                             .unwrap_or(value),
-                        None => mirror
+                        None => cell_store
                             .get_cell_value_at(sheet_id, SheetPos::new(row, col))
                             .cloned()
                             .unwrap_or(CellValue::Null),
                     };
 
-                    // Actual formula text from ComputeCore, mirror identity formula fallback
-                    let formula = formula_text_for_cell(engine, mirror, &cell_id).or_else(|| {
-                        crate::storage::engine::data_table_formula::formula_at(
-                            mirror, sheet_id, row, col,
-                        )
-                    });
+                    // Actual formula text from ComputeCore, cell_store identity formula fallback
+                    let formula =
+                        formula_text_for_cell(engine, cell_store, &cell_id).or_else(|| {
+                            crate::storage::engine::data_table_formula::formula_at(
+                                cell_store, sheet_id, row, col,
+                            )
+                        });
 
                     let cell_id_hex = id_to_hex(cell_id.as_u128());
 
@@ -304,7 +318,7 @@ pub(in crate::storage::engine) fn for_each_cell_in_range(
                     // Build effective format reusing the pre-fetched cell format
                     let table_fmt =
                         crate::storage::engine::services::resolve_structured_format_at_cell(
-                            mirror, sheet_id, row, col,
+                            cell_store, sheet_id, row, col,
                         );
                     let mut effective = properties::get_effective_format_preloaded(
                         &engine.stores.storage,
@@ -314,7 +328,7 @@ pub(in crate::storage::engine) fn for_each_cell_in_range(
                         table_fmt.as_ref(),
                         cell_props.as_ref(),
                         engine.stores.grid_indexes.get(sheet_id),
-                        sheet_mirror,
+                        sheet_store,
                     );
                     domain_types::theme_color::resolve_theme_refs(
                         &mut effective,
@@ -335,7 +349,7 @@ pub(in crate::storage::engine) fn for_each_cell_in_range(
                         effective_format: effective,
                     });
                 } else if let Some(proj_value) =
-                    mirror.get_cell_value_at(sheet_id, SheetPos::new(row, col))
+                    cell_store.get_cell_value_at(sheet_id, SheetPos::new(row, col))
                 {
                     // No real cell at this position — check for materialized
                     // projection (spill) values in col_data.
@@ -343,7 +357,7 @@ pub(in crate::storage::engine) fn for_each_cell_in_range(
                         let value = proj_value.clone();
                         let table_fmt =
                             crate::storage::engine::services::resolve_structured_format_at_cell(
-                                mirror, sheet_id, row, col,
+                                cell_store, sheet_id, row, col,
                             );
                         let empty_cell_id_hex = String::new();
                         let mut effective = properties::get_effective_format(
@@ -354,7 +368,7 @@ pub(in crate::storage::engine) fn for_each_cell_in_range(
                             col,
                             table_fmt.as_ref(),
                             engine.stores.grid_indexes.get(sheet_id),
-                            sheet_mirror,
+                            sheet_store,
                         );
                         domain_types::theme_color::resolve_theme_refs(
                             &mut effective,
@@ -365,8 +379,8 @@ pub(in crate::storage::engine) fn for_each_cell_in_range(
                             compute_formats::format_value(&value, format_code, locale);
                         let formatted = format_result.text;
 
-                        let formula = mirror.cse_anchor_covering(sheet_id, row, col).and_then(
-                            |(anchor_id, _)| formula_text_for_cell(engine, mirror, &anchor_id),
+                        let formula = cell_store.cse_anchor_covering(sheet_id, row, col).and_then(
+                            |(anchor_id, _)| formula_text_for_cell(engine, cell_store, &anchor_id),
                         );
 
                         visitor(CellVisit {
@@ -385,7 +399,7 @@ pub(in crate::storage::engine) fn for_each_cell_in_range(
                     // format exists that should be visible to the API.
                     let table_fmt =
                         crate::storage::engine::services::resolve_structured_format_at_cell(
-                            mirror, sheet_id, row, col,
+                            cell_store, sheet_id, row, col,
                         );
                     let empty_cell_id_hex = String::new();
                     let mut effective = properties::get_effective_format(
@@ -396,7 +410,7 @@ pub(in crate::storage::engine) fn for_each_cell_in_range(
                         col,
                         table_fmt.as_ref(),
                         engine.stores.grid_indexes.get(sheet_id),
-                        sheet_mirror,
+                        sheet_store,
                     );
                     domain_types::theme_color::resolve_theme_refs(
                         &mut effective,

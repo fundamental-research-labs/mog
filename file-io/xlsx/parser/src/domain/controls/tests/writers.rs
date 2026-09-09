@@ -4,7 +4,7 @@ use crate::domain::controls::mapping::{
 use crate::domain::controls::types::{
     AnchorSource, CheckState, ControlAnchor, FormControl, FormControlType, OleObject,
 };
-use crate::domain::controls::vml::escape_xml_text;
+use crate::domain::controls::vml_write::escape_xml_text;
 use crate::domain::controls::write::{
     CONTENT_TYPE_CTRL_PROP, ControlsWriter, REL_CTRL_PROP, ctrl_prop_relationship_target,
 };

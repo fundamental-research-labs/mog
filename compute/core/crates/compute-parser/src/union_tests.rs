@@ -349,7 +349,16 @@ fn union_in_nested_functions() {
 
 #[test]
 fn union_is_range_like() {
-    // Union should be treated as range-like for intersection purposes
-    let ast = parse("(A1:A5,C1:C5)");
-    assert!(crate::expressions::is_range_like(&ast));
+    // Exercise the public parser contract: a union can be the left operand
+    // of a whitespace intersection, with both constituent ranges preserved.
+    assert_eq!(
+        parse("(A1:A5,C1:C5) A1:C3"),
+        ASTNode::BinaryOp {
+            op: crate::ast::BinOp::Intersect,
+            left: Box::new(ASTNode::Union {
+                ranges: vec![parse("A1:A5"), parse("C1:C5")],
+            }),
+            right: Box::new(parse("A1:C3")),
+        }
+    );
 }

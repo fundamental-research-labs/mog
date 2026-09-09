@@ -4,7 +4,7 @@ use crate::{FunctionRegistry, PureFunction};
 
 use statrs::distribution::{Beta, Continuous, ContinuousCDF};
 
-use super::support::try_dist;
+use super::support::{inverse_nonnegative_cdf, try_dist};
 
 // --- Beta distribution ---
 
@@ -203,7 +203,7 @@ impl PureFunction for FnBetaInv {
             );
         }
         let dist = try_dist!(Beta::new(alpha, beta_param), self.name());
-        CellValue::number(a + dist.inverse_cdf(p) * (b - a))
+        CellValue::number(a + inverse_nonnegative_cdf(&dist, p) * (b - a))
     }
 }
 

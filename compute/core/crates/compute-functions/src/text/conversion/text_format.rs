@@ -2,7 +2,7 @@ use value_types::date_serial::{try_parse_date, try_parse_datetime, try_parse_tim
 use value_types::{CellError, CellValue};
 
 use crate::helpers::coercion::check_error;
-use crate::{FunctionRegistry, PureFunction};
+use crate::{FunctionContext, FunctionRegistry, PureFunction};
 
 pub(super) struct FnText;
 impl PureFunction for FnText {
@@ -19,6 +19,9 @@ impl PureFunction for FnText {
         Some(2)
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
+        self.call_with_context(args, &FunctionContext::default())
+    }
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         if let Some(e) = check_error(&args[0]) {
             return e;
         }
@@ -51,21 +54,51 @@ impl PureFunction for FnText {
                 || first == b'.';
             if could_be_numeric {
                 if let Ok(n) = trimmed.parse::<f64>() {
-                    return CellValue::Text(compute_formats::format_number(n, &format_code).into());
+                    return CellValue::Text(
+                        compute_formats::format_number_with_date_system(
+                            n,
+                            &format_code,
+                            context.date1904,
+                        )
+                        .into(),
+                    );
                 }
                 if let Ok(serial) = try_parse_date(trimmed) {
                     return CellValue::Text(
-                        compute_formats::format_number(serial, &format_code).into(),
+                        compute_formats::format_number_with_date_system(
+                            if context.date1904 {
+                                serial - 1462.0
+                            } else {
+                                serial
+                            },
+                            &format_code,
+                            context.date1904,
+                        )
+                        .into(),
                     );
                 }
                 if let Ok(serial) = try_parse_datetime(trimmed) {
                     return CellValue::Text(
-                        compute_formats::format_number(serial, &format_code).into(),
+                        compute_formats::format_number_with_date_system(
+                            if context.date1904 {
+                                serial - 1462.0
+                            } else {
+                                serial
+                            },
+                            &format_code,
+                            context.date1904,
+                        )
+                        .into(),
                     );
                 }
                 if let Ok(time_val) = try_parse_time(trimmed) {
                     return CellValue::Text(
-                        compute_formats::format_number(time_val, &format_code).into(),
+                        compute_formats::format_number_with_date_system(
+                            time_val,
+                            &format_code,
+                            context.date1904,
+                        )
+                        .into(),
                     );
                 }
             }
@@ -81,7 +114,14 @@ impl PureFunction for FnText {
                         ),
                     );
                 }
-                CellValue::Text(compute_formats::format_number(n, &format_code).into())
+                CellValue::Text(
+                    compute_formats::format_number_with_date_system(
+                        n,
+                        &format_code,
+                        context.date1904,
+                    )
+                    .into(),
+                )
             }
             Err(e) => CellValue::Error(e, None),
         }

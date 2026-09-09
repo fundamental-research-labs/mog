@@ -2,6 +2,7 @@ mod accrual;
 mod coupons;
 mod duration;
 mod price_yield;
+mod odd_coupons;
 
 use value_types::CellValue;
 

@@ -55,12 +55,9 @@ fn test_pending_fix_gte_numeric_matches_text_cells() {
     );
 }
 
-/// FT-016 — Excel's `COUNTIF(range, "<>0")` counts empty (Null) cells as
-/// matching. Current code at `criteria.rs:213` in the `strip_prefix("<>")`
-/// branch returns `false` for Null (non-participation).
+/// FT-016 regression — numeric not-equal criteria also match empty cells.
 #[test]
-#[ignore = "pending fix: COUNTIF numeric not-equal should match empty cells"]
-fn test_pending_fix_ne_numeric_matches_null() {
+fn test_ne_numeric_matches_null() {
     // "<>0" must count empty cells (they are "not equal to 0" in Excel).
     let crit = parse_criteria(&CellValue::Text("<>0".into()));
     assert!(

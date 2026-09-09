@@ -28,6 +28,7 @@ pub mod criteria;
 pub mod date_serial;
 pub mod hashing;
 pub mod power;
+pub mod ranking;
 
 // -- Evaluation caches (SPI for compute-core scheduler) --
 pub mod bitmask_cache;

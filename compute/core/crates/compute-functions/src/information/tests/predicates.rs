@@ -87,9 +87,9 @@ fn test_isnontext() {
 
 #[test]
 fn test_isref() {
-    assert_eq!(FnIsRef.call(&[num(1.0)]), bool_val(true));
-    assert_eq!(FnIsRef.call(&[text("A1")]), bool_val(true));
-    assert_eq!(FnIsRef.call(&[null()]), bool_val(true));
+    assert_eq!(FnIsRef.call(&[num(1.0)]), bool_val(false));
+    assert_eq!(FnIsRef.call(&[text("A1")]), bool_val(false));
+    assert_eq!(FnIsRef.call(&[null()]), bool_val(false));
     assert_eq!(FnIsRef.call(&[err(CellError::Ref)]), bool_val(false));
 }
 

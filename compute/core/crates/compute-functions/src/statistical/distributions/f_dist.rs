@@ -4,7 +4,7 @@ use crate::{FunctionRegistry, PureFunction};
 
 use statrs::distribution::{Continuous, ContinuousCDF, FisherSnedecor};
 
-use super::support::try_dist;
+use super::support::{inverse_nonnegative_cdf, inverse_nonnegative_sf, try_dist};
 
 // --- F distribution ---
 
@@ -152,7 +152,7 @@ impl PureFunction for FnFInv {
             );
         }
         let dist = try_dist!(FisherSnedecor::new(df1, df2), self.name());
-        CellValue::number(dist.inverse_cdf(p))
+        CellValue::number(inverse_nonnegative_cdf(&dist, p))
     }
 }
 
@@ -192,7 +192,7 @@ impl PureFunction for FnFInvRT {
             );
         }
         let dist = try_dist!(FisherSnedecor::new(df1, df2), self.name());
-        CellValue::number(dist.inverse_cdf(1.0 - p))
+        CellValue::number(inverse_nonnegative_sf(&dist, p))
     }
 }
 

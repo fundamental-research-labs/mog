@@ -2,6 +2,13 @@
 
 use value_types::CellValue;
 
+/// Immutable workbook options that affect value-to-value function evaluation.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct FunctionContext {
+    /// Whether calendar serials use January 1, 1904 as day zero.
+    pub date1904: bool,
+}
+
 /// Trait implemented by every Excel-compatible function.
 ///
 /// Functions receive pre-evaluated, flattened arguments as `&[CellValue]`.
@@ -9,6 +16,12 @@ use value_types::CellValue;
 pub trait PureFunction: Send + Sync {
     /// Execute the function with the given arguments.
     fn call(&self, args: &[CellValue]) -> CellValue;
+
+    /// Execute with explicit workbook options. Context-independent functions
+    /// retain their ordinary value-to-value implementation.
+    fn call_with_context(&self, args: &[CellValue], _context: &FunctionContext) -> CellValue {
+        self.call(args)
+    }
 
     /// The canonical (uppercase) name of the function.
     fn name(&self) -> &'static str;

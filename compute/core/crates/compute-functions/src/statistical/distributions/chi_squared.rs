@@ -4,7 +4,7 @@ use crate::{FunctionRegistry, PureFunction};
 
 use statrs::distribution::{ChiSquared, Continuous, ContinuousCDF};
 
-use super::support::try_dist;
+use super::support::{inverse_nonnegative_cdf, inverse_nonnegative_sf, try_dist};
 
 // --- Chi-squared distribution ---
 
@@ -138,7 +138,7 @@ impl PureFunction for FnChisqInv {
             );
         }
         let dist = try_dist!(ChiSquared::new(df), self.name());
-        CellValue::number(dist.inverse_cdf(p))
+        CellValue::number(inverse_nonnegative_cdf(&dist, p))
     }
 }
 
@@ -174,7 +174,7 @@ impl PureFunction for FnChisqInvRT {
             );
         }
         let dist = try_dist!(ChiSquared::new(df), self.name());
-        CellValue::number(dist.inverse_cdf(1.0 - p))
+        CellValue::number(inverse_nonnegative_sf(&dist, p))
     }
 }
 

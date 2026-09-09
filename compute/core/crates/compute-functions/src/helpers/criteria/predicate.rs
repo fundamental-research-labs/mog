@@ -72,9 +72,11 @@ pub fn parse_criteria(criteria: &CellValue) -> Box<dyn Fn(&CellValue) -> bool> {
                 if let Some(n) = try_parse_criteria_number(&rest) {
                     return Box::new(move |v: &CellValue| match v.as_comparable_number() {
                         Some(x) => (x - n).abs() >= 1e-10,
-                        // Unparseable text IS "not equal" to a number;
-                        // Null, Boolean, Error are non-participants → false
-                        None => matches!(v, CellValue::Text(_)),
+                        // Values without a numeric representation are unequal
+                        // to the numeric criterion, including blanks, booleans,
+                        // and errors. Aggregators separately propagate errors
+                        // from matching cells in their value range.
+                        None => true,
                     });
                 }
                 // Explicit blank semantics when criteria is exactly "<>"

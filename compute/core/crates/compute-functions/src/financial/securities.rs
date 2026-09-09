@@ -4,6 +4,7 @@
 mod accrual;
 mod coupons;
 mod duration;
+mod odd_coupons;
 mod price_yield;
 
 use self::accrual::{FnAccrint, FnAccrintm};
@@ -24,6 +25,7 @@ pub(super) fn register(registry: &mut FunctionRegistry) {
     registry.register(Box::new(FnCouppcd));
     registry.register(Box::new(FnDuration));
     registry.register(Box::new(FnMduration));
+    odd_coupons::register(registry);
     registry.register(Box::new(FnPrice));
     registry.register(Box::new(FnYield));
 }

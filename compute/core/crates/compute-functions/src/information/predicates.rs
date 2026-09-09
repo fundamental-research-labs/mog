@@ -204,8 +204,10 @@ impl PureFunction for FnIsRef {
         true
     }
 
-    fn call(&self, args: &[CellValue]) -> CellValue {
-        CellValue::Boolean(!args[0].is_error())
+    fn call(&self, _args: &[CellValue]) -> CellValue {
+        // Values alone carry no reference identity. The evaluator handles
+        // ISREF with the original AST before any cell is dereferenced.
+        CellValue::Boolean(false)
     }
 }
 

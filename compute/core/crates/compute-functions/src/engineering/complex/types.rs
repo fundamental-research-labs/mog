@@ -86,10 +86,8 @@ pub(super) fn parse_complex(s: &str) -> Option<(f64, f64, char)> {
 
 /// Format a complex number as a string, matching Excel conventions.
 pub(super) fn format_complex(re: f64, im: f64, suffix: char) -> String {
-    const EPSILON: f64 = 1e-14;
-    let re = if re.abs() < EPSILON { 0.0 } else { re };
-    let im = if im.abs() < EPSILON { 0.0 } else { im };
-
+    // Only exact zeros suppress a component. Tiny finite components carry
+    // information, including when the result feeds another complex function.
     if im == 0.0 {
         return format_num(re);
     }
@@ -113,11 +111,8 @@ pub(super) fn format_complex(re: f64, im: f64, suffix: char) -> String {
     format!("{}{}{}{}", format_num(re), sign, format_num(im), suffix)
 }
 
-/// Format a number for complex output: integers without decimals, floats as-is.
+/// Complex values are text results: use the canonical 15-significant-digit
+/// numeric renderer so subsequent complex functions parse the same text as Excel.
 fn format_num(n: f64) -> String {
-    if n == n.trunc() && n.abs() < 1e15 {
-        format!("{}", n as i64)
-    } else {
-        format!("{}", n)
-    }
+    compute_formats::format_number(n, "General")
 }

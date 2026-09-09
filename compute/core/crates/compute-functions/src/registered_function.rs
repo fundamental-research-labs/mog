@@ -1,5 +1,5 @@
 use crate::array_lift;
-use crate::{ExcelFunction, PureFunction};
+use crate::{ExcelFunction, FunctionContext, PureFunction};
 use value_types::CellValue;
 
 /// Wrapper enum that unifies PureFunction and ExcelFunction in one registry.
@@ -12,17 +12,21 @@ pub enum RegisteredFunction {
 
 impl RegisteredFunction {
     pub fn call(&self, args: &[CellValue]) -> CellValue {
+        self.call_with_context(args, &FunctionContext::default())
+    }
+
+    pub fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         if !self.returns_array()
-            && let Some(result) = array_lift::try_array_lift(self, args)
+            && let Some(result) = array_lift::try_array_lift(self, args, context)
         {
             return result;
         }
-        self.call_inner(args)
+        self.call_inner(args, context)
     }
 
-    pub(crate) fn call_inner(&self, args: &[CellValue]) -> CellValue {
+    pub(crate) fn call_inner(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         match self {
-            Self::Pure(f) => f.call(args),
+            Self::Pure(f) => f.call_with_context(args, context),
             Self::Excel(f) => {
                 let sig = f.signature();
                 for (i, arg) in args.iter().enumerate() {

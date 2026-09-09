@@ -41,6 +41,11 @@ fn ln_factorial(n: u64) -> f64 {
 
 /// Modified Bessel function of the first kind I_n(x), series expansion.
 fn bessel_i(x: f64, n: i64) -> f64 {
+    // At zero, the first-kind series is 1 for order zero and 0 otherwise.
+    // Handle its limit before the logarithmic initial term (0 * ln(0)).
+    if x == 0.0 {
+        return if n == 0 { 1.0 } else { 0.0 };
+    }
     let n = n as u64;
     // Use logarithmic computation for the initial term to avoid overflow for large n
     let ln_initial = (n as f64) * (x / 2.0).abs().ln() - ln_factorial(n);
@@ -65,6 +70,11 @@ fn bessel_i(x: f64, n: i64) -> f64 {
 
 /// Bessel function of the first kind J_n(x), series expansion.
 fn bessel_j(x: f64, n: i64) -> f64 {
+    // At zero, the first-kind series is 1 for order zero and 0 otherwise.
+    // Handle its limit before the logarithmic initial term (0 * ln(0)).
+    if x == 0.0 {
+        return if n == 0 { 1.0 } else { 0.0 };
+    }
     let n = n as u64;
     // Use logarithmic computation for the initial term to avoid overflow for large n
     let ln_initial = (n as f64) * (x / 2.0).abs().ln() - ln_factorial(n);
@@ -601,6 +611,35 @@ mod tests {
                 // Also acceptable
             }
             other => panic!("Expected number or #NUM!, got {:?}", other),
+        }
+    }
+}
+
+#[test]
+fn first_kind_bessel_zero_limits_include_blank_coercion() {
+    // Excel returns 1 for BESSELI when both referenced arguments are blank.
+    // Explicit zero/order cases also verify the analytical BESSELI/BESSELJ limits.
+    let registry = FunctionRegistry::new();
+    for name in ["BESSELI", "BESSELJ"] {
+        for x in [
+            CellValue::Null,
+            CellValue::number(0.0),
+            CellValue::number(-0.0),
+        ] {
+            for order in [CellValue::Null, CellValue::number(0.0)] {
+                assert_eq!(
+                    registry.call(name, &[x.clone(), order]),
+                    CellValue::number(1.0),
+                    "{name}"
+                );
+            }
+            for order in [1.0, 2.0, 200.0] {
+                assert_eq!(
+                    registry.call(name, &[x.clone(), CellValue::number(order)]),
+                    CellValue::number(0.0),
+                    "{name}"
+                );
+            }
         }
     }
 }

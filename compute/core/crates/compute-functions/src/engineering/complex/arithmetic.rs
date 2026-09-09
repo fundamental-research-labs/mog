@@ -9,6 +9,16 @@ complex_unary_fn!(FnImSqrt, "IMSQRT", |re: f64,
                                        im: f64,
                                        suffix: char|
  -> CellValue {
+    // The principal square root is exact on the real axis. Avoid cos(pi/2)
+    // introducing a spurious real component for a negative real input.
+    if im == 0.0 {
+        let (r, i) = if re < 0.0 {
+            (0.0, (-re).sqrt().copysign(im))
+        } else {
+            (re.sqrt(), 0.0)
+        };
+        return CellValue::Text(format_complex(r, i, suffix).into());
+    }
     let modulus = (re * re + im * im).sqrt();
     let theta = im.atan2(re);
     let sqrt_r = modulus.sqrt();
@@ -114,17 +124,147 @@ impl PureFunction for FnImDiv {
             );
         }
         let suffix = if b != 0.0 { suf1 } else { suf2 };
-        let denom = c * c + d * d;
-        if denom == 0.0 {
+        if c == 0.0 && d == 0.0 {
             return CellValue::error_with_message(
                 CellError::Num,
                 "IMDIV: division by zero".to_string(),
             );
         }
-        let re = (a * c + b * d) / denom;
-        let im = (b * c - a * d) / denom;
+        let (re, im) = finite_complex_divide(a, b, c, d);
+        if !re.is_finite() || !im.is_finite() {
+            return CellValue::error_with_message(
+                CellError::Num,
+                "IMDIV: result is not finite".to_string(),
+            );
+        }
         CellValue::Text(format_complex(re, im, suffix).into())
     }
+}
+
+/// Keep Smith's ordinary evaluation order, but use explicit binary exponents
+/// when an intermediate loses range. A tiny product can become representable
+/// again after division, so testing only the final quotient is insufficient.
+fn finite_complex_divide(a: f64, b: f64, c: f64, d: f64) -> (f64, f64) {
+    if ![a, b, c, d].iter().all(|v| v.is_finite()) {
+        return (f64::NAN, f64::NAN);
+    }
+    let (ratio, denominator, left_re, right_re, left_im, right_im, factors) = if c.abs() >= d.abs()
+    {
+        let ratio = d / c;
+        (ratio, c + d * ratio, a, b * ratio, b, -a * ratio, [d, b, a])
+    } else {
+        let ratio = c / d;
+        (ratio, d + c * ratio, a * ratio, b, b * ratio, -a, [c, a, b])
+    };
+    let product_lost_range = |factor: f64| {
+        let product = factor * ratio;
+        factor != 0.0 && ratio != 0.0 && (product == 0.0 || product.is_subnormal())
+    };
+    let re_numerator = left_re + right_re;
+    let im_numerator = left_im + right_im;
+    if (factors[0] != 0.0 && (ratio == 0.0 || ratio.is_subnormal()))
+        || product_lost_range(factors[1])
+        || product_lost_range(factors[2])
+        || !denominator.is_normal()
+        || !re_numerator.is_finite()
+        || !im_numerator.is_finite()
+        || re_numerator.is_subnormal()
+        || im_numerator.is_subnormal()
+    {
+        let denominator = scaled_product_sum(c, c, d, d);
+        return (
+            scaled_quotient(scaled_product_sum(a, c, b, d), denominator),
+            scaled_quotient(scaled_product_sum(b, c, -a, d), denominator),
+        );
+    }
+    (re_numerator / denominator, im_numerator / denominator)
+}
+
+/// A normalized signed significand and an unrestricted binary exponent.
+/// Keeping exponents separate allows products outside f64's range to cancel
+/// or be divided before the final result is rounded back into that range.
+#[derive(Clone, Copy)]
+struct ScaledComplexComponent {
+    significand: f64,
+    exponent: i32,
+}
+
+fn scaled_component(value: f64) -> ScaledComplexComponent {
+    if value == 0.0 {
+        return ScaledComplexComponent {
+            significand: value,
+            exponent: 0,
+        };
+    }
+    if value.is_subnormal() {
+        let mut result = scaled_component(value * 18014398509481984.0); // exactly 2^54
+        result.exponent -= 54;
+        return result;
+    }
+    let bits = value.to_bits();
+    ScaledComplexComponent {
+        significand: f64::from_bits((bits & 0x800f_ffff_ffff_ffff) | (1023_u64 << 52)),
+        exponent: ((bits >> 52) & 0x7ff) as i32 - 1023,
+    }
+}
+
+fn scale_complex_significand(value: f64, exponent: i32) -> f64 {
+    if value == 0.0 {
+        return value;
+    }
+    if exponent > 1023 {
+        return f64::INFINITY.copysign(value);
+    }
+    if exponent < -1075 {
+        return 0.0_f64.copysign(value);
+    }
+    if exponent < -1022 {
+        // Only the last multiplication rounds into the subnormal range.
+        return (value * f64::MIN_POSITIVE)
+            * f64::from_bits(((exponent + 1022 + 1023) as u64) << 52);
+    }
+    value * f64::from_bits(((exponent + 1023) as u64) << 52)
+}
+
+fn scaled_product_sum(a: f64, b: f64, c: f64, d: f64) -> ScaledComplexComponent {
+    let (a, b, c, d) = (
+        scaled_component(a),
+        scaled_component(b),
+        scaled_component(c),
+        scaled_component(d),
+    );
+    let left = a.significand * b.significand;
+    let right = c.significand * d.significand;
+    let left_exp = a.exponent + b.exponent;
+    let right_exp = c.exponent + d.exponent;
+    let exponent = if left == 0.0 {
+        right_exp
+    } else if right == 0.0 {
+        left_exp
+    } else {
+        left_exp.max(right_exp)
+    };
+    let left_error = a.significand.mul_add(b.significand, -left);
+    let right_error = c.significand.mul_add(d.significand, -right);
+    let x = scale_complex_significand(left, left_exp - exponent);
+    let y = scale_complex_significand(right, right_exp - exponent);
+    let sum = x + y;
+    // Error-free two-sum plus the FMA product residuals retains a small
+    // determinant when the two large products almost cancel.
+    let recovered_y = sum - x;
+    let sum_error = (x - (sum - recovered_y)) + (y - recovered_y);
+    let residual = scale_complex_significand(left_error, left_exp - exponent)
+        + scale_complex_significand(right_error, right_exp - exponent)
+        + sum_error;
+    let mut result = scaled_component(sum + residual);
+    result.exponent += exponent;
+    result
+}
+
+fn scaled_quotient(numerator: ScaledComplexComponent, denominator: ScaledComplexComponent) -> f64 {
+    let mut result = scaled_component(numerator.significand / denominator.significand);
+    result.exponent += numerator.exponent - denominator.exponent;
+    scale_complex_significand(result.significand, result.exponent)
 }
 
 // IMSUB: complex - complex
@@ -194,40 +334,7 @@ impl PureFunction for FnImSum {
         None
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
-        let mut total_re = 0.0;
-        let mut total_im = 0.0;
-        let mut result_suffix = 'i';
-        let mut suffix_set = false;
-        for (idx, _) in args.iter().enumerate() {
-            let s = match coerce_str(args, idx) {
-                Ok(v) => v,
-                Err(e) => return e,
-            };
-            let (re, im, suf) = match parse_complex(&s) {
-                Some(v) => v,
-                None => {
-                    return CellValue::error_with_message(
-                        CellError::Num,
-                        format!("IMSUM: argument {} is not a valid complex number", idx + 1),
-                    );
-                }
-            };
-            total_re += re;
-            total_im += im;
-            // Track suffix from first non-real argument; error on mismatch
-            if suf != 'i' || im != 0.0 {
-                if !suffix_set {
-                    result_suffix = suf;
-                    suffix_set = true;
-                } else if suf != result_suffix && suf != 'i' {
-                    return CellValue::error_with_message(
-                        CellError::Value,
-                        "IMSUM: mismatched imaginary suffixes ('i' vs 'j')".to_string(),
-                    );
-                }
-            }
-        }
-        CellValue::Text(format_complex(total_re, total_im, result_suffix).into())
+        aggregate_complex(args, "IMSUM", (0.0, 0.0), |(a, b), (c, d)| (a + c, b + d))
     }
 }
 
@@ -244,45 +351,62 @@ impl PureFunction for FnImProduct {
         None
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
-        let mut result_re = 1.0;
-        let mut result_im = 0.0;
-        let mut result_suffix = 'i';
-        let mut suffix_set = false;
-        for (idx, _) in args.iter().enumerate() {
-            let s = match coerce_str(args, idx) {
-                Ok(v) => v,
-                Err(e) => return e,
+        aggregate_complex(args, "IMPRODUCT", (1.0, 0.0), |(a, b), (c, d)| {
+            (a * c - b * d, a * d + b * c)
+        })
+    }
+}
+
+/// Aggregate scalar arguments and every cell of range/array arguments in order.
+/// Empty range cells do not contribute an operand; explicit scalar arguments
+/// retain the same coercion and error behavior as the other complex functions.
+fn aggregate_complex(
+    args: &[CellValue],
+    name: &str,
+    mut result: (f64, f64),
+    combine: impl Fn((f64, f64), (f64, f64)) -> (f64, f64),
+) -> CellValue {
+    let mut result_suffix = 'i';
+    let mut suffix_set = false;
+    for (idx, argument) in args.iter().enumerate() {
+        let mut pending = vec![(argument, false)];
+        while let Some((value, in_array)) = pending.pop() {
+            match value {
+                CellValue::Array(rows) => {
+                    pending.extend(rows.data().iter().rev().map(|cell| (cell, true)));
+                    continue;
+                }
+                CellValue::Null if in_array => continue,
+                CellValue::Error(..) => return value.clone(),
+                _ => {}
+            }
+            let s = match value.coerce_to_string() {
+                Ok(s) => s,
+                Err(error) => return CellValue::Error(error, None),
             };
-            let (re, im, suf) = match parse_complex(&s) {
-                Some(v) => v,
+            let (re, im, suffix) = match parse_complex(&s) {
+                Some(value) => value,
                 None => {
                     return CellValue::error_with_message(
                         CellError::Num,
-                        format!(
-                            "IMPRODUCT: argument {} is not a valid complex number",
-                            idx + 1
-                        ),
+                        format!("{name}: argument {} is not a valid complex number", idx + 1),
                     );
                 }
             };
-            // (a + bi)(c + di) = (ac - bd) + (ad + bc)i
-            let new_re = result_re * re - result_im * im;
-            let new_im = result_re * im + result_im * re;
-            result_re = new_re;
-            result_im = new_im;
-            // Track suffix from first non-real argument; error on mismatch
-            if suf != 'i' || im != 0.0 {
+            result = combine(result, (re, im));
+            // Preserve the existing scalar suffix policy for array operands.
+            if suffix != 'i' || im != 0.0 {
                 if !suffix_set {
-                    result_suffix = suf;
+                    result_suffix = suffix;
                     suffix_set = true;
-                } else if suf != result_suffix && suf != 'i' {
+                } else if suffix != result_suffix && suffix != 'i' {
                     return CellValue::error_with_message(
                         CellError::Value,
-                        "IMPRODUCT: mismatched imaginary suffixes ('i' vs 'j')".to_string(),
+                        format!("{name}: mismatched imaginary suffixes ('i' vs 'j')"),
                     );
                 }
             }
         }
-        CellValue::Text(format_complex(result_re, result_im, result_suffix).into())
     }
+    CellValue::Text(format_complex(result.0, result.1, result_suffix).into())
 }

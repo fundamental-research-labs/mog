@@ -1,7 +1,7 @@
 //! Excel-compatible function library — 512+ pure functions.
 //!
-//! Every function is a `PureFunction`: `(&[CellValue]) -> CellValue`.
-//! No evaluation context, no cell references, no side effects.
+//! Pure functions transform values using optional immutable workbook options.
+//! No workbook access, cell references, or side effects.
 //!
 //! Functions that need per-argument error propagation semantics (e.g.,
 //! COUNTIF, SUMIFS) implement `ExcelFunction` instead, which declares
@@ -22,7 +22,7 @@ pub use excel_function::ExcelFunction;
 pub use registered_function::RegisteredFunction;
 pub use registry::FunctionRegistry;
 pub use signature::{ArgRole, ArgSpec, FunctionSignature, VariadicSpec};
-pub use trait_def::PureFunction;
+pub use trait_def::{FunctionContext, PureFunction};
 
 // Shared infrastructure (renamed from `core` to avoid shadowing Rust's core crate)
 // SPI for compute-core scheduler/evaluator — gated behind `__internal` feature.

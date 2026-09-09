@@ -8,11 +8,9 @@
 use value_types::{CellError, CellValue};
 
 use crate::helpers::coercion::{check_error, flatten_values};
+use crate::helpers::ranking::rank_components;
 use crate::helpers::sorted_cache;
 use crate::{FunctionRegistry, PureFunction};
-
-/// Epsilon tolerance for "number exists in array" checks (matches Excel behavior).
-const EPS: f64 = 1e-10;
 
 pub(super) struct FnLarge;
 impl PureFunction for FnLarge {
@@ -93,31 +91,6 @@ impl PureFunction for FnSmall {
             }
             Err(e) => CellValue::Error(e, None),
         }
-    }
-}
-
-/// Find the rank of `number` in a sorted ascending slice using binary search
-/// with epsilon tolerance. Returns `(count_less, count_equal)` where "less"
-/// and "equal" are defined relative to the `order` parameter:
-/// - order == 0 (descending): "less" means values > number, "equal" means values ≈ number
-/// - order != 0 (ascending): "less" means values < number, "equal" means values ≈ number
-fn rank_components(sorted_asc: &[f64], number: f64, order: i32) -> Option<(usize, usize)> {
-    // Find the range of elements approximately equal to `number`
-    let first_ge = sorted_asc.partition_point(|&x| x < number - EPS);
-    let first_gt = sorted_asc.partition_point(|&x| x <= number + EPS);
-    let equal_count = first_gt - first_ge;
-
-    if equal_count == 0 {
-        return None; // number not found in array
-    }
-
-    if order == 0 {
-        // Descending: count how many are strictly greater
-        let greater_count = sorted_asc.len() - first_gt;
-        Some((greater_count, equal_count))
-    } else {
-        // Ascending: count how many are strictly less
-        Some((first_ge, equal_count))
     }
 }
 

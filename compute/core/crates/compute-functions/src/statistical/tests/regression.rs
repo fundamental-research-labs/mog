@@ -859,3 +859,51 @@ fn test_prob_no_match() {
         "PROB no match",
     );
 }
+
+#[test]
+fn paired_statistics_propagate_errors_with_or_without_diagnostics() {
+    let registry = crate::FunctionRegistry::new();
+    for name in [
+        "SLOPE",
+        "INTERCEPT",
+        "RSQ",
+        "STEYX",
+        "CORREL",
+        "PEARSON",
+        "COVAR",
+        "COVARIANCE.P",
+        "COVARIANCE.S",
+        "FORECAST",
+        "FORECAST.LINEAR",
+    ] {
+        for error in [
+            CellError::Name,
+            CellError::Ref,
+            CellError::Div0,
+            CellError::Num,
+            CellError::Value,
+            CellError::Na,
+        ] {
+            for diagnostic in [false, true] {
+                let error_value = if diagnostic {
+                    CellValue::error_with_message(error, "source observation failed")
+                } else {
+                    CellValue::Error(error, None)
+                };
+                for erroneous in [
+                    error_value.clone(),
+                    CellValue::from_rows(vec![vec![num(1.0), error_value, num(3.0)]]),
+                ] {
+                    for error_argument in 0..2 {
+                        let mut args = vec![arr(vec![2.0, 4.0, 6.0]), arr(vec![1.0, 2.0, 3.0])];
+                        args[error_argument] = erroneous.clone();
+                        if name.starts_with("FORECAST") {
+                            args.insert(0, num(4.0));
+                        }
+                        assert_err(registry.call(name, &args), error, name);
+                    }
+                }
+            }
+        }
+    }
+}

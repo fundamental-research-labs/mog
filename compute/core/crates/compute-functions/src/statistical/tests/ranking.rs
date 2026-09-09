@@ -357,3 +357,38 @@ fn test_small_single_element() {
     let reg = crate::FunctionRegistry::new();
     assert_eq!(reg.call("SMALL", &[arr(vec![42.0]), num(1.0)]), num(42.0));
 }
+
+#[test]
+fn rank_family_preserves_distinct_values_and_ties_at_every_scale() {
+    for scale in [1e-307, 1e-100, 1.0, 1e100] {
+        let values = [-3.0 * scale, 0.0, scale, scale, 2.0 * scale];
+        let range = arr(values.to_vec());
+        for (index, value) in values.into_iter().enumerate() {
+            for (order, expected_eq, expected_avg) in [
+                (0.0, [5.0, 4.0, 2.0, 2.0, 1.0], [5.0, 4.0, 2.5, 2.5, 1.0]),
+                (1.0, [1.0, 2.0, 3.0, 3.0, 5.0], [1.0, 2.0, 3.5, 3.5, 5.0]),
+            ] {
+                let args = [num(value), range.clone(), num(order)];
+                assert_eq!(FnRank.call(&args), num(expected_eq[index]), "scale={scale}");
+                assert_eq!(
+                    FnRankEq.call(&args),
+                    num(expected_eq[index]),
+                    "scale={scale}"
+                );
+                assert_eq!(
+                    FnRankAvg.call(&args),
+                    num(expected_avg[index]),
+                    "scale={scale}"
+                );
+            }
+        }
+        for function in [&FnRank as &dyn PureFunction, &FnRankEq, &FnRankAvg] {
+            assert_eq!(
+                function.call(&[num(scale / 2.0), range.clone()]),
+                err(CellError::Na),
+                "{} must reject an absent small value",
+                function.name(),
+            );
+        }
+    }
+}

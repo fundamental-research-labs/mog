@@ -490,42 +490,89 @@ impl PureFunction for FnAmordegrc {
                 ));
             }
 
+            if date_purchased > first_period || basis == 2 {
+                return Err(CellValue::error_with_message(
+                    CellError::Num,
+                    "AMORDEGRC: purchase must not follow first period; basis must be 0, 1, 3, or 4",
+                ));
+            }
             let life = 1.0 / rate;
-            let coeff = if life < 3.0 {
-                1.0
-            } else if life < 5.0 {
+            if life < 3.0 || (life > 4.0 && life < 5.0) {
+                return Err(CellValue::error_with_message(
+                    CellError::Num,
+                    "AMORDEGRC: unsupported asset life",
+                ));
+            }
+            let asset_life = life.ceil();
+            if cost == salvage || period > asset_life {
+                return Ok(0.0);
+            }
+            // Microsoft defines 1.5 for lives 3..4, 2 for 5..6, and
+            // 2.5 for lives greater than 6 (including fractional years).
+            let coefficient = if asset_life <= 4.0 {
                 1.5
-            } else if life < 7.0 {
+            } else if asset_life <= 6.0 {
                 2.0
             } else {
                 2.5
             };
-            let degressive_rate = rate * coeff;
-            let period_int = period.floor() as i32;
-
-            let first_yf = year_frac(date_purchased, first_period, basis);
-            if period_int == 0 {
-                let dep = cost * degressive_rate * first_yf;
-                return Ok(dep.min(cost - salvage));
-            }
-
-            let mut book_value = cost;
-            book_value -= cost * degressive_rate * first_yf;
-
-            for _ in 1..period_int {
-                let dep = book_value * degressive_rate;
-                book_value -= dep;
-                if book_value <= salvage {
-                    book_value = salvage;
-                    break;
+            let mut depreciation_rate = rate * coefficient;
+            let (purchase_year, _, _) = value_types::date_serial::serial_to_ymd(date_purchased);
+            let year_days = if basis == 1 {
+                if value_types::date_serial::is_leap_year(purchase_year) {
+                    366.0
+                } else {
+                    365.0
                 }
+            } else if basis == 3 {
+                365.0
+            } else {
+                360.0
+            };
+            let normalize_date = |serial: f64| {
+                let (year, month, day) = value_types::date_serial::serial_to_ymd(serial);
+                if matches!(basis, 1 | 3) && month == 2 && day == 29 {
+                    value_types::date_serial::ymd_to_serial(year, month, 28)
+                } else {
+                    serial.floor()
+                }
+            };
+            let purchase = normalize_date(date_purchased);
+            let first = normalize_date(first_period);
+            let first_days = if matches!(basis, 0 | 4) {
+                value_types::date_serial::days360_between(purchase, first, basis)
+            } else {
+                value_types::date_serial::actual_days_between(purchase, first)
+            };
+            let prorated = cost * depreciation_rate * first_days / year_days;
+            let schedule_life = asset_life + if prorated == 0.0 { 0.0 } else { 1.0 };
+            let initial = if prorated == 0.0 {
+                cost * depreciation_rate
+            } else {
+                prorated
+            };
+            let round = |value| value_types::precision::excel_round_to_decimal_places(value, 0);
+            let first_depreciation = round(initial.min(cost - salvage));
+            if period == 0.0 {
+                return Ok(first_depreciation);
             }
-
-            if book_value <= salvage {
-                return Ok(0.0);
+            let mut book_value = cost - first_depreciation;
+            let mut depreciation = 0.0;
+            for current_period in 1..=(period.floor() as i32) {
+                // The last two effective depreciation periods switch to
+                // half the remaining balance, then the entire balance.
+                depreciation = if schedule_life - f64::from(current_period + 1) == 2.0 {
+                    depreciation_rate = 1.0;
+                    book_value * 0.5
+                } else {
+                    book_value * depreciation_rate
+                };
+                if book_value < salvage {
+                    depreciation = 0.0;
+                }
+                book_value -= depreciation;
             }
-            let dep = book_value * degressive_rate;
-            Ok(dep.min(book_value - salvage))
+            Ok(round(depreciation))
         })())
     }
 }
@@ -788,6 +835,97 @@ mod tests {
                 );
             }
             _ => panic!("Expected number, got {:?}", r),
+        }
+    }
+}
+
+#[cfg(test)]
+mod amordegrc_contracts {
+    use super::*;
+
+    fn depreciation(
+        cost: f64,
+        purchased: f64,
+        first: f64,
+        salvage: f64,
+        period: f64,
+        rate: f64,
+        basis: f64,
+    ) -> CellValue {
+        FnAmordegrc
+            .call(&[cost, purchased, first, salvage, period, rate, basis].map(CellValue::number))
+    }
+
+    #[test]
+    fn documented_example_and_fractional_life_coefficient() {
+        // Microsoft's published Actual/actual example.
+        assert_eq!(
+            depreciation(2400., 39679., 39813., 300., 1., 0.15, 1.),
+            CellValue::number(776.)
+        );
+        // Windows Excel: purchase ten days earlier and default 30/360 basis.
+        assert_eq!(
+            depreciation(2400., 39669., 39813., 300., 1., 0.15, 0.),
+            CellValue::number(767.)
+        );
+        assert_eq!(
+            depreciation(2400., 39669., 39813., 300., 0., 0.15, 0.),
+            CellValue::number(355.)
+        );
+    }
+
+    #[test]
+    fn rounds_outputs_but_retains_intermediate_balance() {
+        // Public Excel-recorded values: the first period spans two years,
+        // and leap-day normalization differs from generic YEARFRAC.
+        let args = (100., 35854., 36585., 10., 0.15);
+        for (period, expected) in [
+            (0., 75.),
+            (0.3, 0.),
+            (1., 9.),
+            (1.7, 9.),
+            (2., 6.),
+            (10., 0.),
+        ] {
+            assert_eq!(
+                depreciation(args.0, args.1, args.2, args.3, period, args.4, 3.),
+                CellValue::number(expected),
+                "period {period}"
+            );
+        }
+    }
+
+    #[test]
+    fn switches_final_periods_to_half_then_full_balance() {
+        // A full initial year with rate=0.1 has a 10-year lifetime and
+        // coefficient=2.5. The last two active periods use 50%, then 100%.
+        let mut remaining = 750.;
+        for _ in 1..=7 {
+            remaining *= 0.75;
+        }
+        for period in [8., 9.] {
+            assert_eq!(
+                depreciation(1000., 43845., 44211., 0., period, 0.1, 0.),
+                CellValue::number(value_types::precision::excel_round_to_decimal_places(
+                    remaining * 0.5,
+                    0
+                ))
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_unsupported_basis_life_and_reversed_dates() {
+        for (purchased, first, rate, basis) in [
+            (39679., 39813., 0.15, 2.),
+            (39814., 39813., 0.15, 0.),
+            (39679., 39813., 0.4, 0.),
+            (39679., 39813., 1. / 4.5, 0.),
+        ] {
+            assert!(matches!(
+                depreciation(2400., purchased, first, 300., 1., rate, basis),
+                CellValue::Error(CellError::Num, _)
+            ));
         }
     }
 }

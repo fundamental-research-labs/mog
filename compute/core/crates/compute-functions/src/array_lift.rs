@@ -8,6 +8,7 @@ use value_types::{CellError, CellValue};
 pub(crate) fn try_array_lift(
     function: &RegisteredFunction,
     args: &[CellValue],
+    context: &crate::FunctionContext,
 ) -> Option<CellValue> {
     let lift_indices: Vec<usize> = args
         .iter()
@@ -35,9 +36,9 @@ pub(crate) fn try_array_lift(
                 .iter()
                 .map(|elem| {
                     if lift_idx == 0 {
-                        function.call(&[elem.clone(), other.clone()])
+                        function.call_with_context(&[elem.clone(), other.clone()], context)
                     } else {
-                        function.call(&[other.clone(), elem.clone()])
+                        function.call_with_context(&[other.clone(), elem.clone()], context)
                     }
                 })
                 .collect();
@@ -49,7 +50,7 @@ pub(crate) fn try_array_lift(
             .map(|elem| {
                 let mut lifted_args = args.to_vec();
                 lifted_args[lift_idx] = elem.clone();
-                function.call(&lifted_args)
+                function.call_with_context(&lifted_args, context)
             })
             .collect();
         return Some(CellValue::array(result, cols));
@@ -92,7 +93,7 @@ pub(crate) fn try_array_lift(
                         .unwrap_or(CellValue::Error(CellError::Na, None));
                 }
             }
-            result.push(function.call_inner(&lifted_args));
+            result.push(function.call_inner(&lifted_args, context));
         }
     }
     Some(CellValue::array(result, max_cols))

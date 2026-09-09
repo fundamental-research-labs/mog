@@ -1,7 +1,7 @@
 use super::super::evaluation::cell_value_dedup_key;
 use super::super::{
-    ColumnFilter, FilterCondition, FilterKind, FilterLogic, FilterOperator, create_filter,
-    evaluate_filter, get_filtered_record_count, get_unique_values, set_column_filter,
+    create_filter, evaluate_filter, get_filtered_record_count, get_unique_values,
+    set_column_filter, ColumnFilter, FilterCondition, FilterKind, FilterLogic, FilterOperator,
 };
 use super::helpers::{storage_with_sheet, test_get_cell_format};
 use value_types::{CellValue, FiniteF64};
@@ -153,6 +153,82 @@ fn test_evaluate_filter_condition() {
     assert!(results[1].matches); // 75 > 50
     assert!(!results[2].matches); // 50 == 50 (not >)
     assert!(results[3].matches); // 100 > 50
+}
+
+#[test]
+fn test_evaluate_filter_numeric_text_condition() {
+    let (storage, sheet_id) = storage_with_sheet();
+
+    let filter = create_filter(
+        storage.doc(),
+        storage.sheets(),
+        &sheet_id,
+        "header-start",
+        "header-end",
+        "data-end",
+        FilterKind::AutoFilter,
+        None,
+        &crate::storage::STORAGE_ID_ALLOC,
+    )
+    .unwrap();
+
+    // Imported OOXML customFilter operands are lexical text, including for a
+    // numeric worksheet column.
+    let criteria = ColumnFilter::Condition {
+        conditions: vec![FilterCondition {
+            operator: FilterOperator::GreaterThan,
+            value: Some(CellValue::Text("50".into())),
+            value2: None,
+        }],
+        logic: FilterLogic::And,
+    };
+    set_column_filter(
+        storage.doc(),
+        storage.sheets(),
+        &sheet_id,
+        &filter.id,
+        "col-header-0",
+        criteria,
+    );
+
+    let get_cell_value = |row: u32, _col: u32| -> CellValue {
+        match row {
+            1 => CellValue::Number(FiniteF64::must(10.0)),
+            2 => CellValue::Number(FiniteF64::must(75.0)),
+            3 => CellValue::Number(FiniteF64::must(50.0)),
+            4 => CellValue::Number(FiniteF64::must(100.0)),
+            _ => CellValue::Null,
+        }
+    };
+
+    let resolve = |cell_id: &str| -> Option<(u32, u32)> {
+        match cell_id {
+            "header-start" => Some((0, 0)),
+            "header-end" => Some((0, 0)),
+            "data-end" => Some((4, 0)),
+            "col-header-0" => Some((0, 0)),
+            _ => None,
+        }
+    };
+
+    let results = evaluate_filter(
+        storage.doc(),
+        storage.sheets(),
+        &sheet_id,
+        &filter.id,
+        get_cell_value,
+        test_get_cell_format,
+        |_, _| None,
+        resolve,
+    );
+
+    assert_eq!(
+        results
+            .iter()
+            .map(|result| result.matches)
+            .collect::<Vec<_>>(),
+        vec![false, true, false, true]
+    );
 }
 
 #[test]

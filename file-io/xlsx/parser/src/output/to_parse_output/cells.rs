@@ -231,10 +231,10 @@ pub(super) fn convert_cell_with_projection_role_and_provenance(
     // - The resolved CellValue is Null (empty string → Null in resolve_formula_cached_value)
     // Note: cell_formula covers shared formula children (t="shared" si="N") which
     // have cell_formula.is_some() but formula.is_none() (no formula text).
-    let has_empty_cached_value =
-        (is_formula || cell.formula.is_some() || cell.cell_formula.is_some())
+    let has_empty_cached_value = cell.has_empty_cached_value
+        || ((is_formula || cell.formula.is_some() || cell.cell_formula.is_some())
             && cell.value.as_ref().map_or(false, |v| v.is_empty())
-            && cell.cached_value_type == 0;
+            && cell.cached_value_type == 0);
     let is_formula_cell = is_formula || cell.formula.is_some() || cell.cell_formula.is_some();
 
     let can_drop_sst_provenance = cell
@@ -324,6 +324,8 @@ fn formula_cache_provenance(
         && cached_value_kind.is_none()
         && cached_value_presence.is_absent()
         && cell.value.is_none()
+        && !cell.preserve_space_formula
+        && !cell.preserve_space_value
     {
         return FormulaCacheProvenance::default();
     }
@@ -335,6 +337,8 @@ fn formula_cache_provenance(
         cached_value_presence,
         cached_value_lexeme: cell.value.clone(),
         formula_identity_fingerprint: cell.formula.clone(),
+        formula_preserve_space: cell.preserve_space_formula,
+        value_preserve_space: cell.preserve_space_value,
         ..Default::default()
     }
 }

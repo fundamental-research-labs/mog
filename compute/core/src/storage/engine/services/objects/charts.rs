@@ -23,6 +23,23 @@ fn require_chart(
     get_chart(stores, sheet_id, chart_id).ok_or_else(|| chart_not_found(sheet_id, chart_id))
 }
 
+/// A literal chart-title edit supersedes an imported formula unless the caller
+/// supplies an explicit `titleFormula` update as well. Generic floating-object
+/// updates merge fields, so leaving the imported formula in place would make
+/// XLSX reconstruction prefer that formula over the edited title text.
+fn normalize_chart_title_update(updates: &serde_json::Value) -> serde_json::Value {
+    let Some(updates_object) = updates.as_object() else {
+        return updates.clone();
+    };
+    if !updates_object.contains_key("title") || updates_object.contains_key("titleFormula") {
+        return updates.clone();
+    }
+
+    let mut normalized = updates_object.clone();
+    normalized.insert("titleFormula".to_string(), serde_json::Value::Null);
+    serde_json::Value::Object(normalized)
+}
+
 pub(in crate::storage::engine) fn create_chart(
     stores: &mut EngineStores,
     sheet_id: &SheetId,
@@ -62,12 +79,13 @@ pub(in crate::storage::engine) fn update_chart(
     updates: &serde_json::Value,
 ) -> Result<MutationResult, ComputeError> {
     require_chart(stores, sheet_id, chart_id)?;
+    let normalized_updates = normalize_chart_title_update(updates);
     floating_objects::update_floating_object(
         stores.storage.doc(),
         stores.storage.sheets(),
         sheet_id,
         chart_id,
-        updates,
+        &normalized_updates,
     );
     let data: Option<FloatingObject> = floating_objects::get_floating_object_typed(
         stores.storage.doc(),

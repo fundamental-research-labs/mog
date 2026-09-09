@@ -21,6 +21,7 @@ mod of_pie;
 mod point_format_fidelity;
 mod scatter;
 mod series_shadow_fidelity;
+mod shape_preservation;
 mod surface;
 mod title_rich_text_fidelity;
 mod trendline_fidelity;

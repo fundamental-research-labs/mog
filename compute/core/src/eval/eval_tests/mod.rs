@@ -10,6 +10,7 @@ use value_types::*;
 
 mod advanced_arrays;
 mod argument_validation;
+mod arithmetic_underflow;
 mod array_context;
 mod basics;
 mod calculation_contracts;

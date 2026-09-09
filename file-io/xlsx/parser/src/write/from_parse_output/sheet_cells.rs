@@ -133,23 +133,55 @@ fn convert_cell_with_metadata_refs(
     let fallback_error = |error: CellError| imported_rich_error.map_or(error, |rich| rich.fallback);
     let value = match (&cell.value, &cell.formula) {
         (_, Some(formula)) => {
-            let cached = match &cell.value {
-                DomainValue::Number(n) => Some(Box::new(CellValue::Number(n.get()))),
-                DomainValue::Text(s) => {
-                    Some(Box::new(CellValue::FormulaString(s.as_ref().to_string())))
+            let cached = if cell.has_empty_cached_value {
+                // Keep an authored empty `<v/>` distinct from a typed
+                // semantic placeholder such as Boolean(false) or an error.
+                // The writer uses this empty text cache to emit `<v/>`, while
+                // `formula_type_hint` retains the original cell `t`.
+                Some(Box::new(CellValue::FormulaString(String::new())))
+            } else {
+                match &cell.value {
+                    DomainValue::Number(n) => Some(Box::new(CellValue::Number(n.get()))),
+                    DomainValue::Text(s) => {
+                        Some(Box::new(CellValue::FormulaString(s.as_ref().to_string())))
+                    }
+                    DomainValue::Boolean(b) => Some(Box::new(CellValue::Boolean(*b))),
+                    DomainValue::Error(_, _) if authored_numeric_value.is_some() => {
+                        Some(Box::new(CellValue::Number(0.0)))
+                    }
+                    DomainValue::Error(e, _) => Some(Box::new(CellValue::Error(
+                        fallback_error(*e).as_str().to_string(),
+                    ))),
+                    _ => None,
                 }
-                DomainValue::Boolean(b) => Some(Box::new(CellValue::Boolean(*b))),
-                DomainValue::Error(_, _) if authored_numeric_value.is_some() => {
-                    Some(Box::new(CellValue::Number(0.0)))
-                }
-                DomainValue::Error(e, _) => Some(Box::new(CellValue::Error(
-                    fallback_error(*e).as_str().to_string(),
-                ))),
-                _ if cell.has_empty_cached_value => Some(Box::new(CellValue::Number(0.0))),
-                _ => None,
             };
             CellValue::Formula {
                 formula: formula.clone(),
+                cached_value: cached,
+                cell_formula: cell.cell_formula.clone(),
+            }
+        }
+        (value, None) if is_authored_empty_formula(cell) => {
+            let cached = if cell.has_empty_cached_value {
+                Some(Box::new(CellValue::FormulaString(String::new())))
+            } else {
+                match value {
+                    DomainValue::Number(n) => Some(Box::new(CellValue::Number(n.get()))),
+                    DomainValue::Text(s) => {
+                        Some(Box::new(CellValue::FormulaString(s.as_ref().to_string())))
+                    }
+                    DomainValue::Boolean(b) => Some(Box::new(CellValue::Boolean(*b))),
+                    DomainValue::Error(_, _) if authored_numeric_value.is_some() => {
+                        Some(Box::new(CellValue::Number(0.0)))
+                    }
+                    DomainValue::Error(e, _) => Some(Box::new(CellValue::Error(
+                        fallback_error(*e).as_str().to_string(),
+                    ))),
+                    _ => None,
+                }
+            };
+            CellValue::Formula {
+                formula: String::new(),
                 cached_value: cached,
                 cell_formula: cell.cell_formula.clone(),
             }
@@ -206,13 +238,22 @@ fn convert_cell_with_metadata_refs(
         } else {
             emit_cell_metadata_refs.then_some(cell.vm).flatten()
         },
-        preserve_space_formula: false,
-        preserve_space_value: false,
+        preserve_space_formula: cell.formula_cache_provenance.state.is_current()
+            && cell.formula_cache_provenance.formula_preserve_space,
+        preserve_space_value: cell.formula_cache_provenance.state.is_current()
+            && cell.formula_cache_provenance.value_preserve_space,
         explicit_type: None,
         formula_type_hint,
         phonetic: cell.phonetic,
         date_lexical_value: compatible_date_lexical_value(cell),
     }
+}
+
+fn is_authored_empty_formula(cell: &DomainCellData) -> bool {
+    cell.formula.is_none()
+        && cell.cell_formula.as_ref().is_some_and(|formula| {
+            formula.t == ooxml_types::worksheet::CellFormulaType::Normal && formula.text.is_empty()
+        })
 }
 
 fn current_force_recalc(cell: &DomainCellData) -> bool {

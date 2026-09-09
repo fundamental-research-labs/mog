@@ -19,9 +19,13 @@ pub(crate) fn extract_chart_format(
     sp_pr: Option<&ooxml_types::charts::ShapeProperties>,
     tx_pr: Option<&ooxml_types::drawings::TextBody>,
 ) -> Option<domain_types::chart::ChartFormatData> {
+    // Picture/group fills carry relationship-backed rendering state that the
+    // public chart format model does not represent. Leave those fills absent
+    // so reconstruction can merge the complete imported ShapeProperties back
+    // in instead of replacing a chart-owned image with <a:noFill/>.
     let fill = sp_pr
         .and_then(|sp| sp.fill.as_ref())
-        .map(|f| extract_chart_fill(f));
+        .and_then(extract_chart_fill);
     let line = sp_pr
         .and_then(|sp| sp.ln.as_ref())
         .map(|ln| extract_chart_line(ln));
@@ -91,20 +95,20 @@ pub(super) fn extract_title_chart_format(
 /// Extract ChartFillData from a DrawingFill.
 fn extract_chart_fill(
     fill: &ooxml_types::drawings::DrawingFill,
-) -> domain_types::chart::ChartFillData {
+) -> Option<domain_types::chart::ChartFillData> {
     use ooxml_types::drawings::DrawingFill;
 
     match fill {
-        DrawingFill::NoFill => domain_types::chart::ChartFillData::NoFill,
+        DrawingFill::NoFill => Some(domain_types::chart::ChartFillData::NoFill),
         DrawingFill::Solid(sf) => {
             let color = extract_chart_color(&sf.color);
             let transparency = extract_alpha_transparency(&sf.color);
             match color {
-                Some(c) => domain_types::chart::ChartFillData::Solid {
+                Some(c) => Some(domain_types::chart::ChartFillData::Solid {
                     color: c,
                     transparency,
-                },
-                None => domain_types::chart::ChartFillData::NoFill,
+                }),
+                None => Some(domain_types::chart::ChartFillData::NoFill),
             }
         }
         DrawingFill::Gradient(gf) => {
@@ -139,11 +143,11 @@ fn extract_chart_fill(
                 })
                 .collect();
 
-            domain_types::chart::ChartFillData::Gradient {
+            Some(domain_types::chart::ChartFillData::Gradient {
                 gradient_type,
                 angle,
                 stops,
-            }
+            })
         }
         DrawingFill::Pattern(pf) => {
             let pattern = pf
@@ -153,14 +157,15 @@ fn extract_chart_fill(
                 .unwrap_or_default();
             let foreground = pf.fg_color.as_ref().and_then(|c| extract_chart_color(c));
             let background = pf.bg_color.as_ref().and_then(|c| extract_chart_color(c));
-            domain_types::chart::ChartFillData::Pattern {
+            Some(domain_types::chart::ChartFillData::Pattern {
                 pattern,
                 foreground,
                 background,
-            }
+            })
         }
-        // BlipFill and Group — not representable in our domain model, fallback to NoFill
-        _ => domain_types::chart::ChartFillData::NoFill,
+        // BlipFill and Group are preserved through the imported OOXML
+        // definition and merged by the reconstruction path.
+        DrawingFill::Blip(_) | DrawingFill::Group => None,
     }
 }
 

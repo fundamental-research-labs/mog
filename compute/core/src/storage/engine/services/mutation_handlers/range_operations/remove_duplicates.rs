@@ -6,6 +6,8 @@ use crate::mirror::CellMirror;
 use crate::snapshot::RecalcResult;
 use crate::storage::engine::mutation_coordinator::MutationCoordinator;
 use crate::storage::engine::stores::EngineStores;
+use crate::storage::workbook::data_tables;
+use yrs::{Origin, Transact};
 
 use super::patches::merge_recalc_results;
 
@@ -72,30 +74,109 @@ pub(in crate::storage::engine) fn mutation_remove_duplicates(
         }
     }
 
+    if !stores.grid_indexes.contains_key(sheet_id) {
+        return Err(ComputeError::SheetNotFound {
+            sheet_id: id_to_hex(sheet_id.as_u128()).to_string(),
+        });
+    }
+
     // 2. Suppress observer — we'll manually sync stores below.
     //    `remove_duplicates` manages cell identities through the GridIndex
     //    directly, so the GridIndex is in its final authoritative state
     //    after this call returns.
-    let grid =
-        stores
+    mutation.observer.set_suppressed(true);
+    let result = {
+        let grid = stores
             .grid_indexes
             .get_mut(sheet_id)
-            .ok_or_else(|| ComputeError::SheetNotFound {
-                sheet_id: id_to_hex(sheet_id.as_u128()).to_string(),
-            })?;
-    mutation.observer.set_suppressed(true);
-    let result = cell_ops::remove_duplicates(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        *sheet_id,
-        grid,
-        start_row,
-        start_col,
-        end_row,
-        end_col,
-        &options,
-    );
+            .expect("grid index checked before suppressing observer");
+        cell_ops::remove_duplicates(
+            stores.storage.doc(),
+            stores.storage.sheets(),
+            *sheet_id,
+            grid,
+            start_row,
+            start_col,
+            end_row,
+            end_col,
+            &options,
+        )
+    };
+
+    let (data_table_mutation, stale_table_cells) = if result.duplicates_removed == 0 {
+        (data_tables::DataTableRegionMutation::default(), Vec::new())
+    } else {
+        let workbook = stores.storage.workbook_map().clone();
+        let sheets = stores.storage.sheets().clone();
+        let mut txn = stores
+            .storage
+            .doc()
+            .transact_mut_with(Origin::from(compute_document::undo::ORIGIN_USER_EDIT));
+        let region_mutation = data_tables::invalidate_regions_in_txn(
+            &workbook, &mut txn, sheet_id, start_row, start_col, end_row, end_col,
+        );
+        let mut stale_cells = Vec::new();
+        for (region_sheet, region_start_row, region_start_col, region_end_row, region_end_col) in
+            &region_mutation.formula_ranges
+        {
+            let ids: Vec<CellId> = stores
+                .grid_indexes
+                .get(region_sheet)
+                .map(|grid| {
+                    grid.cells_in_range(
+                        *region_start_row,
+                        *region_start_col,
+                        *region_end_row,
+                        *region_end_col,
+                    )
+                    .map(|(cell_id, _, _)| cell_id)
+                    .collect()
+                })
+                .unwrap_or_default();
+            stale_cells.extend(
+                data_tables::clear_table_formula_cells_in_txn(
+                    &sheets,
+                    &mut txn,
+                    region_sheet,
+                    &ids,
+                )
+                .into_iter()
+                .map(|cell_id| (*region_sheet, cell_id)),
+            );
+        }
+        stale_cells.sort_unstable_by_key(|(sid, cid)| (sid.as_u128(), cid.as_u128()));
+        stale_cells.dedup();
+        (region_mutation, stale_cells)
+    };
     mutation.observer.set_suppressed(false);
+
+    if data_table_mutation.changed {
+        let regions = data_tables::get_all_data_table_regions(
+            stores.storage.doc(),
+            stores.storage.workbook_map(),
+        );
+        mirror.replace_data_table_regions(regions);
+    }
+
+    if !stale_table_cells.is_empty() {
+        let mut ids_by_sheet = std::collections::HashMap::<SheetId, Vec<CellId>>::new();
+        for (region_sheet, cell_id) in &stale_table_cells {
+            ids_by_sheet
+                .entry(*region_sheet)
+                .or_default()
+                .push(*cell_id);
+        }
+        let _suppress = mutation.suppress_guard();
+        for (region_sheet, cell_ids) in ids_by_sheet {
+            crate::storage::properties::clear_formula_cache_metadata_for_cell_ids(
+                stores.storage.doc(),
+                stores.storage.workbook_map(),
+                stores.storage.sheets(),
+                &region_sheet,
+                &cell_ids,
+            );
+        }
+    }
 
     let data = serde_json::json!({
         "duplicatesFound": result.duplicates_found,
@@ -150,6 +231,37 @@ pub(in crate::storage::engine) fn mutation_remove_duplicates(
                 edits.push((*sheet_id, cell_id, row, col, value, formula));
             }
         }
+    }
+
+    // A removed data-table region may extend beyond the duplicate-removal
+    // range. Include those surviving body cells in the literal value replay so
+    // their cached values remain visible while their TABLE dependencies are
+    // removed from ComputeCore as well as Yrs.
+    for (region_sheet, cell_id) in stale_table_cells {
+        if edits.iter().any(|(sheet, existing_id, _, _, _, _)| {
+            *sheet == region_sheet && *existing_id == cell_id
+        }) {
+            continue;
+        }
+        let Some(grid) = stores.grid_indexes.get(&region_sheet) else {
+            continue;
+        };
+        let Some((row, col)) = grid.cell_position(&cell_id) else {
+            continue;
+        };
+        let Some((value, _, identity_formula)) =
+            stores.storage.read_cell_from_yrs(&region_sheet, &cell_id)
+        else {
+            continue;
+        };
+        mirror.apply_edit(
+            &region_sheet,
+            cell_id,
+            SheetPos::new(row, col),
+            value.clone(),
+            identity_formula,
+        );
+        edits.push((region_sheet, cell_id, row, col, value, None));
     }
 
     let recalc = if edits.is_empty() {

@@ -284,6 +284,10 @@ pub struct DocumentChanges {
     /// When `true`, `build_mutation_result_from_changes` re-reads the
     /// full workbook settings from yrs and emits a `WorkbookSettingsChange`.
     pub workbook_settings_changed: bool,
+    /// Whether the workbook-level `dataTableRegions` map changed. The engine
+    /// re-reads the complete canonical map because region entries are small,
+    /// nested records and undo/redo can add or remove the whole sub-map.
+    pub data_table_regions_changed: bool,
 }
 
 impl DocumentChanges {
@@ -317,6 +321,7 @@ impl DocumentChanges {
             && self.grid_index.is_empty()
             && !self.sheet_order_changed
             && !self.workbook_settings_changed
+            && !self.data_table_regions_changed
     }
 
     /// Returns true if there are any changes outside the `cells` field.
@@ -350,5 +355,6 @@ impl DocumentChanges {
             || !self.grid_index.is_empty()
             || self.sheet_order_changed
             || self.workbook_settings_changed
+            || self.data_table_regions_changed
     }
 }

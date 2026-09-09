@@ -13,7 +13,7 @@ use compute_document::schema::KEY_TABLES;
 use compute_document::undo::ORIGIN_BOOTSTRAP;
 use domain_types::domain::table::{FilterSpec, TableCatalogEntry as CanonicalTable};
 use domain_types::yrs_schema;
-use value_types::CellValue;
+use value_types::{CellValue, DateSystem};
 use yrs::{Map, Out, Transact};
 
 use crate::mirror::CellMirror;
@@ -132,29 +132,49 @@ fn materialize_table_auto_filter_from_preserved_spec(
         )
     };
 
-    let shell = build_table_filter_shell_metadata(table, &col_id_to_header_cell_id);
-    let column_filters = if shell.capability == filters::FilterCapability::Supported {
-        table
-            .filter_columns
-            .iter()
-            .filter_map(|column| {
-                let header_cell_id = col_id_to_header_cell_id.get(&column.col_id)?;
-                Some((
-                    header_cell_id.clone(),
-                    table_filter_spec_to_column_filter(&column.filter)?,
-                ))
-            })
-            .collect::<HashMap<_, _>>()
-    } else {
-        HashMap::new()
-    };
-
+    let date_system = DateSystem::from_date1904(mirror.date1904);
     let existing_filter = filters::get_table_filter(
         stores.storage.doc(),
         stores.storage.sheets(),
         sheet_id,
         &table.id,
     );
+    let shell = build_table_filter_shell_metadata(table, &col_id_to_header_cell_id, date_system);
+    // The persisted runtime state is the executable authority. The preserved
+    // OOXML specification cannot represent every runtime predicate (including
+    // typed operands and both bounds of Between), so reconstructing it over an
+    // existing filter would discard user edits on reopen. An old unsupported
+    // import has no executable authority and can be projected when support is
+    // added in a newer engine.
+    let existing_runtime_is_authoritative = existing_filter.as_ref().is_some_and(|filter| {
+        filters::get_filter_metadata_binding(
+            stores.storage.doc(),
+            stores.storage.sheets(),
+            sheet_id,
+            &filter.id,
+        )
+        .is_none_or(|binding| binding.shell.capability == filters::FilterCapability::Supported)
+    });
+    let column_filters = if shell.capability != filters::FilterCapability::Supported {
+        HashMap::new()
+    } else if existing_runtime_is_authoritative {
+        existing_filter
+            .as_ref()
+            .expect("authoritative runtime filter exists")
+            .column_filters
+            .clone()
+    } else {
+        table
+            .filter_columns
+            .iter()
+            .filter_map(|column| {
+                let header_cell_id = col_id_to_header_cell_id.get(&column.col_id)?;
+                let projected = table_filter_spec_to_column_filter(&column.filter, date_system)?;
+                Some((header_cell_id.clone(), projected))
+            })
+            .collect::<HashMap<_, _>>()
+    };
+
     let filter_id = existing_filter
         .as_ref()
         .map(|filter| filter.id.clone())
@@ -329,7 +349,10 @@ fn record_unsupported_table_filter_import_diagnostics(
         if column.ext_lst_raw.is_some() {
             reasons.insert(filters::ImportFilterUnsupportedReason::UnknownExtension);
         }
-        reasons.extend(unsupported_reasons_for_table_filter_spec(&column.filter));
+        reasons.extend(unsupported_reasons_for_table_filter_spec(
+            &column.filter,
+            DateSystem::from_date1904(mirror.date1904),
+        ));
         if reasons.is_empty() {
             continue;
         }
@@ -360,6 +383,7 @@ fn record_unsupported_table_filter_import_diagnostics(
 fn build_table_filter_shell_metadata(
     table: &CanonicalTable,
     col_id_to_header_cell_id: &BTreeMap<u32, String>,
+    date_system: DateSystem,
 ) -> filters::FilterShellMetadata {
     let mut unsupported_reasons = BTreeSet::new();
     let mut button_metadata = BTreeMap::new();
@@ -398,7 +422,10 @@ fn build_table_filter_shell_metadata(
         if column.ext_lst_raw.is_some() {
             unsupported_reasons.insert(filters::ImportFilterUnsupportedReason::UnknownExtension);
         }
-        unsupported_reasons.extend(unsupported_reasons_for_table_filter_spec(&column.filter));
+        unsupported_reasons.extend(unsupported_reasons_for_table_filter_spec(
+            &column.filter,
+            date_system,
+        ));
         lossless_criteria.push(filters::LosslessCriterionDescriptor {
             filter_col_id: None,
             table_column_id: stable_column_id_for_filter_col(table, column.col_id)
@@ -425,11 +452,17 @@ fn build_table_filter_shell_metadata(
 
 fn unsupported_reasons_for_table_filter_spec(
     filter: &FilterSpec,
+    date_system: DateSystem,
 ) -> Vec<filters::ImportFilterUnsupportedReason> {
     match filter {
         FilterSpec::Values {
             date_group_items, ..
-        } if !date_group_items.is_empty() => {
+        } if !date_group_items.is_empty()
+            && !filters::date_group_items_supported_in_date_system(
+                date_group_items,
+                date_system,
+            ) =>
+        {
             vec![filters::ImportFilterUnsupportedReason::DateGroupUnsupported]
         }
         FilterSpec::Custom { filters: specs, .. } => {
@@ -443,12 +476,17 @@ fn unsupported_reasons_for_table_filter_spec(
             }
         }
         FilterSpec::Dynamic { kind, .. } => {
-            let mut reasons =
-                vec![filters::ImportFilterUnsupportedReason::DynamicTemporalContextUnsupported];
-            if !is_known_dynamic_type(kind) {
-                reasons.push(filters::ImportFilterUnsupportedReason::UnknownDynamicType);
+            match filters::dynamic_filter_rule_from_ooxml_type(kind) {
+                Some(filters::DynamicFilterRule::AboveAverage)
+                | Some(filters::DynamicFilterRule::BelowAverage) => {
+                    vec![filters::ImportFilterUnsupportedReason::DynamicTemporalContextUnsupported]
+                }
+                Some(_) => Vec::new(),
+                None => vec![
+                    filters::ImportFilterUnsupportedReason::UnknownDynamicType,
+                    filters::ImportFilterUnsupportedReason::DynamicTemporalContextUnsupported,
+                ],
             }
-            reasons
         }
         FilterSpec::Color { .. } => {
             vec![filters::ImportFilterUnsupportedReason::ColorDxfUnresolved]
@@ -464,15 +502,19 @@ fn unsupported_reasons_for_table_filter_spec(
     }
 }
 
-fn table_filter_spec_to_column_filter(filter: &FilterSpec) -> Option<filters::ColumnFilter> {
+pub(in crate::storage::engine) fn table_filter_spec_to_column_filter(
+    filter: &FilterSpec,
+    date_system: DateSystem,
+) -> Option<filters::ColumnFilter> {
     Some(match filter {
-        FilterSpec::Values { blank, values, .. } => filters::ColumnFilter::Values {
-            values: values
-                .iter()
-                .map(|value| serde_json::Value::String(value.clone()))
-                .collect(),
-            include_blanks: *blank,
-        },
+        FilterSpec::Values {
+            blank,
+            values,
+            date_group_items,
+            ..
+        } => {
+            filters::values_filter_to_column_filter(values, *blank, date_group_items, date_system)?
+        }
         FilterSpec::Custom {
             and,
             filters: specs,
@@ -512,9 +554,17 @@ fn table_filter_spec_to_column_filter(filter: &FilterSpec) -> Option<filters::Co
             icon_set_name: icon_set.clone(),
             icon_index: *icon_id,
         },
-        FilterSpec::Dynamic { .. } | FilterSpec::Color { .. } => {
-            return None;
+        FilterSpec::Dynamic { kind, .. } => {
+            let rule = filters::dynamic_filter_rule_from_ooxml_type(kind)?;
+            if matches!(
+                rule,
+                filters::DynamicFilterRule::AboveAverage | filters::DynamicFilterRule::BelowAverage
+            ) {
+                return None;
+            }
+            filters::ColumnFilter::Dynamic { rule }
         }
+        FilterSpec::Color { .. } => return None,
     })
 }
 
@@ -565,29 +615,6 @@ fn is_supported_custom_operator(operator: &str) -> bool {
             | "notContains"
             | "between"
             | "notBetween"
-    )
-}
-
-fn is_known_dynamic_type(dynamic_type: &str) -> bool {
-    matches!(
-        dynamic_type,
-        "aboveAverage"
-            | "belowAverage"
-            | "today"
-            | "yesterday"
-            | "tomorrow"
-            | "thisWeek"
-            | "lastWeek"
-            | "nextWeek"
-            | "thisMonth"
-            | "lastMonth"
-            | "nextMonth"
-            | "thisQuarter"
-            | "lastQuarter"
-            | "nextQuarter"
-            | "thisYear"
-            | "lastYear"
-            | "nextYear"
     )
 }
 

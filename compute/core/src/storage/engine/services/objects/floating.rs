@@ -174,6 +174,24 @@ pub(in crate::storage::engine) fn update_floating_object(
     Ok(result)
 }
 
+pub(in crate::storage::engine) fn update_floating_object_with_origin(
+    stores: &mut EngineStores,
+    sheet_id: &SheetId,
+    object_id: &str,
+    updates: &serde_json::Value,
+    origin: &'static [u8],
+) -> Result<(), ComputeError> {
+    let _ = floating_objects::update_floating_object_with_origin(
+        stores.storage.doc(),
+        stores.storage.sheets(),
+        sheet_id,
+        object_id,
+        updates,
+        origin,
+    );
+    Ok(())
+}
+
 pub(in crate::storage::engine) fn create_shape(
     stores: &mut EngineStores,
     sheet_id: &SheetId,

@@ -256,6 +256,14 @@ impl CellMirror {
         }
     }
 
+    /// Replace the runtime data-table projection from the canonical workbook
+    /// Yrs map. Structural/cell mutations may suppress the observer; callers
+    /// use this after their authoritative map edit, while undo/redo and remote
+    /// sync use it to reconcile the mirror from Yrs.
+    pub(crate) fn replace_data_table_regions(&mut self, regions: Vec<DataTableRegionDef>) {
+        self.data_table_regions = regions;
+    }
+
     // -----------------------------------------------------------------------
     // Dense Column Cache
     // -----------------------------------------------------------------------

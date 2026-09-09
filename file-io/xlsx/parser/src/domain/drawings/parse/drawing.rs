@@ -5,7 +5,11 @@ use super::super::reader::namespaces::root_namespace_attrs;
 use super::super::types::{
     Anchor, Drawing, DrawingContent, McAlternateContent, OneCellAnchor, TwoCellAnchor,
 };
-use super::anchors::{parse_absolute_anchor, parse_one_cell_anchor, parse_two_cell_anchor};
+use super::anchors::{
+    parse_absolute_anchor_with_namespace_context, parse_one_cell_anchor_with_namespace_context,
+    parse_two_cell_anchor_with_namespace_context,
+};
+use super::pictures::{merge_namespace_declarations, namespace_declarations};
 use crate::infra::xml::{
     MC_DRAWING_MARKUP_SUPPORTED_NAMESPACES, resolve_mc_alternate_content_with_namespace_context,
 };
@@ -25,16 +29,22 @@ pub fn parse_drawing(xml: &[u8]) -> Drawing {
         return drawing;
     };
     let root = root_element.full_slice(xml);
+    let namespaces = namespace_declarations(xml);
 
-    if let Some(anchor) = parse_top_level_anchor(root_element.local_name, root, Some(root)) {
+    if let Some(anchor) =
+        parse_top_level_anchor(root_element.local_name, root, Some(root), &namespaces)
+    {
         drawing.anchors.push(anchor);
         return drawing;
     }
 
     for child in direct_child_elements(root) {
-        if let Some(anchor) =
-            parse_top_level_anchor(child.local_name, child.full_slice(root), Some(root))
-        {
+        if let Some(anchor) = parse_top_level_anchor(
+            child.local_name,
+            child.full_slice(root),
+            Some(root),
+            &namespaces,
+        ) {
             drawing.anchors.push(anchor);
         }
     }
@@ -46,25 +56,37 @@ fn parse_top_level_anchor(
     local_name: &[u8],
     anchor_xml: &[u8],
     containing_xml: Option<&[u8]>,
+    inherited_namespaces: &[(String, String)],
 ) -> Option<Anchor> {
     match local_name {
         b"twoCellAnchor" => {
-            let mut anchor = parse_two_cell_anchor(anchor_xml, 0)?;
+            let mut anchor =
+                parse_two_cell_anchor_with_namespace_context(anchor_xml, 0, inherited_namespaces)?;
             preserve_content_level_raw(&mut anchor, anchor_xml);
             Some(Anchor::TwoCell(anchor))
         }
         b"oneCellAnchor" => {
-            let mut anchor = parse_one_cell_anchor(anchor_xml, 0)?;
+            let mut anchor =
+                parse_one_cell_anchor_with_namespace_context(anchor_xml, 0, inherited_namespaces)?;
             preserve_one_cell_content_level_raw(&mut anchor, anchor_xml);
             Some(Anchor::OneCell(anchor))
         }
-        b"absoluteAnchor" => parse_absolute_anchor(anchor_xml, 0).map(Anchor::Absolute),
-        b"AlternateContent" => parse_wrapped_anchor(anchor_xml, containing_xml),
+        b"absoluteAnchor" => {
+            parse_absolute_anchor_with_namespace_context(anchor_xml, 0, inherited_namespaces)
+                .map(Anchor::Absolute)
+        }
+        b"AlternateContent" => {
+            parse_wrapped_anchor(anchor_xml, containing_xml, inherited_namespaces)
+        }
         _ => None,
     }
 }
 
-fn parse_wrapped_anchor(mc_xml: &[u8], containing_xml: Option<&[u8]>) -> Option<Anchor> {
+fn parse_wrapped_anchor(
+    mc_xml: &[u8],
+    containing_xml: Option<&[u8]>,
+    inherited_namespaces: &[(String, String)],
+) -> Option<Anchor> {
     let raw_xml = std::str::from_utf8(mc_xml).ok()?.to_string();
     let branch = resolve_mc_alternate_content_with_namespace_context(
         mc_xml,
@@ -72,25 +94,56 @@ fn parse_wrapped_anchor(mc_xml: &[u8], containing_xml: Option<&[u8]>) -> Option<
         MC_DRAWING_MARKUP_SUPPORTED_NAMESPACES,
     )?;
     let branch_xml = &mc_xml[branch.start..branch.end];
+    let mut branch_namespaces = inherited_namespaces.to_vec();
+    merge_namespace_declarations(&mut branch_namespaces, namespace_declarations(mc_xml));
+    let wrapper_name: &[u8] = if branch.is_choice {
+        b"Choice"
+    } else {
+        b"Fallback"
+    };
+    if let Some(wrapper) = direct_child_elements(mc_xml).find(|child| {
+        child.local_name == wrapper_name && branch.start >= child.start && branch.end <= child.end
+    }) {
+        merge_namespace_declarations(
+            &mut branch_namespaces,
+            namespace_declarations(wrapper.full_slice(mc_xml)),
+        );
+    }
+    merge_namespace_declarations(&mut branch_namespaces, namespace_declarations(branch_xml));
 
     if let Some(child) = document_element(branch_xml) {
         let anchor_xml = child.full_slice(branch_xml);
         match child.local_name {
             b"twoCellAnchor" => {
-                let mut anchor = parse_two_cell_anchor(anchor_xml, 0)?;
+                let mut anchor = parse_two_cell_anchor_with_namespace_context(
+                    anchor_xml,
+                    0,
+                    &branch_namespaces,
+                )?;
                 anchor.mc_alternate_content = Some(McAlternateContent {
                     raw_xml: raw_xml.clone(),
                 });
                 return Some(Anchor::TwoCell(anchor));
             }
             b"oneCellAnchor" => {
-                let mut anchor = parse_one_cell_anchor(anchor_xml, 0)?;
+                let mut anchor = parse_one_cell_anchor_with_namespace_context(
+                    anchor_xml,
+                    0,
+                    &branch_namespaces,
+                )?;
                 anchor.mc_alternate_content = Some(McAlternateContent {
                     raw_xml: raw_xml.clone(),
                 });
                 return Some(Anchor::OneCell(anchor));
             }
-            b"absoluteAnchor" => return parse_absolute_anchor(anchor_xml, 0).map(Anchor::Absolute),
+            b"absoluteAnchor" => {
+                return parse_absolute_anchor_with_namespace_context(
+                    anchor_xml,
+                    0,
+                    &branch_namespaces,
+                )
+                .map(Anchor::Absolute);
+            }
             _ => {}
         }
     }
@@ -162,5 +215,81 @@ mod tests {
         assert_eq!(anchor.to.col, 7);
         assert!(matches!(anchor.content, DrawingContent::Shape(_)));
         assert!(anchor.mc_alternate_content.is_some());
+    }
+
+    #[test]
+    fn carries_drawing_root_namespace_to_detached_blip_effect() {
+        let xml = br#"<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:vendor="urn:vendor">
+            <xdr:oneCellAnchor>
+                <xdr:from><xdr:col>1</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>2</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>
+                <xdr:ext cx="10" cy="20"/>
+                <xdr:pic>
+                    <xdr:nvPicPr><xdr:cNvPr id="1" name="Picture"/><xdr:cNvPicPr/></xdr:nvPicPr>
+                    <xdr:blipFill><a:blip><vendor:futureEffect><vendor:payload/></vendor:futureEffect></a:blip></xdr:blipFill>
+                    <xdr:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr>
+                </xdr:pic>
+                <xdr:clientData/>
+            </xdr:oneCellAnchor>
+        </xdr:wsDr>"#;
+
+        let drawing = parse_drawing(xml);
+        let Anchor::OneCell(anchor) = &drawing.anchors[0] else {
+            panic!("expected one-cell picture anchor");
+        };
+        let DrawingContent::Picture(picture) = &anchor.content else {
+            panic!("expected picture content");
+        };
+        let ooxml_types::drawings::BlipEffect::RawXml(raw) = &picture.blip_fill.effects[0] else {
+            panic!("expected unknown effect to remain raw");
+        };
+        let effect_start = raw.find("<vendor:futureEffect").expect("raw effect");
+        let effect_open_end = raw[effect_start..]
+            .find('>')
+            .map(|offset| effect_start + offset)
+            .expect("raw effect opening tag");
+        assert!(raw[effect_start..=effect_open_end].contains(r#"xmlns:vendor="urn:vendor""#));
+    }
+
+    #[test]
+    fn carries_alternate_content_namespace_to_detached_blip_effect() {
+        let xml = br#"<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">
+            <mc:AlternateContent>
+                <mc:Choice Requires="unsupported" xmlns:unsupported="urn:unsupported" xmlns:vendor="urn:first-choice-vendor">
+                    <xdr:oneCellAnchor/>
+                </mc:Choice>
+                <mc:Choice Requires="a14" xmlns:a14="http://schemas.microsoft.com/office/drawing/2010/main" xmlns:vendor="urn:choice-vendor">
+                    <xdr:twoCellAnchor>
+                        <xdr:from><xdr:col>1</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>2</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>
+                        <xdr:to><xdr:col>3</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>4</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>
+                        <xdr:pic>
+                            <xdr:nvPicPr><xdr:cNvPr id="1" name="Picture"/><xdr:cNvPicPr/></xdr:nvPicPr>
+                            <xdr:blipFill><a:blip><vendor:futureEffect><vendor:payload/></vendor:futureEffect></a:blip></xdr:blipFill>
+                            <xdr:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr>
+                        </xdr:pic>
+                        <xdr:clientData/>
+                    </xdr:twoCellAnchor>
+                </mc:Choice>
+                <mc:Fallback/>
+            </mc:AlternateContent>
+        </xdr:wsDr>"#;
+
+        let drawing = parse_drawing(xml);
+        let Anchor::TwoCell(anchor) = &drawing.anchors[0] else {
+            panic!("expected selected choice anchor");
+        };
+        let DrawingContent::Picture(picture) = &anchor.content else {
+            panic!("expected picture content");
+        };
+        let ooxml_types::drawings::BlipEffect::RawXml(raw) = &picture.blip_fill.effects[0] else {
+            panic!("expected unknown effect to remain raw");
+        };
+        let effect_start = raw.find("<vendor:futureEffect").expect("raw effect");
+        let effect_open_end = raw[effect_start..]
+            .find('>')
+            .map(|offset| effect_start + offset)
+            .expect("raw effect opening tag");
+        assert!(
+            raw[effect_start..=effect_open_end].contains(r#"xmlns:vendor="urn:choice-vendor""#)
+        );
     }
 }

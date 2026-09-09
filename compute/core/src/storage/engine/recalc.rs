@@ -43,6 +43,11 @@ impl YrsComputeEngine {
             && !self.metadata_requires_recalc()
             && !self.stores.compute.has_volatile_cells()
         {
+            // A clean calculate call is still a recalc boundary for volatile
+            // context. Refresh the retained CF clock from the current request
+            // so a prior fixed timestamp cannot leak into a later live/session
+            // call that correctly short-circuits formula work.
+            self.stores.compute.begin_recalc_clock(None);
             return Ok(crate::snapshot::RecalcResult::empty());
         }
         self.materialize_all_pivots();
@@ -74,12 +79,18 @@ impl YrsComputeEngine {
         // compute store is clean. Same audit as `recalculate()` above.
         let has_explicit_overrides = options.iterative.is_some()
             || options.max_iterations.is_some()
-            || options.max_change.is_some();
+            || options.max_change.is_some()
+            || options.timestamp_serial.is_some();
         if !self.stores.compute.is_dirty()
             && !self.metadata_requires_recalc()
             && !has_explicit_overrides
             && !self.stores.compute.has_volatile_cells()
         {
+            // See `recalculate()`: the no-op result still establishes the
+            // caller's live/session clock boundary for subsequent CF reads.
+            self.stores
+                .compute
+                .begin_recalc_clock(options.timestamp_serial.map(|timestamp| timestamp.get()));
             return Ok(crate::snapshot::RecalcResult::empty());
         }
         self.materialize_all_pivots();
@@ -96,12 +107,14 @@ impl YrsComputeEngine {
     /// Rebuild the `ComputeCore` from the engine's own internal state.
     pub fn rebuild_compute_core(&mut self) -> Result<crate::snapshot::RecalcResult, ComputeError> {
         let snapshot = construction::build_workbook_snapshot(&self.stores, &self.mirror);
+        let char_code_page = self.mirror.char_code_page;
         let mut rebuilt_mirror = construction::build_finalized_mirror_from_snapshot(
             &self.stores.storage,
             &snapshot,
             &self.stores.grid_indexes,
             self.stores.layout_metrics,
         )?;
+        rebuilt_mirror.char_code_page = char_code_page;
         self.stores.compute = ComputeCore::new();
         let recalc = self
             .stores

@@ -333,6 +333,7 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
     let Some(data) = engine.deferred_hydration.as_ref() else {
         return Ok(None);
     };
+    let char_code_page = engine.mirror.char_code_page;
 
     // Debug breadcrumbs for WASM std::time panic investigation.
     // tracing::info! routes through the configured subscriber → browser console.
@@ -551,6 +552,7 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
             );
             let mut new_compute = ComputeCore::new();
             let mut new_mirror = CellMirror::new();
+            new_mirror.char_code_page = char_code_page;
             #[cfg(target_arch = "wasm32")]
             {
                 new_compute.init_from_snapshot_minimal(&mut new_mirror, full_snap.clone())?;

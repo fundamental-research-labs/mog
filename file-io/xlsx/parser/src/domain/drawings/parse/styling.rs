@@ -14,6 +14,9 @@ use super::super::types::{
     PatternFill, PenAlignment, PresetGeometry, ShapeGeometry, ShapeProperties, ShapeStyle,
     SolidFill, StyleRef, Transform2D,
 };
+use super::pictures::{
+    merge_namespace_declarations, namespace_declarations, parse_blip_fill_with_namespace_context,
+};
 use super::shapes::parse_shape_preset;
 use ooxml_types::drawings::{
     BlurEffect, FillOverlayEffect, Glow, InnerShadow, OuterShadow, PresetShadow, RectAlignment,
@@ -27,6 +30,16 @@ use ooxml_types::drawings::{
 
 /// Parse shape properties
 pub fn parse_shape_properties(xml: &[u8]) -> ShapeProperties {
+    parse_shape_properties_with_namespace_context(xml, &[])
+}
+
+/// Parse shape properties while carrying namespace declarations inherited
+/// from the containing chart/drawing part. Detached `<spPr>` slices otherwise
+/// lose bindings needed by opaque effect children.
+pub(crate) fn parse_shape_properties_with_namespace_context(
+    xml: &[u8],
+    inherited_namespaces: &[(String, String)],
+) -> ShapeProperties {
     let mut props = ShapeProperties::default();
 
     // Parse bwMode attribute on the <a:spPr> element itself
@@ -65,7 +78,9 @@ pub fn parse_shape_properties(xml: &[u8]) -> ShapeProperties {
             });
     }
 
-    props.fill = parse_direct_fill(xml);
+    let mut namespaces = inherited_namespaces.to_vec();
+    merge_namespace_declarations(&mut namespaces, namespace_declarations(xml));
+    props.fill = parse_direct_fill(xml, &namespaces);
 
     // Parse outline
     if let Some(ln) = direct_child_slice(xml, b"ln") {
@@ -137,20 +152,41 @@ pub fn parse_transform_2d(xml: &[u8]) -> Option<Transform2D> {
 
 /// Parse fill styles
 pub fn parse_fill(xml: &[u8]) -> Option<Fill> {
+    parse_fill_with_namespace_context(xml, &[])
+}
+
+/// Parse a fill while carrying namespace declarations inherited from the
+/// containing drawing part. Fill elements are often parsed from detached
+/// slices, so opaque blip effects need the original root bindings.
+pub(crate) fn parse_fill_with_namespace_context(
+    xml: &[u8],
+    inherited_namespaces: &[(String, String)],
+) -> Option<Fill> {
     let root = document_element(xml)?;
-    if let Some(fill) = parse_fill_element(root.local_name, root.full_slice(xml)) {
+    let mut namespaces = inherited_namespaces.to_vec();
+    merge_namespace_declarations(&mut namespaces, namespace_declarations(xml));
+    if let Some(fill) = parse_fill_element(root.local_name, root.full_slice(xml), &namespaces) {
         return Some(fill);
     }
 
-    parse_direct_fill(root.full_slice(xml))
+    parse_direct_fill(root.full_slice(xml), &namespaces)
 }
 
-fn parse_direct_fill(xml: &[u8]) -> Option<Fill> {
-    direct_child_elements(xml)
-        .find_map(|child| parse_fill_element(child.local_name, child.full_slice(xml)))
+fn parse_direct_fill(xml: &[u8], inherited_namespaces: &[(String, String)]) -> Option<Fill> {
+    direct_child_elements(xml).find_map(|child| {
+        parse_fill_element(
+            child.local_name,
+            child.full_slice(xml),
+            inherited_namespaces,
+        )
+    })
 }
 
-fn parse_fill_element(local_name: &[u8], xml: &[u8]) -> Option<Fill> {
+fn parse_fill_element(
+    local_name: &[u8],
+    xml: &[u8],
+    inherited_namespaces: &[(String, String)],
+) -> Option<Fill> {
     match local_name {
         b"noFill" => Some(Fill::NoFill),
         b"solidFill" => Some(Fill::Solid(SolidFill {
@@ -158,6 +194,10 @@ fn parse_fill_element(local_name: &[u8], xml: &[u8]) -> Option<Fill> {
         })),
         b"gradFill" => Some(Fill::Gradient(parse_gradient_fill(xml))),
         b"pattFill" => Some(Fill::Pattern(parse_pattern_fill(xml))),
+        b"blipFill" => Some(Fill::Blip(parse_blip_fill_with_namespace_context(
+            xml,
+            inherited_namespaces,
+        ))),
         _ => None,
     }
 }

@@ -76,7 +76,9 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
         if self.meta.legacy_reference_result() && Self::is_referenceable_for_intersection(node) {
             // Keep the reference identity until implicit intersection chooses
             // its caller-aligned cell. Once materialized, an array has no origin.
-            self.eval_implicit_intersection(node).await
+            self.eval_implicit_intersection(node)
+                .await
+                .map(EvalValue::normalize_formula_value)
         } else {
             self.eval_node(node).await
         }
@@ -90,7 +92,10 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
         Box::pin(async move {
             self.tick()?;
             self.push_depth()?;
-            let result = self.eval_node_inner(node).await;
+            let result = self
+                .eval_node_inner(node)
+                .await
+                .map(EvalValue::normalize_formula_value);
             self.pop_depth();
             result
         })

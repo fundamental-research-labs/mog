@@ -123,6 +123,7 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
             // -- Reference special forms (need AST access for reference resolution) --
             "OFFSET" => self.eval_offset(args).await,
             "INDIRECT" => self.eval_indirect(args).await,
+            "PHONETIC" => self.eval_phonetic(args).await,
 
             // -- Row/Col info --
             "ROW" => self.eval_row(args).await,
@@ -346,10 +347,11 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
                         let _body_span =
                             tracing::info_span!("fn_body", fn_name = other, arg_count = args.len())
                                 .entered();
-                        Ok(func.call_with_context(
+                        Ok(func.call_with_context_raw(
                             &evaluated_args,
                             &compute_functions::FunctionContext {
                                 date1904: self.meta.date1904(),
+                                char_code_page: self.meta.char_code_page(),
                             },
                         ))
                     }

@@ -1,6 +1,6 @@
 use domain_types::{
-    ChartDefinition,
     chart::{AxisData, ChartSpec, ChartType as DomainChartType, SingleAxisData},
+    ChartDefinition,
 };
 use ooxml_types::charts::{
     self, AxisCrosses, AxisType, ChartAxis, ChartAxisPosition, ChartLines, CrossBetween,
@@ -9,11 +9,12 @@ use ooxml_types::charts::{
 use ooxml_types::drawings::{Paragraph, ParagraphProperties, ShapeProperties, StAngle, TextBody};
 
 use super::{
-    elements::{TitleTextSource, build_chart_text_rich, build_title},
+    elements::{build_title, TitleTextSource},
     formatting::{build_outline, build_shape_properties, build_text_body},
     text_body_fidelity::{
         preserve_imported_text_body_properties, preserve_imported_title_text_properties,
     },
+    title_text::build_chart_text_rich,
 };
 
 // =============================================================================

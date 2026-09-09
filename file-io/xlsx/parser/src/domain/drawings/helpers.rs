@@ -44,19 +44,10 @@ pub fn parse_edit_as(bytes: &[u8]) -> Option<EditAs> {
 
 /// Decode XML entities in bytes
 pub fn decode_xml_entities(bytes: &[u8]) -> String {
-    let s = String::from_utf8_lossy(bytes);
-    decode_xml_entities_string(&s)
+    crate::infra::xml::decode_xml_entities(bytes)
 }
 
 /// Decode XML entities in a string
 pub fn decode_xml_entities_string(s: &str) -> String {
-    if !s.contains('&') {
-        return s.to_string();
-    }
-
-    s.replace("&amp;", "&")
-        .replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&quot;", "\"")
-        .replace("&apos;", "'")
+    crate::infra::xml::decode_xml_entities_string(s)
 }

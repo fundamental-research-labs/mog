@@ -86,7 +86,9 @@ pub(super) use runtime::{
 pub(super) use sheet_import::import_sheets_from_xlsx;
 pub use snapshots::build_workbook_snapshot_from_yrs;
 pub(super) use snapshots::{build_sheet_snapshot_from_yrs, build_workbook_snapshot};
-pub(in crate::storage::engine) use table_auto_filter_projection::materialize_table_auto_filters_from_preserved_specs;
+pub(in crate::storage::engine) use table_auto_filter_projection::{
+    materialize_table_auto_filters_from_preserved_specs, table_filter_spec_to_column_filter,
+};
 pub(super) use types::{DeferredHydrationCompletion, DeferredHydrationData, XlsxHydrateResult};
 pub(super) use xlsx::{from_xlsx_bytes, import_from_xlsx_bytes};
 

@@ -201,9 +201,11 @@ fn imported_table_autofilter_materializes_runtime_table_filter() {
             && info.source_type
                 == crate::storage::sheet::filters::FilterHeaderSourceType::TableAutoFilter
     }));
-    assert!(header_info
-        .iter()
-        .any(|info| info.col == 1 && info.has_active_filter && info.button_visible));
+    assert!(
+        header_info
+            .iter()
+            .any(|info| info.col == 1 && info.has_active_filter && info.button_visible)
+    );
 }
 
 #[test]

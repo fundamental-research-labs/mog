@@ -37,6 +37,92 @@ fn column_filter_condition_roundtrip() {
 }
 
 #[test]
+fn column_filter_between_exports_as_relational_custom_filters() {
+    let filter = ColumnFilter::Condition {
+        conditions: vec![FilterCondition {
+            operator: FilterOperator::Between,
+            value: Some(CellValue::number(10.0)),
+            value2: Some(CellValue::number(20.0)),
+        }],
+        // The interval expansion has its own required conjunction.
+        logic: FilterLogic::Or,
+    };
+
+    let OoxmlFilterType::Custom {
+        conditions,
+        and_logic,
+    } = column_filter_to_ooxml_filter_type(&filter)
+    else {
+        panic!("expected custom filter");
+    };
+
+    assert!(and_logic);
+    assert_eq!(conditions.len(), 2);
+    assert_eq!(conditions[0].operator, "greaterThanOrEqual");
+    assert_eq!(conditions[0].value, CellValue::number(10.0));
+    assert!(conditions[0].value2.is_none());
+    assert_eq!(conditions[1].operator, "lessThanOrEqual");
+    assert_eq!(conditions[1].value, CellValue::number(20.0));
+    assert!(conditions[1].value2.is_none());
+}
+
+#[test]
+fn column_filter_not_between_exports_as_relational_custom_filters() {
+    let filter = ColumnFilter::Condition {
+        conditions: vec![FilterCondition {
+            operator: FilterOperator::NotBetween,
+            value: Some(CellValue::number(10.0)),
+            value2: Some(CellValue::number(20.0)),
+        }],
+        // The interval expansion has its own required disjunction.
+        logic: FilterLogic::And,
+    };
+
+    let OoxmlFilterType::Custom {
+        conditions,
+        and_logic,
+    } = column_filter_to_ooxml_filter_type(&filter)
+    else {
+        panic!("expected custom filter");
+    };
+
+    assert!(!and_logic);
+    assert_eq!(conditions.len(), 2);
+    assert_eq!(conditions[0].operator, "lessThan");
+    assert_eq!(conditions[0].value, CellValue::number(10.0));
+    assert!(conditions[0].value2.is_none());
+    assert_eq!(conditions[1].operator, "greaterThan");
+    assert_eq!(conditions[1].value, CellValue::number(20.0));
+    assert!(conditions[1].value2.is_none());
+}
+
+#[test]
+fn column_filter_interval_with_missing_bound_preserves_legacy_condition() {
+    let filter = ColumnFilter::Condition {
+        conditions: vec![FilterCondition {
+            operator: FilterOperator::Between,
+            value: Some(CellValue::number(10.0)),
+            value2: None,
+        }],
+        logic: FilterLogic::And,
+    };
+
+    let OoxmlFilterType::Custom {
+        conditions,
+        and_logic,
+    } = column_filter_to_ooxml_filter_type(&filter)
+    else {
+        panic!("expected custom filter");
+    };
+
+    assert!(and_logic);
+    assert_eq!(conditions.len(), 1);
+    assert_eq!(conditions[0].operator, "between");
+    assert_eq!(conditions[0].value, CellValue::number(10.0));
+    assert!(conditions[0].value2.is_none());
+}
+
+#[test]
 fn column_filter_top_bottom_roundtrip() {
     let filter = ColumnFilter::TopBottom {
         direction: TopBottomDirection::Top,

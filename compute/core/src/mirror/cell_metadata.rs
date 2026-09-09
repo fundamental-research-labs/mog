@@ -1,7 +1,7 @@
 //! Read-only workbook metadata boundary for reference-aware formula functions.
 use super::CellMirror;
 use cell_types::{CellId, SheetId};
-use domain_types::CellFormat;
+use domain_types::{CellFormat, RichSharedString};
 
 #[derive(Debug, Clone)]
 pub struct CellReferenceMetadata {
@@ -42,6 +42,19 @@ pub(crate) trait CellMetadataProvider: std::fmt::Debug + Send + Sync {
     fn is_row_filtered(&self, _mirror: &CellMirror, _sheet: &SheetId, _row: u32) -> bool {
         false
     }
+    /// Return the imported rich shared-string record owned by a cell.
+    ///
+    /// The provider owns the storage transaction and returns an owned value so
+    /// evaluation never holds a Yrs read transaction across an async read.
+    fn rich_shared_string(
+        &self,
+        _mirror: &CellMirror,
+        _sheet: &SheetId,
+        _row: u32,
+        _col: u32,
+    ) -> Option<RichSharedString> {
+        None
+    }
     fn query(
         &self,
         mirror: &CellMirror,
@@ -81,6 +94,18 @@ impl CellMirror {
         self.cell_metadata_provider
             .as_ref()?
             .formula_result_mode(&sheet, cell)
+    }
+
+    /// Read the cell-owned rich string through the installed storage provider.
+    pub(crate) fn phonetic_shared_string(
+        &self,
+        sheet: &SheetId,
+        row: u32,
+        col: u32,
+    ) -> Option<RichSharedString> {
+        self.cell_metadata_provider
+            .as_ref()?
+            .rich_shared_string(self, sheet, row, col)
     }
 
     pub(crate) fn declared_array_extent(&self, cell: &CellId) -> Option<(u32, u32)> {

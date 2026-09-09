@@ -1,14 +1,14 @@
 use crate::mirror::CellMirror;
 use crate::snapshot::{ChangeKind, FilterChange, MutationResult, RuntimeOperationDiagnostic};
 use crate::storage::engine::services::filter_results::append_row_visibility_changes;
-use crate::storage::engine::services::imported_filters;
 use crate::storage::engine::services::resolved_formats;
+use crate::storage::engine::services::{imported_filter_runtime, imported_filters};
 use crate::storage::engine::settings::EngineSettings;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::{dimensions, filters};
 use cell_types::{CellId, SheetId, SheetPos};
 use compute_document::hex::{hex_to_id, id_to_hex};
-use value_types::{CellValue, ComputeError};
+use value_types::{CellValue, ComputeError, DateSystem};
 
 mod clear_all;
 mod value_queries;
@@ -782,6 +782,9 @@ fn apply_filter_with_action(
     action: &str,
     diagnostic_operation: Option<&'static str>,
 ) -> Result<MutationResult, ComputeError> {
+    imported_filter_runtime::refresh_imported_date_group_filters_for_evaluation(
+        stores, mirror, sheet_id, filter_id,
+    );
     let filter = filters::get_filter(
         stores.storage.doc(),
         stores.storage.sheets(),
@@ -826,8 +829,10 @@ fn apply_filter_with_action(
     }
 
     let sid = *sheet_id;
-    let icons = crate::storage::engine::services::cf_cache::evaluate_filter_icons(stores, mirror, sheet_id, filter_id);
-    let results = filters::evaluate_filter(
+    let icons = crate::storage::engine::services::cf_cache::evaluate_filter_icons(
+        stores, mirror, sheet_id, filter_id,
+    );
+    let results = filters::evaluate_filter_with_date_system(
         stores.storage.doc(),
         stores.storage.sheets(),
         sheet_id,
@@ -844,6 +849,7 @@ fn apply_filter_with_action(
         },
         |row, col| icons.get(&(row, col)).cloned(),
         |hex| resolve_filter_cell_pos(stores, mirror, sheet_id, hex),
+        DateSystem::from_date1904(mirror.date1904),
     );
 
     let mut rows_to_hide = Vec::new();

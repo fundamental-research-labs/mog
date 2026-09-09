@@ -13,6 +13,7 @@ use yrs::{Any, Array, ArrayPrelim, Map, MapPrelim, Out, Transact};
 
 mod navigation_outline;
 mod region;
+mod relocation_metadata;
 
 // -------------------------------------------------------------------
 // Helpers

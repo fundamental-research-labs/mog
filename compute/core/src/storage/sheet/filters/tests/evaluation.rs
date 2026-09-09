@@ -1,10 +1,12 @@
 use super::super::evaluation::cell_value_dedup_key;
 use super::super::{
-    create_filter, evaluate_filter, get_filtered_record_count, get_unique_values,
-    set_column_filter, ColumnFilter, FilterCondition, FilterKind, FilterLogic, FilterOperator,
+    ColumnFilter, DynamicFilterRule, FilterCondition, FilterKind, FilterLogic, FilterOperator,
+    create_filter, evaluate_filter, evaluate_filter_with_date_system, get_filtered_record_count,
+    get_unique_values, set_column_filter,
 };
 use super::helpers::{storage_with_sheet, test_get_cell_format};
-use value_types::{CellValue, FiniteF64};
+use chrono::NaiveDate;
+use value_types::{CellValue, DateSystem, FiniteF64, date_to_serial};
 
 #[test]
 fn test_evaluate_filter_value() {
@@ -229,6 +231,83 @@ fn test_evaluate_filter_numeric_text_condition() {
             .collect::<Vec<_>>(),
         vec![false, true, false, true]
     );
+}
+
+#[test]
+fn test_evaluate_dynamic_date_filter_uses_literal_1900_and_1904_serials() {
+    let now = NaiveDate::from_ymd_opt(2024, 6, 15).unwrap();
+    let canonical_today = date_to_serial(&now);
+    crate::eval::clock::set_current_time(canonical_today + 0.25);
+
+    for date_system in [DateSystem::Date1900, DateSystem::Date1904] {
+        let (storage, sheet_id) = storage_with_sheet();
+        let filter = create_filter(
+            storage.doc(),
+            storage.sheets(),
+            &sheet_id,
+            "header-start",
+            "header-end",
+            "data-end",
+            FilterKind::AutoFilter,
+            None,
+            &crate::storage::STORAGE_ID_ALLOC,
+        )
+        .unwrap();
+        set_column_filter(
+            storage.doc(),
+            storage.sheets(),
+            &sheet_id,
+            &filter.id,
+            "col-header-0",
+            ColumnFilter::Dynamic {
+                rule: DynamicFilterRule::Today,
+            },
+        );
+
+        let get_cell_value = |row: u32, _col: u32| -> CellValue {
+            let canonical = match row {
+                1 => canonical_today - 1.0,
+                2 => canonical_today,
+                3 => canonical_today + 0.5,
+                4 => canonical_today + 1.0 - 1e-6,
+                5 => canonical_today + 1.0,
+                _ => return CellValue::Null,
+            };
+            CellValue::number(date_system.from_canonical_serial(canonical))
+        };
+        let resolve = |cell_id: &str| -> Option<(u32, u32)> {
+            match cell_id {
+                "header-start" => Some((0, 0)),
+                "header-end" => Some((0, 0)),
+                "data-end" => Some((5, 0)),
+                "col-header-0" => Some((0, 0)),
+                _ => None,
+            }
+        };
+
+        let results = evaluate_filter_with_date_system(
+            storage.doc(),
+            storage.sheets(),
+            &sheet_id,
+            &filter.id,
+            get_cell_value,
+            test_get_cell_format,
+            |_, _| None,
+            resolve,
+            date_system,
+        );
+
+        assert_eq!(
+            results
+                .iter()
+                .map(|result| result.matches)
+                .collect::<Vec<_>>(),
+            vec![false, true, true, true, false],
+            "date system {date_system:?}",
+        );
+    }
+
+    crate::eval::clock::set_current_time(0.0);
 }
 
 #[test]

@@ -57,7 +57,10 @@ pub use bindings::{
     get_filter_metadata_bindings_in_sheet, upsert_filter_metadata_binding,
     upsert_filter_metadata_binding_with_origin, upsert_import_filter_metadata_binding,
 };
-pub use bridge::convert_dynamic_rule;
+pub use bridge::{
+    convert_dynamic_rule, date_group_items_supported, date_group_items_supported_in_date_system,
+    dynamic_filter_rule_from_ooxml_type, values_filter_to_column_filter,
+};
 pub use codec::write_filter_state_to_ymap;
 pub use crud::{
     clear_all_column_filters, clear_all_filters, clear_column_filter, create_filter,
@@ -66,7 +69,10 @@ pub use crud::{
     get_table_filter, set_column_filter, set_filter_sort_state, upsert_filter_state,
     upsert_filter_state_with_origin, upsert_import_filter_state,
 };
-pub use evaluation::{evaluate_filter, get_filtered_record_count, get_unique_values};
+pub use evaluation::{
+    evaluate_filter, evaluate_filter_with_date_system, get_filtered_record_count,
+    get_filtered_record_count_with_date_system, get_unique_values,
+};
 
 #[allow(dead_code)]
 pub type CellRange = crate::PositionRange;

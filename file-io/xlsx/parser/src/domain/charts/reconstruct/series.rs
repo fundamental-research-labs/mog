@@ -13,15 +13,16 @@ use ooxml_types::charts::{
 use ooxml_types::drawings::{DrawingColor, DrawingFill, ShapeProperties, SolidFill};
 
 use super::{
+    chart_space::merge_imported_shape_properties,
     elements::{
-        apply_default_shadow_to_shape_properties, build_chart_text_rich, build_data_label_override,
-        build_data_labels,
+        apply_default_shadow_to_shape_properties, build_data_label_override, build_data_labels,
     },
     formatting::{build_drawing_color, build_outline, build_shape_properties, build_text_body},
     text_body_fidelity::{
-        preserve_imported_data_label_text_properties,
+        preserve_imported_extensions, preserve_imported_matching_data_label_text_properties,
         preserve_imported_optional_data_label_options_fidelity,
     },
+    title_text::build_chart_text_rich,
 };
 
 // =============================================================================
@@ -208,18 +209,65 @@ pub(super) fn preserve_imported_series_text_body_properties(
     target: &mut charts::ChartSeries,
     imported: &charts::ChartSeries,
 ) {
+    merge_imported_shape_properties(&mut target.sp_pr, imported.sp_pr.as_ref());
+    if target.marker.is_none() {
+        target.marker = imported.marker.clone();
+    } else if let (Some(target_marker), Some(imported_marker)) =
+        (target.marker.as_mut(), imported.marker.as_ref())
+    {
+        merge_imported_shape_properties(&mut target_marker.sp_pr, imported_marker.sp_pr.as_ref());
+        preserve_imported_extensions(
+            &mut target_marker.extensions,
+            &imported_marker.extensions,
+            false,
+        );
+    }
+    preserve_imported_extensions(&mut target.extensions, &imported.extensions, false);
+    target.has_empty_ext_lst |= imported.has_empty_ext_lst;
+    if target.raw_series_type_attr.is_none() {
+        target.raw_series_type_attr = imported.raw_series_type_attr.clone();
+    }
+
+    for point in &mut target.d_pt {
+        let Some(imported_point) = imported
+            .d_pt
+            .iter()
+            .find(|candidate| candidate.idx == point.idx)
+        else {
+            continue;
+        };
+        merge_imported_shape_properties(&mut point.sp_pr, imported_point.sp_pr.as_ref());
+        if point.marker.is_none() {
+            point.marker = imported_point.marker.clone();
+        } else if let (Some(target_marker), Some(imported_marker)) =
+            (point.marker.as_mut(), imported_point.marker.as_ref())
+        {
+            merge_imported_shape_properties(
+                &mut target_marker.sp_pr,
+                imported_marker.sp_pr.as_ref(),
+            );
+            preserve_imported_extensions(
+                &mut target_marker.extensions,
+                &imported_marker.extensions,
+                false,
+            );
+        }
+        preserve_imported_extensions(&mut point.extensions, &imported_point.extensions, false);
+    }
+
     preserve_imported_optional_data_label_options_fidelity(
         &mut target.d_lbls,
         imported.d_lbls.as_ref(),
     );
 
-    for label in &mut target.d_lbl {
-        let imported_label = imported
-            .d_lbl
-            .iter()
-            .find(|candidate| candidate.idx == label.idx);
-        preserve_imported_data_label_text_properties(label, imported_label);
+    if let Some(target_labels) = target.d_lbls.as_mut() {
+        preserve_imported_matching_data_label_text_properties(
+            &mut target_labels.d_lbl,
+            &imported.d_lbl,
+        );
     }
+
+    preserve_imported_matching_data_label_text_properties(&mut target.d_lbl, &imported.d_lbl);
 }
 
 fn build_series_shape_properties(

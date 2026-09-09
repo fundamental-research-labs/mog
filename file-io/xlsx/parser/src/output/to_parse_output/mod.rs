@@ -325,6 +325,7 @@ pub fn full_parse_result_to_parse_output(
     };
     let _data_features = parse_output.workbook_data_features();
     populate_dxf_registry_owners(&mut parse_output);
+    features::finalize_standard_chart_source_fingerprints(&mut parse_output.sheets);
 
     // 10. Build ParseDiagnostics
     let mut diagnostics = build_diagnostics(result);

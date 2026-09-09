@@ -6,11 +6,22 @@ use super::super::reader::elements::{direct_child_slice, document_element_slice}
 use super::super::reader::raw::extract_ext_lst_raw;
 use super::super::types::{Connection, DrawingLocking, SpreadsheetConnector};
 use super::non_visual::parse_nv_props;
-use super::styling::{parse_shape_properties, parse_shape_style};
+use super::pictures::{merge_namespace_declarations, namespace_declarations};
+use super::styling::{parse_shape_properties_with_namespace_context, parse_shape_style};
 
 /// Parse a connector element.
 pub fn parse_connector(xml: &[u8], start: usize) -> Option<SpreadsheetConnector> {
+    parse_connector_with_namespace_context(xml, start, &[])
+}
+
+pub(crate) fn parse_connector_with_namespace_context(
+    xml: &[u8],
+    start: usize,
+    inherited_namespaces: &[(String, String)],
+) -> Option<SpreadsheetConnector> {
     let element = document_element_slice(&xml[start..])?;
+    let mut namespaces = inherited_namespaces.to_vec();
+    merge_namespace_declarations(&mut namespaces, namespace_declarations(element));
 
     let mut connector = SpreadsheetConnector::default();
 
@@ -37,7 +48,7 @@ pub fn parse_connector(xml: &[u8], start: usize) -> Option<SpreadsheetConnector>
     }
 
     if let Some(sp_pr) = direct_child_slice(element, b"spPr") {
-        connector.sp_pr = parse_shape_properties(sp_pr);
+        connector.sp_pr = parse_shape_properties_with_namespace_context(sp_pr, &namespaces);
     }
 
     if let Some(style) = direct_child_slice(element, b"style") {

@@ -388,7 +388,10 @@ fn current_array_formula_ref_matches(cell: &DomainCellData, formula: &CellFormul
 
 fn formula_metadata_matches_current_cell(cell: &DomainCellData, formula: &CellFormula) -> bool {
     let Some(current_formula) = cell.formula.as_deref() else {
-        return false;
+        // A normal, textless CellFormula is the typed marker for an authored
+        // empty `<f>` element. It deliberately has no executable formula text
+        // and must still reach the worksheet writer with its attributes.
+        return formula.t == CellFormulaType::Normal && formula.text.is_empty();
     };
 
     match formula.t {

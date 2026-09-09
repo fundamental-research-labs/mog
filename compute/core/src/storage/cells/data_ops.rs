@@ -18,6 +18,7 @@ use std::sync::Arc;
 
 use compute_document::undo::ORIGIN_USER_EDIT;
 use regex::Regex;
+use yrs::types::AsPrelim;
 use yrs::{Any, Map, MapPrelim, MapRef, Origin, Out, Transact};
 
 use crate::storage::infra::grid_helpers::{get_cells_map, get_properties_map};
@@ -25,7 +26,7 @@ use cell_types::{CellId, SheetId, col_to_letter};
 use compute_document::cell_serde::yrs_any_to_cell_value;
 use compute_document::hex::id_to_hex;
 use compute_document::identity::GridIndex;
-use compute_document::schema::KEY_VALUE;
+use compute_document::schema::{KEY_ARRAY_REF, KEY_FORMULA_METADATA, KEY_VALUE};
 use value_types::CellValue;
 use yrs::Doc;
 
@@ -62,6 +63,44 @@ fn read_cell_value_as_string<T: yrs::ReadTxn>(
         CellValue::Error(e, _) => e.as_str().to_string(),
         _ => String::new(),
     }
+}
+
+/// Row compaction moves one cell without proving that an entire formula
+/// family moved with it. Preserve authored Normal metadata, but invalidate
+/// coordinate-bearing shared/array/data-table markers and CSE extents so a
+/// stale range cannot be replayed at the compacted destination. The formula
+/// and identity keys remain in the copied map and are recalculated normally.
+fn invalidate_compacted_formula_metadata(
+    cell_map: &yrs::MapRef,
+    txn: &mut yrs::TransactionMut<'_>,
+) {
+    let remove_formula_metadata = match cell_map.get(&*txn, KEY_FORMULA_METADATA) {
+        Some(Out::Any(Any::String(json))) => serde_json::from_str::<serde_json::Value>(&json)
+            .ok()
+            .and_then(|metadata| {
+                metadata
+                    .get("t")
+                    .and_then(serde_json::Value::as_str)
+                    .map(|formula_type| {
+                        // Imported OOXML uses lower-camel values (`shared`,
+                        // `array`, `dataTable`), while serde's Rust enum
+                        // representation uses its variant spelling. Accept
+                        // both forms before deciding whether the marker's
+                        // coordinates remain valid after compaction.
+                        formula_type.eq_ignore_ascii_case("shared")
+                            || formula_type.eq_ignore_ascii_case("array")
+                            || formula_type.eq_ignore_ascii_case("dataTable")
+                    })
+            })
+            .unwrap_or(false),
+        _ => false,
+    };
+    if remove_formula_metadata {
+        cell_map.remove(txn, KEY_FORMULA_METADATA);
+    }
+    // `ar` is executable CSE geometry even when an `fm` entry is absent or
+    // Normal; no row-level proof exists that its complete range moved.
+    cell_map.remove(txn, KEY_ARRAY_REF);
 }
 
 // ===========================================================================
@@ -267,37 +306,49 @@ fn copy_row_cells(
         let to_cell = grid.cell_id_at(to_row, col);
 
         if let Some(src_id) = from_cell {
-            // Source cell exists — read its value and write to target
+            // Source cell exists.  A row compaction moves the cell's
+            // structured payload, not just its display value.  In particular,
+            // authored empty-formula markers, imported OOXML formula metadata,
+            // identity formula keys, result mode, CSE range, and rich text
+            // are cell-owned Yrs fields alongside `v`/`f`.
             let src_hex = id_to_hex(src_id.as_u128());
-            let src_value = match cells_map.get(txn, src_hex.as_str()) {
-                Some(Out::YMap(m)) => match m.get(txn, KEY_VALUE) {
-                    Some(Out::Any(a)) => a.clone(),
-                    _ => Any::Null,
-                },
-                _ => Any::Null,
+            if let Some(Out::YMap(src_cell_map)) = cells_map.get(txn, src_hex.as_str()) {
+                invalidate_compacted_formula_metadata(&src_cell_map, txn);
+            }
+            let src_cell_prelim = match cells_map.get(txn, src_hex.as_str()) {
+                Some(Out::YMap(m)) => m.as_prelim(txn),
+                _ => MapPrelim::from([(KEY_VALUE, Any::Null)]),
             };
+            let src_props_prelim = props_map
+                .and_then(|pm| pm.get(txn, src_hex.as_str()))
+                .map(|props| props.as_prelim(txn));
 
             if let Some(tgt_id) = to_cell {
-                // Target cell exists — update KEY_VALUE in-place within the
-                // existing YMap. Inserting a MapPrelim at an existing YMap key
-                // does not replace the nested map in Yrs; only in-place update works.
+                // Target cell exists.  Replacing the nested map is deliberate:
+                // it clears target-only formula metadata instead of leaving a
+                // stale marker behind when the source has a different cell
+                // shape.  `MapRef::as_prelim` is the structured transfer
+                // contract and deep-copies any nested values.
                 let tgt_hex = id_to_hex(tgt_id.as_u128());
-                match cells_map.get(txn, tgt_hex.as_str()) {
-                    Some(Out::YMap(cell_map)) => {
-                        cell_map.insert(txn, KEY_VALUE, src_value);
-                    }
-                    _ => {
-                        let cell_prelim = MapPrelim::from([(KEY_VALUE, src_value)]);
-                        cells_map.insert(txn, tgt_hex.as_str(), cell_prelim);
+                cells_map.insert(txn, tgt_hex.as_str(), src_cell_prelim);
+                if let Some(pm) = props_map {
+                    pm.remove(txn, tgt_hex.as_str());
+                    if let Some(props) = src_props_prelim {
+                        pm.insert(txn, tgt_hex.as_str(), props);
                     }
                 }
             } else {
                 // No target cell — allocate a new CellId via the GridIndex
-                // (the sole identity authority) and persist the value.
+                // (the sole identity authority) and persist the full source
+                // payload and properties under that identity.
                 let new_id = grid.ensure_cell_id(to_row, col);
                 let new_hex = id_to_hex(new_id.as_u128());
-                let cell_prelim = MapPrelim::from([(KEY_VALUE, src_value)]);
-                cells_map.insert(txn, new_hex.as_str(), cell_prelim);
+                cells_map.insert(txn, new_hex.as_str(), src_cell_prelim);
+                if let Some(pm) = props_map
+                    && let Some(props) = src_props_prelim
+                {
+                    pm.insert(txn, new_hex.as_str(), props);
+                }
             }
         } else if let Some(tgt_id) = to_cell {
             // Source is empty but target exists — delete target

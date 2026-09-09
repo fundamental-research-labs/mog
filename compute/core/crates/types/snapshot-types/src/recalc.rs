@@ -123,6 +123,13 @@ pub struct RecalcOptions {
     /// Override convergence threshold for this call only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_change: Option<FiniteF64>,
+    /// Timestamp used by NOW()/TODAY() for this recalc only, as a canonical
+    /// 1900-system Excel serial date. Evaluator metadata converts it to the
+    /// workbook's 1900/1904 serial system. When omitted, the live clock is
+    /// used; an active session clock injected through `set_current_time()` is
+    /// captured and propagated to all evaluator workers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timestamp_serial: Option<FiniteF64>,
 }
 
 /// Cell edit sent from TS to Rust (incremental update).

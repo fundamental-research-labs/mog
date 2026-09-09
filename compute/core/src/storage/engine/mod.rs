@@ -31,6 +31,7 @@ mod bridge_imports;
 mod cell_bridge;
 pub(crate) mod cell_metadata;
 mod cell_semantics;
+mod chart_invalidation;
 mod sync_bridge;
 mod table_result_merge;
 mod undo_bridge;

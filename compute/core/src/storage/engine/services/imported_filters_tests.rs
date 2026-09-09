@@ -224,7 +224,11 @@ fn filter_shell_metadata_classifies_unsupported_lossless_criteria() {
         ext_lst_raw: Some("<autoFilterExt/>".to_string()),
     };
 
-    let shell = build_filter_shell_metadata(Some(&imported), BTreeMap::new());
+    let shell = build_filter_shell_metadata(
+        Some(&imported),
+        BTreeMap::new(),
+        value_types::DateSystem::Date1900,
+    );
 
     assert_eq!(shell.capability, filters::FilterCapability::Unsupported);
     assert_eq!(
@@ -265,7 +269,11 @@ fn filter_shell_metadata_keeps_runtime_color_filter_supported() {
         ..Default::default()
     };
 
-    let shell = build_filter_shell_metadata(Some(&imported), BTreeMap::new());
+    let shell = build_filter_shell_metadata(
+        Some(&imported),
+        BTreeMap::new(),
+        value_types::DateSystem::Date1900,
+    );
 
     assert_eq!(shell.capability, filters::FilterCapability::Supported);
     assert!(shell.unsupported_reasons.is_empty());

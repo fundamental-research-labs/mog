@@ -238,6 +238,100 @@ fn current_cell_recalc_intent_does_not_force_workbook_recalc_flags() {
 }
 
 #[test]
+fn authored_empty_formula_markers_roundtrip_without_executable_text() {
+    use ooxml_types::worksheet::{CellFormula, CellFormulaType};
+
+    let array_ref = "A1:B1".to_string();
+    let array_master = CellData {
+        row: 0,
+        col: 0,
+        value: CellValue::Number(FiniteF64::must(3.0)),
+        formula: Some("SUM(1,2)".to_string()),
+        array_ref: Some(array_ref.clone()),
+        cell_formula: Some(CellFormula {
+            t: CellFormulaType::Array,
+            r#ref: Some(array_ref),
+            text: "SUM(1,2)".to_string(),
+            aca: true,
+            ca: true,
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let empty_marker = CellFormula {
+        t: CellFormulaType::Normal,
+        ca: true,
+        ..Default::default()
+    };
+    let output = make_single_sheet(
+        "Sheet1",
+        vec![
+            array_master,
+            CellData {
+                row: 0,
+                col: 1,
+                value: CellValue::Boolean(false),
+                formula_result_type: Some(3),
+                cell_formula: Some(empty_marker.clone()),
+                ..Default::default()
+            },
+            CellData {
+                row: 0,
+                col: 2,
+                value: CellValue::Null,
+                cell_formula: Some(empty_marker),
+                ..Default::default()
+            },
+        ],
+    );
+
+    let round_tripped = roundtrip(&output);
+    let follower = round_tripped.sheets[0]
+        .cells
+        .iter()
+        .find(|cell| cell.row == 0 && cell.col == 1)
+        .expect("array follower should remain present");
+    assert!(follower.formula.is_none());
+    assert_eq!(follower.value, CellValue::Boolean(false));
+    assert_eq!(
+        follower.cell_formula.as_ref().map(|formula| formula.t),
+        Some(CellFormulaType::Normal)
+    );
+    assert!(
+        follower
+            .cell_formula
+            .as_ref()
+            .is_some_and(|formula| formula.ca && formula.text.is_empty())
+    );
+
+    let standalone = round_tripped.sheets[0]
+        .cells
+        .iter()
+        .find(|cell| cell.row == 0 && cell.col == 2)
+        .expect("standalone empty formula should remain present");
+    assert!(standalone.formula.is_none());
+    assert_eq!(standalone.value, CellValue::Null);
+    assert!(
+        standalone
+            .cell_formula
+            .as_ref()
+            .is_some_and(|formula| formula.ca && formula.text.is_empty())
+    );
+
+    let master = round_tripped.sheets[0]
+        .cells
+        .iter()
+        .find(|cell| cell.row == 0 && cell.col == 0)
+        .expect("array master should remain present");
+    assert_eq!(master.formula.as_deref(), Some("SUM(1,2)"));
+    assert_eq!(master.array_ref.as_deref(), Some("A1:B1"));
+    assert_eq!(
+        master.cell_formula.as_ref().map(|formula| formula.t),
+        Some(CellFormulaType::Array)
+    );
+}
+
+#[test]
 fn stale_imported_formula_cache_forces_workbook_recalc_flags() {
     let mut cell = formula_cell(
         0,

@@ -1638,8 +1638,10 @@ pub struct CellData {
     /// Index into `ParseOutput.style_palette`.
     pub style_id: Option<u32>,
     /// Original OOXML formula metadata for round-trip preservation.
-    /// When present, carries shared/array/dataTable formula attributes
-    /// so the writer can emit the correct `<f>` element structure.
+    /// When present, carries shared/array/dataTable formula attributes so the
+    /// writer can emit the correct `<f>` element structure. A Normal formula
+    /// with empty text and `formula == None` is an authored empty `<f>` marker
+    /// (for example, an array follower), not executable empty formula text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cell_formula: Option<ooxml_types::worksheet::CellFormula>,
     /// OOXML cell metadata index from the `<c cm="N">` attribute.

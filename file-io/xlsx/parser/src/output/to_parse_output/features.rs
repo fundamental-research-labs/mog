@@ -60,6 +60,7 @@ pub(crate) use charts::{
 };
 pub(crate) use charts::{
     convert_parsed_chart_ex_to_chart_specs, convert_parsed_charts_to_chart_specs,
+    finalize_standard_chart_source_fingerprints,
 };
 pub(crate) use comments::convert_comment_runs;
 #[cfg(test)]

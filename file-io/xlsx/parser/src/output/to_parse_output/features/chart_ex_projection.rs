@@ -1610,6 +1610,7 @@ mod tests {
             value: Some(value.to_string()),
             formula: None,
             force_recalc: false,
+            has_empty_cached_value: false,
             array_ref: None,
             cell_metadata_index: None,
             phonetic: false,

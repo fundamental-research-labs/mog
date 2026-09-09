@@ -12,6 +12,7 @@ pub(crate) mod implicit_intersection;
 pub(crate) mod logical_primitives;
 pub(crate) mod operator_aliases;
 pub(crate) mod operators;
+pub(crate) mod phonetic;
 pub(crate) mod reference_area;
 pub(crate) mod reference_info;
 pub(crate) mod reference_resolution;

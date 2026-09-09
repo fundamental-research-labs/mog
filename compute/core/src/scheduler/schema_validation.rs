@@ -221,7 +221,8 @@ impl ComputeCore {
     ) -> Option<CellValue> {
         // parse_formula handles leading '=' internally.
         let spanned = parse_formula(formula_str, None).ok()?;
-        let ctx = crate::eval_bridge::MirrorContext::new(mirror, cell_id, sheet_id);
+        let ctx = crate::eval_bridge::MirrorContext::new(mirror, cell_id, sheet_id)
+            .with_recalc_clock(self.recalc_clock());
         crate::eval::sync_block_on(crate::eval::Evaluator::evaluate(&spanned.node, &ctx, &ctx)).ok()
     }
 

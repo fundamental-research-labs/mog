@@ -6,7 +6,10 @@ use crate::eval::context::traits::{
 };
 use crate::eval::engine::evaluator::Evaluator;
 
-use super::primitives::{has_wildcard_chars, match_scalar_in_flat};
+use super::primitives::{
+    approximate_match_descending_numeric_endpoint_is_impossible, has_wildcard_chars,
+    match_scalar_in_flat,
+};
 use super::range_geometry::try_extract_single_col_range;
 
 pub(in crate::eval) async fn eval_match<'a, D: EvalDataAccess, M: EvalMetadata>(
@@ -89,6 +92,29 @@ pub(in crate::eval) async fn eval_match<'a, D: EvalDataAccess, M: EvalMetadata>(
         match search_result {
             IndexedLookupResult::Found(row) => {
                 if row >= start_row && row <= end_row {
+                    // The lookup index has completed against the current
+                    // column state. Only now inspect the source endpoint for
+                    // approximate MATCH; doing this before the index search
+                    // can observe a stale mirror slice while a dependency is
+                    // still being refreshed. If the index is unavailable,
+                    // materialization below remains the dependency-aware
+                    // fallback.
+                    if match_type == -1
+                        && let Some(values) = evaluator.meta.get_column_values(&sheet, col)
+                    {
+                        let start = start_row as usize;
+                        let end = (end_row as usize).min(values.len().saturating_sub(1));
+                        if start < values.len()
+                            && start <= end
+                            && approximate_match_descending_numeric_endpoint_is_impossible(
+                                &lookup,
+                                &values[start..=end],
+                            )
+                        {
+                            return Ok(CellValue::Error(CellError::Na, None));
+                        }
+                    }
+
                     let position = (row - start_row + 1) as f64;
                     return Ok(CellValue::number(position));
                 }

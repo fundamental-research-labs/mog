@@ -346,9 +346,17 @@ pub(super) fn build_sheet_parts(
             }
             let chart_xml = match chart_replay::standard_chart_export_plan(chart_spec) {
                 chart_replay::StandardChartExportPlan::ReplayImportedChartSpace => {
-                    match &chart_spec.definition {
-                        Some(domain_types::ChartDefinition::Chart(cs)) => serialize_chart_space(cs),
-                        _ => continue, // not a standard chart
+                    if let Some(original_xml) =
+                        chart_replay::standard_chart_original_xml(chart_spec)
+                    {
+                        original_xml.to_vec()
+                    } else {
+                        match &chart_spec.definition {
+                            Some(domain_types::ChartDefinition::Chart(cs)) => {
+                                serialize_chart_space(cs)
+                            }
+                            _ => continue, // not a standard chart
+                        }
                     }
                 }
                 chart_replay::StandardChartExportPlan::ReconstructFromModel => {

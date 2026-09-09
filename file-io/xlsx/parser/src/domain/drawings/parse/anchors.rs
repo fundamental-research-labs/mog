@@ -11,11 +11,22 @@ use super::super::reader::elements::{
 use super::super::types::{
     AbsoluteAnchor, CellAnchor, ClientData, Extent, OneCellAnchor, Position, TwoCellAnchor,
 };
-use super::content::parse_drawing_content;
+use super::content::parse_drawing_content_with_namespace_context;
+use super::pictures::{merge_namespace_declarations, namespace_declarations};
 
 /// Parse a two-cell anchor element
 pub fn parse_two_cell_anchor(xml: &[u8], start: usize) -> Option<TwoCellAnchor> {
+    parse_two_cell_anchor_with_namespace_context(xml, start, &[])
+}
+
+pub(crate) fn parse_two_cell_anchor_with_namespace_context(
+    xml: &[u8],
+    start: usize,
+    inherited_namespaces: &[(String, String)],
+) -> Option<TwoCellAnchor> {
     let element = document_element_slice(&xml[start..])?;
+    let mut namespaces = inherited_namespaces.to_vec();
+    merge_namespace_declarations(&mut namespaces, namespace_declarations(element));
 
     // Parse editAs attribute
     let edit_as = attr_value(element, b"editAs=\"").and_then(parse_edit_as);
@@ -27,7 +38,7 @@ pub fn parse_two_cell_anchor(xml: &[u8], start: usize) -> Option<TwoCellAnchor> 
     let to = parse_cell_anchor_element(element, b"to")?;
 
     // Parse content
-    let content = parse_drawing_content(element);
+    let content = parse_drawing_content_with_namespace_context(element, &namespaces);
 
     // Parse client data
     let client_data = parse_client_data(element);
@@ -44,7 +55,17 @@ pub fn parse_two_cell_anchor(xml: &[u8], start: usize) -> Option<TwoCellAnchor> 
 
 /// Parse a one-cell anchor element
 pub fn parse_one_cell_anchor(xml: &[u8], start: usize) -> Option<OneCellAnchor> {
+    parse_one_cell_anchor_with_namespace_context(xml, start, &[])
+}
+
+pub(crate) fn parse_one_cell_anchor_with_namespace_context(
+    xml: &[u8],
+    start: usize,
+    inherited_namespaces: &[(String, String)],
+) -> Option<OneCellAnchor> {
     let element = document_element_slice(&xml[start..])?;
+    let mut namespaces = inherited_namespaces.to_vec();
+    merge_namespace_declarations(&mut namespaces, namespace_declarations(element));
 
     // Parse from element
     let from = parse_cell_anchor_element(element, b"from")?;
@@ -53,7 +74,7 @@ pub fn parse_one_cell_anchor(xml: &[u8], start: usize) -> Option<OneCellAnchor> 
     let extent = parse_extent_element(element)?;
 
     // Parse content
-    let content = parse_drawing_content(element);
+    let content = parse_drawing_content_with_namespace_context(element, &namespaces);
 
     // Parse client data
     let client_data = parse_client_data(element);
@@ -69,7 +90,17 @@ pub fn parse_one_cell_anchor(xml: &[u8], start: usize) -> Option<OneCellAnchor> 
 
 /// Parse an absolute anchor element
 pub fn parse_absolute_anchor(xml: &[u8], start: usize) -> Option<AbsoluteAnchor> {
+    parse_absolute_anchor_with_namespace_context(xml, start, &[])
+}
+
+pub(crate) fn parse_absolute_anchor_with_namespace_context(
+    xml: &[u8],
+    start: usize,
+    inherited_namespaces: &[(String, String)],
+) -> Option<AbsoluteAnchor> {
     let element = document_element_slice(&xml[start..])?;
+    let mut namespaces = inherited_namespaces.to_vec();
+    merge_namespace_declarations(&mut namespaces, namespace_declarations(element));
 
     // Parse pos element
     let pos = parse_position_element(element)?;
@@ -78,7 +109,7 @@ pub fn parse_absolute_anchor(xml: &[u8], start: usize) -> Option<AbsoluteAnchor>
     let extent = parse_extent_element(element)?;
 
     // Parse content
-    let content = parse_drawing_content(element);
+    let content = parse_drawing_content_with_namespace_context(element, &namespaces);
 
     // Parse client data
     let client_data = parse_client_data(element);

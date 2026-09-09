@@ -147,6 +147,26 @@ pub struct SharedFormulaMaster {
     pub ref_range: String,
 }
 
+/// Metadata for an authored `<f>` element with no formula text.
+///
+/// These cells are still formula-bearing OOXML cells, most commonly array
+/// followers, but the empty element must not become an executable empty
+/// formula in the typed model. The writer uses this metadata to replay the
+/// element while leaving `CellData.formula` absent.
+#[derive(Debug, Clone, Default)]
+pub struct EmptyFormulaMetadata {
+    pub ca: bool,
+    pub aca: bool,
+    pub bx: bool,
+    pub dt2d: bool,
+    pub dtr: bool,
+    pub del1: bool,
+    pub del2: bool,
+    pub ref_range: Option<String>,
+    pub r1: Option<String>,
+    pub r2: Option<String>,
+}
+
 /// Side-channel data collected during `parse_worksheet_fast_with_extras`.
 ///
 /// When passed to the parse function, shared formula info, cached formula values,
@@ -167,6 +187,13 @@ pub struct ParseExtras {
     /// Cell indices where the `<f>` element has `ca="1"` (needs recalculation).
     /// The cached `<v>` value in these cells may be stale or a placeholder.
     pub force_recalc_indices: Vec<usize>,
+    /// Formula cells with an authored empty cached `<v/>` or `<v></v>`.
+    /// This is distinct from an absent `<v>` and must survive typed conversion.
+    pub empty_cached_value_indices: Vec<usize>,
+    /// Authored empty formula elements with their non-text formula metadata.
+    /// The typed cell keeps `formula=None`; this side channel replays the
+    /// formula element without registering an executable empty formula.
+    pub empty_formula_metadata: Vec<(usize, EmptyFormulaMetadata)>,
     /// Array formula ranges: (cell_index, ref_string).
     /// Used to identify spill ranges from `<f t="array" ref="A1:C5">`.
     /// The source cell has this entry; phantom cells within the range have cached

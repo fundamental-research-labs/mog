@@ -201,7 +201,9 @@ fn mismatched_catalog_key_is_ignored_by_sync_and_export() {
         "sync must ignore catalog entries whose Y.Map key is not table.id"
     );
 
-    let exported = engine.build_parse_output_from_yrs().expect("export projection");
+    let exported = engine
+        .build_parse_output_from_yrs()
+        .expect("export projection");
     let exported_tables = &exported.sheets[0].tables;
     assert_eq!(exported_tables.len(), 1);
     assert_eq!(exported_tables[0].name, "ValidTable");

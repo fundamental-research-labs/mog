@@ -44,14 +44,16 @@ impl ComputeCore {
 
             #[cfg(feature = "native")]
             let mut ctx = MirrorContext::with_range_store(mirror, cell_id, sheet_id, range_store)
-                .with_sumifs_cache_epoch(self.current_sumifs_cache_epoch());
+                .with_sumifs_cache_epoch(self.current_sumifs_cache_epoch())
+                .with_recalc_clock(self.recalc_clock());
             #[cfg(not(feature = "native"))]
             let mut ctx = {
                 let mut c = MirrorContext::new(mirror, cell_id, sheet_id);
                 c.range_store = Some(range_store);
                 c.sumifs_cache_epoch = self.current_sumifs_cache_epoch();
                 c
-            };
+            }
+            .with_recalc_clock(self.recalc_clock());
             ctx.ast_cache = Some(&self.ast_cache);
             ctx.access.ordered_sheets = ordered_sheets.clone();
             ctx.access.formula_text_provider = self.formula_text_provider();
@@ -243,6 +245,7 @@ impl ComputeCore {
             let cell_formula_text = &self.cell_formula_text;
             let workbook_cache = &self.workbook_cache;
             let sumifs_epoch = self.current_sumifs_cache_epoch();
+            let recalc_clock = self.recalc_clock();
 
             level
                 .par_iter()
@@ -260,7 +263,8 @@ impl ComputeCore {
 
                     let mut ctx =
                         MirrorContext::with_range_store(mirror, cell_id, sheet_id, range_store)
-                            .with_sumifs_cache_epoch(sumifs_epoch);
+                            .with_sumifs_cache_epoch(sumifs_epoch)
+                            .with_recalc_clock(recalc_clock);
                     ctx.ast_cache = Some(ast_cache);
                     ctx.access.formula_text_provider =
                         FormulaTextProvider::new(cell_formula_text, formula_strings);

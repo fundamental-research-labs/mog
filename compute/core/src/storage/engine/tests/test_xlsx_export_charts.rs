@@ -759,9 +759,11 @@ fn imported_current_standard_chart2() -> ChartSpec {
     let fingerprint = standard_chart_projection_fingerprint(&chart);
     chart.standard_chart_provenance = Some(StandardChartProvenance {
         original_path: Some("xl/charts/chart2.xml".to_string()),
+        original_xml: None,
         rels_path: Some("xl/charts/_rels/chart2.xml.rels".to_string()),
         projection_schema_version: STANDARD_CHART_PROJECTION_SCHEMA_VERSION,
         projection_fingerprint: Some(fingerprint.clone()),
+        source_fingerprint: None,
         relationships: chart.chart_relationships.clone(),
         auxiliary_paths: chart
             .chart_auxiliary_files
@@ -776,6 +778,7 @@ fn imported_current_standard_chart2() -> ChartSpec {
         package_owner: Some("xl/charts/chart2.xml".to_string()),
         relationship_closure_current: true,
         projection_fingerprint: Some(fingerprint),
+        source_fingerprint: None,
         invalidated_owner_ids: Vec::new(),
         stale_reason: None,
     });

@@ -9,6 +9,7 @@ use crate::mirror::{
 use crate::storage::{YrsStorage, properties, sheet::dimensions};
 use cell_types::{CellId, SheetId, SheetPos};
 use compute_document::hex::id_to_hex;
+use domain_types::RichSharedString;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use yrs::{Any, Map, Out, Transact};
@@ -104,6 +105,34 @@ impl CellMetadataProvider for StorageCellMetadata {
             sheet,
             mirror.row_id_lookup(sheet, row),
         )
+    }
+    fn rich_shared_string(
+        &self,
+        mirror: &CellMirror,
+        sheet: &SheetId,
+        row: u32,
+        col: u32,
+    ) -> Option<RichSharedString> {
+        let mirror_cell = mirror.resolve_cell_id(sheet, SheetPos::new(row, col));
+        let storage_cell = self.storage.read_cell_id_at_pos(sheet, row, col);
+        let txn = self.storage.doc().transact();
+        let cells = crate::storage::infra::grid_helpers::get_cells_map(
+            &txn,
+            self.storage.sheets(),
+            &id_to_hex(sheet.as_u128()),
+        )?;
+
+        for cell in [mirror_cell, storage_cell].into_iter().flatten() {
+            let Some(Out::YMap(cell_map)) = cells.get(&txn, &id_to_hex(cell.as_u128())) else {
+                continue;
+            };
+            if let Some(rich_string) =
+                compute_document::cell_serde::read_rich_string_from_yrs(&cell_map, &txn)
+            {
+                return Some(rich_string);
+            }
+        }
+        None
     }
     fn query(
         &self,

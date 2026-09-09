@@ -1,7 +1,9 @@
 use crate::write::xml_writer::XmlWriter;
 
 use ooxml_types::charts::ShapeProperties;
-use ooxml_types::drawings::{DrawingColor, DrawingFill, LineDash, LineFill, LineJoin, Outline};
+use ooxml_types::drawings::{
+    BlipEffect, DrawingColor, DrawingFill, FillMode, LineDash, LineFill, LineJoin, Outline,
+};
 
 use super::util::write_raw_xml_if_relationship_safe;
 
@@ -149,27 +151,234 @@ pub(super) fn emit_fill(w: &mut XmlWriter, fill: &DrawingFill) {
             w.end_element("a:pattFill");
         }
         DrawingFill::Blip(blip) => {
-            w.start_element("a:blipFill").end_attrs();
-            if blip.embed_id.is_none() && blip.link_id.is_none() {
-                w.start_element("a:blip");
-                if let Some(ref comp) = blip.compression {
-                    w.attr("cstate", comp.to_ooxml());
-                }
-                if let Some(ref ext) = blip.ext_lst {
-                    w.end_attrs();
-                    write_raw_xml_if_relationship_safe(w, ext);
-                    w.end_element("a:blip");
-                } else {
-                    w.self_close();
-                }
-            }
-            w.start_element("a:stretch").end_attrs();
-            w.start_element("a:fillRect").self_close();
-            w.end_element("a:stretch");
-            w.end_element("a:blipFill");
+            emit_blip_fill(w, blip);
         }
         DrawingFill::Group => {
             w.start_element("a:grpFill").self_close();
+        }
+    }
+}
+
+fn emit_blip_fill(w: &mut XmlWriter, blip: &ooxml_types::drawings::BlipFill) {
+    let has_blip = blip.embed_id.is_some()
+        || blip.link_id.is_some()
+        || blip.compression.is_some()
+        || !blip.effects.is_empty()
+        || blip.ext_lst.is_some();
+    if !has_blip {
+        // CT_BlipFill requires a CT_Blip child. Do not manufacture an empty
+        // complex fill when programmatic data has no source image or effect.
+        return;
+    }
+
+    let mut fill = w.start_element("a:blipFill");
+    if let Some(dpi) = blip.dpi {
+        fill = fill.attr_num("dpi", dpi);
+    }
+    if let Some(rot_with_shape) = blip.rot_with_shape {
+        fill = fill.attr("rotWithShape", if rot_with_shape { "1" } else { "0" });
+    }
+    fill.end_attrs();
+
+    let mut element = w.start_element("a:blip");
+    if let Some(embed_id) = blip.embed_id.as_deref() {
+        element = element.attr("r:embed", embed_id);
+    }
+    if let Some(link_id) = blip.link_id.as_deref() {
+        element = element.attr("r:link", link_id);
+    }
+    if let Some(compression) = blip.compression {
+        element = element.attr("cstate", compression.to_ooxml());
+    }
+    if blip.effects.is_empty() && blip.ext_lst.is_none() {
+        element.self_close();
+    } else {
+        element.end_attrs();
+        emit_blip_effects(w, &blip.effects);
+        if let Some(ext_lst) = blip.ext_lst.as_deref() {
+            write_raw_xml_if_relationship_safe(w, ext_lst);
+        }
+        w.end_element("a:blip");
+    }
+
+    if let Some(source_rect) = blip.source_rect.as_ref() {
+        let mut element = w.start_element("a:srcRect");
+        if blip.src_rect_explicit & 1 != 0 {
+            element = element.attr_num("l", source_rect.left.value());
+        }
+        if blip.src_rect_explicit & 2 != 0 {
+            element = element.attr_num("t", source_rect.top.value());
+        }
+        if blip.src_rect_explicit & 4 != 0 {
+            element = element.attr_num("r", source_rect.right.value());
+        }
+        if blip.src_rect_explicit & 8 != 0 {
+            element = element.attr_num("b", source_rect.bottom.value());
+        }
+        element.self_close();
+    }
+
+    match blip.fill_mode.as_ref() {
+        Some(FillMode::Stretch { fill_rect }) => {
+            w.start_element("a:stretch").end_attrs();
+            if let Some(fill_rect) = fill_rect {
+                w.start_element("a:fillRect")
+                    .attr_num("l", fill_rect.left.value())
+                    .attr_num("t", fill_rect.top.value())
+                    .attr_num("r", fill_rect.right.value())
+                    .attr_num("b", fill_rect.bottom.value())
+                    .self_close();
+            }
+            w.end_element("a:stretch");
+        }
+        Some(FillMode::Tile(tile)) => {
+            let mut element = w.start_element("a:tile");
+            if let Some(tx) = tile.tx {
+                element = element.attr_num("tx", tx.value());
+            }
+            if let Some(ty) = tile.ty {
+                element = element.attr_num("ty", ty.value());
+            }
+            if let Some(sx) = tile.sx {
+                element = element.attr_num("sx", sx.value());
+            }
+            if let Some(sy) = tile.sy {
+                element = element.attr_num("sy", sy.value());
+            }
+            element = element.attr("flip", tile.flip.to_ooxml());
+            if let Some(align) = tile.align {
+                element = element.attr("algn", align.to_ooxml());
+            }
+            element.self_close();
+        }
+        None => {}
+    }
+
+    w.end_element("a:blipFill");
+}
+
+fn emit_blip_effects(w: &mut XmlWriter, effects: &[BlipEffect]) {
+    for effect in effects {
+        match effect {
+            BlipEffect::AlphaModFix { amt } => {
+                w.start_element("a:alphaModFix")
+                    .attr_num("amt", *amt)
+                    .self_close();
+            }
+            BlipEffect::Luminance { bright, contrast } => {
+                w.start_element("a:lum")
+                    .attr_num("bright", *bright)
+                    .attr_num("contrast", *contrast)
+                    .self_close();
+            }
+            BlipEffect::Grayscale => {
+                w.start_element("a:grayscl").self_close();
+            }
+            BlipEffect::BiLevel { thresh } => {
+                w.start_element("a:biLevel")
+                    .attr_num("thresh", *thresh)
+                    .self_close();
+            }
+            BlipEffect::AlphaBiLevel { thresh } => {
+                w.start_element("a:alphaBiLevel")
+                    .attr_num("thresh", *thresh)
+                    .self_close();
+            }
+            BlipEffect::AlphaCeiling => {
+                w.start_element("a:alphaCeiling").self_close();
+            }
+            BlipEffect::AlphaFloor => {
+                w.start_element("a:alphaFloor").self_close();
+            }
+            BlipEffect::AlphaInverse { color } => {
+                if let Some(color) = color {
+                    w.start_element("a:alphaInv").end_attrs();
+                    emit_drawing_color(w, color);
+                    w.end_element("a:alphaInv");
+                } else {
+                    w.start_element("a:alphaInv").self_close();
+                }
+            }
+            BlipEffect::AlphaModulate => {
+                // CT_AlphaModulateEffect requires a `<a:cont>` child. The
+                // compact model has no field for it. Authored input uses the
+                // ordered RawXml variant; a programmatic empty value must not
+                // produce invalid OOXML.
+            }
+            BlipEffect::AlphaReplace { alpha } => {
+                w.start_element("a:alphaRepl")
+                    .attr_num("a", *alpha)
+                    .self_close();
+            }
+            BlipEffect::Blur(blur) => {
+                w.start_element("a:blur")
+                    .attr_num("rad", blur.rad.value())
+                    .attr("grow", if blur.grow { "1" } else { "0" })
+                    .self_close();
+            }
+            BlipEffect::ColorChange { use_alpha, raw_xml } => {
+                let Some(raw_xml) = raw_xml else {
+                    // clrChange requires clrFrom and clrTo children.
+                    continue;
+                };
+                let mut element = w.start_element("a:clrChange");
+                if *use_alpha {
+                    element = element.attr("useA", "1");
+                }
+                element.end_attrs();
+                write_raw_xml_if_relationship_safe(w, raw_xml);
+                w.end_element("a:clrChange");
+            }
+            BlipEffect::RawXml(raw_xml) => {
+                // The parser stores one authored direct child here when its
+                // nested schema is not modeled. Preserve its position while
+                // rejecting relationship-bearing fragments whose ids cannot
+                // be validated by the chart serializer.
+                write_raw_xml_if_relationship_safe(w, raw_xml);
+            }
+            BlipEffect::ColorReplace { color } => {
+                let Some(color) = color else {
+                    // clrRepl requires one colour child.
+                    continue;
+                };
+                w.start_element("a:clrRepl").end_attrs();
+                emit_drawing_color(w, color);
+                w.end_element("a:clrRepl");
+            }
+            BlipEffect::Duotone { color1, color2 } => {
+                let (Some(color1), Some(color2)) = (color1, color2) else {
+                    // duotone requires exactly two colour children.
+                    continue;
+                };
+                w.start_element("a:duotone").end_attrs();
+                emit_drawing_color(w, color1);
+                emit_drawing_color(w, color2);
+                w.end_element("a:duotone");
+            }
+            BlipEffect::FillOverlay(effect) => {
+                let Some(fill) = effect.fill.as_ref() else {
+                    // fillOverlay requires one EG_FillProperties child.
+                    continue;
+                };
+                let mut element = w.start_element("a:fillOverlay");
+                element = element.attr("blend", effect.blend.to_ooxml());
+                element.end_attrs();
+                emit_fill(w, fill);
+                w.end_element("a:fillOverlay");
+            }
+            BlipEffect::Hsl { hue, sat, lum } => {
+                w.start_element("a:hsl")
+                    .attr_num("hue", *hue)
+                    .attr_num("sat", *sat)
+                    .attr_num("lum", *lum)
+                    .self_close();
+            }
+            BlipEffect::Tint { hue, amt } => {
+                w.start_element("a:tint")
+                    .attr_num("hue", *hue)
+                    .attr_num("amt", *amt)
+                    .self_close();
+            }
         }
     }
 }
@@ -685,4 +894,74 @@ fn emit_bevel(w: &mut XmlWriter, tag: &str, bevel: &ooxml_types::drawings::Bevel
         w.attr("prst", prst.to_ooxml());
     }
     w.self_close();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ooxml_types::drawings::{BlipFill, StCoordinate, StPercentage, TileFill, TileFlipMode};
+
+    #[test]
+    fn chart_shape_writer_preserves_embedded_blip_and_tile_settings() {
+        let shape = ShapeProperties {
+            fill: Some(DrawingFill::Blip(BlipFill {
+                embed_id: Some("rIdImage".to_string()),
+                fill_mode: Some(FillMode::Tile(TileFill {
+                    tx: Some(StCoordinate::new(12)),
+                    ty: Some(StCoordinate::new(-7)),
+                    sx: Some(StPercentage::new(100_000)),
+                    sy: Some(StPercentage::new(100_000)),
+                    flip: TileFlipMode::None,
+                    align: Some(ooxml_types::drawings::RectAlignment::TopLeft),
+                })),
+                ..Default::default()
+            })),
+            ..Default::default()
+        };
+        let mut writer = XmlWriter::new();
+        emit_shape_properties(&mut writer, &shape, "c:spPr");
+        let xml = writer.finish_string();
+
+        assert!(
+            xml.contains("<a:blip r:embed=\"rIdImage\"/>")
+                || xml.contains("<a:blip r:embed=\"rIdImage\" />")
+        );
+        assert!(xml.contains("<a:tile"));
+        assert!(xml.contains("tx=\"12\""));
+        assert!(xml.contains("ty=\"-7\""));
+        assert!(xml.contains("sx=\"100000\""));
+        assert!(xml.contains("sy=\"100000\""));
+        assert!(xml.contains("algn=\"tl\""));
+    }
+
+    #[test]
+    fn chart_shape_writer_preserves_required_blip_children() {
+        let blip = crate::domain::drawings::parse_blip_fill(
+            br#"<a:blipFill><a:blip>
+                <a:clrRepl><a:srgbClr val="112233"/></a:clrRepl>
+                <a:duotone><a:srgbClr val="000000"/><a:srgbClr val="FFFFFF"/></a:duotone>
+                <a:fillOverlay blend="mult"><a:solidFill><a:srgbClr val="ABCDEF"/></a:solidFill></a:fillOverlay>
+                <a:alphaMod><a:cont val="50000"/></a:alphaMod>
+            </a:blip></a:blipFill>"#,
+        );
+        let shape = ShapeProperties {
+            fill: Some(DrawingFill::Blip(blip)),
+            ..Default::default()
+        };
+
+        let mut writer = XmlWriter::new();
+        emit_shape_properties(&mut writer, &shape, "c:spPr");
+        let xml = writer.finish_string();
+
+        assert!(xml.contains("<a:clrRepl><a:srgbClr val=\"112233\"/></a:clrRepl>"));
+        assert!(xml.contains(
+            "<a:duotone><a:srgbClr val=\"000000\"/><a:srgbClr val=\"FFFFFF\"/></a:duotone>"
+        ));
+        assert!(xml.contains("<a:fillOverlay blend=\"mult\"><a:solidFill><a:srgbClr val=\"ABCDEF\"/></a:solidFill></a:fillOverlay>"));
+        assert!(xml.contains("<a:alphaMod><a:cont val=\"50000\"/></a:alphaMod>"));
+        assert!(!xml.contains("<a:alphaMod/>"));
+        assert!(!xml.contains("<a:clrRepl/>"));
+        assert!(!xml.contains("<a:duotone></a:duotone>"));
+        assert!(!xml.contains("<a:fillOverlay blend=\"mult\"/>"));
+    }
 }

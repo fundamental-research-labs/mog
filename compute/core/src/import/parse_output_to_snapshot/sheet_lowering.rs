@@ -70,6 +70,7 @@ pub(crate) fn convert_sheets(
                     // positional default must be kept so their CellId is
                     // allocated and cell-level properties are hydrated.
                     if cell.formula.is_none()
+                        && cell.cell_formula.is_none()
                         && matches!(cell.value, CellValue::Null)
                         && cell.original_value.is_none()
                     {

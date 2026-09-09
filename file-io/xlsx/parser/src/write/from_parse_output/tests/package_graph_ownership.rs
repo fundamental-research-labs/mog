@@ -103,6 +103,39 @@ fn modeled_feature_package_subgraphs_require_typed_owner_state() {
 }
 
 #[test]
+fn imported_connections_keep_part_relationship_content_type_and_source_xml() {
+    let source = br#"<?xml version="1.0" encoding="UTF-8"?><connections xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" mc:Ignorable="xr16" xmlns:xr16="http://schemas.microsoft.com/office/spreadsheetml/2017/revision16"><connection id="1" xr16:uid="{CONNECTION-1}" name="test" type="5"><dbPr connection="Provider=ACE"/></connection></connections>"#;
+    let mut output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+    output.connections = crate::domain::connections::parse_connections_xml(source);
+
+    let bytes = write_xlsx_from_parse_output(&output).expect("connections should export");
+    let archive = {
+        let leaked = Box::leak(bytes.into_boxed_slice());
+        crate::XlsxArchive::new(leaked).expect("exported XLSX should be readable")
+    };
+    assert_eq!(archive.read_file("xl/connections.xml").unwrap(), source);
+
+    let content_types = String::from_utf8(archive.read_file("[Content_Types].xml").unwrap())
+        .expect("content types should be UTF-8");
+    assert!(content_types.contains("PartName=\"/xl/connections.xml\""));
+    assert!(
+        content_types.contains(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.connections+xml"
+        )
+    );
+
+    let workbook_rels = String::from_utf8(archive.read_file("xl/_rels/workbook.xml.rels").unwrap())
+        .expect("workbook relationships should be UTF-8");
+    assert!(workbook_rels.contains(crate::domain::connections::REL_CONNECTIONS));
+    assert!(workbook_rels.contains("connections.xml"));
+
+    validate_archive_package_integrity(&archive).expect("connections package graph should close");
+}
+
+#[test]
 fn rich_data_relationship_closure_registers_owned_media_parts() {
     let output = ParseOutput {
         sheets: vec![SheetData {

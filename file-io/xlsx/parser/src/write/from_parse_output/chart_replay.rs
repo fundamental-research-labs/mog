@@ -70,6 +70,7 @@ fn can_replay_current_imported_chart_space(chart_spec: &domain_types::ChartSpec)
     let current_fingerprint = standard_chart_projection_fingerprint(chart_spec);
     provenance.projection_fingerprint.as_deref() == Some(current_fingerprint.as_str())
         && authority.projection_fingerprint.as_deref() == Some(current_fingerprint.as_str())
+        && provenance.source_fingerprint == authority.source_fingerprint
 }
 
 fn has_live_chart_source_refs(chart_spec: &domain_types::ChartSpec) -> bool {
@@ -77,16 +78,33 @@ fn has_live_chart_source_refs(chart_spec: &domain_types::ChartSpec) -> bool {
         .data_range
         .as_deref()
         .is_some_and(|range| !range.trim().is_empty())
+        || chart_spec
+            .series_range
+            .as_deref()
+            .is_some_and(|range| !range.trim().is_empty())
+        || chart_spec
+            .category_range
+            .as_deref()
+            .is_some_and(|range| !range.trim().is_empty())
+        || chart_spec
+            .title_formula
+            .as_deref()
+            .is_some_and(|formula| !formula.trim().is_empty())
         || chart_spec.series.iter().any(series_has_live_source_refs)
 }
 
 fn series_has_live_source_refs(series: &domain_types::chart::ChartSeriesData) -> bool {
-    live_source_ref(series.values.as_deref(), series.value_source_kind)
+    non_empty_chart_source_ref(series.name_ref.as_deref())
+        || live_source_ref(series.values.as_deref(), series.value_source_kind)
         || live_source_ref(series.categories.as_deref(), series.category_source_kind)
         || live_source_ref(
             series.bubble_size.as_deref(),
             series.bubble_size_source_kind,
         )
+}
+
+fn non_empty_chart_source_ref(reference: Option<&str>) -> bool {
+    reference.is_some_and(|reference| !reference.trim().is_empty())
 }
 
 fn live_source_ref(
@@ -282,25 +300,36 @@ pub(super) fn chart_allows_current_auxiliary_replay(
     chart_spec: &domain_types::ChartSpec,
     chart_path: &str,
 ) -> bool {
-    chart_auxiliary::chart_auxiliary_data(chart_spec).is_some()
-        && chart_auxiliary::chart_frame_identity_matches_path(chart_spec, chart_path)
-        && if chart_spec.is_chart_ex {
-            chart_ex_allows_opaque_replay(chart_spec, chart_path)
-        } else {
-            matches!(
-                standard_chart_export_plan(chart_spec),
-                StandardChartExportPlan::ReplayImportedChartSpace
-            )
-        }
+    if !chart_auxiliary::chart_frame_identity_matches_path(chart_spec, chart_path) {
+        return false;
+    }
+    if chart_spec.is_chart_ex {
+        return chart_auxiliary::chart_auxiliary_data(chart_spec).is_some()
+            && chart_ex_allows_opaque_replay(chart_spec, chart_path);
+    }
+    matches!(
+        standard_chart_export_plan(chart_spec),
+        StandardChartExportPlan::ReplayImportedChartSpace
+    )
 }
 
 pub(super) fn standard_chart_original_number_with_current_auxiliary_replay(
     chart_spec: &domain_types::ChartSpec,
 ) -> Option<usize> {
-    let aux = chart_auxiliary::chart_auxiliary_data(chart_spec)?;
-    let original_number = chart_auxiliary::standard_chart_number(&aux)?;
+    let original_path = chart_spec
+        .standard_chart_provenance
+        .as_ref()
+        .and_then(|provenance| provenance.original_path.as_deref())?;
+    let original_number = original_chart_number(original_path, "chart")?;
     let chart_path = format!("xl/charts/chart{original_number}.xml");
     chart_allows_current_auxiliary_replay(chart_spec, &chart_path).then_some(original_number)
+}
+
+pub(super) fn standard_chart_original_xml(chart_spec: &domain_types::ChartSpec) -> Option<&[u8]> {
+    chart_spec
+        .standard_chart_provenance
+        .as_ref()
+        .and_then(|provenance| provenance.original_xml.as_deref())
 }
 
 pub(super) fn chart_ex_original_number_with_current_replay(

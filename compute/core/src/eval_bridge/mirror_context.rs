@@ -4,6 +4,7 @@
 
 use super::mirror_access::{MirrorAccess, PendingCellOverride};
 use crate::eval::cache::range_store::RangeStore;
+use crate::eval::clock::RecalcClock;
 use crate::eval::context::traits::{EvalDataAccess, EvalMetadata};
 use crate::formula_text::{FormulaTextLookup, FormulaTextProvider};
 use crate::mirror::CellMirror;
@@ -44,6 +45,8 @@ pub struct MirrorContext<'a> {
     pub workbook_cache: Option<&'a crate::eval::cache::workbook_cache::WorkbookCache>,
     /// Current scheduler-owned SUMIFS cache epoch.
     pub sumifs_cache_epoch: Option<SumifsCacheEpoch>,
+    /// Immutable clock input for the current recalc/evaluation scope.
+    pub(crate) clock: RecalcClock,
 }
 
 impl<'a> MirrorContext<'a> {
@@ -57,6 +60,7 @@ impl<'a> MirrorContext<'a> {
             #[cfg(feature = "native")]
             workbook_cache: None,
             sumifs_cache_epoch: None,
+            clock: RecalcClock::live(),
         }
     }
 
@@ -80,6 +84,7 @@ impl<'a> MirrorContext<'a> {
             #[cfg(feature = "native")]
             workbook_cache: None,
             sumifs_cache_epoch: None,
+            clock: RecalcClock::live(),
         }
     }
 
@@ -104,6 +109,7 @@ impl<'a> MirrorContext<'a> {
             #[cfg(feature = "native")]
             workbook_cache: None,
             sumifs_cache_epoch: None,
+            clock: RecalcClock::live(),
         }
     }
 
@@ -130,6 +136,7 @@ impl<'a> MirrorContext<'a> {
             #[cfg(feature = "native")]
             workbook_cache: None,
             sumifs_cache_epoch: None,
+            clock: RecalcClock::live(),
         }
     }
 
@@ -148,6 +155,7 @@ impl<'a> MirrorContext<'a> {
             ast_cache: None,
             workbook_cache: None,
             sumifs_cache_epoch: None,
+            clock: RecalcClock::live(),
         }
     }
 
@@ -167,11 +175,18 @@ impl<'a> MirrorContext<'a> {
             ast_cache: None,
             workbook_cache: None,
             sumifs_cache_epoch: None,
+            clock: RecalcClock::live(),
         }
     }
 
     pub fn with_sumifs_cache_epoch(mut self, epoch: Option<SumifsCacheEpoch>) -> Self {
         self.sumifs_cache_epoch = epoch;
+        self
+    }
+
+    /// Attach the immutable clock captured for the enclosing recalc.
+    pub(crate) fn with_recalc_clock(mut self, clock: RecalcClock) -> Self {
+        self.clock = clock;
         self
     }
 }
@@ -318,6 +333,23 @@ impl<'a> EvalMetadata for MirrorContext<'a> {
     }
     fn date1904(&self) -> bool {
         self.access.mirror.date1904
+    }
+
+    fn phonetic_shared_string(
+        &self,
+        sheet: &SheetId,
+        row: u32,
+        col: u32,
+    ) -> Option<domain_types::RichSharedString> {
+        self.access.mirror.phonetic_shared_string(sheet, row, col)
+    }
+
+    fn char_code_page(&self) -> compute_functions::CharCodePage {
+        self.access.mirror.char_code_page
+    }
+
+    fn current_timestamp(&self) -> f64 {
+        self.clock.current_timestamp_for_workbook(self.date1904())
     }
 
     fn legacy_reference_result(&self) -> bool {

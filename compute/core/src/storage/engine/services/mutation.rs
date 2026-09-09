@@ -22,9 +22,6 @@ use super::super::merge_index::{MergeRangeRef, MergeSpatialItem};
 /// reconciling the persisted CSE marker against the runtime mirror.
 /// Returns `None` if the string can't be parsed as a positional range.
 fn parse_a1_range_simple(s: &str) -> Option<(u32, u32, u32, u32)> {
-    if !s.contains(':') {
-        return None;
-    }
     let range = compute_parser::parse_a1_range(s)?;
     let (sr, sc) = match range.start {
         formula_types::CellRef::Positional { row, col, .. } => (row, col),
@@ -35,6 +32,40 @@ fn parse_a1_range_simple(s: &str) -> Option<(u32, u32, u32, u32)> {
         formula_types::CellRef::Resolved(_) => return None,
     };
     Some((sr, sc, er, ec))
+}
+
+/// Reconcile the runtime CSE state with a persisted `KEY_ARRAY_REF` value.
+///
+/// Structural range operations suppress the normal Yrs observer, so they must
+/// call this helper after moving a cell. Removing the old projection first is
+/// essential: a changed or cleared marker otherwise leaves partial-array-write
+/// guards and spill reads pointing at the old sheet/position.
+pub(in crate::storage::engine) fn reconcile_persisted_array_ref(
+    mirror: &mut CellMirror,
+    sheet_id: &SheetId,
+    cell_id: &CellId,
+    array_ref: Option<&str>,
+) {
+    mirror.projection_registry.remove(cell_id);
+    mirror.unmark_cse_anchor(cell_id);
+    mirror.cse_single_cell.remove(cell_id);
+
+    let Some(array_ref) = array_ref else {
+        return;
+    };
+
+    mirror.mark_cse_anchor(*cell_id);
+    if let Some((sr, sc, er, ec)) = parse_a1_range_simple(array_ref) {
+        let rows = er - sr + 1;
+        let cols = ec - sc + 1;
+        if rows == 1 && cols == 1 {
+            mirror.cse_single_cell.insert(*cell_id);
+        } else {
+            mirror
+                .projection_registry
+                .register(*cell_id, *sheet_id, sr, sc, rows, cols);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -125,26 +156,12 @@ pub(in crate::storage::engine) fn apply_cell_changes(
                         // `KEY_ARRAY_REF`. Yrs is the source of truth
                         // for "is this cell a CSE anchor", so undo/
                         // redo replays correctly through the observer.
-                        if let Some(ref ar_str) = array_ref {
-                            mirror.mark_cse_anchor(*cell_id);
-                            // Re-register the projection extent so
-                            // post-undo writes inside the rectangle
-                            // are still rejected as PartialArrayWrite.
-                            if let Some((sr, sc, er, ec)) = parse_a1_range_simple(ar_str) {
-                                let rows = er - sr + 1;
-                                let cols = ec - sc + 1;
-                                if rows == 1 && cols == 1 {
-                                    mirror.cse_single_cell.insert(*cell_id);
-                                } else {
-                                    mirror
-                                        .projection_registry
-                                        .register(*cell_id, *sheet_id, sr, sc, rows, cols);
-                                }
-                            }
-                        } else {
-                            mirror.unmark_cse_anchor(cell_id);
-                            mirror.cse_single_cell.remove(cell_id);
-                        }
+                        reconcile_persisted_array_ref(
+                            mirror,
+                            sheet_id,
+                            cell_id,
+                            array_ref.as_deref(),
+                        );
 
                         // Update grid_indexes — ensure cell is registered at position
                         if let Some(grid) = stores.grid_indexes.get_mut(sheet_id) {

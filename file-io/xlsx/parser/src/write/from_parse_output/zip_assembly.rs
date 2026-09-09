@@ -200,8 +200,7 @@ pub(super) fn write_zip_package(
     }
 
     if !output.connections.is_empty() {
-        let xml =
-            crate::domain::connections::write_connections_xml(&output.connections.connections);
+        let xml = crate::domain::connections::write_connection_set_xml(&output.connections);
         add_registered_part(package_graph, &mut zip, "xl/connections.xml", xml)?;
     }
 

@@ -1,8 +1,8 @@
 mod cells;
-mod dynamic_metadata;
 mod chart_sources;
 mod comment_package_metadata;
 mod dimensions;
+mod dynamic_metadata;
 mod named_ranges;
 #[cfg(feature = "native")]
 mod native_parallel;
@@ -11,6 +11,7 @@ mod pivot_cache_reconciliation;
 mod print_defined_names;
 mod sheet_metadata;
 mod slicers;
+mod table_filter_preservation;
 mod table_totals;
 mod workbook;
 mod workbook_views;

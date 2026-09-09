@@ -4,7 +4,8 @@ use yrs::{Any, Map, Out, ReadTxn, TransactionMut};
 use cell_types::SheetId;
 
 use crate::schema::{
-    KEY_NAMED_RANGES, KEY_SHEET_ORDER, KEY_SLICERS, KEY_TABLES, KEY_WORKBOOK_SETTINGS,
+    KEY_DATA_TABLE_REGIONS, KEY_NAMED_RANGES, KEY_SHEET_ORDER, KEY_SLICERS, KEY_TABLES,
+    KEY_WORKBOOK_SETTINGS,
 };
 
 use super::changes::*;
@@ -272,6 +273,9 @@ pub(super) fn observe_workbook_events(
                         k if k == KEY_SLICERS => {
                             push_slicer_submap_changes(buffer, change, txn);
                         }
+                        k if k == KEY_DATA_TABLE_REGIONS => {
+                            buffer.data_table_regions_changed = true;
+                        }
                         _ => {
                             // Other workbook sub-maps are either read on-demand
                             // from yrs or driven by direct mutation paths.
@@ -379,6 +383,14 @@ pub(super) fn observe_workbook_events(
                             data: None,
                         });
                     }
+                }
+
+                // --- dataTableRegions ---
+                // Region records are nested maps; any entry or field change
+                // invalidates the mirror projection, which is refreshed from
+                // the complete canonical workbook map by sync_pipeline.
+                k if k == KEY_DATA_TABLE_REGIONS => {
+                    buffer.data_table_regions_changed = true;
                 }
 
                 // --- Unknown workbook sub-maps ---

@@ -25,6 +25,13 @@ pub struct CellMirror {
     pub(crate) evaluated_metadata_revision: u64,
     /// Workbook date system supplied by the engine's workbook settings store.
     pub(crate) date1904: bool,
+    /// Runtime-only code page selected for the legacy CHAR/CODE functions.
+    ///
+    /// This is deliberately kept alongside the evaluation mirror instead of
+    /// being inferred from workbook culture or persisted workbook metadata.
+    /// A rebuilt mirror copies the value from the previous session so a
+    /// calculation-context change remains effective across lifecycle paths.
+    pub(crate) char_code_page: compute_functions::CharCodePage,
     pub(super) sheets: FxHashMap<SheetId, SheetMirror>,
     /// Lowercase sheet name -> SheetId for case-insensitive lookup.
     pub(super) sheet_names: FxHashMap<String, SheetId>,
@@ -92,6 +99,7 @@ impl CellMirror {
             cell_metadata_provider: None,
             evaluated_metadata_revision: 0,
             date1904: false,
+            char_code_page: compute_functions::DEFAULT_CHAR_CODE_PAGE,
             sheets: FxHashMap::default(),
             sheet_names: FxHashMap::default(),
             variables: VariableStore::new(),

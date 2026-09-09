@@ -38,6 +38,11 @@ impl YrsComputeEngine {
         if self.mirror.date1904 != date1904 {
             self.mirror.date1904 = date1904;
             self.stores.compute.mark_dirty();
+            // Literal date cells do not change numerically when their epoch
+            // changes, but calendar CF rules do. Refresh here so cache-backed
+            // reads after any local or synchronized settings update see the
+            // new date system even before formula recalculation.
+            self.init_cf_caches();
         }
     }
 

@@ -35,6 +35,24 @@ impl ComputeCore {
         sheet_id: &SheetId,
         rules: &[crate::cf::types::CFRule],
     ) -> Vec<crate::cf::types::CellCFResult> {
+        // A completed recalc keeps its clock context for post-recalc CF cache
+        // construction. Direct CF calls on an otherwise-live core capture the
+        // caller's session hook here, preserving the existing API behavior.
+        let clock = if self.recalc_clock().is_fixed() {
+            self.recalc_clock()
+        } else {
+            crate::eval::clock::RecalcClock::for_recalc(None)
+        };
+        self.eval_cf_with_clock(mirror, sheet_id, rules, clock)
+    }
+
+    pub(crate) fn eval_cf_with_clock(
+        &self,
+        mirror: &CellMirror,
+        sheet_id: &SheetId,
+        rules: &[crate::cf::types::CFRule],
+        clock: crate::eval::clock::RecalcClock,
+    ) -> Vec<crate::cf::types::CellCFResult> {
         use crate::cf::stats::compute_range_stats;
         use cell_types::RangePos;
 
@@ -45,7 +63,10 @@ impl ComputeCore {
 
         // Compute "now" once for all time-period rules. Reads through the
         // injected clock so cloud workers honor the session userTimezone.
-        let now = crate::eval::clock::current_calendar_date();
+        let context = crate::cf::evaluator::CFEvaluationContext {
+            now: clock.current_calendar_date(),
+            date_system: value_types::DateSystem::from_date1904(mirror.date1904),
+        };
 
         // 1. Process each rule's RangePos ranges: clamp to sheet bounds,
         //    compute statistics, and parse formula ASTs.
@@ -275,7 +296,8 @@ impl ComputeCore {
                         let cell_id = mirror
                             .resolve_cell_id(sheet_id, SheetPos::new(row, col))
                             .unwrap_or(CellId::from_raw(0));
-                        let ctx = MirrorContext::new(mirror, cell_id, *sheet_id);
+                        let ctx =
+                            MirrorContext::new(mirror, cell_id, *sheet_id).with_recalc_clock(clock);
 
                         crate::eval::sync_block_on(Evaluator::evaluate(&shifted_ast, &ctx, &ctx))
                             .ok()
@@ -283,12 +305,12 @@ impl ComputeCore {
                         None
                     };
 
-                cascade.apply_for_cell(
+                cascade.apply_for_cell_with_context(
                     &value,
                     rule,
                     stats,
                     formula_eval_result.as_ref(),
-                    now,
+                    context,
                     has_formula,
                 );
             }

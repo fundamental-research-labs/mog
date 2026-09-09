@@ -767,6 +767,7 @@ fn test_decode_xml_entities() {
     assert_eq!(decode_xml_entities(b"&lt;tag&gt;"), "<tag>");
     assert_eq!(decode_xml_entities(b"&quot;quoted&quot;"), "\"quoted\"");
     assert_eq!(decode_xml_entities(b"it&apos;s"), "it's");
+    assert_eq!(decode_xml_entities(b"line&#xA;break"), "line\nbreak");
 }
 
 #[test]

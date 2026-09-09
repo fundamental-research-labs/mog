@@ -405,6 +405,27 @@ fn test_match_descending_approx_between_values() {
     assert_eq!(eval(&node, &ctx), CellValue::number(2.0));
 }
 
+#[test]
+fn test_match_descending_endpoint_above_first_returns_na() {
+    // MATCH type -1 requires descending data. If the first comparable value
+    // is 100, a lookup above 100 cannot have a valid >= candidate under that
+    // contract, even when an invalidly ordered tail contains one.
+    let (m, s) = test_mirror();
+    let ctx = make_ctx(&m, s);
+    let arr = ASTNode::Array {
+        rows: vec![
+            vec![ASTNode::Number(100.0)],
+            vec![ASTNode::Number(200.0)],
+            vec![ASTNode::Number(300.0)],
+        ],
+    };
+    let node = func(
+        "MATCH",
+        vec![ASTNode::Number(300.0), arr, ASTNode::Number(-1.0)],
+    );
+    assert_eq!(eval(&node, &ctx), CellValue::Error(CellError::Na, None));
+}
+
 // =======================================================================
 // VLOOKUP / HLOOKUP: Null lookup with approximate match → #N/A
 // (Excel does not match blank against sorted data)

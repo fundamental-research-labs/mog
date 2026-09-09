@@ -70,6 +70,7 @@ impl YrsComputeEngine {
         repair::repair_orphaned_cell_bindings_after_sync(self)?;
 
         let workbook_snap = construction::build_workbook_snapshot_from_yrs(&self.stores.storage)?;
+        let char_code_page = self.mirror.char_code_page;
 
         self.stores.grid_indexes = construction::build_grid_indexes_from_yrs(
             &self.stores.storage,
@@ -82,6 +83,7 @@ impl YrsComputeEngine {
             &self.stores.grid_indexes,
             self.stores.layout_metrics,
         )?;
+        rebuilt_mirror.char_code_page = char_code_page;
 
         self.stores.compute = ComputeCore::new();
         let recalc = self
@@ -412,6 +414,13 @@ impl YrsComputeEngine {
         if doc_changes.workbook_settings_changed {
             self.sync_runtime_calculation_settings_from_storage();
         }
+        if doc_changes.data_table_regions_changed {
+            let regions = crate::storage::workbook::data_tables::get_all_data_table_regions(
+                self.stores.storage.doc(),
+                self.stores.storage.workbook_map(),
+            );
+            self.mirror.replace_data_table_regions(regions);
+        }
 
         let mut sheet_lifecycle_changed = false;
 
@@ -440,6 +449,7 @@ impl YrsComputeEngine {
         }
 
         if sheet_lifecycle_changed {
+            let char_code_page = self.mirror.char_code_page;
             let workbook_snap =
                 construction::build_workbook_snapshot_from_yrs(&self.stores.storage)?;
 
@@ -454,6 +464,7 @@ impl YrsComputeEngine {
                 &self.stores.grid_indexes,
                 self.stores.layout_metrics,
             )?;
+            rebuilt_mirror.char_code_page = char_code_page;
 
             self.stores.compute = ComputeCore::new();
             let recalc = self

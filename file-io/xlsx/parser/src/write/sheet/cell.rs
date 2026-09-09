@@ -59,7 +59,21 @@ fn write_type_attr(w: &mut XmlWriter, cell: &CellData) {
             w.attr("t", "e");
         }
         CellValue::Formula { cached_value, .. } => {
-            if let Some(cached) = cached_value {
+            // Empty formula caches use a synthetic cache placeholder so the
+            // typed model can retain an authored `<v/>`. In that case the
+            // original cell `t` attribute remains authoritative; selecting a
+            // type from the placeholder would silently rewrite boolean,
+            // error, string, or ISO-date cache typing as an untyped number.
+            if cell.original_value.as_deref() == Some("") {
+                // `FormulaString("")` is only a writer-side placeholder for
+                // an explicitly empty `<v/>`. Infer no type from it: an
+                // untyped source formula must remain untyped so that the
+                // parser restores its Null cache. Typed empty formula caches
+                // provide an authoritative hint (`b`, `e`, `str`, or `d`).
+                if let Some(ref hint) = cell.formula_type_hint {
+                    w.attr("t", hint);
+                }
+            } else if let Some(cached) = cached_value {
                 match cached.as_ref() {
                     CellValue::String(_) => {
                         w.attr("t", "s");
@@ -264,6 +278,47 @@ fn write_formula(
             }
             if ca || cf.ca {
                 b.attr("ca", "1");
+            }
+            b.self_close();
+        }
+        Some(cf) if cf.t == CellFormulaType::Normal && cf.text.is_empty() && formula.is_empty() => {
+            // An authored empty `<f>` (most notably an array follower) is
+            // metadata, not executable empty formula text. Replay its
+            // attributes without writing a formula body or changing the
+            // cached value selected by the domain cell.
+            let b = w.start_element("f");
+            if let Some(ref ref_range) = cf.r#ref {
+                b.attr("ref", ref_range);
+            }
+            if cf.dt2d {
+                b.attr("dt2D", "1");
+            }
+            if cf.dtr {
+                b.attr("dtr", "1");
+            }
+            if cf.del1 {
+                b.attr("del1", "1");
+            }
+            if cf.del2 {
+                b.attr("del2", "1");
+            }
+            if cf.aca {
+                b.attr("aca", "1");
+            }
+            if let Some(ref r1) = cf.r1 {
+                b.attr("r1", r1);
+            }
+            if let Some(ref r2) = cf.r2 {
+                b.attr("r2", r2);
+            }
+            if cf.bx {
+                b.attr("bx", "1");
+            }
+            if cf.ca || ca {
+                b.attr("ca", "1");
+            }
+            if psf {
+                b.attr("xml:space", "preserve");
             }
             b.self_close();
         }

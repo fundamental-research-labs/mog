@@ -239,13 +239,19 @@ pub(super) fn get_unique_column_values(
 }
 
 pub(super) fn compute_dynamic_filter_serial_range(
-    _engine: &YrsComputeEngine,
+    engine: &YrsComputeEngine,
     rule: filters::DynamicFilterRule,
 ) -> Option<(f64, f64)> {
     let now_serial = crate::eval::clock::get_current_serial_timestamp();
     let now_date = value_types::serial_to_date(now_serial)?;
     let table_rule = filters::convert_dynamic_rule(&rule);
-    compute_table::compute_date_range_serial(&table_rule, now_date, chrono::Weekday::Sun)
+    let date_system = value_types::DateSystem::from_date1904(engine.mirror.date1904);
+    compute_table::compute_date_range_serial_with_date_system(
+        &table_rule,
+        now_date,
+        chrono::Weekday::Sun,
+        date_system,
+    )
 }
 
 pub(super) fn get_filter(

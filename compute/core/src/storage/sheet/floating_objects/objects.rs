@@ -157,8 +157,25 @@ pub fn update_floating_object(
     object_id: &str,
     updates: &serde_json::Value,
 ) -> bool {
+    update_floating_object_with_origin(doc, sheets, sheet_id, object_id, updates, ORIGIN_USER_EDIT)
+}
+
+/// Update a floating object with an explicit transaction origin.
+///
+/// Internal derived metadata (for example, chart source replay authority)
+/// uses a non-user origin so the bookkeeping follows the source edit without
+/// creating a second undo step. Public object edits continue to use
+/// [`update_floating_object`] and remain user undoable.
+pub fn update_floating_object_with_origin(
+    doc: &Doc,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    object_id: &str,
+    updates: &serde_json::Value,
+    origin: &'static [u8],
+) -> bool {
     let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
+    let mut txn = doc.transact_mut_with(Origin::from(origin));
     let map = match get_sheet_submap(&txn, sheets, &sheet_hex, KEY_FLOATING_OBJECTS) {
         Some(m) => m,
         None => return false,

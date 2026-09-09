@@ -39,6 +39,9 @@ pub(super) fn emit_title(w: &mut XmlWriter, title: &Title) {
     if let Some(ref tb) = title.tx_pr {
         emit_text_body(w, tb, "c:txPr");
     }
+    if !title.extensions.is_empty() {
+        super::chart_types::emit_extensions(w, &title.extensions);
+    }
 
     w.end_element("c:title");
 }

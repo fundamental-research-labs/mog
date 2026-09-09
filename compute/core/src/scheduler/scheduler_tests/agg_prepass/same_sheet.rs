@@ -120,3 +120,46 @@ fn test_agg_prepass_same_sheet_averageifs() {
         );
     }
 }
+
+#[test]
+fn test_agg_prepass_return_boundary_flushes_subnormal() {
+    // Eight matching rows sum to MIN_POSITIVE / 2.0, so the prepass return
+    // itself is subnormal and must be normalized by run_agg_prepass.
+    let subnormal = f64::MIN_POSITIVE / 16.0;
+    let mut cells = Vec::new();
+    let mut id_counter = 0x7000u128;
+
+    for row in 0..8u32 {
+        cells.push(text_cell(&mut id_counter, row, 0, "X"));
+        cells.push(number_cell(&mut id_counter, row, 1, subnormal));
+        cells.push(text_cell(&mut id_counter, row, 2, "X"));
+    }
+    for row in 0..8u32 {
+        cells.push(formula_cell(
+            &mut id_counter,
+            row,
+            3,
+            format!("=SUMIFS(B$1:B$8,A$1:A$8,C{})", row + 1),
+        ));
+    }
+
+    let (mut core, mirror) = init_core(single_sheet_snapshot("Sheet1", 8, 4, cells));
+    let sheet_id = sid(1);
+    let dirty = (0..8u32)
+        .map(|row| {
+            mirror
+                .resolve_cell_id(&sheet_id, cell_types::SheetPos::new(row, 3))
+                .expect("SUMIFS formula cell")
+        })
+        .collect::<rustc_hash::FxHashSet<_>>();
+    let already_evaluated = rustc_hash::FxHashSet::default();
+    let epoch = core.begin_sumifs_cache_epoch();
+    let (results, _) = core.run_agg_prepass(&mirror, &dirty, &already_evaluated, epoch);
+
+    assert_eq!(results.len(), 8);
+    assert!(
+        results
+            .iter()
+            .all(|(_, value)| *value == CellValue::number(0.0))
+    );
+}

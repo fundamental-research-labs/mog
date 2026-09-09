@@ -4,7 +4,7 @@ use crate::storage::engine::settings::EngineSettings;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::filters;
 use cell_types::{SheetId, SheetPos};
-use value_types::CellValue;
+use value_types::{CellValue, DateSystem};
 
 pub(super) fn get_unique_column_values(
     stores: &EngineStores,
@@ -43,9 +43,14 @@ pub(super) fn get_filtered_record_count(
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> Option<filters::FilterRecordCount> {
+    crate::storage::engine::services::imported_filter_runtime::refresh_imported_date_group_filters_for_evaluation(
+        stores, mirror, sheet_id, filter_id,
+    );
     let sid = *sheet_id;
-    let icons = crate::storage::engine::services::cf_cache::evaluate_filter_icons(stores, mirror, sheet_id, filter_id);
-    filters::get_filtered_record_count(
+    let icons = crate::storage::engine::services::cf_cache::evaluate_filter_icons(
+        stores, mirror, sheet_id, filter_id,
+    );
+    filters::get_filtered_record_count_with_date_system(
         stores.storage.doc(),
         stores.storage.sheets(),
         sheet_id,
@@ -62,5 +67,6 @@ pub(super) fn get_filtered_record_count(
         },
         |row, col| icons.get(&(row, col)).cloned(),
         |hex| super::resolve_filter_cell_pos(stores, mirror, sheet_id, hex),
+        DateSystem::from_date1904(mirror.date1904),
     )
 }

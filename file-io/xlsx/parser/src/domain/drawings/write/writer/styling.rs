@@ -170,7 +170,8 @@ impl DrawingWriter {
                     }
                 }
                 BlipEffect::AlphaModulate => {
-                    w.start_element("a:alphaMod").self_close();
+                    // CT_AlphaModulateEffect requires a `<a:cont>` child;
+                    // authored instances are carried by RawXml.
                 }
                 BlipEffect::AlphaReplace { alpha } => {
                     w.start_element("a:alphaRepl")
@@ -184,41 +185,50 @@ impl DrawingWriter {
                         .self_close();
                 }
                 BlipEffect::ColorChange { use_alpha, raw_xml } => {
+                    let Some(raw_xml) = raw_xml else {
+                        // clrChange requires clrFrom and clrTo children.
+                        continue;
+                    };
                     w.start_element("a:clrChange");
                     if *use_alpha {
                         w.attr("useA", "1");
                     }
-                    if let Some(xml) = raw_xml {
-                        w.end_attrs();
-                        self.write_raw_xml(w, xml);
-                        w.end_element("a:clrChange");
-                    } else {
-                        w.self_close();
-                    }
+                    w.end_attrs();
+                    self.write_raw_xml(w, raw_xml);
+                    w.end_element("a:clrChange");
+                }
+                BlipEffect::RawXml(raw_xml) => {
+                    self.write_raw_xml(w, raw_xml);
                 }
                 BlipEffect::ColorReplace { color } => {
-                    if let Some(c) = color {
-                        w.start_element("a:clrRepl").end_attrs();
-                        self.write_drawing_color(w, c);
-                        w.end_element("a:clrRepl");
-                    } else {
-                        w.start_element("a:clrRepl").self_close();
-                    }
+                    let Some(c) = color else {
+                        // clrRepl requires one colour child.
+                        continue;
+                    };
+                    w.start_element("a:clrRepl").end_attrs();
+                    self.write_drawing_color(w, c);
+                    w.end_element("a:clrRepl");
                 }
                 BlipEffect::Duotone { color1, color2 } => {
+                    let (Some(c1), Some(c2)) = (color1, color2) else {
+                        // duotone requires exactly two colour children.
+                        continue;
+                    };
                     w.start_element("a:duotone").end_attrs();
-                    if let Some(c1) = color1 {
-                        self.write_drawing_color(w, c1);
-                    }
-                    if let Some(c2) = color2 {
-                        self.write_drawing_color(w, c2);
-                    }
+                    self.write_drawing_color(w, c1);
+                    self.write_drawing_color(w, c2);
                     w.end_element("a:duotone");
                 }
                 BlipEffect::FillOverlay(fo) => {
+                    let Some(fill) = fo.fill.as_ref() else {
+                        // fillOverlay requires one EG_FillProperties child.
+                        continue;
+                    };
                     w.start_element("a:fillOverlay")
                         .attr("blend", fo.blend.to_ooxml())
-                        .self_close();
+                        .end_attrs();
+                    self.write_ooxml_fill(w, fill);
+                    w.end_element("a:fillOverlay");
                 }
                 BlipEffect::Hsl { hue, sat, lum } => {
                     w.start_element("a:hsl")
@@ -491,12 +501,15 @@ impl DrawingWriter {
                     if let Some(ref comp) = blip.compression {
                         w.attr("cstate", comp.to_ooxml());
                     }
-                    if let Some(ref ext) = blip.ext_lst {
-                        w.end_attrs();
-                        self.write_raw_xml(w, ext);
-                        w.end_element("a:blip");
-                    } else {
+                    if blip.effects.is_empty() && blip.ext_lst.is_none() {
                         w.self_close();
+                    } else {
+                        w.end_attrs();
+                        self.write_blip_effects(w, &blip.effects);
+                        if let Some(ref ext) = blip.ext_lst {
+                            self.write_raw_xml(w, ext);
+                        }
+                        w.end_element("a:blip");
                     }
 
                     // Default stretch

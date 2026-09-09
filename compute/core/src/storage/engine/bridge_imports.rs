@@ -181,6 +181,7 @@ impl YrsComputeEngine {
                         value_types::FiniteF64::new(calculation.iterate_delta)
                             .unwrap_or_else(|| value_types::FiniteF64::must(0.001)),
                     ),
+                    timestamp_serial: None,
                 };
                 Self::materialize_all_pivots_for_import_open(
                     &mut completion.stores,

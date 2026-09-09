@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use bridge_core as bridge;
+use compute_functions::CharCodePage;
 
 use super::{YrsComputeEngine, construction};
 use crate::snapshot::MutationResult;
@@ -33,6 +34,42 @@ impl YrsComputeEngine {
         self.settings.locale = compute_formats::get_culture(culture);
         // Locale affects date/number parsing — safest to require a fresh recalc.
         self.stores.compute.mark_dirty();
+        Ok((
+            compute_wire::mutation::serialize_multi_viewport_patches(&[]),
+            MutationResult::empty(),
+        ))
+    }
+
+    /// Get the runtime code page used by the legacy CHAR/CODE functions.
+    ///
+    /// This option is session-scoped. It is intentionally independent from
+    /// workbook culture and is not written to the Yrs document or exported as
+    /// workbook metadata.
+    pub fn char_code_page(&self) -> u16 {
+        self.mirror.char_code_page.code_page_id()
+    }
+
+    /// Select the runtime code page used by the legacy CHAR/CODE functions.
+    ///
+    /// The wire API uses Microsoft's numeric code-page identifiers because the
+    /// bridge does not expose the internal enum. Supported values are 1252
+    /// (Windows ANSI) and 10000 (Macintosh Roman). Changing the selection
+    /// invalidates calculation results and is applied by the next recalc.
+    #[bridge::write]
+    pub fn set_char_code_page(
+        &mut self,
+        code_page_id: u16,
+    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+        let page =
+            CharCodePage::from_code_page_id(code_page_id).ok_or_else(|| ComputeError::Eval {
+                message: format!("unsupported CHAR/CODE code page {code_page_id}"),
+            })?;
+
+        if self.mirror.char_code_page != page {
+            self.mirror.char_code_page = page;
+            self.stores.compute.mark_dirty();
+        }
+
         Ok((
             compute_wire::mutation::serialize_multi_viewport_patches(&[]),
             MutationResult::empty(),

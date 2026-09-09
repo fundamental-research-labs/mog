@@ -196,6 +196,7 @@ pub(crate) fn convert_cell_data(
         value,
         formula,
         force_recalc: false,
+        has_empty_cached_value: false,
         array_ref: None,
         cell_metadata_index: None,
         phonetic: false,
@@ -262,6 +263,40 @@ pub(crate) fn apply_parse_extras(
     for &cell_idx in &extras.force_recalc_indices {
         if cell_idx < cells.len() {
             cells[cell_idx].force_recalc = true;
+        }
+    }
+    for &cell_idx in &extras.empty_cached_value_indices {
+        if cell_idx < cells.len() {
+            cells[cell_idx].has_empty_cached_value = true;
+        }
+    }
+    {
+        use ooxml_types::worksheet::{CellFormula as OoxmlCellFormula, CellFormulaType};
+
+        for (cell_idx, metadata) in &extras.empty_formula_metadata {
+            if *cell_idx >= cells.len() {
+                continue;
+            }
+
+            // Preserve the authored formula element as typed metadata. An
+            // empty formula is not executable formula text: keeping this
+            // field absent prevents the scheduler/Yrs formula graph from
+            // registering an empty expression or replacing an array cache.
+            cells[*cell_idx].formula = None;
+            cells[*cell_idx].cell_formula = Some(OoxmlCellFormula {
+                t: CellFormulaType::Normal,
+                r#ref: metadata.ref_range.clone(),
+                aca: metadata.aca,
+                dt2d: metadata.dt2d,
+                del1: metadata.del1,
+                del2: metadata.del2,
+                r1: metadata.r1.clone(),
+                r2: metadata.r2.clone(),
+                ca: metadata.ca,
+                bx: metadata.bx,
+                dtr: metadata.dtr,
+                ..Default::default()
+            });
         }
     }
     for &cell_idx in &extras.xml_space_formula_indices {
@@ -506,6 +541,7 @@ mod tests {
             value: value.map(|s| s.to_string()),
             formula: formula.map(|s| s.to_string()),
             force_recalc: false,
+            has_empty_cached_value: false,
             array_ref: None,
             cell_metadata_index: None,
             vm: None,
@@ -518,6 +554,37 @@ mod tests {
             sst_index: None,
             has_explicit_style: false,
         }
+    }
+
+    #[test]
+    fn authored_empty_formula_preserves_metadata_without_formula_text() {
+        use ooxml_types::worksheet::CellFormulaType;
+
+        let mut cells = vec![make_cell(0, 1, CELL_TYPE_VAL_FORMULA, Some("0"), None)];
+        let mut extras = ParseExtras::default();
+        extras.force_recalc_indices.push(0);
+        extras.empty_cached_value_indices.push(0);
+        extras.empty_formula_metadata.push((
+            0,
+            crate::domain::cells::types::EmptyFormulaMetadata {
+                ca: true,
+                ..Default::default()
+            },
+        ));
+
+        apply_parse_extras(&mut cells, &extras, &[], &[], &[]);
+
+        assert!(cells[0].formula.is_none());
+        assert!(cells[0].force_recalc);
+        assert!(cells[0].has_empty_cached_value);
+        let formula = cells[0]
+            .cell_formula
+            .as_ref()
+            .expect("empty formula metadata should survive conversion");
+        assert_eq!(formula.t, CellFormulaType::Normal);
+        assert!(formula.text.is_empty());
+        assert!(formula.ca);
+        assert_eq!(cells[0].value.as_deref(), Some("0"));
     }
 
     #[test]

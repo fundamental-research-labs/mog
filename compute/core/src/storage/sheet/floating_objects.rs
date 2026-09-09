@@ -45,7 +45,7 @@ pub use mutations::{
 pub use objects::{
     create_floating_object, delete_floating_object, get_all_floating_objects,
     get_all_floating_objects_typed, get_floating_object, get_floating_object_typed,
-    set_floating_object, update_floating_object,
+    set_floating_object, update_floating_object, update_floating_object_with_origin,
 };
 pub use z_order::{
     bring_floating_object_forward, bring_floating_object_to_front, get_all_in_z_order,

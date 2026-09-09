@@ -1,6 +1,6 @@
 //! Types for regression analysis.
 //!
-//! Shared by `compute-stats::regression` and consumed by `compute-core-wasm`.
+//! Shared by `compute-stats::regression` and chart transforms.
 
 use serde::{Deserialize, Serialize};
 

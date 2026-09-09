@@ -140,7 +140,7 @@ impl ComputeService {
 //
 // Each descriptor group generates:
 // 1. `impl ComputeService { ... }` with delegate methods
-// 2. `__bridge_descriptor_ComputeService_<group>` macro for WASM/NAPI consumption
+// 2. `__bridge_descriptor_ComputeService_<group>` descriptor macro
 // ---------------------------------------------------------------------------
 
 bridge_delegate::delegate!(
@@ -179,7 +179,7 @@ bridge_delegate::delegate!(
 
 // ---------------------------------------------------------------------------
 // Lifecycle and special methods — defined directly on ComputeService with
-// bridge annotations so codegen picks them up for WASM/NAPI/Tauri.
+// bridge annotations.
 // ---------------------------------------------------------------------------
 
 #[bridge::api(
@@ -232,8 +232,8 @@ impl ComputeService {
     ///
     /// Annotated `#[bridge::session]` (R2.4) — a dedicated access kind
     /// for interior-mutable `&self` methods. `#[bridge::write]` would
-    /// promote the napi/pyo3 wrapper to `&mut self`, which defeats the
-    /// ArcSwap design ("SDKs expect to reset the principal at any point
+    /// promote the wrapper to `&mut self`, which defeats the
+    /// ArcSwap design ("callers expect to reset the principal at any point
     /// in a session without coordinating with in-flight calls").
     /// `#[bridge::read]` would wrongly suggest no mutation.
     /// `#[bridge::lifecycle]` is reserved for constructors only.

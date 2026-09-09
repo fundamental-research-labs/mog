@@ -1,8 +1,7 @@
 //! Target-neutral classification helpers used across downstream target
 //! crates.
 //!
-//! Anything napi-specific (bytes-tuple detection, self-tuple detection,
-//! `ReturnInfo`) lives in `bridge-napi-macros` as a per-target extension.
+//! Per-target classification belongs in the consuming crate.
 //! This module only holds helpers that every target would otherwise
 //! re-implement identically.
 

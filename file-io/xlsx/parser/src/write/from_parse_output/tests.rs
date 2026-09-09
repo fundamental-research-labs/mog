@@ -30,7 +30,6 @@ mod chart_export_plan;
 mod chart_plot_vis_only_replay;
 mod chart_user_shapes;
 mod charts;
-mod context_removal_gates;
 mod data_tables;
 mod drawing_pictures;
 mod fill_lowering;

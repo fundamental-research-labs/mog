@@ -244,10 +244,8 @@ impl fmt::Display for CellError {
 /// Track R3 — tagged-JSON wire shape.
 ///
 /// The serde representation is **externally tagged with `kind`** and uses
-/// **camelCase field names**, matching the TS `BridgeError` discriminated
-/// union (`kernel/src/types/bridge-error.ts`). The same JSON shape is
-/// produced across WASM, NAPI, and Tauri transports because the bridge
-/// macros call `bridge_types::WrapErr(&e).bridge_format()`, which
+/// **camelCase field names**. Bridge macros call
+/// `bridge_types::WrapErr(&e).bridge_format()`, which
 /// dispatches to [`BridgeStructuredError::to_bridge_value`] when the
 /// error type implements [`bridge_types::BridgeStructuredError`].
 ///

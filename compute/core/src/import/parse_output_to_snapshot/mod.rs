@@ -35,7 +35,7 @@ use snapshot_types::{SheetSnapshot, WorkbookSnapshot};
 
 use crate::storage::infra::hydration::HydrationIdMap;
 
-// Re-export so external consumers (formula-eval, integration tests) can access
+// Re-export so integration tests can access
 // the allocator type required by `parse_output_to_workbook_snapshot`.
 pub use crate::storage::infra::hydration::DefaultIdAllocator;
 

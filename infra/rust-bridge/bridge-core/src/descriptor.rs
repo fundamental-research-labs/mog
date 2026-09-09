@@ -23,10 +23,10 @@ pub(crate) struct ServiceMeta {
 /// `Session` is a sibling of `Read` for privacy-sensitive session state.
 /// Semantically it covers methods that **mutate session-scoped state via
 /// interior mutability** (e.g. `ArcSwap`) and therefore take `&self` rather
-/// than `&mut self`. Downstream codegens (napi/pyo3/tauri/wasm) emit a
+/// than `&mut self`. Downstream consumers emit a
 /// `&self` wrapper identical to `Read` — the two differ only in intent, not
 /// FFI shape. This kind exists so `set_active_principal` (R2.4) does not
-/// get promoted to `&mut self` by the napi codegen, which would defeat the
+/// get promoted to `&mut self`, which would defeat the
 /// `ArcSwap` design ("SDKs expect to reset the principal at any point in a
 /// session without coordinating with in-flight calls"; see
 #[derive(Debug, Clone, PartialEq, Eq)]

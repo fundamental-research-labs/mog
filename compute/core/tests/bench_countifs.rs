@@ -1,6 +1,6 @@
 //! Isolated benchmark for COUNTIFS/SUMIFS with full-column references.
 //!
-//! This reproduces the exact hot path found by formula-eval profiling:
+//! This reproduces a COUNTIFS hot path:
 //! 111K COUNTIFS formulas with full-column references ($A:$A) taking 21s.
 //!
 //! Run:

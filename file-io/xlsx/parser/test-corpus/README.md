@@ -18,7 +18,7 @@ test-corpus/
 │   ├── truncated/         # Files cut off at various points
 │   └── mixed/             # Multiple error types combined
 ├── edge-cases/            # Unusual but valid files
-├── generated/             # Generated test files (from TypeScript scripts)
+├── generated/             # Generated test files
 │   ├── features/          # ECMA-376 feature coverage tests
 │   ├── realistic/         # Real-world scenario simulations
 │   └── edge-cases/        # Edge case test files

@@ -1,9 +1,7 @@
 //! High-level cell semantics methods for ComputeEngine.
 //!
-//! These methods consolidate what TypeScript currently does across multiple IPC
-//! calls into single Rust calls: typed cell values, 2D range reads, and combined
-//! cell info queries. By living in the engine, all FFI targets (WASM, Tauri,
-//! N-API) get them automatically.
+//! These methods consolidate typed cell values, 2D range reads, and combined
+//! cell info queries into single engine calls.
 
 use super::{ComputeEngine, services};
 use crate::storage::cells::values as cell_values;

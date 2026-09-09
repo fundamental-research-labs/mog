@@ -32,10 +32,9 @@ pub const DEFAULT_COL_WIDTH_MACOS: Pixels = Pixels(72.0);
 
 /// Returns the platform-appropriate default column width.
 ///
-/// Uses compile-time `cfg!(target_os)` for native builds (Tauri, N-API).
-/// For WASM builds this returns `DEFAULT_COL_WIDTH` (64.0) — callers should
-/// prefer the sheet metadata's `defaultColWidth` which TypeScript sets
-/// based on runtime platform detection.
+/// Uses compile-time `cfg!(target_os)`. Non-macOS targets return
+/// `DEFAULT_COL_WIDTH` (64.0); callers can override with sheet metadata
+/// `defaultColWidth`.
 pub fn platform_default_col_width() -> Pixels {
     if cfg!(target_os = "macos") {
         DEFAULT_COL_WIDTH_MACOS

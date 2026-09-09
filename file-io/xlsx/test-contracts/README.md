@@ -1,11 +1,11 @@
 # XLSX Test Contracts
 
-Shared Phase 0 contracts for trustworthy file I/O testing.
+Shared contracts for trustworthy file I/O testing.
 
 ## Public Locations
 
 - Shared Rust contracts: `file-io/xlsx/test-contracts`
-- Public synthetic/generated fixtures: `file-io/xlsx/parser/test-corpus` or lane-owned public fixture folders under `file-io/xlsx`
+- Public synthetic/generated fixtures: `file-io/xlsx/parser/test-corpus` or other public fixture folders under `file-io/xlsx`
 - Public smoke/golden budget files for generated fixtures: `file-io/xlsx/parser/testing/budgets`
 - Public gate adapters and parser/archive validation: `file-io/xlsx/parser/src/testing`
 - Stable gate command surface: `cargo run -p xlsx-parser --bin xlsx-gate --features cli -- <gate>`
@@ -28,13 +28,7 @@ Shared Phase 0 contracts for trustworthy file I/O testing.
 - `corpus-full`
 - `perf-full`
 
-Phase 0 implements the `package-graph` archive adapter and performance gates,
-and publishes explicit `not implemented` stubs for corpus-owned gates.
-
-## Lane E Rollout Surface
-
-Lane E owns orchestration, not new report schemas. The gate binary exposes the
-shared command metadata and rollout suites from the Rust contracts:
+List the gate binary's command metadata:
 
 ```bash
 cargo run -p xlsx-parser --bin xlsx-gate --features cli -- list

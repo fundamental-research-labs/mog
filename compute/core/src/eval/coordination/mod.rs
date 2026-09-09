@@ -1,11 +1,11 @@
-//! # Platform Duality: Native vs WASM
+//! # Native vs single-threaded builds
 //!
-//! `compute-core` compiles for two targets:
+//! `compute-core` has two threading modes:
 //!
-//! - **Native** (`features = ["native"]`): Desktop via Tauri. Evaluation runs on a rayon
+//! - **Native** (`features = ["native"]`): Evaluation runs on a rayon
 //!   thread pool. Shared state uses atomics, `DashMap`, and `parking_lot` locks.
-//! - **WASM** (`target_arch = "wasm32"`, no `native` feature): Browser. Evaluation is
-//!   single-threaded. Shared state uses `RefCell` and `HashMap`.
+//! - **Without `native`**: Evaluation is single-threaded. Shared state uses
+//!   `RefCell` and `HashMap`.
 //!
 //! ## Convention
 //!

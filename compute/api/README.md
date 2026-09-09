@@ -22,13 +22,12 @@ fn example() -> Result<(), ComputeApiError> {
 
 `history()` exposes `undo`, `redo`, `can_undo`, `can_redo`, `get_undo_state`,
 `begin_undo_group`, and `end_undo_group`. Groups nest, and bulk writes create
-one action. Undo and redo return mutation results with recalculated cells;
-the API strips viewport bytes from the core result.
+one action. Undo and redo return mutation results with recalculated cells.
 
 Each mutating Office.js `context.sync()` shares one history action. A failed
 sync keeps its successfully applied prefix undoable and closes its group.
 Rejected operations that change nothing preserve redo. A new authored edit
-clears redo; reads, recalculation, and transient UI state do not.
+clears redo; reads and recalculation do not.
 
 See [undo and redo](../../docs/guides/undo-redo.md) for explicit grouping and
 failure handling. Run `cargo test -p compute-api` to verify the facade.

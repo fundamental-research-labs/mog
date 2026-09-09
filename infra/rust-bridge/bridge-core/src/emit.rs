@@ -95,10 +95,8 @@ pub(crate) fn emit_descriptor(desc: &ApiDescriptor, counter: usize) -> TokenStre
 
     // Emit extras block only when non-empty. An empty extras map produces
     // byte-identical DSL to the pre-extras shape — critical for preserving
-    // backward compat with downstream parsers (bridge-napi/pyo3/wasm/tauri)
-    // that don't yet know how to skip an `extras { ... }` block. Those parsers
-    // learn to skip it only when the first non-empty extras lands (PR5+), at
-    // which point bridge-ir extraction (PR2) teaches them.
+    // backward compat with descriptor parsers that don't yet know how to
+    // skip an `extras { ... }` block.
     let extras_token = emit_extras_block(&desc.extras);
 
     quote! {
@@ -227,10 +225,8 @@ fn emit_method(method: &MethodDescriptor, crate_path: Option<&str>) -> TokenStre
 
     // Phase B.1: pass `scope` and `needs_principal` through the DSL so the
     // delegate macro can see them. Emitted only when set — methods that don't
-    // opt in produce byte-identical DSL to the pre-B.1 shape, preserving
-    // backward compat with downstream parsers (bridge-napi/pyo3/wasm/tauri)
-    // that don't recognize these keywords. The delegate macro strips them
-    // before re-emitting for downstream consumption.
+    // opt in produce byte-identical DSL to the pre-B.1 shape. The delegate
+    // macro strips them before re-emitting.
     let scope_token = match &method.scope {
         Some(s) => quote! { scope = #s; },
         None => TokenStream::new(),
@@ -263,9 +259,7 @@ fn emit_method(method: &MethodDescriptor, crate_path: Option<&str>) -> TokenStre
         AccessLevel::Write => quote! { method write },
         AccessLevel::Structural => quote! { method structural },
         // `session` rides through the descriptor DSL as its own keyword so
-        // downstream codegens can choose to emit `&self` or `&mut self`
-        // (they all emit `&self` today — see `method session` in
-        // bridge-napi/pyo3/tauri/wasm expand.rs).
+        // consumers can choose to emit `&self` or `&mut self`.
         AccessLevel::Session => quote! { method session },
     };
 

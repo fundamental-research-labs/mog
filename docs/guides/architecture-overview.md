@@ -41,8 +41,6 @@ Yrs and collaboration are removed. The public scripting boundary remains
 Office.js; the repository contains no UI, Node N-API host, or custom `wb`/`ws`
 scripting API.
 
-The before/after workloads and measurement method are documented in
-[the storage benchmark report](remove-yrs-bench.md). A review of in-memory
-indexes versus the Cells engine is in [storage model review](storage-model-review.md).
-The subsequent storage changes are measured in the
+The Yrs-to-native comparison is in [the storage benchmark report](remove-yrs-bench.md).
+Later native-store changes are measured in the
 [memory and speed comparison](storage-model-bench.md).

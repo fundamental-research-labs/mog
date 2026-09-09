@@ -147,3 +147,79 @@ fn test_preserve_xlsx_prefixes_in_doubled_quote_literal() {
         r#"=IF(A1=""""_xlpm.val"""",1,2)"#
     );
 }
+
+#[test]
+fn test_preserve_prefixed_sheet_and_table_names() {
+    for formula in [
+        "'_xlfn.Budget'!A1+_xlfn.SUM(A2)",
+        "'Budget''s _xlpm.total'!A1+_xlfn.SUM(A2)",
+        "_xlfn.Budget!A1+_xlfn.SUM(A2)",
+        "_xlpm.Table[Amount]+_xlfn.SUM(A2)",
+        "_xlfn.Budget ! A1+_xlfn.SUM(A2)",
+        "_xlpm.Table [Amount]+_xlfn.SUM(A2)",
+        "Sheet1!_xlpm.x+_xlfn.SUM(A2)",
+        "'Sheet 1' ! _xlpm.x+_xlfn.SUM(A2)",
+        "SUM(_xlfn.Start : _xlpm.End ! A1)+_xlfn.SUM(A2)",
+        "SUM(_xlfn.Start:_xlpm.End!A1)+_xlfn.SUM(A2)",
+        "SUM(_xlfn.Start:'_xlpm.End Sheet'!A1)+_xlfn.SUM(A2)",
+    ] {
+        let expected = format!("={}", formula.replace("_xlfn.SUM", "SUM"));
+        assert_eq!(normalize_xlsx_formula(formula), expected, "{formula}");
+    }
+}
+
+#[test]
+fn test_preserve_prefixes_in_structured_and_external_references() {
+    for formula in [
+        "SUM(Table[_xlpm.Amount])+_xlfn.SINGLE(A1)",
+        "SUM(Table[[#Headers],[_xlfn.Amount]])+_xlfn.SINGLE(A1)",
+        "SUM(Table[Amount']_xlpm.tail])+_xlfn.SINGLE(A1)",
+        "SUM([_xlfn.Workbook.xlsx]Sheet1!A1)+_xlfn.SINGLE(A1)",
+    ] {
+        let expected = format!("={}", formula.replace("_xlfn.SINGLE", "SINGLE"));
+        assert_eq!(normalize_xlsx_formula(formula), expected, "{formula}");
+    }
+}
+
+#[test]
+fn test_only_strip_prefixes_at_identifier_boundaries() {
+    assert_eq!(
+        normalize_xlsx_formula(
+            "_xlfn.LET(_xlpm.x,1,my_xlpm.x+name._xlfn.x+測定_xlpm.x+\\_xlpm.x+_xlpm.x)"
+        ),
+        "=LET(x,1,my_xlpm.x+name._xlfn.x+測定_xlpm.x+\\_xlpm.x+x)"
+    );
+}
+
+#[test]
+fn test_entity_decoding_precedes_prefix_detection() {
+    assert_eq!(
+        normalize_xlsx_formula("&#95;xlfn.LET(&#95;xlpm.x,1,&#95;xlpm.x)"),
+        "=LET(x,1,x)"
+    );
+    assert_eq!(
+        normalize_xlsx_formula("&apos;_xlfn.Sheet&apos;!A1+_xlfn.SUM(A2)"),
+        "='_xlfn.Sheet'!A1+SUM(A2)"
+    );
+    assert_eq!(
+        normalize_xlsx_formula("&quot;_xlpm.x&quot;&amp;_xlpm.x"),
+        "=\"_xlpm.x\"&x"
+    );
+}
+
+#[test]
+fn test_preserve_unterminated_protected_regions() {
+    for formula in ["'_xlfn.Sheet", "Table[_xlpm.Header", "\"_xlfn.SUM"] {
+        assert_eq!(normalize_xlsx_formula(formula), format!("={formula}"));
+    }
+}
+
+#[test]
+fn test_unicode_whitespace_is_an_identifier_boundary() {
+    for space in ['\u{00a0}', '\u{2003}'] {
+        assert_eq!(
+            normalize_xlsx_formula(&format!("A1{space}_xlfn.SUM(A2)+{space}_xlpm.x")),
+            format!("=A1{space}SUM(A2)+{space}x")
+        );
+    }
+}

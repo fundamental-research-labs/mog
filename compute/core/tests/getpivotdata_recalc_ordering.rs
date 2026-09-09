@@ -222,8 +222,11 @@ fn native_overall_totals_follow_each_rendered_measure_for_every_axis_layout() {
     }
 }
 
-/// Authored package: source values deliberately do not define the visible pivot
-/// result. GETPIVOTDATA must read existing totals using its imported axis layout.
+/// Authored cache-only package: CT_CacheSource permits its child choice to be
+/// absent (minOccurs=0), so there is no live worksheet range to refresh.
+/// GETPIVOTDATA must read the existing result using its imported axis layout.
+/// Schema: ISO/IEC 29500-1 A.2 CT_CacheSource; Open XML SDK CacheSource metadata
+/// uses CompositeParticle.Builder(ParticleType.Choice, 0, 1).
 fn imported_overall_fixture(data_on_rows: bool, include_totals: bool) -> Vec<u8> {
     use xlsx_parser::write::ZipWriter;
     let main = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
@@ -269,7 +272,7 @@ fn imported_overall_fixture(data_on_rows: bool, include_totals: bool) -> Vec<u8>
         (
             "xl/pivotCache/pivotCacheDefinition1.xml",
             format!(
-                r#"<pivotCacheDefinition xmlns="{main}" recordCount="0"><cacheSource type="worksheet"><worksheetSource ref="J1:M2" sheet="Pivot"/></cacheSource><cacheFields count="4"><cacheField name="Category"><sharedItems/></cacheField><cacheField name="Region"><sharedItems/></cacheField><cacheField name="Amount"><sharedItems/></cacheField><cacheField name="Units"><sharedItems/></cacheField></cacheFields></pivotCacheDefinition>"#
+                r#"<pivotCacheDefinition xmlns="{main}" recordCount="0"><cacheSource type="worksheet"/><cacheFields count="4"><cacheField name="Category"><sharedItems/></cacheField><cacheField name="Region"><sharedItems/></cacheField><cacheField name="Amount"><sharedItems/></cacheField><cacheField name="Units"><sharedItems/></cacheField></cacheFields></pivotCacheDefinition>"#
             ),
         ),
     ];
@@ -334,8 +337,12 @@ fn imported_overall_totals_use_axis_measure_indices_on_either_axis() {
                         );
                     }
                 }
-                engine.recalculate().unwrap();
                 let sheet = SheetId::from_uuid_str(&engine.get_all_sheet_ids()[0]).unwrap();
+                assert!(
+                    engine.pivot_get_all(&sheet).is_empty(),
+                    "cache-only pivot must not acquire a refreshable native source"
+                );
+                engine.recalculate().unwrap();
                 for (row, expected) in [(0, 57.0), (1, 9.0)] {
                     let expected = if include_totals {
                         CellValue::Number(FiniteF64::must(expected))

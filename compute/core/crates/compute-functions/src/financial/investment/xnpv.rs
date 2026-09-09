@@ -1,9 +1,9 @@
 use value_types::{CellError, CellValue, KahanSum};
 
 use super::super::helpers::{err_val, num_or_err_msg, req_num};
-use super::dated_cash_flows::collect_value_date_pairs;
-use crate::PureFunction;
+use super::dated_cash_flows::collect_value_date_pairs_with_context;
 use crate::helpers::coercion::flatten_values;
+use crate::{FunctionContext, PureFunction};
 
 pub(super) struct FnXnpv;
 
@@ -18,6 +18,9 @@ impl PureFunction for FnXnpv {
         Some(3)
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
+        self.call_with_context(args, &FunctionContext::default())
+    }
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
             let rate = req_num(args, 0).map_err(err_val)?;
             if rate <= 0.0 {
@@ -30,7 +33,8 @@ impl PureFunction for FnXnpv {
             let flat_vals = flatten_values(&[args[1].clone()]);
             let flat_dates = flatten_values(&[args[2].clone()]);
             let (values, dates) =
-                collect_value_date_pairs(&flat_vals, &flat_dates).map_err(err_val)?;
+                collect_value_date_pairs_with_context(&flat_vals, &flat_dates, context)
+                    .map_err(err_val)?;
             if values.is_empty() {
                 return Err(CellValue::error_with_message(
                     CellError::Num,

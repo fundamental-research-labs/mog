@@ -5,9 +5,30 @@ use chrono::NaiveDate;
 use value_types::{CellError, CellValue};
 
 use crate::datetime::calendar::{excel_dow_from_serial, is_excel_weekend, is_excel_weekend_mask};
+use crate::datetime::date_context::canonical_date_value;
 use crate::helpers::coercion::{check_error, flatten_values};
 use crate::helpers::date_serial::{date_to_serial, serial_to_date};
-use crate::{FunctionRegistry, PureFunction};
+use crate::{FunctionContext, FunctionRegistry, PureFunction};
+
+fn canonical_date_arg_with_input(
+    value: &CellValue,
+    context: &FunctionContext,
+) -> Result<(f64, f64), CellError> {
+    let input_serial = value.coerce_to_number()?;
+    let serial = canonical_date_value(value, context)?;
+    Ok((input_serial, serial))
+}
+
+fn holiday_serials(value: &CellValue, context: &FunctionContext) -> Vec<f64> {
+    flatten_values(std::slice::from_ref(value))
+        .iter()
+        .filter_map(|value| {
+            canonical_date_value(value, context)
+                .ok()
+                .map(|serial| serial.floor())
+        })
+        .collect()
+}
 
 pub struct FnNetworkdays;
 impl PureFunction for FnNetworkdays {
@@ -24,28 +45,28 @@ impl PureFunction for FnNetworkdays {
         index < 2
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
+        self.call_with_context(args, &FunctionContext::default())
+    }
+
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         if let Some(e) = check_error(&args[0]) {
             return e;
         }
         if let Some(e) = check_error(&args[1]) {
             return e;
         }
-        let start_serial = match args[0].coerce_to_number() {
-            Ok(n) => n,
+        let start_serial = match canonical_date_value(&args[0], context) {
+            Ok(serial) => serial,
             Err(e) => return CellValue::Error(e, None),
         };
-        let end_serial = match args[1].coerce_to_number() {
-            Ok(n) => n,
+        let end_serial = match canonical_date_value(&args[1], context) {
+            Ok(serial) => serial,
             Err(e) => return CellValue::Error(e, None),
         };
 
         // Optional holidays array
         let holidays: Vec<f64> = if args.len() > 2 {
-            let flat = flatten_values(&[args[2].clone()]);
-            flat.iter()
-                .filter_map(|v| v.coerce_to_number().ok())
-                .map(|n| n.floor())
-                .collect()
+            holiday_serials(&args[2], context)
         } else {
             Vec::new()
         };
@@ -100,18 +121,22 @@ impl PureFunction for FnNetworkdaysIntl {
         index < 3
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
+        self.call_with_context(args, &FunctionContext::default())
+    }
+
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         if let Some(e) = check_error(&args[0]) {
             return e;
         }
         if let Some(e) = check_error(&args[1]) {
             return e;
         }
-        let start_serial = match args[0].coerce_to_number() {
-            Ok(n) => n,
+        let start_serial = match canonical_date_value(&args[0], context) {
+            Ok(serial) => serial,
             Err(e) => return CellValue::Error(e, None),
         };
-        let end_serial = match args[1].coerce_to_number() {
-            Ok(n) => n,
+        let end_serial = match canonical_date_value(&args[1], context) {
+            Ok(serial) => serial,
             Err(e) => return CellValue::Error(e, None),
         };
 
@@ -128,11 +153,7 @@ impl PureFunction for FnNetworkdaysIntl {
 
         // Optional holidays array
         let holidays: Vec<f64> = if args.len() > 3 {
-            let flat = flatten_values(&[args[3].clone()]);
-            flat.iter()
-                .filter_map(|v| v.coerce_to_number().ok())
-                .map(|n| n.floor())
-                .collect()
+            holiday_serials(&args[3], context)
         } else {
             Vec::new()
         };
@@ -184,27 +205,28 @@ impl PureFunction for FnWorkday {
         index < 2
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
+        self.call_with_context(args, &FunctionContext::default())
+    }
+
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         if let Some(e) = check_error(&args[0]) {
             return e;
         }
         if let Some(e) = check_error(&args[1]) {
             return e;
         }
-        let start_serial = match args[0].coerce_to_number() {
-            Ok(n) => n,
-            Err(e) => return CellValue::Error(e, None),
-        };
+        let (start_input_serial, start_serial) =
+            match canonical_date_arg_with_input(&args[0], context) {
+                Ok(values) => values,
+                Err(e) => return CellValue::Error(e, None),
+            };
         let days = match args[1].coerce_to_number() {
             Ok(n) => n as i32,
             Err(e) => return CellValue::Error(e, None),
         };
 
         let holidays: Vec<f64> = if args.len() > 2 {
-            let flat = flatten_values(&[args[2].clone()]);
-            flat.iter()
-                .filter_map(|v| v.coerce_to_number().ok())
-                .map(|n| n.floor())
-                .collect()
+            holiday_serials(&args[2], context)
         } else {
             Vec::new()
         };
@@ -214,7 +236,7 @@ impl PureFunction for FnWorkday {
             None => {
                 return CellValue::error_with_message(
                     CellError::Num,
-                    format!("WORKDAY: invalid start date serial number {start_serial}"),
+                    format!("WORKDAY: invalid start date serial number {start_input_serial}"),
                 );
             }
         };
@@ -233,7 +255,7 @@ impl PureFunction for FnWorkday {
                         "WORKDAY: resulting date is before the epoch".to_string(),
                     )
                 } else {
-                    CellValue::number(serial)
+                    CellValue::number(context.from_canonical_date_serial(serial))
                 }
             }
             None => CellValue::error_with_message(
@@ -259,16 +281,21 @@ impl PureFunction for FnWorkdayIntl {
         index < 3
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
+        self.call_with_context(args, &FunctionContext::default())
+    }
+
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         if let Some(e) = check_error(&args[0]) {
             return e;
         }
         if let Some(e) = check_error(&args[1]) {
             return e;
         }
-        let start_serial = match args[0].coerce_to_number() {
-            Ok(n) => n,
-            Err(e) => return CellValue::Error(e, None),
-        };
+        let (start_input_serial, start_serial) =
+            match canonical_date_arg_with_input(&args[0], context) {
+                Ok(values) => values,
+                Err(e) => return CellValue::Error(e, None),
+            };
         let days = match args[1].coerce_to_number() {
             Ok(n) => n as i32,
             Err(e) => return CellValue::Error(e, None),
@@ -285,11 +312,7 @@ impl PureFunction for FnWorkdayIntl {
         };
 
         let holidays: Vec<f64> = if args.len() > 3 {
-            let flat = flatten_values(&[args[3].clone()]);
-            flat.iter()
-                .filter_map(|v| v.coerce_to_number().ok())
-                .map(|n| n.floor())
-                .collect()
+            holiday_serials(&args[3], context)
         } else {
             Vec::new()
         };
@@ -299,7 +322,7 @@ impl PureFunction for FnWorkdayIntl {
             None => {
                 return CellValue::error_with_message(
                     CellError::Num,
-                    format!("WORKDAY.INTL: invalid start date serial number {start_serial}"),
+                    format!("WORKDAY.INTL: invalid start date serial number {start_input_serial}"),
                 );
             }
         };
@@ -315,7 +338,7 @@ impl PureFunction for FnWorkdayIntl {
                         "WORKDAY.INTL: resulting date is before the epoch".to_string(),
                     )
                 } else {
-                    CellValue::number(serial)
+                    CellValue::number(context.from_canonical_date_serial(serial))
                 }
             }
             None => CellValue::error_with_message(
@@ -550,6 +573,65 @@ mod tests {
                 num(1.0)
             ],),
             num(5.0)
+        );
+    }
+
+    #[test]
+    fn test_workday_functions_use_1904_workbook_serials_and_holidays() {
+        let context = FunctionContext {
+            date1904: true,
+            ..FunctionContext::default()
+        };
+        let start = NaiveDate::from_ymd_opt(2024, 1, 1).unwrap();
+        let end = NaiveDate::from_ymd_opt(2024, 1, 5).unwrap();
+        let holiday = NaiveDate::from_ymd_opt(2024, 1, 2).unwrap();
+        let start_1900 = date_to_serial(&start);
+        let end_1900 = date_to_serial(&end);
+        let holiday_1900 = date_to_serial(&holiday);
+        let start_1904 = context.from_canonical_date_serial(start_1900);
+        let end_1904 = context.from_canonical_date_serial(end_1900);
+        let holiday_1904 = context.from_canonical_date_serial(holiday_1900);
+        let holidays = CellValue::array(vec![num(holiday_1904)], 1);
+
+        assert_eq!(
+            FnNetworkdays.call_with_context(
+                &[num(start_1904), num(end_1904), holidays.clone()],
+                &context,
+            ),
+            FnNetworkdays.call(&[
+                num(start_1900),
+                num(end_1900),
+                CellValue::array(vec![num(holiday_1900),], 1)
+            ])
+        );
+        assert_eq!(
+            FnNetworkdays.call_with_context(&[text("1/1/2024"), text("1/5/2024")], &context,),
+            num(5.0)
+        );
+        assert_eq!(
+            FnNetworkdaysIntl.call_with_context(
+                &[num(start_1904), num(end_1904), num(1.0), holidays.clone(),],
+                &context,
+            ),
+            FnNetworkdaysIntl.call(&[
+                num(start_1900),
+                num(end_1900),
+                num(1.0),
+                CellValue::array(vec![num(holiday_1900)], 1),
+            ])
+        );
+
+        let expected_workday = context.from_canonical_date_serial(date_to_serial(
+            &NaiveDate::from_ymd_opt(2024, 1, 3).unwrap(),
+        ));
+        assert_eq!(
+            FnWorkday.call_with_context(&[num(start_1904), num(1.0), holidays.clone()], &context),
+            num(expected_workday)
+        );
+        assert_eq!(
+            FnWorkdayIntl
+                .call_with_context(&[num(start_1904), num(1.0), num(1.0), holidays], &context,),
+            num(expected_workday)
         );
     }
 }

@@ -1,9 +1,9 @@
 use value_types::{CellError, CellValue, KahanSum};
 
 use super::super::helpers::{err_val, num_or_err_msg};
-use super::dated_cash_flows::{collect_value_date_pairs, solve_financial_root};
-use crate::PureFunction;
+use super::dated_cash_flows::{collect_value_date_pairs_with_context, solve_financial_root};
 use crate::helpers::coercion::flatten_values;
+use crate::{FunctionContext, PureFunction};
 
 pub(super) struct FnXirr;
 
@@ -18,11 +18,15 @@ impl PureFunction for FnXirr {
         Some(3)
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
+        self.call_with_context(args, &FunctionContext::default())
+    }
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
             let flat_vals = flatten_values(&[args[0].clone()]);
             let flat_dates = flatten_values(&[args[1].clone()]);
             let (values, dates) =
-                collect_value_date_pairs(&flat_vals, &flat_dates).map_err(err_val)?;
+                collect_value_date_pairs_with_context(&flat_vals, &flat_dates, context)
+                    .map_err(err_val)?;
             if values.len() < 2 {
                 return Err(CellValue::error_with_message(
                     CellError::Num,

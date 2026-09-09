@@ -22,7 +22,7 @@ pub use excel_function::ExcelFunction;
 pub use registered_function::RegisteredFunction;
 pub use registry::FunctionRegistry;
 pub use signature::{ArgRole, ArgSpec, FunctionSignature, VariadicSpec};
-pub use trait_def::{FunctionContext, PureFunction};
+pub use trait_def::{CharCodePage, DEFAULT_CHAR_CODE_PAGE, FunctionContext, PureFunction};
 
 // Shared infrastructure (renamed from `core` to avoid shadowing Rust's core crate)
 // SPI for compute-core scheduler/evaluator — gated behind `__internal` feature.

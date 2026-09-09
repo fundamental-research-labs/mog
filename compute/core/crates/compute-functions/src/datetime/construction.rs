@@ -7,7 +7,7 @@ use value_types::{CellError, CellValue};
 use crate::datetime::array_lift::{array_get, broadcast_dims, has_any_array};
 use crate::helpers::coercion::check_error;
 use crate::helpers::date_serial::date_to_serial;
-use crate::{FunctionRegistry, PureFunction};
+use crate::{FunctionContext, FunctionRegistry, PureFunction};
 
 pub struct FnDate;
 
@@ -63,6 +63,25 @@ fn date_scalar(args: &[CellValue]) -> CellValue {
     }
 }
 
+fn workbook_date_result(value: CellValue, context: &FunctionContext) -> CellValue {
+    match value {
+        CellValue::Number(number) => {
+            CellValue::number(context.from_canonical_date_serial(number.get()))
+        }
+        CellValue::Array(array) => {
+            let cols = array.cols();
+            let values = array
+                .data()
+                .iter()
+                .cloned()
+                .map(|value| workbook_date_result(value, context))
+                .collect();
+            CellValue::array(values, cols)
+        }
+        other => other,
+    }
+}
+
 impl PureFunction for FnDate {
     fn name(&self) -> &'static str {
         "DATE"
@@ -93,6 +112,13 @@ impl PureFunction for FnDate {
             return CellValue::from_rows(result);
         }
         date_scalar(args)
+    }
+
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
+        if !context.date1904 {
+            return self.call(args);
+        }
+        workbook_date_result(self.call(args), context)
     }
 }
 
@@ -153,6 +179,13 @@ impl PureFunction for FnEpochToDate {
         } else {
             CellValue::Error(CellError::Num, None)
         }
+    }
+
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
+        if !context.date1904 {
+            return self.call(args);
+        }
+        workbook_date_result(self.call(args), context)
     }
 }
 

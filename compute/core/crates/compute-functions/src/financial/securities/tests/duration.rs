@@ -1,6 +1,6 @@
 use super::super::{FnDuration, FnMduration};
 use super::{approx, num, ymd_to_serial};
-use crate::PureFunction;
+use crate::{FunctionContext, PureFunction};
 use value_types::{CellError, CellValue};
 
 #[test]
@@ -110,6 +110,49 @@ fn test_mduration_formula_relationship() {
             );
         }
         _ => panic!("Expected numbers"),
+    }
+}
+
+#[test]
+fn duration_functions_are_date_system_invariant() {
+    let settlement = ymd_to_serial(2020, 1, 1);
+    let maturity = ymd_to_serial(2030, 1, 1);
+    let offset = value_types::DateSystem::DATE_SYSTEM_1904_OFFSET;
+    let context = FunctionContext {
+        date1904: true,
+        ..FunctionContext::default()
+    };
+    let args_1900 = [
+        num(settlement),
+        num(maturity),
+        num(0.08),
+        num(0.09),
+        num(2.0),
+        num(1.0),
+    ];
+    let args_1904 = [
+        num(settlement - offset),
+        num(maturity - offset),
+        num(0.08),
+        num(0.09),
+        num(2.0),
+        num(1.0),
+    ];
+    let duration_1900 = FnDuration.call(&args_1900);
+    let duration_1904 = FnDuration.call_with_context(&args_1904, &context);
+    let mduration_1900 = FnMduration.call(&args_1900);
+    let mduration_1904 = FnMduration.call_with_context(&args_1904, &context);
+    match (duration_1900, duration_1904, mduration_1900, mduration_1904) {
+        (
+            CellValue::Number(duration_1900),
+            CellValue::Number(duration_1904),
+            CellValue::Number(mduration_1900),
+            CellValue::Number(mduration_1904),
+        ) => {
+            assert!((duration_1900.get() - duration_1904.get()).abs() < 1e-10);
+            assert!((mduration_1900.get() - mduration_1904.get()).abs() < 1e-10);
+        }
+        other => panic!("Expected numeric duration results, got {other:?}"),
     }
 }
 

@@ -5,9 +5,10 @@ use chrono::Datelike;
 use value_types::{CellError, CellValue};
 
 use crate::datetime::calendar::year_length_actual;
+use crate::datetime::date_context::canonical_date_value;
 use crate::helpers::coercion::check_error;
 use crate::helpers::date_serial::serial_to_date;
-use crate::{FunctionRegistry, PureFunction};
+use crate::{FunctionContext, FunctionRegistry, PureFunction};
 
 pub struct FnYearFrac;
 impl PureFunction for FnYearFrac {
@@ -137,6 +138,27 @@ impl PureFunction for FnYearFrac {
 
         CellValue::number(result)
     }
+
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
+        if !context.date1904 {
+            return self.call(args);
+        }
+
+        // YEARFRAC's first two arguments are calendar dates.  Rewrite only
+        // those positions; the optional basis is a plain numeric selector.
+        let mut canonical_args = args.to_vec();
+        for index in 0..2 {
+            if let Some(error) = check_error(&canonical_args[index]) {
+                return error;
+            }
+            let serial = match canonical_date_value(&canonical_args[index], context) {
+                Ok(serial) => serial,
+                Err(error) => return CellValue::Error(error, None),
+            };
+            canonical_args[index] = CellValue::number(serial);
+        }
+        self.call(&canonical_args)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -205,6 +227,33 @@ mod tests {
                 num(5.0)
             ],),
             err(CellError::Num)
+        );
+    }
+
+    #[test]
+    fn test_yearfrac_uses_1904_workbook_serials() {
+        let context = FunctionContext {
+            date1904: true,
+            ..FunctionContext::default()
+        };
+        let start = NaiveDate::from_ymd_opt(2023, 1, 1).unwrap();
+        let end = NaiveDate::from_ymd_opt(2024, 1, 1).unwrap();
+        let start_1900 = date_to_serial(&start);
+        let end_1900 = date_to_serial(&end);
+        let start_1904 = context.from_canonical_date_serial(start_1900);
+        let end_1904 = context.from_canonical_date_serial(end_1900);
+
+        for basis in [0.0, 1.0, 2.0, 3.0, 4.0] {
+            assert_eq!(
+                FnYearFrac
+                    .call_with_context(&[num(start_1904), num(end_1904), num(basis)], &context,),
+                FnYearFrac.call(&[num(start_1900), num(end_1900), num(basis)])
+            );
+        }
+        assert_eq!(
+            FnYearFrac
+                .call_with_context(&[text("1/1/2023"), text("1/1/2024"), num(3.0)], &context,),
+            FnYearFrac.call(&[num(start_1900), num(end_1900), num(3.0)])
         );
     }
 }

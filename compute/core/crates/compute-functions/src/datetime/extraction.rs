@@ -2,8 +2,21 @@
 
 use value_types::{CellError, CellValue};
 
+use super::date_context::canonical_date_value;
 use crate::helpers::coercion::check_error;
-use crate::{FunctionRegistry, PureFunction};
+use crate::{FunctionContext, FunctionRegistry, PureFunction};
+
+fn canonicalized_date_arg(
+    args: &[CellValue],
+    context: &FunctionContext,
+) -> Result<CellValue, CellValue> {
+    if let Some(error) = check_error(&args[0]) {
+        return Err(error);
+    }
+    canonical_date_value(&args[0], context)
+        .map(CellValue::number)
+        .map_err(|error| CellValue::Error(error, None))
+}
 
 pub struct FnYear;
 impl PureFunction for FnYear {
@@ -36,6 +49,16 @@ impl PureFunction for FnYear {
                 }
             }
             Err(e) => CellValue::Error(e, None),
+        }
+    }
+
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
+        if !context.date1904 {
+            return self.call(args);
+        }
+        match canonicalized_date_arg(args, context) {
+            Ok(arg) => self.call(&[arg]),
+            Err(error) => error,
         }
     }
 }
@@ -73,6 +96,16 @@ impl PureFunction for FnMonth {
             Err(e) => CellValue::Error(e, None),
         }
     }
+
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
+        if !context.date1904 {
+            return self.call(args);
+        }
+        match canonicalized_date_arg(args, context) {
+            Ok(arg) => self.call(&[arg]),
+            Err(error) => error,
+        }
+    }
 }
 
 pub struct FnDay;
@@ -106,6 +139,16 @@ impl PureFunction for FnDay {
                 }
             }
             Err(e) => CellValue::Error(e, None),
+        }
+    }
+
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
+        if !context.date1904 {
+            return self.call(args);
+        }
+        match canonicalized_date_arg(args, context) {
+            Ok(arg) => self.call(&[arg]),
+            Err(error) => error,
         }
     }
 }
@@ -281,5 +324,39 @@ mod tests {
         assert_eq!(FnYear.call(&[num(61.0)]), num(1900.0));
         assert_eq!(FnMonth.call(&[num(61.0)]), num(3.0));
         assert_eq!(FnDay.call(&[num(61.0)]), num(1.0));
+    }
+
+    #[test]
+    fn test_1904_context_does_not_shift_civil_date_text_twice() {
+        let context = FunctionContext {
+            date1904: true,
+            ..FunctionContext::default()
+        };
+        let civil_date = text("1/1/2024");
+        assert_eq!(
+            FnYear.call_with_context(std::slice::from_ref(&civil_date), &context),
+            num(2024.0)
+        );
+        assert_eq!(
+            FnMonth.call_with_context(std::slice::from_ref(&civil_date), &context),
+            num(1.0)
+        );
+        assert_eq!(FnDay.call_with_context(&[civil_date], &context), num(1.0));
+    }
+
+    #[test]
+    fn test_1904_context_shifts_numeric_text_like_numeric_serials() {
+        let context = FunctionContext {
+            date1904: true,
+            ..FunctionContext::default()
+        };
+        assert_eq!(
+            FnYear.call_with_context(&[num(43_830.0)], &context),
+            num(2024.0)
+        );
+        assert_eq!(
+            FnYear.call_with_context(&[text("43830")], &context),
+            num(2024.0)
+        );
     }
 }

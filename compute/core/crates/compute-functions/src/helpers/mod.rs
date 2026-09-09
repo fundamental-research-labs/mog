@@ -22,6 +22,7 @@
 //!   [`sumifs_result_cache`]
 
 // -- Function utilities --
+pub mod arithmetic;
 pub mod coercion;
 pub mod conditional_aggregate;
 pub mod criteria;

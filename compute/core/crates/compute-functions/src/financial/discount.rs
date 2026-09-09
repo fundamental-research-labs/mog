@@ -2,8 +2,9 @@
 
 use value_types::{CellError, CellValue};
 
+use super::date_context::canonical_date_arg;
 use super::helpers::{arg_num, err_val, num_or_err_msg, req_num, year_frac};
-use crate::{FunctionRegistry, PureFunction};
+use crate::{FunctionContext, FunctionRegistry, PureFunction};
 
 // ===========================================================================
 // DISC
@@ -24,9 +25,12 @@ impl PureFunction for FnDisc {
         Some(5)
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
+        self.call_with_context(args, &FunctionContext::default())
+    }
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
-            let settlement = req_num(args, 0).map_err(err_val)?;
-            let maturity = req_num(args, 1).map_err(err_val)?;
+            let settlement = canonical_date_arg(args, 0, context).map_err(err_val)?;
+            let maturity = canonical_date_arg(args, 1, context).map_err(err_val)?;
             let pr = req_num(args, 2).map_err(err_val)?;
             let redemption = req_num(args, 3).map_err(err_val)?;
             let basis = arg_num(args, 4, 0.0).map_err(err_val)? as i32;
@@ -81,9 +85,12 @@ impl PureFunction for FnIntrate {
         Some(5)
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
+        self.call_with_context(args, &FunctionContext::default())
+    }
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
-            let settlement = req_num(args, 0).map_err(err_val)?;
-            let maturity = req_num(args, 1).map_err(err_val)?;
+            let settlement = canonical_date_arg(args, 0, context).map_err(err_val)?;
+            let maturity = canonical_date_arg(args, 1, context).map_err(err_val)?;
             let investment = req_num(args, 2).map_err(err_val)?;
             let redemption = req_num(args, 3).map_err(err_val)?;
             let basis = arg_num(args, 4, 0.0).map_err(err_val)? as i32;
@@ -138,9 +145,12 @@ impl PureFunction for FnPricedisc {
         Some(5)
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
+        self.call_with_context(args, &FunctionContext::default())
+    }
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
-            let settlement = req_num(args, 0).map_err(err_val)?;
-            let maturity = req_num(args, 1).map_err(err_val)?;
+            let settlement = canonical_date_arg(args, 0, context).map_err(err_val)?;
+            let maturity = canonical_date_arg(args, 1, context).map_err(err_val)?;
             let discount = req_num(args, 2).map_err(err_val)?;
             let redemption = req_num(args, 3).map_err(err_val)?;
             let basis = arg_num(args, 4, 0.0).map_err(err_val)? as i32;
@@ -189,10 +199,13 @@ impl PureFunction for FnPricemat {
         Some(6)
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
+        self.call_with_context(args, &FunctionContext::default())
+    }
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
-            let settlement = req_num(args, 0).map_err(err_val)?;
-            let maturity = req_num(args, 1).map_err(err_val)?;
-            let issue = req_num(args, 2).map_err(err_val)?;
+            let settlement = canonical_date_arg(args, 0, context).map_err(err_val)?;
+            let maturity = canonical_date_arg(args, 1, context).map_err(err_val)?;
+            let issue = canonical_date_arg(args, 2, context).map_err(err_val)?;
             let rate = req_num(args, 3).map_err(err_val)?;
             let yld = req_num(args, 4).map_err(err_val)?;
             let basis = arg_num(args, 5, 0.0).map_err(err_val)? as i32;
@@ -256,9 +269,12 @@ impl PureFunction for FnReceived {
         Some(5)
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
+        self.call_with_context(args, &FunctionContext::default())
+    }
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
-            let settlement = req_num(args, 0).map_err(err_val)?;
-            let maturity = req_num(args, 1).map_err(err_val)?;
+            let settlement = canonical_date_arg(args, 0, context).map_err(err_val)?;
+            let maturity = canonical_date_arg(args, 1, context).map_err(err_val)?;
             let investment = req_num(args, 2).map_err(err_val)?;
             let discount = req_num(args, 3).map_err(err_val)?;
             let basis = arg_num(args, 4, 0.0).map_err(err_val)? as i32;
@@ -314,9 +330,12 @@ impl PureFunction for FnYielddisc {
         Some(5)
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
+        self.call_with_context(args, &FunctionContext::default())
+    }
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
-            let settlement = req_num(args, 0).map_err(err_val)?;
-            let maturity = req_num(args, 1).map_err(err_val)?;
+            let settlement = canonical_date_arg(args, 0, context).map_err(err_val)?;
+            let maturity = canonical_date_arg(args, 1, context).map_err(err_val)?;
             let pr = req_num(args, 2).map_err(err_val)?;
             let redemption = req_num(args, 3).map_err(err_val)?;
             let basis = arg_num(args, 4, 0.0).map_err(err_val)? as i32;
@@ -371,10 +390,13 @@ impl PureFunction for FnYieldmat {
         Some(6)
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
+        self.call_with_context(args, &FunctionContext::default())
+    }
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
-            let settlement = req_num(args, 0).map_err(err_val)?;
-            let maturity = req_num(args, 1).map_err(err_val)?;
-            let issue = req_num(args, 2).map_err(err_val)?;
+            let settlement = canonical_date_arg(args, 0, context).map_err(err_val)?;
+            let maturity = canonical_date_arg(args, 1, context).map_err(err_val)?;
+            let issue = canonical_date_arg(args, 2, context).map_err(err_val)?;
             let rate = req_num(args, 3).map_err(err_val)?;
             let pr = req_num(args, 4).map_err(err_val)?;
             let basis = arg_num(args, 5, 0.0).map_err(err_val)? as i32;
@@ -435,11 +457,147 @@ pub(super) fn register(registry: &mut FunctionRegistry) {
 mod tests {
     use super::super::helpers::ymd_to_serial;
     use super::*;
-    use crate::PureFunction;
+    use crate::{FunctionContext, PureFunction};
     use value_types::CellValue;
 
     fn num(n: f64) -> CellValue {
         CellValue::number(n)
+    }
+
+    #[test]
+    fn discount_schedule_functions_are_date_system_invariant() {
+        let settlement = ymd_to_serial(2023, 4, 1);
+        let maturity = ymd_to_serial(2024, 1, 1);
+        let issue = ymd_to_serial(2023, 1, 1);
+        let offset = value_types::DateSystem::DATE_SYSTEM_1904_OFFSET;
+        let context = FunctionContext {
+            date1904: true,
+            ..FunctionContext::default()
+        };
+        let s4 = settlement - offset;
+        let m4 = maturity - offset;
+        let i4 = issue - offset;
+        let cases = [
+            (
+                FnDisc.call(&[
+                    num(settlement),
+                    num(maturity),
+                    num(98.0),
+                    num(100.0),
+                    num(2.0),
+                ]),
+                FnDisc.call_with_context(
+                    &[num(s4), num(m4), num(98.0), num(100.0), num(2.0)],
+                    &context,
+                ),
+            ),
+            (
+                FnIntrate.call(&[
+                    num(settlement),
+                    num(maturity),
+                    num(98.0),
+                    num(100.0),
+                    num(2.0),
+                ]),
+                FnIntrate.call_with_context(
+                    &[num(s4), num(m4), num(98.0), num(100.0), num(2.0)],
+                    &context,
+                ),
+            ),
+            (
+                FnPricedisc.call(&[
+                    num(settlement),
+                    num(maturity),
+                    num(0.05),
+                    num(100.0),
+                    num(2.0),
+                ]),
+                FnPricedisc.call_with_context(
+                    &[num(s4), num(m4), num(0.05), num(100.0), num(2.0)],
+                    &context,
+                ),
+            ),
+            (
+                FnPricemat.call(&[
+                    num(settlement),
+                    num(maturity),
+                    num(issue),
+                    num(0.05),
+                    num(0.06),
+                    num(2.0),
+                ]),
+                FnPricemat.call_with_context(
+                    &[num(s4), num(m4), num(i4), num(0.05), num(0.06), num(2.0)],
+                    &context,
+                ),
+            ),
+            (
+                FnReceived.call(&[
+                    num(settlement),
+                    num(maturity),
+                    num(100.0),
+                    num(0.05),
+                    num(2.0),
+                ]),
+                FnReceived.call_with_context(
+                    &[num(s4), num(m4), num(100.0), num(0.05), num(2.0)],
+                    &context,
+                ),
+            ),
+            (
+                FnYielddisc.call(&[
+                    num(settlement),
+                    num(maturity),
+                    num(98.0),
+                    num(100.0),
+                    num(2.0),
+                ]),
+                FnYielddisc.call_with_context(
+                    &[num(s4), num(m4), num(98.0), num(100.0), num(2.0)],
+                    &context,
+                ),
+            ),
+            (
+                FnYieldmat.call(&[
+                    num(settlement),
+                    num(maturity),
+                    num(issue),
+                    num(0.05),
+                    num(98.0),
+                    num(2.0),
+                ]),
+                FnYieldmat.call_with_context(
+                    &[num(s4), num(m4), num(i4), num(0.05), num(98.0), num(2.0)],
+                    &context,
+                ),
+            ),
+        ];
+        for (canonical, workbook) in cases {
+            match (canonical, workbook) {
+                (CellValue::Number(canonical), CellValue::Number(workbook)) => {
+                    assert!((canonical.get() - workbook.get()).abs() < 1e-10);
+                }
+                other => panic!("Expected numeric discount results, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn discount_context_rejects_invalid_1904_dates() {
+        let context = FunctionContext {
+            date1904: true,
+            ..FunctionContext::default()
+        };
+        for serial in [-1.0, 2_957_004.0] {
+            let result = FnDisc.call_with_context(
+                &[num(serial), num(serial + 1.0), num(98.0), num(100.0)],
+                &context,
+            );
+            assert!(matches!(
+                result,
+                CellValue::Error(value_types::CellError::Value, _)
+            ));
+        }
     }
 
     #[test]

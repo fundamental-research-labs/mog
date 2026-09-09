@@ -1,4 +1,4 @@
-use crate::PureFunction;
+use crate::{FunctionContext, PureFunction};
 use value_types::{CellError, CellValue};
 
 use super::{FnXirr, FnXnpv, err, num, ymd};
@@ -296,4 +296,65 @@ fn xirr_unparseable_text_date_skipped() {
         }
         _ => panic!("Expected numbers, got {:?} and {:?}", r_bad, r_clean),
     }
+}
+
+#[test]
+fn xirr_xnpv_1904_context_handles_numeric_and_civil_date_text() {
+    let first_1900 = ymd(2023, 1, 1);
+    let second_1900 = ymd(2024, 1, 1);
+    let offset = value_types::DateSystem::DATE_SYSTEM_1904_OFFSET;
+    let context = FunctionContext {
+        date1904: true,
+        ..FunctionContext::default()
+    };
+    let values = CellValue::from_rows(vec![vec![num(-1000.0), num(1100.0)]]);
+    let dates_1900 = CellValue::from_rows(vec![vec![num(first_1900), num(second_1900)]]);
+    let dates_1904_mixed = CellValue::from_rows(vec![vec![
+        num(first_1900 - offset),
+        CellValue::Text("1/1/2024".into()),
+    ]]);
+
+    let xirr_1900 = FnXirr.call(&[values.clone(), dates_1900.clone()]);
+    let xirr_1904 = FnXirr.call_with_context(&[values.clone(), dates_1904_mixed.clone()], &context);
+    match (xirr_1900, xirr_1904) {
+        (CellValue::Number(canonical), CellValue::Number(workbook)) => {
+            assert!((canonical.get() - workbook.get()).abs() < 1e-10);
+        }
+        other => panic!("Expected numeric XIRR results, got {other:?}"),
+    }
+
+    let xnpv_1900 = FnXnpv.call(&[num(0.1), values.clone(), dates_1900]);
+    let xnpv_1904 =
+        FnXnpv.call_with_context(&[num(0.1), values.clone(), dates_1904_mixed], &context);
+    match (xnpv_1900, xnpv_1904) {
+        (CellValue::Number(canonical), CellValue::Number(workbook)) => {
+            assert!((canonical.get() - workbook.get()).abs() < 1e-10);
+        }
+        other => panic!("Expected numeric XNPV results, got {other:?}"),
+    }
+}
+
+#[test]
+fn dated_investment_context_rejects_out_of_range_1904_serials() {
+    let values = CellValue::from_rows(vec![vec![num(-100.0), num(110.0)]]);
+    let context = FunctionContext {
+        date1904: true,
+        ..FunctionContext::default()
+    };
+    for serial in [-1.0, 2_957_004.0] {
+        let dates = CellValue::from_rows(vec![vec![num(serial), num(serial + 1.0)]]);
+        assert_eq!(
+            FnXnpv.call_with_context(&[num(0.1), values.clone(), dates.clone()], &context),
+            err(CellError::Value)
+        );
+        assert_eq!(
+            FnXirr.call_with_context(&[values.clone(), dates], &context),
+            err(CellError::Value)
+        );
+    }
+    let valid_dates = CellValue::from_rows(vec![vec![num(0.0), num(1.0)]]);
+    assert!(matches!(
+        FnXnpv.call_with_context(&[num(0.1), values, valid_dates], &context),
+        CellValue::Number(_)
+    ));
 }

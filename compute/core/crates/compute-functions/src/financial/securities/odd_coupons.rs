@@ -7,6 +7,7 @@
 use value_types::date_serial::days_in_month;
 use value_types::{CellError, CellValue};
 
+use super::super::date_context::canonical_date_arg_truncated;
 use super::super::helpers::{
     actual_days_between, add_months_to_serial, arg_num, coupon_period_months, days360_between,
     err_val, num_or_err_msg, req_num, serial_to_ymd, validate_bond_args, ymd_to_serial,
@@ -18,8 +19,8 @@ fn invalid(message: &str) -> CellValue {
 }
 
 fn date_arg(args: &[CellValue], index: usize, context: &FunctionContext) -> Result<f64, CellValue> {
-    let serial = req_num(args, index).map_err(err_val)?.trunc();
-    let serial = serial + if context.date1904 { 1462.0 } else { 0.0 };
+    let serial = canonical_date_arg_truncated(args, index, context)
+        .map_err(|error| CellValue::Error(error, None))?;
     if !(0.0..=2_958_465.0).contains(&serial) {
         return Err(CellValue::error_with_message(
             CellError::Value,

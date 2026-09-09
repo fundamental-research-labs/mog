@@ -1,5 +1,8 @@
 use value_types::{CellError, CellValue};
 
+use super::super::date_context::canonical_date_value;
+use crate::FunctionContext;
+
 /// Excel's 1900 date system supports serials through 31 December 9999.
 ///
 /// This is a contract boundary, rather than a solver bound.  The date
@@ -39,6 +42,17 @@ pub(super) fn collect_value_date_pairs(
     flat_vals: &[CellValue],
     flat_dates: &[CellValue],
 ) -> Result<(Vec<f64>, Vec<f64>), CellError> {
+    collect_value_date_pairs_with_context(flat_vals, flat_dates, &FunctionContext::default())
+}
+
+/// Collect value/date pairs after converting workbook-relative date serials to
+/// the canonical 1900 system. Date-like text is already civil-date based and
+/// therefore is not shifted a second time in a 1904 workbook.
+pub(super) fn collect_value_date_pairs_with_context(
+    flat_vals: &[CellValue],
+    flat_dates: &[CellValue],
+    context: &FunctionContext,
+) -> Result<(Vec<f64>, Vec<f64>), CellError> {
     // Excel requires the values and dates references to have the same number
     // of entries.  Check this before filtering skipped cells; otherwise a
     // mismatched range can accidentally produce enough remaining pairs to
@@ -60,10 +74,15 @@ pub(super) fn collect_value_date_pairs(
             return Err(*e);
         }
         let date_val = match d {
-            CellValue::Number(n) => n.get(),
-            CellValue::Text(_) => match d.coerce_to_number() {
+            CellValue::Number(_) | CellValue::Text(_) => match canonical_date_value(d, context) {
                 Ok(n) => n,
-                Err(_) => continue,
+                Err(error) => match d {
+                    // Preserve the established numeric-date error contract;
+                    // unparseable text date pairs remain skipped.
+                    CellValue::Number(_) => return Err(error),
+                    CellValue::Text(_) => continue,
+                    _ => unreachable!(),
+                },
             },
             _ => continue,
         };

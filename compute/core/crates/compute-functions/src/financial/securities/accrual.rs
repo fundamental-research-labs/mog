@@ -2,11 +2,12 @@
 
 use value_types::{CellError, CellValue};
 
+use super::super::date_context::canonical_date_arg;
 use super::super::helpers::{
     actual_days_between, arg_num, days_in_year_by_basis, days360_between, err_val, num_or_err_msg,
     req_num, serial_to_ymd,
 };
-use crate::PureFunction;
+use crate::{FunctionContext, PureFunction};
 
 pub(super) struct FnAccrint;
 impl PureFunction for FnAccrint {
@@ -23,10 +24,13 @@ impl PureFunction for FnAccrint {
         Some(8)
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
+        self.call_with_context(args, &FunctionContext::default())
+    }
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
-            let issue = req_num(args, 0).map_err(err_val)?;
-            let first_interest = req_num(args, 1).map_err(err_val)?;
-            let settlement = req_num(args, 2).map_err(err_val)?;
+            let issue = canonical_date_arg(args, 0, context).map_err(err_val)?;
+            let first_interest = canonical_date_arg(args, 1, context).map_err(err_val)?;
+            let settlement = canonical_date_arg(args, 2, context).map_err(err_val)?;
             let rate = req_num(args, 3).map_err(err_val)?;
             let par = req_num(args, 4).map_err(err_val)?;
             let frequency = req_num(args, 5).map_err(err_val)? as i32;
@@ -111,9 +115,12 @@ impl PureFunction for FnAccrintm {
         Some(5)
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
+        self.call_with_context(args, &FunctionContext::default())
+    }
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
-            let issue = req_num(args, 0).map_err(err_val)?;
-            let settlement = req_num(args, 1).map_err(err_val)?;
+            let issue = canonical_date_arg(args, 0, context).map_err(err_val)?;
+            let settlement = canonical_date_arg(args, 1, context).map_err(err_val)?;
             let rate = req_num(args, 2).map_err(err_val)?;
             let par = req_num(args, 3).map_err(err_val)?;
             let basis = arg_num(args, 4, 0.0).map_err(err_val)? as i32;

@@ -5,9 +5,26 @@ use chrono::{Datelike, NaiveDate};
 use value_types::{CellError, CellValue};
 
 use crate::datetime::calendar::{excel_dow_from_serial, excel_iso_week_from_serial};
+use crate::datetime::date_context::canonical_date_value;
 use crate::helpers::coercion::check_error;
 use crate::helpers::date_serial::{date_to_serial, serial_to_date};
-use crate::{FunctionRegistry, PureFunction};
+use crate::{FunctionContext, FunctionRegistry, PureFunction};
+
+/// Convert only the date argument into the canonical 1900 serial system.
+/// Negative serials intentionally remain unchanged so the existing #NUM!
+/// behavior for dates before the supported epoch is retained.
+fn canonical_date_arg(arg: &CellValue, context: &FunctionContext) -> Result<CellValue, CellValue> {
+    match canonical_date_value(arg, context) {
+        Ok(serial) => Ok(CellValue::number(serial)),
+        Err(error) => {
+            if let Some(original) = check_error(arg) {
+                Err(original)
+            } else {
+                Err(CellValue::Error(error, None))
+            }
+        }
+    }
+}
 
 pub struct FnWeekday;
 impl PureFunction for FnWeekday {
@@ -91,6 +108,19 @@ impl PureFunction for FnWeekday {
             ),
         }
     }
+
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
+        if !context.date1904 {
+            return self.call(args);
+        }
+        let date_arg = match canonical_date_arg(&args[0], context) {
+            Ok(arg) => arg,
+            Err(error) => return error,
+        };
+        let mut canonical_args = args.to_vec();
+        canonical_args[0] = date_arg;
+        self.call(&canonical_args)
+    }
 }
 pub struct FnIsoWeekNum;
 
@@ -117,6 +147,17 @@ impl PureFunction for FnIsoWeekNum {
         };
         // Use Excel serial-based ISO week calculation for Lotus bug consistency
         CellValue::number(excel_iso_week_from_serial(serial) as f64)
+    }
+
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
+        if !context.date1904 {
+            return self.call(args);
+        }
+        let date_arg = match canonical_date_arg(&args[0], context) {
+            Ok(arg) => arg,
+            Err(error) => return error,
+        };
+        self.call(&[date_arg])
     }
 }
 
@@ -216,6 +257,19 @@ impl PureFunction for FnWeekNum {
 
         CellValue::number(week as f64)
     }
+
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
+        if !context.date1904 {
+            return self.call(args);
+        }
+        let date_arg = match canonical_date_arg(&args[0], context) {
+            Ok(arg) => arg,
+            Err(error) => return error,
+        };
+        let mut canonical_args = args.to_vec();
+        canonical_args[0] = date_arg;
+        self.call(&canonical_args)
+    }
 }
 
 pub(super) fn register_weekday(registry: &mut FunctionRegistry) {
@@ -304,6 +358,34 @@ mod tests {
         let d2 = NaiveDate::from_ymd_opt(2020, 12, 31).unwrap();
         let result2 = f.call(&[num(date_to_serial(&d2)), num(21.0)]);
         assert_eq!(result2, num(53.0));
+    }
+
+    #[test]
+    fn test_week_functions_use_1904_workbook_serials() {
+        let context = FunctionContext {
+            date1904: true,
+            ..FunctionContext::default()
+        };
+        let date = NaiveDate::from_ymd_opt(2024, 1, 15).unwrap();
+        let canonical_serial = date_to_serial(&date);
+        let workbook_serial = context.from_canonical_date_serial(canonical_serial);
+
+        assert_eq!(
+            FnWeekday.call_with_context(&[num(workbook_serial), num(2.0)], &context),
+            FnWeekday.call(&[num(canonical_serial), num(2.0)])
+        );
+        assert_eq!(
+            FnWeekday.call_with_context(&[text("1/15/2024"), num(2.0)], &context),
+            FnWeekday.call(&[num(canonical_serial), num(2.0)])
+        );
+        assert_eq!(
+            FnIsoWeekNum.call_with_context(&[num(workbook_serial)], &context),
+            FnIsoWeekNum.call(&[num(canonical_serial)])
+        );
+        assert_eq!(
+            FnWeekNum.call_with_context(&[num(workbook_serial), num(21.0)], &context),
+            FnWeekNum.call(&[num(canonical_serial), num(21.0)])
+        );
     }
 
     // -----------------------------------------------------------------------

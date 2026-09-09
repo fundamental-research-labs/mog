@@ -5,7 +5,7 @@ use chrono::Timelike;
 use value_types::{CellError, CellValue};
 
 use crate::helpers::coercion::check_error;
-use crate::{FunctionRegistry, PureFunction};
+use crate::{FunctionContext, FunctionRegistry, PureFunction};
 
 pub struct FnDatevalue;
 impl PureFunction for FnDatevalue {
@@ -39,6 +39,18 @@ impl PureFunction for FnDatevalue {
                 CellError::Value,
                 format!("DATEVALUE: could not parse '{trimmed}' as a date"),
             ),
+        }
+    }
+
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
+        if !context.date1904 {
+            return self.call(args);
+        }
+        match self.call(args) {
+            CellValue::Number(number) => {
+                CellValue::number(context.from_canonical_date_serial(number.get()))
+            }
+            other => other,
         }
     }
 }

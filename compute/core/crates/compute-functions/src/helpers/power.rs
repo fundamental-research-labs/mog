@@ -5,6 +5,20 @@
 
 use value_types::CellValue;
 
+use super::arithmetic::normalize_formula_result;
+
+/// Normalize a finite POWER result to Excel's arithmetic value space.
+///
+/// Office specifies IEC 60559 double precision while excluding denormalized
+/// (subnormal) numbers (MS-OE376, Part 4, §3.17.2). A finite result in that
+/// range therefore underflows to the representable zero value at the formula
+/// boundary. NaN, infinities, and normal numbers are unchanged; either zero
+/// is canonicalized to positive zero.
+#[inline]
+pub fn normalize_power_result(result: f64) -> f64 {
+    normalize_formula_result(result)
+}
+
 /// Maximum odd denominator to test when detecting rational exponents.
 /// Covers all common fractional exponents like 1/3, 2/3, 1/5, 3/7, etc.
 const MAX_ODD_DENOM: u64 = 99;
@@ -53,6 +67,7 @@ pub fn try_negative_base_pow(base: f64, exponent: f64) -> Option<CellValue> {
             }
             // Sign: (-1)^p — negative when p is odd, positive when p is even
             let result = if p % 2 != 0 { -magnitude } else { magnitude };
+            let result = normalize_power_result(result);
             return Some(CellValue::number(result));
         }
     }
@@ -118,5 +133,20 @@ mod tests {
         // (-8)^(-1/3) = 1/(-2) = -0.5
         let result = try_negative_base_pow(-8.0, -1.0 / 3.0).unwrap();
         assert!((unwrap_num(result) - (-0.5)).abs() < 1e-10);
+    }
+
+    #[test]
+    fn subnormal_power_result_is_zero() {
+        let subnormal = f64::MIN_POSITIVE / 2.0;
+        assert_eq!(normalize_power_result(subnormal), 0.0);
+        assert_eq!(normalize_power_result(-subnormal), 0.0);
+    }
+
+    #[test]
+    fn normal_power_result_is_preserved() {
+        assert_eq!(normalize_power_result(f64::MIN_POSITIVE), f64::MIN_POSITIVE);
+        assert_eq!(normalize_power_result(-8.0), -8.0);
+        assert_eq!(normalize_power_result(0.0), 0.0);
+        assert!(normalize_power_result(-0.0).is_sign_positive());
     }
 }

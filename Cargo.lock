@@ -1310,6 +1310,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "value-types",
+ "xlsx-parser",
 ]
 
 [[package]]

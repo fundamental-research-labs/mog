@@ -75,7 +75,9 @@ impl Workbook {
         })
     }
 
-    /// Load a workbook from an xlsx file on disk.
+    /// Load a workbook from an xlsx file on disk, preserving imported formula caches.
+    ///
+    /// Call [`Self::recalculate`] explicitly to evaluate formulas before exporting.
     pub fn from_xlsx_path(path: &str) -> Result<(Self, RecalcResult), ComputeApiError> {
         let data = std::fs::read(path).map_err(|e| {
             ComputeApiError::InvalidOperation(format!("read {path}: {e}"))
@@ -92,7 +94,18 @@ impl Workbook {
         Ok((Workbook { dispatch }, recalc))
     }
 
-    /// Export the workbook as xlsx bytes.
+    /// Evaluate formulas using the current workbook's calculation settings.
+    ///
+    /// An imported XLSX has pending calculation even when it contains cached
+    /// results. Volatile formulas use the current execution environment; their
+    /// results are not expected to equal a previously saved workbook's caches.
+    pub fn recalculate(&self) -> Result<RecalcResult, ComputeApiError> {
+        Ok(self.dispatch.call_engine(|e| {
+            e.recalculate_with_options(&snapshot_types::RecalcOptions::default())
+        })??)
+    }
+
+    /// Export the workbook as xlsx bytes without initiating recalculation.
     pub fn to_xlsx_bytes(&self) -> Result<Vec<u8>, ComputeApiError> {
         Ok(self.dispatch.call_engine(|e| e.export_to_xlsx_bytes())??)
     }

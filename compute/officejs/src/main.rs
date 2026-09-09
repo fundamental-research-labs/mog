@@ -6,7 +6,7 @@ use compute_api::Workbook;
 use mog::{OfficeJsError, run_office_js_with_workbook};
 
 fn usage() -> String {
-    "Usage:\n  mog save <in.xlsx> <out.xlsx>\n  mog run <in.xlsx> <script.js> <out.xlsx>\n  mog [--eval] <script.js>\n".to_string()
+    "Usage:\n  mog save [--recalculate] <in.xlsx> <out.xlsx>\n  mog run [--recalculate] <in.xlsx> <script.js> <out.xlsx>\n  mog [--eval] <script.js>\n\nSave preserves formula caches by default. --recalculate evaluates formulas before export.\n".to_string()
 }
 
 fn main() -> ExitCode {
@@ -28,22 +28,24 @@ fn run() -> Result<(), OfficeJsError> {
         }
         Some("save") => {
             args.next();
+            let recalculate = take_recalculate(&mut args);
             let input = args.next().ok_or_else(|| OfficeJsError::Script(usage()))?;
             let output = args.next().ok_or_else(|| OfficeJsError::Script(usage()))?;
             if args.next().is_some() {
                 return Err(OfficeJsError::Script(usage()));
             }
-            return open_save(&input, "", &output);
+            return open_save(&input, "", &output, recalculate);
         }
         Some("run") => {
             args.next();
+            let recalculate = take_recalculate(&mut args);
             let input = args.next().ok_or_else(|| OfficeJsError::Script(usage()))?;
             let script = args.next().ok_or_else(|| OfficeJsError::Script(usage()))?;
             let output = args.next().ok_or_else(|| OfficeJsError::Script(usage()))?;
             if args.next().is_some() {
                 return Err(OfficeJsError::Script(usage()));
             }
-            return open_save(&input, &script, &output);
+            return open_save(&input, &script, &output, recalculate);
         }
         _ => {}
     }
@@ -70,7 +72,21 @@ fn run() -> Result<(), OfficeJsError> {
     Ok(())
 }
 
-fn open_save(input: &str, script: &str, output: &str) -> Result<(), OfficeJsError> {
+fn take_recalculate(args: &mut std::iter::Peekable<impl Iterator<Item = String>>) -> bool {
+    if args.peek().is_some_and(|arg| arg == "--recalculate") {
+        args.next();
+        true
+    } else {
+        false
+    }
+}
+
+fn open_save(
+    input: &str,
+    script: &str,
+    output: &str,
+    recalculate: bool,
+) -> Result<(), OfficeJsError> {
     let (wb, _) = Workbook::from_xlsx_path(input)?;
     if !script.trim().is_empty() {
         let src = fs::read_to_string(script)
@@ -78,6 +94,9 @@ fn open_save(input: &str, script: &str, output: &str) -> Result<(), OfficeJsErro
         if !src.trim().is_empty() {
             run_office_js_with_workbook(&wb, &src)?;
         }
+    }
+    if recalculate {
+        wb.recalculate()?;
     }
     wb.to_xlsx_path(output)?;
     Ok(())

@@ -22,3 +22,4 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
+xlsx-parser = { path = "../../file-io/xlsx/parser" }

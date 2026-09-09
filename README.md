@@ -47,6 +47,22 @@ cargo run -p mog -- --eval 'await Excel.run(async (context) => {
 
 ## Scripting surface
 
+To open and save an existing workbook:
+
+```bash
+mog save input.xlsx output.xlsx
+mog save --recalculate input.xlsx calculated.xlsx
+mog run --recalculate input.xlsx script.js calculated.xlsx
+```
+
+`save` preserves imported formula caches. `--recalculate` evaluates formulas
+before export, after any script has run. Use recalculation to verify arithmetic
+starting from stale caches; use ordinary save to verify preservation. Random,
+clock, path, and platform-dependent results require controlled inputs or
+separate assertions, including dependent cells and spill ranges, when comparing
+against an Excel-generated workbook. Exact cached-value equality does not
+verify calculation accuracy.
+
 The engine implements a growing portion of the Office.js Excel
 application-specific API:
 

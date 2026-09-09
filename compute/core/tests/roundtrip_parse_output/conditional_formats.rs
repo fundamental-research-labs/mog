@@ -211,7 +211,7 @@ fn roundtrip_conditional_format_data_bar() {
                 },
                 min_length: None,
                 max_length: None,
-                positive_color: "#638EC6".to_string(),
+                positive_color: "#638EC6".into(),
                 negative_color: None,
                 border_color: None,
                 negative_border_color: None,

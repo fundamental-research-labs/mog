@@ -332,7 +332,7 @@ fn test_convert_data_bar_rule_accepts_ooxml_blank_threshold_colors() {
             max_point: invalid_max,
             min_length: None,
             max_length: None,
-            positive_color: "004472C4".to_string(),
+            positive_color: "004472C4".into(),
             negative_color: None,
             border_color: None,
             negative_border_color: None,
@@ -537,4 +537,53 @@ fn test_range_identities_preferred_over_position_ranges() {
     // Should use range_identities (0,0)->(5,3), NOT position ranges (99,99)->(100,100)
     assert_eq!(result[0].ranges[0].start_row(), 0);
     assert_eq!(result[0].ranges[0].end_row(), 5);
+}
+
+#[test]
+fn data_bar_resolves_authored_colors_in_every_role_at_render_boundary() {
+    use crate::cf::types::CFRuleKind;
+    let palette = std::collections::HashMap::from([("dk2".into(), "#000000".into())]);
+    for (color, expected) in [
+        (serde_json::json!({"rgb": "FF638EC6"}), "#638EC6"),
+        (
+            serde_json::json!({"rgb": "40000000", "tint": 0.5}),
+            "#40808080",
+        ),
+        (serde_json::json!({"theme": 3, "tint": 0.5}), "#808080"),
+        (serde_json::json!({"indexed": 2, "tint": -0.5}), "#800000"),
+        (serde_json::json!({"auto": true}), "#000000"),
+    ] {
+        let rule: cf::CFRule = serde_json::from_value(serde_json::json!({
+            "type": "dataBar", "id": "bar", "priority": 1,
+            "dataBar": {
+                "minPoint": {"value": {"kind": "min"}, "color": ""},
+                "maxPoint": {"value": {"kind": "max"}, "color": ""},
+                "positiveColor": color, "negativeColor": color, "borderColor": color,
+                "negativeBorderColor": color, "axisColor": color
+            }
+        }))
+        .unwrap();
+        let rules =
+            convert_cf_formats_to_rules(&[make_format(vec![rule])], no_resolve, None, &palette);
+        assert_eq!(
+            rules.len(),
+            1,
+            "structured colors must not invalidate the data bar"
+        );
+        let CFRuleKind::DataBar(bar) = &rules[0].kind else {
+            panic!("expected data bar")
+        };
+        let expected = value_types::Color::from_hex(expected).unwrap();
+        assert_eq!(bar.positive_color, expected);
+        for role in [
+            bar.negative_color,
+            bar.border_color,
+            bar.negative_border_color,
+            bar.axis_color,
+        ] {
+            assert_eq!(role.unwrap(), expected);
+        }
+        assert_eq!(bar.min_point.color, bar.positive_color);
+        assert_eq!(bar.max_point.color, bar.positive_color);
+    }
 }

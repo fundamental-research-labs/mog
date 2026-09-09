@@ -291,3 +291,25 @@ fn conditional_format_roundtrip() {
     };
     roundtrip_json(&cf);
 }
+
+#[test]
+fn structured_data_bar_color_json_preserves_authored_kind_and_accepts_legacy_rgb() {
+    for value in [
+        serde_json::json!("#638EC6"),
+        serde_json::json!({"rgb": "FF638EC6"}),
+        serde_json::json!({"theme": 3, "tint": 0.39997558519241921}),
+        serde_json::json!({"indexed": 2, "tint": -0.25}),
+        serde_json::json!({"auto": true}),
+    ] {
+        let color: CFColor = serde_json::from_value(value.clone()).unwrap();
+        if let Some(rgb) = value.as_str() {
+            assert_eq!(color.rgb.as_deref(), Some(rgb));
+        }
+        let serialized = serde_json::to_value(&color).unwrap();
+        assert!(serialized.is_object());
+        assert_eq!(
+            serde_json::from_value::<CFColor>(serialized).unwrap(),
+            color
+        );
+    }
+}

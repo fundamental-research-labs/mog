@@ -3,6 +3,65 @@ use serde::{Deserialize, Serialize};
 
 use super::CFValueRef;
 
+/// Authored SpreadsheetML color, retained until the rendering boundary.
+/// Legacy RGB strings remain accepted when reading saved domain JSON/Yrs state.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(from = "CFColorInput")]
+pub struct CFColor {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rgb: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub theme: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub indexed: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tint: Option<f64>,
+    pub auto: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum CFColorInput {
+    Rgb(String),
+    Structured(ooxml_types::cond_format::CfColor),
+}
+
+impl From<CFColorInput> for CFColor {
+    fn from(value: CFColorInput) -> Self {
+        match value {
+            CFColorInput::Rgb(rgb) => rgb.into(),
+            CFColorInput::Structured(color) => color.into(),
+        }
+    }
+}
+
+impl From<ooxml_types::cond_format::CfColor> for CFColor {
+    fn from(color: ooxml_types::cond_format::CfColor) -> Self {
+        Self {
+            rgb: color.rgb,
+            theme: color.theme,
+            indexed: color.indexed,
+            tint: color.tint,
+            auto: color.auto,
+        }
+    }
+}
+
+impl From<String> for CFColor {
+    fn from(rgb: String) -> Self {
+        Self {
+            rgb: Some(rgb),
+            ..Self::default()
+        }
+    }
+}
+
+impl From<&str> for CFColor {
+    fn from(rgb: &str) -> Self {
+        rgb.to_owned().into()
+    }
+}
+
 /// A single point in a color scale (min, mid, max) or data bar (min, max).
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -74,13 +133,13 @@ pub struct CFDataBar {
     pub min_length: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_length: Option<u32>,
-    pub positive_color: String,
+    pub positive_color: CFColor,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub negative_color: Option<String>,
+    pub negative_color: Option<CFColor>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub border_color: Option<String>,
+    pub border_color: Option<CFColor>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub negative_border_color: Option<String>,
+    pub negative_border_color: Option<CFColor>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub show_border: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -90,7 +149,7 @@ pub struct CFDataBar {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub axis_position: Option<DataBarAxisPosition>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub axis_color: Option<String>,
+    pub axis_color: Option<CFColor>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub show_value: Option<bool>,
     /// When true, negative bars use the positive fill color instead of negative_color.

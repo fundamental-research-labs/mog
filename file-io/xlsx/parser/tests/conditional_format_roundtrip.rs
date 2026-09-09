@@ -387,7 +387,7 @@ fn cf_data_bar_rule_round_trips_with_typed_value_refs() {
                 },
                 min_length: None,
                 max_length: None,
-                positive_color: "#638EC6".to_string(),
+                positive_color: "#638EC6".into(),
                 negative_color: None,
                 border_color: None,
                 negative_border_color: None,

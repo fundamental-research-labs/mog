@@ -441,12 +441,15 @@ pub(crate) fn convert_cf_rule(
                     },
                     min_length: db.min_length_attr_present.then_some(db.min_length),
                     max_length: db.max_length_attr_present.then_some(db.max_length),
-                    positive_color: cf_color_to_rgb(&db.color),
+                    positive_color: cf_color_to_domain(&db.color),
                     show_value: db.show_value_attr_present.then_some(db.show_value),
-                    border_color: db.border_color.as_ref().map(cf_color_to_rgb),
-                    negative_border_color: db.negative_border_color.as_ref().map(cf_color_to_rgb),
-                    negative_color: db.negative_fill_color.as_ref().map(cf_color_to_rgb),
-                    axis_color: db.axis_color.as_ref().map(cf_color_to_rgb),
+                    border_color: db.border_color.as_ref().map(cf_color_to_domain),
+                    negative_border_color: db
+                        .negative_border_color
+                        .as_ref()
+                        .map(cf_color_to_domain),
+                    negative_color: db.negative_fill_color.as_ref().map(cf_color_to_domain),
+                    axis_color: db.axis_color.as_ref().map(cf_color_to_domain),
                     direction: db.direction_attr_present.then_some(db.direction),
                     gradient: db.gradient_attr_present.then_some(db.gradient),
                     ext_id: rule.ext_id.clone(),
@@ -483,7 +486,7 @@ pub(crate) fn convert_cf_rule(
                     },
                     min_length: None,
                     max_length: None,
-                    positive_color: String::new(),
+                    positive_color: domain_types::CFColor::default(),
                     negative_color: None,
                     border_color: None,
                     negative_border_color: None,
@@ -652,9 +655,11 @@ pub(crate) fn convert_cf_rule(
     converted
 }
 
-/// Extract an RGB hex string from a `CfColor`, falling back to an empty string.
-pub(crate) fn cf_color_to_rgb(color: &ooxml_types::cond_format::CfColor) -> String {
-    color.rgb.clone().unwrap_or_default()
+/// Preserve the authored representation for every data-bar color role.
+pub(crate) fn cf_color_to_domain(
+    color: &ooxml_types::cond_format::CfColor,
+) -> domain_types::CFColor {
+    color.clone().into()
 }
 
 /// Build a `CFColorPoint` from a `Cfvo` and `CfColor`, preserving theme/indexed/tint/auto.

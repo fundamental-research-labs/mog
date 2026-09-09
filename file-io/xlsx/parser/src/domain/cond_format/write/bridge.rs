@@ -31,6 +31,31 @@ pub(super) fn write_cf_color_point_color(w: &mut XmlWriter, pt: &CFColorPoint) {
     w.self_close();
 }
 
+/// Emit the same authored color representation in base and x14 data bars.
+pub(super) fn write_data_bar_color(
+    w: &mut XmlWriter,
+    element: &str,
+    color: &domain_types::CFColor,
+) {
+    w.start_element(element);
+    if let Some(rgb) = &color.rgb {
+        w.attr("rgb", &hex_to_argb(rgb));
+    }
+    if let Some(theme) = color.theme {
+        w.attr_num("theme", theme);
+    }
+    if let Some(indexed) = color.indexed {
+        w.attr_num("indexed", indexed);
+    }
+    if color.auto {
+        w.attr("auto", "1");
+    }
+    if let Some(tint) = color.tint {
+        w.attr("tint", &tint.to_string());
+    }
+    w.self_close();
+}
+
 pub(super) fn cfvo_ooxml_value(point: &CFColorPoint) -> Option<String> {
     point
         .value
@@ -355,29 +380,16 @@ fn write_cf_rule(w: &mut XmlWriter, rule: &CFRule, first_cell: &str) {
             w.end_attrs();
             write_cfvo_from_color_point(w, &data_bar.min_point);
             write_cfvo_from_color_point(w, &data_bar.max_point);
-            // color
-            w.start_element("color")
-                .attr("rgb", &hex_to_argb(&data_bar.positive_color))
-                .self_close();
-            if let Some(color) = &data_bar.border_color {
-                w.start_element("borderColor")
-                    .attr("rgb", &hex_to_argb(color))
-                    .self_close();
-            }
-            if let Some(color) = &data_bar.negative_color {
-                w.start_element("negativeFillColor")
-                    .attr("rgb", &hex_to_argb(color))
-                    .self_close();
-            }
-            if let Some(color) = &data_bar.negative_border_color {
-                w.start_element("negativeBorderColor")
-                    .attr("rgb", &hex_to_argb(color))
-                    .self_close();
-            }
-            if let Some(color) = &data_bar.axis_color {
-                w.start_element("axisColor")
-                    .attr("rgb", &hex_to_argb(color))
-                    .self_close();
+            write_data_bar_color(w, "color", &data_bar.positive_color);
+            for (element, color) in [
+                ("borderColor", &data_bar.border_color),
+                ("negativeFillColor", &data_bar.negative_color),
+                ("negativeBorderColor", &data_bar.negative_border_color),
+                ("axisColor", &data_bar.axis_color),
+            ] {
+                if let Some(color) = color {
+                    write_data_bar_color(w, element, color);
+                }
             }
             w.end_element("dataBar");
             // Write x14:id extension linking to extended databar properties
@@ -686,15 +698,15 @@ mod tests {
                     max_point: data_bar_point(CFValueRef::Max),
                     min_length: None,
                     max_length: None,
-                    positive_color: "#4472C4".to_string(),
-                    negative_color: Some("#FF0000".to_string()),
+                    positive_color: "#4472C4".into(),
+                    negative_color: Some("#FF0000".into()),
                     negative_border_color: None,
-                    border_color: Some("#222222".to_string()),
+                    border_color: Some("#222222".into()),
                     show_border: Some(true),
                     gradient: Some(false),
                     direction: Some(DataBarDirection::LeftToRight),
                     axis_position: Some(DataBarAxisPosition::None),
-                    axis_color: Some("#000000".to_string()),
+                    axis_color: Some("#000000".into()),
                     show_value: Some(false),
                     match_positive_fill_color: Some(false),
                     match_positive_border_color: Some(true),
@@ -740,7 +752,7 @@ mod tests {
                     max_point: data_bar_point(CFValueRef::AutoMax),
                     min_length: None,
                     max_length: None,
-                    positive_color: "#4472C4".to_string(),
+                    positive_color: "#4472C4".into(),
                     negative_color: None,
                     negative_border_color: None,
                     border_color: None,
@@ -862,7 +874,7 @@ mod tests {
                     max_point: data_bar_point(CFValueRef::Max),
                     min_length: None,
                     max_length: None,
-                    positive_color: "#4472C4".to_string(),
+                    positive_color: "#4472C4".into(),
                     negative_color: None,
                     negative_border_color: None,
                     border_color: None,
@@ -914,7 +926,7 @@ mod tests {
                     max_point,
                     min_length: None,
                     max_length: None,
-                    positive_color: "#4472C4".to_string(),
+                    positive_color: "#4472C4".into(),
                     negative_color: None,
                     negative_border_color: None,
                     border_color: None,
@@ -954,7 +966,7 @@ mod tests {
                     max_point: data_bar_point(CFValueRef::Max),
                     min_length: Some(10),
                     max_length: Some(90),
-                    positive_color: "#4472C4".to_string(),
+                    positive_color: "#4472C4".into(),
                     negative_color: None,
                     negative_border_color: None,
                     border_color: None,

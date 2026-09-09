@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use super::value_refs::convert_color_point_to_wire;
+use super::value_refs::{convert_color_point_to_wire, resolve_cf_color};
 use crate::cf::types::{
     CFColorPointWire, CFDataBarAxisPosition, CFDataBarDirection, CFDataBarWire,
 };
@@ -43,21 +43,44 @@ pub(super) fn convert_data_bar_to_wire(
         None => CFDataBarAxisPosition::default(),
     };
 
-    let positive_color =
-        normalize_data_bar_color(&db.positive_color).unwrap_or_else(|| db.positive_color.clone());
+    let resolve = |color: &cf::CFColor| {
+        // Keep the existing ARGB/alpha contract for explicit RGB bars. Resolve
+        // authored palette references only at this evaluation boundary.
+        let explicit_rgb = if color.theme.is_none() && color.indexed.is_none() && !color.auto {
+            color
+                .rgb
+                .as_deref()
+                .and_then(|rgb| value_types::Color::from_hex(rgb.trim()).ok())
+                .map(|rgb| {
+                    let tinted = color
+                        .tint
+                        .map(|tint| domain_types::theme_color::apply_tint(&rgb.to_hex_rgb(), tint))
+                        .and_then(|tinted| value_types::Color::from_hex(&tinted).ok())
+                        .unwrap_or(rgb);
+                    tinted.with_alpha(rgb.a()).to_string()
+                })
+        } else {
+            None
+        };
+        explicit_rgb
+            .or_else(|| resolve_cf_color(color, theme_palette))
+            .and_then(|color| normalize_data_bar_color(&color))
+            .unwrap_or_else(|| color.rgb.clone().unwrap_or_default())
+    };
+    let positive_color = resolve(&db.positive_color);
 
     CFDataBarWire {
         min_point: convert_data_bar_point_to_wire(&db.min_point, &positive_color, theme_palette),
         max_point: convert_data_bar_point_to_wire(&db.max_point, &positive_color, theme_palette),
         positive_color,
-        negative_color: db.negative_color.clone(),
-        border_color: db.border_color.clone(),
-        negative_border_color: db.negative_border_color.clone(),
+        negative_color: db.negative_color.as_ref().map(resolve),
+        border_color: db.border_color.as_ref().map(resolve),
+        negative_border_color: db.negative_border_color.as_ref().map(resolve),
         show_border: db.show_border.unwrap_or(false),
         gradient: db.gradient.unwrap_or(true),
         direction,
         axis_position,
-        axis_color: db.axis_color.clone(),
+        axis_color: db.axis_color.as_ref().map(resolve),
         show_value: db.show_value.unwrap_or(true),
         min_length: data_bar_length_to_wire(db.min_length, 10),
         max_length: data_bar_length_to_wire(db.max_length, 90),

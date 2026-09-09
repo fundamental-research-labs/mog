@@ -86,8 +86,8 @@ fn test_numeric_text_criteria_use_numeric_comparisons() {
         cv_num(1.0),
         cv_num(5.0),
         cv_num(10.0),
-        cv_text("10"),
-        cv_null(),
+        cv_text("10"), // Text rows retain text-vs-text comparison semantics.
+        cv_null(),     // Blank rows retain the positive-operator false contract.
     ];
 
     let cases = [
@@ -95,8 +95,8 @@ fn test_numeric_text_criteria_use_numeric_comparisons() {
         (FilterOperator::NotEquals, vec![1, 0, 1, 1, 1]),
         (FilterOperator::GreaterThan, vec![0, 0, 1, 0, 0]),
         (FilterOperator::GreaterThanOrEqual, vec![0, 1, 1, 0, 0]),
-        (FilterOperator::LessThan, vec![1, 0, 0, 0, 0]),
-        (FilterOperator::LessThanOrEqual, vec![1, 1, 0, 0, 0]),
+        (FilterOperator::LessThan, vec![1, 0, 0, 1, 0]),
+        (FilterOperator::LessThanOrEqual, vec![1, 1, 0, 1, 0]),
     ];
 
     for (operator, expected) in cases {

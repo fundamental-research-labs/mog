@@ -556,8 +556,9 @@ fn is_numeric_comparison_operator(operator: &FilterOperator) -> bool {
 /// Coerce a textual criterion to a number only when the row value is already
 /// numeric. This keeps text columns type-strict while allowing imported
 /// numeric-column criteria such as `greaterThan val="10"` to evaluate as Excel
-/// does. Invalid and non-finite text remains text and therefore retains the
-/// normal type-mismatch behavior.
+/// does. Text rows retain the original text criterion and existing text
+/// comparison semantics. Invalid and non-finite text remains text and
+/// therefore retains the normal type-mismatch behavior for numeric rows.
 fn normalize_numeric_condition_value<'a>(
     value: &CellValue,
     criterion: &'a CellValue,

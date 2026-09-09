@@ -172,7 +172,8 @@ fn test_numeric_text_criteria_support_between_and_not_between() {
         cv_num(5.0),
         cv_num(8.0),
         cv_num(9.0),
-        cv_text("5"),
+        cv_text("5"), // Text rows compare against text bounds lexically.
+        cv_null(),    // Blank rows remain excluded by positive conditions.
     ];
 
     let between = make_condition_filter(
@@ -183,7 +184,7 @@ fn test_numeric_text_criteria_support_between_and_not_between() {
         )],
         FilterLogic::And,
     );
-    assert_eq!(eval(&between, &data), vec![0, 1, 1, 1, 0, 0]);
+    assert_eq!(eval(&between, &data), vec![0, 1, 1, 1, 0, 1, 0]);
 
     let not_between = make_condition_filter(
         vec![make_cond2(
@@ -193,5 +194,5 @@ fn test_numeric_text_criteria_support_between_and_not_between() {
         )],
         FilterLogic::And,
     );
-    assert_eq!(eval(&not_between, &data), vec![1, 0, 0, 0, 1, 0]);
+    assert_eq!(eval(&not_between, &data), vec![1, 0, 0, 0, 1, 0, 1]);
 }

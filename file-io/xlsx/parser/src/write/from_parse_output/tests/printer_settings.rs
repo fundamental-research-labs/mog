@@ -228,6 +228,40 @@ fn stale_imported_worksheet_printer_settings_bytes_are_preserved_inertly() {
         .expect("exported package should be valid");
 }
 
+#[test]
+fn worksheet_scale_zero_roundtrips_as_automatic_distinct_from_explicit_ten() {
+    for scale in [0, 10] {
+        let imported = printer_settings_fixture_with_worksheet(
+            worksheet_xml_with_scale(scale),
+            Some(PRINTER_SETTINGS_BYTES),
+        );
+        let (parsed, _) = crate::parse_xlsx_to_output(&imported).expect("fixture should parse");
+        assert_eq!(
+            parsed.sheets[0]
+                .print_settings
+                .as_ref()
+                .and_then(|settings| settings.scale),
+            Some(scale)
+        );
+
+        let exported = write_xlsx_from_parse_output(&parsed).expect("export should succeed");
+        let reparsed = crate::parse_xlsx_to_output(&exported)
+            .expect("export should reparse")
+            .0;
+        assert_eq!(
+            reparsed.sheets[0]
+                .print_settings
+                .as_ref()
+                .and_then(|settings| settings.scale),
+            Some(scale)
+        );
+        let archive = crate::XlsxArchive::new(&exported).expect("exported XLSX should be readable");
+        let sheet_xml =
+            String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+        assert!(sheet_xml.contains(format!(r#"scale="{scale}""#).as_str()));
+    }
+}
+
 fn printer_settings_fixture(printer_settings: Option<&[u8]>) -> Vec<u8> {
     printer_settings_fixture_with_path(
         "../printerSettings/printerSettings1.bin",
@@ -241,6 +275,32 @@ fn printer_settings_fixture_with_path(
     part_path: &str,
     printer_settings: Option<&[u8]>,
 ) -> Vec<u8> {
+    printer_settings_fixture_with_worksheet_and_path(
+        worksheet_xml(),
+        rel_target,
+        part_path,
+        printer_settings,
+    )
+}
+
+fn printer_settings_fixture_with_worksheet(
+    worksheet_xml: String,
+    printer_settings: Option<&[u8]>,
+) -> Vec<u8> {
+    printer_settings_fixture_with_worksheet_and_path(
+        worksheet_xml,
+        "../printerSettings/printerSettings1.bin",
+        "xl/printerSettings/printerSettings1.bin",
+        printer_settings,
+    )
+}
+
+fn printer_settings_fixture_with_worksheet_and_path(
+    worksheet_xml: String,
+    rel_target: &str,
+    part_path: &str,
+    printer_settings: Option<&[u8]>,
+) -> Vec<u8> {
     let mut zip = crate::write::ZipWriter::new();
     zip.add_file("[Content_Types].xml", content_types_xml().into_bytes())
         .add_file("_rels/.rels", root_rels_xml().into_bytes())
@@ -249,7 +309,7 @@ fn printer_settings_fixture_with_path(
             "xl/_rels/workbook.xml.rels",
             workbook_rels_xml().into_bytes(),
         )
-        .add_file("xl/worksheets/sheet1.xml", worksheet_xml().into_bytes())
+        .add_file("xl/worksheets/sheet1.xml", worksheet_xml.into_bytes())
         .add_file(
             "xl/worksheets/_rels/sheet1.xml.rels",
             worksheet_rels_xml_with_target(rel_target).into_bytes(),
@@ -312,12 +372,17 @@ fn workbook_xml() -> String {
 }
 
 fn worksheet_xml() -> String {
-    r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    worksheet_xml_with_scale(90)
+}
+
+fn worksheet_xml_with_scale(scale: u32) -> String {
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <sheetData/>
-  <pageSetup paperSize="9" scale="90" orientation="landscape" horizontalDpi="600" verticalDpi="600" r:id="rIdPrinter"/>
+  <pageSetup paperSize="9" scale="{scale}" orientation="landscape" horizontalDpi="600" verticalDpi="600" r:id="rIdPrinter"/>
 </worksheet>"#
-        .to_string()
+    )
 }
 
 fn rels_xml(relationships: &[(&str, &str, &str)]) -> String {

@@ -204,13 +204,21 @@ fn odd_coupons_invalid_arguments_and_registration() {
             (5 + offset, -1., CellError::Num),
             (6 + offset, 3., CellError::Num),
             (7 + offset, 5., CellError::Num),
-            (0, -1., CellError::Value),
+            (0, -1., CellError::Num),
         ];
         if first {
             invalid.extend([(3, 39763., CellError::Num), (3, 44256., CellError::Num)]);
         }
         if is_yield {
             invalid.push((4 + offset, 0., CellError::Num));
+        }
+        // Native Excel reports #NUM! for invalid date serials in each of
+        // the four odd-coupon functions, before validating their chronology.
+        for date_index in 0..(3 + offset) {
+            invalid.extend([
+                (date_index, -0.5, CellError::Num),
+                (date_index, 2_958_466.5, CellError::Num),
+            ]);
         }
         for (index, value, error) in invalid {
             let mut values = args.iter().copied().map(num).collect::<Vec<_>>();

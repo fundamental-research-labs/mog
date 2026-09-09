@@ -19,15 +19,8 @@ fn invalid(message: &str) -> CellValue {
 }
 
 fn date_arg(args: &[CellValue], index: usize, context: &FunctionContext) -> Result<f64, CellValue> {
-    let serial = canonical_date_arg_truncated(args, index, context)
-        .map_err(|error| CellValue::Error(error, None))?;
-    if !(0.0..=2_958_465.0).contains(&serial) {
-        return Err(CellValue::error_with_message(
-            CellError::Value,
-            "invalid security date",
-        ));
-    }
-    Ok(serial)
+    canonical_date_arg_truncated(args, index, context)
+        .map_err(|error| CellValue::Error(error, None))
 }
 
 fn is_month_end(serial: f64) -> bool {

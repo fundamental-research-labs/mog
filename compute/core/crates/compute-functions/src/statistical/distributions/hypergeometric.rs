@@ -55,25 +55,15 @@ impl PureFunction for FnHypGeomDist {
             Ok(v) => v,
             Err(e) => return CellValue::Error(e, None),
         };
-        // Excel rejects degenerate populations/samples and samples that cannot
-        // contain enough successes because the population has too few
-        // failures.  The upper bound is min(number_sample, population_s),
-        // while the lower bound is max(0, number_sample - number_pop +
-        // population_s).
-        let min_successes = n_sample.saturating_sub(n_pop.saturating_sub(k_pop));
-        if n_sample == 0
-            || k_pop == 0
-            || n_pop == 0
-            || n_sample > n_pop
-            || k_pop > n_pop
-            || s > n_sample
-            || s > k_pop
-            || s < min_successes
-        {
+        // Excel returns a zero probability for sample counts outside the
+        // distribution's support. Only the population relation itself is an
+        // invalid argument: an empty population, an oversized sample, or more
+        // successes than population members.
+        if n_pop == 0 || n_sample > n_pop || k_pop > n_pop {
             return CellValue::error_with_message(
                 CellError::Num,
                 format!(
-                    "HYPGEOM.DIST: requires 0 < number_sample <= number_pop, 0 < population_s <= number_pop, and max(0, number_sample - number_pop + population_s) <= sample_s <= min(number_sample, population_s), got s={s}, n_sample={n_sample}, k_pop={k_pop}, n_pop={n_pop}"
+                    "HYPGEOM.DIST: requires 0 < number_pop, number_sample <= number_pop, and population_s <= number_pop, got s={s}, n_sample={n_sample}, k_pop={k_pop}, n_pop={n_pop}"
                 ),
             );
         }
@@ -129,20 +119,11 @@ impl PureFunction for FnHypGeomDistLegacy {
         let n_sample = n_sample_f as u64;
         let k_pop = k_pop_f as u64;
         let n_pop = n_pop_f as u64;
-        let min_successes = n_sample.saturating_sub(n_pop.saturating_sub(k_pop));
-        if n_sample == 0
-            || k_pop == 0
-            || n_pop == 0
-            || n_sample > n_pop
-            || k_pop > n_pop
-            || s > n_sample
-            || s > k_pop
-            || s < min_successes
-        {
+        if n_pop == 0 || n_sample > n_pop || k_pop > n_pop {
             return CellValue::error_with_message(
                 CellError::Num,
                 format!(
-                    "HYPGEOMDIST: requires 0 < number_sample <= number_pop, 0 < population_s <= number_pop, and max(0, number_sample - number_pop + population_s) <= sample_s <= min(number_sample, population_s), got s={s}, n_sample={n_sample}, k_pop={k_pop}, n_pop={n_pop}"
+                    "HYPGEOMDIST: requires 0 < number_pop, number_sample <= number_pop, and population_s <= number_pop, got s={s}, n_sample={n_sample}, k_pop={k_pop}, n_pop={n_pop}"
                 ),
             );
         }

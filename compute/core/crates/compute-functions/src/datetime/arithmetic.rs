@@ -148,7 +148,12 @@ fn eomonth_scalar(args: &[CellValue], context: &FunctionContext) -> CellValue {
             );
         }
     };
-    let last_day = excel_last_day_of_month(target_year, target_month);
+    // EOMONTH uses the real Gregorian month length for its target month.
+    // Excel's serial-60 compatibility field is retained while resolving the
+    // source month, but 1900-02 ends at serial 59 rather than the phantom
+    // serial 60: EOMONTH(1, 1), EOMONTH(59, 0), and EOMONTH(60, 0) all return
+    // 59.
+    let last_day = crate::datetime::calendar::last_day_of_month(target_year, target_month);
     match excel_ymd_to_serial(target_year, target_month, last_day) {
         Some(result_serial) => date_result_or_error(result_serial, context, "EOMONTH"),
         None => CellValue::error_with_message(
@@ -559,17 +564,28 @@ mod tests {
     }
 
     #[test]
-    fn test_calendar_functions_preserve_excel_serial_60() {
+    fn test_calendar_functions_match_excel_serial_60_boundary() {
+        assert_eq!(FnEdate.call(&[num(59.0), num(0.0)]), num(59.0));
         assert_eq!(
             FnEdate.call(&[num(60.0), num(0.0)]),
-            num(60.0),
-            "EDATE must keep the compatibility date when no month is added"
+            num(59.0),
+            "EDATE clamps serial 60 to the real February month end"
         );
+        assert_eq!(FnEdate.call(&[num(61.0), num(0.0)]), num(61.0));
+        assert_eq!(FnEdate.call(&[num(59.0), num(1.0)]), num(88.0));
         assert_eq!(FnEdate.call(&[num(60.0), num(1.0)]), num(89.0));
+        assert_eq!(FnEdate.call(&[num(61.0), num(1.0)]), num(92.0));
+        assert_eq!(FnEdate.call(&[num(59.0), num(-1.0)]), num(28.0));
         assert_eq!(FnEdate.call(&[num(60.0), num(-1.0)]), num(29.0));
+        assert_eq!(FnEdate.call(&[num(61.0), num(-1.0)]), num(32.0));
 
-        assert_eq!(FnEomonth.call(&[num(60.0), num(0.0)]), num(60.0));
+        assert_eq!(FnEomonth.call(&[num(1.0), num(1.0)]), num(59.0));
+        assert_eq!(FnEomonth.call(&[num(59.0), num(0.0)]), num(59.0));
+        assert_eq!(FnEomonth.call(&[num(60.0), num(0.0)]), num(59.0));
+        assert_eq!(FnEomonth.call(&[num(61.0), num(0.0)]), num(91.0));
+        assert_eq!(FnEomonth.call(&[num(59.0), num(1.0)]), num(91.0));
         assert_eq!(FnEomonth.call(&[num(60.0), num(1.0)]), num(91.0));
+        assert_eq!(FnEomonth.call(&[num(61.0), num(1.0)]), num(121.0));
 
         assert_eq!(FnDays360.call(&[num(60.0), num(61.0)]), num(1.0));
         for unit in ["Y", "M", "D", "MD", "YM", "YD"] {

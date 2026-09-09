@@ -51,6 +51,24 @@ fn assert_date_matrix(
         "{name} matrix baseline must be numeric, got {baseline:?}"
     );
     for &index in date_indices {
+        let mut negative = args.to_vec();
+        negative[index] = num(-0.5);
+        assert!(
+            matches!(
+                call_named(registry, name, &negative, &default_context),
+                CellValue::Error(CellError::Num, _)
+            ),
+            "{name} must reject negative date argument {index}"
+        );
+        let mut overflow = args.to_vec();
+        overflow[index] = num(2_958_466.5);
+        assert!(
+            matches!(
+                call_named(registry, name, &overflow, &default_context),
+                CellValue::Error(CellError::Num, _)
+            ),
+            "{name} must reject date argument {index} above 9999-12-31"
+        );
         let fractional = with_fraction(args, &[index], 0.0, 0.75);
         assert_eq!(
             &baseline,
@@ -381,4 +399,90 @@ fn all_financial_date_arguments_truncate_in_both_date_systems() {
         amorlinc(39813.0, 39679.0, 1.0),
         CellValue::Error(CellError::Num, _)
     ));
+}
+
+#[test]
+fn date_zero_and_max_fraction_edges_remain_valid() {
+    let registry = FunctionRegistry::new();
+    let context = FunctionContext::default();
+    let zero_cases = [
+        ("COUPDAYS", vec![num(0.0), num(1.0), num(2.0)]),
+        (
+            "DISC",
+            vec![num(0.0), num(1.0), num(98.0), num(100.0), num(2.0)],
+        ),
+        (
+            "PRICEDISC",
+            vec![num(0.0), num(1.0), num(0.05), num(100.0), num(2.0)],
+        ),
+        (
+            "AMORLINC",
+            vec![
+                num(2400.0),
+                num(0.0),
+                num(1.0),
+                num(300.0),
+                num(1.0),
+                num(0.15),
+                num(1.0),
+            ],
+        ),
+    ];
+    for (name, args) in zero_cases {
+        assert!(
+            matches!(
+                call_named(&registry, name, &args, &context),
+                CellValue::Number(_)
+            ),
+            "{name} should accept serial zero"
+        );
+    }
+
+    let max_cases = [
+        (
+            "COUPDAYS",
+            vec![num(2_958_464.5), num(2_958_465.5), num(2.0)],
+        ),
+        (
+            "DISC",
+            vec![
+                num(2_958_464.5),
+                num(2_958_465.5),
+                num(98.0),
+                num(100.0),
+                num(2.0),
+            ],
+        ),
+        (
+            "PRICEDISC",
+            vec![
+                num(2_958_464.5),
+                num(2_958_465.5),
+                num(0.05),
+                num(100.0),
+                num(2.0),
+            ],
+        ),
+        (
+            "AMORLINC",
+            vec![
+                num(2400.0),
+                num(2_958_464.5),
+                num(2_958_465.5),
+                num(300.0),
+                num(1.0),
+                num(0.15),
+                num(1.0),
+            ],
+        ),
+    ];
+    for (name, args) in max_cases {
+        assert!(
+            matches!(
+                call_named(&registry, name, &args, &context),
+                CellValue::Number(_)
+            ),
+            "{name} should accept a fraction on 9999-12-31"
+        );
+    }
 }

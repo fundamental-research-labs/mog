@@ -125,14 +125,20 @@ pub(super) fn excel_last_day_of_month(year: i32, month: u32) -> u32 {
     }
 }
 
-/// Add whole calendar months while preserving Excel's serial-60 date.
+/// Add whole calendar months using Excel's source date fields.
+///
+/// Excel exposes serial 60 as the compatibility date 1900-02-29 when it
+/// chooses the day to carry into another month. The target month is still
+/// clamped to the real Gregorian month length: `EDATE(60, 0)` therefore
+/// returns serial 59 (February 28), while `EDATE(60, 1)` carries day 29 into
+/// March and returns serial 89.
 pub(super) fn add_months_to_excel_serial(serial: f64, months: i32) -> Option<f64> {
     let (year, month, day) = excel_serial_to_ymd(serial)?;
     let total_months = i64::from(year) * 12 + i64::from(month - 1) + i64::from(months);
     let target_year = total_months.div_euclid(12);
     let target_month = (total_months.rem_euclid(12) + 1) as u32;
     let target_year = i32::try_from(target_year).ok()?;
-    let target_day = day.min(excel_last_day_of_month(target_year, target_month));
+    let target_day = day.min(last_day_of_month(target_year, target_month));
     excel_ymd_to_serial(target_year, target_month, target_day)
 }
 
@@ -330,7 +336,8 @@ mod tests {
         assert_eq!(super::excel_serial_to_ymd(60.75), Some((1900, 2, 29)));
         assert_eq!(super::excel_ymd_to_serial(1900, 2, 29), Some(60.0));
         assert_eq!(super::excel_last_day_of_month(1900, 2), 29);
-        assert_eq!(super::add_months_to_excel_serial(60.0, 0), Some(60.0));
+        assert_eq!(super::last_day_of_month(1900, 2), 28);
+        assert_eq!(super::add_months_to_excel_serial(60.0, 0), Some(59.0));
         assert_eq!(super::add_months_to_excel_serial(60.0, 1), Some(89.0));
         assert_eq!(super::add_months_to_excel_serial(60.0, -1), Some(29.0));
     }

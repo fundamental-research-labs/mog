@@ -876,10 +876,10 @@ impl PureFunction for FnProb {
                 ),
             );
         }
-        if ps.iter().any(|&p| !(0.0..=1.0).contains(&p) || p == 0.0) {
+        if ps.iter().any(|&p| !(0.0..=1.0).contains(&p)) {
             return CellValue::error_with_message(
                 CellError::Num,
-                "PROB: all probabilities must be greater than 0 and at most 1",
+                "PROB: all probabilities must be between 0 and 1",
             );
         }
         let sum_p: f64 = ps.iter().sum();

@@ -137,23 +137,23 @@ fn test_hypgeom_dist_sample_gt_pop() {
 
 #[test]
 fn test_hypgeom_dist_s_gt_sample() {
-    assert_eq!(
+    assert_num(
         FnHypGeomDist.call(&[
             num(5.0),
             num(4.0),
             num(8.0),
             num(20.0),
-            CellValue::Boolean(false)
+            CellValue::Boolean(false),
         ]),
-        err(CellError::Num)
+        0.0,
+        1e-12,
+        "HYPGEOM.DIST s greater than sample is zero",
     );
 }
 
 #[test]
-fn test_hypgeom_dist_rejects_impossible_lower_tail_and_degenerate_sizes() {
-    // Sampling four items from a population of four containing one success
-    // must include that success; sample_s=0 is outside the valid support.
-    assert_eq!(
+fn test_hypgeom_dist_population_relation_errors_and_support_zeros() {
+    assert_num(
         FnHypGeomDist.call(&[
             num(0.0),
             num(4.0),
@@ -161,11 +161,20 @@ fn test_hypgeom_dist_rejects_impossible_lower_tail_and_degenerate_sizes() {
             num(4.0),
             CellValue::Boolean(false),
         ]),
+        0.0,
+        1e-12,
+        "HYPGEOM.DIST impossible support is zero",
+    );
+    assert_eq!(
+        FnHypGeomDist.call(&[
+            num(0.0),
+            num(1.0),
+            num(1.0),
+            num(0.0),
+            CellValue::Boolean(false),
+        ]),
         err(CellError::Num)
     );
-
-    // Excel rejects zero-sized samples, zero-success populations, and empty
-    // populations even when the other arguments are nonnegative.
     for args in [
         [
             num(0.0),
@@ -181,18 +190,12 @@ fn test_hypgeom_dist_rejects_impossible_lower_tail_and_degenerate_sizes() {
             num(1.0),
             CellValue::Boolean(false),
         ],
-        [
-            num(0.0),
-            num(1.0),
-            num(1.0),
-            num(0.0),
-            CellValue::Boolean(false),
-        ],
     ] {
-        assert_eq!(
+        assert_num(
             FnHypGeomDist.call(&args),
-            err(CellError::Num),
-            "degenerate HYPGEOM.DIST arguments must return #NUM!"
+            1.0,
+            1e-12,
+            "zero sample/successes have probability one",
         );
     }
 }
@@ -216,21 +219,26 @@ fn test_hypgeomdist_legacy_sample_gt_pop() {
 }
 
 #[test]
-fn test_hypgeomdist_legacy_rejects_impossible_lower_tail_and_degenerate_sizes() {
-    assert_eq!(
+fn test_hypgeomdist_legacy_population_relation_errors_and_support_zeros() {
+    assert_num(
         FnHypGeomDistLegacy.call(&[num(0.0), num(4.0), num(1.0), num(4.0)]),
+        0.0,
+        1e-12,
+        "HYPGEOMDIST impossible support is zero",
+    );
+    assert_eq!(
+        FnHypGeomDistLegacy.call(&[num(0.0), num(1.0), num(1.0), num(0.0)]),
         err(CellError::Num)
     );
-
     for args in [
         [num(0.0), num(0.0), num(1.0), num(1.0)],
         [num(0.0), num(1.0), num(0.0), num(1.0)],
-        [num(0.0), num(1.0), num(1.0), num(0.0)],
     ] {
-        assert_eq!(
+        assert_num(
             FnHypGeomDistLegacy.call(&args),
-            err(CellError::Num),
-            "degenerate HYPGEOMDIST arguments must return #NUM!"
+            1.0,
+            1e-12,
+            "zero sample/successes have probability one",
         );
     }
 }

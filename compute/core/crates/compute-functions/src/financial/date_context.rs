@@ -14,6 +14,9 @@ use crate::FunctionContext;
 /// Last supported serial in Excel's 1904 date system (31 December 9999).
 const MAX_1904_SERIAL: f64 = 2_957_003.0;
 
+/// Last supported serial in the canonical 1900 date system (31 December 9999).
+const MAX_CANONICAL_SERIAL: f64 = 2_958_465.0;
+
 /// Convert one date argument to the canonical 1900 serial system.
 ///
 /// `CellValue::Number`, numeric text, blanks, and booleans retain their
@@ -36,7 +39,15 @@ pub(crate) fn canonical_date_arg_truncated(
     index: usize,
     context: &FunctionContext,
 ) -> Result<f64, CellError> {
-    Ok(canonical_date_arg(args, index, context)?.trunc())
+    let serial = canonical_date_arg(args, index, context)?;
+    if !serial.is_finite() || serial < 0.0 {
+        return Err(CellError::Num);
+    }
+    let truncated = serial.trunc();
+    if truncated > MAX_CANONICAL_SERIAL {
+        return Err(CellError::Num);
+    }
+    Ok(truncated)
 }
 
 /// Convert a date cell while preserving whether text was a civil date or a

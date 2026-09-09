@@ -330,19 +330,7 @@ impl PureFunction for FnSqrtPi {
                 CellError::Num,
                 format!("SQRTPI: number must be >= 0, got {n}"),
             ),
-            Ok(n) => {
-                // The mathematical result can remain finite after `n * PI`
-                // overflows (for example, SQRTPI(f64::MAX)).  Scale the
-                // square roots only for that upper range so ordinary inputs
-                // retain the direct computation's result and rounding.
-                let pi = std::f64::consts::PI;
-                let result = if n > f64::MAX / pi {
-                    n.sqrt() * pi.sqrt()
-                } else {
-                    (n * pi).sqrt()
-                };
-                CellValue::number(result)
-            }
+            Ok(n) => CellValue::number((n * std::f64::consts::PI).sqrt()),
             Err(e) => CellValue::Error(e, None),
         }
     }

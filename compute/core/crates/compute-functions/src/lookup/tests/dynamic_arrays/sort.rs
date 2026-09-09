@@ -134,11 +134,26 @@ fn test_sort_invalid_sort_index() {
 }
 
 #[test]
-fn test_sort_rejects_all_invalid_sort_orders_and_preserves_errors() {
+fn test_sort_floors_valid_fractional_orders_and_rejects_other_orders() {
     let f = FnSort;
     let array = CellValue::from_rows(vec![vec![num(2.0)], vec![num(1.0)]]);
 
-    for order in [num(0.0), num(2.0), num(-2.0), num(1.5), text("ascending")] {
+    assert_eq!(
+        f.call(&[array.clone(), num(1.0), num(1.5)]),
+        CellValue::from_rows(vec![vec![num(1.0)], vec![num(2.0)]])
+    );
+    assert_eq!(
+        f.call(&[array.clone(), num(1.0), num(-0.5)]),
+        CellValue::from_rows(vec![vec![num(2.0)], vec![num(1.0)]])
+    );
+    for order in [
+        num(0.0),
+        num(0.5),
+        num(-1.5),
+        num(2.0),
+        num(-2.0),
+        text("ascending"),
+    ] {
         assert_eq!(
             f.call(&[array.clone(), num(1.0), order]),
             err(CellError::Value)

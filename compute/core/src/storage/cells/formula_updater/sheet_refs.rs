@@ -40,46 +40,18 @@ fn rewrite_sheet_reference_tokens(
         return formula.to_string();
     }
 
-    let mut result = String::new();
-    let mut copied = 0;
-    for token in compute_parser::collect_reference_tokens(formula) {
-        if token.class != compute_parser::ReferenceTokenClass::SheetRef {
-            continue;
+    compute_parser::rewrite_reference_tokens(formula, |class, text| {
+        if class != compute_parser::ReferenceTokenClass::SheetRef {
+            return None;
         }
-        let Some(start) = byte_offset_for_utf16(formula, token.span_start) else {
-            continue;
-        };
-        let Some(end) = byte_offset_for_utf16(formula, token.span_end) else {
-            continue;
-        };
-        let Some((qualifier, reference)) = token.text.rsplit_once('!') else {
-            continue;
-        };
+        let (qualifier, reference) = text.rsplit_once('!')?;
         let referenced_sheet = qualifier
             .strip_prefix('\'')
             .and_then(|quoted| quoted.strip_suffix('\''))
             .map(|quoted| quoted.replace("''", "'"))
             .unwrap_or_else(|| qualifier.to_string());
-        if referenced_sheet.eq_ignore_ascii_case(sheet_name) {
-            result.push_str(&formula[copied..start]);
-            result.push_str(&replacement(reference));
-            copied = end;
-        }
-    }
-    result.push_str(&formula[copied..]);
-    result
-}
-
-fn byte_offset_for_utf16(value: &str, target: u32) -> Option<usize> {
-    let mut offset = 0;
-    for (byte, ch) in value.char_indices() {
-        if offset == target {
-            return Some(byte);
-        }
-        offset = offset.checked_add(ch.len_utf16() as u32)?;
-        if offset > target {
-            return None;
-        }
-    }
-    (offset == target).then_some(value.len())
+        referenced_sheet
+            .eq_ignore_ascii_case(sheet_name)
+            .then(|| replacement(reference))
+    })
 }

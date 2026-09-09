@@ -830,14 +830,15 @@ fn test_prob_invalid_probability() {
 }
 
 #[test]
-fn test_prob_zero_probability_is_invalid() {
+fn test_prob_zero_probability_is_valid() {
     let reg = crate::FunctionRegistry::new();
-    assert_err(
+    assert_num(
         reg.call(
             "PROB",
-            &[arr(vec![1.0, 2.0]), arr(vec![0.0, 1.0]), num(2.0)],
+            &[arr(vec![1.0, 2.0]), arr(vec![0.0, 1.0]), num(1.0)],
         ),
-        CellError::Num,
+        0.0,
+        1e-12,
         "PROB p=0",
     );
 }

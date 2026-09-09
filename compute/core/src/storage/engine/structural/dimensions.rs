@@ -91,8 +91,9 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         rows: &[u32],
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::structural::hide_rows(&mut self.stores, sheet_id, rows)
-            .map(|r| (serialize_multi_viewport_patches(&[]), r))
+        let result = services::structural::hide_rows(&mut self.stores, sheet_id, rows)?;
+        self.sync_row_visibility_for_evaluation(sheet_id, rows);
+        Ok((serialize_multi_viewport_patches(&[]), result))
     }
 
     pub(super) fn apply_unhide_rows(
@@ -100,8 +101,26 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         rows: &[u32],
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::structural::unhide_rows(&mut self.stores, sheet_id, rows)
-            .map(|r| (serialize_multi_viewport_patches(&[]), r))
+        let result = services::structural::unhide_rows(&mut self.stores, sheet_id, rows)?;
+        self.sync_row_visibility_for_evaluation(sheet_id, rows);
+        Ok((serialize_multi_viewport_patches(&[]), result))
+    }
+
+    fn sync_row_visibility_for_evaluation(&mut self, sheet_id: &SheetId, rows: &[u32]) {
+        for &row in rows {
+            let hidden = crate::storage::sheet::dimensions::get_row_visibility_ownership(
+                self.stores.storage.doc(),
+                self.stores.storage.sheets(),
+                sheet_id,
+                row,
+                self.stores.grid_indexes.get(sheet_id),
+            )
+            .effective_hidden;
+            if self.mirror.is_row_hidden(sheet_id, row) != hidden {
+                self.mirror.set_row_hidden(sheet_id, row, hidden);
+                self.stores.compute.mark_dirty();
+            }
+        }
     }
 
     pub(super) fn apply_hide_columns(

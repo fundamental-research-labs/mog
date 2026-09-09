@@ -303,8 +303,12 @@ impl CellMirror {
                     }
                 }
 
-                // Corner grand total
-                if let Some(ref grand) = result.grand_totals.grand {
+                // A computed overall aggregate does not itself reserve a cell.
+                // Write the corner only at the intersection of rendered total bands.
+                if let Some(ref grand) = result.grand_totals.grand
+                    && result.grand_totals.row.is_some()
+                    && result.grand_totals.column.is_some()
+                {
                     let gt_row = anchor_row + total_rows - 1;
                     for (val_idx, value) in grand.iter().enumerate() {
                         write_cell(

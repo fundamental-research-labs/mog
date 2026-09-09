@@ -35,6 +35,7 @@ pub mod source_rect;
 pub mod text_body;
 pub mod text_body_convert;
 pub mod transform;
+pub mod vml_presentation;
 pub mod vml_shape;
 
 pub use audits::{
@@ -71,3 +72,5 @@ pub use text_body::{
 };
 pub use transform::Transform2D;
 pub use vml_shape::VmlShapeProps;
+
+pub use vml_presentation::{VmlCellAnchor, VmlShapePresentation};

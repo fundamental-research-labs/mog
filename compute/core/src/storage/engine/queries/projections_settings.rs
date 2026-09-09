@@ -105,6 +105,7 @@ pub(in crate::storage::engine) fn set_workbook_setting(
         key,
         value,
     );
+    engine.sync_runtime_date_system_from_storage();
     if let Some(pre_calc) = pre_calc {
         let post_calc = workbook::get_calculation_settings(
             engine.stores.storage.doc(),

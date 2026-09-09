@@ -15,8 +15,13 @@ pub(super) fn convert_icon_set_to_wire(is: &cf::CFIconSet) -> CFIconSetWire {
     .unwrap_or(CFIconSetName::ThreeArrows);
 
     let thresholds = if !is.thresholds.is_empty() {
+        // OOXML supplies one floor per icon; the evaluator consumes only
+        // boundaries between icons. Native domain callers may already supply N-1.
         is.thresholds
             .iter()
+            .skip(usize::from(
+                is.thresholds.len() == icon_set_name.icon_count(),
+            ))
             .map(|threshold| CFIconThresholdWire {
                 value_type: cfvo_type_to_wire(threshold.value_type),
                 value: threshold_value_to_wire(threshold.value_type, threshold.value.as_deref()),
@@ -32,7 +37,27 @@ pub(super) fn convert_icon_set_to_wire(is: &cf::CFIconSet) -> CFIconSetWire {
         default_icon_thresholds(icon_set_name)
     };
 
+    let custom_icons = is
+        .custom_icons
+        .iter()
+        .rev()
+        .map(|custom| {
+            let custom = custom.as_ref()?;
+            let set: CFIconSetName =
+                serde_json::from_value(serde_json::Value::String(custom.icon_set.clone())).ok()?;
+            let index = if set == CFIconSetName::NoIcons {
+                0
+            } else {
+                set.icon_count().checked_sub(custom.icon_id as usize + 1)? as u8
+            };
+            Some(crate::cf::types::CustomIcon {
+                icon_set: set,
+                icon_index: index,
+            })
+        })
+        .collect();
     CFIconSetWire {
+        custom_icons,
         icon_set_name,
         thresholds,
         percent: is.percent,

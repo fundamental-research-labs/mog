@@ -463,12 +463,28 @@ pub fn is_row_hidden_by_any_filter(
     row: u32,
     grid_index: Option<&GridIndex>,
 ) -> bool {
-    let txn = doc.transact();
-    let Some(row_id) = row_id_key(grid_index, row) else {
+    is_row_hidden_by_any_filter_id(
+        doc,
+        sheets,
+        sheet_id,
+        grid_index.and_then(|grid| grid.row_id(row)),
+    )
+}
+
+/// Query filter ownership with an already resolved stable row identity.
+pub fn is_row_hidden_by_any_filter_id(
+    doc: &Doc,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    row_id: Option<cell_types::RowId>,
+) -> bool {
+    let Some(row_id) = row_id else {
         return false;
     };
+    let row_key = compute_document::hex::id_to_hex(row_id.as_u128());
+    let txn = doc.transact();
     get_sheet_submap(&txn, sheets, sheet_id, KEY_FILTER_HIDDEN_ROWS)
-        .is_some_and(|m| any_filter_hides_row(&m, &txn, &row_id))
+        .is_some_and(|m| any_filter_hides_row(&m, &txn, &row_key))
 }
 
 #[cfg(test)]

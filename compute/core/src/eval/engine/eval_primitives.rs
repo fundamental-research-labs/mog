@@ -37,6 +37,14 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
         name: &str,
         args: &[ASTNode],
     ) -> Result<EvalValue, ComputeError> {
+        // The parser cannot know whether a call names a built-in function or a
+        // lexical LAMBDA parameter/LET binding. Resolve the nearest binding
+        // before dispatch so higher-order calls preserve the lambda value.
+        if self.get_variable(name).is_some() {
+            return self
+                .eval_call_expression(&ASTNode::Identifier(name.to_owned()), args)
+                .await;
+        }
         let upper = name.to_uppercase();
         #[cfg(feature = "profile")]
         let _fn_span =
@@ -100,6 +108,7 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
 
             // -- CELL function: needs AST access for "row"/"col"/"address" --
             "CELL" => self.eval_cell(args).await,
+            "ISREF" => self.eval_isref(args).await,
 
             // -- Lookup --
             "INDEX" => self.eval_index(args).await,
@@ -337,7 +346,12 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
                         let _body_span =
                             tracing::info_span!("fn_body", fn_name = other, arg_count = args.len())
                                 .entered();
-                        Ok(func.call(&evaluated_args))
+                        Ok(func.call_with_context(
+                            &evaluated_args,
+                            &compute_functions::FunctionContext {
+                                date1904: self.meta.date1904(),
+                            },
+                        ))
                     }
                     None => Ok(CellValue::error_with_message(
                         CellError::Name,

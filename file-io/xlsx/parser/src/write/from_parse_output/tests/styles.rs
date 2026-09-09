@@ -320,8 +320,14 @@ fn live_conditional_format_styles_allocate_dxfs_and_parse_back() {
     assert_eq!(parsed_style.underline_type, Some(UnderlineStyle::Single));
     assert_eq!(parsed_style.strikethrough, Some(true));
     assert_eq!(parsed_style.number_format.as_deref(), Some("$#,##0.00"));
-    assert_eq!(parsed_style.border_color.as_deref(), Some("#00aaff"));
-    assert_eq!(parsed_style.border_style, Some(BorderStyle::Thin));
+    // Mixed sides have no single unified color/style, but each side retains
+    // exactly the original visual attributes.
+    assert_eq!(parsed_style.border_color, None);
+    assert_eq!(parsed_style.border_style, None);
+    assert_eq!(parsed_style.border_left_color.as_deref(), Some("#00aaff"));
+    assert_eq!(parsed_style.border_right_color.as_deref(), Some("#00aaff"));
+    assert_eq!(parsed_style.border_left_style.as_deref(), Some("thin"));
+    assert_eq!(parsed_style.border_right_style.as_deref(), Some("thin"));
     assert_eq!(parsed_style.border_top_color.as_deref(), Some("#123456"));
     assert_eq!(parsed_style.border_top_style.as_deref(), Some("thick"));
     assert_eq!(parsed_style.border_bottom_color.as_deref(), Some("#654321"));
@@ -812,8 +818,7 @@ fn test_col_styles_roundtrip() {
     let mut shared_strings = SharedStringsWriter::new();
     let no_dt_bodies: std::collections::HashSet<(u32, u32)> = std::collections::HashSet::new();
     let no_dt_regions = Vec::new();
-    let style_remapper =
-        super::super::style_remap::StyleExportRemapper::palette_projection(u32::MAX);
+    let style_remapper = super::super::style_remap::StyleExportRemapper::palette_projection(16);
     let writer = build_sheet(
         &sheet_data,
         &mut shared_strings,
@@ -848,8 +853,7 @@ fn test_sparse_col_style_ranges_export_as_col_metadata() {
     let mut shared_strings = SharedStringsWriter::new();
     let no_dt_bodies: std::collections::HashSet<(u32, u32)> = std::collections::HashSet::new();
     let no_dt_regions = Vec::new();
-    let style_remapper =
-        super::super::style_remap::StyleExportRemapper::palette_projection(u32::MAX);
+    let style_remapper = super::super::style_remap::StyleExportRemapper::palette_projection(16);
     let writer = build_sheet(
         &sheet_data,
         &mut shared_strings,

@@ -21,18 +21,20 @@ use super::{ColumnFilter, FilterEvaluationResult, FilterRecordCount};
 ///
 /// Returns evaluation results for each data row. An empty result means
 /// no column filters are active (all rows match).
-pub fn evaluate_filter<F, G, R>(
+pub fn evaluate_filter<F, G, I, R>(
     doc: &Doc,
     sheets: &MapRef,
     sheet_id: &SheetId,
     filter_id: &str,
     get_cell_value: F,
     get_cell_format: G,
+    get_cell_icon: I,
     resolve_cell_id_to_pos: R,
 ) -> Vec<FilterEvaluationResult>
 where
     F: Fn(u32, u32) -> CellValue,
     G: Fn(u32, u32) -> domain_types::CellFormat,
+    I: Fn(u32, u32) -> Option<domain_types::FilterIconIdentity>,
     R: Fn(&str) -> Option<(u32, u32)>,
 {
     let filter = match get_filter(doc, sheets, sheet_id, filter_id) {
@@ -105,11 +107,17 @@ where
                 None
             };
 
+        let column_icons = matches!(criteria, ColumnFilter::Icon { .. }).then(|| {
+            (0..row_count)
+                .map(|i| get_cell_icon(data_start_row + i as u32, col))
+                .collect::<Vec<_>>()
+        });
         // Delegate evaluation to compute-table
-        let bitmap = compute_table::filter::evaluate_column_filter(
+        let bitmap = compute_table::filter::evaluate_column_filter_with_icons(
             &table_criteria,
             &column_data,
             column_formats.as_deref(),
+            column_icons.as_deref(),
             now,
             None, // week_start_day — defaults to Sunday inside compute-table
         );
@@ -228,18 +236,20 @@ where
 }
 
 /// Get filtered vs total record count for a specific filter.
-pub fn get_filtered_record_count<F, G, R>(
+pub fn get_filtered_record_count<F, G, I, R>(
     doc: &Doc,
     sheets: &MapRef,
     sheet_id: &SheetId,
     filter_id: &str,
     get_cell_value: F,
     get_cell_format: G,
+    get_cell_icon: I,
     resolve_cell_id_to_pos: R,
 ) -> Option<FilterRecordCount>
 where
     F: Fn(u32, u32) -> CellValue,
     G: Fn(u32, u32) -> domain_types::CellFormat,
+    I: Fn(u32, u32) -> Option<domain_types::FilterIconIdentity>,
     R: Fn(&str) -> Option<(u32, u32)>,
 {
     let results = evaluate_filter(
@@ -249,6 +259,7 @@ where
         filter_id,
         get_cell_value,
         get_cell_format,
+        get_cell_icon,
         resolve_cell_id_to_pos,
     );
     if results.is_empty() {

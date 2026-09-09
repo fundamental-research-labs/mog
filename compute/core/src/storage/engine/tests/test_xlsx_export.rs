@@ -429,6 +429,10 @@ fn ole_owner_parse_output() -> ParseOutput {
                         }),
                         vml_drawing_path: Some("xl/drawings/vmlDrawing1.vml".to_string()),
                         vml_relationship_id: Some("rIdVml1".to_string()),
+                        object_pr: Some(domain_types::domain::drawings::OleObjectProperties {
+                            r_id: Some("rIdWorksheetPreview".to_string()),
+                            ..Default::default()
+                        }),
                         ..Default::default()
                     }),
                 }),
@@ -519,6 +523,50 @@ fn imported_picture_survives_context_stripped_hydration_export_and_deletion_remo
 }
 
 #[test]
+fn ole_worksheet_preview_relationship_survives_normal_and_context_stripped_engine_export() {
+    let engine = engine_from_parse_output_normal(&ole_owner_parse_output());
+    for bytes in [
+        engine
+            .export_to_xlsx_bytes()
+            .expect("normal OLE preview export"),
+        engine
+            .export_to_xlsx_bytes_context_stripped()
+            .expect("context-stripped OLE preview export"),
+    ] {
+        let archive = xlsx_parser::zip::XlsxArchive::new(&bytes).unwrap();
+        xlsx_parser::infra::package_integrity::validate_archive_package_integrity(&archive)
+            .unwrap();
+        let worksheet = archive_text(&bytes, "xl/worksheets/sheet1.xml").unwrap();
+        let rels = xlsx_parser::domain::workbook::read::parse_all_rels(
+            &archive
+                .read_file("xl/worksheets/_rels/sheet1.xml.rels")
+                .unwrap(),
+        );
+        let preview = rels
+            .iter()
+            .find(|rel| rel.rel_type == xlsx_parser::infra::opc::REL_IMAGE)
+            .expect("worksheet objectPr owns its preview image relationship");
+        let properties = worksheet
+            .split("<objectPr")
+            .nth(1)
+            .unwrap()
+            .split('>')
+            .next()
+            .unwrap();
+        assert!(properties.contains(&format!(r#"r:id="{}""#, preview.id)));
+        let target = xlsx_parser::infra::opc::resolve_relationship_target(
+            Some("xl/worksheets/sheet1.xml"),
+            &preview.target,
+        )
+        .unwrap();
+        assert_eq!(
+            archive.read_file(&target).unwrap(),
+            [0x89, b'P', b'N', b'G', b'\r', b'\n', 0x1a, b'\n']
+        );
+    }
+}
+
+#[test]
 fn modeled_ole_survives_context_stripped_hydration_export_and_deletion_removes_parts() {
     let input = ole_owner_parse_output();
     let mut engine = engine_from_parse_output_normal(&input);
@@ -587,7 +635,9 @@ fn workbook_stylesheet_survives_yrs_hydration_export() {
     ));
 
     let engine = engine_from_parse_output_normal(&input);
-    let exported = engine.build_parse_output_from_yrs();
+    let exported = engine
+        .build_parse_output_from_yrs()
+        .expect("export projection");
 
     assert_eq!(exported.workbook_stylesheet, input.workbook_stylesheet);
 }
@@ -626,7 +676,9 @@ fn pivot_cache_records_survive_yrs_hydration_export_without_context() {
     );
 
     let engine = engine_from_parse_output_normal(&input);
-    let exported = engine.build_parse_output_from_yrs();
+    let exported = engine
+        .build_parse_output_from_yrs()
+        .expect("export projection");
 
     assert_eq!(exported.pivot_cache_records, input.pivot_cache_records);
 }
@@ -661,7 +713,9 @@ fn pivot_cache_sources_survive_yrs_hydration_export_without_context() {
         });
 
     let engine = engine_from_parse_output_normal(&input);
-    let exported = engine.build_parse_output_from_yrs();
+    let exported = engine
+        .build_parse_output_from_yrs()
+        .expect("export projection");
 
     assert_eq!(exported.pivot_cache_sources, input.pivot_cache_sources);
 }
@@ -679,7 +733,9 @@ fn modeled_export_does_not_recreate_absent_pivot_cache_records() {
     };
 
     let engine = engine_from_parse_output_normal(&input);
-    let exported = engine.build_parse_output_from_yrs();
+    let exported = engine
+        .build_parse_output_from_yrs()
+        .expect("export projection");
 
     assert!(exported.pivot_cache_records.is_empty());
 }
@@ -871,7 +927,9 @@ fn build_parse_output_from_yrs_preserves_xlsx_metadata_domain() {
     });
 
     let engine = engine_from_parse_output_normal(&output);
-    let exported = engine.build_parse_output_from_yrs();
+    let exported = engine
+        .build_parse_output_from_yrs()
+        .expect("export projection");
 
     assert_eq!(exported.metadata, output.metadata);
 }
@@ -994,7 +1052,9 @@ fn build_parse_output_from_yrs_preserves_workbook_views() {
     };
 
     let engine = engine_from_parse_output_normal(&output);
-    let exported = engine.build_parse_output_from_yrs();
+    let exported = engine
+        .build_parse_output_from_yrs()
+        .expect("export projection");
 
     assert_eq!(exported.workbook_views, output.workbook_views);
 }
@@ -1024,7 +1084,9 @@ fn build_parse_output_from_yrs_preserves_workbook_web_publishing() {
     };
 
     let engine = engine_from_parse_output_normal(&output);
-    let exported = engine.build_parse_output_from_yrs();
+    let exported = engine
+        .build_parse_output_from_yrs()
+        .expect("export projection");
 
     assert_eq!(exported.web_publishing, output.web_publishing);
 }
@@ -1058,7 +1120,9 @@ fn build_parse_output_from_yrs_preserves_imported_array_refs() {
     };
 
     let engine = engine_from_parse_output_normal(&output);
-    let exported = engine.build_parse_output_from_yrs();
+    let exported = engine
+        .build_parse_output_from_yrs()
+        .expect("export projection");
     let cell = exported.sheets[0]
         .cells
         .iter()

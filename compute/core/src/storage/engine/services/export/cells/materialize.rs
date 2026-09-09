@@ -4,6 +4,7 @@ use rustc_hash::FxHashMap;
 use value_types::CellValue;
 
 use crate::mirror::CellMirror;
+use crate::mirror::cell_metadata::FormulaResultMode;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::properties::CellProperties;
 
@@ -53,7 +54,17 @@ pub(super) fn build_cell_data_for_cell_id(
     let style_id = cell_style_id(stores, mirror, sheet_id, row, col, cell_props, palette);
 
     let cell_metadata_index = cell_props.and_then(|props| props.cell_metadata_index);
-    let vm = cell_props.and_then(|props| props.vm);
+    let mut vm = cell_props.and_then(|props| props.vm);
+    let imported_rich_error = cell_props
+        .and_then(|props| props.imported_rich_error)
+        .filter(|imported| {
+            let current = vm == Some(imported.vm)
+                && matches!(&value, CellValue::Error(error, _) if *error == imported.semantic);
+            if !current {
+                vm = None;
+            }
+            current
+        });
     let formula_result_type = cell_props.and_then(|props| props.formula_result_type);
     let has_empty_cached_value = cell_props
         .map(|props| props.has_empty_cached_value)
@@ -105,6 +116,51 @@ pub(super) fn build_cell_data_for_cell_id(
         return None;
     }
 
+    let dynamic = formula.is_some()
+        && match mirror.formula_result_mode(cell_id) {
+            Some(FormulaResultMode::Dynamic) => true,
+            Some(FormulaResultMode::Cse | FormulaResultMode::LegacyScalar) => false,
+            None => {
+                stores.compute.is_dynamic_array(cell_id).unwrap_or(false)
+                    || (mirror.projection_registry.get(cell_id).is_some()
+                        && !mirror.is_cse_anchor(cell_id))
+            }
+        };
+    let array_ref = if dynamic {
+        let origin = cell_types::SheetPos::new(row, col).to_string();
+        Some(
+            if let Some(projection) = mirror.projection_registry.get(cell_id) {
+                let end =
+                    cell_types::SheetPos::new(row + projection.rows - 1, col + projection.cols - 1);
+                if projection.rows == 1 && projection.cols == 1 {
+                    origin
+                } else {
+                    format!("{origin}:{end}")
+                }
+            } else if matches!(value, CellValue::Error(value_types::CellError::Spill, _)) {
+                origin
+            } else {
+                array_refs.get(cell_id).cloned().unwrap_or(origin)
+            },
+        )
+    } else {
+        array_refs.get(cell_id).cloned()
+    };
+    let cell_formula = if dynamic {
+        let mut metadata = formula_metadata.get(cell_id).cloned().unwrap_or_default();
+        metadata.text = formula
+            .as_deref()
+            .unwrap_or_default()
+            .trim_start_matches('=')
+            .to_string();
+        metadata.t = ooxml_types::worksheet::CellFormulaType::Array;
+        metadata.si = None;
+        metadata.r#ref = array_ref.clone();
+        Some(metadata)
+    } else {
+        formula_metadata.get(cell_id).cloned()
+    };
+
     Some(CellData {
         row,
         col,
@@ -113,19 +169,24 @@ pub(super) fn build_cell_data_for_cell_id(
         formula: formula
             .as_deref()
             .map(|f| f.strip_prefix('=').unwrap_or(f).to_string()),
-        array_ref: array_refs.get(cell_id).cloned(),
+        array_ref,
         style_id,
-        cell_formula: formula_metadata.get(cell_id).cloned(),
+        cell_formula,
         cell_metadata_index,
         formula_result_type,
         has_empty_cached_value,
         formula_cache_provenance,
         vm,
+        imported_rich_error,
         phonetic,
         date_lexical_value,
         original_sst_index,
         original_value,
-        projection_role: ImportedCellProjectionRole::Normal,
+        projection_role: if dynamic {
+            ImportedCellProjectionRole::DynamicArraySource
+        } else {
+            ImportedCellProjectionRole::Normal
+        },
     })
 }
 
@@ -223,6 +284,7 @@ pub(super) fn range_payload_cell(row: u32, col: u32, value: CellValue) -> CellDa
         has_empty_cached_value: false,
         formula_cache_provenance: Default::default(),
         vm: None,
+        imported_rich_error: None,
         phonetic: false,
         date_lexical_value: None,
         original_sst_index: None,

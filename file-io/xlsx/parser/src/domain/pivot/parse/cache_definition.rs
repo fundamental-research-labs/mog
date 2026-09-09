@@ -95,6 +95,9 @@ pub(crate) fn parse_cache_fields(xml: &[u8]) -> Vec<CacheField> {
             let field_end = find_closing_tag(xml, b"cacheField", field_start).unwrap_or(xml.len());
 
             let field_body = &xml[tag_end + 1..field_end];
+            if let Some(metadata) = &mut field.field_metadata {
+                metadata.field_group = super::field_group::parse_field_group(field_body);
+            }
             if let Some(items_start) = find_tag_simd(field_body, b"sharedItems", 0) {
                 if let Some(items_tag_end) = find_gt_simd(field_body, items_start) {
                     let items_element = &field_body[items_start..items_tag_end + 1];

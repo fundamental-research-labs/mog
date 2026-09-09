@@ -12,6 +12,7 @@ mod advanced_arrays;
 mod argument_validation;
 mod array_context;
 mod basics;
+mod calculation_contracts;
 mod coercion;
 mod dynamic_refs;
 mod error_propagation;

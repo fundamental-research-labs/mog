@@ -3,8 +3,17 @@
 use crate::write::xml_writer::XmlWriter;
 use ooxml_types::pivot::{PivotCacheField, SharedItem};
 
-pub(super) fn write_cache_field(field: &PivotCacheField, w: &mut XmlWriter) {
+pub(super) fn write_cache_field_with_preservation(
+    field: &PivotCacheField,
+    w: &mut XmlWriter,
+    preservation: Option<&domain_types::domain::pivot::PivotFieldOoxmlPreservation>,
+) {
     w.start_element("cacheField").attr("name", &field.name);
+    if let Some(preservation) = preservation {
+        for attr in &preservation.attributes {
+            w.attr(&attr.name, &attr.value);
+        }
+    }
     for (name, value) in [
         ("caption", field.caption.as_deref()),
         ("formula", field.formula.as_deref()),
@@ -79,6 +88,14 @@ pub(super) fn write_cache_field(field: &PivotCacheField, w: &mut XmlWriter) {
                 item.write_xml(w);
             }
             w.end_element("sharedItems");
+        }
+    }
+    if let Some(group) = &field.field_group {
+        write_field_group(group, w);
+    }
+    if let Some(preservation) = preservation {
+        for child in &preservation.children {
+            w.raw_str(&child.xml);
         }
     }
     w.end_element("cacheField");
@@ -225,4 +242,70 @@ mod tests {
         assert_eq!(items.count, Some(1));
         assert_eq!(items.items, vec![SharedItem::String("value".into())]);
     }
+}
+
+fn write_field_group(group: &ooxml_types::pivot::PivotFieldGroup, w: &mut XmlWriter) {
+    w.start_element("fieldGroup");
+    if let Some(v) = group.par {
+        w.attr_num("par", v);
+    }
+    if let Some(v) = group.base {
+        w.attr_num("base", v);
+    }
+    if group.range_pr.is_none() && group.discrete_pr.is_none() && group.group_items.is_none() {
+        w.self_close();
+        return;
+    }
+    w.end_attrs();
+    if let Some(range) = &group.range_pr {
+        w.start_element("rangePr")
+            .attr_bool("autoStart", range.auto_start)
+            .attr_bool("autoEnd", range.auto_end);
+        for (key, value) in [
+            ("groupBy", &range.group_by),
+            ("startDate", &range.start_date),
+            ("endDate", &range.end_date),
+        ] {
+            if let Some(v) = value {
+                w.attr(key, v);
+            }
+        }
+        for (key, value) in [
+            ("startNum", range.start_num),
+            ("endNum", range.end_num),
+            ("groupInterval", range.group_interval),
+        ] {
+            if let Some(v) = value {
+                w.attr_num(key, v);
+            }
+        }
+        w.self_close();
+    }
+    if let Some(discrete) = &group.discrete_pr {
+        w.start_element("discretePr")
+            .attr_num("count", discrete.items.len())
+            .end_attrs();
+        for value in &discrete.items {
+            w.start_element("x").attr_num("v", value).self_close();
+        }
+        w.end_element("discretePr");
+    }
+    if let Some(items) = &group.group_items {
+        w.start_element("groupItems")
+            .attr_num("count", items.items.len())
+            .end_attrs();
+        for item in &items.items {
+            let item = match item {
+                SharedItem::Missing => super::types::SharedItem::Missing,
+                SharedItem::Number(v) => super::types::SharedItem::Number(*v),
+                SharedItem::Boolean(v) => super::types::SharedItem::Boolean(*v),
+                SharedItem::Error(v) => super::types::SharedItem::Error(v.clone()),
+                SharedItem::String(v) => super::types::SharedItem::String(v.clone()),
+                SharedItem::DateTime(v) => super::types::SharedItem::DateTime(v.clone()),
+            };
+            item.write_xml(w);
+        }
+        w.end_element("groupItems");
+    }
+    w.end_element("fieldGroup");
 }

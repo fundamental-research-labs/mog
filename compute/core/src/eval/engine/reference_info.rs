@@ -50,7 +50,7 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
         &mut self,
         args: &[ASTNode],
     ) -> Result<CellValue, ComputeError> {
-        if args.is_empty() {
+        if args.is_empty() || args.len() > 2 {
             return Ok(CellValue::Error(CellError::Value, None));
         }
         let info_type = self.eval_node_cv(&args[0]).await?;
@@ -63,6 +63,87 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
         };
 
         match info_str.as_str() {
+            "type" | "contents" if args.len() == 2 => {
+                let value =
+                    if let Ok((sheet, row, col, _, _)) = self.eval_node_as_area(&args[1]).await {
+                        self.data
+                            .get_cell_value_by_ref(&CellRef::Positional { sheet, row, col })
+                            .await
+                    } else {
+                        self.eval_node_cv(&args[1]).await?
+                    };
+                if info_str == "contents" && matches!(value, CellValue::Null) {
+                    Ok(CellValue::number(0.0))
+                } else {
+                    Ok(GLOBAL_REGISTRY.call("CELL", &[info_type, value]))
+                }
+            }
+            "color" | "format" | "parentheses" | "prefix" | "protect" | "width" | "filename" => {
+                let Some(reference) = args.get(1) else {
+                    return Ok(CellValue::Error(CellError::Na, None));
+                };
+                if let ASTNode::Error(error) = reference {
+                    return Ok(CellValue::Error(*error, None));
+                }
+                let (sheet, row, col, _, _) = match self.eval_node_as_area(reference).await {
+                    Ok(area) => area,
+                    Err(ComputeError::Eval { .. }) => {
+                        return Ok(CellValue::Error(CellError::Value, None));
+                    }
+                    Err(error) => return Err(error),
+                };
+                // Byte-based imports have no saved filesystem identity. Excel
+                // uses empty text for an unsaved workbook, never a guessed path.
+                if info_str == "filename" {
+                    return Ok(CellValue::Text("".into()));
+                }
+                let Some(metadata) = self.meta.cell_reference_metadata(&sheet, row, col) else {
+                    return Ok(CellValue::Error(CellError::Na, None));
+                };
+                let info = compute_formats::cell_format_info(
+                    metadata
+                        .format
+                        .number_format
+                        .as_deref()
+                        .unwrap_or("General"),
+                );
+                Ok(match info_str.as_str() {
+                    "color" => CellValue::number(u8::from(info.colored_negative) as f64),
+                    "format" => CellValue::Text(info.code.into()),
+                    "parentheses" => CellValue::number(u8::from(info.parentheses) as f64),
+                    "protect" => {
+                        CellValue::number(u8::from(metadata.format.locked.unwrap_or(true)) as f64)
+                    }
+                    "width" => CellValue::row_array(vec![
+                        CellValue::number(metadata.column_width.round()),
+                        CellValue::Boolean(metadata.column_width_is_default),
+                    ]),
+                    "prefix" => {
+                        let value = self
+                            .data
+                            .get_cell_value_by_ref(&CellRef::Positional { sheet, row, col })
+                            .await;
+                        let prefix = if matches!(value, CellValue::Text(_))
+                            && !self.meta.cell_has_formula(&sheet, row, col)
+                        {
+                            use ooxml_types::styles::HorizontalAlign;
+                            match metadata.format.horizontal_align {
+                                None | Some(HorizontalAlign::General | HorizontalAlign::Left) => {
+                                    "'"
+                                }
+                                Some(HorizontalAlign::Right) => "\"",
+                                Some(HorizontalAlign::Center) => "^",
+                                Some(HorizontalAlign::Fill) => "\\",
+                                _ => "",
+                            }
+                        } else {
+                            ""
+                        };
+                        CellValue::Text(prefix.into())
+                    }
+                    _ => unreachable!(),
+                })
+            }
             "row" | "col" | "address" => {
                 // These need the REFERENCE (not value) from the second argument
                 if args.len() < 2 {
@@ -118,124 +199,97 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
             }
         }
     }
+    pub(in crate::eval) async fn eval_isref(
+        &mut self,
+        args: &[ASTNode],
+    ) -> Result<CellValue, ComputeError> {
+        if args.len() != 1 {
+            return Ok(CellValue::Error(CellError::Value, None));
+        }
+        // Flatten only unions/parentheses here; each member must remain a
+        // valid reference. Never evaluate referenced cells just to test ISREF.
+        let mut pending = vec![&args[0]];
+        while let Some(node) = pending.pop() {
+            match node {
+                ASTNode::Union { ranges } => pending.extend(ranges),
+                ASTNode::Paren(inner) => pending.push(inner),
+                ASTNode::StructuredRef(reference) => {
+                    if self.meta.resolve_structured_ref(reference).is_err() {
+                        return Ok(CellValue::Boolean(false));
+                    }
+                }
+                _ => match self.eval_node_as_area(node).await {
+                    Ok(_) => {}
+                    Err(ComputeError::Eval { .. }) => return Ok(CellValue::Boolean(false)),
+                    Err(error) => return Err(error),
+                },
+            }
+        }
+        Ok(CellValue::Boolean(true))
+    }
+
     pub(in crate::eval) async fn eval_row(
         &mut self,
         args: &[ASTNode],
     ) -> Result<CellValue, ComputeError> {
-        if args.is_empty() {
-            // ROW() — return the current cell's row (1-based)
-            let cell_id = self.meta.current_cell();
-            match self.meta.resolve_position(&cell_id) {
-                Some((_, row, _)) => Ok(CellValue::number(row as f64 + 1.0)),
-                None => Ok(CellValue::Error(CellError::Ref, None)),
-            }
-        } else {
-            // Unwrap SheetRef if present to get the inner reference node
-            let inner = match &args[0] {
-                ASTNode::SheetRef { inner, .. } => inner.as_ref(),
-                other => other,
-            };
-            match inner {
-                ASTNode::CellReference(CellRefNode { reference, .. }) => match reference {
-                    CellRef::Positional { row, .. } => Ok(CellValue::number(*row as f64 + 1.0)),
-                    CellRef::Resolved(id) => match self.meta.resolve_position(id) {
-                        Some((_, row, _)) => Ok(CellValue::number(row as f64 + 1.0)),
-                        None => Ok(CellValue::Error(CellError::Ref, None)),
-                    },
-                },
-                ASTNode::Range(RangeRef { start, end, .. }) => {
-                    // Extract start/end rows from the range references
-                    let start_row = match start {
-                        CellRef::Positional { row, .. } => *row,
-                        CellRef::Resolved(id) => match self.meta.resolve_position(id) {
-                            Some((_, r, _)) => r,
-                            None => return Ok(CellValue::Error(CellError::Ref, None)),
-                        },
-                    };
-                    let end_row = match end {
-                        CellRef::Positional { row, .. } => *row,
-                        CellRef::Resolved(id) => match self.meta.resolve_position(id) {
-                            Some((_, r, _)) => r,
-                            None => return Ok(CellValue::Error(CellError::Ref, None)),
-                        },
-                    };
-                    let min_row = start_row.min(end_row);
-                    let max_row = start_row.max(end_row);
-                    if min_row == max_row {
-                        // Single-row range: return a scalar
-                        Ok(CellValue::number(min_row as f64 + 1.0))
-                    } else {
-                        // Multi-row range: return a column array of row numbers
-                        let data: Vec<CellValue> = (min_row..=max_row)
-                            .map(|r| CellValue::number(r as f64 + 1.0))
-                            .collect();
-                        Ok(CellValue::column_array(data))
-                    }
-                }
-                ASTNode::Error(e) => Ok(CellValue::Error(*e, None)),
-                _ => Ok(CellValue::Error(CellError::Value, None)),
-            }
-        }
+        self.eval_row_column(args, true).await
     }
+
     pub(in crate::eval) async fn eval_column(
         &mut self,
         args: &[ASTNode],
     ) -> Result<CellValue, ComputeError> {
-        if args.is_empty() {
-            // COLUMN() — return the current cell's column (1-based)
-            let cell_id = self.meta.current_cell();
-            match self.meta.resolve_position(&cell_id) {
-                Some((_, _, col)) => Ok(CellValue::number(col as f64 + 1.0)),
-                None => Ok(CellValue::Error(CellError::Ref, None)),
-            }
-        } else {
-            // Unwrap SheetRef if present to get the inner reference node
-            let inner = match &args[0] {
-                ASTNode::SheetRef { inner, .. } => inner.as_ref(),
-                other => other,
-            };
-            match inner {
-                ASTNode::CellReference(CellRefNode { reference, .. }) => match reference {
-                    CellRef::Positional { col, .. } => Ok(CellValue::number(*col as f64 + 1.0)),
-                    CellRef::Resolved(id) => match self.meta.resolve_position(id) {
-                        Some((_, _, col)) => Ok(CellValue::number(col as f64 + 1.0)),
-                        None => Ok(CellValue::Error(CellError::Ref, None)),
-                    },
-                },
-                ASTNode::Range(RangeRef { start, end, .. }) => {
-                    // Extract start/end cols from the range references
-                    let start_col = match start {
-                        CellRef::Positional { col, .. } => *col,
-                        CellRef::Resolved(id) => match self.meta.resolve_position(id) {
-                            Some((_, _, c)) => c,
-                            None => return Ok(CellValue::Error(CellError::Ref, None)),
-                        },
-                    };
-                    let end_col = match end {
-                        CellRef::Positional { col, .. } => *col,
-                        CellRef::Resolved(id) => match self.meta.resolve_position(id) {
-                            Some((_, _, c)) => c,
-                            None => return Ok(CellValue::Error(CellError::Ref, None)),
-                        },
-                    };
-                    let min_col = start_col.min(end_col);
-                    let max_col = start_col.max(end_col);
-                    if min_col == max_col {
-                        // Single-col range: return a scalar
-                        Ok(CellValue::number(min_col as f64 + 1.0))
+        self.eval_row_column(args, false).await
+    }
+
+    async fn eval_row_column(
+        &mut self,
+        args: &[ASTNode],
+        rows: bool,
+    ) -> Result<CellValue, ComputeError> {
+        if args.len() > 1 {
+            return Ok(CellValue::Error(CellError::Value, None));
+        }
+        let (start, end) = if let Some(reference) = args.first() {
+            match self.eval_node_as_area(reference).await {
+                Ok((_, start_row, start_col, end_row, end_col)) => {
+                    if rows {
+                        (start_row, end_row)
                     } else {
-                        // Multi-col range: return a row array of column numbers
-                        let data: Vec<CellValue> = (min_col..=max_col)
-                            .map(|c| CellValue::number(c as f64 + 1.0))
-                            .collect();
-                        Ok(CellValue::row_array(data))
+                        (start_col, end_col)
                     }
                 }
-                ASTNode::Error(e) => Ok(CellValue::Error(*e, None)),
-                _ => Ok(CellValue::Error(CellError::Value, None)),
+                Err(ComputeError::Eval { .. }) => {
+                    // Invalid reference-producing functions preserve their
+                    // error; scalar expressions still produce #VALUE!.
+                    let value = self.eval_node_cv(reference).await?;
+                    return Ok(match value {
+                        CellValue::Error(..) => value,
+                        _ => CellValue::Error(CellError::Value, None),
+                    });
+                }
+                Err(error) => return Err(error),
             }
+        } else {
+            let Some((_, row, col)) = self.meta.resolve_position(&self.meta.current_cell()) else {
+                return Ok(CellValue::Error(CellError::Ref, None));
+            };
+            let index = if rows { row } else { col };
+            (index, index)
+        };
+        if start == end {
+            return Ok(CellValue::number(f64::from(start) + 1.0));
         }
+        let values = (start..=end)
+            .map(|index| CellValue::number(f64::from(index) + 1.0))
+            .collect();
+        Ok(if rows {
+            CellValue::column_array(values)
+        } else {
+            CellValue::row_array(values)
+        })
     }
+
     pub(in crate::eval) async fn eval_rows(
         &mut self,
         args: &[ASTNode],

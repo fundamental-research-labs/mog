@@ -144,6 +144,16 @@ pub(in crate::storage::engine) fn set_cell_value_parsed(
         });
 
     if let Some(cell_id) = cell_id {
+        {
+            let _guard = mutation.suppress_guard();
+            crate::storage::properties::clear_formula_cache_metadata(
+                stores.storage.doc(),
+                stores.storage.workbook_map(),
+                stores.storage.sheets(),
+                sheet_id,
+                &id_to_hex(cell_id.as_u128()),
+            );
+        }
         // If the position is beyond GridIndex bounds, rebuild from YArrays
         // (the cell write may have auto-expanded rowOrder/colOrder)
         if let Some(grid) = stores.grid_indexes.get(sheet_id) {
@@ -307,6 +317,16 @@ pub(in crate::storage::engine) fn set_cell_value_as_text(
 
     let cell_id = find_cell_id_at(stores, sheet_id, row, col);
     if let Some(cell_id) = cell_id {
+        {
+            let _guard = mutation.suppress_guard();
+            crate::storage::properties::clear_formula_cache_metadata(
+                stores.storage.doc(),
+                stores.storage.workbook_map(),
+                stores.storage.sheets(),
+                sheet_id,
+                &id_to_hex(cell_id.as_u128()),
+            );
+        }
         if let Some(grid) = stores.grid_indexes.get_mut(sheet_id) {
             grid.register_cell(cell_id, row, col);
         }

@@ -9,9 +9,12 @@ mod modeled_parts;
 mod paths;
 mod refs;
 mod relationships;
+mod worksheet_images;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod worksheet_images_tests;
 
 use crate::zip::XlsxArchive;
 

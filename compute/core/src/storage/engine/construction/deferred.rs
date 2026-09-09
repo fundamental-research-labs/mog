@@ -264,6 +264,17 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
         engine.stores.layout_metrics,
     )?;
 
+    engine
+        .mirror
+        .install_cell_metadata_provider(crate::storage::engine::cell_metadata::provider(
+            &engine.stores.storage,
+            engine.stores.layout_metrics,
+        ));
+    engine.mirror.date1904 = workbook_settings::get_settings(
+        engine.stores.storage.doc(),
+        engine.stores.storage.workbook_map(),
+    )
+    .date1904;
     engine.mirror.install_row_col_indexes(
         engine
             .stores
@@ -563,6 +574,12 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
 
         dh_log!("phase 4 done: ComputeCore init_from_snapshot_minimal");
 
+        new_mirror.install_cell_metadata_provider(crate::storage::engine::cell_metadata::provider(
+            &new_storage,
+            layout_metrics,
+        ));
+        new_mirror.date1904 =
+            workbook_settings::get_settings(new_storage.doc(), new_storage.workbook_map()).date1904;
         new_mirror.install_row_col_indexes(
             grid_indexes
                 .iter()

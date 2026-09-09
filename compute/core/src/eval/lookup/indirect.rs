@@ -1,196 +1,139 @@
-//! INDIRECT function evaluation — runtime A1-style reference resolution.
+//! INDIRECT reference construction, shared by value and reference consumers.
 
-use cell_types::SheetId;
+use cell_types::col_to_letter;
 use compute_parser::ASTNode;
-use formula_types::{CellRef, RangeType};
 use value_types::{CellError, CellValue, ComputeError};
 
 use crate::eval::context::traits::{EvalDataAccess, EvalMetadata};
 use crate::eval::engine::evaluator::Evaluator;
+use crate::eval::engine::reference_resolution::parse_defined_name_formula;
 
 impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
-    // -----------------------------------------------------------------------
-    // INDIRECT
-    // -----------------------------------------------------------------------
+    /// Resolve INDIRECT without discarding the reference's sheet and geometry.
+    /// User errors are represented as AST error nodes so both value consumers
+    /// and functions such as ROW/COLUMN preserve their Excel error code.
+    pub(in crate::eval) async fn indirect_reference_node(
+        &mut self,
+        args: &[ASTNode],
+    ) -> Result<ASTNode, ComputeError> {
+        if args.is_empty() || args.len() > 2 {
+            return Ok(ASTNode::Error(CellError::Value));
+        }
+        let ref_value = self.eval_node_cv(&args[0]).await?;
+        let ref_text = match ref_value.coerce_to_string() {
+            Ok(text) => text,
+            Err(error) => return Ok(ASTNode::Error(error)),
+        };
+        let a1 = if args.len() == 2 && !matches!(args[1], ASTNode::Omitted) {
+            match self.eval_node_cv(&args[1]).await?.coerce_to_bool() {
+                Ok(flag) => flag,
+                Err(error) => return Ok(ASTNode::Error(error)),
+            }
+        } else {
+            true
+        };
+        let ref_text = ref_text.trim();
+        let converted = if a1 {
+            None
+        } else {
+            let position = self.meta.resolve_position(&self.meta.current_cell());
+            r1c1_to_a1(ref_text, position.map(|(_, row, col)| (row, col)))
+        };
+        // Defined names are legal in either reference style.
+        let reference = converted.as_deref().unwrap_or(ref_text);
+        let Some(node) = parse_defined_name_formula(reference, self.meta) else {
+            return Ok(ASTNode::Error(CellError::Ref));
+        };
+        // INDIRECT accepts reference text, not a formula to execute. In R1C1
+        // mode an unsuccessful conversion must not accidentally accept A1.
+        if (!a1 && converted.is_none() && !matches!(node, ASTNode::Identifier(_)))
+            || !indirect_reference_syntax(&node)
+        {
+            return Ok(ASTNode::Error(CellError::Ref));
+        }
+        if let ASTNode::Identifier(name) = &node
+            && self.meta.resolve_defined_name(name).is_none()
+        {
+            return Ok(ASTNode::Error(CellError::Ref));
+        }
+        Ok(node)
+    }
 
-    /// Evaluate INDIRECT(ref_text, [a1]).
-    ///
-    /// INDIRECT takes a string like "A1", "$B$5", or "Sheet1!A1:B5" and resolves
-    /// it to the cell value(s) at runtime. Only A1-style references are supported.
-    /// Returns `#REF!` if the string cannot be parsed as a valid reference.
+    /// Evaluate INDIRECT(ref_text, [a1]) in a value context.
     pub(in crate::eval) async fn eval_indirect(
         &mut self,
         args: &[ASTNode],
     ) -> Result<CellValue, ComputeError> {
-        if args.is_empty() || args.len() > 2 {
-            return Ok(CellValue::Error(CellError::Value, None));
-        }
+        let node = self.indirect_reference_node(args).await?;
+        self.eval_node_cv(&node).await
+    }
+}
 
-        // Evaluate the reference text
-        let ref_text_val = self.eval_node_cv(&args[0]).await?;
-        if let CellValue::Error(e, _) = ref_text_val {
-            return Ok(CellValue::Error(e, None));
+fn indirect_reference_syntax(node: &ASTNode) -> bool {
+    match node {
+        ASTNode::CellReference(_)
+        | ASTNode::Range(_)
+        | ASTNode::Identifier(_)
+        | ASTNode::StructuredRef(_) => true,
+        ASTNode::ExternalNameRef { workbook, .. } => workbook.is_current_workbook(),
+        ASTNode::SheetRef { inner, .. } | ASTNode::UnresolvedSheetRef { inner, .. } => {
+            indirect_reference_syntax(inner)
         }
-        let ref_text = match ref_text_val.coerce_to_string() {
-            Ok(s) => s,
-            Err(e) => return Ok(CellValue::Error(e, None)),
+        _ => false,
+    }
+}
+
+/// Convert only R1C1 reference syntax to the canonical A1 parser's input.
+/// Absolute, relative and omitted axes can be combined; whole rows/columns
+/// require a range. Sheet names retain their quoting and escaped apostrophes.
+fn r1c1_to_a1(text: &str, position: Option<(u32, u32)>) -> Option<String> {
+    let (prefix, address) = text.rsplit_once('!').map_or(("", text), |(_, address)| {
+        let prefix_len = text.len() - address.len();
+        (text.get(..prefix_len).unwrap(), address)
+    });
+    let address = address.to_ascii_uppercase();
+    let endpoints: Vec<&str> = address.split(':').collect();
+    if endpoints.len() > 2 {
+        return None;
+    }
+    let mut converted = Vec::new();
+    let mut range_kind = None;
+    for endpoint in &endpoints {
+        let (kind, value) = if let Some(row_axis) = endpoint.strip_prefix('R') {
+            if let Some((row_axis, col_axis)) = row_axis.split_once('C') {
+                let row = r1c1_axis(row_axis, position.map(|p| p.0), 1_048_576)?;
+                let col = r1c1_axis(col_axis, position.map(|p| p.1), 16_384)?;
+                (0, format!("${}${}", col_to_letter(col), row + 1))
+            } else {
+                let row = r1c1_axis(row_axis, position.map(|p| p.0), 1_048_576)?;
+                (1, format!("${}", row + 1))
+            }
+        } else if let Some(col_axis) = endpoint.strip_prefix('C') {
+            let col = r1c1_axis(col_axis, position.map(|p| p.1), 16_384)?;
+            (2, format!("${}", col_to_letter(col)))
+        } else {
+            return None;
         };
-
-        // Check a1 style flag (default TRUE = A1 style)
-        if args.len() > 1 && !matches!(args[1], ASTNode::Omitted) {
-            let a1_val = self.eval_node_cv(&args[1]).await?;
-            if let CellValue::Error(e, _) = a1_val {
-                return Ok(CellValue::Error(e, None));
-            }
-            match a1_val.coerce_to_bool() {
-                Ok(false) => {
-                    // R1C1 style not supported
-                    return Ok(CellValue::Error(CellError::Ref, None));
-                }
-                Ok(true) => {} // A1 style, continue
-                Err(e) => return Ok(CellValue::Error(e, None)),
-            }
-        }
-
-        // Get the current cell's sheet as the default sheet
-        let current_cell = self.meta.current_cell();
-        let default_sheet = self
-            .meta
-            .resolve_position(&current_cell)
-            .map(|(s, _, _)| s)
-            .unwrap_or_else(|| SheetId::from_raw(0));
-
-        // Parse the reference string as an A1-style reference first
-        let result = self
-            .parse_and_resolve_indirect(&ref_text, default_sheet)
-            .await?;
-
-        // If A1 parsing failed (#REF!), try resolving as a variable (defined name)
-        if matches!(&result, CellValue::Error(CellError::Ref, _))
-            && let Some(resolved) = self.meta.resolve_defined_name(&ref_text)
+        if range_kind.is_some_and(|previous| previous != kind)
+            || (kind != 0 && endpoints.len() != 2)
         {
-            return Ok(self.fetch_defined_name_value(&resolved).await);
+            return None;
         }
-
-        Ok(result)
+        range_kind = Some(kind);
+        converted.push(value);
     }
+    Some(format!("{prefix}{}", converted.join(":")))
+}
 
-    /// Parse an A1-style reference string and resolve it to a cell value.
-    async fn parse_and_resolve_indirect(
-        &self,
-        ref_text: &str,
-        default_sheet: SheetId,
-    ) -> Result<CellValue, ComputeError> {
-        let ref_text = ref_text.trim();
-        if ref_text.is_empty() {
-            return Ok(CellValue::error_with_message(
-                CellError::Ref,
-                "Empty reference in INDIRECT",
-            ));
-        }
-
-        // Split on '!' for sheet reference
-        let (sheet_id, cell_part) = if let Some(bang_pos) = ref_text.find('!') {
-            // bang_pos from find('!') — ASCII '!' is a single UTF-8 byte, boundary-safe.
-            #[allow(clippy::string_slice)]
-            let sheet_name_raw = &ref_text[..bang_pos];
-            #[allow(clippy::string_slice)] // bang_pos + 1 is a char boundary (ASCII '!').
-            let cell_part = &ref_text[bang_pos + 1..];
-            // Strip surrounding quotes from sheet name
-            let sheet_name = sheet_name_raw
-                .trim_start_matches('\'')
-                .trim_end_matches('\'');
-            match self.meta.sheet_by_name(sheet_name) {
-                Some(id) => (id, cell_part),
-                None => {
-                    return Ok(CellValue::error_with_message(
-                        CellError::Ref,
-                        format!("Sheet '{}' not found in INDIRECT", sheet_name),
-                    ));
-                }
-            }
-        } else {
-            (default_sheet, ref_text)
-        };
-
-        // Check if it's a range (contains ':')
-        if let Some(colon_pos) = cell_part.find(':') {
-            // colon_pos from find(':') — ASCII ':' is a single UTF-8 byte, boundary-safe.
-            #[allow(clippy::string_slice)]
-            let start_str = &cell_part[..colon_pos];
-            #[allow(clippy::string_slice)] // colon_pos + 1 is a char boundary (ASCII ':').
-            let end_str = &cell_part[colon_pos + 1..];
-            let (start_row, start_col) = match Self::parse_a1_cell(start_str) {
-                Some(rc) => rc,
-                None => {
-                    return Ok(CellValue::error_with_message(
-                        CellError::Ref,
-                        format!("Invalid reference '{}' in INDIRECT", start_str),
-                    ));
-                }
-            };
-            let (end_row, end_col) = match Self::parse_a1_cell(end_str) {
-                Some(rc) => rc,
-                None => {
-                    return Ok(CellValue::error_with_message(
-                        CellError::Ref,
-                        format!("Invalid reference '{}' in INDIRECT", end_str),
-                    ));
-                }
-            };
-            let start_ref = CellRef::Positional {
-                sheet: sheet_id,
-                row: start_row,
-                col: start_col,
-            };
-            let end_ref = CellRef::Positional {
-                sheet: sheet_id,
-                row: end_row,
-                col: end_col,
-            };
-            match self
-                .data
-                .get_range_values(&start_ref, &end_ref, &RangeType::CellRange)
-                .await
-            {
-                Ok(arr) => {
-                    if arr.rows() == 1 && arr.cols() == 1 {
-                        Ok(arr.get(0, 0).cloned().unwrap_or(CellValue::Null))
-                    } else {
-                        Ok(CellValue::Array(arr))
-                    }
-                }
-                Err(e) => Ok(CellValue::Error(e, None)),
-            }
-        } else {
-            // Single cell reference
-            let (row, col) = match Self::parse_a1_cell(cell_part) {
-                Some(rc) => rc,
-                None => {
-                    return Ok(CellValue::error_with_message(
-                        CellError::Ref,
-                        format!("Invalid reference '{}' in INDIRECT", cell_part),
-                    ));
-                }
-            };
-            let cell_ref = CellRef::Positional {
-                sheet: sheet_id,
-                row,
-                col,
-            };
-            Ok(self.data.get_cell_value_by_ref(&cell_ref).await)
-        }
-    }
-
-    /// Parse a single A1-style cell reference like "A1", "$B$5", "AA100".
-    /// Returns (row_0based, col_0based) or None if invalid.
-    fn parse_a1_cell(s: &str) -> Option<(u32, u32)> {
-        // Delegates to compute_parser::parse_a1_cell; unwraps the positional
-        // (row, col) tuple for the existing INDIRECT call-site contract.
-        let node = compute_parser::parse_a1_cell(s.trim())?;
-        match node.reference {
-            CellRef::Positional { row, col, .. } => Some((row, col)),
-            CellRef::Resolved(_) => None,
-        }
-    }
+fn r1c1_axis(axis: &str, current: Option<u32>, limit: u32) -> Option<u32> {
+    let index = if axis.is_empty() {
+        i64::from(current?)
+    } else if let Some(relative) = axis.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
+        i64::from(current?).checked_add(relative.parse::<i64>().ok()?)?
+    } else if axis.bytes().all(|byte| byte.is_ascii_digit()) {
+        axis.parse::<i64>().ok()?.checked_sub(1)?
+    } else {
+        return None;
+    };
+    (index >= 0 && index < i64::from(limit)).then_some(index as u32)
 }

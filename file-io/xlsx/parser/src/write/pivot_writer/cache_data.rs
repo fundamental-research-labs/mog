@@ -21,6 +21,7 @@ pub(super) fn build_cache(
     external_source_relationship_id: Option<&str>,
 ) -> Option<(Vec<u8>, Vec<u8>)> {
     let mut cache_writer = PivotCacheWriter::new(cache_src.cache_id);
+    cache_writer.ooxml_preservation = cache_src.ooxml_preservation.clone();
     cache_writer.field_templates = cache_src.cache_fields.clone();
     if snapshot_records.is_some_and(|rows| typed_snapshot_matches(cache_src, rows)) {
         cache_writer.typed_fields = Some(cache_src.cache_fields.clone());

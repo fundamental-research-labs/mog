@@ -20,6 +20,11 @@ use super::variable_store::VariableStore;
 /// Holds all sheets with their cells, plus workbook-level named ranges and tables.
 #[derive(Debug, Clone)]
 pub struct CellMirror {
+    pub(crate) cell_metadata_provider:
+        Option<std::sync::Arc<dyn super::cell_metadata::CellMetadataProvider>>,
+    pub(crate) evaluated_metadata_revision: u64,
+    /// Workbook date system supplied by the engine's workbook settings store.
+    pub(crate) date1904: bool,
     pub(super) sheets: FxHashMap<SheetId, SheetMirror>,
     /// Lowercase sheet name -> SheetId for case-insensitive lookup.
     pub(super) sheet_names: FxHashMap<String, SheetId>,
@@ -84,6 +89,9 @@ impl CellMirror {
     /// Create an empty cell mirror.
     pub fn new() -> Self {
         Self {
+            cell_metadata_provider: None,
+            evaluated_metadata_revision: 0,
+            date1904: false,
             sheets: FxHashMap::default(),
             sheet_names: FxHashMap::default(),
             variables: VariableStore::new(),
@@ -119,7 +127,13 @@ impl CellMirror {
 
     /// Returns `true` if `cell_id` is registered as a CSE anchor.
     pub fn is_cse_anchor(&self, cell_id: &CellId) -> bool {
-        self.cse_anchors.contains(cell_id)
+        !matches!(
+            self.formula_result_mode(cell_id),
+            Some(
+                super::cell_metadata::FormulaResultMode::Dynamic
+                    | super::cell_metadata::FormulaResultMode::LegacyScalar
+            )
+        ) && self.cse_anchors.contains(cell_id)
     }
 
     /// Returns the CSE anchor whose extent covers `(sheet, row, col)` —
@@ -136,7 +150,7 @@ impl CellMirror {
         col: u32,
     ) -> Option<(CellId, SheetPos)> {
         let (source, _, _) = self.projection_registry.resolve(sheet, row, col)?;
-        if !self.cse_anchors.contains(&source) {
+        if !self.is_cse_anchor(&source) {
             return None;
         }
         let anchor_pos = self.resolve_position(&source)?;
@@ -157,7 +171,7 @@ impl CellMirror {
         col: u32,
     ) -> Option<(CellId, SheetPos)> {
         let (source, _, _) = self.projection_registry.resolve(sheet, row, col)?;
-        if self.cse_anchors.contains(&source) {
+        if self.is_cse_anchor(&source) {
             return None;
         }
         let anchor_pos = self.resolve_position(&source)?;
@@ -251,7 +265,7 @@ impl CellMirror {
                 anchor_row: anchor_pos.row(),
                 anchor_col: anchor_pos.col(),
                 value,
-                is_cse: self.cse_anchors.contains(&anchor_id),
+                is_cse: self.is_cse_anchor(&anchor_id),
             });
         }
 

@@ -92,6 +92,8 @@ pub struct CFIconThresholdWire {
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct CFIconSetWire {
+    #[serde(default)]
+    pub custom_icons: Vec<Option<super::rule::CustomIcon>>,
     pub icon_set_name: CFIconSetName,
     pub thresholds: Vec<CFIconThresholdWire>,
     pub percent: Option<bool>,

@@ -7,6 +7,7 @@ impl YrsComputeEngine {
         pre: &CalculationSettings,
         post: &CalculationSettings,
     ) {
+        self.sync_runtime_date_system_from_storage();
         self.apply_runtime_calculation_settings(post);
 
         if pre != post {
@@ -15,6 +16,7 @@ impl YrsComputeEngine {
     }
 
     pub(super) fn sync_runtime_calculation_settings_from_storage(&mut self) {
+        self.sync_runtime_date_system_from_storage();
         let settings = crate::storage::workbook::settings::get_calculation_settings(
             self.stores.storage.doc(),
             self.stores.storage.workbook_map(),
@@ -23,6 +25,18 @@ impl YrsComputeEngine {
         self.apply_runtime_calculation_settings(&settings);
 
         if runtime_changed {
+            self.stores.compute.mark_dirty();
+        }
+    }
+
+    pub(crate) fn sync_runtime_date_system_from_storage(&mut self) {
+        let date1904 = crate::storage::workbook::settings::get_settings(
+            self.stores.storage.doc(),
+            self.stores.storage.workbook_map(),
+        )
+        .date1904;
+        if self.mirror.date1904 != date1904 {
+            self.mirror.date1904 = date1904;
             self.stores.compute.mark_dirty();
         }
     }

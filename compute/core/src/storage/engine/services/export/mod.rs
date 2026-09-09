@@ -1,8 +1,11 @@
 mod cells;
+mod dynamic_metadata;
 mod chart_sources;
 mod comment_package_metadata;
 mod dimensions;
 mod named_ranges;
+#[cfg(feature = "native")]
+mod native_parallel;
 mod palette;
 mod pivot_cache_reconciliation;
 mod print_defined_names;
@@ -49,6 +52,7 @@ use domain_types::{
     domain::print::PrintSettings,
     domain::table::TableSpec,
 };
+use value_types::ComputeError;
 use yrs::{Any, Map, Out, Transact};
 
 use named_ranges::export_workbook_named_ranges;
@@ -757,7 +761,7 @@ fn tab_color_to_ooxml_color(color: &str) -> ooxml_types::styles::ColorDef {
 pub(in crate::storage::engine) fn build_parse_output_from_yrs(
     stores: &EngineStores,
     mirror: &CellMirror,
-) -> ParseOutput {
+) -> Result<ParseOutput, ComputeError> {
     let sheet_ids = stores.storage.sheet_order();
     let mut workbook_stylesheet = export_workbook_stylesheet(stores);
     let mut seeded_style_palette = export_workbook_style_palette(stores);
@@ -771,13 +775,15 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
             seeded_style_palette,
             imported_style_prefix_len,
         );
-        let exported_sheets: Vec<ExportedSheetData> = sheet_ids
-            .par_iter()
-            .enumerate()
-            .filter_map(|(sheet_idx, sheet_id)| {
-                export_single_sheet(stores, mirror, sheet_id, sheet_idx, &palette)
-            })
-            .collect();
+        let exported_sheets: Vec<ExportedSheetData> = native_parallel::install(|| {
+            sheet_ids
+                .par_iter()
+                .enumerate()
+                .filter_map(|(sheet_idx, sheet_id)| {
+                    export_single_sheet(stores, mirror, sheet_id, sheet_idx, &palette)
+                })
+                .collect()
+        })?;
         let table_projection_inputs: Vec<Vec<ExportedTableProjectionInput>> = exported_sheets
             .iter()
             .map(|sheet| sheet.table_projection_inputs.clone())
@@ -857,7 +863,7 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
     let pivot_tables =
         export_workbook_parsed_pivot_tables(stores, mirror, default_pivot_style.as_deref());
 
-    let output = ParseOutput {
+    let mut output = ParseOutput {
         sheets: output_sheets,
         workbook_sheet_inventory,
         parsed_workbook_sheet_indices,
@@ -902,8 +908,9 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
         has_persons_part,
         volatile_dependency_part: workbook::export_volatile_dependency_part(stores),
     };
+    dynamic_metadata::reconcile(&mut output);
     let _data_features = output.workbook_data_features();
-    output
+    Ok(output)
 }
 
 /// Helper: resolve a cell_id hex string to (row, col) via the compute mirror.

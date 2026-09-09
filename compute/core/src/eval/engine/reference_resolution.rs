@@ -37,7 +37,7 @@ impl<M: EvalMetadata> compute_parser::CellRefResolver for EvalRefResolver<'_, M>
     }
 }
 
-pub(super) fn parse_defined_name_formula<M: EvalMetadata>(
+pub(in crate::eval) fn parse_defined_name_formula<M: EvalMetadata>(
     raw_expression: &str,
     meta: &M,
 ) -> Option<ASTNode> {
@@ -92,7 +92,7 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
         }
     }
 
-    pub(super) fn patch_sheet_id(node: &ASTNode, sheet_id: SheetId) -> ASTNode {
+    pub(in crate::eval) fn patch_sheet_id(node: &ASTNode, sheet_id: SheetId) -> ASTNode {
         SheetPatcher { sheet_id }.fold(node.clone())
     }
 }

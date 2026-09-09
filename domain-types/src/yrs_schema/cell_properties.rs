@@ -31,6 +31,7 @@ const KEY_CONNECTION_ID: &str = "ci";
 const KEY_STYLE_ID: &str = "si";
 const KEY_CM: &str = "cm";
 const KEY_VM: &str = "vm";
+const KEY_IMPORTED_RICH_ERROR: &str = "ire";
 const KEY_PHONETIC: &str = "ph";
 const KEY_DATE_LEXICAL_VALUE: &str = "dlv";
 const KEY_FORMULA_RESULT_TYPE: &str = "frt";
@@ -72,6 +73,11 @@ pub fn to_yrs_prelim(props: &CellProperties) -> Vec<(&str, Any)> {
     }
     if let Some(vm) = props.vm {
         entries.push((KEY_VM, Any::Number(vm as f64)));
+    }
+    if let Some(error) = props.imported_rich_error
+        && let Ok(json) = serde_json::to_string(&error)
+    {
+        entries.push((KEY_IMPORTED_RICH_ERROR, Any::String(Arc::from(json))));
     }
     if props.phonetic {
         entries.push((KEY_PHONETIC, Any::Bool(true)));
@@ -124,6 +130,8 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<CellProperties>
     let cell_metadata_index = read_u32(map, txn, KEY_CM)
         .or_else(|| read_bool(map, txn, KEY_CM).and_then(|present| present.then_some(1)));
     let vm = read_u32(map, txn, KEY_VM);
+    let imported_rich_error = read_string(map, txn, KEY_IMPORTED_RICH_ERROR)
+        .and_then(|json| serde_json::from_str(&json).ok());
     let phonetic = read_bool(map, txn, KEY_PHONETIC).unwrap_or(false);
     let date_lexical_value = read_string(map, txn, KEY_DATE_LEXICAL_VALUE);
     let formula_result_type = read_u32(map, txn, KEY_FORMULA_RESULT_TYPE).map(|n| n as u8);
@@ -142,6 +150,7 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<CellProperties>
         style_id,
         cell_metadata_index,
         vm,
+        imported_rich_error,
         phonetic,
         date_lexical_value,
         formula_result_type,

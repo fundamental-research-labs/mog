@@ -287,6 +287,8 @@ pub fn clear_formula_cache_metadata(
     if props.formula_result_type.is_none()
         && !props.has_empty_cached_value
         && props.formula_cache_provenance.is_absent_or_unknown()
+        && props.vm.is_none()
+        && props.imported_rich_error.is_none()
     {
         return;
     }
@@ -294,6 +296,8 @@ pub fn clear_formula_cache_metadata(
     props.formula_result_type = None;
     props.has_empty_cached_value = false;
     props.formula_cache_provenance = Default::default();
+    props.vm = None;
+    props.imported_rich_error = None;
     if props.format.is_none() && props.metadata_is_empty() {
         clear_properties(doc, sheets, sheet_id, cell_id);
     } else {
@@ -334,6 +338,8 @@ pub fn clear_formula_cache_metadata_for_cell_ids(
         if props.formula_result_type.is_none()
             && !props.has_empty_cached_value
             && props.formula_cache_provenance.is_absent_or_unknown()
+            && props.vm.is_none()
+            && props.imported_rich_error.is_none()
         {
             continue;
         }
@@ -341,6 +347,8 @@ pub fn clear_formula_cache_metadata_for_cell_ids(
         props.formula_result_type = None;
         props.has_empty_cached_value = false;
         props.formula_cache_provenance = Default::default();
+        props.vm = None;
+        props.imported_rich_error = None;
         props_map.remove(&mut txn, &cell_hex);
         if props.format.is_some() || !props.metadata_is_empty() {
             if let Some(format) = props.format.as_ref() {

@@ -286,6 +286,11 @@ impl<'a> MirrorAccess<'a> {
         self.resolve_named_range_def(nr)
     }
 
+    pub fn resolve_workbook_name(&self, name: &str) -> Option<ResolvedName> {
+        let nr = self.mirror.resolve_variable(name, &[Scope::Workbook])?;
+        self.resolve_named_range_def(nr)
+    }
+
     /// Resolve a named range using a specific sheet's scope chain.
     /// Used when evaluating `'Sheet1'!MyName` where Sheet1 may differ from the current sheet.
     pub fn resolve_defined_name_for_sheet(

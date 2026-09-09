@@ -251,6 +251,7 @@ fn convert_icon_set(wire: CFIconSetWire) -> Result<CFIconSet, CFRuleValidationEr
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok(CFIconSet {
+        custom_icons: wire.custom_icons,
         icon_set_name: wire.icon_set_name,
         thresholds,
         reverse_order: wire.reverse_order,

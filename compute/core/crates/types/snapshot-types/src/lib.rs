@@ -30,7 +30,7 @@ mod test_helpers;
 pub use error::*;
 pub use init::{
     CellData, CellDataBin, ColAxisIdentityRef, ColAxisIdentityRefBin, DataTableOoxmlFlags,
-    DataTableRegionDef, PivotTableDef, RangeData, RangeDataBin, RowAxisIdentityRef,
+    DataTableRegionDef, PivotGrandTotalCell, PivotTableDef, RangeData, RangeDataBin, RowAxisIdentityRef,
     RowAxisIdentityRefBin, SheetSnapshot, SheetSnapshotBin, SnapshotAxisIdentityRun,
     SnapshotAxisIdentityRunRef, WORKBOOK_SNAPSHOT_SCHEMA_VERSION_COMPACT_AXIS_IDENTITY,
     WORKBOOK_SNAPSHOT_SCHEMA_VERSION_CURRENT, WORKBOOK_SNAPSHOT_SCHEMA_VERSION_DENSE_IDENTITY,

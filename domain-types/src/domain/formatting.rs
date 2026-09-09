@@ -41,6 +41,12 @@ pub struct CellMetadata {
     /// `N` in `metadata.xml`'s valueMetadata block.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vm: Option<u32>,
+    #[serde(
+        rename = "importedRichError",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub imported_rich_error: Option<crate::ImportedRichError>,
     /// Formula-result type code preserved from the original `<c>`
     /// element for cells whose computed result type cannot be
     /// recovered from the cached value alone (e.g. empty-string vs
@@ -115,6 +121,12 @@ pub struct CellProperties {
     /// Value-metadata-record index. See [`CellMetadata::vm`].
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vm: Option<u32>,
+    #[serde(
+        rename = "importedRichError",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub imported_rich_error: Option<crate::ImportedRichError>,
     /// Cell-level phonetic display flag (`ph`).
     #[serde(default, skip_serializing_if = "is_false")]
     pub phonetic: bool,
@@ -167,6 +179,7 @@ impl CellProperties {
             && self.style_id.is_none()
             && self.cell_metadata_index.is_none()
             && self.vm.is_none()
+            && self.imported_rich_error.is_none()
             && !self.phonetic
             && self.date_lexical_value.is_none()
             && self.formula_result_type.is_none()
@@ -188,6 +201,7 @@ impl CellMetadata {
             && self.style_id.is_none()
             && self.cell_metadata_index.is_none()
             && self.vm.is_none()
+            && self.imported_rich_error.is_none()
             && self.formula_result_type.is_none()
             && !self.has_empty_cached_value
             && self.formula_cache_provenance.is_absent_or_unknown()

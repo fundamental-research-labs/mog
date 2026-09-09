@@ -567,14 +567,25 @@ fn apply_mirror_action(
     action: MirrorAction,
 ) {
     match action {
-        MirrorAction::Remove(cell_id) => mirror.remove_cell(&cell_id),
-        MirrorAction::Apply(cell_id, value) => mirror.apply_edit(
-            sheet_id,
-            cell_id,
-            cell_types::SheetPos::new(row, col),
-            value,
-            None,
-        ),
+        MirrorAction::Remove(cell_id) => {
+            mirror.unmark_cse_anchor(&cell_id);
+            mirror.cse_single_cell.remove(&cell_id);
+            mirror.remove_cell(&cell_id);
+        }
+        MirrorAction::Apply(cell_id, value) => {
+            // This authored write replaced the canonical cell and its imported
+            // array declaration. Direct writes suppress the storage observer,
+            // so reconcile the mirror markers here before recalculation too.
+            mirror.unmark_cse_anchor(&cell_id);
+            mirror.cse_single_cell.remove(&cell_id);
+            mirror.apply_edit(
+                sheet_id,
+                cell_id,
+                cell_types::SheetPos::new(row, col),
+                value,
+                None,
+            );
+        }
         MirrorAction::None => {}
     }
 }

@@ -158,8 +158,7 @@ impl YrsComputeEngine {
         );
 
         // 6. Register bounds for GETPIVOTDATA
-        let bounds = &result.rendered_bounds;
-        let def = engine_config.to_pivot_table_def(bounds, &output_sheet_id);
+        let def = engine_config.to_pivot_table_def_from_result(&result, &output_sheet_id);
         self.mirror.upsert_pivot_table_def(def);
 
         Ok((output_sheet_id, result))

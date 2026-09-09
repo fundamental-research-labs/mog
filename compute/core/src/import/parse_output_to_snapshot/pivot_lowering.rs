@@ -131,6 +131,7 @@ pub(crate) fn convert_pivot_tables(
             });
 
             Some(PivotTableDef {
+                grand_total_cells: super::pivot_totals::imported_grand_total_cells(config),
                 id: config.id.clone(),
                 name: config.name.clone(),
                 sheet: sheet_uuid,

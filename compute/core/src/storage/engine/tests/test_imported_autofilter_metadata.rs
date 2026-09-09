@@ -474,7 +474,7 @@ fn assert_unsupported_icon_table_filter(table: &TableSpec) {
     match &table.filter_columns[0].filter {
         FilterSpec::Icon { icon_set, icon_id } => {
             assert_eq!(icon_set, "3TrafficLights1");
-            assert_eq!(*icon_id, Some(1));
+            assert_eq!(*icon_id, Some(99));
         }
         other => panic!("expected preserved icon filter metadata, got {other:?}"),
     }
@@ -509,7 +509,7 @@ fn unsupported_people_table_filter_parse_output() -> ParseOutput {
                 show_button: true,
                 filter: FilterSpec::Icon {
                     icon_set: "3TrafficLights1".to_string(),
-                    icon_id: Some(1),
+                    icon_id: Some(99),
                 },
                 ext_lst_raw: None,
             }])],

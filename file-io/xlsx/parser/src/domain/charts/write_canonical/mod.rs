@@ -8,6 +8,8 @@ mod chart_types;
 mod labels;
 mod layout;
 mod series;
+#[cfg(test)]
+mod series_order_tests;
 mod shape_props;
 mod structure;
 mod text_body;

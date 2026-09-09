@@ -216,6 +216,7 @@ fn record_raw_cell_value_provenance(
         KEY_FORMULA_VOLATILE,
         KEY_FORMULA_AGGREGATE,
         KEY_FORMULA_METADATA,
+        compute_document::schema::KEY_FORMULA_RESULT_MODE,
     ] {
         if let Some(value) = raw_cell_marker_value(&cell_map, &txn, key) {
             provenance.insert_marker(FORMULA_METADATA_CATEGORY, key, value);

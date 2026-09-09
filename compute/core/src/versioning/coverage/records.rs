@@ -305,6 +305,7 @@ fn push_cell_records(records: &mut Vec<SemanticCoverageRecord>) {
         records,
         &[
             KEY_FORMULA_METADATA,
+            compute_document::schema::KEY_FORMULA_RESULT_MODE,
             KEY_ARRAY_REF,
             "rt",
             "h",

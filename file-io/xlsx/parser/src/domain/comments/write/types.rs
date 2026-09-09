@@ -240,6 +240,7 @@ pub struct CommentShape {
     pub note_width_style: Option<domain_types::VmlStyleDimensionInfo>,
     /// Whether this shape has imported owner-scoped VML provenance.
     pub has_vml_note_provenance: bool,
+    pub presentation: Option<domain_types::VmlNotePresentation>,
     /// Note-owned VML image relationships to emit as `<v:imagedata>`.
     pub note_images: Vec<CommentShapeImage>,
 }
@@ -247,6 +248,7 @@ pub struct CommentShape {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommentShapeImage {
     pub relationship_id: String,
+    pub original_relationship_id: String,
 }
 
 impl Default for CommentShape {
@@ -267,6 +269,7 @@ impl Default for CommentShape {
             note_height_style: None,
             note_width_style: None,
             has_vml_note_provenance: false,
+            presentation: None,
             note_images: Vec::new(),
         }
     }
@@ -292,6 +295,7 @@ impl CommentShape {
             note_height_style: None,
             note_width_style: None,
             has_vml_note_provenance: false,
+            presentation: None,
             note_images: Vec::new(),
         }
     }

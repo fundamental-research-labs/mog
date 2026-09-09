@@ -35,8 +35,17 @@ pub(super) fn emit_series(w: &mut XmlWriter, ser: &ChartSeries, chart_type: Char
         emit_shape_properties(w, sp, "c:spPr");
     }
 
-    // Type-specific fields order varies by chart type.
-    // We emit fields in a reasonable order that covers all chart types.
+    // CT_*Ser are ordered sequences. Picture options precede the first
+    // type-specific field, except bar (after invertIfNegative) and line
+    // (after marker). Stock uses CT_LineSer as well.
+    let picture_after_marker = matches!(
+        chart_type,
+        ChartType::Line | ChartType::Line3D | ChartType::Stock
+    );
+    let picture_after_invert = matches!(chart_type, ChartType::Bar | ChartType::Bar3D);
+    if !picture_after_marker && !picture_after_invert {
+        emit_series_picture_options(w, ser);
+    }
 
     // invertIfNegative (bar, bubble)
     if let Some(v) = ser.invert_if_negative {
@@ -44,10 +53,23 @@ pub(super) fn emit_series(w: &mut XmlWriter, ser: &ChartSeries, chart_type: Char
             .attr("val", if v { "1" } else { "0" })
             .self_close();
     }
+    if picture_after_invert {
+        emit_series_picture_options(w, ser);
+    }
 
     // marker (line, scatter, radar)
     if let Some(ref m) = ser.marker {
         emit_marker(w, m);
+    }
+    if picture_after_marker {
+        emit_series_picture_options(w, ser);
+    }
+
+    // CT_PieSer: pictureOptions, explosion, dPt, dLbls, cat, val.
+    if let Some(v) = ser.explosion {
+        w.start_element("c:explosion")
+            .attr("val", &v.to_string())
+            .self_close();
     }
 
     // dPt
@@ -103,18 +125,6 @@ pub(super) fn emit_series(w: &mut XmlWriter, ser: &ChartSeries, chart_type: Char
             .self_close();
     }
 
-    // explosion (pie, doughnut)
-    if let Some(v) = ser.explosion {
-        w.start_element("c:explosion")
-            .attr("val", &v.to_string())
-            .self_close();
-    }
-
-    // pictureOptions (bar, bar3D, area, surface)
-    if let Some(ref po) = ser.picture_options {
-        emit_picture_options(w, po);
-    }
-
     // shape (bar3D)
     if let Some(ref s) = ser.shape {
         w.start_element("c:shape")
@@ -136,10 +146,13 @@ pub(super) fn emit_series(w: &mut XmlWriter, ser: &ChartSeries, chart_type: Char
         w.start_element("c:extLst").self_close();
     }
 
-    // Suppress unused variable warning
-    let _ = chart_type;
-
     w.end_element("c:ser");
+}
+
+fn emit_series_picture_options(w: &mut XmlWriter, ser: &ChartSeries) {
+    if let Some(ref options) = ser.picture_options {
+        emit_picture_options(w, options);
+    }
 }
 
 // ============================================================================

@@ -223,6 +223,30 @@ impl<'a> EvalDataAccess for OverrideContext<'a> {
 }
 
 impl<'a> EvalMetadata for OverrideContext<'a> {
+    fn cell_reference_metadata(
+        &self,
+        sheet: &SheetId,
+        row: u32,
+        col: u32,
+    ) -> Option<crate::mirror::cell_metadata::CellReferenceMetadata> {
+        self.access.mirror.cell_metadata_provider.as_ref()?.query(
+            self.access.mirror,
+            sheet,
+            row,
+            col,
+        )
+    }
+    fn date1904(&self) -> bool {
+        self.access.mirror.date1904
+    }
+
+    fn legacy_reference_result(&self) -> bool {
+        self.access
+            .mirror
+            .formula_result_mode(&self.access.current_cell())
+            == Some(crate::mirror::cell_metadata::FormulaResultMode::LegacyScalar)
+    }
+
     fn current_cell(&self) -> CellId {
         self.access.current_cell()
     }
@@ -241,6 +265,10 @@ impl<'a> EvalMetadata for OverrideContext<'a> {
 
     fn resolve_defined_name(&self, name: &str) -> Option<ResolvedName> {
         self.access.resolve_defined_name(name)
+    }
+
+    fn resolve_workbook_name(&self, name: &str) -> Option<ResolvedName> {
+        self.access.resolve_workbook_name(name)
     }
 
     fn resolve_defined_name_for_sheet(&self, name: &str, sheet: SheetId) -> Option<ResolvedName> {
@@ -290,6 +318,14 @@ impl<'a> EvalMetadata for OverrideContext<'a> {
 
     fn is_row_hidden(&self, sheet: &SheetId, row: u32) -> bool {
         self.access.is_row_hidden(sheet, row)
+    }
+
+    fn is_row_filtered(&self, sheet: &SheetId, row: u32) -> bool {
+        self.access
+            .mirror
+            .cell_metadata_provider
+            .as_ref()
+            .is_some_and(|provider| provider.is_row_filtered(self.access.mirror, sheet, row))
     }
 
     fn get_table(&self, name: &str) -> Option<&formula_types::TableDef> {

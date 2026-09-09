@@ -103,8 +103,16 @@ pub(in crate::storage::engine) fn build_finalized_mirror_from_snapshot(
     storage: &YrsStorage,
     snapshot: &WorkbookSnapshot,
     grid_indexes: &FxHashMap<SheetId, GridIndex>,
+    layout_metrics: domain_types::units::LayoutMetrics,
 ) -> Result<CellMirror, ComputeError> {
     let mut mirror = CellMirror::from_snapshot(snapshot.clone())?;
+    mirror.install_cell_metadata_provider(crate::storage::engine::cell_metadata::provider(
+        storage,
+        layout_metrics,
+    ));
+    mirror.date1904 =
+        crate::storage::workbook::settings::get_settings(storage.doc(), storage.workbook_map())
+            .date1904;
     install_ordered_row_col_indexes(&mut mirror, grid_indexes);
     sync_enable_calculation_flags_for_mirror(storage, &mut mirror);
     hydrate_mirror_format_ranges(storage, &mut mirror);

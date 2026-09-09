@@ -218,6 +218,10 @@ pub(in crate::eval::lookup) fn index_scalar(
     let (row_idx, col_idx) =
         index_effective_position(row_idx, col_idx, has_col_arg, num_rows, num_cols);
 
+    if row_idx > num_rows || col_idx > num_cols {
+        return CellValue::Error(CellError::Ref, None);
+    }
+
     if row_idx == 0 && col_idx == 0 {
         return CellValue::Array(Arc::new(source.clone()));
     }

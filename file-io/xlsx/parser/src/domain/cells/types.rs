@@ -16,7 +16,10 @@ pub const CELL_TYPE_DATE: u8 = 7;
 /// Value type enumeration (for value_type field)
 pub const VALUE_TYPE_NONE: u8 = 0;
 pub const VALUE_TYPE_INLINE: u8 = 1;
-pub const VALUE_TYPE_SHARED_STRING: u8 = 2;
+/// Text already decoded at its XML/xstring boundary (shared or inline string).
+pub const VALUE_TYPE_DECODED_STRING: u8 = 2;
+/// Historical name retained for the packed shared-string representation.
+pub const VALUE_TYPE_SHARED_STRING: u8 = VALUE_TYPE_DECODED_STRING;
 pub const VALUE_TYPE_FORMULA: u8 = 3;
 /// Cached formula: cell has a formula element (e.g., self-closing `<f .../>` shared formula
 /// reference) but the value bytes contain the cached `<v>` value, not formula text.
@@ -157,6 +160,8 @@ pub struct ParseExtras {
     pub sf_refs: Vec<(u32, u32, u32)>,
     /// Cached `<v>` values for formula cells: (cell_index, offset_in_strings_buffer, len)
     pub cached_values: Vec<(usize, u32, u32)>,
+    /// Already decoded inline-string formula caches: (cell_index, text).
+    pub cached_inline_strings: Vec<(usize, String)>,
     /// Data table entries with region bounds and input cell references.
     pub data_tables: Vec<DataTableEntry>,
     /// Cell indices where the `<f>` element has `ca="1"` (needs recalculation).

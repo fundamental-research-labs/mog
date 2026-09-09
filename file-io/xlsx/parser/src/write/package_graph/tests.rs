@@ -924,3 +924,35 @@ fn modeled_paths_are_not_replayed_as_opaque_parts() {
 
     assert!(!graph.contains_part("xl/comments1.xml"));
 }
+
+#[test]
+fn worksheet_preview_relationship_targets_must_be_media() {
+    for (target, valid) in [("xl/media/preview.png", true), ("xl/styles.xml", false)] {
+        let mut builder = build_modeled_workbook_graph_builder(graph_options(None)).unwrap();
+        register_media_part(&mut builder, "xl/media/preview.png").unwrap();
+        builder.add_relationship(PackageRelationship {
+            owner: PackageOwner::Worksheet {
+                index: 0,
+                path: "xl/worksheets/sheet1.xml".to_string(),
+            },
+            relationship_type: REL_IMAGE.to_string(),
+            target: PackageRelationshipTarget::InternalPart {
+                path: target.to_string(),
+            },
+            identity_hint: Some(RelationshipIdentityHint::new("rPreview")),
+        });
+        let graph = builder.resolve().unwrap();
+        let result = graph.validate_for_export();
+        if valid {
+            result.expect("worksheet preview media ownership is legal before emitted XML reference validation");
+        } else {
+            let WriteError::PackageIntegrityIssues(issues) = result.unwrap_err() else {
+                panic!("expected package integrity issues");
+            };
+            assert!(issues.iter().any(|issue| matches!(issue,
+                PackageIntegrityIssue::InvalidRelationshipTargetKind { relationship_type, expected_kind, .. }
+                if relationship_type == REL_IMAGE && expected_kind == "Media"
+            )));
+        }
+    }
+}

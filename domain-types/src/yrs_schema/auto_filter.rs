@@ -181,7 +181,7 @@ mod tests {
                     show_button: true,
                     filter_type: Some(OoxmlFilterType::Icon {
                         icon_set: Some("3TrafficLights1".to_string()),
-                        icon_id: 2,
+                        icon_id: Some(2),
                     }),
                     ext_lst_raw: None,
                 },

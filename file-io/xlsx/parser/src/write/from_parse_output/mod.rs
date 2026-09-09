@@ -69,7 +69,7 @@ use crate::infra::opc::REL_CUSTOM_PROPERTY;
 use crate::write::relationships::{RelationshipManager, create_sheet_rels};
 use crate::write::{
     ControlsWriter, REL_CHART, REL_CHART_EX, REL_COMMENTS, REL_CTRL_PROP, REL_DRAWING,
-    REL_HYPERLINK, REL_PIVOT_TABLE, REL_PRINTER_SETTINGS, REL_SLICER, REL_TABLE,
+    REL_HYPERLINK, REL_PRINTER_SETTINGS, REL_SLICER, REL_TABLE,
     REL_THREADED_COMMENT, REL_VML_DRAWING,
 };
 
@@ -695,12 +695,8 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             worksheet_timeline_relationships.push((sheet_idx, global_timeline_idx));
         }
 
-        // Pivot table rels (sheet → pivotTable) and worksheet-level references.
-        //
-        // OOXML consumers discover worksheet-owned pivot tables from structured
-        // `<pivotTableDefinition r:id="..."/>` children in the worksheet XML.
-        // The relationship file supplies the target part; both must be kept in
-        // lockstep with the generated authoritative pivot paths.
+        // Pivot tables are implicitly owned by worksheet relationships. Unlike
+        // tables/drawings, CT_Worksheet has no pivotTableDefinition reference child.
         let pivot_table_r_ids =
             pivot_package::add_sheet_relationships(&mut rels, &pivot_data, sheet_idx);
         if !pivot_table_r_ids.is_empty() {
@@ -1409,6 +1405,9 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             entry.relationship_id_hint.as_deref(),
         );
     }
+    for (sheet_idx, extras) in sheet_extras.iter().enumerate() {
+        ole_objects::register_preview_relationships(&mut package_graph_builder, &extras.ole_objects, sheet_idx)?;
+    }
     for entry in &vml_preview_relationships {
         crate::write::package_graph::register_media_part(
             &mut package_graph_builder,
@@ -1944,7 +1943,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
         }
         ole_r_ids.sort_by_key(|(idx, _)| *idx);
         let ole_r_ids: Vec<String> = ole_r_ids.into_iter().map(|(_, r_id)| r_id).collect();
-        let ole_xml = ole_objects::write_worksheet_ole_objects(&extras.ole_objects, &ole_r_ids);
+        let ole_xml = ole_objects::write_worksheet_ole_objects(&extras.ole_objects, &ole_r_ids, &package_graph, sheet_idx);
         sheet_writers[sheet_idx].set_ole_objects_xml(String::from_utf8_lossy(&ole_xml).to_string());
 
         if let Some(vml_entry) = worksheet_ole_vml_relationships
@@ -2133,34 +2132,6 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
         table_parts_xml.push_str("</tableParts>");
         sheet_writers[sheet_idx].set_table_parts_xml(table_parts_xml);
     }
-    for sheet_idx in 0..output.sheets.len() {
-        let owner = crate::write::package_graph::PackageOwner::Worksheet {
-            index: sheet_idx,
-            path: format!("xl/worksheets/sheet{}.xml", sheet_idx + 1),
-        };
-        let pivot_table_r_ids: Vec<String> = pivot_data
-            .pivot_table_entries
-            .iter()
-            .filter(|entry| entry.sheet_idx == sheet_idx)
-            .map(|entry| {
-                let target = pivot_package::worksheet_relative_target(&entry.path);
-                package_graph
-                    .relationship_id(&owner, REL_PIVOT_TABLE, &target)
-                    .ok_or_else(|| {
-                        WriteError::PackageIntegrity(format!(
-                            "missing generated worksheet pivot relationship for sheet {} target {}",
-                            sheet_idx + 1,
-                            target
-                        ))
-                    })
-                    .map(str::to_string)
-            })
-            .collect::<Result<_, _>>()?;
-        if !pivot_table_r_ids.is_empty() {
-            sheet_writers[sheet_idx].set_pivot_table_r_ids(pivot_table_r_ids);
-        }
-    }
-
     // ── 4. Build workbook.xml ───────────────────────────────────────────
     let workbook_parts::WorkbookXmlParts {
         workbook_xml,

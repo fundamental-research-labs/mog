@@ -20,6 +20,17 @@ use value_types::{CellError, CellValue};
 
 use snapshot_types::PivotTableDef;
 
+/// Complete search contract for a cached column lookup. Bounds are inclusive;
+/// direction determines which duplicate wins within those bounds.
+#[derive(Clone, Copy, Debug)]
+pub struct ColumnLookupQuery {
+    pub start_row: u32,
+    pub end_row: u32,
+    pub reverse: bool,
+    /// 0 = exact, 1 = next smaller, -1 = next larger, 2 = wildcard.
+    pub match_mode: i32,
+}
+
 // ---------------------------------------------------------------------------
 // Data access trait (async)
 // ---------------------------------------------------------------------------
@@ -139,12 +150,38 @@ pub trait DataSource {
 
 /// Positional / structural metadata — synchronous queries passed to functions.
 pub trait EvalMetadata {
+    fn cell_reference_metadata(
+        &self,
+        _sheet: &SheetId,
+        _row: u32,
+        _col: u32,
+    ) -> Option<crate::mirror::cell_metadata::CellReferenceMetadata> {
+        None
+    }
+    /// Whether workbook calendar serials use the 1904 date system.
+    fn date1904(&self) -> bool {
+        false
+    }
+
+    /// Imported legacy formulas implicitly intersect reference-valued results
+    /// at the caller position. Computed value arrays have a separate scalar
+    /// result policy and must not acquire reference geometry.
+    fn legacy_reference_result(&self) -> bool {
+        false
+    }
+
     fn current_cell(&self) -> CellId;
     /// Worksheet context for references that are not tied to a materialized cell.
     fn current_sheet(&self) -> SheetId;
     fn resolve_position(&self, cell_id: &CellId) -> Option<(SheetId, u32, u32)>;
     fn resolve_cell_id(&self, sheet: &SheetId, row: u32, col: u32) -> Option<CellId>;
     fn resolve_defined_name(&self, name: &str) -> Option<ResolvedName>;
+
+    /// Resolve an explicitly workbook-qualified local name, bypassing any
+    /// sheet-local names. Contexts without named scopes may use the default.
+    fn resolve_workbook_name(&self, name: &str) -> Option<ResolvedName> {
+        self.resolve_defined_name(name)
+    }
 
     /// Resolve a named range using a specific sheet's scope chain.
     /// Used when evaluating `'Sheet1'!MyName` where Sheet1 may differ from the current sheet.
@@ -236,6 +273,11 @@ pub trait EvalMetadata {
         false
     }
 
+    /// True only for rows excluded by a filter, independently of manual hiding.
+    fn is_row_filtered(&self, _sheet: &SheetId, _row: u32) -> bool {
+        false
+    }
+
     /// Get a table definition by name.
     fn get_table(&self, _name: &str) -> Option<&formula_types::TableDef> {
         None
@@ -263,6 +305,18 @@ pub trait EvalMetadata {
         _col: u32,
         _target: &CellValue,
         _match_mode: i32,
+    ) -> IndexedLookupResult {
+        IndexedLookupResult::NotAvailable
+    }
+
+    /// Search only the referenced rows and preserve duplicate search direction.
+    /// Hosts without a compatible index use the value materialization path.
+    fn indexed_column_search_range(
+        &self,
+        _sheet: &SheetId,
+        _col: u32,
+        _target: &CellValue,
+        _query: ColumnLookupQuery,
     ) -> IndexedLookupResult {
         IndexedLookupResult::NotAvailable
     }

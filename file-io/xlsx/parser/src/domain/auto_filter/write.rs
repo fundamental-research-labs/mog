@@ -206,7 +206,7 @@ fn write_filter_type_xml(w: &mut XmlWriter, filter_type: &OoxmlFilterType, stric
             if let Some(set) = icon_set {
                 w.attr("iconSet", set);
             }
-            w.attr("iconId", &icon_id.to_string());
+            if let Some(icon_id) = icon_id { w.attr("iconId", &icon_id.to_string()); }
             w.self_close();
         }
     }

@@ -183,9 +183,8 @@ pub(super) fn column_filter_to_table_criteria(
             icon_set_name,
             icon_index,
         } => {
-            // Icon filters require CF rule context that is not available at the storage
-            // level — the bridge layer performs the actual match. Forward the payload so
-            // the bridge can read it from the stored FilterCriteria.
+            // Preserve the criterion identity; evaluation receives fresh CF icon
+            // identities separately from values and formats.
             compute_table::types::FilterCriteria::Icon(compute_table::types::IconFilter {
                 icon_set_name: icon_set_name.clone(),
                 icon_index: *icon_index,

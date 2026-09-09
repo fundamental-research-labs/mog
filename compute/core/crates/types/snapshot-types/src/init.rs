@@ -16,6 +16,15 @@ use domain_types::domain::pivot::PivotTableStyle;
 use formula_types::{CellRef, NamedRangeDef, TableDef};
 use value_types::{CellValue, FiniteF64};
 
+/// An explicitly rendered overall-total value for one measure.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PivotGrandTotalCell {
+    pub data_field_index: u32,
+    pub row: u32,
+    pub col: u32,
+}
+
 /// Lightweight pivot table definition for GETPIVOTDATA lookup.
 ///
 /// Contains structural metadata to locate values in rendered pivot cells.
@@ -50,6 +59,9 @@ pub struct PivotTableDef {
     pub first_data_col: u32,
     /// Data field display names, e.g. `["Sum of FMV", "Sum of Capital Invested"]`.
     pub data_field_names: Vec<String>,
+    /// Locations derived from the actual axis layout; empty means no addressable overall total.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub grand_total_cells: Vec<PivotGrandTotalCell>,
     /// Cache field names (all source columns), e.g. `["Company Name", "FMV", ...]`.
     pub cache_field_names: Vec<String>,
     /// Indices into `cache_field_names` for row-axis fields.
@@ -597,6 +609,7 @@ mod tests {
     #[test]
     fn pivot_table_def_serde_roundtrip() {
         let ptd = PivotTableDef {
+            grand_total_cells: Vec::new(),
             id: "pivot-1".into(),
             name: "PivotTable1".into(),
             sheet: "abc-123".into(),

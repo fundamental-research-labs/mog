@@ -114,3 +114,18 @@ fn totals_has_bottom_border() {
     let fmt = resolve_table_cell_format(&table, 7, 1).unwrap();
     assert!(fmt.border_bottom.is_some());
 }
+
+#[test]
+fn unstyled_tables_contribute_no_header_body_or_totals_format() {
+    for style in ["none", "None", ""] {
+        let table = make_table(Some(TableOverrides {
+            style: Some(style.to_string()),
+            ..Default::default()
+        }));
+        for row in 2..=7 {
+            for col in 1..=3 {
+                assert!(resolve_table_cell_format(&table, row, col).is_none());
+            }
+        }
+    }
+}

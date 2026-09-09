@@ -188,7 +188,7 @@ fn test_color_filter_serde() {
 fn test_icon_filter_serde() {
     let criteria = ColumnFilter::Icon {
         icon_set_name: "3TrafficLights1".to_string(),
-        icon_index: 0,
+        icon_index: Some(0),
     };
 
     let value = serde_json::to_value(&criteria).unwrap();

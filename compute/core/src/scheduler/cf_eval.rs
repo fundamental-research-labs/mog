@@ -259,9 +259,9 @@ impl ComputeCore {
             let mut cascade = crate::cf::evaluator::CascadeEvaluator::new();
 
             for (rule, stats, parsed_formula_opt) in &applicable {
-                // Skip if this rule's category is already stopped
-                if cascade.is_stopped(rule) {
-                    continue;
+                // A matching stopIfTrue rule blocks every lower-priority rule.
+                if cascade.is_stopped() {
+                    break;
                 }
 
                 // For formula-based rules, shift the AST to this cell's position

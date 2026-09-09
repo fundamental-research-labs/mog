@@ -1,13 +1,14 @@
 use compute_parser::ASTNode;
 use value_types::{CellError, CellValue, ComputeError};
 
-use crate::eval::context::traits::{EvalDataAccess, EvalMetadata, IndexedLookupResult};
+use crate::eval::context::traits::{
+    ColumnLookupQuery, EvalDataAccess, EvalMetadata, IndexedLookupResult,
+};
 use crate::eval::engine::evaluator::Evaluator;
 use crate::eval::engine::operators::{cell_value_cmp_for_lookup, cell_value_eq_lookup};
 use crate::functions::helpers::criteria::WildcardPattern;
 use crate::functions::lookup::helpers::get_return_value;
 
-use super::primitives::has_wildcard_chars;
 use super::range_geometry::{is_whole_range, try_extract_single_col_range};
 
 pub(in crate::eval) async fn eval_xlookup<'a, D: EvalDataAccess, M: EvalMetadata>(
@@ -77,7 +78,7 @@ pub(in crate::eval) async fn eval_xlookup<'a, D: EvalDataAccess, M: EvalMetadata
         }
 
         // For exact/next-smaller/next-larger match + linear search, try indexed path per element
-        let use_indexed = matches!(match_mode, -1..=1) && matches!(search_mode, 1 | -1);
+        let use_indexed = matches!(search_mode, 1 | -1);
 
         if use_indexed
             && let Some((sheet, col, start_row, end_row)) =
@@ -99,23 +100,21 @@ pub(in crate::eval) async fn eval_xlookup<'a, D: EvalDataAccess, M: EvalMetadata
                     0 => 0,  // exact
                     -1 => 1, // next smaller -> leq
                     1 => -1, // next larger -> geq
-                    _ => 0,
+                    2 => 2,  // wildcard
+                    _ => unreachable!(),
                 };
 
-                // Handle wildcard separately
-                let search_result =
-                    if match_mode == 2 || (match_mode == 0 && has_wildcard_chars(&elem)) {
-                        match elem.coerce_to_string() {
-                            Ok(pat) => evaluator
-                                .meta
-                                .indexed_column_wildcard_search(&sheet, col, &pat),
-                            Err(_) => IndexedLookupResult::NotAvailable,
-                        }
-                    } else {
-                        evaluator
-                            .meta
-                            .indexed_column_search(&sheet, col, &elem, indexed_mode)
-                    };
+                let search_result = evaluator.meta.indexed_column_search_range(
+                    &sheet,
+                    col,
+                    &elem,
+                    ColumnLookupQuery {
+                        start_row,
+                        end_row,
+                        reverse: search_mode == -1,
+                        match_mode: indexed_mode,
+                    },
+                );
 
                 match search_result {
                     IndexedLookupResult::Found(row) if row >= start_row && row <= end_row => {
@@ -263,32 +262,24 @@ pub(in crate::eval) async fn eval_xlookup<'a, D: EvalDataAccess, M: EvalMetadata
         //   XLOOKUP -1 (next smaller)  → indexed 1 (leq / largest <=)
         //   XLOOKUP  1 (next larger)   → indexed -1 (geq / smallest >=)
         //   XLOOKUP  2 (wildcard)      → indexed_column_wildcard_search
-        let search_result = if match_mode == 2 {
-            match lookup.coerce_to_string() {
-                Ok(pat) => evaluator
-                    .meta
-                    .indexed_column_wildcard_search(&sheet, col, &pat),
-                Err(_) => IndexedLookupResult::NotAvailable,
-            }
-        } else if match_mode == 0 && has_wildcard_chars(&lookup) {
-            // Exact match with wildcard characters in lookup value
-            match lookup.coerce_to_string() {
-                Ok(pat) => evaluator
-                    .meta
-                    .indexed_column_wildcard_search(&sheet, col, &pat),
-                Err(_) => IndexedLookupResult::NotAvailable,
-            }
-        } else {
-            let indexed_mode = match match_mode {
-                0 => 0,  // exact
-                -1 => 1, // next smaller → leq
-                1 => -1, // next larger → geq
-                _ => 0,  // unreachable due to validation above
-            };
-            evaluator
-                .meta
-                .indexed_column_search(&sheet, col, &lookup, indexed_mode)
+        let indexed_mode = match match_mode {
+            0 => 0,
+            -1 => 1,
+            1 => -1,
+            2 => 2,
+            _ => unreachable!(),
         };
+        let search_result = evaluator.meta.indexed_column_search_range(
+            &sheet,
+            col,
+            &lookup,
+            ColumnLookupQuery {
+                start_row,
+                end_row,
+                reverse: search_mode == -1,
+                match_mode: indexed_mode,
+            },
+        );
 
         match search_result {
             IndexedLookupResult::Found(row) => {

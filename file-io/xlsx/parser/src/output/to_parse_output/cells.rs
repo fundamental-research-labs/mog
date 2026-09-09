@@ -284,6 +284,7 @@ pub(super) fn convert_cell_with_projection_role_and_provenance(
             has_effective_formula_result_type,
         ),
         vm: cell.vm,
+        imported_rich_error: None,
         phonetic: cell.phonetic,
         date_lexical_value: cell.date_lexical_value.clone(),
         original_sst_index: if can_drop_sst_provenance {

@@ -278,7 +278,7 @@ fn deleted_imported_pivot_filters_its_pivot_and_private_cache_on_export() {
     let mut engine = engine_from_parse_output_normal(&input);
 
     delete_imported_pivot_by_name(&mut engine, "PivotA");
-    let exported = engine.build_parse_output_from_yrs();
+    let exported = engine.build_parse_output_from_yrs().expect("export projection");
 
     let pivot_names: Vec<_> = exported
         .pivot_tables
@@ -310,7 +310,7 @@ fn deleted_imported_pivot_keeps_shared_cache_when_another_pivot_survives() {
     let mut engine = engine_from_parse_output_normal(&input);
 
     delete_imported_pivot_by_name(&mut engine, "PivotA");
-    let exported = engine.build_parse_output_from_yrs();
+    let exported = engine.build_parse_output_from_yrs().expect("export projection");
 
     let pivot_names: Vec<_> = exported
         .pivot_tables
@@ -331,7 +331,7 @@ fn promoted_imported_pivot_preserves_matching_cache_on_export() {
     );
     let engine = engine_from_parse_output_normal(&input);
 
-    let exported = engine.build_parse_output_from_yrs();
+    let exported = engine.build_parse_output_from_yrs().expect("export projection");
 
     let pivot = exported_pivot(&exported, "PivotA");
     assert_eq!(pivot.config.cache_id, Some(7));
@@ -362,7 +362,7 @@ fn promoted_imported_pivot_preserves_cache_after_source_sheet_rename() {
     engine
         .rename_compute_sheet(&source_sheet_id, "RenamedData")
         .expect("rename source sheet");
-    let exported = engine.build_parse_output_from_yrs();
+    let exported = engine.build_parse_output_from_yrs().expect("export projection");
 
     let pivot = exported_pivot(&exported, "PivotA");
     assert_eq!(pivot.config.cache_id, Some(7));
@@ -384,7 +384,7 @@ fn promoted_imported_pivot_changed_source_range_forks_from_imported_cache() {
     update_imported_pivot_by_name(&mut engine, "PivotA", |pivot| {
         pivot.source_range = CellRange::new(0, 0, 1, 1);
     });
-    let exported = engine.build_parse_output_from_yrs();
+    let exported = engine.build_parse_output_from_yrs().expect("export projection");
 
     let pivot = exported_pivot(&exported, "PivotA");
     let forked_cache_id = pivot.config.cache_id.expect("forked cache id");
@@ -397,7 +397,7 @@ fn promoted_imported_pivot_changed_source_range_forks_from_imported_cache() {
     );
     assert!(exported.pivot_cache_records.is_empty());
 
-    let exported_again = engine.build_parse_output_from_yrs();
+    let exported_again = engine.build_parse_output_from_yrs().expect("export projection");
     assert_eq!(
         exported_pivot(&exported_again, "PivotA").config.cache_id,
         Some(forked_cache_id),
@@ -426,7 +426,7 @@ fn promoted_imported_pivot_shared_cache_keeps_survivor_when_one_source_changes()
     update_imported_pivot_by_name(&mut engine, "PivotA", |pivot| {
         pivot.source_range = CellRange::new(0, 0, 1, 1);
     });
-    let exported = engine.build_parse_output_from_yrs();
+    let exported = engine.build_parse_output_from_yrs().expect("export projection");
 
     let forked_cache_id = exported_pivot(&exported, "PivotA")
         .config
@@ -461,7 +461,7 @@ fn unsupported_external_imported_pivot_keeps_external_cache_source_on_export() {
     });
 
     let engine = engine_from_parse_output_normal(&input);
-    let exported = engine.build_parse_output_from_yrs();
+    let exported = engine.build_parse_output_from_yrs().expect("export projection");
 
     let source = exported_cache_source(&exported, 7);
     assert_eq!(source.source_kind, PivotCacheSourceKind::ExternalWorksheet);

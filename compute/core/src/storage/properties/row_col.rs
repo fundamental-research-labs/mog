@@ -25,7 +25,15 @@ pub fn get_row_format(
     row: u32,
     grid_index: Option<&GridIndex>,
 ) -> Option<CellFormat> {
-    let row_id = id_to_hex(grid_index?.row_id(row)?.as_u128());
+    get_row_format_by_id(storage, sheet_id, grid_index?.row_id(row)?)
+}
+
+pub(crate) fn get_row_format_by_id(
+    storage: &YrsStorage,
+    sheet_id: &SheetId,
+    row_id: cell_types::RowId,
+) -> Option<CellFormat> {
+    let row_id = id_to_hex(row_id.as_u128());
     let sheets = storage.sheets_ref();
     let txn = storage.doc().transact();
     let fmt_map = get_sheet_submap(&txn, &sheets, sheet_id, KEY_ROW_FORMATS)?;
@@ -185,7 +193,15 @@ pub fn get_col_format(
     col: u32,
     grid_index: Option<&GridIndex>,
 ) -> Option<CellFormat> {
-    let col_id = id_to_hex(grid_index?.col_id(col)?.as_u128());
+    get_col_format_by_id(storage, sheet_id, grid_index?.col_id(col)?)
+}
+
+pub(crate) fn get_col_format_by_id(
+    storage: &YrsStorage,
+    sheet_id: &SheetId,
+    col_id: cell_types::ColId,
+) -> Option<CellFormat> {
+    let col_id = id_to_hex(col_id.as_u128());
     let sheets = storage.sheets_ref();
     let txn = storage.doc().transact();
     let fmt_map = get_sheet_submap(&txn, &sheets, sheet_id, KEY_COL_FORMATS)?;

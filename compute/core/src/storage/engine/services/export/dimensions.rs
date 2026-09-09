@@ -924,7 +924,7 @@ fn table_filter_spec_from_ooxml(filter: &OoxmlFilterType) -> Option<FilterSpec> 
         },
         OoxmlFilterType::Icon { icon_set, icon_id } => FilterSpec::Icon {
             icon_set: icon_set.clone().unwrap_or_default(),
-            icon_id: Some(*icon_id),
+            icon_id: *icon_id,
         },
     })
 }

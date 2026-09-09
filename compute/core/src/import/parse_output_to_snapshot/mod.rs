@@ -46,6 +46,7 @@ pub mod hyperlink_lowering;
 pub mod merge_lowering;
 pub mod name_lowering;
 pub mod pivot_lowering;
+pub(crate) mod pivot_totals;
 pub mod sheet_lowering;
 pub mod sparkline_lowering;
 pub mod table_lowering;

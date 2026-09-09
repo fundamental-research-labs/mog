@@ -341,6 +341,9 @@ impl Default for FormControlWorksheetControlPr {
 #[serde(default)]
 #[derive(Default)]
 pub struct OleObjectOoxmlProps {
+    /// Owner-scoped preview shape appearance; live geometry/media override it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preview_vml: Option<crate::domain::drawings::VmlShapePresentation>,
     /// VML shape identifier.
     pub shape_id: u32,
     /// Relationship ID for the embedded binary part.

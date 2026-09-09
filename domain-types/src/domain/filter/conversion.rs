@@ -126,7 +126,7 @@ fn ooxml_filter_type_to_column_filter(ft: &OoxmlFilterType) -> ColumnFilter {
         },
         OoxmlFilterType::Icon { icon_set, icon_id } => ColumnFilter::Icon {
             icon_set_name: icon_set.clone().unwrap_or_default(),
-            icon_index: *icon_id as u8,
+            icon_index: *icon_id,
         },
     }
 }
@@ -338,7 +338,7 @@ pub fn column_filter_to_ooxml_filter_type(cf: &ColumnFilter) -> OoxmlFilterType 
             } else {
                 Some(icon_set_name.clone())
             },
-            icon_id: *icon_index as u32,
+            icon_id: *icon_index,
         },
     }
 }

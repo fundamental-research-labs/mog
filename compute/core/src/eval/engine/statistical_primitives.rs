@@ -429,10 +429,12 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
             0
         };
         match self.get_sorted_for_range(&args[1], &flat) {
-            Ok(sorted) => match rank_components_inline(&sorted, number, order) {
-                Some((less, _equal)) => Ok(CellValue::number((less + 1) as f64)),
-                None => Ok(CellValue::Error(CellError::Na, None)),
-            },
+            Ok(sorted) => {
+                match compute_functions::helpers::ranking::rank_components(&sorted, number, order) {
+                    Some((less, _equal)) => Ok(CellValue::number((less + 1) as f64)),
+                    None => Ok(CellValue::Error(CellError::Na, None)),
+                }
+            }
             Err(e) => Ok(CellValue::Error(e, None)),
         }
     }
@@ -466,37 +468,16 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
             0
         };
         match self.get_sorted_for_range(&args[1], &flat) {
-            Ok(sorted) => match rank_components_inline(&sorted, number, order) {
-                Some((less, equal)) => {
-                    let rank = less as f64 + 1.0 + (equal as f64 - 1.0) / 2.0;
-                    Ok(CellValue::number(rank))
+            Ok(sorted) => {
+                match compute_functions::helpers::ranking::rank_components(&sorted, number, order) {
+                    Some((less, equal)) => {
+                        let rank = less as f64 + 1.0 + (equal as f64 - 1.0) / 2.0;
+                        Ok(CellValue::number(rank))
+                    }
+                    None => Ok(CellValue::Error(CellError::Na, None)),
                 }
-                None => Ok(CellValue::Error(CellError::Na, None)),
-            },
+            }
             Err(e) => Ok(CellValue::Error(e, None)),
         }
-    }
-}
-
-/// Epsilon tolerance for "number exists in array" checks (matches Excel behavior).
-const RANK_EPS: f64 = 1e-10;
-
-fn rank_components_inline(sorted_asc: &[f64], number: f64, order: i32) -> Option<(usize, usize)> {
-    // Find the range of elements approximately equal to `number`
-    let first_ge = sorted_asc.partition_point(|&x| x < number - RANK_EPS);
-    let first_gt = sorted_asc.partition_point(|&x| x <= number + RANK_EPS);
-    let equal_count = first_gt - first_ge;
-
-    if equal_count == 0 {
-        return None; // number not found in array
-    }
-
-    if order == 0 {
-        // Descending: count how many are strictly greater
-        let greater_count = sorted_asc.len() - first_gt;
-        Some((greater_count, equal_count))
-    } else {
-        // Ascending: count how many are strictly less
-        Some((first_ge, equal_count))
     }
 }

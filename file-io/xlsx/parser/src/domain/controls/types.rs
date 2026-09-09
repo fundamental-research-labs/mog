@@ -379,6 +379,10 @@ impl ActiveXControl {
 /// OLE embedded object.
 #[derive(Debug, Clone)]
 pub struct OleObject {
+    pub preview_vml: Option<domain_types::VmlShapePresentation>,
+    pub preview_width_pt: Option<f64>,
+    pub preview_visible: Option<bool>,
+    pub preview_height_pt: Option<f64>,
     /// Program ID (e.g., "Excel.Sheet.12", "Word.Document.12").
     pub prog_id: String,
     /// Shape ID in the drawing.
@@ -415,6 +419,10 @@ impl OleObject {
     /// Create a new OLE object.
     pub fn new(prog_id: String, shape_id: u32) -> Self {
         Self {
+            preview_vml: None,
+            preview_width_pt: None,
+            preview_visible: None,
+            preview_height_pt: None,
             prog_id,
             shape_id,
             data_path: None,

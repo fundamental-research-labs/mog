@@ -54,7 +54,6 @@ pub(super) fn write_worksheet_body(w: &mut XmlWriter, sheet: &SheetWriter) {
     raw_sections::write_raw_section(w, &sheet.ole_objects_xml);
     raw_sections::write_raw_section(w, &sheet.controls_xml);
     raw_sections::write_raw_section(w, &sheet.table_parts_xml);
-    relationships::write_pivot_table_definitions(w, &sheet.pivot_table_r_ids);
     raw_sections::write_raw_section(w, &sheet.ext_lst_xml);
 }
 

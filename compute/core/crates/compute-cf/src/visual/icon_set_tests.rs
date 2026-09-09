@@ -31,6 +31,7 @@ fn pct_threshold_gt(value: f64) -> CFIconThreshold {
 /// Build a 3-icon set with given thresholds.
 fn make_3_icon_set(t1: CFIconThreshold, t2: CFIconThreshold) -> CFIconSet {
     CFIconSet {
+        custom_icons: Vec::new(),
         icon_set_name: CFIconSetName::ThreeArrows,
         thresholds: vec![t1, t2],
         reverse_order: false,
@@ -71,6 +72,7 @@ fn test_3_icon_default_thresholds() {
 fn test_4_icon_set() {
     let stats = make_stats(&[0.0, 25.0, 50.0, 75.0, 100.0]);
     let icon_set = CFIconSet {
+        custom_icons: Vec::new(),
         icon_set_name: CFIconSetName::FourRating,
         thresholds: vec![
             pct_threshold(25.0),
@@ -106,6 +108,7 @@ fn test_4_icon_set() {
 fn test_5_icon_set() {
     let stats = make_stats(&[0.0, 20.0, 40.0, 60.0, 80.0, 100.0]);
     let icon_set = CFIconSet {
+        custom_icons: Vec::new(),
         icon_set_name: CFIconSetName::FiveArrows,
         thresholds: vec![
             pct_threshold(20.0),
@@ -164,6 +167,7 @@ fn test_exact_threshold_gte() {
 fn test_exact_threshold_gt() {
     let stats = make_stats(&[0.0, 100.0]);
     let icon_set = CFIconSet {
+        custom_icons: Vec::new(),
         icon_set_name: CFIconSetName::ThreeArrows,
         thresholds: vec![pct_threshold_gt(33.0), pct_threshold_gt(67.0)],
         reverse_order: false,
@@ -189,6 +193,7 @@ fn test_exact_threshold_gt() {
 fn test_reverse_order() {
     let stats = make_stats(&[0.0, 100.0]);
     let icon_set = CFIconSet {
+        custom_icons: Vec::new(),
         icon_set_name: CFIconSetName::ThreeArrows,
         thresholds: vec![pct_threshold(33.0), pct_threshold(67.0)],
         reverse_order: true,
@@ -251,6 +256,7 @@ fn test_custom_thresholds() {
 fn test_show_icon_only() {
     let stats = make_stats(&[0.0, 100.0]);
     let icon_set = CFIconSet {
+        custom_icons: Vec::new(),
         icon_set_name: CFIconSetName::ThreeArrows,
         thresholds: vec![pct_threshold(33.0), pct_threshold(67.0)],
         reverse_order: false,
@@ -270,6 +276,7 @@ fn test_show_icon_only() {
 fn test_empty_thresholds() {
     let stats = make_stats(&[0.0, 100.0]);
     let icon_set = CFIconSet {
+        custom_icons: Vec::new(),
         icon_set_name: CFIconSetName::NoIcons,
         thresholds: vec![],
         reverse_order: false,
@@ -292,6 +299,7 @@ fn test_number_type_thresholds() {
     // against the raw value, NOT the percentile.
     let stats = make_stats(&[200.0, 400.0, 600.0, 800.0]);
     let icon_set = CFIconSet {
+        custom_icons: Vec::new(),
         icon_set_name: CFIconSetName::ThreeArrows,
         thresholds: vec![
             CFIconThreshold {
@@ -351,6 +359,7 @@ fn test_infinity_value_gets_worst_icon() {
 fn test_nan_value_reversed_gets_best_icon() {
     let stats = make_stats(&[0.0, 50.0, 100.0]);
     let icon_set = CFIconSet {
+        custom_icons: Vec::new(),
         icon_set_name: CFIconSetName::ThreeArrows,
         thresholds: vec![pct_threshold(33.0), pct_threshold(67.0)],
         reverse_order: true,
@@ -371,6 +380,7 @@ fn test_percentile_type_thresholds() {
     // sorted: [10, 20, 30, 40, 50], use Percentile thresholds at 33 and 67
     let stats = make_stats(&[10.0, 20.0, 30.0, 40.0, 50.0]);
     let icon_set = CFIconSet {
+        custom_icons: Vec::new(),
         icon_set_name: CFIconSetName::ThreeArrows,
         thresholds: vec![
             CFIconThreshold {
@@ -408,6 +418,7 @@ fn test_negative_number_thresholds() {
     // Range includes negative values: [-20, -10, 0, 10, 20]
     let stats = make_stats(&[-20.0, -10.0, 0.0, 10.0, 20.0]);
     let icon_set = CFIconSet {
+        custom_icons: Vec::new(),
         icon_set_name: CFIconSetName::ThreeArrows,
         thresholds: vec![
             CFIconThreshold {
@@ -449,6 +460,7 @@ fn test_mismatched_threshold_count() {
     // A 3-icon set (ThreeArrows) with 3 thresholds instead of 2 should return None
     let stats = make_stats(&[1.0, 2.0, 3.0, 4.0, 5.0]);
     let icon_set = CFIconSet {
+        custom_icons: Vec::new(),
         icon_set_name: CFIconSetName::ThreeArrows,
         thresholds: vec![
             CFIconThreshold {
@@ -485,6 +497,7 @@ fn test_correct_threshold_count_accepted() {
     // A 3-icon set with 2 thresholds (correct) should work
     let stats = make_stats(&[1.0, 2.0, 3.0, 4.0, 5.0]);
     let icon_set = CFIconSet {
+        custom_icons: Vec::new(),
         icon_set_name: CFIconSetName::ThreeArrows,
         thresholds: vec![
             CFIconThreshold {
@@ -512,6 +525,7 @@ fn test_mixed_type_thresholds() {
     // One threshold is Number, another is Percent
     let stats = make_stats(&[10.0, 20.0, 30.0, 40.0, 50.0]);
     let icon_set = CFIconSet {
+        custom_icons: Vec::new(),
         icon_set_name: CFIconSetName::ThreeArrows,
         thresholds: vec![
             CFIconThreshold {
@@ -549,6 +563,7 @@ fn test_custom_icon_override() {
     // the custom icon's set_name and icon_index instead of the default.
     let stats = make_stats(&[0.0, 100.0]);
     let icon_set = CFIconSet {
+        custom_icons: Vec::new(),
         icon_set_name: CFIconSetName::ThreeArrows,
         thresholds: vec![
             pct_threshold(33.0), // No custom icon
@@ -587,6 +602,7 @@ fn test_threshold_count_too_few() {
     // A 3-icon set (ThreeArrows) needs 2 thresholds. Providing only 1 should return None.
     let stats = make_stats(&[0.0, 50.0, 100.0]);
     let icon_set = CFIconSet {
+        custom_icons: Vec::new(),
         icon_set_name: CFIconSetName::ThreeArrows,
         thresholds: vec![pct_threshold(50.0)], // Only 1 threshold, but 3-icon set needs 2
         reverse_order: false,
@@ -610,6 +626,7 @@ fn test_percentile_threshold_all_same_values() {
     // to 50 when min == max.
     let stats = make_stats(&[42.0, 42.0, 42.0]);
     let icon_set = CFIconSet {
+        custom_icons: Vec::new(),
         icon_set_name: CFIconSetName::ThreeArrows,
         thresholds: vec![
             CFIconThreshold {
@@ -648,6 +665,7 @@ fn test_min_max_threshold_types() {
     // Min resolves to 0 (0th percentile position), Max resolves to 100.
     let stats = make_stats(&[10.0, 50.0, 90.0]);
     let icon_set = CFIconSet {
+        custom_icons: Vec::new(),
         icon_set_name: CFIconSetName::ThreeArrows,
         thresholds: vec![
             CFIconThreshold {

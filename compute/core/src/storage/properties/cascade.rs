@@ -242,7 +242,9 @@ fn workbook_normal_format(storage: &YrsStorage) -> Option<CellFormat> {
     }
 }
 
-fn materialize_cell_layer_format(cell_properties: Option<&CellProperties>) -> CellFormat {
+pub(crate) fn materialize_cell_layer_format(
+    cell_properties: Option<&CellProperties>,
+) -> CellFormat {
     let Some(props) = cell_properties else {
         return CellFormat::default();
     };

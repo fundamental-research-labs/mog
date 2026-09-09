@@ -7,6 +7,8 @@ use super::*;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OleObjectOutput {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview_vml: Option<domain_types::VmlShapePresentation>,
     /// Program ID (e.g., "Excel.Sheet.12", "Word.Document.12")
     pub prog_id: String,
     /// Shape ID in the VML drawing
@@ -89,6 +91,7 @@ impl OleObjectOutput {
         });
 
         Self {
+            preview_vml: obj.preview_vml.clone(),
             prog_id: obj.prog_id.clone(),
             shape_id: obj.shape_id,
             r_id: obj.r_id.clone(),

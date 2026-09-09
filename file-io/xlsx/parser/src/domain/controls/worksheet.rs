@@ -4,7 +4,7 @@
 //! worksheet `<controlPr>` attributes, modern anchors, and worksheet controls
 //! XML generation.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use domain_types::domain::floating_object::FormControlWorksheetControlPr;
 
@@ -220,9 +220,19 @@ pub fn parse_form_controls_for_sheet(
     sheet_num: usize,
     worksheet_xml: &[u8],
 ) -> Vec<FormControlOutput> {
+    // OLE preview shapes also use VML ClientData (ObjectType=Pict). Their
+    // worksheet oleObject owns that shape; importing it as a form control as
+    // well creates duplicate objects and invalid control relationships.
+    let mut ole_objects = Vec::new();
+    super::ole::parse_ole_objects_with_context(
+        worksheet_xml,
+        Some(worksheet_xml),
+        &mut ole_objects,
+    );
+    let ole_shape_ids: HashSet<u32> = ole_objects.iter().map(|object| object.shape_id).collect();
     let ws_controls = parse_worksheet_controls_from_xml(worksheet_xml);
     if ws_controls.is_empty() {
-        return parse_vml_only_controls(archive, sheet_num);
+        return parse_vml_only_controls(archive, sheet_num, &ole_shape_ids);
     }
 
     let rels_path = format!("xl/worksheets/_rels/sheet{}.xml.rels", sheet_num);
@@ -270,7 +280,14 @@ pub fn parse_form_controls_for_sheet(
         }
     }
 
-    let vml_controls = vml::parse_vml_drawing_for_sheet(archive, sheet_num, &rels_xml);
+    let vml_controls: Vec<_> = vml::parse_vml_drawing_for_sheet(archive, sheet_num, &rels_xml)
+        .into_iter()
+        .filter(|control| {
+            !control
+                .shape_id
+                .is_some_and(|id| ole_shape_ids.contains(&id))
+        })
+        .collect();
     merge_vml_controls(&mut controls, &vml_controls, &modern_anchors);
 
     controls
@@ -337,6 +354,7 @@ fn merge_vml_controls(
 fn parse_vml_only_controls(
     archive: &crate::zip::XlsxArchive,
     sheet_num: usize,
+    ole_shape_ids: &HashSet<u32>,
 ) -> Vec<FormControlOutput> {
     let rels_path = format!("xl/worksheets/_rels/sheet{}.xml.rels", sheet_num);
     let rels_xml = match archive.read_file(&rels_path) {
@@ -346,8 +364,13 @@ fn parse_vml_only_controls(
 
     vml::parse_vml_drawing_for_sheet(archive, sheet_num, &rels_xml)
         .iter()
+        .filter(|control| {
+            !control
+                .shape_id
+                .is_some_and(|id| ole_shape_ids.contains(&id))
+        })
         .enumerate()
-        .map(|(i, fc)| FormControlOutput::from_form_control(fc, i as u32))
+        .map(|(i, fc)| FormControlOutput::from_form_control(fc, fc.shape_id.unwrap_or(i as u32)))
         .collect()
 }
 

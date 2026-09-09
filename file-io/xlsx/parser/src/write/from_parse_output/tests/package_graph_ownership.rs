@@ -539,3 +539,51 @@ fn worksheet_ext_lst_keeps_safe_entries_when_dropping_relationship_entries() {
     assert!(!sheet_xml.contains("rId6"));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
+
+#[test]
+fn rich_data_registry_and_root_namespace_bindings_survive_cell_metadata_changes() {
+    let mut output = ParseOutput {
+        sheets: vec![SheetData { name: "Sheet1".into(), cells: vec![DomainCellData {
+            row: 2, col: 1, value: DomainValue::Text(Arc::from("rich")), vm: Some(1), ..Default::default()
+        }], ..Default::default() }],
+        metadata: Some(domain_types::WorkbookMetadata {
+            metadata_types: vec![domain_types::MetadataType { name: "VENDOR".into(), ..Default::default() }],
+            future_metadata: vec![domain_types::FutureMetadataGroup { name: "VENDOR".into(), blocks: vec![domain_types::FutureMetadataBlock {
+                raw_xml: "<extLst><ext uri=\"test\"><custom:payload key=\"one\"/></ext></extLst>".into()
+            }] }],
+            value_metadata: vec![domain_types::ValueMetadataBlock { records: vec![domain_types::CellMetadataRecord { t: 1, v: 0 }] }],
+            imported_metadata_xml: Some(domain_types::ImportedMetadataXml {
+                bytes: br#"<metadata xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:custom="urn:custom&amp;scope"/>"#.to_vec(),
+                ..Default::default()
+            }),
+            rich_data: Some(domain_types::WorkbookRichData {
+                parts: vec![domain_types::RichDataPart {
+                    path: "xl/richData/rdrichvalue.xml".into(),
+                    content_type: "application/vnd.ms-excel.rdrichvalue+xml".into(),
+                    data: br#"<rvData xmlns="http://schemas.microsoft.com/office/spreadsheetml/2017/richdata" count="0"/>"#.to_vec(),
+                    relationships: Vec::new(),
+                }], related_parts: Vec::new(),
+            }), ..Default::default()
+        }), ..Default::default()
+    };
+    // A new cell metadata block and moved vm reference force modeled XML.
+    output
+        .metadata
+        .as_mut()
+        .unwrap()
+        .cell_metadata
+        .push(domain_types::CellMetadataBlock::default());
+    output.sheets[0].cells[0].cell_metadata_index = Some(1);
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).unwrap();
+    assert!(archive.contains("xl/richData/rdrichvalue.xml"));
+    let xml = String::from_utf8(archive.read_file("xl/metadata.xml").unwrap()).unwrap();
+    assert!(
+        xml.contains("xmlns:custom=\"urn:custom&amp;scope\""),
+        "{xml}"
+    );
+    assert!(xml.contains("<custom:payload"));
+    let rels = String::from_utf8(archive.read_file("xl/_rels/workbook.xml.rels").unwrap()).unwrap();
+    assert!(rels.contains("/rdRichValue\""), "{rels}");
+    validate_archive_package_integrity(&archive).unwrap();
+}

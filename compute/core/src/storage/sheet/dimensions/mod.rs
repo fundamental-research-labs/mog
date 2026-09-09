@@ -22,6 +22,7 @@ mod row_visibility;
 mod rows;
 mod scans;
 mod yrs_access;
+pub(crate) use cols::get_col_width_by_id;
 
 #[cfg(test)]
 mod tests;
@@ -36,8 +37,8 @@ pub use cols::{get_col_width_stored, get_col_width_with_default};
 pub use row_visibility::{
     clear_filter_hidden_rows, clear_filter_hidden_rows_in_txn, finalize_imported_hidden_row_cache,
     get_hidden_rows, get_row_visibility_ownership, hide_manual_rows, is_row_hidden,
-    is_row_hidden_by_any_filter, normalize_imported_filter_hidden_rows, set_filter_hidden_rows,
-    unhide_manual_rows,
+    is_row_hidden_by_any_filter, is_row_hidden_by_any_filter_id,
+    normalize_imported_filter_hidden_rows, set_filter_hidden_rows, unhide_manual_rows,
 };
 #[cfg(test)]
 pub use row_visibility::{

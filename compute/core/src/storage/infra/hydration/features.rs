@@ -66,6 +66,7 @@ pub(super) fn hydrate_cells(
             None, // No identity formulas in ParseOutput
         );
         let cell_map: MapRef = cells_map.insert(txn, &*cell_hex, cell_prelim);
+        write_formula_result_mode_to_yrs(&cell_map, txn, cell);
         if let Some(array_ref) = cell.array_ref.as_deref() {
             write_array_ref_to_yrs(&cell_map, txn, array_ref);
         }
@@ -147,6 +148,7 @@ pub(super) fn hydrate_cells_with_ids(
 
         let cell_prelim = build_cell_prelim(&cell.value, cell.formula.as_deref(), None);
         let cell_map: MapRef = cells_map.insert(txn, &*cell_hex, cell_prelim);
+        write_formula_result_mode_to_yrs(&cell_map, txn, cell);
         if let Some(array_ref) = cell.array_ref.as_deref() {
             write_array_ref_to_yrs(&cell_map, txn, array_ref);
         }
@@ -158,6 +160,34 @@ pub(super) fn hydrate_cells_with_ids(
         }
     }
     pos_map
+}
+
+fn write_formula_result_mode_to_yrs(
+    cell_map: &MapRef,
+    txn: &mut yrs::TransactionMut<'_>,
+    cell: &CellData,
+) {
+    use crate::mirror::cell_metadata::FormulaResultMode;
+    if cell.formula.is_none() {
+        return;
+    }
+    let mode = if cell.projection_role == ImportedCellProjectionRole::DynamicArraySource {
+        FormulaResultMode::Dynamic
+    } else if cell.array_ref.is_some()
+        || cell
+            .cell_formula
+            .as_ref()
+            .is_some_and(|f| f.t == ooxml_types::worksheet::CellFormulaType::Array)
+    {
+        FormulaResultMode::Cse
+    } else {
+        FormulaResultMode::LegacyScalar
+    };
+    cell_map.insert(
+        txn,
+        compute_document::schema::KEY_FORMULA_RESULT_MODE,
+        Any::String(serde_json::to_string(&mode).unwrap().into()),
+    );
 }
 
 fn write_formula_metadata_to_yrs(

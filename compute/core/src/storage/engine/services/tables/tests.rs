@@ -609,7 +609,7 @@ mod tests {
             .create_custom_table_style(style)
             .expect("create custom table style");
 
-        let exported = engine.build_parse_output_from_yrs();
+        let exported = engine.build_parse_output_from_yrs().expect("export projection");
         assert!(
             exported
                 .custom_table_styles

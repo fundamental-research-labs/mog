@@ -126,6 +126,35 @@ pub(in crate::storage::engine) fn refresh_cf_cache(
     theme_palette: &HashMap<String, String>,
     sheet_id: &SheetId,
 ) {
+    let Some(results) = evaluate_cf_for_sheet(stores, mirror, theme_palette, sheet_id) else {
+        stores.cf_cache.remove(sheet_id);
+        return;
+    };
+
+    // 5. Convert Vec<CellCFResult> to HashMap keyed by (row, col)
+    let mut result_map = FxHashMap::default();
+    for result in results {
+        result_map.insert((result.row, result.col), result);
+    }
+
+    // 6. Store in cache
+    stores.cf_cache.insert(
+        *sheet_id,
+        CFCacheEntry {
+            results: result_map,
+            dirty: false,
+        },
+    );
+}
+
+/// Fresh evaluation shared by display caching and filter predicates. It must not
+/// read the display cache: filter reapply observes current rules and values.
+pub(in crate::storage::engine) fn evaluate_cf_for_sheet(
+    stores: &EngineStores,
+    mirror: &CellMirror,
+    theme_palette: &HashMap<String, String>,
+    sheet_id: &SheetId,
+) -> Option<Vec<crate::cf::types::CellCFResult>> {
     // 1. Read CF formats from Yrs storage
     let formats = cf_store::get_formats_for_sheet(
         stores.storage.doc(),
@@ -151,25 +180,51 @@ pub(in crate::storage::engine) fn refresh_cf_cache(
 
     // 3. If no rules, remove cache entry and return
     if rules.is_empty() {
-        stores.cf_cache.remove(sheet_id);
-        return;
+        return None;
     }
 
     // 4. Evaluate CF rules
-    let results = stores.compute.eval_cf(mirror, sheet_id, &rules);
+    Some(stores.compute.eval_cf(mirror, sheet_id, &rules))
+}
 
-    // 5. Convert Vec<CellCFResult> to HashMap keyed by (row, col)
-    let mut result_map = FxHashMap::default();
-    for result in results {
-        result_map.insert((result.row, result.col), result);
+/// Materialize icon identities only for filters that require CF context.
+pub(in crate::storage::engine) fn evaluate_filter_icons(
+    stores: &EngineStores,
+    mirror: &CellMirror,
+    sheet_id: &SheetId,
+    filter_id: &str,
+) -> FxHashMap<(u32, u32), domain_types::FilterIconIdentity> {
+    let needs_icons = crate::storage::sheet::filters::get_filter(
+        stores.storage.doc(),
+        stores.storage.sheets(),
+        sheet_id,
+        filter_id,
+    )
+    .is_some_and(|filter| {
+        filter
+            .column_filters
+            .values()
+            .any(|criterion| matches!(criterion, domain_types::ColumnFilter::Icon { .. }))
+    });
+    if !needs_icons {
+        return FxHashMap::default();
     }
-
-    // 6. Store in cache
-    stores.cf_cache.insert(
-        *sheet_id,
-        CFCacheEntry {
-            results: result_map,
-            dirty: false,
-        },
-    );
+    // Theme color resolution has no bearing on icon identity or rule matching.
+    evaluate_cf_for_sheet(stores, mirror, &HashMap::new(), sheet_id)
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|cell| {
+            let icon = cell.icon?;
+            let count = icon.set_name.icon_count();
+            let index = count.checked_sub(usize::from(icon.icon_index) + 1)?;
+            let name = compute_cf::types::CFIconSetName::SERDE_NAMES[icon.set_name as usize];
+            Some((
+                (cell.row, cell.col),
+                domain_types::FilterIconIdentity {
+                    icon_set_name: name.into(),
+                    icon_index: index as u32,
+                },
+            ))
+        })
+        .collect()
 }

@@ -5,6 +5,20 @@ use crate::scheduler::ComputeCore;
 use super::{YrsComputeEngine, construction};
 
 impl YrsComputeEngine {
+    fn metadata_requires_recalc(&self) -> bool {
+        self.mirror
+            .cell_metadata_provider
+            .as_ref()
+            .is_some_and(|provider| provider.revision() != self.mirror.evaluated_metadata_revision)
+    }
+
+    fn mark_metadata_evaluated(&mut self) {
+        self.mirror.evaluated_metadata_revision = self
+            .mirror
+            .cell_metadata_provider
+            .as_ref()
+            .map_or(0, |provider| provider.revision());
+    }
     /// Perform a full recalculation of all formula cells using the existing
     /// dependency graph and AST caches. Does NOT rebuild the ComputeCore.
     ///
@@ -25,13 +39,17 @@ impl YrsComputeEngine {
         //     explicitly so materialize_all_pivots still runs on next recalc.
         //   - set_culture marks dirty (locale affects date/number parsing).
         //   - Sheet CRUD and named-range CRUD mark dirty (may change resolution).
-        if !self.stores.compute.is_dirty() {
+        if !self.stores.compute.is_dirty()
+            && !self.metadata_requires_recalc()
+            && !self.stores.compute.has_volatile_cells()
+        {
             return Ok(crate::snapshot::RecalcResult::empty());
         }
         self.materialize_all_pivots();
         let result = self.stores.compute.full_recalc(&mut self.mirror)?;
         self.init_cf_caches();
         self.stores.compute.clear_dirty();
+        self.mark_metadata_evaluated();
         Ok(result)
     }
 
@@ -58,6 +76,7 @@ impl YrsComputeEngine {
             || options.max_iterations.is_some()
             || options.max_change.is_some();
         if !self.stores.compute.is_dirty()
+            && !self.metadata_requires_recalc()
             && !has_explicit_overrides
             && !self.stores.compute.has_volatile_cells()
         {
@@ -70,6 +89,7 @@ impl YrsComputeEngine {
             .full_recalc_with_options(&mut self.mirror, options)?;
         self.init_cf_caches();
         self.stores.compute.clear_dirty();
+        self.mark_metadata_evaluated();
         Ok(result)
     }
 
@@ -80,6 +100,7 @@ impl YrsComputeEngine {
             &self.stores.storage,
             &snapshot,
             &self.stores.grid_indexes,
+            self.stores.layout_metrics,
         )?;
         self.stores.compute = ComputeCore::new();
         let recalc = self

@@ -347,7 +347,7 @@ impl YrsComputeEngine {
                         &result,
                     );
                     let def =
-                        engine_config.to_pivot_table_def(&result.rendered_bounds, &output_sheet_id);
+                        engine_config.to_pivot_table_def_from_result(&result, &output_sheet_id);
                     mirror.upsert_pivot_table_def(def);
                 }
                 Err(e) => {
@@ -466,7 +466,7 @@ impl YrsComputeEngine {
                         &result,
                     );
                     let def =
-                        engine_config.to_pivot_table_def(&result.rendered_bounds, &output_sheet_id);
+                        engine_config.to_pivot_table_def_from_result(&result, &output_sheet_id);
                     self.mirror.upsert_pivot_table_def(def);
                 }
                 Err(e) => {

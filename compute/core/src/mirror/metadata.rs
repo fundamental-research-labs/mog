@@ -279,6 +279,7 @@ mod tests {
 
     fn pivot_def(name: &str, sheet: &SheetId, start_row: u32, start_col: u32) -> PivotTableDef {
         PivotTableDef {
+            grand_total_cells: Vec::new(),
             id: name.to_string(),
             name: name.to_string(),
             sheet: sheet.to_uuid_string(),

@@ -69,7 +69,7 @@ pub(super) fn parse_atomic(input: &mut &str, state: &ParseState) -> ModalResult<
             let n = lexer::number_literal_with_leading_dot.parse_next(input)?;
             Ok(ASTNode::Number(n))
         }
-        c if c.is_ascii_alphabetic() || c == '_' => parse_alpha_starting(input, state),
+        c if c.is_ascii_alphabetic() || c == '_' || c == '\\' => parse_alpha_starting(input, state),
         '$' => {
             let saved = *input;
             if let Ok(node) = try_parse_row_range(input, state, None) {

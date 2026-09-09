@@ -32,13 +32,7 @@ fn pivot_package_generation_filters_stale_original_parts_and_rels() {
     assert!(!workbook_rels.contains("pivotCacheDefinition7.xml"));
     assert!(sheet_rels.contains("../pivotTables/pivotTable1.xml"));
     assert!(!sheet_rels.contains("../pivotTables/pivotTable7.xml"));
-    let pivot_r_id = sheet_rels
-        .split("<Relationship ")
-        .find(|rel| rel.contains("../pivotTables/pivotTable1.xml"))
-        .and_then(|rel| rel.split("Id=\"").nth(1))
-        .and_then(|rel| rel.split('"').next())
-        .expect("generated pivot relationship should have an r:id");
-    assert!(sheet_xml.contains(&format!("<pivotTableDefinition r:id=\"{pivot_r_id}\"/>")));
+    assert!(!sheet_xml.contains("<pivotTableDefinition"));
     assert!(content_types.contains("PartName=\"/xl/pivotTables/pivotTable1.xml\""));
     assert!(content_types.contains("PartName=\"/xl/pivotCache/pivotCacheDefinition1.xml\""));
     assert!(content_types.contains("PartName=\"/xl/pivotCache/pivotCacheRecords1.xml\""));
@@ -223,26 +217,24 @@ fn skipped_generated_pivot_does_not_emit_stale_pivot_package_metadata() {
 
 #[test]
 fn worksheet_pivot_marker_without_modeled_pivot_is_not_emitted() {
-    for position in ["after", "before"] {
-        let output = make_parse_output(vec![
-            SheetData {
-                name: "Data".to_string(),
-                ..Default::default()
-            },
-            SheetData {
-                name: "Pivot".to_string(),
-                ..Default::default()
-            },
-        ]);
-        let bytes = write_xlsx_from_parse_output(&output).unwrap();
-        let archive = crate::XlsxArchive::new(&bytes).unwrap();
-        let sheet_xml =
-            String::from_utf8(archive.read_file("xl/worksheets/sheet2.xml").unwrap()).unwrap();
+    let output = make_parse_output(vec![
+        SheetData {
+            name: "Data".to_string(),
+            ..Default::default()
+        },
+        SheetData {
+            name: "Pivot".to_string(),
+            ..Default::default()
+        },
+    ]);
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).unwrap();
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet2.xml").unwrap()).unwrap();
 
-        assert!(!sheet_xml.contains("pivotTableDefinition"));
-        assert!(!archive.contains("xl/worksheets/_rels/sheet2.xml.rels"));
-        validate_archive_package_integrity(&archive).expect("exported package should be valid");
-    }
+    assert!(!sheet_xml.contains("pivotTableDefinition"));
+    assert!(!archive.contains("xl/worksheets/_rels/sheet2.xml.rels"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
 #[test]
@@ -605,6 +597,7 @@ fn pivot_table_xml_uses_modeled_layout_style_location_and_items() {
     config.rows_per_page = Some(5);
     config.cols_per_page = Some(6);
     config.row_items = vec![domain_types::PivotRowColItem {
+        data_field_index: 0,
         item_type: Some(domain_types::PivotItemType::Grand),
         x_values: vec![None, Some(1)],
     }];

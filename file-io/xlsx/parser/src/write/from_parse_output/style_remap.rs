@@ -44,7 +44,16 @@ pub(super) fn build_style_export_plan(output: &ParseOutput) -> StyleExportPlan {
     };
     let stylesheet = stylesheet.normalized();
     if !can_replay_imported_styles(&stylesheet, palette) {
-        return generated_style_export_plan(palette);
+        let mut plan = generated_style_export_plan(palette);
+        // Rebuilding cell XFs must not discard unrelated stylesheet metadata.
+        // DXFs (including extension references) are reconciled independently.
+        plan.writer.root_namespaces =
+            crate::domain::styles::write::StyleRootNamespaces::from_attrs_and_mce(
+                stylesheet.root_namespace_attrs,
+                stylesheet.root_mce_attributes,
+            );
+        plan.writer.ext_lst_raw = stylesheet.ext_lst_xml;
+        return plan;
     }
 
     let mut writer = StylesWriter::from_workbook_stylesheet(&stylesheet);

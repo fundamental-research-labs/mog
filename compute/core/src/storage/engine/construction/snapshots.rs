@@ -497,6 +497,7 @@ fn read_pivot_defs_from_yrs(
                 domain_types::domain::pivot::PivotFieldArea::Column,
             );
             defs.push(snapshot_types::PivotTableDef {
+            grand_total_cells: crate::import::parse_output_to_snapshot::pivot_totals::imported_grand_total_cells(&config),
                 id: config.id,
                 name: config.name,
                 sheet: output_sheet_id.to_uuid_string(),

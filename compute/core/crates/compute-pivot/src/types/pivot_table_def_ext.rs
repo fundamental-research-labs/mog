@@ -5,6 +5,13 @@ use cell_types::SheetId;
 ///
 /// This method lives here (not in `pivot-types`) because it depends on `snapshot-types`.
 pub trait PivotTableDefExt {
+    /// Register total addresses from the same typed slots the native renderer writes.
+    fn to_pivot_table_def_from_result(
+        &self,
+        result: &crate::types::PivotTableResult,
+        output_sheet_id: &SheetId,
+    ) -> snapshot_types::PivotTableDef;
+
     /// Derive a lightweight `PivotTableDef` from this config and the rendered bounds.
     fn to_pivot_table_def(
         &self,
@@ -14,6 +21,78 @@ pub trait PivotTableDefExt {
 }
 
 impl PivotTableDefExt for PivotTableConfig {
+    fn to_pivot_table_def_from_result(
+        &self,
+        result: &crate::types::PivotTableResult,
+        output_sheet_id: &SheetId,
+    ) -> snapshot_types::PivotTableDef {
+        let mut def = self.to_pivot_table_def(&result.rendered_bounds, output_sheet_id);
+        let count = def.data_field_names.len();
+        let bounds = &result.rendered_bounds;
+        if bounds.total_rows == 0 || bounds.total_cols == 0 || count == 0 {
+            return def;
+        }
+        let row_groups = !def.row_field_indices.is_empty();
+        let col_groups = !def.col_field_indices.is_empty();
+        let location = if col_groups
+            && result.grand_totals.row.is_some()
+            && result.grand_totals.column.is_some()
+        {
+            result
+                .grand_totals
+                .grand
+                .as_ref()
+                .filter(|values| values.len() == count)
+                .and_then(|_| {
+                    bounds
+                        .total_cols
+                        .checked_sub(count as u32)
+                        .map(|col| (bounds.total_rows - 1, col))
+                })
+        } else if !col_groups
+            && result
+                .grand_totals
+                .row
+                .as_ref()
+                .is_some_and(|values| values.len() == count)
+        {
+            Some((bounds.total_rows - 1, bounds.first_data_col))
+        } else if !row_groups && col_groups {
+            result
+                .grand_totals
+                .column
+                .as_ref()
+                .filter(|rows| rows.len() == 1 && rows[0].len() == count)
+                .and_then(|_| {
+                    bounds
+                        .total_cols
+                        .checked_sub(count as u32)
+                        .map(|col| (bounds.first_data_row, col))
+                })
+        } else if !row_groups
+            && !col_groups
+            && result.rows.len() == 1
+            && result.rows[0].values.len() == count
+        {
+            Some((bounds.first_data_row, bounds.first_data_col))
+        } else {
+            None
+        };
+        if let Some((row, first_col)) = location {
+            for index in 0..count {
+                if row < bounds.total_rows && first_col + (index as u32) < bounds.total_cols {
+                    def.grand_total_cells
+                        .push(snapshot_types::PivotGrandTotalCell {
+                            data_field_index: index as u32,
+                            row: def.start_row + row,
+                            col: def.start_col + first_col + index as u32,
+                        });
+                }
+            }
+        }
+        def
+    }
+
     #[allow(clippy::cast_possible_truncation)]
     fn to_pivot_table_def(
         &self,
@@ -23,7 +102,7 @@ impl PivotTableDefExt for PivotTableConfig {
         let start_row = self.output_location.row;
         let start_col = self.output_location.col;
 
-        let data_field_names: Vec<String> = self
+        let mut data_field_names: Vec<String> = self
             .value_placements()
             .iter()
             .map(|p| {
@@ -38,6 +117,10 @@ impl PivotTableDefExt for PivotTableConfig {
                 }
             })
             .collect();
+
+        if let Some(calculated_fields) = &self.calculated_fields {
+            data_field_names.extend(calculated_fields.iter().map(|field| field.name.clone()));
+        }
 
         let cache_field_names: Vec<String> = self.fields.iter().map(|f| f.name.clone()).collect();
 
@@ -79,6 +162,7 @@ impl PivotTableDefExt for PivotTableConfig {
         };
 
         snapshot_types::PivotTableDef {
+            grand_total_cells: Vec::new(),
             id: self.id.clone(),
             name: self.name.clone(),
             sheet: output_sheet_id.to_uuid_string(),

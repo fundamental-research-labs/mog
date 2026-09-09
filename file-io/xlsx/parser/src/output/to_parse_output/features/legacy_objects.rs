@@ -143,6 +143,20 @@ pub(crate) fn convert_ole_objects(
                     extent_cx: None,
                     extent_cy: None,
                 })
+                .or_else(|| {
+                    o.preview_vml.as_ref().map(|preview| FloatingObjectAnchor {
+                        anchor_row: preview.anchor.top_row,
+                        anchor_col: preview.anchor.left_column,
+                        anchor_row_offset: preview.anchor.top_offset.saturating_mul(9_525),
+                        anchor_col_offset: preview.anchor.left_offset.saturating_mul(9_525),
+                        anchor_mode: AnchorMode::TwoCell,
+                        end_row: Some(preview.anchor.bottom_row),
+                        end_col: Some(preview.anchor.right_column),
+                        end_row_offset: Some(preview.anchor.bottom_offset.saturating_mul(9_525)),
+                        end_col_offset: Some(preview.anchor.right_offset.saturating_mul(9_525)),
+                        ..Default::default()
+                    })
+                })
                 .unwrap_or(FloatingObjectAnchor {
                     anchor_row: 0,
                     anchor_col: 0,
@@ -193,6 +207,7 @@ pub(crate) fn convert_ole_objects(
                 o, &object_id, &embedding, &preview,
             ));
             let ooxml = OleObjectOoxmlProps {
+                preview_vml: o.preview_vml.clone(),
                 shape_id: o.shape_id,
                 r_id: o.r_id.clone(),
                 data_path: o.data_path.clone(),
@@ -215,14 +230,26 @@ pub(crate) fn convert_ole_objects(
                     id: format!("fobj-ole-{}", idx),
                     sheet_id: String::new(),
                     anchor,
-                    width: 0.0,
-                    height: 0.0,
+                    width: o
+                        .preview_vml
+                        .as_ref()
+                        .and_then(|preview| preview.width.as_ref())
+                        .and_then(|dimension| dimension.normalized_pt)
+                        .unwrap_or(0.0)
+                        / 0.75,
+                    height: o
+                        .preview_vml
+                        .as_ref()
+                        .and_then(|preview| preview.height.as_ref())
+                        .and_then(|dimension| dimension.normalized_pt)
+                        .unwrap_or(0.0)
+                        / 0.75,
                     z_index: idx as i32,
                     rotation: 0.0,
                     flip_h: false,
                     flip_v: false,
                     locked: false,
-                    visible: true,
+                    visible: o.preview_vml.as_ref().is_none_or(|preview| preview.visible),
                     printable: true,
                     opacity: 1.0,
                     name: o.name.clone().unwrap_or_default(),

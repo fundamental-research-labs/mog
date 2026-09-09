@@ -35,10 +35,11 @@ pub use ooxml_sort::{SortCondition, SortConditionBy, SortMethod, SortState};
 pub use runtime::{
     ColorPosition, ColumnFilter, DynamicFilterRule, FilterButtonMetadata, FilterCapability,
     FilterCondition, FilterEvaluationResult, FilterHeaderInfo, FilterHeaderRange,
-    FilterHeaderSourceType, FilterKind, FilterLogic, FilterMetadataBinding,
+    FilterHeaderSourceType, FilterIconIdentity, FilterKind, FilterLogic, FilterMetadataBinding,
     FilterMetadataOwnerPath, FilterMetadataSourceKey, FilterOperator, FilterRecordCount,
     FilterShellMetadata, FilterSortState, FilterState, ImportFilterUnsupportedReason,
     LosslessCriterionDescriptor, SortBy, SortOrder, TopBottomBy, TopBottomDirection,
+    icon_filter_is_supported,
 };
 
 /// Monotonic counter for generating unique filter IDs.

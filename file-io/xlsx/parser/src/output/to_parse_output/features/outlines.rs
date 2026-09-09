@@ -26,8 +26,11 @@ pub(crate) fn compute_outline_groups(
             if level == 0 {
                 return None;
             }
-            let collapsed = rh.collapsed.unwrap_or(false);
             let hidden = rh.hidden.unwrap_or(false);
+            // A visible summary can belong to an outer group while carrying the
+            // collapsed marker for an inner group. Its marker must not collapse
+            // (and hide) the summary itself. Raw dimension metadata retains it.
+            let collapsed = rh.collapsed.unwrap_or(false) && hidden;
             Some((rh.row, level, collapsed, hidden))
         })
         .collect();
@@ -43,8 +46,8 @@ pub(crate) fn compute_outline_groups(
         if level == 0 {
             continue;
         }
-        let collapsed = cw.collapsed;
         let hidden = cw.hidden;
+        let collapsed = cw.collapsed && hidden;
         // min/max are 1-indexed in OOXML, convert to 0-indexed
         let start = cw.min.saturating_sub(1);
         let end = cw.max.saturating_sub(1);
@@ -153,4 +156,52 @@ fn collect_outline_runs(
         hidden,
         collapsed_on_member: collapsed,
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn visible_nested_summary_markers_do_not_collapse_their_outer_membership() {
+        let rows = vec![
+            RowHeight {
+                outline_level: Some(2),
+                hidden: Some(true),
+                ..RowHeight::new(0, 15.0)
+            },
+            RowHeight {
+                outline_level: Some(1),
+                collapsed: Some(true),
+                ..RowHeight::new(1, 15.0)
+            },
+        ];
+        let cols = vec![
+            ColWidth {
+                outline_level: Some(2),
+                hidden: true,
+                ..ColWidth::range(1, 1, 8.0)
+            },
+            ColWidth {
+                outline_level: Some(1),
+                collapsed: true,
+                ..ColWidth::range(2, 2, 8.0)
+            },
+        ];
+        let groups = compute_outline_groups(&rows, &cols);
+        for is_row in [true, false] {
+            let detail = groups
+                .iter()
+                .find(|g| g.is_row == is_row && g.start == 0)
+                .unwrap();
+            assert!(detail.collapsed);
+            assert!(detail.hidden);
+            let summary = groups
+                .iter()
+                .find(|g| g.is_row == is_row && g.start == 1)
+                .unwrap();
+            assert!(!summary.collapsed);
+            assert!(!summary.hidden);
+        }
+    }
 }

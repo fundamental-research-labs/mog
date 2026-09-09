@@ -86,10 +86,7 @@ pub fn pivot_table_to_writer(pt: &read::PivotTable) -> PivotTableWriter {
     // Style
     if let Some(ref style) = pt.style_info {
         writer.set_style(PivotStyle {
-            name: style
-                .name
-                .clone()
-                .unwrap_or_else(|| "PivotStyleMedium9".to_string()),
+            name: style.name.clone(),
             show_row_headers: style.show_row_headers,
             show_col_headers: style.show_col_headers,
             show_row_stripes: style.show_row_stripes,
@@ -460,6 +457,7 @@ fn convert_domain_function(f: domain_types::PivotFieldFunction) -> DataFieldFunc
 
 fn convert_domain_row_col_item(item: &domain_types::PivotRowColItem) -> RowColItem {
     RowColItem {
+        data_field_index: item.data_field_index,
         item_type: item.item_type.map(convert_domain_item_type),
         x_values: item.x_values.clone(),
         preserved_attributes: Vec::new(),

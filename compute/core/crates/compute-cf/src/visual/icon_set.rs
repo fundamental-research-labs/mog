@@ -151,6 +151,16 @@ pub fn compute_icon(
         icon_index = icon_count - 1 - icon_index;
     }
 
+    // Full icon overrides include the lowest bucket, which has no boundary.
+    // Apply after reverseOrder using the same rendered index as the standard family.
+    if let Some(Some(custom)) = icon_set.custom_icons.get(usize::from(icon_index)) {
+        return Some(IconResult {
+            set_name: custom.icon_set,
+            icon_index: custom.icon_index,
+            show_value: !icon_set.show_icon_only,
+        });
+    }
+
     // If the matching threshold has a custom icon, use that instead
     if let Some(custom) = matched_custom_icon {
         return Some(IconResult {

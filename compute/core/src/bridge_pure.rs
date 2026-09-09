@@ -243,13 +243,15 @@ impl TableBridge {
     pub fn table_evaluate_column_filter(
         criteria: FilterCriteria,
         column_data: Vec<CellValue>,
+        column_icons: Option<Vec<Option<domain_types::FilterIconIdentity>>>,
     ) -> Vec<u8> {
         let now = crate::eval::clock::current_calendar_date();
         let week_start_day = chrono::Weekday::Sun;
-        compute_table::filter::evaluate_column_filter(
+        compute_table::filter::evaluate_column_filter_with_icons(
             &criteria,
             &column_data,
             None,
+            column_icons.as_deref(),
             Some(now),
             Some(week_start_day),
         )

@@ -213,7 +213,7 @@ fn filter_shell_metadata_classifies_unsupported_lossless_criteria() {
                 col_index: 5,
                 filter_type: Some(OoxmlFilterType::Icon {
                     icon_set: Some("3TrafficLights1".to_string()),
-                    icon_id: 1,
+                    icon_id: Some(99),
                 }),
                 ext_lst_raw: Some("<extLst/>".to_string()),
                 ..Default::default()

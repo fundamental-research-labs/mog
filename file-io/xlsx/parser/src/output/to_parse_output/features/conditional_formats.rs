@@ -167,34 +167,41 @@ fn resolve_unified_border_color(
     theme_colors: &[String],
 ) -> Option<String> {
     let border = border?;
-    [
+    let colors = [
         border.left.as_ref(),
         border.top.as_ref(),
         border.right.as_ref(),
         border.bottom.as_ref(),
     ]
-    .into_iter()
-    .find_map(|side| resolve_border_side_color(side, theme_colors))
+    .map(|side| resolve_border_side_color(side, theme_colors));
+    let first = colors[0].clone()?;
+    colors
+        .iter()
+        .all(|color| color.as_ref() == Some(&first))
+        .then_some(first)
 }
 
 fn resolve_unified_border_style(border: Option<&BorderDef>) -> Option<BorderStyle> {
     let border = border?;
-    [
+    let sides = [
         border.left.as_ref(),
         border.top.as_ref(),
         border.right.as_ref(),
         border.bottom.as_ref(),
-    ]
-    .into_iter()
-    .filter_map(|side| side.map(|side| side.style))
-    .find(|style| *style != BorderStyle::None)
+    ];
+    let first = sides[0]?.style;
+    (first != BorderStyle::None
+        && sides
+            .iter()
+            .all(|side| side.is_some_and(|side| side.style == first)))
+    .then_some(first)
 }
 
 /// Resolve a `DxfDef` (differential formatting record) into a `CFStyle`.
 ///
 /// Extracts font color, background color, bold, italic, strikethrough, underline,
 /// and number format from the DXF, resolving theme/indexed colors to hex.
-fn resolve_dxf_to_cf_style(
+pub(crate) fn resolve_dxf_to_cf_style(
     dxf: &crate::domain::styles::types::DxfDef,
     theme_colors: &[String],
     dxf_id: Option<u32>,
@@ -277,6 +284,7 @@ fn resolve_dxf_to_cf_style(
         border_right_color,
         border_right_style,
         dxf_id,
+        dxf_theme_palette: Some(theme_colors.to_vec()),
     }
 }
 

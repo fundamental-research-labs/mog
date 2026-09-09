@@ -245,7 +245,7 @@ impl ColorFilter {
 pub struct IconFilter {
     /// Icon set identifier
     pub icon_set: IconSetType,
-    /// Icon ID within the set (0 = no icon)
+    /// Icon ID within the set; absence means no icon
     pub icon_id: Option<u32>,
 }
 

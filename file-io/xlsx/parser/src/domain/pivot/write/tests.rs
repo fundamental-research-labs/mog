@@ -292,7 +292,7 @@ fn test_pivot_location_xml() {
 #[test]
 fn test_pivot_style_default() {
     let style = PivotStyle::default();
-    assert_eq!(style.name, "PivotStyleMedium9");
+    assert_eq!(style.name.as_deref(), Some("PivotStyleMedium9"));
     assert!(style.show_row_headers);
     assert!(style.show_col_headers);
     assert!(!style.show_row_stripes);
@@ -673,4 +673,71 @@ fn test_format_number() {
     assert_eq!(format_number(42.5), "42.5");
     assert_eq!(format_number(-100.0), "-100");
     assert_eq!(format_number(0.0), "0");
+}
+
+#[test]
+fn unnamed_pivot_style_preserves_flags_without_inventing_a_preset() {
+    let style = PivotStyle {
+        name: None,
+        show_row_stripes: true,
+        ..PivotStyle::default()
+    };
+    let mut writer = XmlWriter::new();
+    style.write_xml(&mut writer);
+    let xml = writer.finish_string();
+    assert!(!xml.contains("name="));
+    assert!(xml.contains("showRowStripes=\"1\""));
+}
+
+#[test]
+fn imported_cache_preserves_grouping_and_owner_metadata() {
+    let xml = br#"<pivotCacheDefinition xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" createdVersion="4" minRefreshableVersion="3" enableRefresh="0" refreshedBy="Author" refreshedDate="41000.5" recordCount="2"><cacheSource type="worksheet"><worksheetSource name="Data"/></cacheSource><cacheFields count="3"><cacheField name="Base"><sharedItems count="2"><s v="A"/><s v="B"/></sharedItems><fieldGroup par="1"/></cacheField><cacheField name="Grouped" databaseField="0"><fieldGroup base="0"><discretePr count="2"><x v="0"/><x v="0"/></discretePr><groupItems count="1"><s v="Group1"/></groupItems></fieldGroup></cacheField><cacheField name="Dates"><fieldGroup base="2"><rangePr autoStart="0" autoEnd="0" groupBy="months" startDate="2020-01-01T00:00:00" endDate="2020-12-31T00:00:00" groupInterval="1"/></fieldGroup><extLst><ext uri="field"><x14:custom/></ext></extLst></cacheField></cacheFields><extLst><ext uri="cache"><x14:pivotCacheDefinition/></ext></extLst></pivotCacheDefinition>"#;
+    let parsed = crate::domain::pivot::spec::pivot_cache_to_ooxml(xml);
+    let mut writer = PivotCacheWriter::new(3);
+    writer.typed_fields = Some(parsed.cache_fields.items.clone());
+    writer.ooxml_preservation = crate::domain::pivot::preservation::capture_cache_preservation(xml);
+    let out = writer.to_definition_xml();
+    let text = String::from_utf8(out.clone()).unwrap();
+    assert!(text.contains("createdVersion=\"4\""));
+    assert!(text.contains("enableRefresh=\"0\""));
+    assert!(!text.contains("refreshOnLoad="));
+    assert!(text.contains("xmlns:x14="));
+    assert!(text.contains("<x14:pivotCacheDefinition/>"));
+    assert!(text.contains("<x14:custom/>"));
+    writer.refreshed_by = Some("New & User".to_string());
+    writer.refreshed_date = Some(45000.25);
+    writer.record_count = Some(5);
+    let refreshed = String::from_utf8(writer.to_definition_xml()).unwrap();
+    assert_eq!(refreshed.matches("refreshedBy=").count(), 1);
+    assert_eq!(refreshed.matches("refreshedDate=").count(), 1);
+    assert_eq!(refreshed.matches("xmlns=\"").count(), 1);
+    assert_eq!(refreshed.matches("xmlns:r=").count(), 1);
+    assert!(refreshed.contains("refreshedBy=\"New &amp; User\""));
+    assert!(refreshed.contains("refreshedDate=\"45000.25\""));
+    assert!(refreshed.contains("recordCount=\"5\""));
+    assert!(!refreshed.contains("41000.5"));
+    assert!(refreshed.contains("<x14:pivotCacheDefinition/>"));
+    let reparsed = crate::domain::pivot::spec::pivot_cache_to_ooxml(&out);
+    for (before, after) in parsed
+        .cache_fields
+        .items
+        .iter()
+        .zip(&reparsed.cache_fields.items)
+    {
+        assert_eq!(before.field_group, after.field_group);
+    }
+    assert_eq!(
+        reparsed.cache_fields.items[0]
+            .field_group
+            .as_ref()
+            .unwrap()
+            .par,
+        Some(1)
+    );
+    let group = reparsed.cache_fields.items[1].field_group.as_ref().unwrap();
+    assert_eq!(group.discrete_pr.as_ref().unwrap().items, vec![0, 0]);
+    assert_eq!(
+        group.group_items.as_ref().unwrap().items,
+        vec![ooxml_types::pivot::SharedItem::String("Group1".to_string())]
+    );
 }

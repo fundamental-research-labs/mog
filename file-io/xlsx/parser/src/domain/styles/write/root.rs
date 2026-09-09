@@ -97,6 +97,17 @@ pub(super) fn write_stylesheet(styles: &StylesWriter) -> Vec<u8> {
         }
     }
 
+    // Root extensions carry slicer/timeline defaults and custom style records.
+    // They belong to this stylesheet, whose DXF positions are retained by the
+    // export planner. Relationship-bearing payloads need a package owner and
+    // cannot be replayed here without resolving their relationship closure.
+    if let Some(raw) = styles.ext_lst_raw.as_deref()
+        && let Ok(xml) = std::str::from_utf8(raw)
+        && !crate::infra::xml::raw_xml_contains_relationship_attr(xml)
+    {
+        w.raw(raw);
+    }
+
     w.end_element("styleSheet");
 
     w.finish()

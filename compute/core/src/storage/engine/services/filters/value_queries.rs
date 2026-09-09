@@ -44,6 +44,7 @@ pub(super) fn get_filtered_record_count(
     filter_id: &str,
 ) -> Option<filters::FilterRecordCount> {
     let sid = *sheet_id;
+    let icons = crate::storage::engine::services::cf_cache::evaluate_filter_icons(stores, mirror, sheet_id, filter_id);
     filters::get_filtered_record_count(
         stores.storage.doc(),
         stores.storage.sheets(),
@@ -59,6 +60,7 @@ pub(super) fn get_filtered_record_count(
         |row, col| {
             resolved_formats::get_resolved_cell_format(stores, mirror, settings, sheet_id, row, col)
         },
+        |row, col| icons.get(&(row, col)).cloned(),
         |hex| super::resolve_filter_cell_pos(stores, mirror, sheet_id, hex),
     )
 }

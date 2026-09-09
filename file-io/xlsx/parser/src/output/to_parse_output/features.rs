@@ -64,7 +64,7 @@ pub(crate) use charts::{
 pub(crate) use comments::convert_comment_runs;
 #[cfg(test)]
 pub(crate) use conditional_formats::convert_cf_rule;
-pub(crate) use conditional_formats::convert_conditional_formats;
+pub(crate) use conditional_formats::{convert_conditional_formats, resolve_dxf_to_cf_style};
 pub(crate) use data_tables::convert_data_tables;
 pub(crate) use floating_objects::convert_floating_objects;
 pub(crate) use legacy_objects::{convert_connectors, convert_form_controls, convert_ole_objects};

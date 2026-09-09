@@ -206,7 +206,23 @@ pub(in crate::storage::engine) fn pivot_register_def(
         compute_pivot::PivotEngineConfig::try_from(config).map_err(|e| ComputeError::Eval {
             message: format!("Pivot config conversion error: {e}"),
         })?;
-    let def = engine_config.to_pivot_table_def(&bounds, &output_sheet_id);
+    let mut def = engine_config.to_pivot_table_def(&bounds, &output_sheet_id);
+    if let Some(previous) = mirror.find_pivot_table_def(&def.id, &def.name, &def.sheet)
+        && previous.start_row == def.start_row
+        && previous.start_col == def.start_col
+        && previous.end_row == def.end_row
+        && previous.end_col == def.end_col
+        && previous.data_field_names == def.data_field_names
+        && previous.row_field_indices == def.row_field_indices
+        && previous.col_field_indices == def.col_field_indices
+        && previous.first_data_row == def.first_data_row
+        && previous.first_data_col == def.first_data_col
+        && previous.data_on_rows == def.data_on_rows
+        && previous.show_row_grand_totals == def.show_row_grand_totals
+        && previous.show_column_grand_totals == def.show_column_grand_totals
+    {
+        def.grand_total_cells = previous.grand_total_cells.clone();
+    }
     mirror.upsert_pivot_table_def(def);
     Ok(MutationResult::empty())
 }
@@ -233,6 +249,7 @@ mod tests {
     ) -> CellMirror {
         let mut mirror = CellMirror::new();
         mirror.upsert_pivot_table_def(PivotTableDef {
+            grand_total_cells: Vec::new(),
             id: "pivot-1".to_string(),
             name: "Pivot1".to_string(),
             sheet: sheet_id.to_uuid_string(),

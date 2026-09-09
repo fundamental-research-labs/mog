@@ -83,13 +83,33 @@ pub fn has_active_filters(state: &TableFilterState) -> bool {
 /// pass this explicitly so that filter evaluation is deterministic and testable.
 ///
 /// `column_formats` carries one resolved `CellFormat` per data row. It is
-/// **required** when `criteria` is `Color` or `Icon` (the predicate consults
+/// **required** when `criteria` is `Color` (the predicate consults
 /// per-cell fill / font color); otherwise it is ignored. Callers that don't
 /// support color filters may pass `None`.
 pub fn evaluate_column_filter(
     criteria: &FilterCriteria,
     column_data: &[CellValue],
     column_formats: Option<&[CellFormat]>,
+    now: Option<chrono::NaiveDate>,
+    week_start_day: Option<chrono::Weekday>,
+) -> Vec<u8> {
+    evaluate_column_filter_with_icons(
+        criteria,
+        column_data,
+        column_formats,
+        None,
+        now,
+        week_start_day,
+    )
+}
+
+/// Evaluate with one fresh, canonical CF icon identity per row. Missing context
+/// cannot prove any row matches an icon criterion; it never means all-pass.
+pub fn evaluate_column_filter_with_icons(
+    criteria: &FilterCriteria,
+    column_data: &[CellValue],
+    column_formats: Option<&[CellFormat]>,
+    column_icons: Option<&[Option<domain_types::FilterIconIdentity>]>,
     now: Option<chrono::NaiveDate>,
     week_start_day: Option<chrono::Weekday>,
 ) -> Vec<u8> {
@@ -120,10 +140,21 @@ pub fn evaluate_column_filter(
         };
     }
 
-    // Icon filters are evaluated by the bridge layer (requires CF rule context).
-    // Return all-visible bitmap as a no-op at the engine level.
-    if let FilterCriteria::Icon(_) = criteria {
-        return vec![1u8; len];
+    if let FilterCriteria::Icon(filter) = criteria {
+        return (0..len)
+            .map(|row| {
+                let Some(icon) = column_icons.and_then(|icons| icons.get(row)) else {
+                    return 0;
+                };
+                u8::from(match (filter.icon_index, icon) {
+                    (None, None) => true,
+                    (Some(index), Some(icon)) => {
+                        icon.icon_set_name == filter.icon_set_name && icon.icon_index == index
+                    }
+                    _ => false,
+                })
+            })
+            .collect();
     }
 
     // Resolve data-dependent filters to concrete form
@@ -209,11 +240,8 @@ fn cell_matches_criteria(
             unreachable!("ValueFilter should use matches_value_filter_fast");
         }
         FilterCriteria::Condition(cf) => matches_condition_filter(value, cf, precomputed_cond_str),
-        // Color is handled via the per-row format-aware path in
-        // evaluate_column_filter and never reaches this dispatch. Icon still
-        // requires CF-rule context (out of scope for the pure engine) so it
-        // passes through.
-        FilterCriteria::Icon(_) => true,
+        // Visual filters are handled above with explicit per-row context.
+        FilterCriteria::Icon(_) => unreachable!("Icon filters require per-row CF identity context"),
         FilterCriteria::Color(_) => {
             unreachable!(
                 "Color filters are dispatched in evaluate_column_filter via column_formats"

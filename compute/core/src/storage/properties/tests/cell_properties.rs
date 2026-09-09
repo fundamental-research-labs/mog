@@ -444,6 +444,12 @@ fn test_clear_formula_cache_metadata_preserves_unrelated_properties() {
         provenance: Some("import".to_string()),
         formula_result_type: Some(2),
         has_empty_cached_value: true,
+        vm: Some(3),
+        imported_rich_error: Some(domain_types::ImportedRichError {
+            vm: 3,
+            semantic: value_types::CellError::Spill,
+            fallback: value_types::CellError::Value,
+        }),
         original_sst_index: Some(9),
         original_value: Some("cached".to_string()),
         ..Default::default()
@@ -456,6 +462,8 @@ fn test_clear_formula_cache_metadata_preserves_unrelated_properties() {
     assert_eq!(got.format.as_ref().unwrap().bold, Some(true));
     assert_eq!(got.provenance.as_deref(), Some("import"));
     assert_eq!(got.formula_result_type, None);
+    assert_eq!(got.vm, None);
+    assert_eq!(got.imported_rich_error, None);
     assert!(!got.has_empty_cached_value);
     assert_eq!(got.original_sst_index, Some(9));
     assert_eq!(got.original_value.as_deref(), Some("cached"));

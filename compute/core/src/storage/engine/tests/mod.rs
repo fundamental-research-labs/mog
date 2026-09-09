@@ -71,3 +71,18 @@ mod test_xlsx_export_tables;
 mod test_xlsx_export_validations;
 mod test_xlsx_export_vc03;
 mod test_xlsx_export_view_state;
+
+mod test_date_system_evaluation;
+mod test_formula_result_modes;
+
+mod test_subtotal_reference_filtering;
+
+mod test_complex_aggregate_ranges;
+
+mod test_rich_error_values;
+
+mod test_legacy_reference_intersection;
+
+mod test_lambda_callable_bindings;
+
+mod test_index_reference_bounds;

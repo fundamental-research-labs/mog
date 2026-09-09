@@ -109,7 +109,8 @@ pub(super) fn convert_cell(
     cell: &DomainCellData,
     shared_strings: &mut SharedStringsWriter,
 ) -> CellData {
-    let style_remapper = StyleExportRemapper::palette_projection(u32::MAX);
+    let style_remapper =
+        StyleExportRemapper::palette_projection(cell.style_id.unwrap_or(0).saturating_add(1));
     convert_cell_with_metadata_refs(cell, shared_strings, true, &style_remapper)
 }
 
@@ -124,6 +125,12 @@ fn convert_cell_with_metadata_refs(
         .and_then(|id| style_remapper.emitted_cell_xf_id(id));
 
     let authored_numeric_value = matching_authored_numeric_value(cell);
+    let imported_rich_error = cell.imported_rich_error.filter(|rich| {
+        emit_cell_metadata_refs
+            && cell.vm == Some(rich.vm)
+            && matches!(&cell.value, DomainValue::Error(error, _) if *error == rich.semantic)
+    });
+    let fallback_error = |error: CellError| imported_rich_error.map_or(error, |rich| rich.fallback);
     let value = match (&cell.value, &cell.formula) {
         (_, Some(formula)) => {
             let cached = match &cell.value {
@@ -135,9 +142,9 @@ fn convert_cell_with_metadata_refs(
                 DomainValue::Error(_, _) if authored_numeric_value.is_some() => {
                     Some(Box::new(CellValue::Number(0.0)))
                 }
-                DomainValue::Error(e, _) => {
-                    Some(Box::new(CellValue::Error(e.as_str().to_string())))
-                }
+                DomainValue::Error(e, _) => Some(Box::new(CellValue::Error(
+                    fallback_error(*e).as_str().to_string(),
+                ))),
                 _ if cell.has_empty_cached_value => Some(Box::new(CellValue::Number(0.0))),
                 _ => None,
             };
@@ -166,7 +173,9 @@ fn convert_cell_with_metadata_refs(
         (DomainValue::Error(CellError::Num, _), None) if authored_numeric_value.is_some() => {
             CellValue::Number(0.0)
         }
-        (DomainValue::Error(e, _), None) => CellValue::Error(e.as_str().to_string()),
+        (DomainValue::Error(e, _), None) => {
+            CellValue::Error(fallback_error(*e).as_str().to_string())
+        }
         _ => CellValue::Empty,
     };
 
@@ -192,7 +201,11 @@ fn convert_cell_with_metadata_refs(
         cell_metadata_index: emit_cell_metadata_refs
             .then_some(cell.cell_metadata_index)
             .flatten(),
-        vm: emit_cell_metadata_refs.then_some(cell.vm).flatten(),
+        vm: if cell.imported_rich_error.is_some() && imported_rich_error.is_none() {
+            None
+        } else {
+            emit_cell_metadata_refs.then_some(cell.vm).flatten()
+        },
         preserve_space_formula: false,
         preserve_space_value: false,
         explicit_type: None,
@@ -367,5 +380,31 @@ mod tests {
                 ..
             }
         ));
+    }
+    #[test]
+    fn rich_error_fallback_requires_current_semantic_value_and_vm() {
+        let mut strings = SharedStringsWriter::new();
+        let mut cell = DomainCellData {
+            value: DomainValue::Error(CellError::Spill, None),
+            vm: Some(3),
+            imported_rich_error: Some(domain_types::ImportedRichError {
+                vm: 3,
+                semantic: CellError::Spill,
+                fallback: CellError::Value,
+            }),
+            ..Default::default()
+        };
+        let converted = convert_cell(&cell, &mut strings);
+        assert!(matches!(converted.value, CellValue::Error(error) if error == "#VALUE!"));
+        assert_eq!(converted.vm, Some(3));
+        cell.value = DomainValue::Error(CellError::Div0, None);
+        let converted = convert_cell(&cell, &mut strings);
+        assert!(matches!(converted.value, CellValue::Error(error) if error == "#DIV/0!"));
+        assert_eq!(converted.vm, None);
+        cell.value = DomainValue::Error(CellError::Spill, None);
+        cell.vm = Some(4);
+        let converted = convert_cell(&cell, &mut strings);
+        assert!(matches!(converted.value, CellValue::Error(error) if error == "#SPILL!"));
+        assert_eq!(converted.vm, None);
     }
 }

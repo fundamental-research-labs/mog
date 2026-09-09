@@ -66,29 +66,41 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
         let cache_field_names = pivot_def.cache_field_names.clone();
         let row_field_indices = pivot_def.row_field_indices.clone();
 
-        // 4. Find data_field column offset
-        let data_field_offset = data_field_names
+        // Overall totals use explicit layout-derived addresses. Bounds alone
+        // cannot identify a total when column groups or multiple measures exist.
+        let data_field_offset = match data_field_names
             .iter()
-            .position(|name| name.eq_ignore_ascii_case(&data_field));
-        let data_field_offset = match data_field_offset {
-            Some(i) => i as u32,
+            .position(|name| name.eq_ignore_ascii_case(&data_field))
+        {
+            Some(index) => index as u32,
             None => return Ok(CellValue::Error(CellError::Ref, None)),
         };
-        let abs_data_col = pt_start_col + pt_first_data_col + data_field_offset;
-
-        // Ensure the computed column is within the pivot range
-        if abs_data_col > pt_end_col {
-            return Ok(CellValue::Error(CellError::Ref, None));
-        }
-
-        // 5. If no criteria → return grand total (last row)
         if args.len() == 2 {
+            let mut totals = pivot_def
+                .grand_total_cells
+                .iter()
+                .filter(|cell| cell.data_field_index == data_field_offset);
+            let Some(total) = totals.next() else {
+                return Ok(CellValue::Error(CellError::Ref, None));
+            };
+            if totals.next().is_some()
+                || total.row < pt_start_row
+                || total.row > pt_end_row
+                || total.col < pt_start_col
+                || total.col > pt_end_col
+            {
+                return Ok(CellValue::Error(CellError::Ref, None));
+            }
             let ref_ = CellRef::Positional {
                 sheet,
-                row: pt_end_row,
-                col: abs_data_col,
+                row: total.row,
+                col: total.col,
             };
             return Ok(self.data.get_cell_value_by_ref(&ref_).await);
+        }
+        let abs_data_col = pt_start_col + pt_first_data_col + data_field_offset;
+        if abs_data_col > pt_end_col {
+            return Ok(CellValue::Error(CellError::Ref, None));
         }
 
         // 6. Parse criteria pairs

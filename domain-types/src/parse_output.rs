@@ -803,8 +803,8 @@ pub struct SheetCommentPackageInfo {
     pub vml_path_hint: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vml_relationship_id_hint: Option<String>,
-    /// Owner-scoped VML note geometry facts parsed from the worksheet VML
-    /// drawing. These are typed provenance for current comment-owned VML
+    /// Owner-scoped VML note geometry and presentation parsed from worksheet VML.
+    /// These are typed provenance for current comment-owned VML
     /// generation, not authority to replay the original VML part.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub vml_note_shapes: Vec<SheetVmlNoteShapeInfo>,
@@ -864,6 +864,9 @@ pub struct SheetVmlNoteShapeInfo {
     pub width: Option<VmlStyleDimensionInfo>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub height: Option<VmlStyleDimensionInfo>,
+    /// Shape-owned presentation, applied only to the current note at this cell.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub presentation: Option<crate::domain::comment_vml::VmlNotePresentation>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1608,6 +1611,16 @@ impl ImportedCellProjectionRole {
     }
 }
 
+/// Legacy cached error paired with a resolved rich-value error identity.
+/// Replay is valid only while both the semantic error and vm index still match.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportedRichError {
+    pub vm: u32,
+    pub semantic: value_types::CellError,
+    pub fallback: value_types::CellError,
+}
+
 /// A single cell's data, position-keyed (no UUID).
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1658,6 +1671,9 @@ pub struct CellData {
     /// Used for rich value types (linked data types, images-in-cells).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vm: Option<u32>,
+    /// Imported rich-error identity and its original legacy cached fallback.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub imported_rich_error: Option<ImportedRichError>,
     /// Worksheet-level phonetic display flag from `ph` on the `<c>` element.
     #[serde(default, skip_serializing_if = "crate::is_false")]
     pub phonetic: bool,

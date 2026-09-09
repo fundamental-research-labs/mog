@@ -598,6 +598,7 @@ pub(super) fn hydrate_cell_styles(
                 },
                 cell_metadata_index,
                 vm: cell.vm,
+                imported_rich_error: cell.imported_rich_error,
                 phonetic: cell.phonetic,
                 date_lexical_value: cell.date_lexical_value.clone(),
                 formula_result_type: cell.formula_result_type,

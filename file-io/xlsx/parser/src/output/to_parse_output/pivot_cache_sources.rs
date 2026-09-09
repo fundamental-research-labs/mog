@@ -28,6 +28,7 @@ pub(super) fn build_pivot_cache_sources<'a>(
                 package.and_then(|package| external_worksheet_source(package, worksheet_source));
             PivotCacheSourceDef {
                 cache_id: *cache_id,
+                ooxml_preservation: parsed_cache.ooxml_preservation.clone(),
                 cache_fields: parsed_cache.definition.cache_fields.items.clone(),
                 typed_records: parsed_cache
                     .records

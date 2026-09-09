@@ -90,7 +90,16 @@ pub fn get_col_width_explicit(
     col: u32,
     grid_index: Option<&GridIndex>,
 ) -> Option<CharWidth> {
-    let col_id = id_to_hex(grid_index?.col_id(col)?.as_u128());
+    get_col_width_by_id(doc, sheets, sheet_id, grid_index?.col_id(col)?)
+}
+
+pub(crate) fn get_col_width_by_id(
+    doc: &Doc,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    col_id: cell_types::ColId,
+) -> Option<CharWidth> {
+    let col_id = id_to_hex(col_id.as_u128());
 
     let txn = doc.transact();
     let col_widths_map = get_sheet_submap(&txn, sheets, sheet_id, KEY_COL_WIDTHS)?;

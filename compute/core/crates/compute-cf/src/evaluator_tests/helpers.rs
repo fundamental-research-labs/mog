@@ -106,6 +106,7 @@ pub(super) fn data_bar_rule(priority: i32, stop_if_true: bool) -> CFRule {
 pub(super) fn icon_set_rule(priority: i32, stop_if_true: bool) -> CFRule {
     make_rule(
         CFRuleKind::IconSet(CFIconSet {
+            custom_icons: Vec::new(),
             icon_set_name: CFIconSetName::ThreeArrows,
             thresholds: vec![
                 CFIconThreshold {

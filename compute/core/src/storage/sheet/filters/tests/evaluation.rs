@@ -70,6 +70,7 @@ fn test_evaluate_filter_value() {
         &filter.id,
         get_cell_value,
         test_get_cell_format,
+        |_, _| None,
         resolve,
     );
 
@@ -143,6 +144,7 @@ fn test_evaluate_filter_condition() {
         &filter.id,
         get_cell_value,
         test_get_cell_format,
+        |_, _| None,
         resolve,
     );
 
@@ -236,6 +238,7 @@ fn test_evaluate_filter_multi_column_and() {
         &filter.id,
         get_cell_value,
         test_get_cell_format,
+        |_, _| None,
         resolve,
     );
 
@@ -272,6 +275,7 @@ fn test_evaluate_no_filters_returns_empty() {
         &filter.id,
         get_cell_value,
         test_get_cell_format,
+        |_, _| None,
         resolve,
     );
     assert!(results.is_empty());
@@ -390,6 +394,7 @@ fn test_get_filtered_record_count() {
         &filter.id,
         get_cell_value,
         test_get_cell_format,
+        |_, _| None,
         resolve,
     );
 
@@ -449,6 +454,7 @@ fn test_evaluate_deleted_header() {
         &filter.id,
         get_cell_value,
         test_get_cell_format,
+        |_, _| None,
         resolve,
     );
     // Column header was deleted, so its bitmap is skipped.
@@ -498,6 +504,7 @@ fn test_evaluate_deleted_range_corners() {
         &filter.id,
         get_cell_value,
         test_get_cell_format,
+        |_, _| None,
         resolve,
     );
     assert!(results.is_empty());

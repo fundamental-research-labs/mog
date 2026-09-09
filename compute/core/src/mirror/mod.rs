@@ -30,6 +30,7 @@ pub mod range_view;
 pub mod variable_store;
 
 mod cell_mirror;
+pub(crate) mod cell_metadata;
 mod metadata;
 mod read;
 mod sheet;

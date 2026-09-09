@@ -606,6 +606,7 @@ mod tests {
 
         // 13. Pivot at (40, 40)
         let pivot_tables = vec![PivotTableDef {
+            grand_total_cells: Vec::new(),
             id: "pivot-1".into(),
             name: "Pivot1".into(),
             sheet: SHEET_UUID.into(),

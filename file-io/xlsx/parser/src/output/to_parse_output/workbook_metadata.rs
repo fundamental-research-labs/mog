@@ -139,9 +139,11 @@ pub(super) fn imported_metadata_xml(
 ) -> ImportedMetadataXml {
     ImportedMetadataXml {
         bytes: raw_xml.to_vec(),
-        generated_at_import: crate::domain::metadata::spreadsheet_xml::write_metadata_model_xml(
-            metadata,
-        ),
+        generated_at_import:
+            crate::domain::metadata::spreadsheet_xml::write_metadata_model_xml_with_source(
+                metadata,
+                Some(raw_xml),
+            ),
         cell_metadata_refs: metadata_refs(sheets, |cell| cell.cell_metadata_index),
         value_metadata_refs: metadata_refs(sheets, |cell| cell.vm),
     }

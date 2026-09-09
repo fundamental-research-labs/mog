@@ -225,19 +225,14 @@ pub struct TableColorFilter {
     pub font_color: Option<Color>,
 }
 
-/// Filter by conditional formatting icon.
-///
-/// Like `TableColorFilter`, actual icon evaluation requires CF rule context
-/// that the pure filter engine does not have. The Rust engine returns
-/// all-visible; real filtering happens in the bridge layer.
+/// Filter by the displayed CF icon's OOXML identity.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IconFilter {
-    /// The icon set name (e.g. "3Arrows", "4Rating").
-    /// Uses String rather than CFIconSetName to avoid a dependency on compute-cf.
     pub icon_set_name: String,
-    /// Which icon index within the set to filter for (0-based).
-    pub icon_index: u8,
+    /// Missing selects cells without a displayed icon.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon_index: Option<u32>,
 }
 
 /// Data for rendering a filter dropdown in the UI.
@@ -699,7 +694,7 @@ mod tests {
     fn test_filter_criteria_icon_round_trip() {
         let criteria = FilterCriteria::Icon(IconFilter {
             icon_set_name: "3Arrows".to_string(),
-            icon_index: 2,
+            icon_index: Some(2),
         });
         round_trip(&criteria);
 

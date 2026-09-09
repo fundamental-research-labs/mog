@@ -80,6 +80,7 @@ impl YrsComputeEngine {
             &self.stores.storage,
             &workbook_snap,
             &self.stores.grid_indexes,
+            self.stores.layout_metrics,
         )?;
 
         self.stores.compute = ComputeCore::new();
@@ -451,6 +452,7 @@ impl YrsComputeEngine {
                 &self.stores.storage,
                 &workbook_snap,
                 &self.stores.grid_indexes,
+                self.stores.layout_metrics,
             )?;
 
             self.stores.compute = ComputeCore::new();

@@ -16,6 +16,11 @@ pub fn resolve_table_cell_format(table: &Table, row: u32, col: u32) -> Option<Ta
         return None;
     }
 
+    // An explicitly unstyled table contributes no differential formatting.
+    if table.style.is_empty() || table.style.eq_ignore_ascii_case("none") {
+        return None;
+    }
+
     // 2. Look up style definition
     let style_def = builtins::get(&table.style)
         .or_else(|| builtins::get(DEFAULT_STYLE_ID))

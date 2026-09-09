@@ -46,7 +46,9 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
             lambda_expr_cache: None,
             deadline: None,
         };
-        eval.eval_node(node).await.map(|ev| ev.into_cell_value())
+        eval.eval_formula_result(node)
+            .await
+            .map(|ev| ev.into_cell_value())
     }
 
     /// Top-level entry point with a per-formula deadline.
@@ -65,7 +67,19 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
             lambda_expr_cache: None,
             deadline: Some(deadline),
         };
-        eval.eval_node(node).await.map(|ev| ev.into_cell_value())
+        eval.eval_formula_result(node)
+            .await
+            .map(|ev| ev.into_cell_value())
+    }
+
+    async fn eval_formula_result(&mut self, node: &ASTNode) -> Result<EvalValue, ComputeError> {
+        if self.meta.legacy_reference_result() && Self::is_referenceable_for_intersection(node) {
+            // Keep the reference identity until implicit intersection chooses
+            // its caller-aligned cell. Once materialized, an array has no origin.
+            self.eval_implicit_intersection(node).await
+        } else {
+            self.eval_node(node).await
+        }
     }
 
     pub(in crate::eval) fn eval_node<'b>(
@@ -93,23 +107,26 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
     }
 
     async fn eval_node_inner(&mut self, node: &ASTNode) -> Result<EvalValue, ComputeError> {
-        if let Some(ref cache) = self.lambda_expr_cache {
+        let contains_lexical_call = self.contains_lexical_call(node);
+        if !contains_lexical_call && let Some(ref cache) = self.lambda_expr_cache {
             let ptr = node as *const ASTNode;
             if let Some(cached) = cache.values.get(&ptr) {
                 return Ok(cached.clone());
             }
         }
 
-        let subexpr_key =
-            if matches!(node, ASTNode::Function { .. }) && subexpr_cache::is_cacheable(node) {
-                let key = subexpr_cache::hash_ast(node);
-                if let Some(cached) = subexpr_cache::get(key, node) {
-                    return Ok(EvalValue::Cell(cached));
-                }
-                Some(key)
-            } else {
-                None
-            };
+        let subexpr_key = if !contains_lexical_call
+            && matches!(node, ASTNode::Function { .. })
+            && subexpr_cache::is_cacheable(node)
+        {
+            let key = subexpr_cache::hash_ast(node);
+            if let Some(cached) = subexpr_cache::get(key, node) {
+                return Ok(EvalValue::Cell(cached));
+            }
+            Some(key)
+        } else {
+            None
+        };
 
         let result = match node {
             ASTNode::Number(n) => Ok(EvalValue::Cell(CellValue::number(*n))),
@@ -160,6 +177,9 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
                 self.eval_unresolved_three_d_ref(start_name, end_name, inner)
                     .await
             }
+            ASTNode::ExternalNameRef { workbook, name } if workbook.is_current_workbook() => {
+                self.eval_workbook_name(name).await
+            }
             ASTNode::ExternalSheetRef { .. }
             | ASTNode::ExternalThreeDRef { .. }
             | ASTNode::ExternalNameRef { .. } => Ok(self.eval_external_ref_unavailable()),
@@ -195,7 +215,7 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
             ASTNode::Union { ranges } => self.eval_union(ranges).await,
         };
 
-        if let Some(ref mut cache) = self.lambda_expr_cache {
+        if !contains_lexical_call && let Some(ref mut cache) = self.lambda_expr_cache {
             let ptr = node as *const ASTNode;
             if cache.cacheable.contains(&ptr)
                 && let Ok(ref val) = result

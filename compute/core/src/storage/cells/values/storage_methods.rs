@@ -231,6 +231,9 @@ impl YrsStorage {
             }
         }
 
+        // Replacing the cell removes its prior array declaration as well.
+        mirror.unmark_cse_anchor(&cell_id);
+        mirror.cse_single_cell.remove(&cell_id);
         // Update mirror with the identity formula.
         mirror.apply_edit(
             sheet_id,

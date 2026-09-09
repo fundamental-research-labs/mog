@@ -79,6 +79,12 @@ pub struct CellMetadata {
     pub cell_metadata_index: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vm: Option<u32>,
+    #[serde(
+        rename = "importedRichError",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub imported_rich_error: Option<domain_types::ImportedRichError>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub phonetic: bool,
     #[serde(rename = "dateLexicalValue", skip_serializing_if = "Option::is_none")]
@@ -135,6 +141,12 @@ pub struct CellProperties {
     pub cell_metadata_index: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vm: Option<u32>,
+    #[serde(
+        rename = "importedRichError",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub imported_rich_error: Option<domain_types::ImportedRichError>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub phonetic: bool,
     #[serde(rename = "dateLexicalValue", skip_serializing_if = "Option::is_none")]
@@ -172,6 +184,7 @@ impl CellProperties {
             && self.style_id.is_none()
             && self.cell_metadata_index.is_none()
             && self.vm.is_none()
+            && self.imported_rich_error.is_none()
             && !self.phonetic
             && self.date_lexical_value.is_none()
             && self.formula_result_type.is_none()
@@ -192,6 +205,7 @@ impl CellMetadata {
             && self.style_id.is_none()
             && self.cell_metadata_index.is_none()
             && self.vm.is_none()
+            && self.imported_rich_error.is_none()
             && self.formula_result_type.is_none()
             && !self.has_empty_cached_value
             && self.formula_cache_provenance.is_absent_or_unknown()
@@ -214,6 +228,7 @@ impl From<domain_types::CellProperties> for CellProperties {
             style_id: d.style_id,
             cell_metadata_index: d.cell_metadata_index,
             vm: d.vm,
+            imported_rich_error: d.imported_rich_error,
             phonetic: d.phonetic,
             date_lexical_value: d.date_lexical_value,
             formula_result_type: d.formula_result_type,
@@ -237,6 +252,7 @@ impl From<CellProperties> for domain_types::CellProperties {
             style_id: s.style_id,
             cell_metadata_index: s.cell_metadata_index,
             vm: s.vm,
+            imported_rich_error: s.imported_rich_error,
             phonetic: s.phonetic,
             date_lexical_value: s.date_lexical_value,
             formula_result_type: s.formula_result_type,

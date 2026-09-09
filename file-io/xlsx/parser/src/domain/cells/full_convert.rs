@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use crate::domain::cells::{
     AuthoredStyleOnlyCell, CELL_TYPE_BOOL, CELL_TYPE_EMPTY, CELL_TYPE_ERROR, CELL_TYPE_FORMULA,
     CELL_TYPE_FORMULA_STRING, CELL_TYPE_NUMBER, CELL_TYPE_STRING, CellData, ParseExtras,
-    VALUE_TYPE_CACHED_FORMULA, VALUE_TYPE_FORMULA, VALUE_TYPE_INLINE, VALUE_TYPE_SHARED_STRING,
+    VALUE_TYPE_CACHED_FORMULA, VALUE_TYPE_DECODED_STRING, VALUE_TYPE_FORMULA, VALUE_TYPE_INLINE,
     adjust_formula_references,
 };
 use crate::output::results::{
@@ -134,9 +134,9 @@ pub(crate) fn convert_cell_data(
         let start = c.value_offset as usize;
         let end = (start + c.value_len as usize).min(strings_buffer.len());
         let bytes = &strings_buffer[start..end];
-        let value_already_decoded_from_sst = c.value_type == VALUE_TYPE_SHARED_STRING
+        let value_already_decoded = c.value_type == VALUE_TYPE_DECODED_STRING
             || (c.value_type == VALUE_TYPE_CACHED_FORMULA && c.cell_type == CELL_TYPE_STRING);
-        let may_have_entities = !value_already_decoded_from_sst
+        let may_have_entities = !value_already_decoded
             && (c.cell_type == CELL_TYPE_STRING
                 || c.cell_type == CELL_TYPE_FORMULA_STRING
                 || c.value_type == VALUE_TYPE_FORMULA);
@@ -145,7 +145,7 @@ pub(crate) fn convert_cell_data(
         } else {
             Some(bytes_to_string(bytes))
         }
-    } else if c.value_type == VALUE_TYPE_SHARED_STRING {
+    } else if c.value_type == VALUE_TYPE_DECODED_STRING {
         Some(String::new())
     } else if c.value_type == VALUE_TYPE_INLINE && c.cell_type == CELL_TYPE_FORMULA_STRING {
         Some(String::new())
@@ -249,6 +249,13 @@ pub(crate) fn apply_parse_extras(
                     cells[cell_idx].value = Some(value_str.clone());
                 }
             }
+        }
+    }
+
+    for (cell_idx, text) in &extras.cached_inline_strings {
+        if let Some(cell) = cells.get_mut(*cell_idx) {
+            cell.value = Some(text.clone());
+            cell.cached_value_type = CELL_TYPE_FORMULA_STRING;
         }
     }
 
@@ -514,6 +521,54 @@ mod tests {
     }
 
     #[test]
+    fn worksheet_inline_strings_decode_once_and_preserve_formula_caches() {
+        let xml = br#"<worksheet><sheetData><row r="1">
+          <c r="A1" t="inlineStr"><is><t>&amp;amp;</t></is></c>
+          <c r="B1" t="inlineStr"><is><t>_x005F_x000D_</t></is></c>
+          <c r="C1" t="inlineStr"><is><r><t>&amp;am</t></r><r><t>p;</t></r></is></c>
+          <c r="D1" t="inlineStr"><is><t/></is></c>
+          <c r="E1" t="inlineStr"><f>CONCATENATE(A1,B1)</f><is><t>&amp;amp;</t></is></c>
+          <c r="F1" t="inlineStr"><f>""</f><is/></c>
+          <c r="G1" t="str"><v>&amp;amp;</v></c>
+          <c r="H1" t="s"><v>0</v></c>
+        </row></sheetData></worksheet>"#;
+        let mut packed = vec![CellData::default(); 8];
+        let mut strings = Vec::new();
+        let mut extras = ParseExtras::default();
+        let count = crate::domain::cells::parse_worksheet_fast_with_extras(
+            xml,
+            &["&amp;"],
+            &mut packed,
+            &mut strings,
+            &mut Vec::new(),
+            &mut extras,
+            &[],
+        );
+        assert_eq!(count, 8);
+        let mut cells: Vec<_> = packed
+            .iter()
+            .map(|c| convert_cell_data(c, &strings, &mut Vec::new()))
+            .collect();
+        apply_parse_extras(&mut cells, &extras, &packed, &strings, &["&amp;".into()]);
+        let values: Vec<_> = cells.iter().map(|c| c.value.as_deref()).collect();
+        assert_eq!(
+            values,
+            vec![
+                Some("&amp;"),
+                Some("_x000D_"),
+                Some("&amp;"),
+                Some(""),
+                Some("&amp;"),
+                Some(""),
+                Some("&amp;"),
+                Some("&amp;")
+            ]
+        );
+        assert_eq!(cells[4].formula.as_deref(), Some("CONCATENATE(A1,B1)"));
+        assert_eq!(cells[4].cached_value_type, CELL_TYPE_FORMULA_STRING);
+    }
+
+    #[test]
     fn convert_cell_data_does_not_double_decode_shared_string_entities() {
         let strings_buffer = b"Design &lt;br&gt; work";
         let cell = CellData {
@@ -521,7 +576,7 @@ mod tests {
             col: 0,
             cell_type: CELL_TYPE_STRING,
             style_idx: 0,
-            value_type: VALUE_TYPE_SHARED_STRING,
+            value_type: VALUE_TYPE_DECODED_STRING,
             value_offset: 0,
             value_len: strings_buffer.len() as u32,
         };

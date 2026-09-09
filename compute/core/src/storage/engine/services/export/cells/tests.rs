@@ -279,7 +279,9 @@ fn mutated_row_and_col_formats_use_authored_palette_ids() {
         )
         .expect("set col format");
 
-    let exported = engine.build_parse_output_from_yrs();
+    let exported = engine
+        .build_parse_output_from_yrs()
+        .expect("export projection");
     assert_eq!(exported.style_palette.len(), 3);
     assert_eq!(exported.sheets[0].row_styles[0].style_id, 1);
     assert_eq!(exported.sheets[0].col_styles[0].style_id, 2);
@@ -296,7 +298,9 @@ fn imported_cell_xf_lineage_survives_yrs_and_live_edits_use_generated_tail() {
         .clone();
     let (mut engine, sheet_id) = engine_from_parse_output(&source);
 
-    let pristine = engine.build_parse_output_from_yrs();
+    let pristine = engine
+        .build_parse_output_from_yrs()
+        .expect("export projection");
     assert_eq!(pristine.sheets[0].cells[0].style_id, Some(1));
     assert_eq!(
         pristine
@@ -321,7 +325,9 @@ fn imported_cell_xf_lineage_survives_yrs_and_live_edits_use_generated_tail() {
         )
         .expect("re-author the effective imported format");
 
-    let edited = engine.build_parse_output_from_yrs();
+    let edited = engine
+        .build_parse_output_from_yrs()
+        .expect("export projection");
     assert_eq!(edited.sheets[0].cells[0].style_id, Some(2));
     assert_eq!(edited.style_palette.len(), 3);
     assert_ne!(
@@ -452,7 +458,9 @@ fn inline_cell_xfs_snapshot_inherited_row_and_column_fills_and_explicit_no_fill(
         )
         .expect("set explicit C1 no-fill");
 
-    let exported = engine.build_parse_output_from_yrs();
+    let exported = engine
+        .build_parse_output_from_yrs()
+        .expect("export projection");
     let format_at = |row, col| {
         let style_id = exported.sheets[0]
             .cells
@@ -618,7 +626,9 @@ fn xlsx_import_rebuild_hydrates_authored_style_ranges() {
         .import_from_xlsx_bytes_no_recalc(&source_xlsx)
         .expect("import XLSX");
 
-    let exported = engine.build_parse_output_from_yrs();
+    let exported = engine
+        .build_parse_output_from_yrs()
+        .expect("export projection");
     let runs = &exported.sheets[0].authored_style_runs;
     assert!(
         runs.iter()
@@ -688,7 +698,9 @@ fn skipped_spill_target_is_not_replayed_from_modeled_export() {
         "spill target must not materialize as editable storage"
     );
 
-    let exported = engine.build_parse_output_from_yrs();
+    let exported = engine
+        .build_parse_output_from_yrs()
+        .expect("export projection");
     let cells = &exported.sheets[0].cells;
     assert!(cells.iter().any(|cell| (cell.row, cell.col) == (0, 0)));
     assert!(
@@ -884,6 +896,7 @@ fn register_rendered_pivot(engine: &mut YrsComputeEngine, sheet_id: &SheetId, va
         .mirror
         .materialize_pivot(sheet_id, 0, 0, &result, &["Region".to_string()]);
     engine.mirror.upsert_pivot_table_def(PivotTableDef {
+        grand_total_cells: Vec::new(),
         id: "pivot-1".to_string(),
         name: "Pivot1".to_string(),
         sheet: sheet_id.to_uuid_string(),
@@ -966,6 +979,7 @@ fn export_cells_does_not_emit_empty_pivot_overlay_at_origin() {
         .mirror
         .materialize_pivot(&sheet_id, 0, 0, &result, &["Region".to_string()]);
     engine.mirror.upsert_pivot_table_def(PivotTableDef {
+        grand_total_cells: Vec::new(),
         id: "empty-pivot".to_string(),
         name: "EmptyPivot".to_string(),
         sheet: sheet_id.to_uuid_string(),

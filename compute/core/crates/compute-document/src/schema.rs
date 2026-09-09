@@ -143,6 +143,8 @@ pub const KEY_FORMULA_AGGREGATE: &str = "fa";
 /// carries OOXML attributes such as `t="array"`, `ref`, `si`, and data-table
 /// flags.
 pub const KEY_FORMULA_METADATA: &str = "fm";
+/// Imported scalar/CSE/dynamic calculation mode, distinct from cached results.
+pub const KEY_FORMULA_RESULT_MODE: &str = "frm";
 
 /// CSE array-formula: CSE (`Ctrl+Shift+Enter`) array-formula range, written on
 /// the anchor cell only. Stored as A1 range string (e.g. `"A1:C5"`) so it

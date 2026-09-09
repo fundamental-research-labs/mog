@@ -55,16 +55,20 @@ impl YrsComputeEngine {
     /// Post-process an import-open recalc for the direct hydration return path.
     ///
     /// This needs the same observable enrichment as mutation flushes, but it
-    /// must not leave compute dirty or seed a pending viewport recalc because
-    /// the enriched payload is returned by `complete_deferred_hydration`
-    /// itself.
+    /// must preserve the incoming calculation state and not seed a pending
+    /// viewport recalc because the enriched payload is returned directly.
+    /// Deferred imports that only loaded cached results still need their first
+    /// explicit calculation; imports already recalculated on open stay clean.
     pub(in crate::storage::engine) fn postprocess_import_open_recalc(
         &mut self,
         recalc: &mut RecalcResult,
     ) {
+        let pending_calculation = self.stores.compute.is_dirty();
         self.prepare_recalc_for_flush(recalc);
         self.enrich_metadata_flags(recalc);
-        self.stores.compute.clear_dirty();
+        if !pending_calculation {
+            self.stores.compute.clear_dirty();
+        }
         self.mutation.pending_recalc = None;
     }
 

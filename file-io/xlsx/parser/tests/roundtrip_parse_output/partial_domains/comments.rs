@@ -20,6 +20,153 @@ use xlsx_parser::zip::XlsxArchive;
 const NOTE_IMAGE: &[u8] = b"\x89PNG\r\n\x1a\nnote-image";
 
 #[test]
+fn legacy_note_presentation_and_literal_content_survive_production_roundtrip() {
+    let imported = styled_note_fixture();
+    let (parsed, _) = parse_xlsx_to_output(&imported).unwrap();
+    let exported = write_xlsx_from_parse_output(&parsed).unwrap();
+    let archive = XlsxArchive::new(&exported).unwrap();
+    validate_archive_package_integrity(&archive).unwrap();
+    let vml = String::from_utf8(archive.read_file(&worksheet_vml_path(&archive)).unwrap()).unwrap();
+    for expected in [
+        "margin-left:107.25pt",
+        "margin-top:18pt",
+        "z-index:7",
+        "width:1.5in",
+        "height:55.5pt",
+        "fillcolor=\"#fbf6d6\"",
+        "strokecolor=\"#edeaa1\"",
+        "angle=\"-180\"",
+        "type=\"gradient\"",
+        "type=\"gradientUnscaled\"",
+        "on=\"t\"",
+        "color=\"red\"",
+        "rotation:13",
+        "data=\"4\"",
+        "id=\"customNote\"",
+        "type=\"#customNote\"",
+        "<x:Visible",
+        "<x:PrintObject>False</x:PrintObject>",
+        "<x:AutoFill>True</x:AutoFill>",
+        "<v:stroke dashstyle=\"dash\"/>",
+        "<a:lock v:ext=\"edit\" rotation=\"t\"/>",
+        "xmlns:a=\"urn:schemas-microsoft-com:office:office\"",
+    ] {
+        assert!(
+            vml.contains(expected),
+            "missing preserved property {expected}: {vml}"
+        );
+    }
+    assert!(!vml.contains("<x:MoveWithCells"));
+    assert!(!vml.contains("<x:SizeWithCells"));
+    assert!(vml.find("id=\"_x0000_s4097\"").unwrap() < vml.find("id=\"_x0000_s1025\"").unwrap());
+    let (roundtripped, _) = parse_xlsx_to_output(&exported).unwrap();
+    let notes = &roundtripped.sheets[0].comments;
+    assert_eq!(
+        notes
+            .iter()
+            .find(|note| note.cell_ref == "B2")
+            .unwrap()
+            .content
+            .as_deref(),
+        Some("")
+    );
+    assert_eq!(
+        notes
+            .iter()
+            .find(|note| note.cell_ref == "A1")
+            .unwrap()
+            .content
+            .as_deref(),
+        Some("Literal note")
+    );
+    assert_eq!(
+        notes
+            .iter()
+            .find(|note| note.cell_ref == "B2")
+            .unwrap()
+            .visible,
+        Some(true)
+    );
+}
+
+#[test]
+fn imported_note_presentation_applies_live_edits_and_does_not_resurrect_deleted_notes() {
+    let (mut parsed, _) = parse_xlsx_to_output(&styled_note_fixture()).unwrap();
+    parsed.sheets[0]
+        .comments
+        .retain(|note| note.cell_ref == "B2");
+    let note = &mut parsed.sheets[0].comments[0];
+    note.content = Some("Author:\nLiteral edit".to_string());
+    note.runs.clear();
+    note.note_width = Some(144.0);
+    note.note_height = Some(72.0);
+    note.visible = Some(false);
+    note.note_shape_anchor.as_mut().unwrap().left_column = 5;
+    parsed.sheets[0].comments.push(Comment {
+        cell_ref: "C3".to_string(),
+        author: "New Author".to_string(),
+        content: Some("New literal".to_string()),
+        comment_type: CommentType::Note,
+        ..Default::default()
+    });
+    let exported = write_xlsx_from_parse_output(&parsed).unwrap();
+    let archive = XlsxArchive::new(&exported).unwrap();
+    validate_archive_package_integrity(&archive).unwrap();
+    let vml = String::from_utf8(archive.read_file(&worksheet_vml_path(&archive)).unwrap()).unwrap();
+    assert!(!vml.contains("margin-left:107.25pt"));
+    assert!(!vml.contains("margin-top:18pt"));
+    assert!(vml.contains("width:144pt") && vml.contains("height:72pt"));
+    assert!(vml.contains("visibility:hidden"));
+    assert!(!vml.contains("<x:Visible"));
+    assert!(vml.contains("<x:Anchor>5, 15, 1, 7, 4, 15, 5, 13</x:Anchor>"));
+    assert!(vml.contains("fillcolor=\"#fbf6d6\""));
+    let (roundtripped, _) = parse_xlsx_to_output(&exported).unwrap();
+    let notes = &roundtripped.sheets[0].comments;
+    assert_eq!(notes.len(), 2);
+    assert!(!notes.iter().any(|note| note.cell_ref == "A1"));
+    assert_eq!(
+        notes
+            .iter()
+            .find(|note| note.cell_ref == "B2")
+            .unwrap()
+            .content
+            .as_deref(),
+        Some("Author:\nLiteral edit")
+    );
+    assert_eq!(
+        notes
+            .iter()
+            .find(|note| note.cell_ref == "C3")
+            .unwrap()
+            .content
+            .as_deref(),
+        Some("New literal")
+    );
+}
+
+fn styled_note_fixture() -> Vec<u8> {
+    let comments = r#"<comments xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><authors><author>Author</author></authors><commentList><comment ref="B2" authorId="0"><text/></comment><comment ref="A1" authorId="0"><text><t>Literal note</t></text></comment></commentList></comments>"#;
+    let vml = r##"<xml xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:a="urn:schemas-microsoft-com:office:office"><o:shapelayout v:ext="edit"><o:idmap v:ext="edit" data="4"/></o:shapelayout><v:shapetype id="customNote" coordsize="21600,21600" o:spt="202" path="m,l,21600r21600,l21600,xe"/><v:shape id="_x0000_s4097" type="#customNote" style="position:absolute;margin-left:107.25pt;margin-top:18pt;width:1.5in;height:55.5pt;z-index:7;visibility:visible;rotation:13" fillcolor="#fbf6d6" strokecolor="#edeaa1"><v:fill color2="#fbfe82" angle="-180" type="gradient"><o:fill v:ext="view" type="gradientUnscaled"/></v:fill><v:shadow on="t" color="red" obscured="t"/><v:stroke dashstyle="dash"/><a:lock v:ext="edit" rotation="t"/><v:textbox style="mso-direction-alt:auto"><div style="text-align:right"/></v:textbox><x:ClientData ObjectType="Note"><x:Anchor>2, 15, 1, 7, 4, 15, 5, 13</x:Anchor><x:PrintObject>False</x:PrintObject><x:AutoFill>True</x:AutoFill><x:Row>1</x:Row><x:Column>1</x:Column><x:Visible/></x:ClientData></v:shape><v:shape id="_x0000_s1025" type="#customNote" style="visibility:hidden;z-index:3"><x:ClientData ObjectType="Note"><x:Anchor>1, 15, 0, 2, 3, 31, 4, 14</x:Anchor><x:Row>0</x:Row><x:Column>0</x:Column></x:ClientData></v:shape></xml>"##;
+    let mut builder = ZipBuilder::new();
+    builder
+        .add_deflate("[Content_Types].xml", fixture_content_types().as_bytes())
+        .add_deflate("_rels/.rels", fixture_root_rels().as_bytes())
+        .add_deflate(
+            "xl/_rels/workbook.xml.rels",
+            fixture_workbook_rels().as_bytes(),
+        )
+        .add_deflate("xl/workbook.xml", fixture_workbook().as_bytes())
+        .add_deflate("xl/worksheets/sheet1.xml", fixture_worksheet().as_bytes())
+        .add_deflate(
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            fixture_worksheet_rels().as_bytes(),
+        )
+        .add_deflate("xl/comments1.xml", comments.as_bytes())
+        .add_deflate("xl/drawings/vmlDrawing1.vml", vml.as_bytes());
+    builder.build()
+}
+
+#[test]
 fn note_comment_export_registers_comments_and_vml_package_graph() {
     let mut output = make_single_sheet(
         "Comments",

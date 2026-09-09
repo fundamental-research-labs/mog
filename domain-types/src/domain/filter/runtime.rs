@@ -50,16 +50,30 @@ pub enum ColumnFilter {
     /// Filter by cell or font color.
     #[serde(rename = "color")]
     Color { color: String, by_font: bool },
-    /// Filter by conditional-formatting icon.
-    ///
-    /// Icon evaluation requires CF rule context that the pure compute engine does not
-    /// have, so the engine treats Icon filters as all-pass; real filtering happens in
-    /// the bridge layer (mirrors `compute_table::types::IconFilter`).
+    /// Filter by the displayed CF icon's OOXML identity. A missing index selects cells with no icon.
     #[serde(rename = "icon")]
     Icon {
         icon_set_name: String,
-        icon_index: u8,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        icon_index: Option<u32>,
     },
+}
+
+/// Displayed icon identity shared by CF evaluation and filter predicates.
+/// Indexes follow OOXML ordering, independent of display priority or reverseOrder.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FilterIconIdentity {
+    pub icon_set_name: String,
+    pub icon_index: u32,
+}
+
+/// Whether an imported icon criterion has a supported family and valid index.
+pub fn icon_filter_is_supported(name: &str, index: Option<u32>) -> bool {
+    index.is_none_or(|index| {
+        ooxml_types::cond_format::IconSetType::from_ooxml_token(name)
+            .is_some_and(|set| (index as usize) < set.num_icons())
+    })
 }
 
 /// Logic operator for combining conditions.

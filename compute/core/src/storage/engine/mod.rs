@@ -29,6 +29,7 @@ mod accessors;
 mod atomics;
 mod bridge_imports;
 mod cell_bridge;
+pub(crate) mod cell_metadata;
 mod cell_semantics;
 mod sync_bridge;
 mod table_result_merge;

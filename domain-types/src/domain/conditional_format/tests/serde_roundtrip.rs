@@ -263,6 +263,7 @@ fn cf_style_roundtrip() {
         border_right_color: None,
         border_right_style: None,
         dxf_id: None,
+        dxf_theme_palette: None,
     };
     roundtrip_json(&style);
 }

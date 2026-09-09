@@ -25,6 +25,7 @@ mod dxf_registry;
 mod features;
 mod media;
 mod metadata;
+mod rich_errors;
 mod package_fidelity;
 mod pivot_cache_sources;
 pub(crate) mod pivot_convert;
@@ -45,6 +46,7 @@ use diagnostics::{count_ooxml_smartart_diagrams, count_ooxml_wordart_text_effect
 use dropped_import_diagnostics::append_dropped_import_diagnostics;
 use dxf_registry::populate_dxf_registry_owners;
 use features::*;
+pub(crate) use features::resolve_dxf_to_cf_style;
 use media::build_binary_part_map;
 use package_fidelity::build_package_fidelity_metadata;
 use pivot_cache_sources::build_pivot_cache_sources;
@@ -214,6 +216,9 @@ pub fn full_parse_result_to_parse_output(
         metadata
             .get_or_insert_with(domain_types::WorkbookMetadata::default)
             .rich_data = Some(rich_data);
+    }
+    if let Some(metadata) = &metadata {
+        rich_errors::resolve_rich_errors(&mut sheet_data_vec, metadata);
     }
     if let Some(raw_metadata_xml) = result.raw_metadata_xml.as_ref() {
         let metadata_for_import =

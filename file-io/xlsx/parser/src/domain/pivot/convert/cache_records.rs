@@ -77,6 +77,7 @@ mod tests {
     #[test]
     fn dereferences_shared_item_indices_by_field_position() {
         let parsed_cache = crate::domain::pivot::types::ParsedPivotCache {
+            ooxml_preservation: None,
             definition: ooxml_types::pivot::PivotCacheDefinition {
                 cache_fields: ooxml_types::pivot::PivotCacheFields {
                     count: Some(2),
@@ -127,6 +128,7 @@ mod tests {
     #[test]
     fn invalid_error_values_resolve_to_null() {
         let parsed_cache = crate::domain::pivot::types::ParsedPivotCache {
+            ooxml_preservation: None,
             definition: ooxml_types::pivot::PivotCacheDefinition {
                 cache_fields: ooxml_types::pivot::PivotCacheFields {
                     count: Some(1),

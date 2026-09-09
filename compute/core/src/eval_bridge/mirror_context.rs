@@ -197,6 +197,9 @@ pub(super) fn root_ast_produces_dynamic_array(ast: &ASTNode) -> bool {
         ASTNode::SheetRef { inner, .. }
         | ASTNode::UnresolvedSheetRef { inner, .. }
         | ASTNode::Paren(inner) => root_ast_produces_dynamic_array(inner),
+        ASTNode::Function { name, args } if name.eq_ignore_ascii_case("CELL") => {
+            !matches!(args.first(), Some(ASTNode::Text(info)) if !info.eq_ignore_ascii_case("width"))
+        }
         ASTNode::Function { name, .. } => {
             ROOT_DYNAMIC_ARRAY_FUNCTIONS.contains(&name.to_uppercase().as_str())
         }
@@ -300,6 +303,30 @@ impl<'a> EvalDataAccess for MirrorContext<'a> {
 }
 
 impl<'a> EvalMetadata for MirrorContext<'a> {
+    fn cell_reference_metadata(
+        &self,
+        sheet: &SheetId,
+        row: u32,
+        col: u32,
+    ) -> Option<crate::mirror::cell_metadata::CellReferenceMetadata> {
+        self.access.mirror.cell_metadata_provider.as_ref()?.query(
+            self.access.mirror,
+            sheet,
+            row,
+            col,
+        )
+    }
+    fn date1904(&self) -> bool {
+        self.access.mirror.date1904
+    }
+
+    fn legacy_reference_result(&self) -> bool {
+        self.access
+            .mirror
+            .formula_result_mode(&self.access.current_cell())
+            == Some(crate::mirror::cell_metadata::FormulaResultMode::LegacyScalar)
+    }
+
     fn current_cell(&self) -> CellId {
         self.access.current_cell()
     }
@@ -318,6 +345,10 @@ impl<'a> EvalMetadata for MirrorContext<'a> {
 
     fn resolve_defined_name(&self, name: &str) -> Option<ResolvedName> {
         self.access.resolve_defined_name(name)
+    }
+
+    fn resolve_workbook_name(&self, name: &str) -> Option<ResolvedName> {
+        self.access.resolve_workbook_name(name)
     }
 
     fn resolve_defined_name_for_sheet(&self, name: &str, sheet: SheetId) -> Option<ResolvedName> {
@@ -372,6 +403,14 @@ impl<'a> EvalMetadata for MirrorContext<'a> {
     }
 
     fn cell_has_dynamic_array_formula(&self, sheet: &SheetId, row: u32, col: u32) -> bool {
+        if let Some(id) = self
+            .access
+            .mirror
+            .resolve_cell_id(sheet, cell_types::SheetPos::new(row, col))
+            && let Some(mode) = self.access.mirror.formula_result_mode(&id)
+        {
+            return mode == crate::mirror::cell_metadata::FormulaResultMode::Dynamic;
+        }
         if let Some(ast_cache) = self.ast_cache
             && let Some(cell_id) = self
                 .access
@@ -392,12 +431,50 @@ impl<'a> EvalMetadata for MirrorContext<'a> {
         self.access.is_row_hidden(sheet, row)
     }
 
+    fn is_row_filtered(&self, sheet: &SheetId, row: u32) -> bool {
+        self.access
+            .mirror
+            .cell_metadata_provider
+            .as_ref()
+            .is_some_and(|provider| provider.is_row_filtered(self.access.mirror, sheet, row))
+    }
+
     fn get_table(&self, name: &str) -> Option<&formula_types::TableDef> {
         self.access.get_table(name)
     }
 
     fn find_pivot_table_at(&self, sheet: &SheetId, row: u32, col: u32) -> Option<&PivotTableDef> {
         self.access.find_pivot_table_at(sheet, row, col)
+    }
+
+    #[cfg(feature = "native")]
+    fn indexed_column_search_range(
+        &self,
+        sheet: &SheetId,
+        col: u32,
+        target: &CellValue,
+        query: crate::eval::context::traits::ColumnLookupQuery,
+    ) -> IndexedLookupResult {
+        if !matches!(target, CellValue::Number(_) | CellValue::Text(_)) {
+            return IndexedLookupResult::NotAvailable;
+        }
+        let Some(cache) = self.lookup_cache else {
+            return IndexedLookupResult::NotAvailable;
+        };
+        let Some(values) = self.access.get_column_values(sheet, col) else {
+            return IndexedLookupResult::NotAvailable;
+        };
+        let index = cache.get_or_build_from_col_data(*sheet, col, values);
+        match index.search_range(
+            target,
+            query.match_mode,
+            query.start_row,
+            query.end_row,
+            query.reverse,
+        ) {
+            Some(row) => IndexedLookupResult::Found(row),
+            None => IndexedLookupResult::NotFound,
+        }
     }
 
     #[cfg(feature = "native")]

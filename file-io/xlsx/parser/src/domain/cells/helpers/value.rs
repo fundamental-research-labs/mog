@@ -131,10 +131,10 @@ fn extract_v_forward<'a>(
     (VALUE_TYPE_NONE, b"")
 }
 
-pub(super) fn extract_inline_string_owned_forward(xml: &[u8], is_lt: usize) -> Option<Vec<u8>> {
+pub(crate) fn extract_inline_string_owned_forward(xml: &[u8], is_lt: usize) -> Option<Vec<u8>> {
     let is_tag = start_tag_at(xml, is_lt, b"is")?;
     if is_tag.is_self_closing {
-        return None;
+        return Some(Vec::new());
     }
     let is_close = find_closing_tag_span(xml, b"is", is_tag.content_start)?;
     let is_end = is_close.lt;
@@ -160,7 +160,7 @@ pub(super) fn extract_inline_string_owned_forward(xml: &[u8], is_lt: usize) -> O
         pos = t_close.end;
     }
 
-    if out.is_empty() { None } else { Some(out) }
+    Some(out)
 }
 
 fn extract_inline_string_slice(xml: &[u8]) -> Option<&[u8]> {

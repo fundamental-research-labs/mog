@@ -100,6 +100,14 @@ fn test_write_formula_canonicalizes_ooxml_future_function_prefixes() {
 }
 
 #[test]
+fn test_write_digit_containing_function_storage_names() {
+    let mut writer = SheetWriter::new();
+    writer.set_formula(0, 0, "T.DIST.2T(2,10)+T.INV.2T(0.05,10)+LOG10(100)+SUMX2MY2(B1:B2,C1:C2)");
+    let xml = String::from_utf8(writer.to_xml()).unwrap();
+    assert!(xml.contains("<f>_xlfn.T.DIST.2T(2,10)+_xlfn.T.INV.2T(0.05,10)+LOG10(100)+SUMX2MY2(B1:B2,C1:C2)</f>"));
+}
+
+#[test]
 fn test_write_formula_with_cached_value() {
     let mut writer = SheetWriter::new();
     writer.set_formula_with_value(0, 0, "A1*2", CellValue::Number(84.0));

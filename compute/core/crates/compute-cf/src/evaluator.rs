@@ -178,14 +178,13 @@ pub fn evaluate_rule_for_cell(
 // CascadeEvaluator
 // =============================================================================
 
-/// Stateful cascade evaluator that tracks stop-if-true per category.
+/// Stateful cascade evaluator that stops all lower-priority rules after a match.
 ///
 /// Captures the cascade logic (stop-if-true + merge) in one place.
 /// Both `evaluate_rules()` and the scheduler delegate to this.
 pub struct CascadeEvaluator {
     result: Option<CFMatchResult>,
-    style_stopped: bool,
-    visual_stopped: bool,
+    stopped: bool,
 }
 
 impl Default for CascadeEvaluator {
@@ -198,20 +197,14 @@ impl CascadeEvaluator {
     pub fn new() -> Self {
         Self {
             result: None,
-            style_stopped: false,
-            visual_stopped: false,
+            stopped: false,
         }
     }
 
-    /// Check if a rule's category is already stopped.
+    /// Check whether a matching higher-priority rule stopped this cell's cascade.
     /// Lets the caller skip expensive work (e.g., formula evaluation).
-    pub fn is_stopped(&self, rule: &CFRule) -> bool {
-        let is_visual = rule.kind.is_visual();
-        if is_visual {
-            self.visual_stopped
-        } else {
-            self.style_stopped
-        }
+    pub fn is_stopped(&self) -> bool {
+        self.stopped
     }
 
     /// Evaluate a single rule and merge the result if it matches.
@@ -237,13 +230,7 @@ impl CascadeEvaluator {
         now: NaiveDate,
         has_formula: bool,
     ) -> &mut Self {
-        let is_visual = rule.kind.is_visual();
-
-        // Skip if this category has been stopped
-        if is_visual && self.visual_stopped {
-            return self;
-        }
-        if !is_visual && self.style_stopped {
+        if self.stopped {
             return self;
         }
 
@@ -256,11 +243,7 @@ impl CascadeEvaluator {
             });
 
             if rule.stop_if_true {
-                if is_visual {
-                    self.visual_stopped = true;
-                } else {
-                    self.style_stopped = true;
-                }
+                self.stopped = true;
             }
         }
 
@@ -280,11 +263,9 @@ impl CascadeEvaluator {
 /// Evaluate multiple CF rules against a cell value.
 ///
 /// Rules should be sorted by priority (lower number = higher priority = first).
-/// Handles stop-if-true with per-category semantics (matching Excel):
-/// - Style rules (CellValue, Formula, Top10, etc.) and visual rules (ColorScale,
-///   DataBar, IconSet) are separate categories.
-/// - `stop_if_true` on a style rule stops only lower-priority style rules.
-/// - `stop_if_true` on a visual rule stops only lower-priority visual rules.
+/// A matching `stop_if_true` rule stops every lower-priority rule for the cell,
+/// including rules with different visual or style properties. A matching rule
+/// with no style still stops the cascade; earlier results remain intact.
 ///
 /// Returns combined `CFMatchResult` from all matching rules, or `None` if no rules match.
 ///

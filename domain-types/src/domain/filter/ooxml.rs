@@ -150,7 +150,8 @@ pub enum OoxmlFilterType {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         icon_set: Option<String>,
         /// `iconId` attribute — zero-based index within the icon set.
-        icon_id: u32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        icon_id: Option<u32>,
     },
 }
 

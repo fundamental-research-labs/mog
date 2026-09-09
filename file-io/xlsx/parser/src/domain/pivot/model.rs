@@ -283,6 +283,7 @@ pub struct PageField {
 /// Row or column layout item in the rendered pivot table.
 #[derive(Debug, Clone, Default)]
 pub struct PivotRowColItem {
+    pub data_field_index: u32,
     /// Optional item type.
     pub item_type: Option<PivotItemType>,
     /// Field/item references (`<x>` children); `None` means a default `<x/>`.

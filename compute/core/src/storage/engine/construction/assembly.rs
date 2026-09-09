@@ -27,8 +27,21 @@ pub(in crate::storage::engine) fn from_snapshot_with_layout_metrics(
     let (compute, recalc_result, mirror) = {
         let _span = tracing::info_span!("compute_init_from_snapshot").entered();
         let mut compute = ComputeCore::new();
-        let mut mirror = CellMirror::new();
-        let recalc_result = compute.init_from_snapshot(&mut mirror, snapshot.clone())?;
+        let initial_indexes = build_grid_indexes_from_yrs(
+            &storage,
+            &snapshot,
+            std::sync::Arc::new(cell_types::IdAllocator::with_seed(
+                snapshot_id_high_water_mark(&snapshot),
+            )),
+        )?;
+        let mut mirror = build_finalized_mirror_from_snapshot(
+            &storage,
+            &snapshot,
+            &initial_indexes,
+            layout_metrics,
+        )?;
+        let recalc_result =
+            compute.init_from_snapshot_with_prebuilt_mirror(&mut mirror, snapshot.clone())?;
         (compute, recalc_result, mirror)
     };
 
@@ -88,8 +101,12 @@ pub(in crate::storage::engine) fn from_yrs_state_with_layout_metrics(
 
     let (compute, _initial_recalc_result, mirror) = {
         let mut compute = ComputeCore::new();
-        let mut mirror =
-            build_finalized_mirror_from_snapshot(&storage, &snapshot, &initial_grid_indexes)?;
+        let mut mirror = build_finalized_mirror_from_snapshot(
+            &storage,
+            &snapshot,
+            &initial_grid_indexes,
+            layout_metrics,
+        )?;
         let recalc_result =
             compute.init_from_snapshot_with_prebuilt_mirror(&mut mirror, snapshot.clone())?;
         // Override ComputeCore's allocator AFTER init_from_snapshot (which
@@ -233,6 +250,12 @@ fn assemble_engine_inner(
     id_alloc: std::sync::Arc<cell_types::IdAllocator>,
     layout_metrics: domain_types::units::LayoutMetrics,
 ) -> Result<YrsComputeEngine, ComputeError> {
+    mirror.install_cell_metadata_provider(crate::storage::engine::cell_metadata::provider(
+        &storage,
+        layout_metrics,
+    ));
+    mirror.date1904 =
+        workbook_settings::get_settings(storage.doc(), storage.workbook_map()).date1904;
     let grid_indexes = build_grid_indexes_from_yrs(&storage, snapshot, grid_id_alloc.clone())?;
     let merge_indexes = build_merge_indexes(&storage, snapshot, &grid_indexes)?;
     let layout_indexes = build_layout_indexes(&storage, snapshot, &grid_indexes, layout_metrics)?;
@@ -338,11 +361,33 @@ pub(in crate::storage::engine) fn rebuild_engine_from_snapshot(
     let recalc_result = {
         let mut profile = crate::xlsx_profile::PhaseTimer::new("import", "mirror_compute_rebuild");
         engine.stores.compute = ComputeCore::new();
+        let date1904 = workbook_settings::get_settings(
+            engine.stores.storage.doc(),
+            engine.stores.storage.workbook_map(),
+        )
+        .date1904;
         let recalc_result = if do_recalc {
+            let initial_indexes = build_grid_indexes_from_yrs(
+                &engine.stores.storage,
+                &workbook_snap,
+                std::sync::Arc::new(cell_types::IdAllocator::with_seed(
+                    snapshot_id_high_water_mark(&workbook_snap),
+                )),
+            )?;
+            engine.mirror = build_finalized_mirror_from_snapshot(
+                &engine.stores.storage,
+                &workbook_snap,
+                &initial_indexes,
+                engine.stores.layout_metrics,
+            )?;
+            engine.mirror.date1904 = date1904;
             engine
                 .stores
                 .compute
-                .init_from_snapshot(&mut engine.mirror, workbook_snap.clone())?
+                .init_from_snapshot_with_prebuilt_mirror(
+                    &mut engine.mirror,
+                    workbook_snap.clone(),
+                )?
         } else {
             #[cfg(target_arch = "wasm32")]
             {
@@ -359,6 +404,13 @@ pub(in crate::storage::engine) fn rebuild_engine_from_snapshot(
                     .init_from_snapshot_no_recalc(&mut engine.mirror, workbook_snap.clone())?
             }
         };
+        engine.mirror.date1904 = date1904;
+        engine.mirror.install_cell_metadata_provider(
+            crate::storage::engine::cell_metadata::provider(
+                &engine.stores.storage,
+                engine.stores.layout_metrics,
+            ),
+        );
         profile.counter("sheets", workbook_snap.sheets.len() as u64);
         profile.counter(
             "snapshot_cells",

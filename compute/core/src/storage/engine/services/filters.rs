@@ -826,6 +826,7 @@ fn apply_filter_with_action(
     }
 
     let sid = *sheet_id;
+    let icons = crate::storage::engine::services::cf_cache::evaluate_filter_icons(stores, mirror, sheet_id, filter_id);
     let results = filters::evaluate_filter(
         stores.storage.doc(),
         stores.storage.sheets(),
@@ -841,6 +842,7 @@ fn apply_filter_with_action(
         |row, col| {
             resolved_formats::get_resolved_cell_format(stores, mirror, settings, sheet_id, row, col)
         },
+        |row, col| icons.get(&(row, col)).cloned(),
         |hex| resolve_filter_cell_pos(stores, mirror, sheet_id, hex),
     );
 

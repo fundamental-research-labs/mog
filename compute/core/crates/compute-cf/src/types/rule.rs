@@ -128,6 +128,8 @@ pub struct CFIconThreshold {
 /// Icon set configuration. Pre-parsed.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CFIconSet {
+    /// Optional overrides in rendered best-first icon order, including the lowest bucket.
+    pub custom_icons: Vec<Option<CustomIcon>>,
     pub icon_set_name: CFIconSetName,
     pub thresholds: Vec<CFIconThreshold>,
     pub reverse_order: bool,

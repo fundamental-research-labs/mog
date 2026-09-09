@@ -453,8 +453,12 @@ fn unsupported_reasons_for_table_filter_spec(
         FilterSpec::Color { .. } => {
             vec![filters::ImportFilterUnsupportedReason::ColorDxfUnresolved]
         }
-        FilterSpec::Icon { .. } => {
-            vec![filters::ImportFilterUnsupportedReason::IconFilterUnsupported]
+        FilterSpec::Icon { icon_set, icon_id } => {
+            if domain_types::icon_filter_is_supported(icon_set, *icon_id) {
+                Vec::new()
+            } else {
+                vec![filters::ImportFilterUnsupportedReason::IconFilterUnsupported]
+            }
         }
         _ => Vec::new(),
     }
@@ -504,7 +508,11 @@ fn table_filter_spec_to_column_filter(filter: &FilterSpec) -> Option<filters::Co
                 filters::TopBottomBy::Items
             },
         },
-        FilterSpec::Dynamic { .. } | FilterSpec::Color { .. } | FilterSpec::Icon { .. } => {
+        FilterSpec::Icon { icon_set, icon_id } => filters::ColumnFilter::Icon {
+            icon_set_name: icon_set.clone(),
+            icon_index: *icon_id,
+        },
+        FilterSpec::Dynamic { .. } | FilterSpec::Color { .. } => {
             return None;
         }
     })

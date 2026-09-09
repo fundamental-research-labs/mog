@@ -5,7 +5,7 @@ use crate::eval::context::traits::{EvalDataAccess, EvalMetadata};
 use crate::eval::eval_value::EvalValue;
 use cell_types::SheetId;
 use compute_parser::{ASTNode, CellRefNode, RangeRef};
-use formula_types::{CellRef, RangeType};
+use formula_types::{CellRef, RangeType, ResolvedName};
 use value_types::{CellError, CellValue, ComputeError};
 
 pub(in crate::eval) type RefArea = (SheetId, u32, u32, u32, u32);
@@ -112,8 +112,22 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
     }
 
     pub(super) fn is_referenceable_for_intersection(node: &ASTNode) -> bool {
+        // This is a candidate classifier, not a guarantee of reference identity.
+        // Names and INDEX can also yield ordinary values; callers must preserve
+        // value evaluation when the runtime area probe cannot resolve a reference.
         match node {
-            ASTNode::CellReference(_) | ASTNode::Range(_) | ASTNode::RangeOp { .. } => true,
+            ASTNode::CellReference(_)
+            | ASTNode::Range(_)
+            | ASTNode::RangeOp { .. }
+            | ASTNode::StructuredRef(_)
+            | ASTNode::Identifier(_) => true,
+            ASTNode::ExternalNameRef { workbook, .. } => workbook.is_current_workbook(),
+            ASTNode::Function { name, .. } => {
+                matches!(
+                    name.to_ascii_uppercase().as_str(),
+                    "INDEX" | "OFFSET" | "INDIRECT"
+                )
+            }
             ASTNode::BinaryOp {
                 op: compute_parser::BinOp::Intersect,
                 left,
@@ -196,7 +210,10 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
     {
         Box::pin(async move {
             self.tick()?;
-            self.eval_node_as_area_inner(node).await
+            self.push_depth()?;
+            let result = self.eval_node_as_area_inner(node).await;
+            self.pop_depth();
+            result
         })
     }
 
@@ -232,11 +249,71 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
                 ))
             }
 
-            ASTNode::SheetRef { inner, .. } => self.eval_node_as_area(inner).await,
+            ASTNode::SheetRef { sheet, inner } => {
+                if let ASTNode::Identifier(name) = inner.as_ref() {
+                    return self
+                        .resolved_name_as_area(
+                            self.meta.resolve_defined_name_for_sheet(name, *sheet),
+                        )
+                        .await;
+                }
+                let patched = Self::patch_sheet_id(inner, *sheet);
+                self.eval_node_as_area(&patched).await
+            }
+
+            ASTNode::Identifier(name) => {
+                self.resolved_name_as_area(self.meta.resolve_defined_name(name))
+                    .await
+            }
+            ASTNode::ExternalNameRef { workbook, name } if workbook.is_current_workbook() => {
+                self.resolved_name_as_area(self.meta.resolve_workbook_name(name))
+                    .await
+            }
+
+            ASTNode::StructuredRef(reference) => {
+                let resolved = self.meta.resolve_structured_ref(reference).map_err(|_| {
+                    ComputeError::Eval {
+                        message: "Cannot resolve table reference".into(),
+                    }
+                })?;
+                let [range] = resolved.ranges.as_slice() else {
+                    return Err(ComputeError::Eval {
+                        message: "Table reference contains multiple areas".into(),
+                    });
+                };
+                let Some((&first, rest)) = range.columns.split_first() else {
+                    return Err(ComputeError::Eval {
+                        message: "Table reference is empty".into(),
+                    });
+                };
+                if rest
+                    .iter()
+                    .enumerate()
+                    .any(|(index, &col)| col != first + index as u32 + 1)
+                {
+                    return Err(ComputeError::Eval {
+                        message: "Table reference contains disjoint columns".into(),
+                    });
+                }
+                Ok((
+                    resolved.sheet,
+                    range.start_row,
+                    first,
+                    range.end_row,
+                    *range.columns.last().unwrap(),
+                ))
+            }
 
             ASTNode::UnresolvedSheetRef { sheet_name, inner } => {
                 match self.meta.sheet_by_name(sheet_name) {
                     Some(sheet_id) => {
+                        if let ASTNode::Identifier(name) = inner.as_ref() {
+                            return self
+                                .resolved_name_as_area(
+                                    self.meta.resolve_defined_name_for_sheet(name, sheet_id),
+                                )
+                                .await;
+                        }
                         let resolved = Self::patch_sheet_id(inner, sheet_id);
                         self.eval_node_as_area(&resolved).await
                     }
@@ -247,6 +324,24 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
             }
 
             ASTNode::Paren(inner) => self.eval_node_as_area(inner).await,
+
+            ASTNode::RangeOp { start, end } => {
+                let (sheet, sr, sc, er, ec) = self.eval_node_as_area(start).await?;
+                let (other_sheet, other_sr, other_sc, other_er, other_ec) =
+                    self.eval_node_as_area(end).await?;
+                if sheet != other_sheet {
+                    return Err(ComputeError::Eval {
+                        message: "Range endpoints belong to different sheets".into(),
+                    });
+                }
+                Ok((
+                    sheet,
+                    sr.min(other_sr),
+                    sc.min(other_sc),
+                    er.max(other_er),
+                    ec.max(other_ec),
+                ))
+            }
 
             ASTNode::BinaryOp {
                 op: compute_parser::BinOp::Intersect,
@@ -263,6 +358,10 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
                 match upper.as_str() {
                     "INDEX" => self.eval_index_as_area(args).await,
                     "OFFSET" => self.eval_offset_as_area(args).await,
+                    "INDIRECT" => {
+                        let reference = self.indirect_reference_node(args).await?;
+                        self.eval_node_as_area(&reference).await
+                    }
                     _ => Err(ComputeError::Eval {
                         message: format!("RangeOp: function '{}' cannot produce a reference", name),
                     }),
@@ -271,6 +370,40 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
 
             _ => Err(ComputeError::Eval {
                 message: "RangeOp: expression cannot produce a reference".into(),
+            }),
+        }
+    }
+    async fn resolved_name_as_area(
+        &mut self,
+        resolved: Option<ResolvedName>,
+    ) -> Result<RefArea, ComputeError> {
+        match resolved {
+            Some(ResolvedName::Cell { sheet, row, col }) => Ok((sheet, row, col, row, col)),
+            Some(ResolvedName::Range {
+                sheet,
+                start_row,
+                start_col,
+                end_row,
+                end_col,
+            }) => Ok((
+                sheet,
+                start_row.min(end_row),
+                start_col.min(end_col),
+                start_row.max(end_row),
+                start_col.max(end_col),
+            )),
+            Some(ResolvedName::Formula { raw_expression }) => {
+                let node = super::reference_resolution::parse_defined_name_formula(
+                    &raw_expression,
+                    self.meta,
+                )
+                .ok_or_else(|| ComputeError::Eval {
+                    message: "Cannot parse named reference".into(),
+                })?;
+                self.eval_node_as_area(&node).await
+            }
+            _ => Err(ComputeError::Eval {
+                message: "Name does not identify a reference".into(),
             }),
         }
     }

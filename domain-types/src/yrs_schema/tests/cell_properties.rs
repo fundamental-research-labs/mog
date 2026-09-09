@@ -24,6 +24,11 @@ fn cell_properties_hydrates_format_and_metadata_from_one_flat_map() {
         style_id: Some(5),
         cell_metadata_index: Some(1),
         vm: Some(7),
+        imported_rich_error: Some(crate::ImportedRichError {
+            vm: 7,
+            semantic: value_types::CellError::Spill,
+            fallback: value_types::CellError::Value,
+        }),
         formula_result_type: Some(2),
         has_empty_cached_value: true,
         original_sst_index: Some(9),

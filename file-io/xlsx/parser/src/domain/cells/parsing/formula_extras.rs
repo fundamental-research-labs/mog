@@ -1,4 +1,7 @@
-use super::super::helpers::{extract_formula_extras_fused, parse_cell_ref_fast};
+use super::super::helpers::{
+    extract_formula_extras_fused, extract_inline_string_owned_forward, find_start_tag,
+    parse_cell_ref_fast,
+};
 use super::super::types::{
     CellData, ParseExtras, SharedFormulaMaster, VALUE_TYPE_CACHED_FORMULA, VALUE_TYPE_FORMULA,
 };
@@ -66,6 +69,18 @@ pub(super) fn collect_formula_extras(
             strings.extend_from_slice(cached_bytes);
             extras.cached_values.push((last_idx, offset, len));
         }
+    }
+
+    // Some producers encode formula caches with <is> rather than <v>.
+    // Decode each text run once, exactly as for ordinary inline strings.
+    if fe.v_content.is_none()
+        && !fe.v_self_closing
+        && let Some(is_tag) = find_start_tag(cell_xml, b"is", 0)
+        && let Some(text) = extract_inline_string_owned_forward(cell_xml, is_tag.lt)
+    {
+        extras
+            .cached_inline_strings
+            .push((last_idx, validated_xml_text(&text)));
     }
 
     if fe.ca {

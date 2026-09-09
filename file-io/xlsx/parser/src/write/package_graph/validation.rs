@@ -107,7 +107,8 @@ pub(super) fn validate_relationship_target_semantic_kind(
         (RelationshipOwnerKind::Drawing, OoxmlRelationshipType::ChartEx) => {
             Some(domain_types::XlsxPackagePartKind::ChartEx)
         }
-        (RelationshipOwnerKind::Drawing, OoxmlRelationshipType::Image)
+        (RelationshipOwnerKind::Worksheet, OoxmlRelationshipType::Image)
+        | (RelationshipOwnerKind::Drawing, OoxmlRelationshipType::Image)
         | (RelationshipOwnerKind::Chart, OoxmlRelationshipType::Image)
         | (RelationshipOwnerKind::VmlDrawing, OoxmlRelationshipType::Image) => {
             Some(domain_types::XlsxPackagePartKind::Media)
@@ -373,9 +374,13 @@ fn relationship_type_allowed_for_owner(
             RelationshipOwnerKind::Worksheet | RelationshipOwnerKind::Drawing
         ),
         Rel::ActiveXControlBinary => true,
+        // Worksheet objectPr/controlPr preview images are legal owners. The
+        // final archive gate checks the emitted XML's concrete owning reference;
+        // it is unavailable when this pre-emission graph is resolved.
         Rel::Image => matches!(
             owner,
-            RelationshipOwnerKind::Drawing
+            RelationshipOwnerKind::Worksheet
+                | RelationshipOwnerKind::Drawing
                 | RelationshipOwnerKind::Chart
                 | RelationshipOwnerKind::VmlDrawing
                 | RelationshipOwnerKind::RichData
@@ -444,7 +449,7 @@ fn expected_owner_description(rel_type: &OoxmlRelationshipType) -> &'static str 
         | Rel::Timeline => "worksheet relationships",
         Rel::Hyperlink => "worksheet or drawing relationships",
         Rel::ActiveXControlBinary => "ActiveX control relationships",
-        Rel::Image => "drawing, chart, VML drawing, or rich data relationships",
+        Rel::Image => "worksheet preview, drawing, chart, VML drawing, or rich data relationships",
         Rel::Chart
         | Rel::ChartEx
         | Rel::DiagramData

@@ -832,6 +832,7 @@ fn evaluate_runtime_filter(
 ) -> Vec<filters::FilterEvaluationResult> {
     let sid = *sheet_id;
     let grid_index = stores.grid_indexes.get(&sid);
+    let icons = crate::storage::engine::services::cf_cache::evaluate_filter_icons(stores, mirror, sheet_id, filter_id);
     filters::evaluate_filter(
         stores.storage.doc(),
         stores.storage.sheets(),
@@ -878,6 +879,7 @@ fn evaluate_runtime_filter(
                 ),
             }
         },
+        |row, col| icons.get(&(row, col)).cloned(),
         |hex| {
             let id = hex_to_id(hex)?;
             let cell_id = CellId::from_raw(id);

@@ -124,15 +124,14 @@ pub trait BridgeStructuredError: BridgeError {
 // ```
 //
 // The opening sentinel `[BRIDGE_ERROR]` is deliberately ASCII, contains no
-// JSON-special characters, and is unambiguous on the TS side: a single
-// `String.startsWith('[BRIDGE_ERROR]')` check identifies the structured
+// JSON-special characters, and is unambiguous: a single
+// `starts_with("[BRIDGE_ERROR]")` check identifies the structured
 // path. Anything else is a legacy/free-form Display error.
 //
-// Both NAPI and WASM call the same `format_bridge_error` helper so the
-// envelope is byte-for-byte identical across transports.
+// Callers use the same `format_bridge_error` helper so the envelope is
+// byte-for-byte identical.
 
-/// Sentinel prefix marking a tagged-JSON bridge error. Kept in sync with
-/// `parseBridgeError` on the TS side (`infra/transport/src/bridge-error.ts`).
+/// Sentinel prefix marking a tagged-JSON bridge error.
 pub const BRIDGE_ERROR_SENTINEL: &str = "[BRIDGE_ERROR]";
 
 /// Newtype wrapper used by [`format_bridge_error`] to anchor inherent-vs-

@@ -50,8 +50,8 @@ pub(crate) enum LifecycleKind {
 ///
 /// `TaggedEnum` carries a full schema for serde-tagged enums (e.g.
 /// `#[serde(tag = "kind", rename_all = "snake_case")] enum AccessTarget { .. }`).
-/// This is a Phase B.2 extension: NAPI/PyO3 codegens consume the schema to emit
-/// discriminated-union wire encoding. The IR shape here is what B.2 destructures.
+/// This is a Phase B.2 extension: the schema describes discriminated-union
+/// wire encoding. The IR shape here is what B.2 destructures.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ParamTag {
     Str,

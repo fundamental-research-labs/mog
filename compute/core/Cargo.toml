@@ -121,7 +121,7 @@ compute-text-measurement = { path = "crates/compute-text-measurement" }
 # Headless sheet screenshot renderer (tiny-skia rasterizer → PNG)
 compute-screenshot = { path = "crates/compute-screenshot" }
 
-# Bridge code generation (proc macros for WASM/Tauri/TS binding generation)
+# Bridge code generation (proc macros for `#[bridge::api]` descriptors)
 bridge-core = { path = "../../infra/rust-bridge/bridge-core" }
 bridge-types = { path = "../../infra/rust-bridge/bridge-types" }
 

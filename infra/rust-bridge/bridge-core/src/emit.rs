@@ -279,8 +279,7 @@ fn emit_method(method: &MethodDescriptor, crate_path: Option<&str>) -> TokenStre
 
 /// Emit a `[tagged_enum ...]` wire form for a `ParamTag::TaggedEnum`.
 ///
-/// Shape (consumed by B.2 NAPI/PyO3 codegens, mirrors the `#[bridge::tagged_enum(...)]`
-/// attribute grammar):
+/// Shape (mirrors the `#[bridge::tagged_enum(...)]` attribute grammar):
 /// ```ignore
 /// [tagged_enum name = "AccessTarget", tag = "kind", content = "payload",
 ///     variants(

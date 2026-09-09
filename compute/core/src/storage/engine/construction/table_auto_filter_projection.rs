@@ -7,12 +7,12 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use cell_types::{SheetId, SheetPos};
+use cell_types::SheetId;
 use compute_document::hex::id_to_hex;
 use domain_types::domain::table::{FilterSpec, TableCatalogEntry as CanonicalTable};
 use value_types::CellValue;
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::storage::engine::filter_import_diagnostics::{
     resolve_filter_cell_pos, unsupported_filter_import_diagnostic, upsert_import_diagnostic_phase,
 };
@@ -21,20 +21,20 @@ use crate::storage::sheet::{filters, properties};
 
 pub(in crate::storage::engine) fn materialize_table_auto_filters_from_preserved_specs(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     import_report: Option<&mut domain_types::ImportReport>,
     import_phase: domain_types::ImportPhase,
 ) {
-    let tables = mirror.all_tables().to_vec();
-    materialize_preserved_tables(stores, mirror, tables, import_report, import_phase);
+    let tables = cell_store.all_tables().to_vec();
+    materialize_preserved_tables(stores, cell_store, tables, import_report, import_phase);
 }
 
 pub(in crate::storage::engine) fn materialize_table_auto_filters_for_sheets(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_ids: &[SheetId],
 ) {
-    let tables = mirror
+    let tables = cell_store
         .all_tables()
         .iter()
         .filter(|table| {
@@ -44,7 +44,7 @@ pub(in crate::storage::engine) fn materialize_table_auto_filters_for_sheets(
         .collect();
     materialize_preserved_tables(
         stores,
-        mirror,
+        cell_store,
         tables,
         None,
         domain_types::ImportPhase::FullHydration,
@@ -53,7 +53,7 @@ pub(in crate::storage::engine) fn materialize_table_auto_filters_for_sheets(
 
 fn materialize_preserved_tables(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     tables: Vec<CanonicalTable>,
     mut import_report: Option<&mut domain_types::ImportReport>,
     import_phase: domain_types::ImportPhase,
@@ -72,11 +72,11 @@ fn materialize_preserved_tables(
         if !table.has_header_row {
             continue;
         }
-        stores.compute.set_table(mirror, table.clone());
+        stores.compute.set_table(cell_store, table.clone());
 
         materialize_table_auto_filter_from_preserved_spec(
             stores,
-            mirror,
+            cell_store,
             &sheet_id,
             &table,
             import_report.as_deref_mut(),
@@ -87,7 +87,7 @@ fn materialize_preserved_tables(
 
 fn materialize_table_auto_filter_from_preserved_spec(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     table: &CanonicalTable,
     import_report: Option<&mut domain_types::ImportReport>,
@@ -112,22 +112,26 @@ fn materialize_table_auto_filter_from_preserved_spec(
         col_id_to_header_cell_id,
         table_column_id_to_header_cell_id,
     ) = {
-        let Some(grid) = stores.grid_indexes.get_mut(sheet_id) else {
+        use crate::storage::engine::services::cell_editing::ensure_cell_id;
+        let Some(header_start) = ensure_cell_id(stores, cell_store, sheet_id, start_row, start_col)
+        else {
             return;
         };
-
-        let header_start = grid.ensure_cell_id(start_row, start_col);
-        let header_end = grid.ensure_cell_id(start_row, end_col);
-        let data_end = grid.ensure_cell_id(data_end_row, end_col);
-        mirror.register_identity_only(sheet_id, SheetPos::new(start_row, start_col), header_start);
-        mirror.register_identity_only(sheet_id, SheetPos::new(start_row, end_col), header_end);
-        mirror.register_identity_only(sheet_id, SheetPos::new(data_end_row, end_col), data_end);
+        let Some(header_end) = ensure_cell_id(stores, cell_store, sheet_id, start_row, end_col)
+        else {
+            return;
+        };
+        let Some(data_end) = ensure_cell_id(stores, cell_store, sheet_id, data_end_row, end_col)
+        else {
+            return;
+        };
 
         let mut col_id_to_header_cell_id = BTreeMap::new();
         let mut table_column_id_to_header_cell_id = BTreeMap::new();
         for col in start_col..=end_col {
-            let cell_id = grid.ensure_cell_id(start_row, col);
-            mirror.register_identity_only(sheet_id, SheetPos::new(start_row, col), cell_id);
+            let Some(cell_id) = ensure_cell_id(stores, cell_store, sheet_id, start_row, col) else {
+                return;
+            };
             let relative_col = col.saturating_sub(start_col);
             let header_cell_id = id_to_hex(cell_id.as_u128()).to_string();
             col_id_to_header_cell_id.insert(relative_col, header_cell_id.clone());
@@ -206,7 +210,7 @@ fn materialize_table_auto_filter_from_preserved_spec(
     {
         record_unsupported_table_filter_import_diagnostics(
             stores,
-            mirror,
+            cell_store,
             sheet_id,
             table,
             &binding,
@@ -279,7 +283,7 @@ fn upsert_table_auto_filter_binding(
 
 fn record_unsupported_table_filter_import_diagnostics(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     table: &CanonicalTable,
     binding: &filters::FilterMetadataBinding,
@@ -304,7 +308,7 @@ fn record_unsupported_table_filter_import_diagnostics(
             Some(table.id.clone()),
             None,
             None,
-            resolve_filter_cell_pos(stores, mirror, sheet_id, &binding.header_start_cell_id),
+            resolve_filter_cell_pos(cell_store, sheet_id, &binding.header_start_cell_id),
             vec![filters::ImportFilterUnsupportedReason::UnknownExtension],
             "tableFilter".to_string(),
             domain_types::ImportFeatureKind::Table,
@@ -332,7 +336,7 @@ fn record_unsupported_table_filter_import_diagnostics(
             .col_id_to_header_cell_id
             .get(&column.col_id)
             .and_then(|header_cell_id| {
-                resolve_filter_cell_pos(stores, mirror, sheet_id, header_cell_id)
+                resolve_filter_cell_pos(cell_store, sheet_id, header_cell_id)
             });
         let diagnostic = unsupported_filter_import_diagnostic(
             binding,

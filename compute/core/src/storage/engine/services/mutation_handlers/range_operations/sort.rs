@@ -2,7 +2,7 @@ use cell_types::{CellId, SheetId, SheetPos};
 use compute_document::hex::id_to_hex;
 use value_types::{CellValue, ComputeError};
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::snapshot::RecalcResult;
 use crate::storage::engine::services::resolved_formats;
 use crate::storage::engine::settings::EngineSettings;
@@ -13,14 +13,14 @@ use super::patches::{merge_recalc_results, synthetic_null_change};
 use super::range_sort::sort_range_backed_rows;
 
 fn sort_range_intersects_range_view(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,
     end_row: u32,
     end_col: u32,
 ) -> bool {
-    mirror
+    cell_store
         .get_sheet(sheet_id)
         .map(|sheet| {
             !sheet
@@ -56,25 +56,15 @@ impl SortRect {
     }
 }
 
-fn resolve_filter_anchor_pos(
-    stores: &EngineStores,
-    mirror: &CellMirror,
-    sheet_id: &SheetId,
-    cell_id_hex: &str,
-) -> Option<(u32, u32)> {
+fn resolve_filter_anchor_pos(cell_store: &CellStore, cell_id_hex: &str) -> Option<(u32, u32)> {
     let cell_id = CellId::from_raw(compute_document::hex::hex_to_id(cell_id_hex)?);
-    if let Some(pos) = mirror.resolve_position(&cell_id) {
-        return Some((pos.row(), pos.col()));
-    }
-    stores
-        .grid_indexes
-        .get(sheet_id)
-        .and_then(|grid| grid.cell_position(&cell_id))
+    let pos = cell_store.resolve_position(&cell_id)?;
+    Some((pos.row(), pos.col()))
 }
 
 fn capture_filter_range_anchors(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,
@@ -90,12 +80,9 @@ fn capture_filter_range_anchors(
     filters::get_filters_in_sheet(&stores.storage, sheet_id)
         .into_iter()
         .filter_map(|filter| {
-            let header_start =
-                resolve_filter_anchor_pos(stores, mirror, sheet_id, &filter.header_start_cell_id)?;
-            let header_end =
-                resolve_filter_anchor_pos(stores, mirror, sheet_id, &filter.header_end_cell_id)?;
-            let data_end =
-                resolve_filter_anchor_pos(stores, mirror, sheet_id, &filter.data_end_cell_id)?;
+            let header_start = resolve_filter_anchor_pos(cell_store, &filter.header_start_cell_id)?;
+            let header_end = resolve_filter_anchor_pos(cell_store, &filter.header_end_cell_id)?;
+            let data_end = resolve_filter_anchor_pos(cell_store, &filter.data_end_cell_id)?;
 
             let filter_start_row = header_start.0;
             let filter_start_col = header_start.1.min(header_end.1);
@@ -123,20 +110,19 @@ fn capture_filter_range_anchors(
 
 fn ensure_filter_anchor_id(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
 ) -> Option<String> {
-    let cell_id = super::super::super::cell_editing::ensure_cell_id_mirrored(
-        stores, mirror, sheet_id, row, col,
-    )?;
+    let cell_id =
+        super::super::super::cell_editing::ensure_cell_id(stores, cell_store, sheet_id, row, col)?;
     Some(id_to_hex(cell_id.as_u128()).to_string())
 }
 
 fn restore_filter_range_anchors(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     anchors: &[FilterRangeAnchor],
 ) -> Result<(), ComputeError> {
@@ -147,7 +133,7 @@ fn restore_filter_range_anchors(
         };
         let Some(header_start_cell_id) = ensure_filter_anchor_id(
             stores,
-            mirror,
+            cell_store,
             sheet_id,
             anchor.header_start.0,
             anchor.header_start.1,
@@ -156,7 +142,7 @@ fn restore_filter_range_anchors(
         };
         let Some(header_end_cell_id) = ensure_filter_anchor_id(
             stores,
-            mirror,
+            cell_store,
             sheet_id,
             anchor.header_end.0,
             anchor.header_end.1,
@@ -165,7 +151,7 @@ fn restore_filter_range_anchors(
         };
         let Some(data_end_cell_id) = ensure_filter_anchor_id(
             stores,
-            mirror,
+            cell_store,
             sheet_id,
             anchor.data_end.0,
             anchor.data_end.1,
@@ -189,7 +175,7 @@ fn restore_filter_range_anchors(
 #[allow(clippy::too_many_arguments)]
 pub(in crate::storage::engine) fn mutation_sort_range(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     settings: &EngineSettings,
     sheet_id: &SheetId,
     start_row: u32,
@@ -206,7 +192,7 @@ pub(in crate::storage::engine) fn mutation_sort_range(
 
     // Bridge sort criteria are absolute sheet columns. Keep them positional so
     // imported Range-backed columns without sparse CellIds can still drive the
-    // comparator through CellMirror reads.
+    // comparator through CellStore reads.
     let mut criteria = Vec::new();
     for criterion in &options.criteria {
         let mode = match &criterion.mode {
@@ -240,11 +226,11 @@ pub(in crate::storage::engine) fn mutation_sort_range(
     let sort_result = {
         let sid = *sheet_id;
         let get_cell_format = |row: u32, col: u32| -> domain_types::CellFormat {
-            resolved_formats::get_resolved_cell_format(stores, mirror, settings, &sid, row, col)
+            resolved_formats::get_resolved_cell_format(stores, cell_store, settings, &sid, row, col)
         };
 
         let get_cell_value = |row: u32, col: u32| -> CellValue {
-            mirror
+            cell_store
                 .get_cell_value_at(&sid, SheetPos::new(row, col))
                 .cloned()
                 .unwrap_or(CellValue::Null)
@@ -270,7 +256,7 @@ pub(in crate::storage::engine) fn mutation_sort_range(
     }
 
     let filter_range_anchors = capture_filter_range_anchors(
-        stores, mirror, sheet_id, start_row, start_col, end_row, end_col,
+        stores, cell_store, sheet_id, start_row, start_col, end_row, end_col,
     );
 
     let data_start = if has_headers {
@@ -296,60 +282,52 @@ pub(in crate::storage::engine) fn mutation_sort_range(
     // path which reorders `rowOrder` directly and leaves payload bytes in
     // place. Otherwise, fall through to the existing per-cell sort path.
     // -----------------------------------------------------------------------
-    let has_ranges =
-        sort_range_intersects_range_view(mirror, sheet_id, start_row, start_col, end_row, end_col);
+    let has_ranges = sort_range_intersects_range_view(
+        cell_store, sheet_id, start_row, start_col, end_row, end_col,
+    );
 
     crate::storage::engine::history::structure::capture_sort(
         stores,
-        mirror,
+        cell_store,
         *sheet_id,
         &permutation,
         has_ranges,
     );
     if has_ranges {
-        let recalc = sort_range_backed_rows(stores, mirror, sheet_id, &permutation)?;
-        restore_filter_range_anchors(stores, mirror, sheet_id, &filter_range_anchors)?;
+        let recalc = sort_range_backed_rows(stores, cell_store, sheet_id, &permutation)?;
+        restore_filter_range_anchors(stores, cell_store, sheet_id, &filter_range_anchors)?;
         return Ok(recalc);
     }
 
-    // ===================================================================
-    // Per-cell sort path (existing code — unchanged)
-    // ===================================================================
-    if let Some(grid) = stores.grid_indexes.get_mut(sheet_id) {
-        grid.sort_rows(&permutation);
-    }
-
+    // A sparse rectangular sort moves only its selected cells. Capture every
+    // source before applying the permutation so overlapping moves are atomic.
+    let row_destinations: rustc_hash::FxHashMap<_, _> = permutation.iter().copied().collect();
+    let moves: Vec<_> = cell_store
+        .get_sheet(sheet_id)
+        .into_iter()
+        .flat_map(|sheet| sheet.cells_in_range(data_start, start_col, end_row, end_col))
+        .filter_map(|(id, row, col)| {
+            row_destinations
+                .get(&row)
+                .map(|&new_row| (id, *sheet_id, SheetPos::new(new_row, col)))
+        })
+        .collect();
+    cell_store.move_cells(&moves);
     let mut edits: Vec<(SheetId, CellId, u32, u32, CellValue, Option<String>)> = Vec::new();
 
-    // Move values and identity formulas together so references follow their cells.
-    for new_row in data_start..=end_row {
-        for col in start_col..=end_col {
-            if let Some(cell_id) = stores
-                .grid_indexes
-                .get(sheet_id)
-                .and_then(|g| g.cell_id_at(new_row, col))
-            {
-                mirror.move_cell(&cell_id, sheet_id, SheetPos::new(new_row, col));
-            }
-        }
-    }
-
     // Pass 2: render each cell's post-sort A1 string from its preserved
-    // IdentityFormula against the now-updated mirror positions, and
+    // IdentityFormula against the now-updated cell_store positions, and
     // record this as the input for set_cells below. This ensures refs
     // follow the cells they originally pointed at (the test invariant
     // in xlsx_sort_roundtrip), rather than being re-resolved against
     // whatever cell happens to sit at the old A1 position post-sort.
     for new_row in data_start..=end_row {
         for col in start_col..=end_col {
-            if let Some(cell_id) = stores
-                .grid_indexes
-                .get(sheet_id)
-                .and_then(|g| g.cell_id_at(new_row, col))
-                && let Some(value) = mirror.get_cell_value_raw(&cell_id).cloned()
+            if let Some(cell_id) = cell_store.resolve_cell_id(sheet_id, SheetPos::new(new_row, col))
+                && let Some(value) = cell_store.get_cell_value_raw(&cell_id).cloned()
             {
-                let formula_body = if let Some(id_formula) = mirror.get_formula(&cell_id) {
-                    let lookup = crate::mirror::MirrorPositionLookup::new(mirror, *sheet_id);
+                let formula_body = if let Some(id_formula) = cell_store.get_formula(&cell_id) {
+                    let lookup = crate::cells::StorePositionLookup::new(cell_store, *sheet_id);
                     let a1 = compute_parser::to_a1_string(id_formula, &lookup);
                     Some(a1.strip_prefix('=').unwrap_or(&a1).to_string())
                 } else {
@@ -367,18 +345,21 @@ pub(in crate::storage::engine) fn mutation_sort_range(
 
     // Publish the moved authored values and recalculate dependents.
     let mut recalc = stores.compute.set_cells_raw_with_trust(
-        mirror,
+        cell_store,
         &edits,
         true,
         crate::scheduler::WriteTrust::UserEdit,
     )?;
 
     let mut blank_slot_clears = Vec::new();
-    if let Some(grid) = stores.grid_indexes.get(sheet_id) {
+    if stores.grid_indexes.contains_key(sheet_id) {
         for row in data_start..=end_row {
             for col in start_col..=end_col {
-                if grid.cell_id_at(row, col).is_none() {
-                    mirror.vacate_position(sheet_id, SheetPos::new(row, col));
+                if cell_store
+                    .resolve_cell_id(sheet_id, SheetPos::new(row, col))
+                    .is_none()
+                {
+                    cell_store.vacate_position(sheet_id, SheetPos::new(row, col));
                     blank_slot_clears.push(synthetic_null_change(sheet_id, row, col));
                 }
             }
@@ -390,7 +371,7 @@ pub(in crate::storage::engine) fn mutation_sort_range(
         merge_recalc_results(&mut recalc, blank_recalc);
     }
 
-    restore_filter_range_anchors(stores, mirror, sheet_id, &filter_range_anchors)?;
+    restore_filter_range_anchors(stores, cell_store, sheet_id, &filter_range_anchors)?;
 
     Ok(recalc)
 }

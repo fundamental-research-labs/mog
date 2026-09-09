@@ -21,7 +21,7 @@ mod stress_common;
 use stress_common::*;
 
 use cell_types::SheetId;
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use value_types::{CellError, CellValue};
 
@@ -34,7 +34,7 @@ fn bare_column_range_auto_spills() {
     // `=A1:A5` typed (without CSE) at C1 must auto-spill into C1:C5.
     // This replaces the TS hack of rewriting `=A1:A5` → `=VSTACK(A1:A5)`.
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![(
         "Sheet1",
         100,
@@ -48,12 +48,12 @@ fn bare_column_range_auto_spills() {
             (0, 2, CellValue::Null, Some("A1:A5")),
         ],
     )]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // C1 is the origin (registered cell); C2..C5 are projection targets.
-    assert_mirror_text(&mirror, 0, 0, 2, "row1");
+    assert_store_text(&cell_store, 0, 0, 2, "row1");
     for (row, expected) in [(1u32, "row2"), (2, "row3"), (3, "row4"), (4, "row5")] {
-        let actual = mirror
+        let actual = cell_store
             .get_cell_value_at(&sid(0), cell_types::SheetPos::new(row, 2))
             .cloned()
             .unwrap_or(CellValue::Null);
@@ -72,7 +72,7 @@ fn binary_op_on_two_ranges_still_spills() {
     // operands, which already auto-spills (element-wise lifting). Re-verify
     // we did not regress it when adding the bare-Range root check.
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![(
         "Sheet1",
         100,
@@ -87,11 +87,11 @@ fn binary_op_on_two_ranges_still_spills() {
             (0, 3, CellValue::Null, Some("A1:A3+B1:B3")),
         ],
     )]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
-    assert_mirror_number(&mirror, 0, 0, 3, 11.0);
-    assert_pos_number(&mirror, 0, 1, 3, 22.0);
-    assert_pos_number(&mirror, 0, 2, 3, 33.0);
+    assert_store_number(&cell_store, 0, 0, 3, 11.0);
+    assert_pos_number(&cell_store, 0, 1, 3, 22.0);
+    assert_pos_number(&cell_store, 0, 2, 3, 33.0);
 }
 
 #[test]
@@ -99,7 +99,7 @@ fn at_operator_picks_row_aligned_cell() {
     // `=@A1:A5` typed at C3 must pick A3 (row-aligned to the caller's row),
     // and must NOT spill into C4:C5.
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![(
         "Sheet1",
         100,
@@ -113,12 +113,12 @@ fn at_operator_picks_row_aligned_cell() {
             (2, 2, CellValue::Null, Some("@A1:A5")),
         ],
     )]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
-    assert_mirror_text(&mirror, 0, 2, 2, "row3");
+    assert_store_text(&cell_store, 0, 2, 2, "row3");
 
     // C4 must remain empty — @ never spills.
-    let c4 = mirror.get_cell_value_at(&sid(0), cell_types::SheetPos::new(3, 2));
+    let c4 = cell_store.get_cell_value_at(&sid(0), cell_types::SheetPos::new(3, 2));
     assert!(
         matches!(c4, None | Some(&CellValue::Null)),
         "C4 must be empty (no spill from @ operator), got {c4:?}",
@@ -130,7 +130,7 @@ fn at_operator_returns_value_error_when_no_row_alignment() {
     // `=@A1:A5` typed at C7 → caller row 6 (0-based) is outside the range
     // rows 0..=4, so implicit intersection has no aligned row. Excel: #VALUE!.
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![(
         "Sheet1",
         100,
@@ -144,16 +144,16 @@ fn at_operator_returns_value_error_when_no_row_alignment() {
             (6, 2, CellValue::Null, Some("@A1:A5")),
         ],
     )]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
-    assert_mirror_error(&mirror, 0, 6, 2, CellError::Value);
+    assert_store_error(&cell_store, 0, 6, 2, CellError::Value);
 }
 
 #[test]
 fn at_operator_on_single_cell_is_identity() {
     // `=@A1` is a no-op (the operand is already a scalar) — must return A1.
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![(
         "Sheet1",
         100,
@@ -163,9 +163,9 @@ fn at_operator_on_single_cell_is_identity() {
             (5, 5, CellValue::Null, Some("@A1")),
         ],
     )]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
-    assert_mirror_number(&mirror, 0, 5, 5, 42.0);
+    assert_store_number(&cell_store, 0, 5, 5, 42.0);
 }
 
 #[test]
@@ -174,7 +174,7 @@ fn at_operator_picks_column_aligned_cell_for_row_range() {
     // the column-aligned cell — D1 (column 3) — when the caller's column is
     // within the range's column span.
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![(
         "Sheet1",
         100,
@@ -189,9 +189,9 @@ fn at_operator_picks_column_aligned_cell_for_row_range() {
             (1, 3, CellValue::Null, Some("@A1:E1")),
         ],
     )]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
-    assert_mirror_text(&mirror, 0, 1, 3, "col-D");
+    assert_store_text(&cell_store, 0, 1, 3, "col-D");
 }
 
 #[test]
@@ -199,7 +199,7 @@ fn cross_sheet_bare_range_auto_spills() {
     // Replaces the `normalizeStandaloneRange` hack: `=Sheet2!A1:A5` typed on
     // Sheet1 must spill 5 rows on Sheet1.
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![
         (
             "Sheet1",
@@ -220,12 +220,12 @@ fn cross_sheet_bare_range_auto_spills() {
             ],
         ),
     ]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // A1 origin lives on Sheet1 and shows "s2-a"; A2..A5 are spill targets.
-    assert_mirror_text(&mirror, 0, 0, 0, "s2-a");
+    assert_store_text(&cell_store, 0, 0, 0, "s2-a");
     for (row, expected) in [(1u32, "s2-b"), (2, "s2-c"), (3, "s2-d"), (4, "s2-e")] {
-        let actual = mirror
+        let actual = cell_store
             .get_cell_value_at(&sid(0), cell_types::SheetPos::new(row, 0))
             .cloned()
             .unwrap_or(CellValue::Null);
@@ -248,7 +248,7 @@ fn cross_sheet_at_operator_picks_caller_row() {
     // Cross-sheet variant: `=@Sheet2!A1:A5` typed in C2 of Sheet1 must pick
     // Sheet2!A2 (caller row=1 (0-based) aligned), NOT spill on Sheet1.
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![
         (
             "Sheet1",
@@ -269,12 +269,12 @@ fn cross_sheet_at_operator_picks_caller_row() {
             ],
         ),
     ]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
-    assert_mirror_text(&mirror, 0, 1, 2, "s2-b");
+    assert_store_text(&cell_store, 0, 1, 2, "s2-b");
 
     // Sheet1 C3 must remain empty (no spill).
-    let c3 = mirror.get_cell_value_at(&sid(0), cell_types::SheetPos::new(2, 2));
+    let c3 = cell_store.get_cell_value_at(&sid(0), cell_types::SheetPos::new(2, 2));
     assert!(
         matches!(c3, None | Some(&CellValue::Null)),
         "Sheet1 C3 must be empty, got {c3:?}",
@@ -284,7 +284,7 @@ fn cross_sheet_at_operator_picks_caller_row() {
 #[test]
 fn single_function_matches_at_for_row_and_column_aligned_ranges() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![(
         "Sheet1",
         100,
@@ -305,18 +305,18 @@ fn single_function_matches_at_for_row_and_column_aligned_ranges() {
             (1, 4, CellValue::Null, Some("@A1:E1")),
         ],
     )]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
-    assert_mirror_text(&mirror, 0, 2, 2, "row3");
-    assert_mirror_text(&mirror, 0, 2, 3, "row3");
-    assert_mirror_text(&mirror, 0, 1, 3, "col-D");
-    assert_mirror_text(&mirror, 0, 1, 4, "col-E");
+    assert_store_text(&cell_store, 0, 2, 2, "row3");
+    assert_store_text(&cell_store, 0, 2, 3, "row3");
+    assert_store_text(&cell_store, 0, 1, 3, "col-D");
+    assert_store_text(&cell_store, 0, 1, 4, "col-E");
 }
 
 #[test]
 fn single_function_matches_at_for_two_dimensional_cross_sheet_range() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![
         (
             "Sheet1",
@@ -334,16 +334,16 @@ fn single_function_matches_at_for_two_dimensional_cross_sheet_range() {
             vec![(2, 2, text("s2-c3"), None), (2, 3, text("s2-d3"), None)],
         ),
     ]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
-    assert_mirror_text(&mirror, 0, 2, 2, "s2-c3");
-    assert_mirror_text(&mirror, 0, 2, 3, "s2-d3");
+    assert_store_text(&cell_store, 0, 2, 2, "s2-c3");
+    assert_store_text(&cell_store, 0, 2, 3, "s2-d3");
 }
 
 #[test]
 fn single_function_uses_at_reference_wrappers_and_array_fallback() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![(
         "Sheet1",
         100,
@@ -359,19 +359,19 @@ fn single_function_uses_at_reference_wrappers_and_array_fallback() {
             (6, 2, CellValue::Null, Some("SINGLE(A1:A3)")),
         ],
     )]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
-    assert_mirror_text(&mirror, 0, 2, 2, "row3");
-    assert_mirror_text(&mirror, 0, 2, 3, "row3");
-    assert_mirror_number(&mirror, 0, 5, 2, 1.0);
-    assert_mirror_number(&mirror, 0, 5, 3, 1.0);
-    assert_mirror_error(&mirror, 0, 6, 2, CellError::Value);
+    assert_store_text(&cell_store, 0, 2, 2, "row3");
+    assert_store_text(&cell_store, 0, 2, 3, "row3");
+    assert_store_number(&cell_store, 0, 5, 2, 1.0);
+    assert_store_number(&cell_store, 0, 5, 3, 1.0);
+    assert_store_error(&cell_store, 0, 6, 2, CellError::Value);
 }
 
 #[test]
 fn xlsx_normalized_single_readback_strips_xlfn_prefix() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![(
         "Sheet1",
         100,
@@ -382,16 +382,16 @@ fn xlsx_normalized_single_readback_strips_xlfn_prefix() {
             (1, 2, CellValue::Null, Some("_xlfn.SINGLE(A1:A5)")),
         ],
     )]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
-    assert_mirror_text(&mirror, 0, 1, 2, "row2");
+    assert_store_text(&cell_store, 0, 1, 2, "row2");
     assert_eq!(core.get_formula(&cid(0, 1, 2)), Some("=SINGLE(A1:A5)"));
 }
 
 #[test]
 fn anchorarray_function_hash_and_xlfn_forms_share_spill_source_path() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![(
         "Sheet1",
         100,
@@ -404,12 +404,12 @@ fn anchorarray_function_hash_and_xlfn_forms_share_spill_source_path() {
             (3, 2, CellValue::Null, Some("ANCHORARRAY(C1)")),
         ],
     )]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
-    assert_mirror_number(&mirror, 0, 0, 2, 6.0);
-    assert_mirror_number(&mirror, 0, 1, 2, 6.0);
-    assert_mirror_number(&mirror, 0, 2, 2, 6.0);
-    assert_mirror_error(&mirror, 0, 3, 2, CellError::Value);
+    assert_store_number(&cell_store, 0, 0, 2, 6.0);
+    assert_store_number(&cell_store, 0, 1, 2, 6.0);
+    assert_store_number(&cell_store, 0, 2, 2, 6.0);
+    assert_store_error(&cell_store, 0, 3, 2, CellError::Value);
     assert_eq!(core.get_formula(&cid(0, 0, 2)), Some("=SUM(A1#)"));
     assert_eq!(
         core.get_formula(&cid(0, 2, 2)),
@@ -424,7 +424,7 @@ fn formula_text_round_trips_unchanged() {
     // mutate the formula string on the way in (the old TS hack would store
     // `=VSTACK(A1:A5)` instead of `=A1:A5`).
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![(
         "Sheet1",
         100,
@@ -436,7 +436,7 @@ fn formula_text_round_trips_unchanged() {
             (5, 5, CellValue::Null, Some("@A1:A5")),
         ],
     )]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // Formulas read back via the engine match exactly what was parsed in;
     // the parser preserves user-typed `@` and bare ranges in the AST and

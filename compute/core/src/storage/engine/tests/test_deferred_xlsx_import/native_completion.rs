@@ -50,10 +50,10 @@ fn completion_reuses_active_native_payload_and_metadata_identities() {
     let bytes = native_range_workbook();
     let (mut engine, _) = ComputeEngine::from_snapshot(WorkbookSnapshot::default()).unwrap();
     engine.import_from_xlsx_bytes_deferred(&bytes).unwrap();
-    let active = engine.mirror().sheet_by_name("Active").unwrap();
-    let remaining = engine.mirror().sheet_by_name("Remaining").unwrap();
+    let active = engine.cell_store().sheet_by_name("Active").unwrap();
+    let remaining = engine.cell_store().sheet_by_name("Remaining").unwrap();
     assert_eq!(engine.get_all_sheet_ids().len(), 2);
-    let original_sheet = engine.mirror().get_sheet(&active).unwrap();
+    let original_sheet = engine.cell_store().get_sheet(&active).unwrap();
     let original_payload = original_sheet
         .iter_ranges()
         .next()
@@ -68,7 +68,7 @@ fn completion_reuses_active_native_payload_and_metadata_identities() {
         .clone();
     assert!(
         engine
-            .mirror()
+            .cell_store()
             .get_cell_value_at(&remaining, cell_types::SheetPos::new(0, 0))
             .is_none()
     );
@@ -78,7 +78,7 @@ fn completion_reuses_active_native_payload_and_metadata_identities() {
     );
     engine.complete_deferred_hydration().unwrap();
     assert!(engine.deferred_hydration.is_none());
-    let completed_sheet = engine.mirror().get_sheet(&active).unwrap();
+    let completed_sheet = engine.cell_store().get_sheet(&active).unwrap();
     assert!(
         Arc::ptr_eq(
             &original_payload,
@@ -101,7 +101,7 @@ fn completion_reuses_active_native_payload_and_metadata_identities() {
         .unwrap();
     assert_eq!(
         engine
-            .mirror()
+            .cell_store()
             .get_cell_value_at(&remaining, cell_types::SheetPos::new(0, 0)),
         Some(&CellValue::number(131_328.0))
     );
@@ -112,9 +112,9 @@ fn failed_remaining_sheet_parse_preserves_loaded_state_and_can_retry() {
     let bytes = native_range_workbook();
     let (mut engine, _) = ComputeEngine::from_snapshot(WorkbookSnapshot::default()).unwrap();
     engine.import_from_xlsx_bytes_deferred(&bytes).unwrap();
-    let active = engine.mirror().sheet_by_name("Active").unwrap();
+    let active = engine.cell_store().sheet_by_name("Active").unwrap();
     let payload = engine
-        .mirror()
+        .cell_store()
         .get_sheet(&active)
         .unwrap()
         .iter_ranges()
@@ -131,7 +131,7 @@ fn failed_remaining_sheet_parse_preserves_loaded_state_and_can_retry() {
     assert!(Arc::ptr_eq(
         &payload,
         &engine
-            .mirror()
+            .cell_store()
             .get_sheet(&active)
             .unwrap()
             .iter_ranges()
@@ -142,7 +142,7 @@ fn failed_remaining_sheet_parse_preserves_loaded_state_and_can_retry() {
     ));
     assert_eq!(
         engine
-            .mirror()
+            .cell_store()
             .get_cell_value_at(&active, cell_types::SheetPos::new(511, 0)),
         Some(&CellValue::number(512.0))
     );

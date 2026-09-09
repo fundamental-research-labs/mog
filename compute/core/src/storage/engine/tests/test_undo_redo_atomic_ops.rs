@@ -212,9 +212,13 @@ fn set_time_value_undoes_value_and_inferred_format_atomically() {
 
     assert_eq!(engine.get_undo_state().undo_depth, 1);
     assert_eq!(cell_value_at(&engine, &sid, 5, 5), num(0.5));
-    let cell_id =
-        crate::storage::engine::services::cell_editing::find_cell_id_at(&engine.stores, &sid, 5, 5)
-            .expect("cell allocated");
+    let cell_id = crate::storage::engine::services::cell_editing::find_cell_id_at(
+        &engine.cell_store,
+        &sid,
+        5,
+        5,
+    )
+    .expect("cell allocated");
     assert_eq!(
         engine
             .get_cell_format(&sid, &cell_id, 5, 5)
@@ -228,7 +232,7 @@ fn set_time_value_undoes_value_and_inferred_format_atomically() {
     assert_eq!(cell_value_at(&engine, &sid, 5, 5), CellValue::Null);
     assert!(
         crate::storage::engine::services::cell_editing::find_cell_id_at(
-            &engine.stores,
+            &engine.cell_store,
             &sid,
             5,
             5,
@@ -319,8 +323,7 @@ fn text_to_columns_undoes_atomically_and_reports_stats() {
                 "textQualifier": "none",
             }),
         )
-        .unwrap()
-        .1;
+        .unwrap();
 
     assert_eq!(
         result.data,

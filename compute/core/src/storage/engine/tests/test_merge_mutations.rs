@@ -33,7 +33,7 @@ fn test_rejected_overlapping_merge_does_not_discard_values() {
     let sid = sheet_id();
 
     engine.merge_range(&sid, 0, 0, 0, 1).unwrap();
-    let (_patches, result) = engine.merge_range(&sid, 0, 0, 1, 1).unwrap();
+    let result = engine.merge_range(&sid, 0, 0, 1, 1).unwrap();
 
     assert!(result.merge_changes.is_empty());
     assert_eq!(cell_value_at(&engine, &sid, 0, 0), num(10.0));

@@ -3,27 +3,24 @@ use std::collections::{HashMap, HashSet};
 use cell_types::{CellId, SheetId};
 use value_types::{CellValue, ComputeError};
 
-use crate::mirror::CellMirror;
-use crate::storage::engine::stores::EngineStores;
+use crate::cells::CellStore;
 
 pub(in crate::storage::engine) fn collect_authored_cells_in_range(
-    stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,
     end_row: u32,
     end_col: u32,
 ) -> Vec<(u32, u32, CellId)> {
-    let mut result: Vec<_> = stores
-        .grid_indexes
-        .get(sheet_id)
+    let mut result: Vec<_> = cell_store
+        .get_sheet(sheet_id)
         .into_iter()
-        .flat_map(|grid| grid.cells_in_range(start_row, start_col, end_row, end_col))
+        .flat_map(|sheet| sheet.cells_in_range(start_row, start_col, end_row, end_col))
         .map(|(id, row, col)| (row, col, id))
         .collect();
     let mut seen: HashSet<_> = result.iter().map(|(row, col, _)| (*row, *col)).collect();
-    if let Some(sheet) = mirror.get_sheet(sheet_id) {
+    if let Some(sheet) = cell_store.get_sheet(sheet_id) {
         for extent in sheet
             .range_spatial_index
             .query_range(start_row, start_col, end_row, end_col)
@@ -53,7 +50,7 @@ pub(in crate::storage::engine) fn collect_authored_cells_in_range(
 }
 
 pub(super) fn push_resolved_clear_target(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     resolved: &mut Vec<(u32, u32, CellId)>,
     direct_edit_old_values: &mut HashMap<CellId, CellValue>,
     seen_cell_ids: &mut HashSet<CellId>,
@@ -62,13 +59,13 @@ pub(super) fn push_resolved_clear_target(
     col: u32,
     cell_id: CellId,
 ) {
-    if let Some((anchor_id, _)) = mirror.dynamic_spill_member_covering(sheet_id, row, col)
+    if let Some((anchor_id, _)) = cell_store.dynamic_spill_member_covering(sheet_id, row, col)
         && seen_cell_ids.contains(&anchor_id)
     {
         return;
     }
     if seen_cell_ids.insert(cell_id) {
-        let old_val = mirror
+        let old_val = cell_store
             .get_cell_value(&cell_id)
             .cloned()
             .unwrap_or(CellValue::Null);
@@ -96,7 +93,7 @@ fn projection_fully_covered_by_range(
 }
 
 pub(super) fn projection_anchor_clear_targets_for_range(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: SheetId,
     start_row: u32,
     start_col: u32,
@@ -107,18 +104,18 @@ pub(super) fn projection_anchor_clear_targets_for_range(
     let end_row_exclusive = end_row.saturating_add(1);
     let end_col_exclusive = end_col.saturating_add(1);
 
-    for projection in mirror.projection_registry.projections_in_range(
+    for projection in cell_store.projection_registry.projections_in_range(
         &sheet_id,
         start_row,
         start_col,
         end_row_exclusive,
         end_col_exclusive,
     ) {
-        let Some(anchor_pos) = mirror.resolve_position(&projection.source) else {
+        let Some(anchor_pos) = cell_store.resolve_position(&projection.source) else {
             continue;
         };
 
-        if mirror.is_cse_anchor(&projection.source) {
+        if cell_store.is_cse_anchor(&projection.source) {
             if !projection_fully_covered_by_range(
                 projection.origin_row,
                 projection.origin_col,

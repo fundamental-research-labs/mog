@@ -7,14 +7,14 @@ use super::*;
 #[test]
 fn test_init_from_snapshot_basic() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, basic_snapshot())
+        .init_from_snapshot(&mut cell_store, basic_snapshot())
         .unwrap();
 
     // C1 = A1 + B1 = 10 + 20 = 30
     let c1_id = cid(0x12);
-    let c1_val = core.get_cell_value(&mirror, &c1_id).unwrap();
+    let c1_val = core.get_cell_value(&cell_store, &c1_id).unwrap();
     assert_eq!(*c1_val, CellValue::number(30.0));
 
     // Should report C1 as changed (from 0.0 to 30.0)
@@ -24,8 +24,8 @@ fn test_init_from_snapshot_basic() {
 #[test]
 fn test_init_from_snapshot_formula_stored() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, basic_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, basic_snapshot())
         .unwrap();
 
     let c1_id = cid(0x12);
@@ -35,7 +35,7 @@ fn test_init_from_snapshot_formula_stored() {
 #[test]
 fn test_no_recalc_init_does_not_apply_user_entry_rewrites_to_imported_formulas() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let formula_id = cid(0x12);
     let imported_formula = r#"=IFERROR(A1,{""})"#;
     let cached_value = CellValue::Text("cached".into());
@@ -84,12 +84,12 @@ fn test_no_recalc_init_does_not_apply_user_entry_rewrites_to_imported_formulas()
         calculation_settings: None,
     };
 
-    core.init_from_snapshot_no_recalc(&mut mirror, snap)
+    core.init_from_snapshot_no_recalc(&mut cell_store, snap)
         .unwrap();
 
     assert_eq!(core.get_formula(&formula_id), Some(imported_formula));
     assert_eq!(
-        *core.get_cell_value(&mirror, &formula_id).unwrap(),
+        *core.get_cell_value(&cell_store, &formula_id).unwrap(),
         cached_value
     );
     assert!(
@@ -100,8 +100,8 @@ fn test_no_recalc_init_does_not_apply_user_entry_rewrites_to_imported_formulas()
 
 #[test]
 fn test_init_identity_formulas_dedupe_ghost_cells_by_sheet_and_position() {
-    fn cell_ref_ids(mirror: &CellMirror, cell_id: CellId) -> Vec<CellId> {
-        mirror
+    fn cell_ref_ids(cell_store: &CellStore, cell_id: CellId) -> Vec<CellId> {
+        cell_store
             .get_formula(&cell_id)
             .unwrap_or_else(|| panic!("cell {cell_id:?} should have an identity formula"))
             .refs
@@ -114,7 +114,7 @@ fn test_init_identity_formulas_dedupe_ghost_cells_by_sheet_and_position() {
     }
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let sheet1 = sid(1);
     let sheet2 = sid(2);
     let a1 = cid(0x100);
@@ -238,50 +238,53 @@ fn test_init_identity_formulas_dedupe_ghost_cells_by_sheet_and_position() {
         calculation_settings: None,
     };
 
-    core.init_from_snapshot(&mut mirror, snap)
+    core.init_from_snapshot(&mut cell_store, snap)
         .expect("ghost identity snapshot should initialize");
 
-    let same_ref_twice = cell_ref_ids(&mirror, s1_same_ref_twice);
+    let same_ref_twice = cell_ref_ids(&cell_store, s1_same_ref_twice);
     assert_eq!(same_ref_twice.len(), 2);
     assert_eq!(same_ref_twice[0], same_ref_twice[1]);
 
-    let same_ref_other_formula = cell_ref_ids(&mirror, s1_same_ref_other_formula);
+    let same_ref_other_formula = cell_ref_ids(&cell_store, s1_same_ref_other_formula);
     assert_eq!(same_ref_twice[0], same_ref_other_formula[0]);
 
-    let different_positions = cell_ref_ids(&mirror, s1_different_missing_positions);
+    let different_positions = cell_ref_ids(&cell_store, s1_different_missing_positions);
     assert_ne!(different_positions[0], different_positions[1]);
     assert_eq!(different_positions[0], same_ref_twice[0]);
 
-    let sheet2_unqualified = cell_ref_ids(&mirror, s2_unqualified_same_row_col);
+    let sheet2_unqualified = cell_ref_ids(&cell_store, s2_unqualified_same_row_col);
     assert_ne!(same_ref_twice[0], sheet2_unqualified[0]);
     assert_eq!(
-        mirror.resolve_position(&same_ref_twice[0]),
+        cell_store.resolve_position(&same_ref_twice[0]),
         Some(SheetPos::new(0, 1))
     );
-    assert_eq!(mirror.sheet_for_cell(&same_ref_twice[0]), Some(sheet1));
+    assert_eq!(cell_store.sheet_for_cell(&same_ref_twice[0]), Some(sheet1));
     assert_eq!(
-        mirror.resolve_position(&sheet2_unqualified[0]),
+        cell_store.resolve_position(&sheet2_unqualified[0]),
         Some(SheetPos::new(0, 1))
     );
-    assert_eq!(mirror.sheet_for_cell(&sheet2_unqualified[0]), Some(sheet2));
+    assert_eq!(
+        cell_store.sheet_for_cell(&sheet2_unqualified[0]),
+        Some(sheet2)
+    );
 
-    let explicit_sheet2 = cell_ref_ids(&mirror, s1_explicit_sheet2_and_unqualified_sheet1);
+    let explicit_sheet2 = cell_ref_ids(&cell_store, s1_explicit_sheet2_and_unqualified_sheet1);
     assert_eq!(explicit_sheet2[0], sheet2_unqualified[0]);
     assert_eq!(explicit_sheet2[1], same_ref_twice[0]);
 
-    let explicit_sheet1 = cell_ref_ids(&mirror, s2_explicit_sheet1_and_unqualified_sheet2);
+    let explicit_sheet1 = cell_ref_ids(&cell_store, s2_explicit_sheet1_and_unqualified_sheet2);
     assert_eq!(explicit_sheet1[0], same_ref_twice[0]);
     assert_eq!(explicit_sheet1[1], sheet2_unqualified[0]);
 
-    let existing_real_cell = cell_ref_ids(&mirror, s1_existing_real_cell);
+    let existing_real_cell = cell_ref_ids(&cell_store, s1_existing_real_cell);
     assert_eq!(existing_real_cell, vec![a1]);
 }
 
 #[test]
 fn test_minimal_init_seeds_formula_readback_before_graph_build() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot_minimal(&mut mirror, basic_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot_minimal(&mut cell_store, basic_snapshot())
         .unwrap();
 
     let c1_id = cid(0x12);
@@ -295,7 +298,7 @@ fn test_minimal_init_seeds_formula_readback_before_graph_build() {
         "minimal init should still defer graph construction",
     );
 
-    core.ensure_graph_built(&mut mirror).unwrap();
+    core.ensure_graph_built(&mut cell_store).unwrap();
     assert_eq!(core.get_formula(&c1_id), Some("=A1+B1"));
     assert!(
         core.ast_cache.contains_key(&c1_id),
@@ -365,13 +368,13 @@ fn test_minimal_init_first_formula_edit_survives_deferred_graph_build() {
     };
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot_minimal(&mut mirror, snapshot)
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot_minimal(&mut cell_store, snapshot)
         .unwrap();
 
     let result = core
         .set_cells(
-            &mut mirror,
+            &mut cell_store,
             &[(
                 sheet_id,
                 target,
@@ -392,7 +395,7 @@ fn test_minimal_init_first_formula_edit_survives_deferred_graph_build() {
         "first formula edit after minimal init should calculate immediately: {result:?}",
     );
     assert_eq!(
-        core.get_cell_value(&mirror, &target),
+        core.get_cell_value(&cell_store, &target),
         Some(&CellValue::number(60.0))
     );
 }
@@ -400,8 +403,8 @@ fn test_minimal_init_first_formula_edit_survives_deferred_graph_build() {
 #[test]
 fn test_viewport_only_init_seeds_materialized_formula_readback() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot_viewport_only(&mut mirror, basic_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot_viewport_only(&mut cell_store, basic_snapshot())
         .unwrap();
 
     let c1_id = cid(0x12);
@@ -415,11 +418,11 @@ fn test_viewport_only_init_seeds_materialized_formula_readback() {
 #[test]
 fn test_viewport_only_init_rejects_partial_graph_build() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot_viewport_only(&mut mirror, basic_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot_viewport_only(&mut cell_store, basic_snapshot())
         .unwrap();
 
-    let err = core.ensure_graph_built(&mut mirror).unwrap_err();
+    let err = core.ensure_graph_built(&mut cell_store).unwrap_err();
     assert!(
         err.to_string().contains("deferred XLSX hydration"),
         "viewport-only graph build must fail with a materialization error, got {err}",
@@ -430,7 +433,7 @@ fn test_viewport_only_init_rejects_partial_graph_build() {
 #[test]
 fn test_init_empty_snapshot() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let snap = WorkbookSnapshot {
         axis_run_high_water_mark: None,
         identity_high_water_mark: None,
@@ -445,6 +448,6 @@ fn test_init_empty_snapshot() {
         max_change: value_types::FiniteF64::must(0.001),
         calculation_settings: None,
     };
-    let result = core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let result = core.init_from_snapshot(&mut cell_store, snap).unwrap();
     assert!(result.changed_cells.is_empty());
 }

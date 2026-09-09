@@ -8,7 +8,7 @@ use super::*;
 fn test_parallel_recalc_basic_independent() {
     // 100 independent formula cells, all at level 0
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let count = 100;
 
     let mut cells = Vec::new();
@@ -61,12 +61,12 @@ fn test_parallel_recalc_basic_independent() {
         calculation_settings: None,
     };
 
-    core.init_from_snapshot(&mut mirror, snap).unwrap();
+    core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     for i in 0..count {
         let b_id =
             CellId::from_uuid_str(&format!("00000000-0000-0000-0000-{:012x}", 0x200 + i)).unwrap();
-        let val = core.get_cell_value(&mirror, &b_id).unwrap();
+        let val = core.get_cell_value(&cell_store, &b_id).unwrap();
         assert_eq!(
             *val,
             CellValue::number((i as f64 + 1.0) * 2.0),
@@ -80,7 +80,7 @@ fn test_parallel_recalc_basic_independent() {
 fn test_parallel_recalc_chain() {
     // A1=1, B1=A1+1, C1=B1+1, D1=C1+1
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
 
     let snap = WorkbookSnapshot {
         axis_run_high_water_mark: None,
@@ -144,35 +144,35 @@ fn test_parallel_recalc_chain() {
         calculation_settings: None,
     };
 
-    core.init_from_snapshot(&mut mirror, snap).unwrap();
+    core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     assert_eq!(
-        *core.get_cell_value(&mirror, &cid(0x11)).unwrap(),
+        *core.get_cell_value(&cell_store, &cid(0x11)).unwrap(),
         CellValue::number(2.0)
     );
     assert_eq!(
-        *core.get_cell_value(&mirror, &cid(0x12)).unwrap(),
+        *core.get_cell_value(&cell_store, &cid(0x12)).unwrap(),
         CellValue::number(3.0)
     );
     assert_eq!(
-        *core.get_cell_value(&mirror, &cid(0x13)).unwrap(),
+        *core.get_cell_value(&cell_store, &cid(0x13)).unwrap(),
         CellValue::number(4.0)
     );
 
     let sheet_id = sid(1);
-    core.set_cell(&mut mirror, &sheet_id, cid(0x10), 0, 0, "10")
+    core.set_cell(&mut cell_store, &sheet_id, cid(0x10), 0, 0, "10")
         .unwrap();
 
     assert_eq!(
-        *core.get_cell_value(&mirror, &cid(0x11)).unwrap(),
+        *core.get_cell_value(&cell_store, &cid(0x11)).unwrap(),
         CellValue::number(11.0)
     );
     assert_eq!(
-        *core.get_cell_value(&mirror, &cid(0x12)).unwrap(),
+        *core.get_cell_value(&cell_store, &cid(0x12)).unwrap(),
         CellValue::number(12.0)
     );
     assert_eq!(
-        *core.get_cell_value(&mirror, &cid(0x13)).unwrap(),
+        *core.get_cell_value(&cell_store, &cid(0x13)).unwrap(),
         CellValue::number(13.0)
     );
 }
@@ -181,7 +181,7 @@ fn test_parallel_recalc_chain() {
 fn test_parallel_recalc_diamond() {
     // Diamond: A1=10, B1=A1*2, C1=A1+5, D1=B1+C1
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
 
     let snap = WorkbookSnapshot {
         axis_run_high_water_mark: None,
@@ -245,35 +245,35 @@ fn test_parallel_recalc_diamond() {
         calculation_settings: None,
     };
 
-    core.init_from_snapshot(&mut mirror, snap).unwrap();
+    core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     assert_eq!(
-        *core.get_cell_value(&mirror, &cid(0x11)).unwrap(),
+        *core.get_cell_value(&cell_store, &cid(0x11)).unwrap(),
         CellValue::number(20.0)
     );
     assert_eq!(
-        *core.get_cell_value(&mirror, &cid(0x12)).unwrap(),
+        *core.get_cell_value(&cell_store, &cid(0x12)).unwrap(),
         CellValue::number(15.0)
     );
     assert_eq!(
-        *core.get_cell_value(&mirror, &cid(0x13)).unwrap(),
+        *core.get_cell_value(&cell_store, &cid(0x13)).unwrap(),
         CellValue::number(35.0)
     );
 
     let sheet_id = sid(1);
-    core.set_cell(&mut mirror, &sheet_id, cid(0x10), 0, 0, "100")
+    core.set_cell(&mut cell_store, &sheet_id, cid(0x10), 0, 0, "100")
         .unwrap();
 
     assert_eq!(
-        *core.get_cell_value(&mirror, &cid(0x11)).unwrap(),
+        *core.get_cell_value(&cell_store, &cid(0x11)).unwrap(),
         CellValue::number(200.0)
     );
     assert_eq!(
-        *core.get_cell_value(&mirror, &cid(0x12)).unwrap(),
+        *core.get_cell_value(&cell_store, &cid(0x12)).unwrap(),
         CellValue::number(105.0)
     );
     assert_eq!(
-        *core.get_cell_value(&mirror, &cid(0x13)).unwrap(),
+        *core.get_cell_value(&cell_store, &cid(0x13)).unwrap(),
         CellValue::number(305.0)
     );
 }
@@ -282,7 +282,7 @@ fn test_parallel_recalc_diamond() {
 fn test_parallel_recalc_wide_level() {
     // 50 independent formulas at level 0 (wider than PARALLEL_THRESHOLD)
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let width = 50;
 
     let mut cells = Vec::new();
@@ -333,7 +333,7 @@ fn test_parallel_recalc_wide_level() {
         calculation_settings: None,
     };
 
-    core.init_from_snapshot(&mut mirror, snap).unwrap();
+    core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     let formula_cells: Vec<CellId> = (0..width)
         .map(|i| {
@@ -343,7 +343,7 @@ fn test_parallel_recalc_wide_level() {
 
     let (levels, _cycle_cells) = core
         .graph
-        .subset_levels(&formula_cells, &mirror)
+        .subset_levels(&formula_cells, &cell_store)
         .into_value();
     assert_eq!(levels.len(), 1, "All cells should be at level 0");
     assert_eq!(levels[0].len(), width);
@@ -351,19 +351,19 @@ fn test_parallel_recalc_wide_level() {
     for i in 0..width {
         let cell_id =
             CellId::from_uuid_str(&format!("00000000-0000-0000-0000-{:012x}", 0x100 + i)).unwrap();
-        let val = core.get_cell_value(&mirror, &cell_id).unwrap();
+        let val = core.get_cell_value(&cell_store, &cell_id).unwrap();
         assert_eq!(*val, CellValue::number(7.0 + i as f64));
     }
 
     // Update source and verify cascade
     let sheet_id = sid(1);
-    core.set_cell(&mut mirror, &sheet_id, cid(0x10), 0, 0, "100")
+    core.set_cell(&mut cell_store, &sheet_id, cid(0x10), 0, 0, "100")
         .unwrap();
 
     for i in 0..width {
         let cell_id =
             CellId::from_uuid_str(&format!("00000000-0000-0000-0000-{:012x}", 0x100 + i)).unwrap();
-        let val = core.get_cell_value(&mirror, &cell_id).unwrap();
+        let val = core.get_cell_value(&cell_store, &cell_id).unwrap();
         assert_eq!(*val, CellValue::number(100.0 + i as f64));
     }
 }
@@ -373,7 +373,7 @@ fn test_group_by_level_diamond_pattern() {
     // B1=A1*2, C1=A1+5, D1=B1+C1
     // Levels: [B1, C1], [D1]
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
 
     let snap = WorkbookSnapshot {
         axis_run_high_water_mark: None,
@@ -437,7 +437,7 @@ fn test_group_by_level_diamond_pattern() {
         calculation_settings: None,
     };
 
-    core.init_from_snapshot(&mut mirror, snap).unwrap();
+    core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     let b1 = cid(0x11);
     let c1 = cid(0x12);
@@ -445,7 +445,7 @@ fn test_group_by_level_diamond_pattern() {
 
     let (levels, _cycle_cells) = core
         .graph
-        .subset_levels(&[b1, c1, d1], &mirror)
+        .subset_levels(&[b1, c1, d1], &cell_store)
         .into_value();
     assert_eq!(levels.len(), 2);
     assert_eq!(levels[0].len(), 2);
@@ -458,7 +458,7 @@ fn test_group_by_level_diamond_pattern() {
 fn test_small_level_stays_sequential() {
     // 3 cells at level 0 — below PARALLEL_THRESHOLD
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
 
     let snap = WorkbookSnapshot {
         axis_run_high_water_mark: None,
@@ -522,7 +522,7 @@ fn test_small_level_stays_sequential() {
         calculation_settings: None,
     };
 
-    core.init_from_snapshot(&mut mirror, snap).unwrap();
+    core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     let b1 = cid(0x11);
     let c1 = cid(0x12);
@@ -530,21 +530,21 @@ fn test_small_level_stays_sequential() {
 
     let (levels, _cycle_cells) = core
         .graph
-        .subset_levels(&[b1, c1, d1], &mirror)
+        .subset_levels(&[b1, c1, d1], &cell_store)
         .into_value();
     assert_eq!(levels.len(), 1);
     assert_eq!(levels[0].len(), 3);
 
     assert_eq!(
-        *core.get_cell_value(&mirror, &b1).unwrap(),
+        *core.get_cell_value(&cell_store, &b1).unwrap(),
         CellValue::number(6.0)
     );
     assert_eq!(
-        *core.get_cell_value(&mirror, &c1).unwrap(),
+        *core.get_cell_value(&cell_store, &c1).unwrap(),
         CellValue::number(7.0)
     );
     assert_eq!(
-        *core.get_cell_value(&mirror, &d1).unwrap(),
+        *core.get_cell_value(&cell_store, &d1).unwrap(),
         CellValue::number(8.0)
     );
 }
@@ -557,7 +557,7 @@ fn test_parallel_matches_sequential_complex_graph() {
     // C1=B1+B2
     // D1=C1*2
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
 
     let snap = WorkbookSnapshot {
         axis_run_high_water_mark: None,
@@ -648,7 +648,7 @@ fn test_parallel_matches_sequential_complex_graph() {
         calculation_settings: None,
     };
 
-    core.init_from_snapshot(&mut mirror, snap).unwrap();
+    core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     let b1 = cid(0x20);
     let b2 = cid(0x21);
@@ -658,7 +658,7 @@ fn test_parallel_matches_sequential_complex_graph() {
     // Verify levels
     let (levels, _cycle_cells) = core
         .graph
-        .subset_levels(&[b1, b2, c1, d1], &mirror)
+        .subset_levels(&[b1, b2, c1, d1], &cell_store)
         .into_value();
     assert_eq!(levels.len(), 3);
     assert_eq!(levels[0].len(), 2);
@@ -669,42 +669,42 @@ fn test_parallel_matches_sequential_complex_graph() {
 
     // B1=3, B2=5, C1=8, D1=16
     assert_eq!(
-        *core.get_cell_value(&mirror, &b1).unwrap(),
+        *core.get_cell_value(&cell_store, &b1).unwrap(),
         CellValue::number(3.0)
     );
     assert_eq!(
-        *core.get_cell_value(&mirror, &b2).unwrap(),
+        *core.get_cell_value(&cell_store, &b2).unwrap(),
         CellValue::number(5.0)
     );
     assert_eq!(
-        *core.get_cell_value(&mirror, &c1).unwrap(),
+        *core.get_cell_value(&cell_store, &c1).unwrap(),
         CellValue::number(8.0)
     );
     assert_eq!(
-        *core.get_cell_value(&mirror, &d1).unwrap(),
+        *core.get_cell_value(&cell_store, &d1).unwrap(),
         CellValue::number(16.0)
     );
 
     // Change A2 to 20
     let sheet_id = sid(1);
-    core.set_cell(&mut mirror, &sheet_id, cid(0x11), 1, 0, "20")
+    core.set_cell(&mut cell_store, &sheet_id, cid(0x11), 1, 0, "20")
         .unwrap();
 
     // B1=21, B2=23, C1=44, D1=88
     assert_eq!(
-        *core.get_cell_value(&mirror, &b1).unwrap(),
+        *core.get_cell_value(&cell_store, &b1).unwrap(),
         CellValue::number(21.0)
     );
     assert_eq!(
-        *core.get_cell_value(&mirror, &b2).unwrap(),
+        *core.get_cell_value(&cell_store, &b2).unwrap(),
         CellValue::number(23.0)
     );
     assert_eq!(
-        *core.get_cell_value(&mirror, &c1).unwrap(),
+        *core.get_cell_value(&cell_store, &c1).unwrap(),
         CellValue::number(44.0)
     );
     assert_eq!(
-        *core.get_cell_value(&mirror, &d1).unwrap(),
+        *core.get_cell_value(&cell_store, &d1).unwrap(),
         CellValue::number(88.0)
     );
 }

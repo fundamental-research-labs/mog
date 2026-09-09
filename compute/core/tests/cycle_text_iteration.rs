@@ -8,7 +8,7 @@
 mod stress_common;
 use stress_common::{build_iterative_snapshot, sheet_uuid};
 
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use snapshot_types::{CellData, RecalcMetrics, SheetSnapshot};
 use value_types::CellValue;
@@ -22,7 +22,7 @@ use value_types::CellValue;
 #[test]
 fn text_only_cycle_iterative_max_delta_serialises_as_null() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let mut snapshot = build_iterative_snapshot(vec![("Sheet1", 100, 26, vec![])], 50, 0.001);
     // Inject A1=B1 and B1=A1 with cached values "x"/"y" — both are text,
     // so any numeric delta tracker has to map its INFINITY sentinel
@@ -61,7 +61,7 @@ fn text_only_cycle_iterative_max_delta_serialises_as_null() {
         cells,
         ranges: vec![],
     }];
-    let r = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let r = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // After migration, `iterative_max_delta` is `Option<FiniteF64>`. For
     // text-only cycles the engine either:

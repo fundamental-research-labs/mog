@@ -34,7 +34,7 @@ struct CellPropertiesPatch {
     old: Option<crate::storage::properties::StoredCellProperties>,
 }
 impl MetadataSwap for CellPropertiesPatch {
-    fn is_changed(&self, storage: &WorkbookStorage, _: &CellMirror) -> bool {
+    fn is_changed(&self, storage: &WorkbookStorage, _: &CellStore) -> bool {
         storage
             .sheet_metadata
             .get(&self.sheet)
@@ -44,7 +44,7 @@ impl MetadataSwap for CellPropertiesPatch {
     fn rebase_ui_format(
         &mut self,
         storage: &WorkbookStorage,
-        mirror: &CellMirror,
+        cell_store: &CellStore,
         sheet: SheetId,
         ranges: &[(u32, u32, u32, u32)],
         format: &domain_types::CellFormat,
@@ -52,7 +52,7 @@ impl MetadataSwap for CellPropertiesPatch {
         if self.sheet != sheet {
             return;
         }
-        let Some(position) = mirror
+        let Some(position) = cell_store
             .get_sheet(&sheet)
             .and_then(|source| source.position_of(&self.cell))
         else {
@@ -74,13 +74,13 @@ impl MetadataSwap for CellPropertiesPatch {
     fn swap(
         &mut self,
         storage: &mut WorkbookStorage,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         effects: &mut HistoryEffects,
     ) {
         effects.metadata_events.record(
             &MetadataKey::CellProperties(self.sheet, self.cell),
             storage,
-            mirror,
+            cell_store,
         );
         if let Some(meta) = storage.sheet_metadata.get_mut(&self.sheet) {
             let current = meta.cell_properties.remove(&self.cell);

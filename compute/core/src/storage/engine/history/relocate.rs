@@ -6,7 +6,7 @@ use rustc_hash::FxHashSet;
 use value_types::CellValue;
 
 use super::{HistoryEffects, HistoryPatch, structure::SheetExtentPatch};
-use crate::mirror::{CellEntry, CellMirror};
+use crate::cells::{CellEntry, CellStore};
 use crate::storage::engine::stores::EngineStores;
 
 #[derive(Debug)]
@@ -14,40 +14,28 @@ struct CellState {
     id: CellId,
     owner: Option<SheetId>,
     position: Option<SheetPos>,
-    positional_owner: bool,
-    grid: Option<(SheetId, u32, u32)>,
+    identity_formula: Option<formula_types::IdentityFormula>,
     entry: Option<CellEntry>,
     formula: Option<String>,
     cse: Option<(u32, u32)>,
 }
 impl CellState {
-    fn read(stores: &EngineStores, mirror: &CellMirror, sheets: &[SheetId], id: CellId) -> Self {
-        let owner = mirror.sheet_for_cell(&id);
-        let source = owner.and_then(|sid| mirror.get_sheet(&sid));
-        let position = source.and_then(|sheet| sheet.id_to_pos.get(&id)).copied();
-        let grid = sheets.iter().find_map(|sid| {
-            stores
-                .grid_indexes
-                .get(sid)
-                .and_then(|grid| grid.cell_position(&id))
-                .map(|(row, col)| (*sid, row, col))
-        });
-        let cse = mirror.cse_anchors.contains(&id).then(|| {
-            mirror
+    fn read(stores: &EngineStores, cell_store: &CellStore, id: CellId) -> Self {
+        let owner = cell_store.sheet_for_cell(&id);
+        let source = owner.and_then(|sid| cell_store.get_sheet(&sid));
+        let position = source.and_then(|sheet| sheet.position_of(&id));
+        let cse = cell_store.cse_anchors.contains(&id).then(|| {
+            cell_store
                 .projection_registry
                 .get(&id)
                 .map(|p| (p.rows, p.cols))
                 .unwrap_or((1, 1))
         });
-        let positional_owner = source
-            .zip(position)
-            .is_some_and(|(sheet, pos)| sheet.pos_to_id.get(&pos) == Some(&id));
         Self {
             id,
             owner,
             position,
-            positional_owner,
-            grid,
+            identity_formula: source.and_then(|sheet| sheet.formula(&id)).cloned(),
             entry: source.and_then(|sheet| sheet.cells.get(&id)).cloned(),
             formula: owner.and_then(|_| stores.compute.get_formula(&id).map(str::to_owned)),
             cse,
@@ -55,13 +43,10 @@ impl CellState {
     }
     fn changed(&self, current: &Self) -> bool {
         self.owner != current.owner
-            || self.positional_owner != current.positional_owner
             || self.position != current.position
-            || self.grid != current.grid
             || self.formula != current.formula
             || self.cse != current.cse
-            || self.entry.as_ref().map(|entry| &entry.formula)
-                != current.entry.as_ref().map(|entry| &entry.formula)
+            || self.identity_formula != current.identity_formula
             || (self.formula.is_none() && self.entry != current.entry)
     }
 }
@@ -84,23 +69,23 @@ pub(crate) struct RelocatePatch {
 }
 
 impl RelocatePatch {
-    pub(crate) fn is_changed(&self, stores: &EngineStores, mirror: &CellMirror) -> bool {
+    pub(crate) fn is_changed(&self, stores: &EngineStores, cell_store: &CellStore) -> bool {
         self.cells
             .iter()
-            .any(|cell| cell.changed(&CellState::read(stores, mirror, &self.sheets, cell.id)))
+            .any(|cell| cell.changed(&CellState::read(stores, cell_store, cell.id)))
     }
 
     pub(crate) fn swap(
         &mut self,
         stores: &mut EngineStores,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         effects: &mut HistoryEffects,
     ) {
         // Capture all mappings before any registration can displace an overlapping identity.
         let mut current: Vec<_> = self
             .cells
             .iter()
-            .map(|cell| CellState::read(stores, mirror, &self.sheets, cell.id))
+            .map(|cell| CellState::read(stores, cell_store, cell.id))
             .collect();
         for cell in &mut current {
             if let Some(text) = effects.formula_texts.get(&cell.id) {
@@ -108,7 +93,7 @@ impl RelocatePatch {
             }
         }
         for payload in &mut self.payloads {
-            if let Some(range) = mirror
+            if let Some(range) = cell_store
                 .get_sheet_mut(&payload.sheet)
                 .and_then(|sheet| sheet.range_views.get_mut(&payload.range))
             {
@@ -120,39 +105,40 @@ impl RelocatePatch {
             }
         }
         for cell in &self.cells {
-            mirror.remove_cell(&cell.id);
-            mirror.cse_anchors.remove(&cell.id);
-            mirror.cse_single_cell.remove(&cell.id);
-            if let Some(projection) = mirror.projection_registry.remove(&cell.id) {
+            cell_store.remove_cell(&cell.id);
+            cell_store.cse_anchors.remove(&cell.id);
+            cell_store.cse_single_cell.remove(&cell.id);
+            if let Some(projection) = cell_store.projection_registry.remove(&cell.id) {
                 effects.projections.push((cell.id, projection));
-            }
-            for sid in &self.sheets {
-                if let Some(grid) = stores.grid_indexes.get_mut(sid) {
-                    grid.remove_cell(&cell.id);
-                }
             }
         }
         for extent in &mut self.extents {
-            extent.swap(stores, mirror, effects);
+            extent.swap(stores, cell_store, effects);
         }
         for cell in &mut self.cells {
             if let (Some(sid), Some(position)) = (cell.owner, cell.position) {
                 if let Some(entry) = cell.entry.take() {
-                    mirror.insert_cell(&sid, cell.id, position, entry);
+                    cell_store.apply_edit(
+                        &sid,
+                        cell.id,
+                        position,
+                        entry.value,
+                        cell.identity_formula.take(),
+                    );
                 } else {
-                    mirror.register_identity_position(sid, position, cell.id);
+                    cell_store.register_identity_position(sid, position, cell.id);
                 }
-                if cell.positional_owner {
+                {
                     effects
                         .cells
                         .insert(cell.id, (sid, position.row(), position.col()));
                 }
                 if let Some((rows, cols)) = cell.cse {
-                    mirror.cse_anchors.insert(cell.id);
+                    cell_store.cse_anchors.insert(cell.id);
                     if rows == 1 && cols == 1 {
-                        mirror.cse_single_cell.insert(cell.id);
+                        cell_store.cse_single_cell.insert(cell.id);
                     }
-                    mirror.projection_registry.register(
+                    cell_store.projection_registry.register(
                         cell.id,
                         sid,
                         position.row(),
@@ -162,35 +148,10 @@ impl RelocatePatch {
                     );
                 }
             }
-            if let Some((sid, row, col)) = cell.grid {
-                if let Some(grid) = stores.grid_indexes.get_mut(&sid) {
-                    grid.register_cell(cell.id, row, col);
-                }
-            }
             effects.formula_texts.insert(cell.id, cell.formula.clone());
         }
-        // Displaced cells can retain a Null identity entry at the same position
-        // as a moved cell. Preserve its identity without letting replay order
-        // replace the actual position owner with that dormant entry.
-        for cell in &self.cells {
-            if let (Some(sid), Some(pos)) = (cell.owner, cell.position)
-                && !cell.positional_owner
-                && let Some(sheet) = mirror.get_sheet_mut(&sid)
-                && sheet.pos_to_id.get(&pos) == Some(&cell.id)
-            {
-                sheet.pos_to_id.remove(&pos);
-            }
-        }
-        for cell in &self.cells {
-            if let (Some(sid), Some(pos)) = (cell.owner, cell.position)
-                && cell.positional_owner
-                && let Some(sheet) = mirror.get_sheet_mut(&sid)
-            {
-                sheet.pos_to_id.insert(pos, cell.id);
-            }
-        }
         for sid in &self.sheets {
-            mirror.history_rebuild_sheet(*sid);
+            cell_store.history_rebuild_sheet(*sid);
             effects.sheets.insert(*sid);
         }
         effects.format_rects.extend(self.rectangles.iter().copied());
@@ -203,7 +164,7 @@ impl RelocatePatch {
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn capture_relocation(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     source: SheetId,
     start_row: u32,
     start_col: u32,
@@ -217,10 +178,10 @@ pub(crate) fn capture_relocation(
     if !capture.is_active() {
         return;
     }
-    let Some(source_grid) = stores.grid_indexes.get(&source) else {
+    let Some(source_grid) = cell_store.get_sheet(&source) else {
         return;
     };
-    let Some(target_grid) = stores.grid_indexes.get(&target) else {
+    let Some(target_grid) = cell_store.get_sheet(&target) else {
         return;
     };
     let moving: Vec<_> = source_grid
@@ -248,10 +209,10 @@ pub(crate) fn capture_relocation(
     capture.record(|| {
         let cells = ids
             .into_iter()
-            .map(|id| CellState::read(stores, mirror, &sheets, id))
+            .map(|id| CellState::read(stores, cell_store, id))
             .collect();
         let mut payloads = Vec::new();
-        if let Some(sheet) = mirror.get_sheet(&target) {
+        if let Some(sheet) = cell_store.get_sheet(&target) {
             for range in sheet.range_views.values() {
                 let mut slots = FxHashSet::default();
                 for &(_, row, col) in &moving {
@@ -263,7 +224,7 @@ pub(crate) fn capture_relocation(
                             range.col_offset_by_id.get(&col),
                         )
                     {
-                        slots.insert(*row as usize * range.payload_cols as usize + *col as usize);
+                        slots.insert(row as usize * range.payload_cols as usize + col as usize);
                     }
                 }
                 if !slots.is_empty() {
@@ -283,7 +244,7 @@ pub(crate) fn capture_relocation(
         }
         let extents = sheets
             .iter()
-            .map(|sid| SheetExtentPatch::capture(mirror, *sid))
+            .map(|sid| SheetExtentPatch::capture(cell_store, *sid))
             .collect();
         HistoryPatch::Relocate(RelocatePatch {
             sheets,

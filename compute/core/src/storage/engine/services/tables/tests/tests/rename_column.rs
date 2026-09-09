@@ -21,15 +21,10 @@ fn rename_column_updates_backing_header_cell_and_viewport() {
         )
         .expect("create_table");
 
-    let (patches, result) = engine
+    let result = engine
         .rename_table_column("Table1", 0, "Alpha")
         .expect("rename_column");
 
-    assert_ne!(
-        patches,
-        compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-        "renaming a visible table header must emit a viewport patch"
-    );
     assert_eq!(
         cell_value(&engine, sid, 0, 0),
         Some(CellValue::Text("Alpha".into())),

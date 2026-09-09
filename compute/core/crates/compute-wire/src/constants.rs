@@ -22,12 +22,6 @@ pub const DIM_STRIDE: usize = 12;
 /// Sentinel value meaning "no string" in a u32 offset field.
 pub const NO_STRING: u32 = 0xFFFF_FFFF;
 
-/// Mutation header size in bytes.
-pub const MUTATION_HEADER_SIZE: usize = 16;
-
-/// Size of a single cell patch in the mutation binary (row + col + cell record).
-pub const PATCH_STRIDE: usize = 40;
-
 // -- Cell record byte offsets (within each 32-byte cell record) ----------------
 
 /// Byte offset of the `f64` number value within a cell record.

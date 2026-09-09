@@ -1,7 +1,7 @@
 use cell_types::{CellId, SheetId};
 use formula_types::Scope;
 
-use crate::mirror::{CellMirror, SheetMirror};
+use crate::cells::{CellStore, SheetStore};
 use crate::scheduler::ComputeCore;
 
 use super::types::FormulaReferenceSourceKind;
@@ -29,7 +29,7 @@ pub(super) struct SourceOrder {
 }
 
 pub(super) fn collect_sources(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     compute: &ComputeCore,
     document_id: &str,
     sheet_filter: Option<SheetId>,
@@ -40,14 +40,14 @@ pub(super) fn collect_sources(
         if sheet_filter.is_some_and(|filter| filter != *sheet_id) {
             continue;
         }
-        let Some(sheet) = mirror.get_sheet(sheet_id) else {
+        let Some(sheet) = cell_store.get_sheet(sheet_id) else {
             continue;
         };
         collect_sheet_sources(sheet, compute, document_id, sheet_index, &mut sources);
     }
 
     if sheet_filter.is_none() {
-        for (scope, name, def) in mirror.all_named_ranges_for_diagnostics() {
+        for (scope, name, def) in cell_store.all_named_ranges_for_diagnostics() {
             let formula = def.raw_expression.as_ref().map_or_else(
                 || render_identity_template(&def.refers_to.template),
                 Clone::clone,
@@ -81,22 +81,19 @@ pub(super) fn collect_sources(
 }
 
 fn collect_sheet_sources(
-    sheet: &SheetMirror,
+    sheet: &SheetStore,
     compute: &ComputeCore,
     document_id: &str,
     sheet_index: usize,
     sources: &mut Vec<SourceFormula>,
 ) {
-    let mut cells: Vec<_> = sheet.cells_iter().collect();
+    let mut cells: Vec<_> = sheet.formulas.iter().collect();
     cells.sort_by_key(|(cell_id, _)| {
         sheet
             .position_for_diagnostics(cell_id)
             .map_or((u32::MAX, u32::MAX), |p| (p.row(), p.col()))
     });
-    for (cell_id, entry) in cells {
-        if entry.formula.is_none() {
-            continue;
-        }
+    for (cell_id, _) in cells {
         let Some(pos) = sheet.position_for_diagnostics(cell_id) else {
             continue;
         };

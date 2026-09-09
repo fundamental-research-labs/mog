@@ -3,7 +3,6 @@ use crate::storage::engine::ComputeEngine;
 use crate::storage::engine::mutation::{EngineMutation, MutationOutput};
 use crate::storage::engine::{mutation, services};
 use cell_types::{CellId, SheetId};
-use compute_document::hex::id_to_hex;
 use compute_formats;
 use value_types::ComputeError;
 
@@ -11,29 +10,23 @@ pub(in crate::storage::engine) fn batch_set_cells(
     engine: &mut ComputeEngine,
     edits: Vec<(SheetId, CellId, u32, u32, mutation::CellInput)>,
     skip_cycle_check: bool,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     match engine.apply_mutation(mutation::EngineMutation::SetCells {
         edits,
         skip_cycle_check,
     })? {
-        mutation::MutationOutput::Recalc(r) => Ok((engine.flush_viewport_patches(), r)),
-        _ => Ok((
-            compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-            MutationResult::empty(),
-        )),
+        mutation::MutationOutput::Recalc(r) => Ok(r),
+        _ => Ok(MutationResult::empty()),
     }
 }
 
 pub(in crate::storage::engine) fn batch_clear_cells(
     engine: &mut ComputeEngine,
     cell_ids: Vec<CellId>,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     match engine.apply_mutation(mutation::EngineMutation::ClearCells { cell_ids })? {
-        mutation::MutationOutput::Recalc(r) => Ok((engine.flush_viewport_patches(), r)),
-        _ => Ok((
-            compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-            MutationResult::empty(),
-        )),
+        mutation::MutationOutput::Recalc(r) => Ok(r),
+        _ => Ok(MutationResult::empty()),
     }
 }
 
@@ -41,16 +34,13 @@ pub(in crate::storage::engine) fn batch_set_cells_by_position(
     engine: &mut ComputeEngine,
     edits: Vec<(SheetId, u32, u32, mutation::CellInput)>,
     skip_cycle_check: bool,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     match engine.apply_mutation(mutation::EngineMutation::SetCellsByPosition {
         edits,
         skip_cycle_check,
     })? {
-        mutation::MutationOutput::Recalc(r) => Ok((engine.flush_viewport_patches(), r)),
-        _ => Ok((
-            compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-            MutationResult::empty(),
-        )),
+        mutation::MutationOutput::Recalc(r) => Ok(r),
+        _ => Ok(MutationResult::empty()),
     }
 }
 
@@ -131,22 +121,22 @@ pub(in crate::storage::engine) fn set_date_value(
     year: i32,
     month: u32,
     day: u32,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let existing_format = {
-        let cell_id = services::cell_editing::find_cell_id_at(&engine.stores, sheet_id, row, col);
+        let cell_id =
+            services::cell_editing::find_cell_id_at(&engine.cell_store, sheet_id, row, col);
         cell_id.and_then(|cid| {
-            let cell_hex = id_to_hex(cid.as_u128());
             let table_fmt =
-                services::resolve_structured_format_at_cell(&engine.mirror, sheet_id, row, col);
-            let fmt = crate::storage::properties::get_effective_format(
+                services::resolve_structured_format_at_cell(&engine.cell_store, sheet_id, row, col);
+            let fmt = crate::storage::properties::get_effective_format_by_id(
                 &engine.stores.storage,
                 sheet_id,
-                &cell_hex,
+                Some(&cid),
                 row,
                 col,
                 table_fmt.as_ref(),
                 engine.stores.grid_indexes.get(sheet_id),
-                engine.mirror.get_sheet(sheet_id),
+                engine.cell_store.get_sheet(sheet_id),
             );
             fmt.number_format
         })
@@ -176,7 +166,7 @@ pub(in crate::storage::engine) fn set_date_value(
             };
             services::formatting::set_format_for_ranges(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 sheet_id,
                 &ranges,
                 &format,
@@ -189,7 +179,7 @@ pub(in crate::storage::engine) fn set_date_value(
             | MutationOutput::Plain(r) => r,
         }
     };
-    Ok((engine.flush_viewport_patches(), mutation_result))
+    Ok(mutation_result)
 }
 
 pub(in crate::storage::engine) fn set_time_value(
@@ -200,22 +190,22 @@ pub(in crate::storage::engine) fn set_time_value(
     hours: u32,
     minutes: u32,
     seconds: u32,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let existing_format = {
-        let cell_id = services::cell_editing::find_cell_id_at(&engine.stores, sheet_id, row, col);
+        let cell_id =
+            services::cell_editing::find_cell_id_at(&engine.cell_store, sheet_id, row, col);
         cell_id.and_then(|cid| {
-            let cell_hex = id_to_hex(cid.as_u128());
             let table_fmt =
-                services::resolve_structured_format_at_cell(&engine.mirror, sheet_id, row, col);
-            let fmt = crate::storage::properties::get_effective_format(
+                services::resolve_structured_format_at_cell(&engine.cell_store, sheet_id, row, col);
+            let fmt = crate::storage::properties::get_effective_format_by_id(
                 &engine.stores.storage,
                 sheet_id,
-                &cell_hex,
+                Some(&cid),
                 row,
                 col,
                 table_fmt.as_ref(),
                 engine.stores.grid_indexes.get(sheet_id),
-                engine.mirror.get_sheet(sheet_id),
+                engine.cell_store.get_sheet(sheet_id),
             );
             fmt.number_format
         })
@@ -246,7 +236,7 @@ pub(in crate::storage::engine) fn set_time_value(
             };
             services::formatting::set_format_for_ranges(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 sheet_id,
                 &ranges,
                 &format,
@@ -259,7 +249,7 @@ pub(in crate::storage::engine) fn set_time_value(
             | MutationOutput::Plain(r) => r,
         }
     };
-    Ok((engine.flush_viewport_patches(), mutation_result))
+    Ok(mutation_result)
 }
 
 pub(in crate::storage::engine) fn clear_range_by_position(
@@ -269,7 +259,7 @@ pub(in crate::storage::engine) fn clear_range_by_position(
     start_col: u32,
     end_row: u32,
     end_col: u32,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     match engine.apply_mutation(mutation::EngineMutation::ClearRangeByPosition {
         sheet_id,
         start_row,
@@ -277,11 +267,8 @@ pub(in crate::storage::engine) fn clear_range_by_position(
         end_row,
         end_col,
     })? {
-        mutation::MutationOutput::Recalc(r) => Ok((engine.flush_viewport_patches(), r)),
-        _ => Ok((
-            compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-            MutationResult::empty(),
-        )),
+        mutation::MutationOutput::Recalc(r) => Ok(r),
+        _ => Ok(MutationResult::empty()),
     }
 }
 
@@ -289,7 +276,7 @@ pub(in crate::storage::engine) fn apply_changes(
     engine: &mut ComputeEngine,
     changes: Vec<CellEdit>,
     skip_cycle_check: bool,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     for edit in &changes {
         if let (Ok(sheet), Ok(cell)) = (
             SheetId::from_uuid_str(&edit.sheet_id),
@@ -297,7 +284,7 @@ pub(in crate::storage::engine) fn apply_changes(
         ) {
             crate::storage::engine::history::cells::capture_cell(
                 &engine.stores,
-                &engine.mirror,
+                &engine.cell_store,
                 sheet,
                 cell,
                 edit.row,
@@ -309,8 +296,8 @@ pub(in crate::storage::engine) fn apply_changes(
         engine
             .stores
             .compute
-            .apply_changes(&mut engine.mirror, &changes, skip_cycle_check)?;
-    engine.prepare_recalc_for_flush(&mut recalc);
-    let patches = engine.flush_viewport_patches();
-    Ok((patches, MutationResult::from_recalc(recalc)))
+            .apply_changes(&mut engine.cell_store, &changes, skip_cycle_check)?;
+    engine.postprocess_mutation_recalc(&mut recalc);
+
+    Ok(MutationResult::from_recalc(recalc))
 }

@@ -6,6 +6,7 @@ use compute_parser::{ASTNode, BinOp};
 use formula_types::CellRef;
 use value_types::{CellError, CellValue, ComputeError};
 
+use super::aggregate_range::direct_aggregate_range;
 use super::evaluator::Evaluator;
 use crate::eval::context::traits::{EvalDataAccess, EvalMetadata};
 use crate::eval::functions::dense_aggregate::{
@@ -125,45 +126,44 @@ pub(in crate::eval) fn flatten_tagged(
     }
 }
 
-/// Helper: extract a numeric value from a tagged value, respecting the
+/// Extract a numeric value with its provenance, respecting the
 /// Excel rule that booleans and nulls from cell/range sources are skipped.
-pub(in crate::eval) fn tagged_to_number(tv: &TaggedValue) -> Option<Result<f64, CellError>> {
-    match &tv.value {
+fn value_to_number(value: &CellValue, source: ValueSource) -> Option<Result<f64, CellError>> {
+    match value {
         CellValue::Error(e, _) => Some(Err(*e)),
         CellValue::Number(n) => Some(Ok(n.get())),
         CellValue::Boolean(b)
-            if tv.source == ValueSource::Inline || tv.source == ValueSource::InlineArray =>
+            if source == ValueSource::Inline || source == ValueSource::InlineArray =>
         {
             Some(Ok(if *b { 1.0 } else { 0.0 }))
         }
         // Omitted arguments (e.g., the trailing empty arg in `MIN(expr, )`) are
         // CellValue::Null with source=Inline.  Excel coerces these to 0.
-        CellValue::Null
-            if tv.source == ValueSource::Inline || tv.source == ValueSource::InlineArray =>
-        {
+        CellValue::Null if source == ValueSource::Inline || source == ValueSource::InlineArray => {
             Some(Ok(0.0))
         }
         _ => None, // skip text, null-from-ranges, and booleans from cell references
     }
 }
 
-pub(in crate::eval) fn agg_sum(vals: &[TaggedValue]) -> CellValue {
+#[cfg(test)]
+mod tests;
+
+fn agg_sum<'a>(vals: impl Iterator<Item = (&'a CellValue, ValueSource)>) -> CellValue {
     #[cfg(feature = "dd-precision")]
     {
         let mut acc = value_types::DdSum::new();
-        for tv in vals {
-            match &tv.value {
+        for (value, source) in vals {
+            match value {
                 CellValue::Error(e, _) => return CellValue::Error(*e, None),
                 CellValue::Number(n) => acc.add_dd(n.to_f64x2()),
                 CellValue::Boolean(b)
-                    if tv.source == ValueSource::Inline
-                        || tv.source == ValueSource::InlineArray =>
+                    if source == ValueSource::Inline || source == ValueSource::InlineArray =>
                 {
                     acc.add(if *b { 1.0 } else { 0.0 });
                 }
                 CellValue::Null
-                    if tv.source == ValueSource::Inline
-                        || tv.source == ValueSource::InlineArray =>
+                    if source == ValueSource::Inline || source == ValueSource::InlineArray =>
                 {
                     acc.add(0.0);
                 }
@@ -176,8 +176,8 @@ pub(in crate::eval) fn agg_sum(vals: &[TaggedValue]) -> CellValue {
     #[cfg(not(feature = "dd-precision"))]
     {
         let mut acc = value_types::KahanSum::new();
-        for tv in vals {
-            match tagged_to_number(tv) {
+        for (value, source) in vals {
+            match value_to_number(value, source) {
                 Some(Ok(n)) => acc.add(n),
                 Some(Err(e)) => return CellValue::Error(e, None),
                 None => {}
@@ -187,11 +187,11 @@ pub(in crate::eval) fn agg_sum(vals: &[TaggedValue]) -> CellValue {
     }
 }
 
-pub(in crate::eval) fn agg_average(vals: &[TaggedValue]) -> CellValue {
+fn agg_average<'a>(vals: impl Iterator<Item = (&'a CellValue, ValueSource)>) -> CellValue {
     let mut acc = value_types::KahanSum::new();
     let mut count = 0u64;
-    for tv in vals {
-        match tagged_to_number(tv) {
+    for (value, source) in vals {
+        match value_to_number(value, source) {
             Some(Ok(n)) => {
                 acc.add(n);
                 count += 1;
@@ -207,13 +207,13 @@ pub(in crate::eval) fn agg_average(vals: &[TaggedValue]) -> CellValue {
     }
 }
 
-pub(in crate::eval) fn agg_count(vals: &[TaggedValue]) -> CellValue {
+fn agg_count<'a>(vals: impl Iterator<Item = (&'a CellValue, ValueSource)>) -> CellValue {
     let mut count = 0u64;
-    for tv in vals {
+    for (value, source) in vals {
         // COUNT counts numeric values unconditionally.
         // Inline (literal) booleans are also counted — Excel coerces them to
         // numbers — but booleans from cell/range references are skipped.
-        match (&tv.value, tv.source) {
+        match (value, source) {
             (CellValue::Number(_), _) => count += 1,
             (CellValue::Boolean(_), ValueSource::Inline) => count += 1,
             _ => {}
@@ -222,31 +222,29 @@ pub(in crate::eval) fn agg_count(vals: &[TaggedValue]) -> CellValue {
     CellValue::number(count as f64)
 }
 
-pub(in crate::eval) fn agg_counta(vals: &[TaggedValue]) -> CellValue {
+fn agg_counta<'a>(vals: impl Iterator<Item = (&'a CellValue, ValueSource)>) -> CellValue {
     let mut count = 0u64;
-    for tv in vals {
-        if !matches!(tv.value, CellValue::Null) {
+    for (value, _) in vals {
+        if !matches!(value, CellValue::Null) {
             count += 1;
         }
     }
     CellValue::number(count as f64)
 }
 
-pub(in crate::eval) fn agg_countblank(vals: &[TaggedValue]) -> CellValue {
+fn agg_countblank<'a>(vals: impl Iterator<Item = (&'a CellValue, ValueSource)>) -> CellValue {
     let count = vals
-        .iter()
-        .filter(|tv| {
-            matches!(tv.value, CellValue::Null)
-                || matches!(&tv.value, CellValue::Text(s) if s.is_empty())
+        .filter(|(value, _)| {
+            matches!(value, CellValue::Null) || matches!(value, CellValue::Text(s) if s.is_empty())
         })
         .count();
     CellValue::number(count as f64)
 }
 
-pub(in crate::eval) fn agg_min(vals: &[TaggedValue]) -> CellValue {
+fn agg_min<'a>(vals: impl Iterator<Item = (&'a CellValue, ValueSource)>) -> CellValue {
     let mut min: Option<f64> = None;
-    for tv in vals {
-        match tagged_to_number(tv) {
+    for (value, source) in vals {
+        match value_to_number(value, source) {
             Some(Ok(n)) => {
                 min = Some(match min {
                     Some(m) => m.min(n),
@@ -260,10 +258,10 @@ pub(in crate::eval) fn agg_min(vals: &[TaggedValue]) -> CellValue {
     CellValue::number(min.unwrap_or(0.0))
 }
 
-pub(in crate::eval) fn agg_max(vals: &[TaggedValue]) -> CellValue {
+fn agg_max<'a>(vals: impl Iterator<Item = (&'a CellValue, ValueSource)>) -> CellValue {
     let mut max: Option<f64> = None;
-    for tv in vals {
-        match tagged_to_number(tv) {
+    for (value, source) in vals {
+        match value_to_number(value, source) {
             Some(Ok(n)) => {
                 max = Some(match max {
                     Some(m) => m.max(n),
@@ -281,28 +279,19 @@ pub(in crate::eval) fn agg_max(vals: &[TaggedValue]) -> CellValue {
 // Dense fast-path helpers
 // ---------------------------------------------------------------------------
 
-/// Map a concrete aggregate function pointer to the corresponding `AggregateOp`.
-///
-/// Returns `None` for unrecognised function pointers or any future aggregate
-/// that doesn't have a dense fast path.
-fn agg_fn_to_op(agg_fn: fn(&[TaggedValue]) -> CellValue) -> Option<AggregateOp> {
-    let ptr = agg_fn as *const () as usize;
-    if ptr == agg_sum as *const () as usize {
-        Some(AggregateOp::Sum)
-    } else if ptr == agg_average as *const () as usize {
-        Some(AggregateOp::Average)
-    } else if ptr == agg_count as *const () as usize {
-        Some(AggregateOp::Count)
-    } else if ptr == agg_counta as *const () as usize {
-        Some(AggregateOp::CountA)
-    } else if ptr == agg_countblank as *const () as usize {
-        Some(AggregateOp::CountBlank)
-    } else if ptr == agg_min as *const () as usize {
-        Some(AggregateOp::Min)
-    } else if ptr == agg_max as *const () as usize {
-        Some(AggregateOp::Max)
-    } else {
-        None
+/// Reduce borrowed or evaluated values with the same provenance and arithmetic.
+fn aggregate_values<'a>(
+    op: AggregateOp,
+    values: impl Iterator<Item = (&'a CellValue, ValueSource)>,
+) -> CellValue {
+    match op {
+        AggregateOp::Sum => agg_sum(values),
+        AggregateOp::Average => agg_average(values),
+        AggregateOp::Count => agg_count(values),
+        AggregateOp::CountA => agg_counta(values),
+        AggregateOp::CountBlank => agg_countblank(values),
+        AggregateOp::Min => agg_min(values),
+        AggregateOp::Max => agg_max(values),
     }
 }
 
@@ -323,16 +312,8 @@ fn try_extract_single_column_range(
     args: &[ASTNode],
     meta: &dyn EvalMetadata,
 ) -> Option<(SheetId, u32, u32, u32)> {
-    if args.len() != 1 {
-        return None;
-    }
-    let arg = match &args[0] {
-        ASTNode::SheetRef { inner, .. } => inner.as_ref(),
-        ASTNode::Paren(inner) => inner.as_ref(),
-        other => other,
-    };
-    match arg {
-        ASTNode::Range(RangeRef { start, end, .. }) => {
+    match direct_aggregate_range(args) {
+        Some(RangeRef { start, end, .. }) => {
             let (s_sheet, s_row, s_col) = resolve_ref(start, meta)?;
             let (e_sheet, e_row, e_col) = resolve_ref(end, meta)?;
             if s_sheet != e_sheet || s_col != e_col {
@@ -356,16 +337,8 @@ fn try_extract_multi_column_range(
     args: &[ASTNode],
     meta: &dyn EvalMetadata,
 ) -> Option<(SheetId, u32, u32, u32, u32)> {
-    if args.len() != 1 {
-        return None;
-    }
-    let arg = match &args[0] {
-        ASTNode::SheetRef { inner, .. } => inner.as_ref(),
-        ASTNode::Paren(inner) => inner.as_ref(),
-        other => other,
-    };
-    match arg {
-        ASTNode::Range(RangeRef { start, end, .. }) => {
+    match direct_aggregate_range(args) {
+        Some(RangeRef { start, end, .. }) => {
             let (s_sheet, s_row, s_col) = resolve_ref(start, meta)?;
             let (e_sheet, e_row, e_col) = resolve_ref(end, meta)?;
             if s_sheet != e_sheet {
@@ -411,17 +384,15 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
     ///
     /// Falls back to the original cell-by-cell path when:
     /// - the argument is not a single-column range,
-    /// - the column has no dense snapshot, or
-    /// - the `agg_fn` is not one of the recognised fast-path operations.
+    /// - the column has no dense snapshot.
     pub(in crate::eval) async fn eval_aggregate(
         &mut self,
         args: &[ASTNode],
-        agg_fn: fn(&[TaggedValue]) -> CellValue,
+        op: AggregateOp,
     ) -> Result<CellValue, ComputeError> {
         // Dense fast path: single-column range on a clean dense column
-        if let Some(op) = agg_fn_to_op(agg_fn)
-            && let Some((sheet, col, start_row, end_row)) =
-                try_extract_single_column_range(args, self.meta)
+        if let Some((sheet, col, start_row, end_row)) =
+            try_extract_single_column_range(args, self.meta)
         {
             let dense = self
                 .meta
@@ -434,9 +405,8 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
         }
 
         // Dense fast path: multi-column range — aggregate across all columns
-        if let Some(op) = agg_fn_to_op(agg_fn)
-            && let Some((sheet, start_col, end_col, start_row, end_row)) =
-                try_extract_multi_column_range(args, self.meta)
+        if let Some((sheet, start_col, end_col, start_row, end_row)) =
+            try_extract_multi_column_range(args, self.meta)
         {
             let columns: Vec<_> = (start_col..=end_col)
                 .map(|col| {
@@ -453,7 +423,7 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
             }
         }
 
-        // Borrowed CellValue fast path: borrow column data directly from mirror
+        // Borrowed CellValue fast path: borrow column data directly from cell_store
         if let Some((sheet, col, start_row, end_row)) =
             try_extract_single_column_range(args, self.meta)
             && let Some(col_values) = self.meta.get_column_values(&sheet, col)
@@ -462,22 +432,21 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
             let end = (end_row.saturating_add(1) as usize).min(col_values.len());
             if start < end {
                 let slice = col_values.slice(start..end);
-                let tagged: Vec<TaggedValue> = slice
-                    .iter()
-                    .map(|v| TaggedValue {
-                        value: v.clone(),
-                        source: ValueSource::Range,
-                    })
-                    .collect();
-                return Ok(agg_fn(&tagged));
+                return Ok(aggregate_values(
+                    op,
+                    slice.iter().map(|value| (value, ValueSource::Range)),
+                ));
             }
-            // Range entirely beyond column data — all nulls → agg_fn on empty
-            return Ok(agg_fn(&[]));
+            // Range entirely beyond column data has no stored values.
+            return Ok(aggregate_values(op, std::iter::empty()));
         }
 
         // Existing cell-by-cell path
         let flat = self.eval_and_flatten_tagged(args).await?;
-        Ok(agg_fn(&flat))
+        Ok(aggregate_values(
+            op,
+            flat.iter().map(|tagged| (&tagged.value, tagged.source)),
+        ))
     }
 
     /// Evaluate args and flatten arrays, tagging each value with whether it

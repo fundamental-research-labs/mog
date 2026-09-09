@@ -98,7 +98,7 @@ fn create_filtered_table(engine: &mut ComputeEngine) -> String {
         .expect("table filter");
     let filter_id = table_filter.id;
 
-    let (_, result) = engine
+    let result = engine
         .set_column_filter(
             &sheet_id,
             &filter_id,
@@ -124,24 +124,13 @@ fn create_filtered_table(engine: &mut ComputeEngine) -> String {
     filter_id
 }
 
-fn visible_filter_columns(engine: &ComputeEngine, sheet_id: &SheetId) -> Vec<u32> {
-    let mut cols: Vec<u32> = engine
-        .get_filter_header_info(sheet_id)
-        .into_iter()
-        .filter(|entry| entry.button_visible)
-        .map(|entry| entry.col)
-        .collect();
-    cols.sort_unstable();
-    cols
-}
-
 #[test]
 fn delete_table_clears_owned_table_filter_visibility() {
     let (mut engine, _) = ComputeEngine::from_snapshot(table_filter_snapshot()).unwrap();
     let sheet_id = sid();
     let filter_id = create_filtered_table(&mut engine);
 
-    let (_, result) = engine.delete_table("People").expect("delete table");
+    let result = engine.delete_table("People").expect("delete table");
 
     assert!(
         engine.get_filters_in_sheet(&sheet_id).is_empty(),
@@ -218,7 +207,7 @@ fn convert_table_to_range_clears_owned_table_filter_visibility() {
     let sheet_id = sid();
     let filter_id = create_filtered_table(&mut engine);
 
-    let (_, result) = engine
+    let result = engine
         .convert_table_to_range("People")
         .expect("convert table");
 

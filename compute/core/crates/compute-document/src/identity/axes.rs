@@ -90,10 +90,7 @@ impl GridIndex {
 
     /// Return the dense `row_index → RowId` slice for legacy explicit axes.
     ///
-    /// unified reference model consumer: the mirror uses this to seed its own
-    /// `RowId → (SheetId, row_index)` reverse index so `WorkbookLookup`
-    /// can answer full-row display queries without threading the grid index
-    /// through every call site.
+    /// Native consumers share the axis with `row_axis()` instead.
     #[inline]
     #[must_use]
     pub fn row_ids_dense(&self) -> &[RowId] {
@@ -105,9 +102,7 @@ impl GridIndex {
 
     /// Collect all row identities in current positional order.
     ///
-    /// This is the compatibility bridge for consumers that still own dense
-    /// mirror indexes. Unlike [`Self::row_ids_dense`], it is correct for
-    /// compact axes because it resolves identities through the axis store.
+    /// Intended for diagnostics and export. Installations share the axis Arc.
     #[must_use]
     pub fn row_ids_ordered(&self) -> Vec<RowId> {
         self.row_axis
@@ -127,9 +122,7 @@ impl GridIndex {
 
     /// Collect all column identities in current positional order.
     ///
-    /// This is the compatibility bridge for consumers that still own dense
-    /// mirror indexes. Unlike [`Self::col_ids_dense`], it is correct for
-    /// compact axes because it resolves identities through the axis store.
+    /// Intended for diagnostics and export. Installations share the axis Arc.
     #[must_use]
     pub fn col_ids_ordered(&self) -> Vec<ColId> {
         self.col_axis

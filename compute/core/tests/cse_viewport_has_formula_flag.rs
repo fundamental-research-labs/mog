@@ -8,14 +8,14 @@
 //!
 //! ```ignore
 //! let has_formula =
-//!     formula_str.is_some() || mirror.get_formula(&cell_id).is_some();
+//!     formula_str.is_some() || cell_store.get_formula(&cell_id).is_some();
 //! if has_formula { flags |= render_flags::HAS_FORMULA; }
 //! ```
 //!
 //! This ignores CSE (Ctrl+Shift+Enter) array-formula projection membership.
 //! For a multi-cell CSE formula entered with anchor `D1` and projection range
 //! `D1:D3`, only the anchor cell carries entries in `formula_strings` /
-//! `mirror.get_formula(...)`. The spilled-into projection members `D2` and
+//! `cell_store.get_formula(...)`. The spilled-into projection members `D2` and
 //! `D3` are members of the same array formula — their value comes from the
 //! anchor's formula text — but the per-cell render flag computation never
 //! consults projection state, so only `D1` lights up `HAS_FORMULA` in the

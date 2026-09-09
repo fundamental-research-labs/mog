@@ -6,14 +6,14 @@ use compute_wire::{
 
 use super::cf_extras::{data_bar_to_render, icon_to_render};
 use super::render_cells::build_render_cell_materials;
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::storage::engine::settings::EngineSettings;
 use crate::storage::engine::stores::{CFCacheEntry, EngineStores};
 use crate::storage::sheet::{dimensions, merges};
 
 pub(in crate::storage::engine::viewport) fn build_viewport_render_data_inner(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     settings: &EngineSettings,
     palette: &mut FormatPalette,
     cf_cache_entry: Option<&CFCacheEntry>,
@@ -31,7 +31,7 @@ pub(in crate::storage::engine::viewport) fn build_viewport_render_data_inner(
 
     let cells = build_render_cell_materials(
         stores,
-        mirror,
+        cell_store,
         settings,
         cf_cache_entry,
         sheet_id,
@@ -45,7 +45,7 @@ pub(in crate::storage::engine::viewport) fn build_viewport_render_data_inner(
         resolve_table_format,
     );
 
-    // Now intern formats into the palette (mirror borrow released above).
+    // Now intern formats into the palette (cell_store borrow released above).
     let mut render_cells: Vec<ViewportRenderCell> = cells
         .into_iter()
         .map(|mut cell| {
@@ -93,11 +93,11 @@ pub(in crate::storage::engine::viewport) fn build_viewport_render_data_inner(
     }
 
     // --- Merges ---
-    let render_merges: Vec<RenderViewportMerge> = match stores.grid_indexes.get(sheet_id) {
-        Some(grid) => merges::get_merges_in_range(
+    let render_merges: Vec<RenderViewportMerge> = match cell_store.get_sheet(sheet_id) {
+        Some(sheet) => merges::get_merges_in_range(
             &stores.storage,
             *sheet_id,
-            grid,
+            sheet,
             start_row,
             start_col,
             end_row,
@@ -114,8 +114,8 @@ pub(in crate::storage::engine::viewport) fn build_viewport_render_data_inner(
         None => Vec::new(),
     };
 
-    // --- Row dimensions (pixels from LayoutIndex) ---
-    let layout_index = stores.layout_indexes.get(sheet_id);
+    // --- Row dimensions (pixels from PixelLayout) ---
+    let layout_index = stores.pixel_layout(sheet_id);
     let row_dimensions: Vec<RenderRowDimension> = (start_row..end_row)
         .map(|row| {
             let hidden = dimensions::is_row_hidden(
@@ -125,6 +125,7 @@ pub(in crate::storage::engine::viewport) fn build_viewport_render_data_inner(
                 stores.grid_indexes.get(sheet_id),
             );
             let height = layout_index
+                .as_deref()
                 .map(|li| li.get_row_height(row as usize))
                 .unwrap_or_else(|| stores.layout_metrics.default_row_height());
             RenderRowDimension {
@@ -135,7 +136,7 @@ pub(in crate::storage::engine::viewport) fn build_viewport_render_data_inner(
         })
         .collect();
 
-    // --- Column dimensions (pixels from LayoutIndex) ---
+    // --- Column dimensions (pixels from PixelLayout) ---
     let col_dimensions: Vec<RenderColDimension> = (start_col..end_col)
         .map(|col| {
             let hidden = dimensions::is_column_hidden(
@@ -145,6 +146,7 @@ pub(in crate::storage::engine::viewport) fn build_viewport_render_data_inner(
                 stores.grid_indexes.get(sheet_id),
             );
             let width = layout_index
+                .as_deref()
                 .map(|li| li.get_col_width(col as usize))
                 .unwrap_or_else(|| stores.layout_metrics.default_column_width());
             RenderColDimension {
@@ -156,14 +158,12 @@ pub(in crate::storage::engine::viewport) fn build_viewport_render_data_inner(
         .collect();
 
     // --- Position arrays ---
-    let row_positions = stores
-        .layout_indexes
-        .get(sheet_id)
+    let row_positions = layout_index
+        .as_deref()
         .map(|li| li.build_row_positions(start_row as usize, end_row as usize))
         .unwrap_or_default();
-    let col_positions = stores
-        .layout_indexes
-        .get(sheet_id)
+    let col_positions = layout_index
+        .as_deref()
         .map(|li| li.build_col_positions(start_col as usize, end_col as usize))
         .unwrap_or_default();
 

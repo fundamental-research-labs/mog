@@ -71,7 +71,7 @@ fn make_snapshot() -> WorkbookSnapshot {
 #[test]
 fn qualified_display_keeps_sheet_prefix_when_context_matches() {
     let (mut engine, _) = ComputeEngine::from_snapshot(make_snapshot()).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     let identity = engine
         .to_identity_formula(&sheet_id, "Sheet1!A1:A5")
@@ -104,7 +104,7 @@ fn qualified_display_keeps_sheet_prefix_when_context_matches() {
 #[test]
 fn qualified_display_with_nil_sheet_context_is_qualified() {
     let (mut engine, _) = ComputeEngine::from_snapshot(make_snapshot()).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     let identity = engine
         .to_identity_formula(&sheet_id, "Sheet1!A1:A5")

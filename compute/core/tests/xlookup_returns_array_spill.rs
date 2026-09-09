@@ -32,22 +32,22 @@ mod stress_common;
 use stress_common::*;
 
 use cell_types::SheetPos;
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use value_types::CellValue;
 
 /// Read whatever value sits at the given sheet position — works for both
 /// real cells (origin of a spill) and projected col_data (spill targets).
-fn pos_value(mirror: &CellMirror, si: u32, row: u32, col: u32) -> Option<CellValue> {
-    mirror
+fn pos_value(cell_store: &CellStore, si: u32, row: u32, col: u32) -> Option<CellValue> {
+    cell_store
         .get_cell_value_at(&sid(si), SheetPos::new(row, col))
         .cloned()
 }
 
 /// Assert the value at a sheet position is `CellValue::Text(expected)`.
 /// Works for spill-origin cells (F1) and spill-target positions (G1, H1).
-fn assert_pos_text(mirror: &CellMirror, si: u32, row: u32, col: u32, expected: &str) {
-    match pos_value(mirror, si, row, col) {
+fn assert_pos_text(cell_store: &CellStore, si: u32, row: u32, col: u32, expected: &str) {
+    match pos_value(cell_store, si, row, col) {
         Some(CellValue::Text(t)) => assert_eq!(
             &*t, expected,
             "pos ({si},{row},{col}) expected Text({expected:?}), got Text({t:?})",
@@ -58,8 +58,8 @@ fn assert_pos_text(mirror: &CellMirror, si: u32, row: u32, col: u32, expected: &
 
 /// Assert the value at a sheet position is empty / Null — spill must not
 /// bleed past the declared array shape.
-fn assert_pos_blank(mirror: &CellMirror, si: u32, row: u32, col: u32) {
-    match pos_value(mirror, si, row, col) {
+fn assert_pos_blank(cell_store: &CellStore, si: u32, row: u32, col: u32) {
+    match pos_value(cell_store, si, row, col) {
         None | Some(CellValue::Null) => {}
         Some(other) => panic!("pos ({si},{row},{col}) expected blank/Null, got {other:?}",),
     }
@@ -74,36 +74,43 @@ fn assert_pos_blank(mirror: &CellMirror, si: u32, row: u32, col: u32) {
 #[test]
 fn xlookup_multi_cell_return_spills_across_row() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
 
     // Empty sheet — we will populate everything via the production parse path
     // (`Scheduler::set_cell` → `CellInput::Parse`) so the test exercises the
     // same edit pipeline a UI typing session would.
     let snapshot = build_snapshot(vec![("Sheet1", 100, 26, vec![])]);
-    core.init_from_snapshot(&mut mirror, snapshot)
+    core.init_from_snapshot(&mut cell_store, snapshot)
         .expect("init_from_snapshot failed");
 
     // A1:A3 — the lookup column.
-    let _ = set(&mut core, &mut mirror, 0, 0, 0, "k1");
-    let _ = set(&mut core, &mut mirror, 0, 1, 0, "k2");
-    let _ = set(&mut core, &mut mirror, 0, 2, 0, "k3");
+    let _ = set(&mut core, &mut cell_store, 0, 0, 0, "k1");
+    let _ = set(&mut core, &mut cell_store, 0, 1, 0, "k2");
+    let _ = set(&mut core, &mut cell_store, 0, 2, 0, "k3");
 
     // B1:D3 — the 3x3 return grid (one row per key, three columns wide).
     let grid: [[&str; 3]; 3] = [["a1", "b1", "c1"], ["a2", "b2", "c2"], ["a3", "b3", "c3"]];
     for (r, row) in grid.iter().enumerate() {
         for (c, cell) in row.iter().enumerate() {
             // B is col 1, C is col 2, D is col 3.
-            let _ = set(&mut core, &mut mirror, 0, r as u32, (c as u32) + 1, cell);
+            let _ = set(
+                &mut core,
+                &mut cell_store,
+                0,
+                r as u32,
+                (c as u32) + 1,
+                cell,
+            );
         }
     }
 
     // Sanity-check the inputs landed (catches any setup-vs-bug confusion in
     // the failure output: if these panic, the bug we want to expose has not
     // even been reached).
-    assert_pos_text(&mirror, 0, 1, 0, "k2");
-    assert_pos_text(&mirror, 0, 1, 1, "a2");
-    assert_pos_text(&mirror, 0, 1, 2, "b2");
-    assert_pos_text(&mirror, 0, 1, 3, "c2");
+    assert_pos_text(&cell_store, 0, 1, 0, "k2");
+    assert_pos_text(&cell_store, 0, 1, 1, "a2");
+    assert_pos_text(&cell_store, 0, 1, 2, "b2");
+    assert_pos_text(&cell_store, 0, 1, 3, "c2");
 
     // F1 = =XLOOKUP("k2", A1:A3, B1:D3). F is column 5 (0-based).
     // The trailing `,,0,1` keeps us in plain exact-match, default search mode
@@ -111,7 +118,7 @@ fn xlookup_multi_cell_return_spills_across_row() {
     // documentation.
     let _ = set(
         &mut core,
-        &mut mirror,
+        &mut cell_store,
         0,
         0,
         5,
@@ -121,17 +128,17 @@ fn xlookup_multi_cell_return_spills_across_row() {
     // F1 — spill origin. Pre-fix this passes because the implicit-intersection
     // branch writes `arr.get(0,0)` → "a2". Post-fix it still passes because
     // the spill scheduler stores the array's top-left scalar at the origin.
-    assert_pos_text(&mirror, 0, 0, 5, "a2");
+    assert_pos_text(&cell_store, 0, 0, 5, "a2");
 
     // G1 — first spill target. Pre-fix: BLANK (the assertion that exposes the
     // bug). Post-fix: "b2".
-    assert_pos_text(&mirror, 0, 0, 6, "b2");
+    assert_pos_text(&cell_store, 0, 0, 6, "b2");
 
     // H1 — second spill target. Pre-fix: BLANK. Post-fix: "c2".
-    assert_pos_text(&mirror, 0, 0, 7, "c2");
+    assert_pos_text(&cell_store, 0, 0, 7, "c2");
 
     // I1 — past the end of the 1x3 spill. Must remain blank both pre- and
     // post-fix; this guards a future over-eager fix from spilling one column
     // too far.
-    assert_pos_blank(&mirror, 0, 0, 8);
+    assert_pos_blank(&cell_store, 0, 0, 8);
 }

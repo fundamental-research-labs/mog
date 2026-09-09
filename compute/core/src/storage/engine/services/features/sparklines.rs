@@ -1,3 +1,4 @@
+use crate::cells::CellStore;
 use crate::snapshot::{CellPosition, ChangeKind, MutationResult, SparklineChange};
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::sparklines;
@@ -7,13 +8,14 @@ use value_types::ComputeError;
 
 pub(in crate::storage::engine) fn add_sparkline(
     stores: &mut EngineStores,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     sparkline: &sparklines::Sparkline,
 ) -> Result<MutationResult, ComputeError> {
     sparklines::add_sparkline(&mut stores.storage, sheet_id, sparkline);
     let mut result = MutationResult::empty();
     push_sparkline_change(
-        stores,
+        cell_store,
         &mut result,
         sheet_id,
         sparkline.cell.row,
@@ -25,6 +27,7 @@ pub(in crate::storage::engine) fn add_sparkline(
 
 pub(in crate::storage::engine) fn update_sparkline(
     stores: &mut EngineStores,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     sparkline_id: &str,
     updates: &sparklines::SparklineUpdate,
@@ -45,7 +48,7 @@ pub(in crate::storage::engine) fn update_sparkline(
     match (before, after) {
         (Some(old), Some(new)) if old.cell.row == new.cell.row && old.cell.col == new.cell.col => {
             push_sparkline_change(
-                stores,
+                cell_store,
                 &mut result,
                 sheet_id,
                 new.cell.row,
@@ -55,7 +58,7 @@ pub(in crate::storage::engine) fn update_sparkline(
         }
         (Some(old), Some(new)) => {
             push_sparkline_change(
-                stores,
+                cell_store,
                 &mut result,
                 sheet_id,
                 old.cell.row,
@@ -63,7 +66,7 @@ pub(in crate::storage::engine) fn update_sparkline(
                 ChangeKind::Removed,
             );
             push_sparkline_change(
-                stores,
+                cell_store,
                 &mut result,
                 sheet_id,
                 new.cell.row,
@@ -73,7 +76,7 @@ pub(in crate::storage::engine) fn update_sparkline(
         }
         (None, Some(new)) => {
             push_sparkline_change(
-                stores,
+                cell_store,
                 &mut result,
                 sheet_id,
                 new.cell.row,
@@ -88,6 +91,7 @@ pub(in crate::storage::engine) fn update_sparkline(
 
 pub(in crate::storage::engine) fn delete_sparkline(
     stores: &mut EngineStores,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     sparkline_id: &str,
 ) -> Result<MutationResult, ComputeError> {
@@ -101,7 +105,7 @@ pub(in crate::storage::engine) fn delete_sparkline(
     let mut result = MutationResult::empty();
     if let Some(old) = before {
         push_sparkline_change(
-            stores,
+            cell_store,
             &mut result,
             sheet_id,
             old.cell.row,
@@ -138,6 +142,7 @@ pub(in crate::storage::engine) fn get_sparkline_at_cell(
 
 pub(in crate::storage::engine) fn add_sparkline_group(
     stores: &mut EngineStores,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     group: &sparklines::SparklineGroup,
 ) -> Result<MutationResult, ComputeError> {
@@ -147,7 +152,7 @@ pub(in crate::storage::engine) fn add_sparkline_group(
         if let Some(sparkline) = sparklines::get_sparkline(&stores.storage, sheet_id, sparkline_id)
         {
             push_sparkline_change(
-                stores,
+                cell_store,
                 &mut result,
                 sheet_id,
                 sparkline.cell.row,
@@ -176,6 +181,7 @@ pub(in crate::storage::engine) fn get_sparkline_groups_in_sheet(
 
 pub(in crate::storage::engine) fn delete_sparkline_group(
     stores: &mut EngineStores,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     group_id: &str,
     delete_sparklines: bool,
@@ -213,7 +219,7 @@ pub(in crate::storage::engine) fn delete_sparkline_group(
     };
     for sparkline in before_sparklines {
         push_sparkline_change(
-            stores,
+            cell_store,
             &mut result,
             sheet_id,
             sparkline.cell.row,
@@ -226,6 +232,7 @@ pub(in crate::storage::engine) fn delete_sparkline_group(
 
 pub(in crate::storage::engine) fn clear_sparklines_in_range(
     stores: &mut EngineStores,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,
@@ -248,7 +255,7 @@ pub(in crate::storage::engine) fn clear_sparklines_in_range(
     let mut result = MutationResult::empty();
     for sparkline in before {
         push_sparkline_change(
-            stores,
+            cell_store,
             &mut result,
             sheet_id,
             sparkline.cell.row,
@@ -261,6 +268,7 @@ pub(in crate::storage::engine) fn clear_sparklines_in_range(
 
 pub(in crate::storage::engine) fn clear_sparklines_for_sheet(
     stores: &mut EngineStores,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
 ) -> Result<MutationResult, ComputeError> {
     let before = sparklines::get_sparklines_in_sheet(&stores.storage, sheet_id);
@@ -268,7 +276,7 @@ pub(in crate::storage::engine) fn clear_sparklines_for_sheet(
     let mut result = MutationResult::empty();
     for sparkline in before {
         push_sparkline_change(
-            stores,
+            cell_store,
             &mut result,
             sheet_id,
             sparkline.cell.row,
@@ -280,17 +288,16 @@ pub(in crate::storage::engine) fn clear_sparklines_for_sheet(
 }
 
 fn push_sparkline_change(
-    stores: &EngineStores,
+    cell_store: &CellStore,
     result: &mut MutationResult,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
     kind: ChangeKind,
 ) {
-    let cell_id = stores
-        .grid_indexes
-        .get(sheet_id)
-        .and_then(|grid| grid.cell_id_at(row, col))
+    let cell_id = cell_store
+        .get_sheet(sheet_id)
+        .and_then(|sheet| sheet.cell_id_at(cell_types::SheetPos::new(row, col)))
         .map(|cell_id| id_to_hex(cell_id.as_u128()).to_string())
         .unwrap_or_default();
 
@@ -310,6 +317,3 @@ pub(in crate::storage::engine) fn has_sparkline(
 ) -> bool {
     sparklines::has_sparkline(&stores.storage, sheet_id, row, col)
 }
-
-// -------------------------------------------------------------------
-// Slicer helpers (pure — from storage/slicers.rs)

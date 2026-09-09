@@ -56,12 +56,12 @@ pub(in crate::storage::engine) fn collect_imported_formats(
 }
 
 pub(in crate::storage::engine) fn install_imported_formats(
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     palette: &[domain_types::CellFormat],
     formats: &[(SheetId, crate::storage::properties::ImportedFormats)],
 ) {
     for (id, formats) in formats {
-        if let Some(sheet) = mirror.get_sheet_mut(id) {
+        if let Some(sheet) = cell_store.get_sheet_mut(id) {
             formats.install(sheet, palette);
         }
     }
@@ -72,6 +72,6 @@ pub(in crate::storage::engine) fn sync_enable_calculation_flags(engine: &mut Com
     let sheet_ids = engine.stores.storage.sheet_order();
     for sheet_id in &sheet_ids {
         let enabled = visibility::is_sheet_calculation_enabled(&engine.stores.storage, sheet_id);
-        engine.mirror.set_enable_calculation(sheet_id, enabled);
+        engine.cell_store.set_enable_calculation(sheet_id, enabled);
     }
 }

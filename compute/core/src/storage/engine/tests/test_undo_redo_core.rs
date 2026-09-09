@@ -5,12 +5,12 @@ use super::helpers::*;
 
 fn assert_a1_and_dependent(engine: &ComputeEngine, value: f64, sum: f64) {
     assert_eq!(
-        engine.mirror().get_cell_value(&cell_id_a1()),
+        engine.cell_store().get_cell_value(&cell_id_a1()),
         Some(&num(value))
     );
     assert_eq!(cell_value_at(engine, &sheet_id(), 0, 0), num(value));
     assert_eq!(
-        engine.mirror().get_cell_value(&cell_id_a2()),
+        engine.cell_store().get_cell_value(&cell_id_a2()),
         Some(&num(sum))
     );
     assert_eq!(engine.get_formula(&cell_id_a2()).as_deref(), Some("=A1+B1"));
@@ -55,7 +55,7 @@ fn test_multiple_edits_undo() {
     assert_a1_and_dependent(&engine, 100.0, 300.0);
     engine.undo().unwrap();
     assert_eq!(
-        engine.mirror().get_cell_value(&cell_id_b1()),
+        engine.cell_store().get_cell_value(&cell_id_b1()),
         Some(&num(20.0))
     );
     assert_a1_and_dependent(&engine, 100.0, 120.0);

@@ -8,10 +8,10 @@ pub(super) fn make_sheet_id(n: u128) -> SheetId {
 
 pub(super) fn storage_with_sheet() -> (WorkbookStorage, SheetId) {
     let mut storage = WorkbookStorage::new();
-    let mut mirror = crate::mirror::CellMirror::new();
+    let mut cell_store = crate::cells::CellStore::new();
     let sid = make_sheet_id(1);
     storage
-        .add_sheet(&mut mirror, sid, "Sheet1", 100, 26)
+        .add_sheet(&mut cell_store, sid, "Sheet1", 100, 26)
         .expect("add_sheet");
     (storage, sid)
 }

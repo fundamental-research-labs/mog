@@ -6,7 +6,7 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Spatial layout index: Fenwick tree over dimension deltas for O(log k) cell-to-pixel mapping"
+description = "Sparse pixel layout: O(k) dimension prefixes for on-demand cell-to-pixel mapping"
 
 [dependencies]
 domain-types = { path = "../../../../domain-types", default-features = false }

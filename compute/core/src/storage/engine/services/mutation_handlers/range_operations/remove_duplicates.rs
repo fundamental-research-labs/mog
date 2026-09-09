@@ -1,7 +1,7 @@
 use cell_types::{SheetId, SheetPos};
 use value_types::{CellValue, ComputeError};
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::snapshot::RecalcResult;
 use crate::storage::cells::data_ops::{RemoveDuplicatesOptions, unique_rows};
 use crate::storage::engine::mutation::CellInput;
@@ -11,7 +11,7 @@ use crate::storage::engine::stores::EngineStores;
 #[allow(clippy::too_many_arguments)]
 pub(in crate::storage::engine) fn mutation_remove_duplicates(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,
@@ -20,7 +20,7 @@ pub(in crate::storage::engine) fn mutation_remove_duplicates(
     columns: &[u32],
     has_headers: bool,
 ) -> Result<(RecalcResult, serde_json::Value), ComputeError> {
-    let sheet = mirror
+    let sheet = cell_store
         .get_sheet(sheet_id)
         .ok_or_else(|| ComputeError::SheetNotFound {
             sheet_id: sheet_id.to_uuid_string(),
@@ -33,7 +33,7 @@ pub(in crate::storage::engine) fn mutation_remove_duplicates(
     }
     let first_row = u64::from(start_row) + u64::from(has_headers);
     let kept = unique_rows(
-        mirror,
+        cell_store,
         sheet_id,
         start_row,
         start_col,
@@ -65,10 +65,10 @@ pub(in crate::storage::engine) fn mutation_remove_duplicates(
         }
         for col in start_col..=end_col {
             let source_pos = SheetPos::new(source_row, col);
-            let source_id = mirror.resolve_cell_id(sheet_id, source_pos);
+            let source_id = cell_store.resolve_cell_id(sheet_id, source_pos);
             let formula = source_id.as_ref().and_then(|cell_id| {
                 crate::storage::engine::formula_read::formula_text_for_cell_id(
-                    stores, mirror, sheet_id, cell_id,
+                    stores, cell_store, sheet_id, cell_id,
                 )
             });
             let input = if let Some(formula) = formula {
@@ -80,7 +80,7 @@ pub(in crate::storage::engine) fn mutation_remove_duplicates(
                     },
                 }
             } else {
-                match mirror.get_cell_value_at(sheet_id, source_pos) {
+                match cell_store.get_cell_value_at(sheet_id, source_pos) {
                     None | Some(CellValue::Null) => CellInput::Clear,
                     Some(value) => CellInput::Value {
                         value: value.clone(),
@@ -95,7 +95,8 @@ pub(in crate::storage::engine) fn mutation_remove_duplicates(
             edits.push((*sheet_id, row as u32, col, CellInput::Clear));
         }
     }
-    let recalc =
-        super::super::cell_mutations::mutation_set_cells_by_position(stores, mirror, edits, false)?;
+    let recalc = super::super::cell_mutations::mutation_set_cells_by_position(
+        stores, cell_store, edits, false,
+    )?;
     Ok((recalc, data))
 }

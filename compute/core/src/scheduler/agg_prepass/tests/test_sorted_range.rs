@@ -132,7 +132,7 @@ fn test_sorted_range_prepass_sumifs_bounded() {
     //
     // Row 0: lower=200, upper=500 -> A in [200,500] & status=0 -> rows 1(200),3(400),4(500) -> D: 2+4+5 = 11
     // Row 1: lower=400, upper=800 -> A in [400,800] & status=0 -> rows 3(400),4(500),5(600),7(800) -> D: 4+5+6+8 = 23
-    let mirror = sorted_range_mirror();
+    let cell_store = sorted_range_store();
     let s = sheet_id_1();
 
     let pattern = AggPattern {
@@ -174,7 +174,7 @@ fn test_sorted_range_prepass_sumifs_bounded() {
     };
 
     let plan = try_build_range_prepass_plan(&pattern).unwrap();
-    let sorted_index = build_sorted_range_index(&plan, &pattern, &mirror).unwrap();
+    let sorted_index = build_sorted_range_index(&plan, &pattern, &cell_store).unwrap();
 
     // Status=0 rows with numeric A: 8 entries
     assert_eq!(sorted_index.len(), 8);
@@ -190,7 +190,7 @@ fn test_sorted_range_prepass_sumifs_bounded() {
         cell_ids,
     };
 
-    let results = execute_sorted_range_prepass(&group, &plan, &sorted_index, &mirror).unwrap();
+    let results = execute_sorted_range_prepass(&group, &plan, &sorted_index, &cell_store).unwrap();
     assert_eq!(results.len(), 2);
 
     // Row 0: lower=200, upper=500 -> sum of D where A in [200,500] and C=0 -> 2+4+5 = 11
@@ -210,7 +210,7 @@ fn test_sorted_range_prepass_sumifs_bounded() {
 #[test]
 fn test_sorted_range_prepass_one_sided_lower() {
     // Only lower bound: A:A >= E_row, no upper bound, C:C = 0
-    let mirror = sorted_range_mirror();
+    let cell_store = sorted_range_store();
     let s = sheet_id_1();
 
     let pattern = AggPattern {
@@ -244,7 +244,7 @@ fn test_sorted_range_prepass_one_sided_lower() {
     assert!(plan.lower_bound.is_some());
     assert!(plan.upper_bound.is_none());
 
-    let sorted_index = build_sorted_range_index(&plan, &pattern, &mirror).unwrap();
+    let sorted_index = build_sorted_range_index(&plan, &pattern, &cell_store).unwrap();
     let cell_ids: Vec<CellId> = vec![cell_id(9000)];
     let group = AggFormulaGroup {
         sheet: s,
@@ -256,7 +256,7 @@ fn test_sorted_range_prepass_one_sided_lower() {
         cell_ids,
     };
 
-    let results = execute_sorted_range_prepass(&group, &plan, &sorted_index, &mirror).unwrap();
+    let results = execute_sorted_range_prepass(&group, &plan, &sorted_index, &cell_store).unwrap();
     assert_eq!(results.len(), 1);
     // Row 0: lower=200, no upper -> A >= 200 and C=0 -> rows 1,3,4,5,7,8,9 -> D: 2+4+5+6+8+9+10 = 44
     assert!(
@@ -269,7 +269,7 @@ fn test_sorted_range_prepass_one_sided_lower() {
 #[test]
 fn test_sorted_range_prepass_empty_result() {
     // Lower bound > upper bound -> empty result
-    let mirror = sorted_range_mirror();
+    let cell_store = sorted_range_store();
     let s = sheet_id_1();
 
     let pattern = AggPattern {
@@ -311,7 +311,7 @@ fn test_sorted_range_prepass_empty_result() {
     };
 
     let plan = try_build_range_prepass_plan(&pattern).unwrap();
-    let sorted_index = build_sorted_range_index(&plan, &pattern, &mirror).unwrap();
+    let sorted_index = build_sorted_range_index(&plan, &pattern, &cell_store).unwrap();
 
     // Use row 2: lower=100, upper=300 -- but row 2's status=1, so we're testing that the
     // static filter already removed it. Range [100,300] & status=0: rows 0(100),1(200) -> D: 1+2 = 3
@@ -326,7 +326,7 @@ fn test_sorted_range_prepass_empty_result() {
         cell_ids,
     };
 
-    let results = execute_sorted_range_prepass(&group, &plan, &sorted_index, &mirror).unwrap();
+    let results = execute_sorted_range_prepass(&group, &plan, &sorted_index, &cell_store).unwrap();
     assert_eq!(results.len(), 1);
     assert!(
         (results[0].1.as_number().unwrap() - 3.0).abs() < 1e-10,
@@ -337,7 +337,7 @@ fn test_sorted_range_prepass_empty_result() {
 
 #[test]
 fn test_sorted_range_prepass_countifs() {
-    let mirror = sorted_range_mirror();
+    let cell_store = sorted_range_store();
     let s = sheet_id_1();
 
     let pattern = AggPattern {
@@ -379,7 +379,7 @@ fn test_sorted_range_prepass_countifs() {
     };
 
     let plan = try_build_range_prepass_plan(&pattern).unwrap();
-    let sorted_index = build_sorted_range_index(&plan, &pattern, &mirror).unwrap();
+    let sorted_index = build_sorted_range_index(&plan, &pattern, &cell_store).unwrap();
 
     let cell_ids: Vec<CellId> = vec![cell_id(9200)];
     let group = AggFormulaGroup {
@@ -392,7 +392,7 @@ fn test_sorted_range_prepass_countifs() {
         cell_ids,
     };
 
-    let results = execute_sorted_range_prepass(&group, &plan, &sorted_index, &mirror).unwrap();
+    let results = execute_sorted_range_prepass(&group, &plan, &sorted_index, &cell_store).unwrap();
     assert_eq!(results.len(), 1);
     // A in [200,500] & status=0 -> rows 1(200),3(400),4(500) -> count = 3
     assert_eq!(results[0].1, CellValue::number(3.0));
@@ -400,7 +400,7 @@ fn test_sorted_range_prepass_countifs() {
 
 #[test]
 fn test_sorted_range_prepass_with_post_op() {
-    let mirror = sorted_range_mirror();
+    let cell_store = sorted_range_store();
     let s = sheet_id_1();
 
     let pattern = AggPattern {
@@ -442,7 +442,7 @@ fn test_sorted_range_prepass_with_post_op() {
     };
 
     let plan = try_build_range_prepass_plan(&pattern).unwrap();
-    let sorted_index = build_sorted_range_index(&plan, &pattern, &mirror).unwrap();
+    let sorted_index = build_sorted_range_index(&plan, &pattern, &cell_store).unwrap();
 
     let cell_ids: Vec<CellId> = vec![cell_id(9300)];
     let group = AggFormulaGroup {
@@ -458,7 +458,7 @@ fn test_sorted_range_prepass_with_post_op() {
         cell_ids,
     };
 
-    let results = execute_sorted_range_prepass(&group, &plan, &sorted_index, &mirror).unwrap();
+    let results = execute_sorted_range_prepass(&group, &plan, &sorted_index, &cell_store).unwrap();
     assert_eq!(results.len(), 1);
     // Row 0: sum=11, /2 = 5.5
     assert!(
@@ -471,7 +471,7 @@ fn test_sorted_range_prepass_with_post_op() {
 #[test]
 fn test_sorted_range_prepass_wired_through_execute_agg_group() {
     // Verify that execute_agg_group correctly falls through to sorted-range path
-    let mirror = sorted_range_mirror();
+    let cell_store = sorted_range_store();
     let s = sheet_id_1();
 
     let pattern = AggPattern {
@@ -525,7 +525,7 @@ fn test_sorted_range_prepass_wired_through_execute_agg_group() {
 
     let no_formulas = |_: &SheetId, _: u32, _: u32, _: u32| false;
     let no_stale = |_: &SheetId, _: u32, _: u32, _: u32| false;
-    let results = execute_agg_group(&group, &mirror, no_formulas, no_stale).unwrap();
+    let results = execute_agg_group(&group, &cell_store, no_formulas, no_stale).unwrap();
     assert_eq!(results.len(), 2);
 
     // Same expected values as test_sorted_range_prepass_sumifs_bounded

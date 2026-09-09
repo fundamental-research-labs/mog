@@ -220,14 +220,14 @@ fn resized_axes_are_available_to_cross_sheet_formulas_immediately() {
     let report = sheet_id(&ids[1]);
     engine.set_row_height(&data, 40, 28.0).unwrap();
     engine.set_col_width(&data, 30, 110.0).unwrap();
-    assert!(engine.mirror().row_id_lookup(&data, 40).is_some());
-    assert!(engine.mirror().col_id_lookup(&data, 30).is_some());
+    assert!(engine.cell_store().row_id_lookup(&data, 40).is_some());
+    assert!(engine.cell_store().col_id_lookup(&data, 30).is_some());
     engine
         .set_cell_value_parsed(&report, 0, 0, "=Data!AE41")
         .unwrap();
     assert_eq!(
         engine
-            .mirror()
+            .cell_store()
             .get_cell_value_at(&report, cell_types::SheetPos::new(0, 0)),
         Some(&value_types::CellValue::Number(
             value_types::FiniteF64::ZERO
@@ -236,7 +236,7 @@ fn resized_axes_are_available_to_cross_sheet_formulas_immediately() {
     engine.set_cell_value_parsed(&data, 40, 30, "9").unwrap();
     assert_eq!(
         engine
-            .mirror()
+            .cell_store()
             .get_cell_value_at(&report, cell_types::SheetPos::new(0, 0)),
         Some(&value_types::CellValue::Number(
             value_types::FiniteF64::must(9.0)

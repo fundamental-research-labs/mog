@@ -4,7 +4,7 @@ mod stress_common;
 use stress_common::*;
 
 use cell_types::{CellId, SheetId};
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{CellData, CellEdit, RecalcResult, SheetSnapshot, WorkbookSnapshot};
 use formula_types::{NamedRangeDef, Scope};
@@ -12,15 +12,15 @@ use value_types::{CellError, CellValue, FiniteF64};
 
 /// Create a ComputeCore+Mirror with an empty Sheet1 and seed the given cells
 /// with value "0" via set_cell so they exist in the dependency graph.
-fn core_with_seeds(seed_positions: &[(u32, u32)]) -> (ComputeCore, CellMirror) {
+fn core_with_seeds(seed_positions: &[(u32, u32)]) -> (ComputeCore, CellStore) {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![("Sheet1", 100, 26, vec![])]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
     for &(row, col) in seed_positions {
-        set(&mut core, &mut mirror, 0, row, col, "0");
+        set(&mut core, &mut cell_store, 0, row, col, "0");
     }
-    (core, mirror)
+    (core, cell_store)
 }
 
 // ---------------------------------------------------------------------------
@@ -30,21 +30,21 @@ fn core_with_seeds(seed_positions: &[(u32, u32)]) -> (ComputeCore, CellMirror) {
 // ---------------------------------------------------------------------------
 #[test]
 fn test_incremental_two_cell_cycle() {
-    let (mut core, mut mirror) = core_with_seeds(&[(0, 1)]);
+    let (mut core, mut cell_store) = core_with_seeds(&[(0, 1)]);
 
     // A1="=B1+1": B1=0, so A1=0+1=1
-    let _r1 = set(&mut core, &mut mirror, 0, 0, 0, "=B1+1");
-    assert_mirror_number(&mirror, 0, 0, 0, 1.0);
+    let _r1 = set(&mut core, &mut cell_store, 0, 0, 0, "=B1+1");
+    assert_store_number(&cell_store, 0, 0, 0, 1.0);
 
     // B1="=A1+1": creates cycle → B1=#REF!, deps not registered.
     // A1 depends on B1, so A1 recalculates: =B1+1 where B1=#REF! → A1=#REF!.
-    let _r2 = set(&mut core, &mut mirror, 0, 0, 1, "=A1+1");
+    let _r2 = set(&mut core, &mut cell_store, 0, 0, 1, "=A1+1");
     assert!(
-        is_ref_error(&mirror, 0, 0, 1),
+        is_ref_error(&cell_store, 0, 0, 1),
         "B1 should be #REF! (cycle rejected)"
     );
     assert!(
-        is_ref_error(&mirror, 0, 0, 0),
+        is_ref_error(&cell_store, 0, 0, 0),
         "A1 should be #REF! (propagated from B1)"
     );
 }
@@ -56,28 +56,28 @@ fn test_incremental_two_cell_cycle() {
 // ---------------------------------------------------------------------------
 #[test]
 fn test_incremental_three_cell_cycle() {
-    let (mut core, mut mirror) = core_with_seeds(&[(0, 1), (0, 2)]);
+    let (mut core, mut cell_store) = core_with_seeds(&[(0, 1), (0, 2)]);
 
-    let _r1 = set(&mut core, &mut mirror, 0, 0, 0, "=C1+1"); // C1=0, A1=1
-    assert_mirror_number(&mirror, 0, 0, 0, 1.0);
+    let _r1 = set(&mut core, &mut cell_store, 0, 0, 0, "=C1+1"); // C1=0, A1=1
+    assert_store_number(&cell_store, 0, 0, 0, 1.0);
 
-    let _r2 = set(&mut core, &mut mirror, 0, 0, 1, "=A1+1"); // A1=1, B1=2
-    assert_mirror_number(&mirror, 0, 0, 1, 2.0);
+    let _r2 = set(&mut core, &mut cell_store, 0, 0, 1, "=A1+1"); // A1=1, B1=2
+    assert_store_number(&cell_store, 0, 0, 1, 2.0);
 
     // C1="=B1+1" closes cycle → C1=#REF!.
     // A1="=C1+1" recalculates: C1=#REF! → A1=#REF!.
     // B1="=A1+1" recalculates: A1=#REF! → B1=#REF!.
-    let _r3 = set(&mut core, &mut mirror, 0, 0, 2, "=B1+1");
+    let _r3 = set(&mut core, &mut cell_store, 0, 0, 2, "=B1+1");
     assert!(
-        is_ref_error(&mirror, 0, 0, 2),
+        is_ref_error(&cell_store, 0, 0, 2),
         "C1 should be #REF! (cycle rejected)"
     );
     assert!(
-        is_ref_error(&mirror, 0, 0, 0),
+        is_ref_error(&cell_store, 0, 0, 0),
         "A1 should be #REF! (propagated)"
     );
     assert!(
-        is_ref_error(&mirror, 0, 0, 1),
+        is_ref_error(&cell_store, 0, 0, 1),
         "B1 should be #REF! (propagated)"
     );
 }
@@ -89,41 +89,41 @@ fn test_incremental_three_cell_cycle() {
 // ---------------------------------------------------------------------------
 #[test]
 fn test_incremental_five_cell_ring() {
-    let (mut core, mut mirror) = core_with_seeds(&[(0, 1), (0, 2), (0, 3), (0, 4)]);
+    let (mut core, mut cell_store) = core_with_seeds(&[(0, 1), (0, 2), (0, 3), (0, 4)]);
 
-    let _r1 = set(&mut core, &mut mirror, 0, 0, 0, "=E1+1"); // E1=0 → A1=1
-    assert_mirror_number(&mirror, 0, 0, 0, 1.0);
+    let _r1 = set(&mut core, &mut cell_store, 0, 0, 0, "=E1+1"); // E1=0 → A1=1
+    assert_store_number(&cell_store, 0, 0, 0, 1.0);
 
-    let _r2 = set(&mut core, &mut mirror, 0, 0, 1, "=A1+1"); // A1=1 → B1=2
-    assert_mirror_number(&mirror, 0, 0, 1, 2.0);
+    let _r2 = set(&mut core, &mut cell_store, 0, 0, 1, "=A1+1"); // A1=1 → B1=2
+    assert_store_number(&cell_store, 0, 0, 1, 2.0);
 
-    let _r3 = set(&mut core, &mut mirror, 0, 0, 2, "=B1+1"); // B1=2 → C1=3
-    assert_mirror_number(&mirror, 0, 0, 2, 3.0);
+    let _r3 = set(&mut core, &mut cell_store, 0, 0, 2, "=B1+1"); // B1=2 → C1=3
+    assert_store_number(&cell_store, 0, 0, 2, 3.0);
 
-    let _r4 = set(&mut core, &mut mirror, 0, 0, 3, "=C1+1"); // C1=3 → D1=4
-    assert_mirror_number(&mirror, 0, 0, 3, 4.0);
+    let _r4 = set(&mut core, &mut cell_store, 0, 0, 3, "=C1+1"); // C1=3 → D1=4
+    assert_store_number(&cell_store, 0, 0, 3, 4.0);
 
     // E1="=D1+1" closes ring → E1=#REF! (cycle rejected).
     // All predecessors recalculate: A1=E1+1→#REF!, B1→#REF!, C1→#REF!, D1→#REF!.
-    let _r5 = set(&mut core, &mut mirror, 0, 0, 4, "=D1+1");
+    let _r5 = set(&mut core, &mut cell_store, 0, 0, 4, "=D1+1");
     assert!(
-        is_ref_error(&mirror, 0, 0, 4),
+        is_ref_error(&cell_store, 0, 0, 4),
         "E1 should be #REF! (cycle rejected)"
     );
     assert!(
-        is_ref_error(&mirror, 0, 0, 0),
+        is_ref_error(&cell_store, 0, 0, 0),
         "A1 should be #REF! (propagated from E1)"
     );
     assert!(
-        is_ref_error(&mirror, 0, 0, 1),
+        is_ref_error(&cell_store, 0, 0, 1),
         "B1 should be #REF! (propagated from A1)"
     );
     assert!(
-        is_ref_error(&mirror, 0, 0, 2),
+        is_ref_error(&cell_store, 0, 0, 2),
         "C1 should be #REF! (propagated from B1)"
     );
     assert!(
-        is_ref_error(&mirror, 0, 0, 3),
+        is_ref_error(&cell_store, 0, 0, 3),
         "D1 should be #REF! (propagated from C1)"
     );
 }
@@ -134,11 +134,11 @@ fn test_incremental_five_cell_ring() {
 // ---------------------------------------------------------------------------
 #[test]
 fn test_incremental_self_reference() {
-    let (mut core, mut mirror) = core_with_seeds(&[]);
+    let (mut core, mut cell_store) = core_with_seeds(&[]);
 
-    let _r = set(&mut core, &mut mirror, 0, 0, 0, "=A1+1");
+    let _r = set(&mut core, &mut cell_store, 0, 0, 0, "=A1+1");
     assert!(
-        is_ref_error(&mirror, 0, 0, 0),
+        is_ref_error(&cell_store, 0, 0, 0),
         "A1 self-ref should be #REF!"
     );
 }
@@ -152,7 +152,7 @@ fn test_incremental_self_reference() {
 // ---------------------------------------------------------------------------
 #[test]
 fn test_batch_set_cells_cycle_detection() {
-    let (mut core, mut mirror) = core_with_seeds(&[(0, 0), (0, 1)]);
+    let (mut core, mut cell_store) = core_with_seeds(&[(0, 0), (0, 1)]);
 
     let s = sid(0);
     let edits: Vec<(
@@ -181,17 +181,17 @@ fn test_batch_set_cells_cycle_detection() {
             },
         ),
     ];
-    let _r = core.set_cells(&mut mirror, &edits, false).unwrap();
+    let _r = core.set_cells(&mut cell_store, &edits, false).unwrap();
 
     // Second edit (B1) creates cycle → #REF!
     assert!(
-        is_ref_error(&mirror, 0, 0, 1),
+        is_ref_error(&cell_store, 0, 0, 1),
         "B1 should be #REF! in batch"
     );
 
     // A1 depends on B1(#REF!) → propagated #REF!
     assert!(
-        is_ref_error(&mirror, 0, 0, 0),
+        is_ref_error(&cell_store, 0, 0, 0),
         "A1 should be #REF! (propagated from B1)"
     );
 }
@@ -204,7 +204,7 @@ fn test_batch_set_cells_cycle_detection() {
 #[test]
 fn test_convergent_two_cell_fixed_point() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_iterative_snapshot(
         vec![(
             "Sheet1",
@@ -228,10 +228,10 @@ fn test_convergent_two_cell_fixed_point() {
         100,
         0.001,
     );
-    let result = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let result = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
-    assert_mirror_number_tol(&mirror, 0, 0, 0, 2.0, 0.01);
-    assert_mirror_number_tol(&mirror, 0, 0, 1, 2.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 0, 2.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 1, 2.0, 0.01);
     assert!(
         result.metrics.has_circular_refs,
         "Should detect circular refs"
@@ -245,7 +245,7 @@ fn test_convergent_two_cell_fixed_point() {
 #[test]
 fn test_convergent_self_ref_fixed_point() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_iterative_snapshot(
         vec![(
             "Sheet1",
@@ -261,9 +261,9 @@ fn test_convergent_self_ref_fixed_point() {
         100,
         0.001,
     );
-    let result = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let result = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
-    assert_mirror_number_tol(&mirror, 0, 0, 0, 2.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 0, 2.0, 0.01);
     assert!(
         result.metrics.has_circular_refs,
         "Should detect circular refs"
@@ -278,7 +278,7 @@ fn test_convergent_self_ref_fixed_point() {
 #[test]
 fn test_cross_sheet_divergent_cycle() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![
         (
             "Sheet1",
@@ -303,15 +303,15 @@ fn test_cross_sheet_divergent_cycle() {
             )],
         ),
     ]);
-    let result = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let result = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     assert!(
         result.metrics.has_circular_refs,
         "Cross-sheet cycle should be detected"
     );
 
-    assert_mirror_number(&mirror, 0, 0, 0, 0.0);
-    assert_mirror_number(&mirror, 1, 0, 0, 0.0);
+    assert_store_number(&cell_store, 0, 0, 0, 0.0);
+    assert_store_number(&cell_store, 1, 0, 0, 0.0);
 }
 
 // ---------------------------------------------------------------------------
@@ -321,7 +321,7 @@ fn test_cross_sheet_divergent_cycle() {
 #[test]
 fn test_named_range_divergent_cycle() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let mut snapshot = build_snapshot(vec![(
         "Sheet1",
         100,
@@ -336,15 +336,15 @@ fn test_named_range_divergent_cycle() {
         Scope::Workbook,
         "Sheet1!A1".into(),
     ));
-    let result = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let result = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     assert!(
         result.metrics.has_circular_refs,
         "Named range cycle should be detected"
     );
 
-    assert_mirror_number(&mirror, 0, 0, 0, 0.0);
-    assert_mirror_number(&mirror, 0, 0, 1, 0.0);
+    assert_store_number(&cell_store, 0, 0, 0, 0.0);
+    assert_store_number(&cell_store, 0, 0, 1, 0.0);
 }
 
 // ---------------------------------------------------------------------------
@@ -356,7 +356,7 @@ fn test_named_range_divergent_cycle() {
 #[test]
 fn test_large_20_cell_ring() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
 
     let mut cell_data: Vec<CellData> = Vec::new();
     cell_data.push(CellData {
@@ -405,7 +405,7 @@ fn test_large_20_cell_ring() {
         calculation_settings: None,
     };
 
-    let result = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let result = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     assert!(
         result.metrics.has_circular_refs,
@@ -413,7 +413,7 @@ fn test_large_20_cell_ring() {
     );
 
     for row in 0u32..20 {
-        assert_mirror_number(&mirror, 0, row, 0, 0.0);
+        assert_store_number(&cell_store, 0, row, 0, 0.0);
     }
 
     // No exponential blowup: changed_cells should be at most 21 (20 ring cells + margin)
@@ -432,7 +432,7 @@ fn test_large_20_cell_ring() {
 #[test]
 fn test_convergent_cycle_with_constant_feeder() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_iterative_snapshot(
         vec![(
             "Sheet1",
@@ -457,11 +457,11 @@ fn test_convergent_cycle_with_constant_feeder() {
         200,
         0.001,
     );
-    let result = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let result = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
-    assert_mirror_number_tol(&mirror, 0, 0, 0, 200.0, 0.01); // A1=200
-    assert_mirror_number_tol(&mirror, 0, 0, 1, 100.0, 0.01); // B1=100
-    assert_mirror_number(&mirror, 0, 0, 2, 100.0); // C1=100
+    assert_store_number_tol(&cell_store, 0, 0, 0, 200.0, 0.01); // A1=200
+    assert_store_number_tol(&cell_store, 0, 0, 1, 100.0, 0.01); // B1=100
+    assert_store_number(&cell_store, 0, 0, 2, 100.0); // C1=100
     assert!(
         result.metrics.has_circular_refs,
         "Should detect circular refs"

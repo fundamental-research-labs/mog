@@ -1,5 +1,5 @@
 // Regression test: formula cells must be filled with adjusted references.
-// Bug: build_adjusted_formula creates CellIds unknown to the mirror,
+// Bug: build_adjusted_formula creates CellIds unknown to the cell store,
 // causing to_a1_display to produce #REF! instead of valid A1 references.
 // This test documents the expected engine-level behavior.
 //
@@ -7,8 +7,8 @@
 // FillUpdate::Formula entries with proper AdjustedRef positions. The bug
 // is in the storage layer (mutation_auto_fill in engine/mod.rs) where:
 //   1. build_adjusted_formula creates new CellIds via grid_id_alloc.next_cell_id()
-//   2. These CellIds are registered in grid_indexes but NOT in the CellMirror
-//   3. to_a1_display uses MirrorPositionLookup which returns None for unknown CellIds
+//   2. These CellIds are registered in grid_indexes but NOT in the CellStore
+//   3. to_a1_display uses StorePositionLookup which returns None for unknown CellIds
 //   4. format_ref in a1_display.rs produces "#REF!" for None positions
 //   5. The formula string ends up as "=#REF!" — never correctly applied
 
@@ -123,7 +123,7 @@ fn extract_formulas(result: &FillResult) -> Vec<(u32, u32, Vec<AdjustedRef>)> {
 ///
 /// This proves the engine output is correct — the storage layer bug is in
 /// how these AdjustedRef positions are converted back to A1 strings via
-/// CellIds that the mirror doesn't know about.
+/// CellIds that the cell store doesn't know about.
 #[test]
 fn regression_formula_fill_down_produces_valid_adjusted_refs() {
     // =A1+1 at B1, fill down to B2:B4

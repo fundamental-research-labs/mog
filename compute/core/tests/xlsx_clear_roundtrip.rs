@@ -73,7 +73,11 @@ fn xlsx_clear_range_by_position_removes_formula_on_export() {
 
     // Reload via XLSX path — `cellGrid` sub-map is never created.
     let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
-    let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
+    let sid = *engine
+        .cell_store()
+        .sheet_ids()
+        .next()
+        .expect("sheet present");
 
     // Clear A2 (the formula cell) — the user-reported ws.clear() path.
     engine
@@ -117,7 +121,11 @@ fn xlsx_clear_range_bulk_removes_all_formulas() {
     let bytes = xlsx_bytes_for(one_sheet_snapshot("BulkClear", N + 10, 5, cells));
 
     let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
-    let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
+    let sid = *engine
+        .cell_store()
+        .sheet_ids()
+        .next()
+        .expect("sheet present");
 
     // Single range clear over the whole column — the user-visible ws.clear() shape.
     engine
@@ -159,7 +167,11 @@ fn xlsx_clear_range_contents_only_removes_formula_on_export() {
     ));
 
     let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
-    let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
+    let sid = *engine
+        .cell_store()
+        .sheet_ids()
+        .next()
+        .expect("sheet present");
 
     engine.clear_range(&sid, 0, 1, 0, 1).expect("clear_range");
 

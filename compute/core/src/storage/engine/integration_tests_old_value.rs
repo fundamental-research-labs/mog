@@ -264,21 +264,21 @@ fn test_integration_set_cell_with_formula_deps() {
 
     // After initial recalc: A1=10, B1=A1*2=20, C1=B1+1=21
     assert_eq!(
-        *engine.mirror().get_cell_value(&cell_id_a1()).unwrap(),
+        *engine.cell_store().get_cell_value(&cell_id_a1()).unwrap(),
         num(10.0)
     );
     assert_eq!(
-        *engine.mirror().get_cell_value(&cell_id_b1()).unwrap(),
+        *engine.cell_store().get_cell_value(&cell_id_b1()).unwrap(),
         num(20.0)
     );
     // C1 is cell_id_a2 slot (col=2, row=0)
     assert_eq!(
-        *engine.mirror().get_cell_value(&cell_id_a2()).unwrap(),
+        *engine.cell_store().get_cell_value(&cell_id_a2()).unwrap(),
         num(21.0)
     );
 
     // Edit A1 from 10 to 100
-    let (_patches, mutation_result) = engine
+    let mutation_result = engine
         .set_cell(
             &sheet_id(),
             cell_id_a1(),
@@ -308,11 +308,11 @@ fn test_integration_change_records_include_display_formula_and_number_format() {
     let snap = formula_deps_snapshot();
     let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     assert_eq!(
-        *engine.mirror().get_cell_value(&cell_id_b1()).unwrap(),
+        *engine.cell_store().get_cell_value(&cell_id_b1()).unwrap(),
         num(20.0)
     );
 
-    let (_patches, mutation_result) = engine
+    let mutation_result = engine
         .set_cell(
             &sheet_id(),
             cell_id_b1(),
@@ -342,7 +342,7 @@ fn test_integration_parsed_formula_overwrite_includes_before_snapshots() {
     let snap = formula_deps_snapshot();
     let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
-    let (_patches, mutation_result) = engine
+    let mutation_result = engine
         .set_cell_value_parsed(&sheet_id(), 0, 1, "=A1*3")
         .unwrap();
 
@@ -362,7 +362,7 @@ fn test_integration_parsed_value_to_formula_has_no_old_formula() {
     let snap = simple_snapshot();
     let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
-    let (_patches, mutation_result) = engine
+    let mutation_result = engine
         .set_cell_value_parsed(&sheet_id(), 0, 1, "=A1*3")
         .unwrap();
 
@@ -420,17 +420,17 @@ fn test_integration_batch_set_cells() {
 
     // Initial: A1=10, B1=20
     assert_eq!(
-        *engine.mirror().get_cell_value(&cell_id_a1()).unwrap(),
+        *engine.cell_store().get_cell_value(&cell_id_a1()).unwrap(),
         num(10.0)
     );
     assert_eq!(
-        *engine.mirror().get_cell_value(&cell_id_b1()).unwrap(),
+        *engine.cell_store().get_cell_value(&cell_id_b1()).unwrap(),
         num(20.0)
     );
 
     // Batch set A1=50, B1=60
     let updates = vec![(0u32, 0u32, "50".to_string()), (0, 1, "60".to_string())];
-    let (_patches, mutation_result) = engine.set_cell_values_parsed(&sheet_id(), updates).unwrap();
+    let mutation_result = engine.set_cell_values_parsed(&sheet_id(), updates).unwrap();
 
     let changes = &mutation_result.recalc.changed_cells;
 
@@ -458,12 +458,12 @@ fn test_integration_clear_cells_old_value() {
 
     // Initial: A1=10
     assert_eq!(
-        *engine.mirror().get_cell_value(&cell_id_a1()).unwrap(),
+        *engine.cell_store().get_cell_value(&cell_id_a1()).unwrap(),
         num(10.0)
     );
 
     // Clear A1
-    let (_patches, mutation_result) = engine.batch_clear_cells(vec![cell_id_a1()]).unwrap();
+    let mutation_result = engine.batch_clear_cells(vec![cell_id_a1()]).unwrap();
 
     let changes = &mutation_result.recalc.changed_cells;
     assert!(
@@ -561,7 +561,7 @@ fn test_integration_sort_preserves_old_values() {
         visible_rows_only: false,
     };
 
-    let (_patches, mutation_result) = engine.sort_range(&sheet_id(), 0, 0, 2, 0, options).unwrap();
+    let mutation_result = engine.sort_range(&sheet_id(), 0, 0, 2, 0, options).unwrap();
 
     let changes = &mutation_result.recalc.changed_cells;
 
@@ -592,8 +592,8 @@ fn test_integration_sort_preserves_old_values() {
     }
 
     // Verify final state regardless
-    let a1_val = engine.mirror().get_cell_value(&cell_id_a1());
-    let a2_val = engine.mirror().get_cell_value(&cell_id_b1()); // cell_id_b1 is at row=1 after sort
+    let a1_val = engine.cell_store().get_cell_value(&cell_id_a1());
+    let a2_val = engine.cell_store().get_cell_value(&cell_id_b1()); // cell_id_b1 is at row=1 after sort
     assert!(
         a1_val.is_some() || a2_val.is_some(),
         "cells should exist after sort"
@@ -614,24 +614,24 @@ fn test_integration_full_cascade_chain_old_values() {
 
     // After initial recalc: A1=1, B1=2, C1=3, D1=4
     assert_eq!(
-        *engine.mirror().get_cell_value(&cell_id_a1()).unwrap(),
+        *engine.cell_store().get_cell_value(&cell_id_a1()).unwrap(),
         num(1.0)
     );
     assert_eq!(
-        *engine.mirror().get_cell_value(&cell_id_b1()).unwrap(),
+        *engine.cell_store().get_cell_value(&cell_id_b1()).unwrap(),
         num(2.0)
     );
     assert_eq!(
-        *engine.mirror().get_cell_value(&cell_id_c1).unwrap(),
+        *engine.cell_store().get_cell_value(&cell_id_c1).unwrap(),
         num(3.0)
     );
     assert_eq!(
-        *engine.mirror().get_cell_value(&cell_id_d1).unwrap(),
+        *engine.cell_store().get_cell_value(&cell_id_d1).unwrap(),
         num(4.0)
     );
 
     // Edit A1 from 1 to 10
-    let (_patches, mutation_result) = engine
+    let mutation_result = engine
         .set_cell(
             &sheet_id(),
             cell_id_a1(),
@@ -715,16 +715,16 @@ fn test_integration_mixed_formula_and_literal_edits() {
 
     // Initial: A1=10, B1=20
     assert_eq!(
-        *engine.mirror().get_cell_value(&cell_id_a1()).unwrap(),
+        *engine.cell_store().get_cell_value(&cell_id_a1()).unwrap(),
         num(10.0)
     );
     assert_eq!(
-        *engine.mirror().get_cell_value(&cell_id_b1()).unwrap(),
+        *engine.cell_store().get_cell_value(&cell_id_b1()).unwrap(),
         num(20.0)
     );
 
     // Step 1: Edit A1=20 — cascades B1 from 20 to 40
-    let (_patches, result1) = engine
+    let result1 = engine
         .set_cell(
             &sheet_id(),
             cell_id_a1(),
@@ -743,7 +743,7 @@ fn test_integration_mixed_formula_and_literal_edits() {
     assert_new_value(changes1, 0, 1, num(40.0));
 
     // Step 2: Overwrite B1 with literal "override" — breaks the formula
-    let (_patches, result2) = engine
+    let result2 = engine
         .set_cell(
             &sheet_id(),
             cell_id_b1(),
@@ -772,11 +772,11 @@ fn test_integration_mixed_formula_and_literal_edits() {
 
     // Final state: A1=20, B1="override"
     assert_eq!(
-        *engine.mirror().get_cell_value(&cell_id_a1()).unwrap(),
+        *engine.cell_store().get_cell_value(&cell_id_a1()).unwrap(),
         num(20.0)
     );
     assert_eq!(
-        *engine.mirror().get_cell_value(&cell_id_b1()).unwrap(),
+        *engine.cell_store().get_cell_value(&cell_id_b1()).unwrap(),
         CellValue::Text("override".into())
     );
 }
@@ -792,20 +792,20 @@ fn test_integration_clear_range_old_values() {
 
     // Initial: A1=10, B1=20, A2=30 (formula =A1+B1)
     assert_eq!(
-        *engine.mirror().get_cell_value(&cell_id_a1()).unwrap(),
+        *engine.cell_store().get_cell_value(&cell_id_a1()).unwrap(),
         num(10.0)
     );
     assert_eq!(
-        *engine.mirror().get_cell_value(&cell_id_b1()).unwrap(),
+        *engine.cell_store().get_cell_value(&cell_id_b1()).unwrap(),
         num(20.0)
     );
     assert_eq!(
-        *engine.mirror().get_cell_value(&cell_id_a2()).unwrap(),
+        *engine.cell_store().get_cell_value(&cell_id_a2()).unwrap(),
         num(30.0)
     );
 
     // Clear range covering rows 0-1, cols 0-1 (A1, B1, A2 area)
-    let (_patches, mutation_result) = engine
+    let mutation_result = engine
         .clear_range_by_position(sheet_id(), 0, 0, 1, 1)
         .unwrap();
 
@@ -861,7 +861,7 @@ fn test_integration_replace_all_returns_changed_cells_and_count() {
     let snap = simple_snapshot();
     let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
-    let (_patches, mutation_result) = engine
+    let mutation_result = engine
         .replace_all_in_range(
             &sheet_id(),
             0,

@@ -1,9 +1,9 @@
-use compute_layout_index::LayoutIndex;
+use compute_layout_index::PixelLayout;
 use domain_types::units::Pixels;
 
 #[test]
 fn fp_col_get_col_at_pixel() {
-    let li = LayoutIndex::with_defaults(10, 10, Pixels(20.0), Pixels(64.0));
+    let li = PixelLayout::with_defaults(10, 10, Pixels(20.0), Pixels(64.0));
     assert_eq!(li.get_col_at_pixel(Pixels(0.0)), 0);
     assert_eq!(li.get_col_at_pixel(Pixels(63.9)), 0);
     assert_eq!(li.get_col_at_pixel(Pixels(64.0)), 1);
@@ -12,7 +12,7 @@ fn fp_col_get_col_at_pixel() {
 
 #[test]
 fn fp_inverse_row_default() {
-    let li = LayoutIndex::with_defaults(50, 10, Pixels(20.0), Pixels(64.0));
+    let li = PixelLayout::with_defaults(50, 10, Pixels(20.0), Pixels(64.0));
     for i in 0..50 {
         let px = li.get_row_position(i);
         assert_eq!(
@@ -27,7 +27,7 @@ fn fp_inverse_row_default() {
 
 #[test]
 fn fp_inverse_col_default() {
-    let li = LayoutIndex::with_defaults(10, 50, Pixels(20.0), Pixels(64.0));
+    let li = PixelLayout::with_defaults(10, 50, Pixels(20.0), Pixels(64.0));
     for j in 0..50 {
         let px = li.get_col_position(j);
         assert_eq!(
@@ -42,7 +42,7 @@ fn fp_inverse_col_default() {
 
 #[test]
 fn fp_inverse_row_with_custom_and_hidden() {
-    let mut li = LayoutIndex::with_defaults(20, 5, Pixels(20.0), Pixels(64.0));
+    let mut li = PixelLayout::with_defaults(20, 5, Pixels(20.0), Pixels(64.0));
     li.set_row_height(3, Pixels(50.0));
     li.set_row_height(10, Pixels(5.0));
     li.hide_row(7);
@@ -64,7 +64,7 @@ fn fp_inverse_row_with_custom_and_hidden() {
 
 #[test]
 fn fp_inverse_col_with_custom_and_hidden() {
-    let mut li = LayoutIndex::with_defaults(5, 20, Pixels(20.0), Pixels(64.0));
+    let mut li = PixelLayout::with_defaults(5, 20, Pixels(20.0), Pixels(64.0));
     li.set_col_width(2, Pixels(150.0));
     li.set_col_width(15, Pixels(10.0));
     li.hide_col(5);
@@ -86,7 +86,7 @@ fn fp_inverse_col_with_custom_and_hidden() {
 
 #[test]
 fn fp_visible_row_range_defaults() {
-    let li = LayoutIndex::with_defaults(100, 10, Pixels(20.0), Pixels(64.0));
+    let li = PixelLayout::with_defaults(100, 10, Pixels(20.0), Pixels(64.0));
     let (start, end) = li.get_visible_row_range(Pixels(50.0), Pixels(90.0));
     assert_eq!(start, 2);
     assert_eq!(end, 5);
@@ -106,7 +106,7 @@ fn fp_visible_row_range_defaults() {
 
 #[test]
 fn fp_visible_col_range_defaults() {
-    let li = LayoutIndex::with_defaults(10, 100, Pixels(20.0), Pixels(64.0));
+    let li = PixelLayout::with_defaults(10, 100, Pixels(20.0), Pixels(64.0));
     let (start, end) = li.get_visible_col_range(Pixels(100.0), Pixels(300.0));
     assert!(start <= 1, "start should be <= 1, got {}", start);
     assert!(end >= 5, "end should be >= 5, got {}", end);
@@ -114,7 +114,7 @@ fn fp_visible_col_range_defaults() {
 
 #[test]
 fn fp_visible_row_range_with_hidden() {
-    let li = LayoutIndex::from_sparse(
+    let li = PixelLayout::from_sparse(
         10,
         5,
         Pixels(20.0),
@@ -131,7 +131,7 @@ fn fp_visible_row_range_with_hidden() {
 
 #[test]
 fn fp_visible_col_range_custom_widths() {
-    let li = LayoutIndex::from_sparse(
+    let li = PixelLayout::from_sparse(
         5,
         10,
         Pixels(20.0),
@@ -148,21 +148,21 @@ fn fp_visible_col_range_custom_widths() {
 
 #[test]
 fn fp_negative_pixel_returns_zero_index() {
-    let li = LayoutIndex::with_defaults(10, 10, Pixels(20.0), Pixels(64.0));
+    let li = PixelLayout::with_defaults(10, 10, Pixels(20.0), Pixels(64.0));
     assert_eq!(li.get_row_at_pixel(Pixels(-100.0)), 0);
     assert_eq!(li.get_col_at_pixel(Pixels(-1.0)), 0);
 }
 
 #[test]
 fn fp_pixel_beyond_total_clamps() {
-    let li = LayoutIndex::with_defaults(10, 10, Pixels(20.0), Pixels(64.0));
+    let li = PixelLayout::with_defaults(10, 10, Pixels(20.0), Pixels(64.0));
     assert_eq!(li.get_row_at_pixel(Pixels(9999.0)), 9);
     assert_eq!(li.get_col_at_pixel(Pixels(9999.0)), 9);
 }
 
 #[test]
 fn fp_visible_range_empty_on_zero_count() {
-    let li = LayoutIndex::with_defaults(0, 0, Pixels(20.0), Pixels(64.0));
+    let li = PixelLayout::with_defaults(0, 0, Pixels(20.0), Pixels(64.0));
     assert_eq!(li.get_visible_row_range(Pixels(0.0), Pixels(100.0)), (0, 0));
     assert_eq!(li.get_visible_col_range(Pixels(0.0), Pixels(100.0)), (0, 0));
 }

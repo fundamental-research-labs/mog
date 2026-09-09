@@ -14,7 +14,7 @@ fn lifecycle_xlsx_export_reimport() {
     let (engine2, _) = ComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
 
     let sid2 = *engine2
-        .mirror()
+        .cell_store()
         .sheet_ids()
         .next()
         .expect("at least one sheet");

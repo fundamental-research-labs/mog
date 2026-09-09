@@ -8,7 +8,6 @@ use crate::snapshot::MutationResult;
 use crate::storage::engine::ComputeEngine;
 use bridge_core as bridge;
 use cell_types::SheetId;
-use compute_wire::mutation::serialize_multi_viewport_patches;
 use value_types::ComputeError;
 
 #[bridge::api(
@@ -36,7 +35,7 @@ impl ComputeEngine {
         start_col: u32,
         end_row: u32,
         end_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.without_history(|engine| {
             let result = super::functions::register_viewport(
                 &engine.viewport,
@@ -47,7 +46,7 @@ impl ComputeEngine {
                 end_row,
                 end_col,
             )?;
-            Ok((serialize_multi_viewport_patches(&[]), result))
+            Ok(result)
         })
     }
 
@@ -66,7 +65,7 @@ impl ComputeEngine {
         start_col: u32,
         end_row: u32,
         end_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.without_history(|engine| {
             let result = super::functions::update_viewport_bounds(
                 &engine.viewport,
@@ -76,7 +75,7 @@ impl ComputeEngine {
                 end_row,
                 end_col,
             )?;
-            Ok((serialize_multi_viewport_patches(&[]), result))
+            Ok(result)
         })
     }
 
@@ -89,10 +88,10 @@ impl ComputeEngine {
     pub fn unregister_viewport(
         &mut self,
         viewport_id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.without_history(|engine| {
             let result = super::functions::unregister_viewport(&engine.viewport, viewport_id)?;
-            Ok((serialize_multi_viewport_patches(&[]), result))
+            Ok(result)
         })
     }
 
@@ -112,10 +111,10 @@ impl ComputeEngine {
     pub fn reset_sheet_viewports(
         &mut self,
         sheet_id: &SheetId,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.without_history(|engine| {
             let result = super::functions::reset_sheet_viewports(&engine.viewport, sheet_id)?;
-            Ok((serialize_multi_viewport_patches(&[]), result))
+            Ok(result)
         })
     }
 }

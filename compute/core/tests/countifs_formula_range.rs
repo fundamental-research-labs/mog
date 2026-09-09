@@ -15,7 +15,7 @@
 //! Run:
 //!   cd os && cargo test -p compute-core --test countifs_formula_range -- --nocapture
 
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{CellData, RecalcResult, SheetSnapshot, WorkbookSnapshot};
 use value_types::CellValue;
@@ -179,10 +179,10 @@ fn h1_countifs_true_text_matches_boolean_formula_cells() {
     ));
 
     let snapshot = build_snapshot(vec![("Sheet1", 20, 5, cells)]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     // Verify formula cells evaluated to Boolean(true)
@@ -210,10 +210,10 @@ fn h1_countif_true_text_matches_boolean_formula_single() {
     cells.push((6, 1, CellValue::Null, Some(r#"COUNTIF(A:A,"TRUE")"#)));
 
     let snapshot = build_snapshot(vec![("Sheet1", 10, 3, cells)]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     assert_num(&result, 0, 6, 1, 3.0);
@@ -235,10 +235,10 @@ fn h1_sumifs_true_text_with_formula_criteria_range() {
     cells.push((6, 2, CellValue::Null, Some(r#"SUMIFS(B:B,A:A,"TRUE")"#)));
 
     let snapshot = build_snapshot(vec![("Sheet1", 10, 5, cells)]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     assert_num(&result, 0, 6, 2, 1500.0);
@@ -280,10 +280,10 @@ fn h2_agg_prepass_bails_when_criteria_has_formula_cells() {
     }
 
     let snapshot = build_snapshot(vec![("Sheet1", 50, 5, cells)]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     // Alpha occurs at rows 0,4,8,12,16 = 5 times
@@ -329,10 +329,10 @@ fn h2_agg_prepass_sumifs_with_formula_criteria_range() {
     }
 
     let snapshot = build_snapshot(vec![("Sheet1", 50, 6, cells)]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     // Alpha rows: 0,2,4,6,8,10,12,14,16,18 → values: 1,3,5,7,9,11,13,15,17,19 → sum=100
@@ -401,10 +401,10 @@ fn h3_cross_sheet_countifs_formula_criteria_range() {
         ("Summary", 10, 5, summary_cells),
         ("Data", 20, 5, data_cells),
     ]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     // Sales rows (with A=TRUE after recalc): 0,2,4,6,7,9 = 6
@@ -450,10 +450,10 @@ fn h3_cross_sheet_sumifs_formula_in_criteria_and_value() {
         ("Summary", 5, 5, summary_cells),
         ("Data", 10, 5, data_cells),
     ]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     // Sales rows: 0,2,4 → values: 1*100=100, 3*100=300, 5*100=500 → sum=900
@@ -506,10 +506,10 @@ fn h4_countifs_criteria_range_with_dependency_chain() {
     cells.push((6, 2, CellValue::Null, Some(r#"COUNTIF(B:B,"TRUE")"#)));
 
     let snapshot = build_snapshot(vec![("Sheet1", 10, 5, cells)]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     assert_num(&result, 0, 6, 2, 3.0);
@@ -548,10 +548,10 @@ fn h4_sumifs_value_range_with_formula_chain() {
     cells.push((6, 3, CellValue::Null, Some(r#"SUMIFS(B:B,C:C,"X")"#)));
 
     let snapshot = build_snapshot(vec![("Sheet1", 10, 5, cells)]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     assert_num(&result, 0, 6, 3, 180.0);
@@ -608,10 +608,10 @@ fn h5_cross_sheet_large_countifs_formula_criteria() {
         ("Summary", 30, 5, summary_cells),
         ("Data", n_data + 10, 5, data_cells),
     ]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     // Each department has 25 rows (100/4)
@@ -668,10 +668,10 @@ fn h6_countifs_boolean_criteria_from_cell_ref() {
     cells.push((7, 2, CellValue::Null, Some(r#"COUNTIFS(A:A,A8,B:B,"X")"#)));
 
     let snapshot = build_snapshot(vec![("Sheet1", 10, 5, cells)]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     // Rows where A=TRUE AND B="X": rows 0, 3 = 2
@@ -721,10 +721,10 @@ fn h6_countifs_criteria_range_with_xlookup_formulas() {
     cells.push((8, 2, CellValue::Null, Some(r#"COUNTIF(B:B,"Sales")"#)));
 
     let snapshot = build_snapshot(vec![("Sheet1", 15, 6, cells)]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     // Employees: E001→Sales, E003→Sales, E002→Engineering, E001→Sales, E004→Marketing, E003→Sales
@@ -754,10 +754,10 @@ fn h7_number_one_does_not_match_true_criteria() {
     cells.push((6, 1, CellValue::Null, Some(r#"COUNTIF(A:A,"TRUE")"#)));
 
     let snapshot = build_snapshot(vec![("Sheet1", 10, 3, cells)]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     assert_num(&result, 0, 6, 1, 3.0);
@@ -784,10 +784,10 @@ fn h7_formula_true_starts_as_number_one_evaluates_to_boolean() {
     cells.push((7, 1, CellValue::Null, Some(r#"COUNTIF(A:A,"TRUE")"#)));
 
     let snapshot = build_snapshot(vec![("Sheet1", 10, 3, cells)]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     // All 5 formula cells should now be Boolean(true)
@@ -835,10 +835,10 @@ fn h8_agg_prepass_static_true_criteria_no_formula_range() {
     }
 
     let snapshot = build_snapshot(vec![("Sheet1", 50, 5, cells)]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     // Sales = 10 (every even row), Ops = 10 (every odd row)

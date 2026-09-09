@@ -49,8 +49,12 @@ fn snapshot_30x15() -> WorkbookSnapshot {
 }
 
 fn sheet_dims(engine: &ComputeEngine) -> (u32, u32) {
-    let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
-    let sm = engine.mirror().get_sheet(&sid).expect("SheetMirror");
+    let sid = *engine
+        .cell_store()
+        .sheet_ids()
+        .next()
+        .expect("sheet present");
+    let sm = engine.cell_store().get_sheet(&sid).expect("SheetStore");
     (sm.rows, sm.cols)
 }
 

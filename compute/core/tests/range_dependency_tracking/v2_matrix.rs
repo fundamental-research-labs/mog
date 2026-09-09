@@ -111,7 +111,7 @@ pub(crate) fn run_fullcol_case_v2(
 
     // Capture the live prior value at the target before the forward op.
     let live_prior = engine
-        .mirror()
+        .cell_store()
         .get_cell_value(&target)
         .cloned()
         .unwrap_or(CellValue::Null);

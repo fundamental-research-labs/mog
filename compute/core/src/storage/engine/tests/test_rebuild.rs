@@ -12,34 +12,34 @@ fn test_rebuild_compute_core_preserves_values_and_formulas() {
 
     // Verify initial state: A1=10, B1=20, A2=A1+B1=30
     assert_eq!(
-        *engine.mirror().get_cell_value(&cell_id_a1()).unwrap(),
+        *engine.cell_store().get_cell_value(&cell_id_a1()).unwrap(),
         CellValue::Number(FiniteF64::must(10.0))
     );
     assert_eq!(
-        *engine.mirror().get_cell_value(&cell_id_b1()).unwrap(),
+        *engine.cell_store().get_cell_value(&cell_id_b1()).unwrap(),
         CellValue::Number(FiniteF64::must(20.0))
     );
     assert_eq!(
-        *engine.mirror().get_cell_value(&cell_id_a2()).unwrap(),
+        *engine.cell_store().get_cell_value(&cell_id_a2()).unwrap(),
         CellValue::Number(FiniteF64::must(30.0))
     );
 
     // Rebuild the compute core
-    let recalc = engine.rebuild_compute_core().unwrap();
+    engine.rebuild_compute_core().unwrap();
 
     // All values should be preserved after rebuild
     assert_eq!(
-        *engine.mirror().get_cell_value(&cell_id_a1()).unwrap(),
+        *engine.cell_store().get_cell_value(&cell_id_a1()).unwrap(),
         CellValue::Number(FiniteF64::must(10.0)),
         "A1 value should survive rebuild"
     );
     assert_eq!(
-        *engine.mirror().get_cell_value(&cell_id_b1()).unwrap(),
+        *engine.cell_store().get_cell_value(&cell_id_b1()).unwrap(),
         CellValue::Number(FiniteF64::must(20.0)),
         "B1 value should survive rebuild"
     );
     assert_eq!(
-        *engine.mirror().get_cell_value(&cell_id_a2()).unwrap(),
+        *engine.cell_store().get_cell_value(&cell_id_a2()).unwrap(),
         CellValue::Number(FiniteF64::must(30.0)),
         "A2 formula result should survive rebuild"
     );
@@ -67,8 +67,8 @@ fn test_rebuild_compute_core_preserves_named_ranges() {
 
     let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
-    // Verify the named range exists in the compute core's mirror
-    let nr_before = engine.mirror().get_named_range("TaxRate");
+    // Verify the named range exists in the compute core's cell_store
+    let nr_before = engine.cell_store().get_named_range("TaxRate");
     assert!(
         nr_before.is_some(),
         "named range should exist before rebuild"
@@ -83,7 +83,7 @@ fn test_rebuild_compute_core_preserves_named_ranges() {
     let _recalc = engine.rebuild_compute_core().unwrap();
 
     // Named range should still be resolvable after rebuild
-    let nr_after = engine.mirror().get_named_range("TaxRate");
+    let nr_after = engine.cell_store().get_named_range("TaxRate");
     assert!(nr_after.is_some(), "named range should survive rebuild");
 }
 
@@ -107,20 +107,20 @@ fn test_rebuild_compute_core_preserves_tables() {
     let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // Verify table exists before rebuild
-    assert_eq!(engine.mirror().all_tables().len(), 1);
-    assert_eq!(engine.mirror().all_tables()[0].name, "Table1");
+    assert_eq!(engine.cell_store().all_tables().len(), 1);
+    assert_eq!(engine.cell_store().all_tables()[0].name, "Table1");
 
     // Rebuild
     let _recalc = engine.rebuild_compute_core().unwrap();
 
     // Table should be preserved
     assert_eq!(
-        engine.mirror().all_tables().len(),
+        engine.cell_store().all_tables().len(),
         1,
         "table count should survive rebuild"
     );
     assert_eq!(
-        engine.mirror().all_tables()[0].name,
+        engine.cell_store().all_tables()[0].name,
         "Table1",
         "table name should survive rebuild"
     );
@@ -156,24 +156,24 @@ fn test_rebuild_compute_core_preserves_data_table_regions() {
     let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // Verify data table region exists before rebuild
-    assert_eq!(engine.mirror().all_data_table_regions().len(), 1);
+    assert_eq!(engine.cell_store().all_data_table_regions().len(), 1);
 
     // Rebuild
     let _recalc = engine.rebuild_compute_core().unwrap();
 
     // Data table region should be preserved
     assert_eq!(
-        engine.mirror().all_data_table_regions().len(),
+        engine.cell_store().all_data_table_regions().len(),
         1,
         "data table region count should survive rebuild"
     );
     assert_eq!(
-        engine.mirror().all_data_table_regions()[0].start_row,
+        engine.cell_store().all_data_table_regions()[0].start_row,
         2,
         "data table region start_row should survive rebuild"
     );
     assert_eq!(
-        engine.mirror().all_data_table_regions()[0].row_input_ref,
+        engine.cell_store().all_data_table_regions()[0].row_input_ref,
         Some(row_input),
         "data table region row_input_ref should survive rebuild"
     );
@@ -226,11 +226,14 @@ fn test_rebuild_preserves_projections() {
 
     // Verify projection exists before rebuild
     assert!(
-        engine.mirror().projection_registry.is_source(&cell_id_a1()),
+        engine
+            .cell_store()
+            .projection_registry
+            .is_source(&cell_id_a1()),
         "A1 should be a projection source before rebuild"
     );
     let proj = engine
-        .mirror()
+        .cell_store()
         .projection_registry
         .get(&cell_id_a1())
         .unwrap();
@@ -238,10 +241,10 @@ fn test_rebuild_preserves_projections() {
     assert_eq!(proj.cols, 1, "projection should span 1 col");
 
     // Verify source + spill target values are materialized
-    let a1_val = engine.mirror().get_cell_value(&cell_id_a1()).unwrap();
+    let a1_val = engine.cell_store().get_cell_value(&cell_id_a1()).unwrap();
     assert_eq!(*a1_val, CellValue::Number(FiniteF64::must(1.0)), "A1=1");
     let col = engine
-        .mirror()
+        .cell_store()
         .get_sheet(&sid)
         .unwrap()
         .get_column_view(0)
@@ -262,11 +265,14 @@ fn test_rebuild_preserves_projections() {
 
     // Projection should survive rebuild
     assert!(
-        engine.mirror().projection_registry.is_source(&cell_id_a1()),
+        engine
+            .cell_store()
+            .projection_registry
+            .is_source(&cell_id_a1()),
         "A1 should still be a projection source after rebuild"
     );
     let proj_after = engine
-        .mirror()
+        .cell_store()
         .projection_registry
         .get(&cell_id_a1())
         .unwrap();
@@ -274,14 +280,14 @@ fn test_rebuild_preserves_projections() {
     assert_eq!(proj_after.cols, 1, "projection cols should survive rebuild");
 
     // Source + spill target values should be correct (not #SPILL!)
-    let a1_after = engine.mirror().get_cell_value(&cell_id_a1()).unwrap();
+    let a1_after = engine.cell_store().get_cell_value(&cell_id_a1()).unwrap();
     assert_eq!(
         *a1_after,
         CellValue::Number(FiniteF64::must(1.0)),
         "A1=1 after rebuild"
     );
     let col_after = engine
-        .mirror()
+        .cell_store()
         .get_sheet(&sid)
         .unwrap()
         .get_column_view(0)
@@ -378,7 +384,7 @@ fn test_rebuild_preserves_cse_single_cell() {
     let c1_id = CellId::from_uuid_str("550e8400-e29b-41d4-a716-446655440006").unwrap();
 
     // C1 = SUM(A1:A2*B1:B2) = 2*10 + 3*20 = 80
-    let c1_val = engine.mirror().get_cell_value(&c1_id).unwrap();
+    let c1_val = engine.cell_store().get_cell_value(&c1_id).unwrap();
     assert_eq!(
         *c1_val,
         CellValue::Number(FiniteF64::must(80.0)),
@@ -389,7 +395,7 @@ fn test_rebuild_preserves_cse_single_cell() {
     let _recalc = engine.rebuild_compute_core().unwrap();
 
     // CSE result should survive
-    let c1_after = engine.mirror().get_cell_value(&c1_id).unwrap();
+    let c1_after = engine.cell_store().get_cell_value(&c1_id).unwrap();
     assert_eq!(
         *c1_after,
         CellValue::Number(FiniteF64::must(80.0)),
@@ -446,31 +452,40 @@ fn test_structure_change_reregisters_projections() {
 
     // Verify projection exists before
     assert!(
-        engine.mirror().projection_registry.is_source(&cell_id_a1()),
+        engine
+            .cell_store()
+            .projection_registry
+            .is_source(&cell_id_a1()),
         "A1 should be a projection source before structure_change"
     );
 
     // Simulate what native structural rebuild does: clear projections, then structure_change
-    engine.mirror.projection_registry.clear();
+    engine.cell_store.projection_registry.clear();
     assert!(
-        !engine.mirror().projection_registry.is_source(&cell_id_a1()),
+        !engine
+            .cell_store()
+            .projection_registry
+            .is_source(&cell_id_a1()),
         "projection should be gone after clear"
     );
 
     let _recalc = engine
         .stores
         .compute
-        .structure_change(&mut engine.mirror, None)
+        .structure_change(&mut engine.cell_store, None)
         .unwrap();
 
     // full_recalc inside structure_change re-evaluates SEQUENCE(3) and the spill
     // handler should re-register the projection
     assert!(
-        engine.mirror().projection_registry.is_source(&cell_id_a1()),
+        engine
+            .cell_store()
+            .projection_registry
+            .is_source(&cell_id_a1()),
         "A1 projection should be re-registered after structure_change"
     );
     let proj = engine
-        .mirror()
+        .cell_store()
         .projection_registry
         .get(&cell_id_a1())
         .unwrap();
@@ -478,10 +493,10 @@ fn test_structure_change_reregisters_projections() {
     assert_eq!(proj.cols, 1, "projection cols should be 1");
 
     // Source + spill target values should be correct
-    let a1_val = engine.mirror().get_cell_value(&cell_id_a1()).unwrap();
+    let a1_val = engine.cell_store().get_cell_value(&cell_id_a1()).unwrap();
     assert_eq!(*a1_val, CellValue::Number(FiniteF64::must(1.0)), "A1=1");
     let col = engine
-        .mirror()
+        .cell_store()
         .get_sheet(&sid)
         .unwrap()
         .get_column_view(0)
@@ -542,11 +557,14 @@ fn test_recalculate_preserves_projections() {
 
     // Projection should survive
     assert!(
-        engine.mirror().projection_registry.is_source(&cell_id_a1()),
+        engine
+            .cell_store()
+            .projection_registry
+            .is_source(&cell_id_a1()),
         "A1 should still be a projection source after recalculate()"
     );
     let proj = engine
-        .mirror()
+        .cell_store()
         .projection_registry
         .get(&cell_id_a1())
         .unwrap();
@@ -556,10 +574,10 @@ fn test_recalculate_preserves_projections() {
     );
 
     // Source + spill target values should be correct
-    let a1_val = engine.mirror().get_cell_value(&cell_id_a1()).unwrap();
+    let a1_val = engine.cell_store().get_cell_value(&cell_id_a1()).unwrap();
     assert_eq!(*a1_val, CellValue::Number(FiniteF64::must(1.0)), "A1=1");
     let col = engine
-        .mirror()
+        .cell_store()
         .get_sheet(&sid)
         .unwrap()
         .get_column_view(0)

@@ -4,7 +4,7 @@
 //! where `get_raw_value` walks `cellGrid` to find the CellId, then reads the
 //! formula off `cells[cell_hex]`. On the XLSX hydration path the legacy
 //! `cellGrid` sub-map is intentionally absent, so the function falls through
-//! to `mirror_display_value` and returns the cached *display* value instead
+//! to `store_display_value` and returns the cached *display* value instead
 //! of the formula text.
 //!
 //! This is a unit-level test — no export round-trip needed.
@@ -74,7 +74,11 @@ fn xlsx_hydrated_formula_cell_raw_value_returns_formula_text() {
     ));
 
     let (engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
-    let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
+    let sid = *engine
+        .cell_store()
+        .sheet_ids()
+        .next()
+        .expect("sheet present");
 
     let raw = engine.get_raw_value(&sid, 0, 2);
     assert_eq!(
@@ -95,7 +99,11 @@ fn xlsx_hydrated_value_cell_raw_value_returns_value_string() {
     ));
 
     let (engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
-    let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
+    let sid = *engine
+        .cell_store()
+        .sheet_ids()
+        .next()
+        .expect("sheet present");
 
     let raw = engine.get_raw_value(&sid, 0, 0);
     assert_eq!(raw, "42", "raw value for A1=42; got {:?}", raw);

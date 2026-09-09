@@ -9,8 +9,7 @@ fn displayed_format_projection_matches_scalar_for_range_sweep_edge_cases() {
     let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
     {
-        let (stores, mirror) = (&mut engine.stores, &mut engine.mirror);
-        let sheet_mirror = mirror.get_sheet_mut(&sid).unwrap();
+        let sheet_store = engine.cell_store.get_sheet_mut(&sid).unwrap();
 
         // A deterministic mix of disjoint and heavily overlapping rectangles.
         let mut state = 0x9E37_79B9_u32;
@@ -42,8 +41,8 @@ fn displayed_format_projection_matches_scalar_for_range_sweep_edge_cases() {
                 },
             };
             crate::storage::properties::add_format_range(
-                sheet_mirror,
-                crate::mirror::RangeId::from_raw(u128::from(1_000 + index)),
+                sheet_store,
+                crate::cells::RangeId::from_raw(u128::from(1_000 + index)),
                 start_row,
                 start_col,
                 end_row,
@@ -58,8 +57,8 @@ fn displayed_format_projection_matches_scalar_for_range_sweep_edge_cases() {
             [(2_000, 9, 0, 4, 9), (2_001, 0, 8, 11, 3)]
         {
             crate::storage::properties::add_format_range(
-                sheet_mirror,
-                crate::mirror::RangeId::from_raw(id),
+                sheet_store,
+                crate::cells::RangeId::from_raw(id),
                 start_row,
                 start_col,
                 end_row,

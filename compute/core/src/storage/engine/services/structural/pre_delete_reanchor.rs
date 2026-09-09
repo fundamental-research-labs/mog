@@ -1,6 +1,6 @@
 use cell_types::{CellId, SheetId, SheetPos};
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 
 // -------------------------------------------------------------------
 // Pre-delete re-anchor pass
@@ -27,15 +27,15 @@ use crate::mirror::CellMirror;
 /// - If both endpoints are doomed, leave the refs alone — the formula
 ///   will render as `#REF!`, the truthful fallback.
 ///
-/// Only mutates `CellEntry.formula` in the mirror. Downstream
+/// Only mutates `CellEntry.formula` in the cell store. Downstream
 /// (`structure_change()` → `regenerate_formula_strings` →
 /// targeted formula-cache refresh) does the rest.
 ///
 /// Must run BEFORE the structural op removes the doomed cells' identities,
-/// so their pre-delete positions can still be resolved via the mirror.
+/// so their pre-delete positions can still be resolved via the cell store.
 pub(super) fn pre_delete_re_anchor_range_refs(
     stores: &crate::storage::engine::stores::EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     at: u32,
     count: u32,
@@ -43,7 +43,7 @@ pub(super) fn pre_delete_re_anchor_range_refs(
 ) -> Vec<CellId> {
     use formula_types::{IdentityFormulaRef, IdentityRangeRef};
 
-    if count == 0 || mirror.get_sheet(sheet_id).is_none() {
+    if count == 0 || cell_store.get_sheet(sheet_id).is_none() {
         return Vec::new();
     }
 
@@ -63,7 +63,7 @@ pub(super) fn pre_delete_re_anchor_range_refs(
 
     // Resolve (sheet, row, col) for a CellId by combining `sheet_for_cell`
     // with `resolve_position` (returns `SheetPos`).
-    let resolve_pos = |m: &CellMirror, id: &CellId| -> Option<(SheetId, u32, u32)> {
+    let resolve_pos = |m: &CellStore, id: &CellId| -> Option<(SheetId, u32, u32)> {
         let sid = m.sheet_for_cell(id)?;
         let p = m.resolve_position(id)?;
         Some((sid, p.row(), p.col()))
@@ -78,21 +78,16 @@ pub(super) fn pre_delete_re_anchor_range_refs(
 
     // Iterate every sheet's cells so cross-sheet formulas pointing at
     // `sheet_id` get re-anchored too.
-    let all_sheet_ids: Vec<SheetId> = mirror.sheet_ids().copied().collect();
+    let all_sheet_ids: Vec<SheetId> = cell_store.sheet_ids().copied().collect();
 
-    let formula_cells: Vec<(CellId, Box<formula_types::IdentityFormula>)> = all_sheet_ids
+    let formula_cells: Vec<(CellId, formula_types::IdentityFormula)> = all_sheet_ids
         .iter()
-        .filter_map(|owning_sheet| mirror.get_sheet(owning_sheet))
-        .flat_map(|sheet_mirror| {
-            sheet_mirror
-                .cells_iter()
-                .filter_map(|(cell_id, entry)| {
-                    entry
-                        .formula
-                        .as_ref()
-                        .map(|formula| (*cell_id, formula.clone()))
-                })
-                .collect::<Vec<_>>()
+        .filter_map(|owning_sheet| cell_store.get_sheet(owning_sheet))
+        .flat_map(|sheet_store| {
+            sheet_store
+                .formulas
+                .iter()
+                .map(|(id, formula)| (*id, formula.clone()))
         })
         .collect();
 
@@ -104,8 +99,8 @@ pub(super) fn pre_delete_re_anchor_range_refs(
             match r {
                 IdentityFormulaRef::Cell(_) => new_refs.push(r.clone()),
                 IdentityFormulaRef::Range(rng) => {
-                    let start_pos = resolve_pos(mirror, &rng.start_id);
-                    let end_pos = resolve_pos(mirror, &rng.end_id);
+                    let start_pos = resolve_pos(cell_store, &rng.start_id);
+                    let end_pos = resolve_pos(cell_store, &rng.end_id);
 
                     let start_doomed = in_doomed_band(start_pos);
                     let end_doomed = in_doomed_band(end_pos);
@@ -140,7 +135,7 @@ pub(super) fn pre_delete_re_anchor_range_refs(
                             let end_row = end_pos.map(|(_, r, _)| r);
                             if end_survives
                                 && end_row.is_some_and(|er| new_row <= er)
-                                && let Some(new_id) = mirror.resolve_cell_id(
+                                && let Some(new_id) = cell_store.resolve_cell_id(
                                     sheet_id,
                                     SheetPos::new(new_row, start_other_axis),
                                 )
@@ -153,7 +148,7 @@ pub(super) fn pre_delete_re_anchor_range_refs(
                             let end_col = end_pos.map(|(_, _, c)| c);
                             if end_survives
                                 && end_col.is_some_and(|ec| new_col <= ec)
-                                && let Some(new_id) = mirror.resolve_cell_id(
+                                && let Some(new_id) = cell_store.resolve_cell_id(
                                     sheet_id,
                                     SheetPos::new(start_other_axis, new_col),
                                 )
@@ -192,7 +187,7 @@ pub(super) fn pre_delete_re_anchor_range_refs(
                                 let start_row = start_pos.map(|(_, r, _)| r);
                                 if start_survives
                                     && start_row.is_some_and(|sr| sr <= new_row)
-                                    && let Some(new_id) = mirror.resolve_cell_id(
+                                    && let Some(new_id) = cell_store.resolve_cell_id(
                                         sheet_id,
                                         SheetPos::new(new_row, end_other_axis),
                                     )
@@ -207,7 +202,7 @@ pub(super) fn pre_delete_re_anchor_range_refs(
                             let start_col = start_pos.map(|(_, _, c)| c);
                             if start_survives
                                 && start_col.is_some_and(|sc| sc <= new_col)
-                                && let Some(new_id) = mirror.resolve_cell_id(
+                                && let Some(new_id) = cell_store.resolve_cell_id(
                                     sheet_id,
                                     SheetPos::new(end_other_axis, new_col),
                                 )
@@ -247,7 +242,7 @@ pub(super) fn pre_delete_re_anchor_range_refs(
         new_refs,
     } in updates
     {
-        if let Some(old_formula) = mirror.get_formula(&owning_cell).cloned() {
+        if let Some(old_formula) = cell_store.get_formula(&owning_cell).cloned() {
             let new_formula = formula_types::IdentityFormula {
                 template: old_formula.template,
                 refs: new_refs,
@@ -256,19 +251,19 @@ pub(super) fn pre_delete_re_anchor_range_refs(
                 // Re-anchor only changes refs; formula shape is preserved.
                 is_aggregate: old_formula.is_aggregate,
             };
-            if let Some(sid) = mirror.sheet_for_cell(&owning_cell)
-                && let Some(pos) = mirror.resolve_position(&owning_cell)
+            if let Some(sid) = cell_store.sheet_for_cell(&owning_cell)
+                && let Some(pos) = cell_store.resolve_position(&owning_cell)
             {
                 crate::storage::engine::history::cells::capture_cell(
                     stores,
-                    mirror,
+                    cell_store,
                     sid,
                     owning_cell,
                     pos.row(),
                     pos.col(),
                 );
             }
-            mirror.set_formula(&owning_cell, Some(new_formula));
+            cell_store.set_formula(&owning_cell, Some(new_formula));
         }
     }
 

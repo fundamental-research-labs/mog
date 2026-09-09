@@ -1,8 +1,8 @@
+use crate::cells::CellStore;
 use crate::engine_types::floating_objects::CreateShapeConfig;
 use crate::storage::WorkbookStorage;
 use cell_types::SheetId;
 use compute_document::hex::id_to_hex;
-use compute_document::identity::GridIndex;
 use domain_types::domain::floating_object::{
     AnchorMode, ChartData, FloatingObject, FloatingObjectAnchor, FloatingObjectCommon,
     FloatingObjectData, ShapeData,
@@ -67,7 +67,7 @@ pub fn create_shape_from_config(
     storage: &mut WorkbookStorage,
     sheet_id: &SheetId,
     config: &CreateShapeConfig,
-    grid_index: Option<&mut GridIndex>,
+    grid_index: Option<&mut CellStore>,
     id_alloc: &cell_types::IdAllocator,
 ) -> Result<serde_json::Value, ComputeError> {
     let sheet_hex = id_to_hex(sheet_id.as_u128());
@@ -116,9 +116,12 @@ pub fn create_shape_from_config(
         .unwrap_or_else(CreateShapeConfig::default_outline);
 
     // Store stable CellId for identity-based anchoring
-    let anchor_cell_id = grid_index.map(|grid| {
-        let cell_id = grid.ensure_cell_id(config.anchor_row, config.anchor_col);
-        id_to_hex(cell_id.as_u128()).to_string()
+    let anchor_cell_id = grid_index.and_then(|grid| {
+        let cell_id = grid.ensure_identity_at(
+            sheet_id,
+            cell_types::SheetPos::new(config.anchor_row, config.anchor_col),
+        );
+        Some(id_to_hex(cell_id?.as_u128()).to_string())
     });
 
     // Build the FloatingObject struct directly — no flat JSON intermediate.
@@ -190,7 +193,7 @@ pub fn create_chart_object(
     storage: &mut WorkbookStorage,
     sheet_id: &SheetId,
     config: &serde_json::Value,
-    grid_index: Option<&mut GridIndex>,
+    grid_index: Option<&mut CellStore>,
     id_alloc: &cell_types::IdAllocator,
 ) -> Result<serde_json::Value, ComputeError> {
     let sheet_hex = id_to_hex(sheet_id.as_u128());
@@ -275,9 +278,10 @@ pub fn create_chart_object(
         .unwrap_or_else(|| format!("Chart {}", chart_count + 1));
 
     // Store stable CellId for identity-based anchoring.
-    let anchor_cell_id = grid_index.map(|grid| {
-        let cell_id = grid.ensure_cell_id(anchor_row, anchor_col);
-        id_to_hex(cell_id.as_u128()).to_string()
+    let anchor_cell_id = grid_index.and_then(|grid| {
+        let cell_id =
+            grid.ensure_identity_at(sheet_id, cell_types::SheetPos::new(anchor_row, anchor_col));
+        Some(id_to_hex(cell_id?.as_u128()).to_string())
     });
 
     // Build a merged JSON for chart-specific field parsing.

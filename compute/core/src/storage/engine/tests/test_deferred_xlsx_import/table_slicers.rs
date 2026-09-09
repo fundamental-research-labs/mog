@@ -123,8 +123,8 @@ fn table_slicer_workbook() -> Vec<u8> {
 }
 
 fn assert_slicer_targets_current_table(engine: &ComputeEngine) {
-    let data = engine.mirror().sheet_by_name("Data").unwrap();
-    let dashboard = engine.mirror().sheet_by_name("Dashboard").unwrap();
+    let data = engine.cell_store().sheet_by_name("Data").unwrap();
+    let dashboard = engine.cell_store().sheet_by_name("Dashboard").unwrap();
     let tables = engine.get_all_tables_in_sheet(&data);
     assert_eq!(tables.len(), 1);
     let slicers = engine.get_all_slicers(&dashboard);
@@ -142,12 +142,12 @@ fn remaining_sheet_slicer_uses_loaded_table_ids_and_filter_selection() {
     let bytes = table_slicer_workbook();
     let (mut engine, _) = ComputeEngine::from_snapshot(WorkbookSnapshot::default()).unwrap();
     engine.import_from_xlsx_bytes_deferred(&bytes).unwrap();
-    let data = engine.mirror().sheet_by_name("Data").unwrap();
-    let dashboard = engine.mirror().sheet_by_name("Dashboard").unwrap();
+    let data = engine.cell_store().sheet_by_name("Data").unwrap();
+    let dashboard = engine.cell_store().sheet_by_name("Dashboard").unwrap();
     assert!(engine.get_all_slicers(&dashboard).is_empty());
     let original_table = engine.get_all_tables_in_sheet(&data).remove(0);
     let payload = engine
-        .mirror()
+        .cell_store()
         .get_sheet(&data)
         .unwrap()
         .iter_ranges()
@@ -168,7 +168,7 @@ fn remaining_sheet_slicer_uses_loaded_table_ids_and_filter_selection() {
     assert!(Arc::ptr_eq(
         &payload,
         &engine
-            .mirror()
+            .cell_store()
             .get_sheet(&data)
             .unwrap()
             .iter_ranges()

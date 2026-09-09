@@ -1,9 +1,9 @@
-use compute_layout_index::{DEFAULT_COL_WIDTH, DEFAULT_ROW_HEIGHT, LayoutIndex};
+use compute_layout_index::{DEFAULT_COL_WIDTH, DEFAULT_ROW_HEIGHT, PixelLayout};
 use domain_types::units::Pixels;
 
 #[test]
 fn layout_index_bulk_positions() {
-    let li = LayoutIndex::from_sparse(
+    let li = PixelLayout::from_sparse(
         10,
         5,
         DEFAULT_ROW_HEIGHT,
@@ -24,7 +24,7 @@ fn layout_index_bulk_positions() {
 
 #[test]
 fn build_row_positions_sentinel_lets_caller_derive_last_row_height() {
-    let li = LayoutIndex::from_sparse(
+    let li = PixelLayout::from_sparse(
         10,
         5,
         DEFAULT_ROW_HEIGHT,
@@ -41,7 +41,7 @@ fn build_row_positions_sentinel_lets_caller_derive_last_row_height() {
 
 #[test]
 fn fp_col_build_positions() {
-    let li = LayoutIndex::from_sparse(
+    let li = PixelLayout::from_sparse(
         5,
         5,
         Pixels(20.0),
@@ -63,7 +63,7 @@ fn fp_col_build_positions() {
 
 #[test]
 fn fp_col_build_dimensions() {
-    let li = LayoutIndex::from_sparse(
+    let li = PixelLayout::from_sparse(
         5,
         5,
         Pixels(20.0),
@@ -79,7 +79,7 @@ fn fp_col_build_dimensions() {
 
 #[test]
 fn fp_row_build_dimensions() {
-    let li = LayoutIndex::from_sparse(
+    let li = PixelLayout::from_sparse(
         5,
         5,
         Pixels(20.0),
@@ -95,7 +95,7 @@ fn fp_row_build_dimensions() {
 
 #[test]
 fn fp_bulk_row_positions_match_individual() {
-    let li = LayoutIndex::from_sparse(
+    let li = PixelLayout::from_sparse(
         10,
         5,
         Pixels(20.0),
@@ -120,7 +120,7 @@ fn fp_bulk_row_positions_match_individual() {
 
 #[test]
 fn fp_bulk_col_positions_match_individual() {
-    let li = LayoutIndex::from_sparse(
+    let li = PixelLayout::from_sparse(
         5,
         10,
         Pixels(20.0),
@@ -145,7 +145,7 @@ fn fp_bulk_col_positions_match_individual() {
 
 #[test]
 fn fp_bulk_row_dimensions_match_individual() {
-    let li = LayoutIndex::from_sparse(
+    let li = PixelLayout::from_sparse(
         10,
         5,
         Pixels(20.0),
@@ -169,7 +169,7 @@ fn fp_bulk_row_dimensions_match_individual() {
 
 #[test]
 fn fp_bulk_col_dimensions_match_individual() {
-    let li = LayoutIndex::from_sparse(
+    let li = PixelLayout::from_sparse(
         5,
         10,
         Pixels(20.0),
@@ -193,7 +193,7 @@ fn fp_bulk_col_dimensions_match_individual() {
 
 #[test]
 fn fp_bulk_positions_subrange() {
-    let li = LayoutIndex::with_defaults(20, 20, Pixels(20.0), Pixels(64.0));
+    let li = PixelLayout::with_defaults(20, 20, Pixels(20.0), Pixels(64.0));
     let bulk = li.build_row_positions(5, 10);
     assert_eq!(bulk.len(), 6);
     for (k, i) in (5..=10).enumerate() {

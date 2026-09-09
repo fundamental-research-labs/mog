@@ -22,7 +22,7 @@ impl WorkbookSettings {
     pub fn set_culture(&self, culture: &str) -> Result<MutationResult, ComputeApiError> {
         let owned_culture = culture.to_owned();
         self.dispatch
-            .call_engine(move |e| e.set_culture(&owned_culture).map(|(_, r)| r))
+            .call_engine(move |e| e.set_culture(&owned_culture))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -39,7 +39,7 @@ impl WorkbookSettings {
         settings: snapshot_types::WorkbookSettings,
     ) -> Result<MutationResult, ComputeApiError> {
         self.dispatch
-            .call_engine(move |e| e.set_workbook_settings(settings).map(|(_, r)| r))
+            .call_engine(move |e| e.set_workbook_settings(settings))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -60,14 +60,14 @@ impl WorkbookSettings {
     pub fn set_calculation_mode(&self, mode: &str) -> Result<MutationResult, ComputeApiError> {
         let m = mode.to_string();
         self.dispatch
-            .call_engine(move |e| e.set_calculation_mode(&m).map(|(_, r)| r))
+            .call_engine(move |e| e.set_calculation_mode(&m))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
     /// Set the maximum iterations for iterative calculation.
     pub fn set_max_iterations(&self, n: u32) -> Result<MutationResult, ComputeApiError> {
         self.dispatch
-            .call_engine(move |e| e.set_max_iterations(n).map(|(_, r)| r))
+            .call_engine(move |e| e.set_max_iterations(n))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -77,7 +77,7 @@ impl WorkbookSettings {
         enabled: bool,
     ) -> Result<MutationResult, ComputeApiError> {
         self.dispatch
-            .call_engine(move |e| e.set_iterative_calculation(enabled).map(|(_, r)| r))
+            .call_engine(move |e| e.set_iterative_calculation(enabled))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 }

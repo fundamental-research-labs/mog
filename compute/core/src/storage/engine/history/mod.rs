@@ -8,15 +8,15 @@ use std::sync::{
 use cell_types::{CellId, SheetId};
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use crate::{mirror::CellMirror, snapshot::MutationResult};
+use crate::{cells::CellStore, snapshot::MutationResult};
 
 mod boundaries;
 pub(crate) mod cells;
 pub(crate) mod metadata;
-mod replay;
-mod ui_formats;
-pub(crate) mod structure;
 pub(crate) mod relocate;
+mod replay;
+pub(crate) mod structure;
+mod ui_formats;
 
 use cells::CellPatch;
 use metadata::{MetadataKey, MetadataPatch};
@@ -40,14 +40,14 @@ pub(crate) enum HistoryPatch {
 }
 
 impl HistoryPatch {
-    fn is_changed(&self, stores: &super::stores::EngineStores, mirror: &CellMirror) -> bool {
+    fn is_changed(&self, stores: &super::stores::EngineStores, cell_store: &CellStore) -> bool {
         match self {
-            Self::Relocate(patch) => patch.is_changed(stores, mirror),
-            Self::Structure(patch) => patch.is_changed(stores, mirror),
-            Self::Sheet(patch) => patch.is_changed(stores, mirror),
-            Self::SheetExtent(patch) => patch.is_changed(stores, mirror),
-            Self::Cell(patch) => patch.is_changed(stores, mirror),
-            Self::Metadata(patch) => patch.is_changed(&stores.storage, mirror),
+            Self::Relocate(patch) => patch.is_changed(stores, cell_store),
+            Self::Structure(patch) => patch.is_changed(stores, cell_store),
+            Self::Sheet(patch) => patch.is_changed(stores, cell_store),
+            Self::SheetExtent(patch) => patch.is_changed(stores, cell_store),
+            Self::Cell(patch) => patch.is_changed(stores, cell_store),
+            Self::Metadata(patch) => patch.is_changed(&stores.storage, cell_store),
         }
     }
 }
@@ -69,7 +69,7 @@ struct CaptureInner {
 
 /// Capture context shared only by the live stores of one engine.
 /// Cloning document state deliberately creates an inactive context: staged
-/// imports and temporary mirrors must never record changes against live state.
+/// imports and temporary cell stores must never record changes against live state.
 #[derive(Debug, Default)]
 pub(crate) struct HistoryCapture(Arc<CaptureInner>);
 
@@ -150,13 +150,23 @@ impl HistoryCapture {
 
     pub(crate) fn retain_untracked_identity(&self, sheet: SheetId, cell: CellId) {
         if !self.is_active() {
-            self.0.untracked_identities.lock().expect("native identity retention poisoned").insert((sheet, cell));
+            self.0
+                .untracked_identities
+                .lock()
+                .expect("native identity retention poisoned")
+                .insert((sheet, cell));
         }
     }
 
     pub(crate) fn retained_identities(&self, sheet: SheetId) -> Vec<CellId> {
-        self.0.untracked_identities.lock().expect("native identity retention poisoned").iter()
-            .filter(|(owner, _)| *owner == sheet).map(|(_, cell)| *cell).collect()
+        self.0
+            .untracked_identities
+            .lock()
+            .expect("native identity retention poisoned")
+            .iter()
+            .filter(|(owner, _)| *owner == sheet)
+            .map(|(_, cell)| *cell)
+            .collect()
     }
 
     pub(crate) fn record_once(&self, key: HistoryKey, make: impl FnOnce() -> HistoryPatch) {

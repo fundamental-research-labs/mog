@@ -1,5 +1,5 @@
+use crate::cells::SheetStore;
 use cell_types::SheetId;
-use compute_document::identity::GridIndex;
 
 use crate::storage::WorkbookStorage;
 
@@ -16,7 +16,7 @@ use super::types::CellRange;
 pub fn check_sort_range_merges(
     storage: &WorkbookStorage,
     sheet_id: SheetId,
-    grid: &GridIndex,
+    grid: &SheetStore,
     range: &CellRange,
 ) -> (bool, Option<String>) {
     let merges = crate::storage::sheet::merges::get_merges_in_range(

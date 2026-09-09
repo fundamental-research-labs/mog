@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 
 use cell_types::{CellId, SheetId, SheetPos};
-use compute_document::hex::id_to_hex;
 use domain_types::CellFormat;
 use formula_types::IdentityFormulaRef;
 use snapshot_types::MutationResult;
@@ -43,7 +42,7 @@ impl ComputeEngine {
             //    parse landed as a date serial). If the parser fell through
             //    to text or boolean, skip.
             let cell_value = self
-                .mirror
+                .cell_store
                 .get_cell_value_at(sheet_id, cell_types::SheetPos::new(*row, *col));
             if !matches!(cell_value, Some(value_types::CellValue::Number(_))) {
                 continue;
@@ -60,23 +59,26 @@ impl ComputeEngine {
             };
 
             // 4. Skip if the cell already has a date format applied.
-            let cell_id =
-                match services::cell_editing::find_cell_id_at(&self.stores, sheet_id, *row, *col) {
-                    Some(id) => id,
-                    None => continue,
-                };
-            let cell_hex = id_to_hex(cell_id.as_u128());
+            let cell_id = match services::cell_editing::find_cell_id_at(
+                &self.cell_store,
+                sheet_id,
+                *row,
+                *col,
+            ) {
+                Some(id) => id,
+                None => continue,
+            };
             let table_fmt =
-                services::resolve_structured_format_at_cell(&self.mirror, sheet_id, *row, *col);
-            let effective = crate::storage::properties::get_effective_format(
+                services::resolve_structured_format_at_cell(&self.cell_store, sheet_id, *row, *col);
+            let effective = crate::storage::properties::get_effective_format_by_id(
                 &self.stores.storage,
                 sheet_id,
-                &cell_hex,
+                Some(&cell_id),
                 *row,
                 *col,
                 table_fmt.as_ref(),
                 self.stores.grid_indexes.get(sheet_id),
-                self.mirror.get_sheet(sheet_id),
+                self.cell_store.get_sheet(sheet_id),
             );
             // Auto date-inference only fires on cells whose effective format is
             // General. Any explicit format the user set — Number, Currency,
@@ -113,7 +115,7 @@ impl ComputeEngine {
             };
             services::formatting::set_format_for_ranges(
                 &mut self.stores,
-                &mut self.mirror,
+                &mut self.cell_store,
                 &sheet_id,
                 &[(row, col, row, col)],
                 &format,
@@ -136,7 +138,7 @@ impl ComputeEngine {
             }
 
             if !matches!(
-                self.mirror
+                self.cell_store
                     .get_cell_value_at(sheet_id, cell_types::SheetPos::new(*row, *col)),
                 Some(value_types::CellValue::Number(_))
             ) {
@@ -147,23 +149,26 @@ impl ComputeEngine {
                 continue;
             };
 
-            let cell_id =
-                match services::cell_editing::find_cell_id_at(&self.stores, sheet_id, *row, *col) {
-                    Some(id) => id,
-                    None => continue,
-                };
-            let cell_hex = id_to_hex(cell_id.as_u128());
+            let cell_id = match services::cell_editing::find_cell_id_at(
+                &self.cell_store,
+                sheet_id,
+                *row,
+                *col,
+            ) {
+                Some(id) => id,
+                None => continue,
+            };
             let table_fmt =
-                services::resolve_structured_format_at_cell(&self.mirror, sheet_id, *row, *col);
-            let effective = crate::storage::properties::get_effective_format(
+                services::resolve_structured_format_at_cell(&self.cell_store, sheet_id, *row, *col);
+            let effective = crate::storage::properties::get_effective_format_by_id(
                 &self.stores.storage,
                 sheet_id,
-                &cell_hex,
+                Some(&cell_id),
                 *row,
                 *col,
                 table_fmt.as_ref(),
                 self.stores.grid_indexes.get(sheet_id),
-                self.mirror.get_sheet(sheet_id),
+                self.cell_store.get_sheet(sheet_id),
             );
             let has_explicit_format = effective
                 .number_format
@@ -187,7 +192,7 @@ impl ComputeEngine {
             };
             services::formatting::set_format_for_ranges(
                 &mut self.stores,
-                &mut self.mirror,
+                &mut self.cell_store,
                 &sheet_id,
                 &[(row, col, row, col)],
                 &format,
@@ -209,7 +214,7 @@ impl ComputeEngine {
             }
 
             if !matches!(
-                self.mirror
+                self.cell_store
                     .get_cell_value_at(sheet_id, cell_types::SheetPos::new(*row, *col)),
                 Some(value_types::CellValue::Number(_))
             ) {
@@ -220,23 +225,26 @@ impl ComputeEngine {
                 continue;
             };
 
-            let cell_id =
-                match services::cell_editing::find_cell_id_at(&self.stores, sheet_id, *row, *col) {
-                    Some(id) => id,
-                    None => continue,
-                };
-            let cell_hex = id_to_hex(cell_id.as_u128());
+            let cell_id = match services::cell_editing::find_cell_id_at(
+                &self.cell_store,
+                sheet_id,
+                *row,
+                *col,
+            ) {
+                Some(id) => id,
+                None => continue,
+            };
             let table_fmt =
-                services::resolve_structured_format_at_cell(&self.mirror, sheet_id, *row, *col);
-            let effective = crate::storage::properties::get_effective_format(
+                services::resolve_structured_format_at_cell(&self.cell_store, sheet_id, *row, *col);
+            let effective = crate::storage::properties::get_effective_format_by_id(
                 &self.stores.storage,
                 sheet_id,
-                &cell_hex,
+                Some(&cell_id),
                 *row,
                 *col,
                 table_fmt.as_ref(),
                 self.stores.grid_indexes.get(sheet_id),
-                self.mirror.get_sheet(sheet_id),
+                self.cell_store.get_sheet(sheet_id),
             );
             let has_explicit_format = effective
                 .number_format
@@ -260,7 +268,7 @@ impl ComputeEngine {
             };
             services::formatting::set_format_for_ranges(
                 &mut self.stores,
-                &mut self.mirror,
+                &mut self.cell_store,
                 &sheet_id,
                 &[(row, col, row, col)],
                 &format,
@@ -286,30 +294,33 @@ impl ComputeEngine {
             }
 
             if !matches!(
-                self.mirror
+                self.cell_store
                     .get_cell_value_at(sheet_id, cell_types::SheetPos::new(*row, *col)),
                 Some(value_types::CellValue::Number(_))
             ) {
                 continue;
             }
 
-            let cell_id =
-                match services::cell_editing::find_cell_id_at(&self.stores, sheet_id, *row, *col) {
-                    Some(id) => id,
-                    None => continue,
-                };
-            let cell_hex = id_to_hex(cell_id.as_u128());
+            let cell_id = match services::cell_editing::find_cell_id_at(
+                &self.cell_store,
+                sheet_id,
+                *row,
+                *col,
+            ) {
+                Some(id) => id,
+                None => continue,
+            };
             let table_fmt =
-                services::resolve_structured_format_at_cell(&self.mirror, sheet_id, *row, *col);
-            let effective = crate::storage::properties::get_effective_format(
+                services::resolve_structured_format_at_cell(&self.cell_store, sheet_id, *row, *col);
+            let effective = crate::storage::properties::get_effective_format_by_id(
                 &self.stores.storage,
                 sheet_id,
-                &cell_hex,
+                Some(&cell_id),
                 *row,
                 *col,
                 table_fmt.as_ref(),
                 self.stores.grid_indexes.get(sheet_id),
-                self.mirror.get_sheet(sheet_id),
+                self.cell_store.get_sheet(sheet_id),
             );
             if effective
                 .number_format
@@ -333,7 +344,7 @@ impl ComputeEngine {
             };
             services::formatting::set_format_for_ranges(
                 &mut self.stores,
-                &mut self.mirror,
+                &mut self.cell_store,
                 &sheet_id,
                 &[(row, col, row, col)],
                 &format,
@@ -357,7 +368,7 @@ impl ComputeEngine {
 
         for (sheet_id, row, col) in candidates {
             let Some(cell_id) = self
-                .mirror
+                .cell_store
                 .resolve_cell_id(sheet_id, SheetPos::new(*row, *col))
             else {
                 continue;
@@ -367,7 +378,7 @@ impl ComputeEngine {
                 continue;
             }
 
-            let Some(formula) = self.mirror.get_formula(&cell_id) else {
+            let Some(formula) = self.cell_store.get_formula(&cell_id) else {
                 continue;
             };
             match formula_result_format_intent(&formula.template) {
@@ -401,16 +412,15 @@ impl ComputeEngine {
         }
 
         let mut result = MutationResult::empty();
-        let mut patch_blobs = Vec::new();
         for (sheet_id, row, col, number_format) in to_apply {
             let format = CellFormat {
                 number_format: Some(number_format),
                 ..Default::default()
             };
-            let (affected, format_result) = {
+            let format_result = {
                 services::formatting::set_format_for_ranges(
                     &mut self.stores,
-                    &mut self.mirror,
+                    &mut self.cell_store,
                     &sheet_id,
                     &[(row, col, row, col)],
                     &format,
@@ -419,18 +429,6 @@ impl ComputeEngine {
             result
                 .property_changes
                 .extend(format_result.property_changes);
-            patch_blobs.push(self.produce_format_change_patches(&sheet_id, &affected));
-        }
-
-        if !patch_blobs.is_empty() {
-            let patches = compute_wire::mutation::concat_multi_viewport_patches(&patch_blobs);
-            self.mutation.pending_format_patches =
-                Some(match self.mutation.pending_format_patches.take() {
-                    Some(existing) => {
-                        compute_wire::mutation::concat_multi_viewport_patches(&[existing, patches])
-                    }
-                    None => patches,
-                });
         }
 
         Ok(result)
@@ -443,18 +441,17 @@ impl ComputeEngine {
         row: u32,
         col: u32,
     ) -> bool {
-        let cell_hex = id_to_hex(cell_id.as_u128());
         let table_fmt =
-            services::resolve_structured_format_at_cell(&self.mirror, sheet_id, row, col);
-        let effective = crate::storage::properties::get_effective_format(
+            services::resolve_structured_format_at_cell(&self.cell_store, sheet_id, row, col);
+        let effective = crate::storage::properties::get_effective_format_by_id(
             &self.stores.storage,
             sheet_id,
-            &cell_hex,
+            Some(&cell_id),
             row,
             col,
             table_fmt.as_ref(),
             self.stores.grid_indexes.get(sheet_id),
-            self.mirror.get_sheet(sheet_id),
+            self.cell_store.get_sheet(sheet_id),
         );
 
         effective
@@ -465,31 +462,30 @@ impl ComputeEngine {
 
     fn formula_cell_result_is_numeric(&self, sheet_id: &SheetId, row: u32, col: u32) -> bool {
         matches!(
-            self.mirror
+            self.cell_store
                 .get_cell_value_at(sheet_id, SheetPos::new(row, col)),
             Some(CellValue::Number(_))
         )
     }
 
     fn effective_number_format_for_cell(&self, cell_id: &CellId) -> Option<String> {
-        let sheet_id = self.mirror.sheet_for_cell(cell_id)?;
-        let pos = self.mirror.resolve_position(cell_id)?;
-        let cell_hex = id_to_hex(cell_id.as_u128());
+        let sheet_id = self.cell_store.sheet_for_cell(cell_id)?;
+        let pos = self.cell_store.resolve_position(cell_id)?;
         let table_fmt = services::resolve_structured_format_at_cell(
-            &self.mirror,
+            &self.cell_store,
             &sheet_id,
             pos.row(),
             pos.col(),
         );
-        let effective = crate::storage::properties::get_effective_format(
+        let effective = crate::storage::properties::get_effective_format_by_id(
             &self.stores.storage,
             &sheet_id,
-            &cell_hex,
+            Some(&cell_id),
             pos.row(),
             pos.col(),
             table_fmt.as_ref(),
             self.stores.grid_indexes.get(&sheet_id),
-            self.mirror.get_sheet(&sheet_id),
+            self.cell_store.get_sheet(&sheet_id),
         );
 
         effective
@@ -507,7 +503,7 @@ impl ComputeEngine {
             return None;
         }
 
-        let formula = self.mirror.get_formula(formula_cell_id)?;
+        let formula = self.cell_store.get_formula(formula_cell_id)?;
         let mut inherited: Option<String> = None;
 
         for reference in &formula.refs {

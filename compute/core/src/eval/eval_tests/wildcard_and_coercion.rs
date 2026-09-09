@@ -11,7 +11,7 @@ use super::*;
 
 #[test]
 fn count_inline_true() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = func("COUNT", vec![ASTNode::Boolean(true)]);
     assert_eq!(eval(&node, &ctx), CellValue::number(1.0));
@@ -19,7 +19,7 @@ fn count_inline_true() {
 
 #[test]
 fn count_inline_false() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = func("COUNT", vec![ASTNode::Boolean(false)]);
     assert_eq!(eval(&node, &ctx), CellValue::number(1.0));
@@ -27,7 +27,7 @@ fn count_inline_false() {
 
 #[test]
 fn count_inline_booleans_and_number() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = func(
         "COUNT",
@@ -42,7 +42,7 @@ fn count_inline_booleans_and_number() {
 
 #[test]
 fn count_mixed_with_text_skipped() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = func(
         "COUNT",
@@ -65,7 +65,7 @@ fn count_mixed_with_text_skipped() {
 
 #[test]
 fn match_exact_wildcard_star_prefix() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let arr = ASTNode::Array {
         rows: vec![
@@ -83,7 +83,7 @@ fn match_exact_wildcard_star_prefix() {
 
 #[test]
 fn match_exact_wildcard_question_mark() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let arr = ASTNode::Array {
         rows: vec![
@@ -101,7 +101,7 @@ fn match_exact_wildcard_question_mark() {
 
 #[test]
 fn match_exact_wildcard_star_suffix() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let arr = ASTNode::Array {
         rows: vec![
@@ -125,7 +125,7 @@ fn match_exact_wildcard_star_suffix() {
 
 #[test]
 fn hlookup_exact_wildcard_star() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let table = ASTNode::Array {
         rows: vec![
@@ -155,7 +155,7 @@ fn hlookup_exact_wildcard_star() {
 
 #[test]
 fn hlookup_exact_wildcard_suffix() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let table = ASTNode::Array {
         rows: vec![

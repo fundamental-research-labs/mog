@@ -8,7 +8,7 @@
 use cell_types::SheetId;
 use formula_types::StructureChange;
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::{cf_store, grouping, pivots, print as meta, sparklines};
 
@@ -22,7 +22,7 @@ use crate::storage::sheet::{cf_store, grouping, pivots, print as meta, sparkline
 /// before `rebuild_merge_index` and formula recalc.
 pub(in crate::storage::engine) fn shift_all_metadata_ranges(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     change: &StructureChange,
 ) {
@@ -32,29 +32,36 @@ pub(in crate::storage::engine) fn shift_all_metadata_ranges(
     }
 
     shift_cf_ranges(stores, sheet_id, change);
-    shift_table_ranges(stores, mirror, sheet_id, change);
+    shift_table_ranges(stores, cell_store, sheet_id, change);
     shift_validation_ranges(stores, sheet_id, change);
     shift_grouping_ranges(stores, sheet_id, change);
-    shift_col_format_ranges(stores, mirror, sheet_id, change);
+    shift_col_format_ranges(stores, cell_store, sheet_id, change);
     shift_sparkline_ranges(stores, sheet_id, change);
-    shift_pivot_ranges(stores, mirror, sheet_id, change);
+    shift_pivot_ranges(stores, cell_store, sheet_id, change);
     shift_print_metadata(stores, sheet_id, change);
     invalidate_range_bound_worksheet_semantic_containers(stores, sheet_id, change);
 }
 
 fn shift_col_format_ranges(
     _stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     change: &StructureChange,
 ) {
-    let Some(sheet) = mirror.get_sheet_mut(sheet_id) else {
+    let Some(sheet) = cell_store.get_sheet_mut(sheet_id) else {
         return;
     };
     if sheet.history.is_active() {
         for range in &sheet.format_ranges {
-            let bounds=cell_types::SheetRange::new(range.start_row,range.start_col,range.end_row,range.end_col);
-            if shift_range(&bounds,change) != Some(bounds) { crate::storage::engine::history::metadata::capture_format_range(sheet,range.id); }
+            let bounds = cell_types::SheetRange::new(
+                range.start_row,
+                range.start_col,
+                range.end_row,
+                range.end_col,
+            );
+            if shift_range(&bounds, change) != Some(bounds) {
+                crate::storage::engine::history::metadata::capture_format_range(sheet, range.id);
+            }
         }
     }
     sheet.format_ranges.retain_mut(|range| {
@@ -85,8 +92,12 @@ fn shift_col_format_ranges(
     }
     if sheet.history.is_active() {
         for range in &sheet.col_format_ranges {
-            let bounds=cell_types::SheetRange::new(0,range.start_col,0,range.end_col);
-            if shift_range(&bounds,change) != Some(bounds) { crate::storage::engine::history::metadata::capture_column_format_range(sheet,range.id); }
+            let bounds = cell_types::SheetRange::new(0, range.start_col, 0, range.end_col);
+            if shift_range(&bounds, change) != Some(bounds) {
+                crate::storage::engine::history::metadata::capture_column_format_range(
+                    sheet, range.id,
+                );
+            }
         }
     }
     sheet.col_format_ranges.retain_mut(|range| {
@@ -217,14 +228,22 @@ pub(in crate::storage::engine) fn relocate_validation_ranges(
     }
     if source_sheet_id != target_sheet_id {
         source_rules.retain(|entry| !entry.spec.ranges.is_empty());
-        crate::storage::engine::history::metadata::capture_validation_replacement(&stores.storage,*source_sheet_id,&source_rules);
+        crate::storage::engine::history::metadata::capture_validation_replacement(
+            &stores.storage,
+            *source_sheet_id,
+            &source_rules,
+        );
         if let Some(metadata) = stores.storage.sheet_metadata.get_mut(source_sheet_id) {
             metadata.validations.rules = source_rules;
             metadata.validations.declared_count = None;
         }
     }
     target_rules.retain(|entry| !entry.spec.ranges.is_empty());
-    crate::storage::engine::history::metadata::capture_validation_replacement(&stores.storage,*target_sheet_id,&target_rules);
+    crate::storage::engine::history::metadata::capture_validation_replacement(
+        &stores.storage,
+        *target_sheet_id,
+        &target_rules,
+    );
     if let Some(metadata) = stores.storage.sheet_metadata.get_mut(target_sheet_id) {
         metadata.validations.rules = target_rules;
         metadata.validations.declared_count = None;
@@ -251,12 +270,12 @@ pub(in crate::storage::engine) fn relocate_validation_ranges(
 ///
 /// Returns the IDs of the pivots whose anchor moved. The caller re-materializes
 /// and rebuilds the sheet viewport when this is non-empty (pivot output cells
-/// live in the mirror's `col_data`, written only by `materialize_all_pivots`;
+/// live in the cell store's `col_data`, written only by `materialize_all_pivots`;
 /// the cell-relocation patches do not cover them).
 #[allow(clippy::too_many_arguments)]
 pub(in crate::storage::engine) fn relocate_pivot_ranges(
     stores: &mut EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     source_sheet_id: &SheetId,
     src_start_row: u32,
     src_start_col: u32,
@@ -271,7 +290,7 @@ pub(in crate::storage::engine) fn relocate_pivot_ranges(
     }
 
     let sheet_uuid = source_sheet_id.to_uuid_string();
-    let sheet_name = mirror
+    let sheet_name = cell_store
         .get_sheet(source_sheet_id)
         .map(|s| s.name.clone())
         .unwrap_or_default();
@@ -287,9 +306,9 @@ pub(in crate::storage::engine) fn relocate_pivot_ranges(
                 }
                 // Require the whole rendered region to be inside the moved
                 // range — Excel only moves a pivot when its full output is
-                // selected. The rendered region comes from the mirror def
+                // selected. The rendered region comes from the cell store def
                 // (the authoritative config stores just the top-left anchor).
-                let def = mirror.find_pivot_table_def(&pivot.id, &pivot.name, &sheet_uuid)?;
+                let def = cell_store.find_pivot_table_def(&pivot.id, &pivot.name, &sheet_uuid)?;
                 if def.is_empty_rendered_region()
                     || def.start_row < src_start_row
                     || def.start_col < src_start_col
@@ -430,7 +449,11 @@ fn invalidate_range_bound_worksheet_semantic_containers(
         return;
     }
 
-    crate::storage::engine::history::metadata::capture_sheet_field!(stores.storage,*sheet_id,semantic_containers);
+    crate::storage::engine::history::metadata::capture_sheet_field!(
+        stores.storage,
+        *sheet_id,
+        semantic_containers
+    );
     if let Some(meta) = stores.storage.sheet_metadata.get_mut(sheet_id) {
         meta.semantic_containers = Default::default();
     }
@@ -501,12 +524,12 @@ fn shift_cf_ranges(stores: &mut EngineStores, sheet_id: &SheetId, change: &Struc
 /// Shift table ranges.
 fn shift_table_ranges(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     change: &StructureChange,
 ) {
     let sheet_id_hex = sheet_id.to_uuid_string();
-    let tables: Vec<_> = mirror
+    let tables: Vec<_> = cell_store
         .all_tables()
         .iter()
         .filter(|t| t.sheet_id == sheet_id_hex)
@@ -518,10 +541,10 @@ fn shift_table_ranges(
             Some(new_range) if new_range != table.range => {
                 let mut updated = table;
                 updated.range = new_range;
-                stores.compute.set_table(mirror, updated.clone());
+                stores.compute.set_table(cell_store, updated.clone());
             }
             None => {
-                stores.compute.remove_table(mirror, &table.name);
+                stores.compute.remove_table(cell_store, &table.name);
             }
             _ => {} // unchanged
         }
@@ -535,13 +558,17 @@ fn shift_validation_ranges(
     change: &StructureChange,
 ) {
     if stores.storage.history.is_active() {
-        if let Some(meta)=stores.storage.sheet_metadata.get(sheet_id) {
+        if let Some(meta) = stores.storage.sheet_metadata.get(sheet_id) {
             for entry in &meta.validations.rules {
                 crate::storage::engine::history::metadata::capture_sheet_vector_entry!(stores.storage,*sheet_id,validations.rules,entry.id,value=>value.id);
             }
         }
     }
-    crate::storage::engine::history::metadata::capture_sheet_field!(stores.storage,*sheet_id,validations.declared_count);
+    crate::storage::engine::history::metadata::capture_sheet_field!(
+        stores.storage,
+        *sheet_id,
+        validations.declared_count
+    );
     let Some(metadata) = stores.storage.sheet_metadata.get_mut(sheet_id) else {
         return;
     };
@@ -779,7 +806,7 @@ fn shift_sparkline_ranges(stores: &mut EngineStores, sheet_id: &SheetId, change:
 /// Shift pivot table source ranges and output locations.
 fn shift_pivot_ranges(
     stores: &mut EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     change: &StructureChange,
 ) {
@@ -789,7 +816,7 @@ fn shift_pivot_ranges(
         .iter()
         .flat_map(|(owner, sheet)| sheet.pivots.values().cloned().map(|pivot| (*owner, pivot)))
         .collect();
-    let current_sheet_name = mirror
+    let current_sheet_name = cell_store
         .get_sheet(sheet_id)
         .map(|s| s.name.clone())
         .unwrap_or_default();

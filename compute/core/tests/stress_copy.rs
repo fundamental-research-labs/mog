@@ -23,7 +23,7 @@ fn test_copy_values_to_new_location() {
         make_cell(0, 1, num(20.0), None), // B1=20
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     engine
         .copy_range(
@@ -57,7 +57,7 @@ fn test_copy_formula_adjusts_references() {
         make_cell(0, 1, num(20.0), Some("=A1*2")), // B1=A1*2=20
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // Copy B1 -> B2
     engine
@@ -97,7 +97,7 @@ fn test_copy_values_only_from_formulas() {
         make_cell(0, 1, num(30.0), Some("=A1*3")), // B1=A1*3=30
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // Copy A1:B1 -> C1:D1, values only
     engine
@@ -138,7 +138,7 @@ fn test_copy_overwrites_existing_formula() {
         make_cell(0, 2, num(100.0), Some("=100")), // C1=100
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // Verify C1=100 initially
     assert_num(&engine, &sheet_id, 0, 2, 100.0);
@@ -176,7 +176,7 @@ fn test_copy_column_to_row_transpose() {
         make_cell(2, 0, num(3.0), None), // A3=3
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // Copy A1:A3 -> B1 with transpose
     engine
@@ -213,7 +213,7 @@ fn test_paste_overwrites_existing_values() {
         make_cell(0, 3, num(88.0), None), // D1=88
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // Verify originals
     assert_num(&engine, &sheet_id, 0, 2, 99.0);
@@ -255,7 +255,7 @@ fn test_copy_large_10x2_range() {
     }
     let snapshot = make_snapshot(cells);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // Set B1:B10 = "=A{i}*2" via parsed API
     for i in 0u32..10 {
@@ -312,8 +312,8 @@ fn test_copy_values_cross_sheet() {
         vec![], // Sheet2 empty
     );
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet1_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
-    let sheet2_id = engine.mirror().sheet_by_name("Sheet2").unwrap();
+    let sheet1_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
+    let sheet2_id = engine.cell_store().sheet_by_name("Sheet2").unwrap();
 
     // Copy Sheet1!A1:B1 -> Sheet2!A1:B1
     engine

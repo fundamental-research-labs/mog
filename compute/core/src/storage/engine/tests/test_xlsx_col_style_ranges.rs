@@ -1,4 +1,3 @@
-use super::super::*;
 use super::helpers::*;
 use domain_types::{
     AuthoredStyleRun, CellData, CellFormat, ColStyleEntry, ColStyleRange, DocumentFormat,
@@ -57,7 +56,7 @@ fn sparse_col_range_output() -> ParseOutput {
 fn imported_col_style_ranges_shift_with_structural_column_edits() {
     let mut engine = engine_from_parse_output_normal(&sparse_col_range_output());
     let sid = *engine
-        .mirror()
+        .cell_store()
         .sheet_ids()
         .next()
         .expect("hydrated sheet id");
@@ -300,7 +299,7 @@ fn direct_cell_row_col_and_styled_blank_formats_export_through_xlsx() {
 fn imported_col_style_ranges_can_be_overridden_and_cleared_by_column() {
     let mut engine = engine_from_parse_output_normal(&sparse_col_range_output());
     let sid = *engine
-        .mirror()
+        .cell_store()
         .sheet_ids()
         .next()
         .expect("hydrated sheet id");
@@ -365,7 +364,7 @@ fn imported_col_style_ranges_can_be_overridden_and_cleared_by_column() {
 fn set_col_format_range_preserves_sparse_column_range_storage() {
     let mut engine = engine_from_parse_output_normal(&sparse_col_range_output());
     let sid = *engine
-        .mirror()
+        .cell_store()
         .sheet_ids()
         .next()
         .expect("hydrated sheet id");

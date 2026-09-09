@@ -321,7 +321,7 @@ fn test_warm_sumifs_result_cache_basic() {
     // Test that warm_sumifs_result_cache correctly pre-populates the cache
     compute_functions::helpers::sumifs_result_cache::clear();
 
-    let mirror = test_mirror();
+    let cell_store = test_store();
     let s = sheet_id_1();
 
     // Pattern: SUMIFS(C1:C5, A1:A5, <dynamic>)
@@ -340,11 +340,11 @@ fn test_warm_sumifs_result_cache_basic() {
     let no_formulas = |_: &SheetId, _: u32, _: u32, _: u32| false;
     let domain = compute_functions::helpers::sumifs_result_cache::new_cache_domain();
     let epoch = compute_functions::helpers::sumifs_result_cache::begin_recalc_epoch(domain);
-    let warmed = warm_sumifs_result_cache(&[pattern], &mirror, &no_formulas, epoch);
+    let warmed = warm_sumifs_result_cache(&[pattern], &cell_store, &no_formulas, epoch);
     assert_eq!(warmed, 1);
 
     // Now verify the cache was populated by doing a lookup with the same slices
-    let sheet = mirror.get_sheet(&s).unwrap();
+    let sheet = cell_store.get_sheet(&s).unwrap();
     let crit_slice = sheet.get_column_view(0).unwrap();
     let sum_slice = sheet.get_column_view(2).unwrap();
 
@@ -388,7 +388,7 @@ fn test_warm_sumifs_result_cache_skips_stale_data() {
     // When data columns have dirty formulas, warming should skip
     compute_functions::helpers::sumifs_result_cache::clear();
 
-    let mirror = test_mirror();
+    let cell_store = test_store();
     let s = sheet_id_1();
 
     let pattern = AggPattern {
@@ -406,7 +406,7 @@ fn test_warm_sumifs_result_cache_skips_stale_data() {
     let has_formulas = |_: &SheetId, _: u32, _: u32, _: u32| true;
     let domain = compute_functions::helpers::sumifs_result_cache::new_cache_domain();
     let epoch = compute_functions::helpers::sumifs_result_cache::begin_recalc_epoch(domain);
-    let warmed = warm_sumifs_result_cache(&[pattern], &mirror, &has_formulas, epoch);
+    let warmed = warm_sumifs_result_cache(&[pattern], &cell_store, &has_formulas, epoch);
     assert_eq!(warmed, 0);
 
     compute_functions::helpers::sumifs_result_cache::clear();

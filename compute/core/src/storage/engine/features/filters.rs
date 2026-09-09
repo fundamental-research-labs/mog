@@ -8,11 +8,10 @@ use value_types::{CellValue, ComputeError};
 
 fn finish_filter_mutation(
     engine: &mut ComputeEngine,
-    patches: Vec<u8>,
     mut result: MutationResult,
-) -> (Vec<u8>, MutationResult) {
+) -> MutationResult {
     engine.assign_and_record_runtime_diagnostics(&mut result.diagnostics);
-    (patches, result)
+    result
 }
 
 fn ensure_filter_full_recalc_ready(engine: &ComputeEngine) -> Result<(), ComputeError> {
@@ -23,33 +22,30 @@ pub(super) fn create_filter(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     config: serde_json::Value,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    // Filter creation can register the filter range on existing rows
-    // (ghost-cell identity allocation). Row visibility for those rows
-    // is unchanged at this step, but the viewport buffer must observe
-    // the new filter shape (header arrows, criteria, etc.) — emit a
-    // full viewport rebuild via the same path used by
-    // `produce_cf_viewport_patches`. filter viewport R5.
+) -> Result<MutationResult, ComputeError> {
     let result =
-        filter_svc::create_filter(&mut engine.stores, &mut engine.mirror, sheet_id, config)?;
-    let patches = engine.produce_cf_viewport_patches(sheet_id);
-    Ok(finish_filter_mutation(engine, patches, result))
+        filter_svc::create_filter(&mut engine.stores, &mut engine.cell_store, sheet_id, config)?;
+
+    Ok(finish_filter_mutation(engine, result))
 }
 
 pub(super) fn delete_filter(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     filter_id: &str,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     ensure_filter_full_recalc_ready(engine)?;
-    let mut result =
-        filter_svc::delete_filter(&mut engine.stores, &mut engine.mirror, sheet_id, filter_id)?;
-    let mut recalc = engine.stores.compute.full_recalc(&mut engine.mirror)?;
-    engine.prepare_recalc_for_flush(&mut recalc);
+    let mut result = filter_svc::delete_filter(
+        &mut engine.stores,
+        &mut engine.cell_store,
+        sheet_id,
+        filter_id,
+    )?;
+    let mut recalc = engine.stores.compute.full_recalc(&mut engine.cell_store)?;
+    engine.postprocess_mutation_recalc(&mut recalc);
     result.recalc = recalc;
-    engine.mutation.pending_recalc = None;
-    let patches = engine.produce_full_viewport_patches(sheet_id);
-    Ok(finish_filter_mutation(engine, patches, result))
+
+    Ok(finish_filter_mutation(engine, result))
 }
 
 pub(super) fn set_column_filter(
@@ -58,11 +54,11 @@ pub(super) fn set_column_filter(
     filter_id: &str,
     header_col: u32,
     criteria: filters::ColumnFilter,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     ensure_filter_full_recalc_ready(engine)?;
     let result = filter_svc::set_column_filter(
         &mut engine.stores,
-        &mut engine.mirror,
+        &mut engine.cell_store,
         &engine.settings,
         sheet_id,
         filter_id,
@@ -70,12 +66,11 @@ pub(super) fn set_column_filter(
         criteria,
     )?;
     let mut result = result;
-    let mut recalc = engine.stores.compute.full_recalc(&mut engine.mirror)?;
-    engine.prepare_recalc_for_flush(&mut recalc);
+    let mut recalc = engine.stores.compute.full_recalc(&mut engine.cell_store)?;
+    engine.postprocess_mutation_recalc(&mut recalc);
     result.recalc = recalc;
-    engine.mutation.pending_recalc = None;
-    let patches = engine.produce_full_viewport_patches(sheet_id);
-    Ok(finish_filter_mutation(engine, patches, result))
+
+    Ok(finish_filter_mutation(engine, result))
 }
 
 pub(super) fn clear_column_filter(
@@ -83,89 +78,86 @@ pub(super) fn clear_column_filter(
     sheet_id: &SheetId,
     filter_id: &str,
     header_col: u32,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     ensure_filter_full_recalc_ready(engine)?;
     let result = filter_svc::clear_column_filter(
         &mut engine.stores,
-        &mut engine.mirror,
+        &mut engine.cell_store,
         &engine.settings,
         sheet_id,
         filter_id,
         header_col,
     )?;
     let mut result = result;
-    let mut recalc = engine.stores.compute.full_recalc(&mut engine.mirror)?;
-    engine.prepare_recalc_for_flush(&mut recalc);
+    let mut recalc = engine.stores.compute.full_recalc(&mut engine.cell_store)?;
+    engine.postprocess_mutation_recalc(&mut recalc);
     result.recalc = recalc;
-    engine.mutation.pending_recalc = None;
-    let patches = engine.produce_full_viewport_patches(sheet_id);
-    Ok(finish_filter_mutation(engine, patches, result))
+
+    Ok(finish_filter_mutation(engine, result))
 }
 
 pub(super) fn clear_all_column_filters(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     filter_id: &str,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     ensure_filter_full_recalc_ready(engine)?;
     let result = filter_svc::clear_all_column_filters(
         &mut engine.stores,
-        &mut engine.mirror,
+        &mut engine.cell_store,
         &engine.settings,
         sheet_id,
         filter_id,
     )?;
     let mut result = result;
-    let mut recalc = engine.stores.compute.full_recalc(&mut engine.mirror)?;
-    engine.prepare_recalc_for_flush(&mut recalc);
+    let mut recalc = engine.stores.compute.full_recalc(&mut engine.cell_store)?;
+    engine.postprocess_mutation_recalc(&mut recalc);
     result.recalc = recalc;
-    engine.mutation.pending_recalc = None;
-    let patches = engine.produce_full_viewport_patches(sheet_id);
-    Ok(finish_filter_mutation(engine, patches, result))
+
+    Ok(finish_filter_mutation(engine, result))
 }
 
 pub(super) fn get_filters_in_sheet(
     engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> Vec<filters::FilterState> {
-    filter_svc::get_filters_in_sheet(&engine.stores, &engine.mirror, sheet_id)
+    filter_svc::get_filters_in_sheet(&engine.stores, &engine.cell_store, sheet_id)
 }
 
 pub(super) fn get_filter_header_info(
     engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> Vec<filters::FilterHeaderInfo> {
-    filter_svc::get_filter_header_info(&engine.stores, &engine.mirror, sheet_id)
+    filter_svc::get_filter_header_info(&engine.stores, &engine.cell_store, sheet_id)
 }
 
 pub(super) fn apply_advanced_filter(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     request: filters::AdvancedFilterRequest,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let mode = request.mode;
     if matches!(mode, filters::AdvancedFilterMode::InPlace) {
         ensure_filter_full_recalc_ready(engine)?;
     }
     let mut result = advanced_filter_svc::apply_advanced_filter(
         &mut engine.stores,
-        &mut engine.mirror,
+        &mut engine.cell_store,
         sheet_id,
         request,
     )?;
     match mode {
         filters::AdvancedFilterMode::InPlace => {
-            let mut recalc = engine.stores.compute.full_recalc(&mut engine.mirror)?;
-            engine.prepare_recalc_for_flush(&mut recalc);
+            let mut recalc = engine.stores.compute.full_recalc(&mut engine.cell_store)?;
+            engine.postprocess_mutation_recalc(&mut recalc);
             result.recalc = recalc;
-            engine.mutation.pending_recalc = None;
-            let patches = engine.produce_full_viewport_patches(sheet_id);
-            Ok(finish_filter_mutation(engine, patches, result))
+
+            Ok(finish_filter_mutation(engine, result))
         }
         filters::AdvancedFilterMode::CopyTo => {
-            engine.prepare_recalc_for_flush(&mut result.recalc);
-            let patches = engine.flush_viewport_patches();
-            Ok(finish_filter_mutation(engine, patches, result))
+            engine.postprocess_mutation_recalc(&mut result.recalc);
+
+            Ok(finish_filter_mutation(engine, result))
         }
     }
 }
@@ -174,52 +166,47 @@ pub(super) fn apply_filter(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     filter_id: &str,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     ensure_filter_full_recalc_ready(engine)?;
     let result = filter_svc::apply_filter(
         &mut engine.stores,
-        &mut engine.mirror,
+        &mut engine.cell_store,
         &engine.settings,
         sheet_id,
         filter_id,
     )?;
-    finish_filter_apply(engine, sheet_id, result)
+    finish_filter_apply(engine, result)
 }
 
 pub(super) fn reapply_filter(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     filter_id: &str,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     ensure_filter_full_recalc_ready(engine)?;
     let result = filter_svc::reapply_filter(
         &mut engine.stores,
-        &mut engine.mirror,
+        &mut engine.cell_store,
         &engine.settings,
         sheet_id,
         filter_id,
     )?;
-    finish_filter_apply(engine, sheet_id, result)
+    finish_filter_apply(engine, result)
 }
 
 fn finish_filter_apply(
     engine: &mut ComputeEngine,
-    sheet_id: &SheetId,
     mut result: MutationResult,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     // Recalculate so SUBTOTAL/AGGREGATE formulas pick up the new hidden-row
-    // state immediately (they read `mirror.is_row_hidden()` during eval).
-    let mut recalc = engine.stores.compute.full_recalc(&mut engine.mirror)?;
+    // state immediately (they read `cell_store.is_row_hidden()` during eval).
+    let mut recalc = engine.stores.compute.full_recalc(&mut engine.cell_store)?;
     // Run the standard post-recalc enrichment (CF cache refresh,
-    // display text, validation) so the rebuild below reads a
-    // consistent CF cache state for any cells whose visibility flipped.
-    engine.prepare_recalc_for_flush(&mut recalc);
-    // Discard the incremental recalc patch — the full viewport rebuild
-    // below subsumes it and includes hidden-row layout state.
+    // display text, validation) for cells affected by visibility changes.
+    engine.postprocess_mutation_recalc(&mut recalc);
     result.recalc = recalc;
-    engine.mutation.pending_recalc = None;
-    let patches = engine.produce_cf_viewport_patches(sheet_id);
-    Ok(finish_filter_mutation(engine, patches, result))
+
+    Ok(finish_filter_mutation(engine, result))
 }
 
 pub(super) fn get_unique_column_values(
@@ -230,7 +217,7 @@ pub(super) fn get_unique_column_values(
 ) -> Vec<CellValue> {
     filter_svc::get_unique_column_values(
         &engine.stores,
-        &engine.mirror,
+        &engine.cell_store,
         sheet_id,
         filter_id,
         header_col,
@@ -283,14 +270,10 @@ pub(super) fn set_filter_sort_state(
     sheet_id: &SheetId,
     filter_id: &str,
     sort_state: Option<filters::FilterSortState>,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let result =
         filter_svc::set_filter_sort_state(&mut engine.stores, sheet_id, filter_id, sort_state)?;
-    Ok(finish_filter_mutation(
-        engine,
-        compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-        result,
-    ))
+    Ok(finish_filter_mutation(engine, result))
 }
 
 pub(super) fn get_filter_sort_state(
@@ -304,16 +287,15 @@ pub(super) fn get_filter_sort_state(
 pub(super) fn clear_all_filters(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     ensure_filter_full_recalc_ready(engine)?;
     let mut result =
-        filter_svc::clear_all_filters(&mut engine.stores, &mut engine.mirror, sheet_id)?;
-    let mut recalc = engine.stores.compute.full_recalc(&mut engine.mirror)?;
-    engine.prepare_recalc_for_flush(&mut recalc);
+        filter_svc::clear_all_filters(&mut engine.stores, &mut engine.cell_store, sheet_id)?;
+    let mut recalc = engine.stores.compute.full_recalc(&mut engine.cell_store)?;
+    engine.postprocess_mutation_recalc(&mut recalc);
     result.recalc = recalc;
-    engine.mutation.pending_recalc = None;
-    let patches = engine.produce_full_viewport_patches(sheet_id);
-    Ok(finish_filter_mutation(engine, patches, result))
+
+    Ok(finish_filter_mutation(engine, result))
 }
 
 pub(super) fn get_filtered_record_count(
@@ -323,7 +305,7 @@ pub(super) fn get_filtered_record_count(
 ) -> Option<filters::FilterRecordCount> {
     filter_svc::get_filtered_record_count(
         &engine.stores,
-        &engine.mirror,
+        &engine.cell_store,
         &engine.settings,
         sheet_id,
         filter_id,

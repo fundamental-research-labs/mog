@@ -3,9 +3,9 @@ use super::*;
 
 #[test]
 fn test_set_cell_value_number() {
-    let (mut storage, mut mirror, sheet_id) = storage_with_sheet();
+    let (_, mut cell_store, sheet_id) = storage_with_sheet();
     // Use the low-level set_cell to write, then use get_cell_count
-    mirror.apply_edit(
+    cell_store.apply_edit(
         &sheet_id,
         make_cell_id(100),
         cell_types::SheetPos::new(0, 0),
@@ -13,8 +13,8 @@ fn test_set_cell_value_number() {
         None,
     );
 
-    // Verify via mirror
-    let val = mirror.get_cell_value_at(&sheet_id, cell_types::SheetPos::new(0, 0));
+    // Verify via cell store
+    let val = cell_store.get_cell_value_at(&sheet_id, cell_types::SheetPos::new(0, 0));
     assert!(val.is_some());
     assert_eq!(*val.unwrap(), CellValue::Number(FiniteF64::must(42.0)));
 }
@@ -25,8 +25,8 @@ fn test_set_cell_value_number() {
 
 #[test]
 fn test_get_effective_value_number() {
-    let (mut storage, mut mirror, sheet_id) = storage_with_sheet();
-    mirror.apply_edit(
+    let (_, mut cell_store, sheet_id) = storage_with_sheet();
+    cell_store.apply_edit(
         &sheet_id,
         make_cell_id(300),
         cell_types::SheetPos::new(0, 0),
@@ -34,15 +34,15 @@ fn test_get_effective_value_number() {
         None,
     );
 
-    let eff = get_effective_value(&mirror, &sheet_id, 0, 0);
+    let eff = get_effective_value(&cell_store, &sheet_id, 0, 0);
     assert!(eff.is_some());
     assert_eq!(eff.unwrap(), CellValue::Number(FiniteF64::must(99.0)));
 }
 
 #[test]
 fn test_get_effective_value_empty() {
-    let (storage, mirror, sheet_id) = storage_with_sheet();
-    let eff = get_effective_value(&mirror, &sheet_id, 5, 5);
+    let (_, cell_store, sheet_id) = storage_with_sheet();
+    let eff = get_effective_value(&cell_store, &sheet_id, 5, 5);
     assert!(eff.is_none());
 }
 
@@ -52,28 +52,28 @@ fn test_get_effective_value_empty() {
 
 #[test]
 fn test_get_cell_count_empty() {
-    let (storage, mirror, sheet_id) = storage_with_sheet();
-    assert_eq!(get_cell_count(&mirror, &sheet_id), 0);
+    let (_, cell_store, sheet_id) = storage_with_sheet();
+    assert_eq!(get_cell_count(&cell_store, &sheet_id), 0);
 }
 
 #[test]
 fn test_get_cell_count_with_cells() {
-    let (mut storage, mut mirror, sheet_id) = storage_with_sheet();
-    mirror.apply_edit(
+    let (_, mut cell_store, sheet_id) = storage_with_sheet();
+    cell_store.apply_edit(
         &sheet_id,
         make_cell_id(400),
         cell_types::SheetPos::new(0, 0),
         CellValue::Number(FiniteF64::must(1.0)),
         None,
     );
-    mirror.apply_edit(
+    cell_store.apply_edit(
         &sheet_id,
         make_cell_id(401),
         cell_types::SheetPos::new(0, 1),
         CellValue::Number(FiniteF64::must(2.0)),
         None,
     );
-    mirror.apply_edit(
+    cell_store.apply_edit(
         &sheet_id,
         make_cell_id(402),
         cell_types::SheetPos::new(1, 0),
@@ -81,11 +81,10 @@ fn test_get_cell_count_with_cells() {
         None,
     );
 
-    assert_eq!(get_cell_count(&mirror, &sheet_id), 3);
+    assert_eq!(get_cell_count(&cell_store, &sheet_id), 3);
 }
 
 #[test]
 fn test_get_cell_count_nonexistent_sheet() {
-    let storage = WorkbookStorage::new();
-    assert_eq!(get_cell_count(&CellMirror::new(), &make_sheet_id(999)), 0);
+    assert_eq!(get_cell_count(&CellStore::new(), &make_sheet_id(999)), 0);
 }

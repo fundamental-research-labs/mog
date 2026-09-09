@@ -57,7 +57,7 @@ Excel.run / load / context.sync
 compute-api::Workbook --> ComputeEngine
     |
     v
-CellMirror (identity-keyed cell store)
+CellStore (identity-keyed cell store)
     |
     v
 compute-parser (winnow) --> ASTNode
@@ -66,7 +66,7 @@ compute-parser (winnow) --> ASTNode
 DependencyGraph (compute-graph) --> topological levels + cycle detection
     |
     v
-Scheduler (shared Evaluator + MirrorContext, four orchestration paths)
+Scheduler (shared Evaluator + EvalContext, four orchestration paths)
     |
     |   ┌── Incremental topo ──── small dirty set → subset_levels() → level eval
     |   ├── Full topo ─────────── pre-computed global levels → level eval
@@ -86,7 +86,7 @@ RecalcResult --> compute-api::Workbook
 Loaded Office.js values (QuickJS)
 ```
 
-> **Why four paths?** All share the same `Evaluator::evaluate()` and `MirrorContext`.
+> **Why four paths?** All share the same `Evaluator::evaluate()` and `EvalContext`.
 > The difference is orchestration: incremental vs full topo sort (performance),
 > cycle recovery (correctness — SCC seeding + convergence), and data table prepass
 > (correctness — mutate-recalc-restore requires per-write cache invalidation
@@ -129,10 +129,10 @@ Located under `crates/`. Pure computation modules, each independently testable.
 | **compute-charts** | `crates/compute-charts` | compute-stats | Chart data transforms: statistics, regression, density, binning, stacking, grouping |
 | **compute-solver** | `crates/compute-solver` | none | Numerical optimization: Nelder-Mead, BFGS, L-BFGS-B, Differential Evolution, root finding (bisection/Brent/Newton), auto dispatch |
 | **compute-document** | `crates/compute-document` | formula-types, cell-types | Native row/column axes, sparse cell identity indexes, compact axis runs, and range metadata |
-| **compute-wire** | `crates/compute-wire` | formula-types, value-types, cell-types, snapshot-types, compute-cf, compute-security | Binary wire protocol: viewport serialization, mutation patches, FormatPalette interning, TS codegen |
+| **compute-wire** | `crates/compute-wire` | domain-types, ooxml-types, value-types, compute-security | Explicit viewport serialization, binary format palettes, and access filtering |
 | **compute-fill** | `crates/compute-fill` | value-types, cell-types, formula-types | Autofill engine: pattern detection, series generation, formula reference adjustment |
 | **compute-relational** | `crates/compute-relational` | value-types, cell-types, compute-stats, pivot-types | Relational compute engine: GROUP BY, aggregation, window functions over tabular data |
-| **compute-layout-index** | `crates/compute-layout-index` | none | Spatial layout index: Fenwick tree over dimension deltas for O(log k) cell-to-pixel mapping |
+| **compute-layout-index** | `crates/compute-layout-index` | none | Sparse pixel layout: O(k) dimension prefixes for on-demand cell-to-pixel mapping |
 | **compute-text-measurement** | `crates/compute-text-measurement` | none | Text measurement engine for autofit, PDF export, and server-side layout |
 | **compute-screenshot** | `crates/compute-screenshot` | compute-wire, compute-layout-index, compute-text-measurement | Headless sheet screenshot rasterizer over `ViewportRenderData` |
 | **compute-security** | `crates/compute-security` | value-types, cell-types | Privacy policy types and access-control engine for compute-core |
@@ -141,7 +141,7 @@ Located under `crates/`. Pure computation modules, each independently testable.
 
 | Module | Purpose |
 |--------|---------|
-| `compute-core` (root) | Orchestration: CellMirror, AST evaluator, recalc scheduler, identity model, native metadata, projection registry, data tables, what-if analysis, solver integration, bridge wrappers |
+| `compute-core` (root) | Orchestration: CellStore, AST evaluator, recalc scheduler, identity model, native metadata, projection registry, data tables, what-if analysis, solver integration, bridge wrappers |
 
 ## Native storage
 
@@ -256,11 +256,11 @@ crates because they depend on multiple sub-crates or own mutable state:
 
 | Module | Description |
 |--------|-------------|
-| `mirror` | **CellMirror** -- authoritative native sparse values and compact imported ranges, queried by the evaluator through borrowed views and disposable numeric caches. |
+| `cells` | **CellStore** -- authoritative native sparse values and compact imported ranges, queried by the evaluator through borrowed views and disposable numeric caches. |
 | `eval` | **AST Evaluator** -- recursive descent evaluator that walks `ASTNode` trees. Two trait hierarchies: `EvalDataAccess` (async data reads) and `EvalMetadata` (sync positional/structural queries). Sub-modules: `core` (dispatch), `context` (traits), `cache` (multi-tier), `lookup` (INDEX/MATCH/XLOOKUP), `functions` (special dispatch), `coordination` (cycle detection, vectorized eval). |
-| `scheduler` | **Recalc Scheduler** -- top-level `ComputeCore` struct. Owns the DependencyGraph and AST cache and evaluates against the engine's CellMirror. Processes edits by parsing, building the dep graph, and evaluating in topological order. Level-based parallel recalc with rayon (native) or sequential fallback (WASM). |
-| `identity` | Per-sheet identity-to-position tracker. Maps `CellId <-> (row, col)` for the Cell Identity Model. |
-| `storage` | `WorkbookStorage` owns typed workbook, sheet, and cell metadata. `CellMirror` owns sparse values and compact ranges; derived indexes share its native axes. |
+| `scheduler` | **Recalc Scheduler** -- top-level `ComputeCore` struct. Owns the DependencyGraph and AST cache and evaluates against the engine's CellStore. Processes edits by parsing, building the dep graph, and evaluating in topological order. Level-based parallel recalc with rayon (native) or sequential fallback (WASM). |
+| `identity` | Shared compact row/column axes and axis order lookup. `SheetStore` owns authored cell identities, keyed by stable `(RowId, ColId)` pairs. |
+| `storage` | `WorkbookStorage` owns typed workbook, sheet, and cell metadata. `CellStore` owns sparse values and compact ranges; derived indexes share its native axes. |
 | `projection` | Dynamic array projection registry. Spatial index tracking which cells are spill array members. |
 | `domain_types` | Pure serializable data contracts for domain features (charts, ranges, etc.). |
 | `what_if` | What-If Analysis -- scenario management (Goal Seek moved to solver, Data Tables to `data_table`). |
@@ -279,7 +279,7 @@ Arrows point from dependent to dependency. Type crates are at the bottom (leaves
                          /   |    |    |    \    \    \
                         /    |    |    |     \    \    \
                        v     v    v    v      v    v    v
-              scheduler  eval  mirror  storage  bridge_pure  ...
+              scheduler  eval  cells   storage  bridge_pure  ...
                  |        |      |       |
     +------------+--------+------+-------+-----------+
     |            |        |      |       |           |

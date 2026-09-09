@@ -52,7 +52,7 @@ fn test_stable_equilibrium_preserves_cached_values() {
 
     // D1 should be ~0 (E1 - C1 = 169672 - 169672 = 0).
     // If the cached value is preserved exactly, D1 won't appear in changed_cells
-    // (computed value matches mirror) — that's the SUCCESS case.
+    // (computed value matches cell_store) — that's the SUCCESS case.
     let d1 = find_changed_value(&result, 0, 0, 3);
     assert_fixed_point_number_or_preserved(&result, 0, 0, 3, 0.0);
 
@@ -121,7 +121,7 @@ fn test_stable_equilibrium_multiple_rows() {
 
     // Verify each row preserves its values.
     // If the cached value is preserved exactly, the cell won't appear in
-    // changed_cells (computed value matches mirror) — that's the SUCCESS case.
+    // changed_cells (computed value matches cell_store) — that's the SUCCESS case.
     for (row, &c_val) in constants.iter().enumerate() {
         let row = row as u32;
 

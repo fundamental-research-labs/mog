@@ -1,7 +1,7 @@
 //! Native hydration from snapshots and parsed workbooks.
 //!
 //! Imports allocate compact row and column runs and sparse cell identities once,
-//! then pass those identities to metadata, range classification, and mirror assembly.
+//! then pass those identities to metadata, range classification, and cell_store assembly.
 
 mod features;
 mod form_controls;

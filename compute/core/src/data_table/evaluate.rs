@@ -9,7 +9,7 @@ use super::types::DataTableResult;
 ///
 /// `evaluate` takes a map of CellId -> CellValue overrides and returns the formula result.
 /// The overrides temporarily replace cell values during evaluation without modifying the
-/// underlying CellMirror.
+/// underlying CellStore.
 ///
 /// # Arguments
 ///

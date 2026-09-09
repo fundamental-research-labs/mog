@@ -4,14 +4,14 @@ use snapshot_types::RecalcResult;
 use super::{ComputeEngine, services};
 
 impl ComputeEngine {
-    /// Post-process recalc (CF refresh + display text + schema validation) and stash for flush.
+    /// Post-process mutation results with CF, display text, and validation metadata.
     ///
     /// This is the central funnel for every mutation path that produces a
     /// `RecalcResult` — cell edits (`set_cell*`, `import_values`, `apply_changes`),
     /// structural changes, and every branch of `apply_mutation`. We mark the
     /// compute store dirty here so that a subsequent `recalculate_with_options`
     /// call cannot short-circuit past a mutation that actually changed state.
-    pub(in crate::storage::engine) fn prepare_recalc_for_flush(
+    pub(in crate::storage::engine) fn postprocess_mutation_recalc(
         &mut self,
         recalc: &mut RecalcResult,
     ) {
@@ -38,7 +38,7 @@ impl ComputeEngine {
             recalc.validation_annotations =
                 self.stores
                     .compute
-                    .validate_dirty_cells(&self.mirror, &dirty, schemas);
+                    .validate_dirty_cells(&self.cell_store, &dirty, schemas);
         }
 
         // Run range-backed data-validation rules on every changed cell. This
@@ -49,23 +49,19 @@ impl ComputeEngine {
         // and `validation:failed` when a valid cell becomes invalid.
         self.append_data_validation_annotations(recalc);
 
-        self.mutation.pending_recalc = Some(recalc.clone());
+        self.enrich_metadata_flags(recalc);
     }
 
     /// Post-process an import-open recalc for the direct hydration return path.
     ///
-    /// This needs the same observable enrichment as mutation flushes, but it
-    /// must not leave compute dirty or seed a pending viewport recalc because
-    /// the enriched payload is returned by `complete_deferred_hydration`
-    /// itself.
+    /// Apply the mutation enrichment without leaving compute dirty; the payload
+    /// is returned directly by `complete_deferred_hydration`.
     pub(in crate::storage::engine) fn postprocess_import_open_recalc(
         &mut self,
         recalc: &mut RecalcResult,
     ) {
-        self.prepare_recalc_for_flush(recalc);
-        self.enrich_metadata_flags(recalc);
+        self.postprocess_mutation_recalc(recalc);
         self.stores.compute.clear_dirty();
-        self.mutation.pending_recalc = None;
     }
 
     /// Append `RecalcValidationAnnotation` entries for every changed cell
@@ -94,7 +90,7 @@ impl ComputeEngine {
 
             let outcome = services::formatting::validate_cell_against_data_validations(
                 &self.stores,
-                &self.mirror,
+                &self.cell_store,
                 &sheet_id,
                 row,
                 col,
@@ -140,7 +136,7 @@ impl ComputeEngine {
     pub(in crate::storage::engine) fn enrich_display_text(&self, result: &mut RecalcResult) {
         services::mutation_handlers::enrich_display_text(
             &self.stores,
-            &self.mirror,
+            &self.cell_store,
             &self.settings,
             result,
             &|value, sheet_id, row, col| self.format_value_at_cell(value, sheet_id, row, col),
@@ -149,6 +145,6 @@ impl ComputeEngine {
 
     /// Populate `extra_flags` on each `CellChange` with metadata flags.
     pub(in crate::storage::engine) fn enrich_metadata_flags(&self, recalc: &mut RecalcResult) {
-        services::mutation_handlers::enrich_metadata_flags(&self.stores, &self.mirror, recalc);
+        services::mutation_handlers::enrich_metadata_flags(&self.stores, &self.cell_store, recalc);
     }
 }

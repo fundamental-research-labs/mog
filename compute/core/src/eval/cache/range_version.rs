@@ -45,96 +45,92 @@ impl RangeVersion {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mirror::{CellEntry, CellMirror, SheetMirror};
+    use crate::cells::{CellEntry, CellStore, SheetStore};
     use cell_types::{CellId, SheetPos};
     use value_types::CellValue;
 
-    fn make_mirror_with_sheet() -> (CellMirror, SheetId) {
-        let mut mirror = CellMirror::new();
+    fn make_store_with_sheet() -> (CellStore, SheetId) {
+        let mut cell_store = CellStore::new();
         let sheet_id = SheetId::from_raw(1);
-        let sheet_mirror = SheetMirror::new(sheet_id, "Sheet1".to_string(), 100, 10);
-        mirror.add_sheet_mirror(sheet_id, "Sheet1".to_string(), sheet_mirror);
-        (mirror, sheet_id)
+        let sheet_store = SheetStore::new(sheet_id, "Sheet1".to_string(), 100, 10);
+        cell_store.add_sheet_store(sheet_id, "Sheet1".to_string(), sheet_store);
+        (cell_store, sheet_id)
     }
 
     #[test]
     fn capture_is_valid_when_nothing_changed() {
-        let (mirror, sheet_id) = make_mirror_with_sheet();
-        let rv = RangeVersion::capture(&mirror, &sheet_id, 0, 2);
-        assert!(rv.is_valid(&mirror));
+        let (cell_store, sheet_id) = make_store_with_sheet();
+        let rv = RangeVersion::capture(&cell_store, &sheet_id, 0, 2);
+        assert!(rv.is_valid(&cell_store));
     }
 
     #[test]
     fn is_valid_false_after_write_to_tracked_column() {
-        let (mut mirror, sheet_id) = make_mirror_with_sheet();
-        let rv = RangeVersion::capture(&mirror, &sheet_id, 0, 2);
+        let (mut cell_store, sheet_id) = make_store_with_sheet();
+        let rv = RangeVersion::capture(&cell_store, &sheet_id, 0, 2);
 
         // Write to column 1
         let cell_id = CellId::from_raw(100);
         let pos = SheetPos::new(0, 1);
-        mirror.insert_cell(
+        cell_store.insert_cell(
             &sheet_id,
             cell_id,
             pos,
             CellEntry {
                 value: CellValue::number(42.0),
-                formula: None,
             },
         );
 
-        assert!(!rv.is_valid(&mirror));
+        assert!(!rv.is_valid(&cell_store));
     }
 
     #[test]
     fn multi_column_range_only_b_changes() {
-        let (mut mirror, sheet_id) = make_mirror_with_sheet();
+        let (mut cell_store, sheet_id) = make_store_with_sheet();
 
         // Insert into col 0 and col 2 first
         let cell_a = CellId::from_raw(200);
-        mirror.insert_cell(
+        cell_store.insert_cell(
             &sheet_id,
             cell_a,
             SheetPos::new(0, 0),
             CellEntry {
                 value: CellValue::number(1.0),
-                formula: None,
             },
         );
         let cell_c = CellId::from_raw(201);
-        mirror.insert_cell(
+        cell_store.insert_cell(
             &sheet_id,
             cell_c,
             SheetPos::new(0, 2),
             CellEntry {
                 value: CellValue::number(3.0),
-                formula: None,
             },
         );
 
         // Capture after initial writes
-        let rv = RangeVersion::capture(&mirror, &sheet_id, 0, 2);
-        assert!(rv.is_valid(&mirror));
+        let rv = RangeVersion::capture(&cell_store, &sheet_id, 0, 2);
+        assert!(rv.is_valid(&cell_store));
 
         // Write to column 1 only
         let cell_b = CellId::from_raw(202);
-        mirror.insert_cell(
+        cell_store.insert_cell(
             &sheet_id,
             cell_b,
             SheetPos::new(0, 1),
             CellEntry {
                 value: CellValue::number(2.0),
-                formula: None,
             },
         );
 
-        assert!(!rv.is_valid(&mirror));
+        assert!(!rv.is_valid(&cell_store));
     }
 
     #[test]
     fn is_empty_for_degenerate_range() {
-        let (mirror, sheet_id) = make_mirror_with_sheet();
+        let (cell_store, sheet_id) = make_store_with_sheet();
         // col_start > col_end => empty (0..=u32 wraps, but the range is empty)
-        let rv = RangeVersion::capture(&mirror, &sheet_id, 5, 3);
+        let rv = RangeVersion::capture(&cell_store, &sheet_id, 5, 3);
         assert!(rv.is_empty());
     }
 }

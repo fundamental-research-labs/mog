@@ -63,7 +63,11 @@ fn two_value_fixture() -> WorkbookSnapshot {
 fn xlsx_set_cell_value_writes_through_to_export() {
     let bytes = xlsx_bytes_for(two_value_fixture());
     let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
-    let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
+    let sid = *engine
+        .cell_store()
+        .sheet_ids()
+        .next()
+        .expect("sheet present");
 
     engine
         .set_cell_value_parsed(&sid, 0, 2, "42")
@@ -89,7 +93,11 @@ fn xlsx_set_cell_value_writes_through_to_export() {
 fn xlsx_set_cell_formula_writes_through_to_export() {
     let bytes = xlsx_bytes_for(two_value_fixture());
     let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
-    let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
+    let sid = *engine
+        .cell_store()
+        .sheet_ids()
+        .next()
+        .expect("sheet present");
 
     // set_cell_value_parsed treats a "=..." prefix as a formula.
     engine
@@ -121,7 +129,11 @@ fn xlsx_overwrite_existing_cell_replaces_value() {
     // doesn't leak through on export.
     let bytes = xlsx_bytes_for(two_value_fixture());
     let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
-    let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
+    let sid = *engine
+        .cell_store()
+        .sheet_ids()
+        .next()
+        .expect("sheet present");
 
     engine
         .set_cell_value_parsed(&sid, 0, 0, "999")

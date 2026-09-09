@@ -8,7 +8,7 @@
 //! Run:
 //!   cd os && cargo test -p compute-core --test countif_array_criteria -- --nocapture
 
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{CellData, RecalcResult, SheetSnapshot, WorkbookSnapshot};
 use value_types::CellValue;
@@ -140,10 +140,10 @@ fn sumproduct_countif_count_distinct() {
         ),
     ];
     let snapshot = build_snapshot(vec![("Sheet1", 10, 5, cells)]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     assert_num(&result, 0, 0, 1, 3.0);
 }
@@ -163,10 +163,10 @@ fn sumproduct_countif_all_unique() {
         ),
     ];
     let snapshot = build_snapshot(vec![("Sheet1", 10, 5, cells)]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     assert_num(&result, 0, 0, 1, 3.0);
 }
@@ -186,10 +186,10 @@ fn sumproduct_countif_all_same() {
         ),
     ];
     let snapshot = build_snapshot(vec![("Sheet1", 10, 5, cells)]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     assert_num(&result, 0, 0, 1, 1.0);
 }
@@ -216,10 +216,10 @@ fn sumproduct_countif_literal_array_criteria() {
         ),
     ];
     let snapshot = build_snapshot(vec![("Sheet1", 10, 5, cells)]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     assert_num(&result, 0, 0, 1, 5.0);
 }
@@ -246,10 +246,10 @@ fn sumproduct_countifs_literal_array_gt_zero() {
         ),
     ];
     let snapshot = build_snapshot(vec![("Sheet1", 10, 5, cells)]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     assert_num(&result, 0, 0, 1, 3.0);
 }
@@ -288,10 +288,10 @@ fn sumproduct_if_countifs_conditional_distinct() {
         ),
     ];
     let snapshot = build_snapshot(vec![("Sheet1", 10, 5, cells)]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     assert_num(&result, 0, 0, 2, 3.0);
 }
@@ -318,10 +318,10 @@ fn sumproduct_countif_numeric_array_criteria() {
         ),
     ];
     let snapshot = build_snapshot(vec![("Sheet1", 10, 5, cells)]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     assert_num(&result, 0, 0, 1, 9.0);
 }

@@ -13,7 +13,7 @@
 //!   cargo test -p compute-core --test data_table_sensitivity -- --nocapture
 
 use cell_types::SheetId;
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{CellData, RecalcResult, SheetSnapshot, WorkbookSnapshot};
 use formula_types::{CellRef, NamedRangeDef, Scope};
@@ -176,10 +176,10 @@ fn collect_body_values(result: &RecalcResult) -> Vec<Option<f64>> {
 fn data_table_direct_ref_produces_distinct_values() {
     let snapshot = build_data_table_snapshot("A1", vec![]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init_from_snapshot failed");
 
     let body = collect_body_values(&result);
@@ -245,10 +245,10 @@ fn data_table_named_range_wrong_scope_causes_constant_collapse() {
         )],
     );
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init_from_snapshot failed");
 
     let body = collect_body_values(&result);
@@ -291,10 +291,10 @@ fn data_table_named_range_correct_scope_produces_distinct_values() {
         )],
     );
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init_from_snapshot failed");
 
     let body = collect_body_values(&result);

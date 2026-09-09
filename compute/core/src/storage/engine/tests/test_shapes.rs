@@ -41,7 +41,7 @@ fn make_shape_config(
 }
 
 /// Simulate the pixel->anchor resolution that `create_shape` performs,
-/// using the default layout constants (no LayoutIndex present).
+/// using the default layout constants (no PixelLayout present).
 fn resolve_pixel_coords(config: &mut crate::engine_types::floating_objects::CreateShapeConfig) {
     use compute_layout_index::{DEFAULT_COL_WIDTH, DEFAULT_ROW_HEIGHT};
     use value_types::FiniteF64;

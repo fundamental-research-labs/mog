@@ -4,13 +4,13 @@ use cell_types::CellId;
 /// Copy authored table metadata and retarget references only on the copied sheet.
 pub(in crate::storage::engine) fn copy_sheet_tables(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     source: &SheetId,
     target: &SheetId,
     formula_cells: &mut [(CellId, String)],
 ) -> Result<(), ComputeError> {
     let source_uuid = source.to_uuid_string();
-    let source_tables: Vec<_> = mirror
+    let source_tables: Vec<_> = cell_store
         .all_tables()
         .iter()
         .filter(|table| table.sheet_id == source_uuid)
@@ -30,7 +30,7 @@ pub(in crate::storage::engine) fn copy_sheet_tables(
                 .take(255usize.saturating_sub(ending.len()))
                 .collect();
             let candidate = format!("{base}{ending}");
-            if mirror.get_table(&candidate).is_none() {
+            if cell_store.get_table(&candidate).is_none() {
                 break candidate;
             }
             suffix += 1;
@@ -49,7 +49,7 @@ pub(in crate::storage::engine) fn copy_sheet_tables(
         }
         table_ids.insert(old_id, table.id.clone());
         renames.push((old_name, name));
-        stores.compute.set_table(mirror, table);
+        stores.compute.set_table(cell_store, table);
     }
     if let Some(metadata) = stores.storage.sheet_metadata.get_mut(target) {
         for object in metadata.floating_objects.objects.values_mut() {
@@ -110,7 +110,7 @@ pub(in crate::storage::engine) fn copy_sheet_tables(
     for (_, formula) in formula_cells {
         *formula = rewrite(formula);
     }
-    let copied_tables: Vec<_> = mirror
+    let copied_tables: Vec<_> = cell_store
         .all_tables()
         .iter()
         .filter(|table| table.sheet_id == target.to_uuid_string())
@@ -128,10 +128,10 @@ pub(in crate::storage::engine) fn copy_sheet_tables(
                 *formula = rewrite(formula);
             }
         }
-        stores.compute.set_table(mirror, table);
+        stores.compute.set_table(cell_store, table);
     }
     for (old, new) in &table_ids {
-        if let Some(table) = mirror.get_table_by_id(new) {
+        if let Some(table) = cell_store.get_table_by_id(new) {
             super::super::objects::copy_table_annotation(stores, old, table)?;
         }
     }
@@ -143,7 +143,7 @@ pub(in crate::storage::engine) fn copy_sheet_tables(
             if let Some(mut binding) =
                 filters::get_filter_metadata_binding(&stores.storage, target, &filter.id)
             {
-                let table = mirror
+                let table = cell_store
                     .get_table_by_id(new_id)
                     .expect("copied table catalog entry");
                 binding.table_id = Some(table.id.clone());

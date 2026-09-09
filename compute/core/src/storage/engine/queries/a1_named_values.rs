@@ -1,5 +1,6 @@
 #![allow(unused_imports, unused_variables)]
 use super::helpers::cell_value_to_type_string;
+use crate::cells::StorePositionLookup;
 use crate::diagnostics::formula_references::{
     FormulaReferenceDiagnosticsOptions, FormulaReferenceDiagnosticsPage,
 };
@@ -10,8 +11,7 @@ use crate::engine_types::{
 };
 use crate::eval::Evaluator;
 use crate::eval::sync_block_on;
-use crate::eval_bridge::MirrorContext;
-use crate::mirror::MirrorPositionLookup;
+use crate::eval_bridge::EvalContext;
 use crate::range_manager::{self, A1CellRef, A1RangeRef};
 use crate::snapshot::{
     BatchRangeEntry, BatchRangeRequest, BatchRangeResponse, BatchRangeResult, CalculationSettings,
@@ -27,7 +27,6 @@ use crate::storage::sheet::{hyperlinks, merges, properties as sheets};
 use crate::storage::workbook::settings as workbook;
 use cell_types::{CellId, SheetId, SheetPos};
 use compute_document::hex::{hex_to_id, id_to_hex};
-use compute_wire::mutation::serialize_multi_viewport_patches;
 use domain_types::domain::merge::{CellMergeInfo, MergeRegion, ResolvedMergedRegion};
 use domain_types::domain::sheet::{FrozenPanes, SheetMeta, SheetScrollPosition, SheetViewOptions};
 use domain_types::domain::slicer::{NamedSlicerStyle, SlicerCustomStyle};
@@ -45,7 +44,7 @@ pub(in crate::storage::engine) fn get_cells_in_range(
     end_col: u32,
 ) -> Vec<String> {
     services::queries::get_cells_in_range(
-        &engine.stores,
+        &engine.cell_store,
         sheet_id,
         start_row,
         start_col,
@@ -67,7 +66,7 @@ pub(in crate::storage::engine) fn get_data_bounds_for_range(
 ) -> Option<RectBounds> {
     services::queries::get_data_bounds_for_range(
         &engine.stores,
-        &engine.mirror,
+        &engine.cell_store,
         sheet_id,
         start_row,
         start_col,
@@ -116,6 +115,7 @@ pub(in crate::storage::engine) fn get_merges_in_range_spatial(
 ) -> Vec<MergeRegion> {
     services::queries::get_merges_in_range_spatial(
         &engine.stores,
+        &engine.cell_store,
         sheet_id,
         start_row,
         start_col,
@@ -130,7 +130,13 @@ pub(in crate::storage::engine) fn get_merge_at_cell_spatial(
     row: u32,
     col: u32,
 ) -> Option<CellMergeInfo> {
-    services::queries::get_merge_at_cell_spatial(&engine.stores, sheet_id, row, col)
+    services::queries::get_merge_at_cell_spatial(
+        &engine.stores,
+        &engine.cell_store,
+        sheet_id,
+        row,
+        col,
+    )
 }
 
 pub(in crate::storage::engine) fn get_named_range_display_value(
@@ -139,13 +145,13 @@ pub(in crate::storage::engine) fn get_named_range_display_value(
     current_sheet: Option<String>,
 ) -> Option<String> {
     let scope_chain = engine.build_scope_chain(current_sheet.as_deref());
-    let def = engine.mirror.resolve_variable(name, &scope_chain)?;
+    let def = engine.cell_store.resolve_variable(name, &scope_chain)?;
     let formula = &def.refers_to;
 
     if formula.refs.len() == 1
         && let formula_types::IdentityFormulaRef::Cell(cell_ref) = &formula.refs[0]
     {
-        let lookup = MirrorPositionLookup::new(&engine.mirror, SheetId::from_raw(0));
+        let lookup = StorePositionLookup::new(&engine.cell_store, SheetId::from_raw(0));
         if let Some((sheet_id, row, col)) = lookup.cell_position(&cell_ref.id) {
             return Some(engine.format_cell_display(&sheet_id, row, col));
         }
@@ -153,7 +159,7 @@ pub(in crate::storage::engine) fn get_named_range_display_value(
 
     if !formula.refs.is_empty() {
         let a1 = engine.stores.compute.to_a1_display_qualified(
-            &engine.mirror,
+            &engine.cell_store,
             &SheetId::from_raw(0),
             formula,
         );
@@ -178,15 +184,15 @@ pub(in crate::storage::engine) fn get_named_range_typed_value(
     current_sheet: Option<String>,
 ) -> Option<CellValue> {
     let scope_chain = engine.build_scope_chain(current_sheet.as_deref());
-    let def = engine.mirror.resolve_variable(name, &scope_chain)?;
+    let def = engine.cell_store.resolve_variable(name, &scope_chain)?;
     let formula = &def.refers_to;
 
     if formula.refs.len() == 1
         && let formula_types::IdentityFormulaRef::Cell(cell_ref) = &formula.refs[0]
     {
-        let lookup = MirrorPositionLookup::new(&engine.mirror, SheetId::from_raw(0));
+        let lookup = StorePositionLookup::new(&engine.cell_store, SheetId::from_raw(0));
         if let Some((sheet_id, row, col)) = lookup.cell_position(&cell_ref.id) {
-            return cell_values::get_effective_value(&engine.mirror, &sheet_id, row, col);
+            return cell_values::get_effective_value(&engine.cell_store, &sheet_id, row, col);
         }
     }
 
@@ -213,7 +219,7 @@ pub(in crate::storage::engine) fn get_named_range_type(
     current_sheet: Option<String>,
 ) -> Option<String> {
     let scope_chain = engine.build_scope_chain(current_sheet.as_deref());
-    let def = engine.mirror.resolve_variable(name, &scope_chain)?;
+    let def = engine.cell_store.resolve_variable(name, &scope_chain)?;
     let formula = &def.refers_to;
 
     if formula.refs.is_empty() {
@@ -223,9 +229,10 @@ pub(in crate::storage::engine) fn get_named_range_type(
     if formula.refs.len() == 1 {
         match &formula.refs[0] {
             formula_types::IdentityFormulaRef::Cell(cell_ref) => {
-                let lookup = MirrorPositionLookup::new(&engine.mirror, SheetId::from_raw(0));
+                let lookup = StorePositionLookup::new(&engine.cell_store, SheetId::from_raw(0));
                 if let Some((sid, row, col)) = lookup.cell_position(&cell_ref.id) {
-                    let value = cell_values::get_effective_value(&engine.mirror, &sid, row, col);
+                    let value =
+                        cell_values::get_effective_value(&engine.cell_store, &sid, row, col);
                     return Some(cell_value_to_type_string(value.as_ref()).to_string());
                 }
             }
@@ -244,12 +251,12 @@ pub(in crate::storage::engine) fn get_named_range_array_values(
     current_sheet: Option<String>,
 ) -> Option<Vec<Vec<CellValue>>> {
     let scope_chain = engine.build_scope_chain(current_sheet.as_deref());
-    let def = engine.mirror.resolve_variable(name, &scope_chain)?;
+    let def = engine.cell_store.resolve_variable(name, &scope_chain)?;
     let formula = &def.refers_to;
 
     let a1 = if !formula.refs.is_empty() {
         let display = engine.stores.compute.to_a1_display_qualified(
-            &engine.mirror,
+            &engine.cell_store,
             &SheetId::from_raw(0),
             formula,
         );
@@ -272,7 +279,7 @@ pub(in crate::storage::engine) fn get_named_range_array_values(
     for row in range.start.row..=range.end.row {
         let mut row_values = Vec::with_capacity((range.end.col - range.start.col + 1) as usize);
         for col in range.start.col..=range.end.col {
-            let value = cell_values::get_effective_value(&engine.mirror, &sid, row, col)
+            let value = cell_values::get_effective_value(&engine.cell_store, &sid, row, col)
                 .unwrap_or_default();
             row_values.push(value);
         }

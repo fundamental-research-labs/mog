@@ -39,6 +39,7 @@ fn default_format_roundtrip() {
 #[test]
 fn fully_populated_roundtrip() {
     let fmt = CellFormat {
+        extensions: Default::default(),
         font_family: Some("Calibri".into()),
         font_size: Some(FontSize::from_millipoints(11000)),
         font_color: Some("#000000".into()),

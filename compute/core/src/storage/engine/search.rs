@@ -114,13 +114,13 @@ impl ComputeEngine {
         end_row: Option<u32>,
         end_col: Option<u32>,
     ) -> Vec<(u32, u32)> {
-        let sheet = match self.mirror.get_sheet(sheet_id) {
+        let sheet = match self.cell_store.get_sheet(sheet_id) {
             Some(s) => s,
             None => return Vec::new(),
         };
 
         // Determine effective bounds
-        let bounds = services::queries::get_data_bounds(&self.stores, &self.mirror, sheet_id);
+        let bounds = services::queries::get_data_bounds(&self.stores, &self.cell_store, sheet_id);
         let (min_r, min_c, max_r, max_c) = match bounds {
             Some(b) => (b.min_row, b.min_col, b.max_row, b.max_col),
             None => return Vec::new(), // no data
@@ -134,7 +134,7 @@ impl ComputeEngine {
         let mut results = Vec::new();
 
         for (cell_id, entry) in sheet.cells_iter() {
-            if entry.is_ghost() {
+            if sheet.is_ghost(cell_id) {
                 continue;
             }
             if let Some(pos) = sheet.position_of(cell_id)
@@ -168,28 +168,22 @@ impl ComputeEngine {
             Err(_) => return Vec::new(),
         };
 
-        let sheet = match self.mirror.get_sheet(sheet_id) {
+        let sheet = match self.cell_store.get_sheet(sheet_id) {
             Some(s) => s,
             None => return Vec::new(),
         };
 
         let mut results = Vec::new();
 
-        for (cell_id, entry) in sheet.cells_iter() {
-            if entry.is_ghost() {
-                continue;
-            }
-            if let Some(ref formula) = entry.formula {
-                // Convert identity formula to A1 display string
-                let a1 = self
-                    .stores
-                    .compute
-                    .to_a1_display(&self.mirror, sheet_id, formula);
-                if re.is_match(&a1)
-                    && let Some(pos) = sheet.position_of(cell_id)
-                {
-                    results.push((pos.row(), pos.col()));
-                }
+        for (cell_id, formula) in &sheet.formulas {
+            let a1 = self
+                .stores
+                .compute
+                .to_a1_display(&self.cell_store, sheet_id, formula);
+            if re.is_match(&a1)
+                && let Some(pos) = sheet.position_of(cell_id)
+            {
+                results.push((pos.row(), pos.col()));
             }
         }
 
@@ -209,7 +203,7 @@ impl ComputeEngine {
         let sheet_ids = self.stores.storage.sheet_order();
         let mut result = Vec::new();
         for sid in &sheet_ids {
-            let tables = services::tables::get_all_tables_in_sheet(&self.mirror, sid);
+            let tables = services::tables::get_all_tables_in_sheet(&self.cell_store, sid);
             let hex: String = id_to_hex(sid.as_u128()).into();
             for table in tables {
                 result.push(WorkbookTable {

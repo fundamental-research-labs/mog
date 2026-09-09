@@ -121,8 +121,7 @@ fn invalid_to_valid_transition_emits_passed_annotation() {
     // Step 1: set A1 to an invalid value (200, exceeds max=100).
     let result_invalid = engine
         .set_cell(&sid, cell_a1, 0, 0, "200".into())
-        .expect("set_cell invalid")
-        .1;
+        .expect("set_cell invalid");
     let recalc = &result_invalid.recalc;
     let a1_anns: Vec<_> = recalc
         .validation_annotations
@@ -146,8 +145,7 @@ fn invalid_to_valid_transition_emits_passed_annotation() {
     // saw a transition event and the validation circle stayed visible.
     let result_valid = engine
         .set_cell(&sid, cell_a1, 0, 0, "50".into())
-        .expect("set_cell valid")
-        .1;
+        .expect("set_cell valid");
     let recalc = &result_valid.recalc;
     let a1_anns: Vec<_> = recalc
         .validation_annotations
@@ -184,8 +182,7 @@ fn cell_outside_data_validation_range_produces_no_annotation() {
     let cell_b2 = CellId::from_uuid_str("00000000-0000-0000-0000-0000000000B2").unwrap();
     let result = engine
         .set_cell(&sid, cell_b2, 1, 1, "999".into())
-        .expect("set_cell outside range")
-        .1;
+        .expect("set_cell outside range");
     let recalc = &result.recalc;
     let b2_anns: Vec<_> = recalc
         .validation_annotations
@@ -214,8 +211,7 @@ fn valid_to_invalid_transition_emits_failed_annotation() {
     // Set A2 to a valid value first.
     let result_valid = engine
         .set_cell(&sid, cell_a2, 1, 0, "75".into())
-        .expect("set_cell valid")
-        .1;
+        .expect("set_cell valid");
     let recalc = &result_valid.recalc;
     let a2_anns: Vec<_> = recalc
         .validation_annotations
@@ -228,8 +224,7 @@ fn valid_to_invalid_transition_emits_failed_annotation() {
     // Now set A2 to an invalid value.
     let result_invalid = engine
         .set_cell(&sid, cell_a2, 1, 0, "-50".into())
-        .expect("set_cell invalid")
-        .1;
+        .expect("set_cell invalid");
     let recalc = &result_invalid.recalc;
     let a2_anns: Vec<_> = recalc
         .validation_annotations

@@ -33,7 +33,6 @@ use sections::{
     write_cell_records, write_col_dimensions, write_data_bar_entries, write_icon_entries,
     write_merge_records, write_position_arrays, write_row_dimensions, write_viewport_header,
 };
-pub(crate) use string_pool::{intern_optional_string, intern_str};
 
 /// Serialize viewport render data into a compact binary blob.
 ///

@@ -30,7 +30,7 @@ use snapshot_types::PivotTableDef;
 /// when a cell's dependency hasn't been evaluated yet, the evaluator can
 /// suspend and let other work proceed (DAG-parallel execution).
 ///
-/// For synchronous contexts (MirrorContext, OverrideContext), the async
+/// For synchronous contexts (EvalContext, OverrideContext), the async
 /// methods complete immediately — the compiler elides async state machines.
 #[allow(async_fn_in_trait)]
 pub trait EvalDataAccess {
@@ -84,7 +84,7 @@ pub enum IndexedLookupResult {
 ///
 /// Separates raw data queries (needed by caches, range stores) from
 /// formula-level metadata (needed by evaluator). This is the trait that
-/// breaks eval's dependency on CellMirror.
+/// breaks eval's dependency on CellStore.
 pub trait DataSource {
     /// Column version for staleness checking.
     ///

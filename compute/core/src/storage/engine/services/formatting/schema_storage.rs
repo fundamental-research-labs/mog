@@ -1,4 +1,4 @@
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::snapshot::MutationResult;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::schemas;
@@ -101,7 +101,7 @@ pub(in crate::storage::engine) fn delete_range_schema(
 
 pub(in crate::storage::engine) fn validate_cell_value(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -114,13 +114,13 @@ pub(in crate::storage::engine) fn validate_cell_value(
         col,
         value,
         stores.grid_indexes.get(sheet_id),
-        mirror,
+        cell_store,
     )
 }
 
 pub(in crate::storage::engine) fn validate_cell_against_data_validations(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -133,6 +133,6 @@ pub(in crate::storage::engine) fn validate_cell_against_data_validations(
         col,
         value,
         stores.grid_indexes.get(sheet_id),
-        mirror,
+        cell_store,
     )
 }

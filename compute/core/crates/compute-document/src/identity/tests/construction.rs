@@ -1,8 +1,8 @@
 use super::fixtures::{assert_invariants, make_grid};
 use crate::identity::GridIndex;
 use cell_types::{
-    AxisIdentityRun, AxisIdentitySeed, AxisIdentityStore, AxisRunId, CellId, ColId, IdAllocator,
-    RowId, SheetId,
+    AxisIdentityRun, AxisIdentitySeed, AxisIdentityStore, AxisRunId, ColId, IdAllocator, RowId,
+    SheetId,
 };
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -16,7 +16,6 @@ fn new_grid_has_correct_dimensions() {
     let grid = make_grid(5, 3);
     assert_eq!(grid.row_count(), 5);
     assert_eq!(grid.col_count(), 3);
-    assert_eq!(grid.cell_count(), 0);
 }
 
 #[test]
@@ -24,7 +23,6 @@ fn new_grid_zero_dimensions() {
     let grid = make_grid(0, 0);
     assert_eq!(grid.row_count(), 0);
     assert_eq!(grid.col_count(), 0);
-    assert_eq!(grid.cell_count(), 0);
 }
 
 #[test]
@@ -149,7 +147,6 @@ fn compact_grid_growth_and_structural_changes_keep_stable_axis_ids() {
     let mut grid = GridIndex::new(sheet, 5, 3, allocator);
     let first = grid.row_id(0).unwrap();
     let fifth = grid.row_id(4).unwrap();
-    grid.register_cell(CellId::from_raw(0x123456789abcdef0123456789abcdef0), 0, 0);
     grid.ensure_row_capacity(999_999);
     let inserted = grid.insert_rows(2, 1)[0];
     assert_eq!(grid.row_index(&first), Some(0));

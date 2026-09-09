@@ -21,7 +21,7 @@ pub struct RangePos {
     end_col: u32,
 }
 
-/// Deserialization helper — fields mirror `RangePos` but are public for serde.
+/// Deserialization helper — fields match `RangePos` but are public for serde.
 #[derive(Deserialize)]
 struct RangePosRaw {
     sheet: SheetId,

@@ -1,5 +1,36 @@
 use compute_api::{CellValue, Workbook};
 
+#[test]
+fn formatting_blank_cells_preserves_values_and_history_through_typed_identity_calls() {
+    let (workbook, _) = Workbook::blank().unwrap();
+    let sheet = workbook.sheet_by_name("Sheet1").unwrap();
+    let formats = sheet.formats();
+    let history = workbook.history();
+    let before = formats.get_cell_format(4, 2).unwrap();
+    formats
+        .set_cell_format(
+            4,
+            2,
+            domain_types::CellFormat {
+                bold: Some(true),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(sheet.get_cell_value("C5").unwrap(), CellValue::Null);
+    assert_eq!(formats.get_cell_format(4, 2).unwrap().bold, Some(true));
+    assert_depths(&workbook, 1, 0);
+    history.undo().unwrap();
+    assert_eq!(formats.get_cell_format(4, 2).unwrap(), before);
+    history.redo().unwrap();
+    assert_eq!(formats.get_cell_format(4, 2).unwrap().bold, Some(true));
+    formats.clear_cell_format(4, 2).unwrap();
+    assert_eq!(formats.get_cell_format(4, 2).unwrap(), before);
+    history.undo().unwrap();
+    assert_eq!(formats.get_cell_format(4, 2).unwrap().bold, Some(true));
+    assert_eq!(sheet.get_cell_value("C5").unwrap(), CellValue::Null);
+}
+
 fn assert_depths(workbook: &Workbook, undo: usize, redo: usize) {
     let history = workbook.history();
     let state = history.get_undo_state().unwrap();

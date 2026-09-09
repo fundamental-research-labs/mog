@@ -6,7 +6,7 @@
 //! `ComputeCore::set_cells` (which is the production user-edit path —
 //! `Worksheet::setCell` → `setCellsByPosition` lowers a single cell write
 //! into a one-element batch) skips that guard: it calls `process_input`
-//! directly without first checking `mirror.cse_anchor_covering(...)`. The
+//! directly without first checking `cell_store.cse_anchor_covering(...)`. The
 //! result is that real user typing into a CSE member silently overwrites
 //! the projection, splitting the array.
 //!
@@ -22,7 +22,7 @@ use stress_common::*;
 
 use cell_types::SheetId;
 use compute_core::bridge_types::CellInput;
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use value_types::{CellValue, ComputeError};
 
@@ -35,7 +35,7 @@ fn batch_path_rejects_partial_array_write_into_cse_member() {
     // CellId so the batch write below has a concrete target without
     // routing through the engine-services CellId allocator.
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![(
         "Sheet1",
         100,
@@ -53,7 +53,7 @@ fn batch_path_rejects_partial_array_write_into_cse_member() {
             (1, 3, CellValue::Null, None), // D2 (member)
         ],
     )]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     let sheet_id = sid(0);
     let d1_id = cid(0, 0, 3);
@@ -61,7 +61,7 @@ fn batch_path_rejects_partial_array_write_into_cse_member() {
 
     // ----- Lay down the CSE array formula on D1:D3 ------------------------
     core.set_array_formula(
-        &mut mirror,
+        &mut cell_store,
         &sheet_id,
         d1_id,
         /* top_row */ 0,
@@ -73,7 +73,7 @@ fn batch_path_rejects_partial_array_write_into_cse_member() {
     .expect("set_array_formula should succeed on an empty rectangle");
 
     // Sanity: D2 = 20 * 2 = 40 — the spill landed.
-    assert_pos_number(&mirror, 0, 1, 3, 40.0);
+    assert_pos_number(&cell_store, 0, 1, 3, 40.0);
 
     // ----- Batch-path partial-write attempt -------------------------------
     // The production write path: `Worksheet::setCell` →
@@ -91,7 +91,7 @@ fn batch_path_rejects_partial_array_write_into_cse_member() {
         },
     )];
 
-    let result = core.set_cells(&mut mirror, &edits, /* skip_cycle_check */ false);
+    let result = core.set_cells(&mut cell_store, &edits, /* skip_cycle_check */ false);
 
     // ----- Assertion 1: returned Err(PartialArrayWrite) -------------------
     // This assertion currently fails because `ComputeCore::set_cells` skips
@@ -134,5 +134,5 @@ fn batch_path_rejects_partial_array_write_into_cse_member() {
     // ----- Assertion 2: D2 was NOT mutated --------------------------------
     // Atomicity: even if a future fix returns Err, it must not have written
     // 999 into D2 first. D2 must still hold the spilled product 40.
-    assert_pos_number(&mirror, 0, 1, 3, 40.0);
+    assert_pos_number(&cell_store, 0, 1, 3, 40.0);
 }

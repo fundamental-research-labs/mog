@@ -12,7 +12,7 @@
 //!
 //! Identity formula conversion happens later — the scheduler's
 //! `bulk_parse_and_register()` converts A1 formulas to identity formulas
-//! using the live `CellMirror` after snapshot loading.
+//! using the live `CellStore` after snapshot loading.
 //!
 //! # Module layout (W3.0 pre-split)
 //!

@@ -5,41 +5,31 @@ use crate::storage::sheet::bindings;
 use crate::what_if::scenarios;
 use cell_types::SheetId;
 use compute_document::hex::id_to_hex;
-use compute_wire::mutation::serialize_multi_viewport_patches;
 use value_types::ComputeError;
 
 pub(in crate::storage::engine) fn create_scenario(
     engine: &mut ComputeEngine,
     input: ScenarioCreateInput,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let result = scenarios::create(&mut engine.stores.storage, input, &engine.stores.id_alloc);
-    Ok((
-        serialize_multi_viewport_patches(&[]),
-        MutationResult::empty().with_data(&result)?,
-    ))
+    Ok(MutationResult::empty().with_data(&result)?)
 }
 
 pub(in crate::storage::engine) fn update_scenario(
     engine: &mut ComputeEngine,
     scenario_id: &str,
     input: ScenarioUpdateInput,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let result = scenarios::update(&mut engine.stores.storage, scenario_id, input);
-    Ok((
-        serialize_multi_viewport_patches(&[]),
-        MutationResult::empty().with_data(&result)?,
-    ))
+    Ok(MutationResult::empty().with_data(&result)?)
 }
 
 pub(in crate::storage::engine) fn remove_scenario(
     engine: &mut ComputeEngine,
     scenario_id: &str,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let result = scenarios::remove(&mut engine.stores.storage, scenario_id);
-    Ok((
-        serialize_multi_viewport_patches(&[]),
-        MutationResult::empty().with_data(&result)?,
-    ))
+    Ok(MutationResult::empty().with_data(&result)?)
 }
 
 pub(in crate::storage::engine) fn get_all_scenarios(engine: &ComputeEngine) -> Vec<Scenario> {
@@ -55,32 +45,26 @@ pub(in crate::storage::engine) fn get_active_scenario_state(
 pub(in crate::storage::engine) fn apply_scenario(
     engine: &mut ComputeEngine,
     scenario_id: &str,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     match engine.apply_mutation(EngineMutation::ApplyScenario {
         scenario_id: scenario_id.to_string(),
     })? {
-        MutationOutput::Recalc(result) => Ok((engine.flush_viewport_patches(), result)),
-        MutationOutput::Plain(result) => Ok((serialize_multi_viewport_patches(&[]), result)),
-        _ => Ok((
-            serialize_multi_viewport_patches(&[]),
-            MutationResult::empty(),
-        )),
+        MutationOutput::Recalc(result) => Ok(result),
+        MutationOutput::Plain(result) => Ok(result),
+        _ => Ok(MutationResult::empty()),
     }
 }
 
 pub(in crate::storage::engine) fn restore_scenario(
     engine: &mut ComputeEngine,
     baseline_id: &str,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     match engine.apply_mutation(EngineMutation::RestoreScenario {
         baseline_id: baseline_id.to_string(),
     })? {
-        MutationOutput::Recalc(result) => Ok((engine.flush_viewport_patches(), result)),
-        MutationOutput::Plain(result) => Ok((serialize_multi_viewport_patches(&[]), result)),
-        _ => Ok((
-            serialize_multi_viewport_patches(&[]),
-            MutationResult::empty(),
-        )),
+        MutationOutput::Recalc(result) => Ok(result),
+        MutationOutput::Plain(result) => Ok(result),
+        _ => Ok(MutationResult::empty()),
     }
 }
 
@@ -88,7 +72,7 @@ pub(in crate::storage::engine) fn create_binding(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     binding: bindings::CreateBindingInput,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let sheet_id = id_to_hex(sheet_id.as_u128());
     let options = bindings::CreateBindingOptions {
         auto_generate_rows: binding.auto_generate_rows,
@@ -104,10 +88,7 @@ pub(in crate::storage::engine) fn create_binding(
         options,
         &engine.stores.id_alloc,
     )?;
-    Ok((
-        serialize_multi_viewport_patches(&[]),
-        MutationResult::empty().with_data(&result)?,
-    ))
+    Ok(MutationResult::empty().with_data(&result)?)
 }
 
 pub(in crate::storage::engine) fn update_binding(
@@ -115,26 +96,20 @@ pub(in crate::storage::engine) fn update_binding(
     sheet_id: &SheetId,
     binding_id: &str,
     updates: bindings::UpdateBindingFields,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let sheet_id = id_to_hex(sheet_id.as_u128());
     bindings::update_binding(&mut engine.stores.storage, &sheet_id, binding_id, updates);
-    Ok((
-        serialize_multi_viewport_patches(&[]),
-        MutationResult::empty(),
-    ))
+    Ok(MutationResult::empty())
 }
 
 pub(in crate::storage::engine) fn remove_binding(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     binding_id: &str,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let sheet_id = id_to_hex(sheet_id.as_u128());
     bindings::remove_binding(&mut engine.stores.storage, &sheet_id, binding_id);
-    Ok((
-        serialize_multi_viewport_patches(&[]),
-        MutationResult::empty(),
-    ))
+    Ok(MutationResult::empty())
 }
 
 pub(in crate::storage::engine) fn get_all_bindings(
@@ -167,7 +142,7 @@ pub(in crate::storage::engine) fn update_refresh_metadata(
     binding_id: &str,
     last_refresh: i64,
     last_row_count: u32,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let sheet_id = id_to_hex(sheet_id.as_u128());
     bindings::update_refresh_metadata(
         &mut engine.stores.storage,
@@ -176,19 +151,13 @@ pub(in crate::storage::engine) fn update_refresh_metadata(
         last_refresh,
         last_row_count,
     );
-    Ok((
-        serialize_multi_viewport_patches(&[]),
-        MutationResult::empty(),
-    ))
+    Ok(MutationResult::empty())
 }
 
 pub(in crate::storage::engine) fn remove_bindings_for_connection(
     engine: &mut ComputeEngine,
     connection_id: &str,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let count = bindings::remove_bindings_for_connection(&mut engine.stores.storage, connection_id);
-    Ok((
-        serialize_multi_viewport_patches(&[]),
-        MutationResult::empty().with_data(&count)?,
-    ))
+    Ok(MutationResult::empty().with_data(&count)?)
 }

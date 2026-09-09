@@ -1,5 +1,6 @@
 #![allow(unused_imports, unused_variables)]
 use super::helpers::diff_top_level_keys;
+use crate::cells::StorePositionLookup;
 use crate::diagnostics::formula_references::{
     FormulaReferenceDiagnosticsOptions, FormulaReferenceDiagnosticsPage,
 };
@@ -10,8 +11,7 @@ use crate::engine_types::{
 };
 use crate::eval::Evaluator;
 use crate::eval::sync_block_on;
-use crate::eval_bridge::MirrorContext;
-use crate::mirror::MirrorPositionLookup;
+use crate::eval_bridge::EvalContext;
 use crate::range_manager::{self, A1CellRef, A1RangeRef};
 use crate::snapshot::{
     BatchRangeEntry, BatchRangeRequest, BatchRangeResponse, BatchRangeResult, CalculationSettings,
@@ -30,7 +30,6 @@ use crate::storage::sheet::{hyperlinks, merges, properties as sheets};
 use crate::storage::workbook::settings as workbook;
 use cell_types::{CellId, SheetId, SheetPos};
 use compute_document::hex::{hex_to_id, id_to_hex};
-use compute_wire::mutation::serialize_multi_viewport_patches;
 use domain_types::domain::merge::{CellMergeInfo, MergeRegion, ResolvedMergedRegion};
 use domain_types::domain::sheet::{FrozenPanes, SheetMeta, SheetScrollPosition, SheetViewOptions};
 use domain_types::domain::slicer::{NamedSlicerStyle, SlicerCustomStyle};
@@ -45,7 +44,7 @@ pub(in crate::storage::engine) fn get_projection_range(
     row: u32,
     col: u32,
 ) -> Option<RectBounds> {
-    services::queries::get_projection_range(&engine.mirror, sheet_id, row, col)
+    services::queries::get_projection_range(&engine.cell_store, sheet_id, row, col)
 }
 
 pub(in crate::storage::engine) fn get_projection_source(
@@ -54,7 +53,7 @@ pub(in crate::storage::engine) fn get_projection_source(
     row: u32,
     col: u32,
 ) -> Option<SheetPos> {
-    services::queries::get_projection_source(&engine.mirror, sheet_id, row, col)
+    services::queries::get_projection_source(&engine.cell_store, sheet_id, row, col)
 }
 
 pub(in crate::storage::engine) fn get_viewport_projection_data(
@@ -66,7 +65,7 @@ pub(in crate::storage::engine) fn get_viewport_projection_data(
     end_col: u32,
 ) -> Vec<ProjectionData> {
     services::queries::get_viewport_projection_data(
-        &engine.mirror,
+        &engine.cell_store,
         sheet_id,
         start_row,
         start_col,
@@ -94,7 +93,7 @@ pub(in crate::storage::engine) fn set_workbook_setting(
     engine: &mut ComputeEngine,
     key: &str,
     value: serde_json::Value,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let pre = workbook::get_settings(&engine.stores.storage.metadata);
     capture_workbook_settings(&engine.stores.storage);
     capture_workbook_field!(engine.stores.storage, default_slicer_style);
@@ -102,15 +101,12 @@ pub(in crate::storage::engine) fn set_workbook_setting(
     workbook::set_setting(&mut engine.stores.storage.metadata, key, value)?;
     let post = workbook::get_settings(&engine.stores.storage.metadata);
     engine.sync_runtime_workbook_settings(&pre, &post);
-    Ok((
-        serialize_multi_viewport_patches(&[]),
-        MutationResult::empty(),
-    ))
+    Ok(MutationResult::empty())
 }
 
 pub(in crate::storage::engine) fn reset_workbook_settings(
     engine: &mut ComputeEngine,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let pre = workbook::get_settings(&engine.stores.storage.metadata);
     capture_workbook_settings(&engine.stores.storage);
     workbook::reset_settings(&mut engine.stores.storage.metadata);
@@ -128,7 +124,7 @@ pub(in crate::storage::engine) fn reset_workbook_settings(
             changed_keys,
             settings: post_json,
         });
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }
 
 pub(in crate::storage::engine) fn get_calculation_settings(
@@ -140,17 +136,14 @@ pub(in crate::storage::engine) fn get_calculation_settings(
 pub(in crate::storage::engine) fn set_calculation_settings(
     engine: &mut ComputeEngine,
     settings: CalculationSettings,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let pre_calc = workbook::get_calculation_settings(&engine.stores.storage.metadata);
     capture_workbook_field!(engine.stores.storage, settings.calculation_settings);
     workbook::set_calculation_settings(&mut engine.stores.storage.metadata, &settings);
     let post_calc = workbook::get_calculation_settings(&engine.stores.storage.metadata);
     engine.sync_runtime_calculation_settings(&pre_calc, &post_calc);
 
-    Ok((
-        serialize_multi_viewport_patches(&[]),
-        MutationResult::empty(),
-    ))
+    Ok(MutationResult::empty())
 }
 
 pub(in crate::storage::engine) fn is_iterative_calculation_enabled(engine: &ComputeEngine) -> bool {
@@ -160,24 +153,21 @@ pub(in crate::storage::engine) fn is_iterative_calculation_enabled(engine: &Comp
 pub(in crate::storage::engine) fn set_iterative_calculation_enabled(
     engine: &mut ComputeEngine,
     enabled: bool,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let pre_calc = workbook::get_calculation_settings(&engine.stores.storage.metadata);
     capture_workbook_field!(engine.stores.storage, settings.calculation_settings);
     workbook::set_iterative_calculation_enabled(&mut engine.stores.storage.metadata, enabled);
     let post_calc = workbook::get_calculation_settings(&engine.stores.storage.metadata);
     engine.sync_runtime_calculation_settings(&pre_calc, &post_calc);
 
-    Ok((
-        serialize_multi_viewport_patches(&[]),
-        MutationResult::empty(),
-    ))
+    Ok(MutationResult::empty())
 }
 
 pub(in crate::storage::engine) fn protect_workbook(
     engine: &mut ComputeEngine,
     password_hash: Option<String>,
     options: Option<WorkbookProtectionOptions>,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     capture_workbook_field!(engine.stores.storage, settings.is_workbook_protected);
     capture_workbook_field!(engine.stores.storage, protection);
     workbook::protect_workbook(
@@ -199,13 +189,13 @@ pub(in crate::storage::engine) fn protect_workbook(
             changed_keys,
             settings: post_json,
         });
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }
 
 pub(in crate::storage::engine) fn unprotect_workbook(
     engine: &mut ComputeEngine,
     password_hash: Option<String>,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     capture_workbook_field!(engine.stores.storage, settings.is_workbook_protected);
     capture_workbook_field!(engine.stores.storage, protection);
     let success = workbook::unprotect_workbook(
@@ -226,7 +216,7 @@ pub(in crate::storage::engine) fn unprotect_workbook(
             changed_keys,
             settings: post_json,
         });
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }
 
 pub(in crate::storage::engine) fn get_workbook_protection_options(
@@ -253,13 +243,10 @@ pub(in crate::storage::engine) fn is_workbook_operation_allowed(
 pub(in crate::storage::engine) fn set_default_table_style_id(
     engine: &mut ComputeEngine,
     style_id: Option<String>,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     capture_workbook_field!(engine.stores.storage, settings.default_table_style_id);
     workbook::set_default_table_style_id(&mut engine.stores.storage.metadata, style_id.as_deref());
-    Ok((
-        serialize_multi_viewport_patches(&[]),
-        MutationResult::empty(),
-    ))
+    Ok(MutationResult::empty())
 }
 
 pub(in crate::storage::engine) fn get_default_table_style_id(
@@ -271,13 +258,10 @@ pub(in crate::storage::engine) fn get_default_table_style_id(
 pub(in crate::storage::engine) fn set_default_slicer_style(
     engine: &mut ComputeEngine,
     style_id: Option<String>,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     capture_workbook_field!(engine.stores.storage, default_slicer_style);
     workbook::set_default_slicer_style(&mut engine.stores.storage.metadata, style_id.as_deref());
-    Ok((
-        serialize_multi_viewport_patches(&[]),
-        MutationResult::empty(),
-    ))
+    Ok(MutationResult::empty())
 }
 
 pub(in crate::storage::engine) fn get_default_slicer_style(

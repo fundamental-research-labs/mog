@@ -191,7 +191,7 @@ fn record_native_cell_value_provenance(
     let Ok(cell_id) = cell_types::CellId::from_uuid_str(cell_hex) else {
         return;
     };
-    if let Some(formula) = engine.mirror().get_formula(&cell_id) {
+    if let Some(formula) = engine.cell_store().get_formula(&cell_id) {
         provenance.insert_marker(
             FORMULA_METADATA_CATEGORY,
             "identityFormula",

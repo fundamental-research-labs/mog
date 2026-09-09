@@ -16,7 +16,7 @@ impl ComputeCore {
     #[tracing::instrument(name = "selective_dep_fixup", skip_all)]
     pub(in super::super) fn selective_dep_fixup_pass(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         epoch_range_store: &mut crate::eval::cache::range_store::RangeStore,
         metrics: &mut RecalcMetrics,
         scope: Option<&FxHashSet<CellId>>,
@@ -35,7 +35,7 @@ impl ComputeCore {
                 .selective_dep_cells_with_changed_ranges(changed_idx)
         } else {
             self.graph
-                .selective_dep_cells_with_formula_ranges(&self.ast_cache, &*mirror)
+                .selective_dep_cells_with_formula_ranges(&self.ast_cache, &*cell_store)
         };
         if selective_cells.is_empty() {
             return (Vec::new(), Vec::new(), Vec::new());
@@ -67,7 +67,7 @@ impl ComputeCore {
                 .filter_map(|cid| self.cell_range_keys.get(cid))
                 .flat_map(|keys| keys.iter().copied())
                 .collect();
-            epoch_range_store.pre_materialize_additive(&plan, mirror);
+            epoch_range_store.pre_materialize_additive(&plan, cell_store);
         }
 
         // Re-evaluate selective deps using parallel evaluation for large sets
@@ -85,7 +85,7 @@ impl ComputeCore {
             #[cfg(feature = "native")]
             {
                 self.topo_evaluate_level_parallel(
-                    mirror,
+                    cell_store,
                     &fixup_cells,
                     &mut changed_cells,
                     &mut projection_changes,
@@ -98,7 +98,7 @@ impl ComputeCore {
             }
         } else {
             self.topo_evaluate_level_sequential(
-                mirror,
+                cell_store,
                 &fixup_cells,
                 &mut changed_cells,
                 &mut projection_changes,
@@ -154,9 +154,9 @@ impl ComputeCore {
                         self.ast_cache.contains_key(c)
                             && !selective_cells.contains(c)
                             && !changed_ids.contains(c)
-                            && mirror
+                            && cell_store
                                 .sheet_for_cell(c)
-                                .is_none_or(|sid| mirror.is_calculation_enabled(&sid))
+                                .is_none_or(|sid| cell_store.is_calculation_enabled(&sid))
                     })
                     .collect()
             };
@@ -197,7 +197,7 @@ impl ComputeCore {
                             .filter_map(|cid| self.cell_range_keys.get(cid))
                             .flat_map(|keys| keys.iter().copied())
                             .collect();
-                        epoch_range_store.pre_materialize_additive(&plan, mirror);
+                        epoch_range_store.pre_materialize_additive(&plan, cell_store);
                     }
 
                     let changes_before = changed_cells.len();
@@ -212,7 +212,7 @@ impl ComputeCore {
                         #[cfg(feature = "native")]
                         {
                             self.topo_evaluate_level_parallel(
-                                mirror,
+                                cell_store,
                                 &dirty_level,
                                 &mut changed_cells,
                                 &mut projection_changes,
@@ -225,7 +225,7 @@ impl ComputeCore {
                         }
                     } else {
                         self.topo_evaluate_level_sequential(
-                            mirror,
+                            cell_store,
                             &dirty_level,
                             &mut changed_cells,
                             &mut projection_changes,
@@ -246,8 +246,8 @@ impl ComputeCore {
                     let dirty_positions: Vec<(SheetId, u32, u32)> = dirty_level
                         .iter()
                         .filter_map(|cid| {
-                            let sid = mirror.sheet_for_cell(cid)?;
-                            let pos = mirror.resolve_position(cid)?;
+                            let sid = cell_store.sheet_for_cell(cid)?;
+                            let pos = cell_store.resolve_position(cid)?;
                             Some((sid, pos.row(), pos.col()))
                         })
                         .collect();

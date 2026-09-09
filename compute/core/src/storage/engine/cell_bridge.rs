@@ -18,7 +18,7 @@ impl ComputeEngine {
     // -------------------------------------------------------------------
 
     /// Apply a cell edit through the native mutation pipeline,
-    /// updates the mirror, and triggers recalculation.
+    /// updates the cell store, and triggers recalculation.
     #[bridge::write(scope = "cell")]
     pub fn set_cell(
         &mut self,
@@ -27,13 +27,13 @@ impl ComputeEngine {
         row: u32,
         col: u32,
         input: mutation::CellInput,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let should_apply_formula_format = is_formula_parse_input(&input);
             let (mut recalc, format_result) = {
                 let recalc = services::cell_editing::set_cell(
                     &mut engine.stores,
-                    &mut engine.mirror,
+                    &mut engine.cell_store,
                     sheet_id,
                     cell_id,
                     row,
@@ -47,13 +47,13 @@ impl ComputeEngine {
                 };
                 (recalc, format_result)
             };
-            engine.prepare_recalc_for_flush(&mut recalc);
-            let patches = engine.flush_viewport_patches();
+            engine.postprocess_mutation_recalc(&mut recalc);
+
             let mut result = MutationResult::from_recalc(recalc);
             result
                 .property_changes
                 .extend(format_result.property_changes);
-            Ok((patches, result))
+            Ok(result)
         })
     }
 
@@ -67,7 +67,7 @@ impl ComputeEngine {
         row: u32,
         col: u32,
         input: mutation::CellInput,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| engine.set_cell(sheet_id, cell_id, row, col, input))
     }
 
@@ -90,12 +90,12 @@ impl ComputeEngine {
         bottom_row: u32,
         right_col: u32,
         formula: String,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let (mut recalc, format_result) = {
                 let recalc = services::cell_editing::set_array_formula(
                     &mut engine.stores,
-                    &mut engine.mirror,
+                    &mut engine.cell_store,
                     sheet_id,
                     top_row,
                     left_col,
@@ -107,13 +107,13 @@ impl ComputeEngine {
                     .apply_formula_inherited_number_formats(&[(*sheet_id, top_row, left_col)])?;
                 (recalc, format_result)
             };
-            engine.prepare_recalc_for_flush(&mut recalc);
-            let patches = engine.flush_viewport_patches();
+            engine.postprocess_mutation_recalc(&mut recalc);
+
             let mut result = MutationResult::from_recalc(recalc);
             result
                 .property_changes
                 .extend(format_result.property_changes);
-            Ok((patches, result))
+            Ok(result)
         })
     }
 
@@ -129,13 +129,13 @@ impl ComputeEngine {
         row: u32,
         col: u32,
         raw_input: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let should_apply_formula_format = raw_input.trim().starts_with('=');
             let (mut recalc, format_result) = {
                 let recalc = services::cell_editing::set_cell_value_parsed(
                     &mut engine.stores,
-                    &mut engine.mirror,
+                    &mut engine.cell_store,
                     sheet_id,
                     row,
                     col,
@@ -148,13 +148,13 @@ impl ComputeEngine {
                 };
                 (recalc, format_result)
             };
-            engine.prepare_recalc_for_flush(&mut recalc);
-            let patches = engine.flush_viewport_patches();
+            engine.postprocess_mutation_recalc(&mut recalc);
+
             let mut result = MutationResult::from_recalc(recalc);
             result
                 .property_changes
                 .extend(format_result.property_changes);
-            Ok((patches, result))
+            Ok(result)
         })
     }
 
@@ -166,19 +166,19 @@ impl ComputeEngine {
         row: u32,
         col: u32,
         value: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let mut recalc = services::cell_editing::set_cell_value_as_text(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 sheet_id,
                 row,
                 col,
                 value,
             )?;
-            engine.prepare_recalc_for_flush(&mut recalc);
-            let patches = engine.flush_viewport_patches();
-            Ok((patches, MutationResult::from_recalc(recalc)))
+            engine.postprocess_mutation_recalc(&mut recalc);
+
+            Ok(MutationResult::from_recalc(recalc))
         })
     }
 
@@ -188,7 +188,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         updates: Vec<(u32, u32, String)>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let formula_format_candidates: Vec<(SheetId, u32, u32)> = updates
                 .iter()
@@ -203,7 +203,7 @@ impl ComputeEngine {
             let (mut recalc, format_result) = {
                 let recalc = services::cell_editing::set_cell_values_parsed(
                     &mut engine.stores,
-                    &mut engine.mirror,
+                    &mut engine.cell_store,
                     sheet_id,
                     &updates,
                 )?;
@@ -211,13 +211,13 @@ impl ComputeEngine {
                     engine.apply_formula_inherited_number_formats(&formula_format_candidates)?;
                 (recalc, format_result)
             };
-            engine.prepare_recalc_for_flush(&mut recalc);
-            let patches = engine.flush_viewport_patches();
+            engine.postprocess_mutation_recalc(&mut recalc);
+
             let mut result = MutationResult::from_recalc(recalc);
             result
                 .property_changes
                 .extend(format_result.property_changes);
-            Ok((patches, result))
+            Ok(result)
         })
     }
 
@@ -227,17 +227,17 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         updates: Vec<(u32, u32, CellValue, Option<String>)>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let mut recalc = services::cell_editing::import_values(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 sheet_id,
                 &updates,
             )?;
-            engine.prepare_recalc_for_flush(&mut recalc);
-            let patches = engine.flush_viewport_patches();
-            Ok((patches, MutationResult::from_recalc(recalc)))
+            engine.postprocess_mutation_recalc(&mut recalc);
+
+            Ok(MutationResult::from_recalc(recalc))
         })
     }
 }

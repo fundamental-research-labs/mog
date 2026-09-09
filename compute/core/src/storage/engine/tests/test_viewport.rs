@@ -21,7 +21,9 @@ fn test_register_viewport_appears_in_registry() {
     let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
-    engine.register_viewport("main", &sid, 0, 0, 50, 20);
+    engine
+        .register_viewport("main", &sid, 0, 0, 50, 20)
+        .unwrap();
 
     let viewports = engine.get_registered_viewports();
     assert_eq!(viewports.len(), 1);
@@ -42,10 +44,14 @@ fn test_update_viewport_bounds() {
     let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
-    engine.register_viewport("main", &sid, 0, 0, 50, 20);
+    engine
+        .register_viewport("main", &sid, 0, 0, 50, 20)
+        .unwrap();
 
     // Update bounds
-    engine.update_viewport_bounds("main", 10, 5, 60, 25);
+    engine
+        .update_viewport_bounds("main", 10, 5, 60, 25)
+        .unwrap();
 
     let viewports = engine.get_registered_viewports();
     assert_eq!(viewports.len(), 1);
@@ -63,7 +69,9 @@ fn test_update_viewport_bounds_unknown_id() {
     let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // Should not panic; just no-op
-    engine.update_viewport_bounds("nonexistent", 0, 0, 50, 20);
+    engine
+        .update_viewport_bounds("nonexistent", 0, 0, 50, 20)
+        .unwrap();
     assert!(engine.get_registered_viewports().is_empty());
 }
 
@@ -77,10 +85,12 @@ fn test_unregister_viewport() {
     let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
-    engine.register_viewport("main", &sid, 0, 0, 50, 20);
+    engine
+        .register_viewport("main", &sid, 0, 0, 50, 20)
+        .unwrap();
     assert_eq!(engine.get_registered_viewports().len(), 1);
 
-    engine.unregister_viewport("main");
+    engine.unregister_viewport("main").unwrap();
     assert!(engine.get_registered_viewports().is_empty());
 }
 
@@ -133,14 +143,20 @@ fn test_reset_sheet_viewports_selective() {
     let sid1 = SheetId::from_uuid_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
     let sid2 = SheetId::from_uuid_str("550e8400-e29b-41d4-a716-446655440099").unwrap();
 
-    engine.register_viewport("main", &sid1, 0, 0, 50, 20);
-    engine.register_viewport("split-bottom", &sid1, 50, 0, 100, 20);
-    engine.register_viewport("sheet2-main", &sid2, 0, 0, 30, 10);
+    engine
+        .register_viewport("main", &sid1, 0, 0, 50, 20)
+        .unwrap();
+    engine
+        .register_viewport("split-bottom", &sid1, 50, 0, 100, 20)
+        .unwrap();
+    engine
+        .register_viewport("sheet2-main", &sid2, 0, 0, 30, 10)
+        .unwrap();
 
     assert_eq!(engine.get_registered_viewports().len(), 3);
 
     // Reset only sheet1 viewports
-    engine.reset_sheet_viewports(&sid1);
+    engine.reset_sheet_viewports(&sid1).unwrap();
 
     let remaining = engine.get_registered_viewports();
     assert_eq!(remaining.len(), 1);
@@ -154,7 +170,7 @@ fn test_reset_sheet_viewports_selective() {
 #[test]
 fn test_get_viewport_binary_updates_registry() {
     let snap = simple_snapshot();
-    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
 
@@ -180,8 +196,12 @@ fn test_multiple_viewports_same_sheet() {
     let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
-    engine.register_viewport("top-pane", &sid, 0, 0, 10, 20);
-    engine.register_viewport("bottom-pane", &sid, 10, 0, 50, 20);
+    engine
+        .register_viewport("top-pane", &sid, 0, 0, 10, 20)
+        .unwrap();
+    engine
+        .register_viewport("bottom-pane", &sid, 10, 0, 50, 20)
+        .unwrap();
 
     let viewports = engine.get_registered_viewports();
     assert_eq!(viewports.len(), 2);
@@ -201,8 +221,12 @@ fn test_register_viewport_replaces_existing() {
     let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
-    engine.register_viewport("main", &sid, 0, 0, 50, 20);
-    engine.register_viewport("main", &sid, 10, 5, 60, 25);
+    engine
+        .register_viewport("main", &sid, 0, 0, 50, 20)
+        .unwrap();
+    engine
+        .register_viewport("main", &sid, 10, 5, 60, 25)
+        .unwrap();
 
     let viewports = engine.get_registered_viewports();
     assert_eq!(viewports.len(), 1);
@@ -260,7 +284,7 @@ fn test_viewport_binary_renders_materialized_values_without_cell_ids() {
         errors: None,
     };
 
-    engine.mirror.materialize_pivot(
+    engine.cell_store.materialize_pivot(
         &sid,
         anchor_row,
         anchor_col,

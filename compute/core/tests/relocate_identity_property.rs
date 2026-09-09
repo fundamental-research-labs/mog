@@ -286,7 +286,7 @@ fn run_same_sheet_property(plan: GridPlan) -> Result<(), TestCaseError> {
     let (mut engine, _) =
         ComputeEngine::from_snapshot(snapshot).expect("from_snapshot must succeed");
     let sid = *engine
-        .mirror()
+        .cell_store()
         .sheet_ids()
         .next()
         .expect("exactly one sheet");
@@ -457,7 +457,7 @@ fn run_cross_sheet_property(plan: CrossSheetPlan) -> Result<(), TestCaseError> {
 
     let (mut engine, _) =
         ComputeEngine::from_snapshot(snapshot).expect("from_snapshot must succeed");
-    let sheet_ids: Vec<_> = engine.mirror().sheet_ids().copied().collect();
+    let sheet_ids: Vec<_> = engine.cell_store().sheet_ids().copied().collect();
     prop_assert_eq!(sheet_ids.len(), 2);
 
     let mut a_sid = None;
@@ -665,12 +665,12 @@ fn run_formula_ref_property(plan: FormulaPlan) -> Result<(), TestCaseError> {
 
     let (mut engine, _) =
         ComputeEngine::from_snapshot(snapshot).expect("from_snapshot must succeed");
-    let sid = *engine.mirror().sheet_ids().next().expect("sheet");
+    let sid = *engine.cell_store().sheet_ids().next().expect("sheet");
 
     // Sanity: F's formula pre-move references V by CellId.
     {
         let formula = engine
-            .mirror()
+            .cell_store()
             .get_formula(&f_cell_id)
             .expect("F must have a formula pre-move")
             .clone();
@@ -700,10 +700,10 @@ fn run_formula_ref_property(plan: FormulaPlan) -> Result<(), TestCaseError> {
         .expect("relocate must succeed");
 
     // Assertion 1: F still has a formula (verify via IdentityFormula on
-    // the mirror, NOT via cached value — a bug that silently strips a
+    // the cell store, NOT via cached value — a bug that silently strips a
     // formula but leaves a stale cached value must fail here).
     let post_formula = engine
-        .mirror()
+        .cell_store()
         .get_formula(&f_cell_id)
         .expect("F must still have a formula after V moves")
         .clone();

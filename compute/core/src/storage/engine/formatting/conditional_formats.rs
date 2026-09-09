@@ -4,7 +4,7 @@ pub(super) fn add_cf_rule(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     rule: serde_json::Value,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     // 1. Normalize wire input to canonical schema.
     let mut rule_json = rule;
     domain_types::domain::conditional_format::normalize_conditional_format_input(&mut rule_json);
@@ -39,8 +39,8 @@ pub(super) fn add_cf_rule(
 
     let sid = *sheet_id;
     engine.refresh_cf_cache(&sid);
-    let patches = engine.produce_cf_viewport_patches(&sid);
-    Ok((patches, result))
+
+    Ok(result)
 }
 
 pub(super) fn update_cf_rule(
@@ -48,37 +48,37 @@ pub(super) fn update_cf_rule(
     sheet_id: &SheetId,
     rule_id: &str,
     updates: serde_json::Value,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let result =
         services::formatting::update_cf_rule(&mut engine.stores, sheet_id, rule_id, &updates)?;
     let sid = *sheet_id;
     engine.refresh_cf_cache(&sid);
-    let patches = engine.produce_cf_viewport_patches(&sid);
-    Ok((patches, result))
+
+    Ok(result)
 }
 
 pub(super) fn delete_cf_rule(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     rule_id: &str,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let result = services::formatting::delete_cf_rule(&mut engine.stores, sheet_id, rule_id)?;
     let sid = *sheet_id;
     engine.refresh_cf_cache(&sid);
-    let patches = engine.produce_cf_viewport_patches(&sid);
-    Ok((patches, result))
+
+    Ok(result)
 }
 
 pub(super) fn reorder_cf_rules(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     rule_ids: Vec<String>,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let result = services::formatting::reorder_cf_rules(&mut engine.stores, sheet_id, &rule_ids)?;
     let sid = *sheet_id;
     engine.refresh_cf_cache(&sid);
-    let patches = engine.produce_cf_viewport_patches(&sid);
-    Ok((patches, result))
+
+    Ok(result)
 }
 
 pub(super) fn get_all_cf_rules(
@@ -119,7 +119,7 @@ pub(super) fn update_cf_ranges(
     sheet_id: &SheetId,
     format_id: &str,
     new_ranges: &[CFCellRange],
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let result = services::formatting::update_cf_ranges(
         &mut engine.stores,
         sheet_id,
@@ -128,16 +128,16 @@ pub(super) fn update_cf_ranges(
     )?;
     let sid = *sheet_id;
     engine.refresh_cf_cache(&sid);
-    let patches = engine.produce_cf_viewport_patches(&sid);
-    Ok((patches, result))
+
+    Ok(result)
 }
 
 pub(super) fn clear_cf_formats_for_sheet(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let result = services::formatting::clear_cf_formats_for_sheet(&mut engine.stores, sheet_id)?;
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }
 
 pub(super) fn add_rule_to_cf(
@@ -145,13 +145,13 @@ pub(super) fn add_rule_to_cf(
     sheet_id: &SheetId,
     format_id: &str,
     rule: &CFRule,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let result =
         services::formatting::add_rule_to_cf(&mut engine.stores, sheet_id, format_id, rule)?;
     let sid = *sheet_id;
     engine.refresh_cf_cache(&sid);
-    let patches = engine.produce_cf_viewport_patches(&sid);
-    Ok((patches, result))
+
+    Ok(result)
 }
 
 pub(super) fn update_rule_in_cf(
@@ -160,7 +160,7 @@ pub(super) fn update_rule_in_cf(
     format_id: &str,
     rule_id: &str,
     updates: serde_json::Value,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let result = services::formatting::update_rule_in_cf(
         &mut engine.stores,
         sheet_id,
@@ -170,8 +170,8 @@ pub(super) fn update_rule_in_cf(
     )?;
     let sid = *sheet_id;
     engine.refresh_cf_cache(&sid);
-    let patches = engine.produce_cf_viewport_patches(&sid);
-    Ok((patches, result))
+
+    Ok(result)
 }
 
 pub(super) fn delete_rule_from_cf(
@@ -179,7 +179,7 @@ pub(super) fn delete_rule_from_cf(
     sheet_id: &SheetId,
     format_id: &str,
     rule_id: &str,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let result = services::formatting::delete_rule_from_cf(
         &mut engine.stores,
         sheet_id,
@@ -188,6 +188,6 @@ pub(super) fn delete_rule_from_cf(
     )?;
     let sid = *sheet_id;
     engine.refresh_cf_cache(&sid);
-    let patches = engine.produce_cf_viewport_patches(&sid);
-    Ok((patches, result))
+
+    Ok(result)
 }

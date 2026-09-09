@@ -9,7 +9,7 @@ use super::*;
 #[test]
 fn test_sumproduct_basic_mul_chain() {
     // SUMPRODUCT({1;2;3} * {4;5;6}) = 1*4 + 2*5 + 3*6 = 32
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let arr1 = ASTNode::Array {
         rows: vec![
@@ -33,7 +33,7 @@ fn test_sumproduct_basic_mul_chain() {
 #[test]
 fn test_sumproduct_if_scalar_branches() {
     // SUMPRODUCT(IF({TRUE;FALSE;TRUE}, 10, 0)) = 10 + 0 + 10 = 20
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let cond = ASTNode::Array {
         rows: vec![
@@ -53,7 +53,7 @@ fn test_sumproduct_if_scalar_branches() {
 #[test]
 fn test_sumproduct_if_array_branches() {
     // SUMPRODUCT(IF({TRUE;FALSE;TRUE}, {1;2;3}, {10;20;30})) = 1 + 20 + 3 = 24
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let cond = ASTNode::Array {
         rows: vec![
@@ -84,7 +84,7 @@ fn test_sumproduct_if_array_branches() {
 #[test]
 fn test_sumproduct_if_mixed_scalar_array() {
     // SUMPRODUCT(IF({TRUE;FALSE;TRUE}, {1;2;3}, 0)) = 1 + 0 + 3 = 4
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let cond = ASTNode::Array {
         rows: vec![
@@ -109,7 +109,7 @@ fn test_sumproduct_if_mixed_scalar_array() {
 fn test_sumproduct_if_omitted_false_branch() {
     // SUMPRODUCT(IF({TRUE;FALSE;TRUE}, 5)) = 5 + 0 + 5 = 10
     // When false branch is omitted, IF returns FALSE which coerces to 0
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let cond = ASTNode::Array {
         rows: vec![
@@ -127,7 +127,7 @@ fn test_sumproduct_if_omitted_false_branch() {
 fn test_sumproduct_if_numeric_condition() {
     // SUMPRODUCT(IF({1;0;1}, 10, 0)) = 10 + 0 + 10 = 20
     // Numeric condition: 0=false, nonzero=true
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let cond = ASTNode::Array {
         rows: vec![
@@ -151,7 +151,7 @@ fn test_sumproduct_if_numeric_condition() {
 #[test]
 fn test_if_true_omitted_true_branch() {
     // =IF(TRUE,,5) → 0  (omitted true-branch returns 0)
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = func(
         "IF",
@@ -167,7 +167,7 @@ fn test_if_true_omitted_true_branch() {
 #[test]
 fn test_if_false_omitted_true_branch() {
     // =IF(FALSE,,5) → 5  (false-branch is 5, omitted true-branch not evaluated)
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = func(
         "IF",
@@ -183,7 +183,7 @@ fn test_if_false_omitted_true_branch() {
 #[test]
 fn test_if_true_omitted_false_branch() {
     // =IF(TRUE,5,) → 5  (true-branch is 5, omitted false-branch not evaluated)
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = func(
         "IF",
@@ -199,7 +199,7 @@ fn test_if_true_omitted_false_branch() {
 #[test]
 fn test_if_false_omitted_false_branch() {
     // =IF(FALSE,5,) → 0  (omitted false-branch returns 0)
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = func(
         "IF",
@@ -215,7 +215,7 @@ fn test_if_false_omitted_false_branch() {
 #[test]
 fn test_if_true_both_omitted() {
     // =IF(TRUE,,) → 0  (both branches omitted, true-branch returns 0)
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = func(
         "IF",
@@ -227,7 +227,7 @@ fn test_if_true_both_omitted() {
 #[test]
 fn test_if_false_both_omitted() {
     // =IF(FALSE,,) → 0  (both branches omitted, false-branch returns 0)
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = func(
         "IF",
@@ -239,7 +239,7 @@ fn test_if_false_both_omitted() {
 #[test]
 fn test_if_array_omitted_true_branch() {
     // =IF({TRUE;FALSE},,5) → {0;5}  (array condition with omitted true-branch)
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let cond = ASTNode::Array {
         rows: vec![vec![ASTNode::Boolean(true)], vec![ASTNode::Boolean(false)]],
@@ -258,7 +258,7 @@ fn test_if_array_omitted_true_branch() {
 #[test]
 fn test_if_array_omitted_false_branch() {
     // =IF({TRUE;FALSE},5,) → {5;0}  (array condition with omitted false-branch)
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let cond = ASTNode::Array {
         rows: vec![vec![ASTNode::Boolean(true)], vec![ASTNode::Boolean(false)]],
@@ -277,7 +277,7 @@ fn test_if_array_omitted_false_branch() {
 #[test]
 fn test_if_array_both_omitted() {
     // =IF({TRUE;FALSE},,) → {0;0}  (array condition with both branches omitted)
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let cond = ASTNode::Array {
         rows: vec![vec![ASTNode::Boolean(true)], vec![ASTNode::Boolean(false)]],

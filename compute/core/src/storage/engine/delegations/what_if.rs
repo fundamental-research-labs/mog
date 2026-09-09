@@ -11,7 +11,7 @@ pub(in crate::storage::engine) fn solve(
     engine
         .stores
         .compute
-        .solve(&engine.mirror, params)
+        .solve(&engine.cell_store, params)
         .unwrap_or_else(|_e| crate::solver::SolverResult {
             converged: false,
             solution: vec![],
@@ -32,7 +32,7 @@ pub(in crate::storage::engine) fn goal_seek(
     engine
         .stores
         .compute
-        .goal_seek(&engine.mirror, params)
+        .goal_seek(&engine.cell_store, params)
         .unwrap_or_else(|_e| crate::solver::GoalSeekResult {
             found: false,
             solution_value: None,
@@ -50,7 +50,7 @@ pub(in crate::storage::engine) fn data_table(
     engine
         .stores
         .compute
-        .data_table(&engine.mirror, params)
+        .data_table(&engine.cell_store, params)
         .unwrap_or_else(|_e| crate::data_table::DataTableResult {
             results: vec![],
             cell_count: 0,
@@ -66,7 +66,7 @@ pub(in crate::storage::engine) fn create_data_table(
     end_row: u32,
     end_col: u32,
     input: &crate::data_table::CreateDataTableInput,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     if &input.sheet_id != sheet_id {
         return Err(ComputeError::InvalidInput {
             message: "create_data_table sheet_id parameter does not match input.sheet_id"
@@ -97,7 +97,7 @@ pub(in crate::storage::engine) fn create_data_table(
         input: input.clone(),
     })? {
         mutation::MutationOutput::Plain(result) | mutation::MutationOutput::Recalc(result) => {
-            Ok((engine.flush_viewport_patches(), result))
+            Ok(result)
         }
         _ => Err(ComputeError::Eval {
             message: "Unexpected output from CreateDataTable".to_string(),

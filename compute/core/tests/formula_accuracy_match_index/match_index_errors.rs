@@ -19,10 +19,10 @@ fn test_match_na_cascades_through_arithmetic() {
         formula_cell(1, 2, 2, "100/A1"),
     ];
     let snapshot = workbook_snapshot(vec![sheet_snapshot(SHEET1_UUID, "Sheet1", 3, 3, cells)]);
-    let (mirror, _core, result) = init_core(snapshot);
+    let (cell_store, _core, result) = init_core(snapshot);
 
     assert_error_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET1_UUID,
         0,
@@ -31,7 +31,7 @@ fn test_match_na_cascades_through_arithmetic() {
         "A0: MATCH should be #N/A",
     );
     assert_error_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET1_UUID,
         0,
@@ -40,7 +40,7 @@ fn test_match_na_cascades_through_arithmetic() {
         "C0: #N/A + 1 should propagate #N/A, not produce a different error",
     );
     assert_error_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET1_UUID,
         1,
@@ -49,7 +49,7 @@ fn test_match_na_cascades_through_arithmetic() {
         "C1: #N/A * 2 should propagate #N/A",
     );
     assert_error_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET1_UUID,
         2,
@@ -71,10 +71,10 @@ fn test_index_match_error_cascade() {
         formula_cell(1, 0, 2, "INDEX(B1:B2,MATCH(\"Missing\",A1:A2,0))"),
     ];
     let snapshot = workbook_snapshot(vec![sheet_snapshot(SHEET1_UUID, "Sheet1", 2, 3, cells)]);
-    let (mirror, _core, result) = init_core(snapshot);
+    let (cell_store, _core, result) = init_core(snapshot);
 
     assert_error_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET1_UUID,
         0,
@@ -97,10 +97,10 @@ fn test_index_match_success() {
         formula_cell(1, 0, 2, "INDEX(B1:B3,MATCH(\"Beta\",A1:A3,0))"),
     ];
     let snapshot = workbook_snapshot(vec![sheet_snapshot(SHEET1_UUID, "Sheet1", 3, 3, cells)]);
-    let (mirror, _core, result) = init_core(snapshot);
+    let (cell_store, _core, result) = init_core(snapshot);
 
     assert_number_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET1_UUID,
         0,
@@ -125,10 +125,10 @@ fn test_multi_step_error_cascade_match_to_arithmetic() {
         formula_cell(1, 0, 5, "(E1-D1)/D1/50"),
     ];
     let snapshot = workbook_snapshot(vec![sheet_snapshot(SHEET1_UUID, "Sheet1", 2, 6, cells)]);
-    let (mirror, _core, result) = init_core(snapshot);
+    let (cell_store, _core, result) = init_core(snapshot);
 
     assert_error_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET1_UUID,
         0,
@@ -137,7 +137,7 @@ fn test_multi_step_error_cascade_match_to_arithmetic() {
         "D0: INDEX/MATCH should be #N/A",
     );
     assert_error_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET1_UUID,
         0,
@@ -146,7 +146,7 @@ fn test_multi_step_error_cascade_match_to_arithmetic() {
         "E0: #N/A - 100 should propagate #N/A",
     );
     assert_error_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET1_UUID,
         0,
@@ -169,10 +169,10 @@ fn test_addition_of_two_match_error_cells() {
         formula_cell(1, 0, 2, "A1+A2"),
     ];
     let snapshot = workbook_snapshot(vec![sheet_snapshot(SHEET1_UUID, "Sheet1", 3, 3, cells)]);
-    let (mirror, _core, result) = init_core(snapshot);
+    let (cell_store, _core, result) = init_core(snapshot);
 
     assert_error_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET1_UUID,
         0,
@@ -181,7 +181,7 @@ fn test_addition_of_two_match_error_cells() {
         "A0 should be #N/A",
     );
     assert_error_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET1_UUID,
         1,
@@ -190,7 +190,7 @@ fn test_addition_of_two_match_error_cells() {
         "A1 should be #N/A",
     );
     assert_error_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET1_UUID,
         0,

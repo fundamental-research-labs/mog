@@ -1,7 +1,7 @@
 //! Tests for spill propagation.
 //!
 //! These modules verify projection materialization, spill stabilization,
-//! `ANCHORARRAY`, viewport patch contracts, and CSE array behavior through
+//! `ANCHORARRAY`, projection change contracts, and CSE array behavior through
 //! the scheduler APIs.
 
 #[path = "projection_tests/helpers.rs"]

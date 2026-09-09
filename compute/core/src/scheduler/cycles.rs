@@ -15,7 +15,7 @@
 
 use super::*;
 use crate::eval::Evaluator;
-use crate::eval_bridge::MirrorContext;
+use crate::eval_bridge::EvalContext;
 
 /// Result from iterative cycle evaluation, carrying convergence metadata.
 pub(super) struct IterativeResult {
@@ -28,7 +28,7 @@ impl ComputeCore {
     /// Handle cycles: either evaluate iteratively or surface circular errors.
     pub(super) fn handle_cycles_and_recalc(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         cycles: Vec<Vec<CellId>>,
         deadline: &super::recalc::Deadline,
     ) -> Result<RecalcResult, ComputeError> {
@@ -41,7 +41,7 @@ impl ComputeCore {
         compute_functions::helpers::column_index::clear();
         compute_functions::helpers::sumifs_result_cache::clear();
         crate::eval::cache::subexpr_cache::clear();
-        crate::mirror::clear_caches();
+        crate::cells::clear_caches();
 
         let mut cycle_cell_set = FxHashSet::default();
         for cycle in &cycles {
@@ -64,7 +64,7 @@ impl ComputeCore {
         // The local topo sort respects as many dependency edges as possible
         // within the SCC. Only actual back-edges (the ones that close the cycle)
         // will see seeded values. This dramatically reduces cascading errors.
-        let cycle_cells = self.local_topo_sort_cycle_cells(&*mirror, &cycle_cell_set);
+        let cycle_cells = self.local_topo_sort_cycle_cells(&*cell_store, &cycle_cell_set);
 
         #[cfg(feature = "journal")]
         {
@@ -101,7 +101,7 @@ impl ComputeCore {
         //
         // Strategy: evaluate ALL non-cycle cells first. Non-cycle cells by definition
         // don't depend on cycle cells, so they compute correctly with whatever values
-        // are currently in the mirror. After cycle evaluation, we re-evaluate any
+        // are currently in the cell store. After cycle evaluation, we re-evaluate any
         // non-cycle cells that are DOWNSTREAM of cycles (dependents).
 
         let all_formula_cells: FxHashSet<CellId> = self.ast_cache.keys().copied().collect();
@@ -116,7 +116,7 @@ impl ComputeCore {
                     .entered();
             let order = self
                 .graph
-                .affected_cells(&non_cycle.iter().copied().collect::<Vec<_>>(), &*mirror)
+                .affected_cells(&non_cycle.iter().copied().collect::<Vec<_>>(), &*cell_store)
                 .into_value();
             order
                 .into_iter()
@@ -131,7 +131,7 @@ impl ComputeCore {
         compute_functions::helpers::column_index::clear();
         compute_functions::helpers::sumifs_result_cache::clear();
         crate::eval::cache::subexpr_cache::clear();
-        crate::mirror::clear_caches();
+        crate::cells::clear_caches();
 
         let mut epoch_range_store = crate::eval::cache::range_store::RangeStore::new();
         let mut cycle_metrics = RecalcMetrics::default();
@@ -154,7 +154,7 @@ impl ComputeCore {
 
         let (pre_changes, pre_projections, pre_errors, pre_proj_deltas, pre_nested_cycles) = self
             .topo_evaluate_pass(
-            mirror,
+            cell_store,
             &non_cycle_eval_order,
             deadline,
             &mut epoch_range_store,
@@ -181,7 +181,7 @@ impl ComputeCore {
                 .graph
                 .affected_cells(
                     &cycle_cell_set.iter().copied().collect::<Vec<_>>(),
-                    &*mirror,
+                    &*cell_store,
                 )
                 .into_value();
             downstream
@@ -204,24 +204,24 @@ impl ComputeCore {
         if self.iterative_calc {
             let iteration_cells =
                 self.iteration_cells_for_cycles(&cycle_cells, &cycle_cell_set, &cycle_dependents);
-            Self::seed_cycle_cells_for_iteration(mirror, &cycle_cells);
+            Self::seed_cycle_cells_for_iteration(cell_store, &cycle_cells);
             iterative_result =
-                Some(self.evaluate_cycles_iterative(mirror, &iteration_cells, deadline)?);
+                Some(self.evaluate_cycles_iterative(cell_store, &iteration_cells, deadline)?);
             self.replace_final_changes_for_cells(
-                mirror,
+                cell_store,
                 &mut changed_cells,
                 &iteration_cells,
                 &cycle_cell_set,
             );
         } else {
-            Self::materialize_cycle_cells_as_circular_errors(mirror, &cycle_cells);
+            Self::materialize_cycle_cells_as_circular_errors(cell_store, &cycle_cells);
         }
 
         // Collect final values from cycle cells. Mark genuinely unresolvable
         // cycles (still Null after evaluation) as #CIRC errors. Emit a
         // diagnostic for every cycle cell.
         for &cell_id in &cycle_cells {
-            let computed = mirror
+            let computed = cell_store
                 .get_cell_value(&cell_id)
                 .cloned()
                 .unwrap_or(CellValue::Null);
@@ -230,14 +230,15 @@ impl ComputeCore {
             } else {
                 computed
             };
-            if let Some(sid) = self.find_sheet_for_cell(mirror, &cell_id) {
+            if let Some(sid) = self.find_sheet_for_cell(cell_store, &cell_id) {
                 errors.push(CellErrorInfo {
                     cell_id: cell_id.to_uuid_string(),
                     sheet_id: sid.to_uuid_string(),
                     error: "Circular reference detected".to_string(),
                 });
             }
-            if let Some((_sid, change)) = self.make_cell_change(mirror, &cell_id, &final_value) {
+            if let Some((_sid, change)) = self.make_cell_change(cell_store, &cell_id, &final_value)
+            {
                 changed_cells.push(change);
             }
         }
@@ -255,12 +256,12 @@ impl ComputeCore {
         compute_functions::helpers::column_index::clear();
         compute_functions::helpers::sumifs_result_cache::clear();
         crate::eval::cache::subexpr_cache::clear();
-        crate::mirror::clear_caches();
+        crate::cells::clear_caches();
 
         if !cycle_dependents.is_empty() {
             let (dep_changes, dep_projections, dep_errors, dep_proj_deltas, dep_nested_cycles) =
                 self.topo_evaluate_pass(
-                    mirror,
+                    cell_store,
                     &cycle_dependents,
                     deadline,
                     &mut epoch_range_store,
@@ -288,12 +289,12 @@ impl ComputeCore {
                         cycle_cell_set.insert(c);
                     }
                     for &cell_id in &extra {
-                        let current = mirror
+                        let current = cell_store
                             .get_cell_value(&cell_id)
                             .cloned()
                             .unwrap_or(CellValue::Null);
                         if matches!(current, CellValue::Null) {
-                            mirror.set_value_mut(&cell_id, CellValue::number(0.0));
+                            cell_store.set_value_mut(&cell_id, CellValue::number(0.0));
                         }
                     }
                     let all_cycle_cells: Vec<CellId> = cycle_cell_set.iter().copied().collect();
@@ -303,18 +304,21 @@ impl ComputeCore {
                             &cycle_cell_set,
                             &cycle_dependents,
                         );
-                        Self::seed_cycle_cells_for_iteration(mirror, &all_cycle_cells);
+                        Self::seed_cycle_cells_for_iteration(cell_store, &all_cycle_cells);
                         let extra_result =
-                            self.evaluate_cycles_iterative(mirror, &iteration_cells, deadline)?;
+                            self.evaluate_cycles_iterative(cell_store, &iteration_cells, deadline)?;
                         iterative_result = Some(extra_result);
                         self.replace_final_changes_for_cells(
-                            mirror,
+                            cell_store,
                             &mut changed_cells,
                             &iteration_cells,
                             &cycle_cell_set,
                         );
                     } else {
-                        Self::materialize_cycle_cells_as_circular_errors(mirror, &all_cycle_cells);
+                        Self::materialize_cycle_cells_as_circular_errors(
+                            cell_store,
+                            &all_cycle_cells,
+                        );
                     }
                 }
             }
@@ -338,7 +342,7 @@ impl ComputeCore {
         let mut merged_projection_changes = all_projection_changes;
         if !all_projection_deltas.is_empty() {
             let (stab_changes, stab_projection_changes, stab_errors) = self.projection_stabilize(
-                mirror,
+                cell_store,
                 &all_projection_deltas,
                 deadline,
                 0,
@@ -391,7 +395,7 @@ impl ComputeCore {
     /// (pass 3 dependents) already computed by the initial topo sort.
     pub(super) fn handle_cycles_with_precomputed_levels(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         predecessor_levels: Vec<Vec<CellId>>,
         cycle_cores: Vec<Vec<CellId>>,
         downstream_levels: Vec<Vec<CellId>>,
@@ -410,7 +414,7 @@ impl ComputeCore {
         let mut changed_cells = Vec::new();
         let mut errors = Vec::new();
 
-        let cycle_cells = self.local_topo_sort_cycle_cells(&*mirror, &cycle_cell_set);
+        let cycle_cells = self.local_topo_sort_cycle_cells(&*cell_store, &cycle_cell_set);
 
         #[cfg(feature = "journal")]
         {
@@ -458,7 +462,7 @@ impl ComputeCore {
         let mut all_projection_deltas = Vec::new();
 
         let predecessor_result = self.topo_evaluate_pass_with_levels(
-            mirror,
+            cell_store,
             predecessor_levels,
             deadline,
             &mut epoch_range_store,
@@ -489,21 +493,21 @@ impl ComputeCore {
         if self.iterative_calc {
             let iteration_cells =
                 self.iteration_cells_for_cycles(&cycle_cells, &cycle_cell_set, &downstream_cells);
-            Self::seed_cycle_cells_for_iteration(mirror, &cycle_cells);
+            Self::seed_cycle_cells_for_iteration(cell_store, &cycle_cells);
             iterative_result =
-                Some(self.evaluate_cycles_iterative(mirror, &iteration_cells, deadline)?);
+                Some(self.evaluate_cycles_iterative(cell_store, &iteration_cells, deadline)?);
             self.replace_final_changes_for_cells(
-                mirror,
+                cell_store,
                 &mut changed_cells,
                 &iteration_cells,
                 &cycle_cell_set,
             );
         } else {
-            Self::materialize_blank_cycle_cells_as_circular_errors(mirror, &cycle_cells);
+            Self::materialize_blank_cycle_cells_as_circular_errors(cell_store, &cycle_cells);
         }
 
         for &cell_id in &cycle_cells {
-            let computed = mirror
+            let computed = cell_store
                 .get_cell_value(&cell_id)
                 .cloned()
                 .unwrap_or(CellValue::Null);
@@ -512,14 +516,15 @@ impl ComputeCore {
             } else {
                 computed
             };
-            if let Some(sid) = self.find_sheet_for_cell(mirror, &cell_id) {
+            if let Some(sid) = self.find_sheet_for_cell(cell_store, &cell_id) {
                 errors.push(CellErrorInfo {
                     cell_id: cell_id.to_uuid_string(),
                     sheet_id: sid.to_uuid_string(),
                     error: "Circular reference detected".to_string(),
                 });
             }
-            if let Some((_sid, change)) = self.make_cell_change(mirror, &cell_id, &final_value) {
+            if let Some((_sid, change)) = self.make_cell_change(cell_store, &cell_id, &final_value)
+            {
                 changed_cells.push(change);
             }
         }
@@ -531,7 +536,7 @@ impl ComputeCore {
 
         if !downstream_levels.is_empty() {
             let downstream_result = self.topo_evaluate_pass_with_levels(
-                mirror,
+                cell_store,
                 downstream_levels,
                 deadline,
                 &mut epoch_range_store,
@@ -572,7 +577,7 @@ impl ComputeCore {
                 idx
             };
             let (fixup_changes, fixup_proj, fixup_errors) = self.selective_dep_fixup_pass(
-                mirror,
+                cell_store,
                 &mut epoch_range_store,
                 &mut cycle_metrics,
                 None,
@@ -587,7 +592,7 @@ impl ComputeCore {
         let mut merged_projection_changes = all_projection_changes;
         if !all_projection_deltas.is_empty() {
             let (stab_changes, stab_projection_changes, stab_errors) = self.projection_stabilize(
-                mirror,
+                cell_store,
                 &all_projection_deltas,
                 deadline,
                 0,
@@ -629,49 +634,52 @@ impl ComputeCore {
         })
     }
 
-    fn seed_cycle_cells_for_iteration(mirror: &mut CellMirror, cycle_cells: &[CellId]) {
+    fn seed_cycle_cells_for_iteration(cell_store: &mut CellStore, cycle_cells: &[CellId]) {
         for &cell_id in cycle_cells {
-            let current = mirror
+            let current = cell_store
                 .get_cell_value(&cell_id)
                 .cloned()
                 .unwrap_or(CellValue::Null);
             let should_reset = matches!(current, CellValue::Null | CellValue::Error(_, _))
                 || matches!(&current, CellValue::Text(_) | CellValue::Boolean(_));
             if should_reset {
-                mirror.set_value_mut(&cell_id, CellValue::number(0.0));
+                cell_store.set_value_mut(&cell_id, CellValue::number(0.0));
             }
         }
     }
 
     fn materialize_blank_cycle_cells_as_circular_errors(
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         cycle_cells: &[CellId],
     ) {
         for &cell_id in cycle_cells {
-            let current = mirror
+            let current = cell_store
                 .get_cell_value(&cell_id)
                 .cloned()
                 .unwrap_or(CellValue::Null);
             if matches!(current, CellValue::Null) {
-                mirror.set_value_mut(&cell_id, CellValue::Error(CellError::Circ, None));
+                cell_store.set_value_mut(&cell_id, CellValue::Error(CellError::Circ, None));
             }
         }
     }
 
-    fn materialize_cycle_cells_as_circular_errors(mirror: &mut CellMirror, cycle_cells: &[CellId]) {
+    fn materialize_cycle_cells_as_circular_errors(
+        cell_store: &mut CellStore,
+        cycle_cells: &[CellId],
+    ) {
         for &cell_id in cycle_cells {
-            mirror.set_value_mut(&cell_id, CellValue::Error(CellError::Circ, None));
+            cell_store.set_value_mut(&cell_id, CellValue::Error(CellError::Circ, None));
         }
     }
 
-    fn seed_error_cells_for_iteration(mirror: &mut CellMirror, cycle_cells: &[CellId]) {
+    fn seed_error_cells_for_iteration(cell_store: &mut CellStore, cycle_cells: &[CellId]) {
         for &cell_id in cycle_cells {
-            let current = mirror
+            let current = cell_store
                 .get_cell_value(&cell_id)
                 .cloned()
                 .unwrap_or(CellValue::Null);
             if matches!(current, CellValue::Error(_, _)) {
-                mirror.set_value_mut(&cell_id, CellValue::number(0.0));
+                cell_store.set_value_mut(&cell_id, CellValue::number(0.0));
             }
         }
     }
@@ -689,7 +697,7 @@ impl ComputeCore {
     /// cycle core) are appended in sheet-tab order as a fallback.
     fn local_topo_sort_cycle_cells(
         &self,
-        mirror: &CellMirror,
+        cell_store: &CellStore,
         cycle_cell_set: &FxHashSet<CellId>,
     ) -> Vec<CellId> {
         use std::collections::VecDeque;
@@ -736,7 +744,7 @@ impl ComputeCore {
             .filter(|(_, deg)| **deg == 0)
             .map(|(&cell, _)| cell)
             .collect();
-        self.sort_cells_by_tab_order(mirror, &mut zero_deg);
+        self.sort_cells_by_tab_order(cell_store, &mut zero_deg);
         for cell in zero_deg {
             queue.push_back(cell);
         }
@@ -757,7 +765,7 @@ impl ComputeCore {
                     }
                 }
                 if newly_ready.len() > 1 {
-                    self.sort_cells_by_tab_order(mirror, &mut newly_ready);
+                    self.sort_cells_by_tab_order(cell_store, &mut newly_ready);
                 }
                 for cell in newly_ready {
                     queue.push_back(cell);
@@ -773,7 +781,7 @@ impl ComputeCore {
                 .filter(|(_, deg)| **deg > 0)
                 .map(|(&cell, _)| cell)
                 .collect();
-            self.sort_cells_by_tab_order(mirror, &mut remaining);
+            self.sort_cells_by_tab_order(cell_store, &mut remaining);
             result.extend(remaining);
         }
 
@@ -781,19 +789,19 @@ impl ComputeCore {
     }
 
     /// Sort cells by (sheet_tab_index, row, col) for deterministic ordering.
-    fn sort_cells_by_tab_order(&self, mirror: &CellMirror, cells: &mut [CellId]) {
+    fn sort_cells_by_tab_order(&self, cell_store: &CellStore, cells: &mut [CellId]) {
         let sheet_order_ref = &self.sheet_order;
         cells.sort_by(|a, b| {
-            let pos_a = mirror
+            let pos_a = cell_store
                 .sheet_for_cell(a)
-                .and_then(|sid| mirror.get_sheet(&sid).map(|sh| (sid, sh)))
+                .and_then(|sid| cell_store.get_sheet(&sid).map(|sh| (sid, sh)))
                 .and_then(|(sid, sh)| {
                     let tab_idx = sheet_order_ref.get(&sid).copied().unwrap_or(usize::MAX);
                     sh.position_of(a).map(|p| (tab_idx, p.row(), p.col()))
                 });
-            let pos_b = mirror
+            let pos_b = cell_store
                 .sheet_for_cell(b)
-                .and_then(|sid| mirror.get_sheet(&sid).map(|sh| (sid, sh)))
+                .and_then(|sid| cell_store.get_sheet(&sid).map(|sh| (sid, sh)))
                 .and_then(|(sid, sh)| {
                     let tab_idx = sheet_order_ref.get(&sid).copied().unwrap_or(usize::MAX);
                     sh.position_of(b).map(|p| (tab_idx, p.row(), p.col()))
@@ -815,7 +823,7 @@ impl ComputeCore {
     /// early when values stop changing.
     fn evaluate_cycles_iterative(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         cycle_cells: &[CellId],
         _deadline: &super::recalc::Deadline,
     ) -> Result<IterativeResult, ComputeError> {
@@ -846,9 +854,9 @@ impl ComputeCore {
             compute_functions::helpers::column_index::clear();
             compute_functions::helpers::sumifs_result_cache::clear();
             crate::eval::cache::subexpr_cache::clear();
-            crate::mirror::clear_caches();
+            crate::cells::clear_caches();
 
-            Self::seed_error_cells_for_iteration(mirror, cycle_cells);
+            Self::seed_error_cells_for_iteration(cell_store, cycle_cells);
 
             let mut max_delta: f64 = 0.0;
 
@@ -858,17 +866,17 @@ impl ComputeCore {
                     None => continue,
                 };
 
-                let sheet_id = match self.find_sheet_for_cell(mirror, &cell_id) {
+                let sheet_id = match self.find_sheet_for_cell(cell_store, &cell_id) {
                     Some(sid) => sid,
                     None => continue,
                 };
 
-                let old_value = mirror
+                let old_value = cell_store
                     .get_cell_value(&cell_id)
                     .cloned()
                     .unwrap_or(CellValue::Null);
 
-                let mut ctx = MirrorContext::new(mirror, cell_id, sheet_id)
+                let mut ctx = EvalContext::new(cell_store, cell_id, sheet_id)
                     .with_sumifs_cache_epoch(self.current_sumifs_cache_epoch());
                 ctx.access.formula_text_provider = self.formula_text_provider();
                 #[cfg(feature = "native")]
@@ -906,7 +914,7 @@ impl ComputeCore {
                     max_delta = delta;
                 }
 
-                mirror.set_value_mut(&cell_id, new_value);
+                cell_store.set_value_mut(&cell_id, new_value);
             }
 
             // Plateau detection — only trigger when delta is already small

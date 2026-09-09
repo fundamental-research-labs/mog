@@ -1,7 +1,7 @@
 use cell_types::{CellId, SheetId};
 use value_types::{CellValue, ComputeError};
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::snapshot::RecalcResult;
 use crate::storage::engine::mutation::CellInput;
 use crate::storage::engine::stores::EngineStores;
@@ -14,7 +14,7 @@ use super::set_cells::mutation_set_cells;
 
 pub(in crate::storage::engine) fn mutation_set_cells_by_position(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     edits: Vec<(SheetId, u32, u32, CellInput)>,
     skip_cycle_check: bool,
 ) -> Result<RecalcResult, ComputeError> {
@@ -29,20 +29,19 @@ pub(in crate::storage::engine) fn mutation_set_cells_by_position(
     for (sheet_id, row, col, input) in edits {
         if input.is_clear_intent() {
             // Clear cell — only process if cell exists (no CellId allocation for no-ops).
-            // Use mirror-aware lookup so Range-resident virtual CellIds are found.
-            if let Some(cell_id) = super::super::super::cell_editing::find_cell_id_at_mirrored(
-                stores, mirror, &sheet_id, row, col,
-            ) {
+            // Use cell_store-aware lookup so Range-resident virtual CellIds are found.
+            if let Some(cell_id) =
+                super::super::super::cell_editing::find_cell_id_at(cell_store, &sheet_id, row, col)
+            {
                 resolved.push((sheet_id, cell_id, row, col, input));
             }
         } else {
             // Set cell value — allocate a CellId if needed.
-            // Use mirror-aware lookup so Range-resident positions get
+            // Use cell_store-aware lookup so Range-resident positions get
             // their deterministic virtual CellId instead of a random one.
-            let cell_id = super::super::super::cell_editing::find_cell_id_at_mirrored(
-                stores, mirror, &sheet_id, row, col,
-            )
-            .unwrap_or_else(|| stores.grid_id_alloc.next_cell_id());
+            let cell_id =
+                super::super::super::cell_editing::find_cell_id_at(cell_store, &sheet_id, row, col)
+                    .unwrap_or_else(|| stores.grid_id_alloc.next_cell_id());
             resolved.push((sheet_id, cell_id, row, col, input));
         }
     }
@@ -53,9 +52,9 @@ pub(in crate::storage::engine) fn mutation_set_cells_by_position(
 
     stores
         .compute
-        .validate_region_partial_writes(mirror, &resolved)?;
+        .validate_region_partial_writes(cell_store, &resolved)?;
 
-    mutation_set_cells(stores, mirror, resolved, skip_cycle_check)
+    mutation_set_cells(stores, cell_store, resolved, skip_cycle_check)
 }
 
 // ---------------------------------------------------------------------------
@@ -72,7 +71,7 @@ pub(in crate::storage::engine) fn mutation_set_cells_by_position(
 /// coerces to numbers/booleans.
 pub(in crate::storage::engine) fn mutation_set_cells_by_position_raw(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     edits: Vec<(SheetId, u32, u32, CellValue, Option<String>)>,
     skip_cycle_check: bool,
 ) -> Result<RecalcResult, ComputeError> {
@@ -88,19 +87,18 @@ pub(in crate::storage::engine) fn mutation_set_cells_by_position_raw(
     for (sheet_id, row, col, value, formula) in edits {
         // "Clear" semantics: value=Null + formula=None. Only process if the
         // cell already exists — skip clearing phantom cells.
-        // Use mirror-aware lookup so Range-resident virtual CellIds are found.
+        // Use cell_store-aware lookup so Range-resident virtual CellIds are found.
         let is_clear = matches!(value, CellValue::Null) && formula.is_none();
         if is_clear {
-            if let Some(cell_id) = super::super::super::cell_editing::find_cell_id_at_mirrored(
-                stores, mirror, &sheet_id, row, col,
-            ) {
+            if let Some(cell_id) =
+                super::super::super::cell_editing::find_cell_id_at(cell_store, &sheet_id, row, col)
+            {
                 resolved.push((sheet_id, cell_id, row, col, value, formula));
             }
         } else {
-            let cell_id = super::super::super::cell_editing::find_cell_id_at_mirrored(
-                stores, mirror, &sheet_id, row, col,
-            )
-            .unwrap_or_else(|| stores.grid_id_alloc.next_cell_id());
+            let cell_id =
+                super::super::super::cell_editing::find_cell_id_at(cell_store, &sheet_id, row, col)
+                    .unwrap_or_else(|| stores.grid_id_alloc.next_cell_id());
             resolved.push((sheet_id, cell_id, row, col, value, formula));
         }
     }
@@ -109,5 +107,5 @@ pub(in crate::storage::engine) fn mutation_set_cells_by_position_raw(
         return Ok(RecalcResult::empty());
     }
 
-    mutation_set_cells_raw(stores, mirror, resolved, skip_cycle_check)
+    mutation_set_cells_raw(stores, cell_store, resolved, skip_cycle_check)
 }

@@ -7,8 +7,8 @@ use super::*;
 #[test]
 fn test_add_sheet_extends_sheet_order() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, basic_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, basic_snapshot())
         .unwrap();
 
     // Initial snapshot has exactly one sheet (sid(1)).
@@ -26,7 +26,7 @@ fn test_add_sheet_extends_sheet_order() {
         cells: vec![],
         ranges: vec![],
     };
-    core.add_sheet(&mut mirror, new_sheet).unwrap();
+    core.add_sheet(&mut cell_store, new_sheet).unwrap();
 
     assert_eq!(
         core.sheet_order.len(),
@@ -53,8 +53,8 @@ fn test_add_sheet_extends_sheet_order() {
 #[test]
 fn test_drain_spill_blockers_for_region_unblocks_merge_fallback() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, basic_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, basic_snapshot())
         .unwrap();
 
     let sheet_id = sid(1);
@@ -72,7 +72,7 @@ fn test_drain_spill_blockers_for_region_unblocks_merge_fallback() {
     // region is (5,0)..=(7,0)), so without the merge-fallback clause
     // this entry would stay stuck forever and the formula would remain
     // permanently #SPILL!.
-    let unblocked = core.drain_spill_blockers_for_region(&mirror, &sheet_id, 5, 0, 7, 0);
+    let unblocked = core.drain_spill_blockers_for_region(&cell_store, &sheet_id, 5, 0, 7, 0);
 
     assert_eq!(
         unblocked,
@@ -89,8 +89,8 @@ fn test_drain_spill_blockers_for_region_unblocks_merge_fallback() {
 #[test]
 fn test_drain_spill_blockers_for_region_keeps_merge_fallback_other_sheet() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, basic_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, basic_snapshot())
         .unwrap();
 
     let sheet_id_a = sid(1);
@@ -116,13 +116,13 @@ fn test_drain_spill_blockers_for_region_keeps_merge_fallback_other_sheet() {
         }],
         ranges: vec![],
     };
-    core.add_sheet(&mut mirror, new_sheet).unwrap();
+    core.add_sheet(&mut cell_store, new_sheet).unwrap();
 
     let source_other = cid(0x30); // Lives on Sheet2
     core.spill_blockers.insert(source_other, source_other);
 
     // Drain merges on Sheet1 — must NOT drain the Sheet2 fallback entry.
-    let unblocked = core.drain_spill_blockers_for_region(&mirror, &sheet_id_a, 0, 0, 99, 99);
+    let unblocked = core.drain_spill_blockers_for_region(&cell_store, &sheet_id_a, 0, 0, 99, 99);
 
     assert!(
         unblocked.is_empty(),
@@ -137,8 +137,8 @@ fn test_drain_spill_blockers_for_region_keeps_merge_fallback_other_sheet() {
 #[test]
 fn test_remove_sheet_clears_sheet_order_entry() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, basic_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, basic_snapshot())
         .unwrap();
 
     // Add a second sheet so removing leaves one behind.
@@ -153,10 +153,10 @@ fn test_remove_sheet_clears_sheet_order_entry() {
         cells: vec![],
         ranges: vec![],
     };
-    core.add_sheet(&mut mirror, new_sheet).unwrap();
+    core.add_sheet(&mut cell_store, new_sheet).unwrap();
     assert_eq!(core.sheet_order.len(), 2);
 
-    core.remove_sheet(&mut mirror, &sid(2)).unwrap();
+    core.remove_sheet(&mut cell_store, &sid(2)).unwrap();
 
     assert_eq!(
         core.sheet_order.len(),

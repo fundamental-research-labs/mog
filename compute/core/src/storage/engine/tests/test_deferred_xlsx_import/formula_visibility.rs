@@ -298,7 +298,7 @@ fn deferred_xlsx_import_exposes_data_table_region_metadata_before_full_hydration
     let sheet_id = SheetId::from_uuid_str(&sheet_id_hex).unwrap();
 
     assert_eq!(
-        engine.mirror().all_data_table_regions().len(),
+        engine.cell_store().all_data_table_regions().len(),
         1,
         "deferred first-sheet snapshot must retain data table regions"
     );

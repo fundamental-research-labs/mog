@@ -1,4 +1,4 @@
-//! Group 10: Structural change viewport synchronization tests.
+//! Structural changes report events and preserve moved values and formulas.
 
 use super::super::*;
 use super::helpers::*;
@@ -6,43 +6,19 @@ use cell_types::CellId;
 use formula_types::StructureChange;
 use snapshot_types::StructureChangeType;
 use value_types::{CellError, CellValue, FiniteF64};
-
-fn patch_positions_from_packed(packed: &[u8]) -> Vec<(u32, u32)> {
-    extract_first_viewport_mutation(packed)
-        .map(|mutation_bytes| extract_patch_positions(&mutation_bytes))
-        .unwrap_or_default()
-}
-
-// -------------------------------------------------------------------
-// Test: Insert column with formula -- the original bug
-// -------------------------------------------------------------------
-
-/// Structural changes report the row/column delta and leave shifted viewport
-/// buffers to the bridge-level force refresh. Formula/value recalc patches can
-/// still be emitted, but they must not expand to every registered viewport cell.
 #[test]
 fn test_structural_viewport_insert_col_formula_cell_visible() {
     let snap = simple_snapshot(); // A1=10, B1=20, A2=A1+B1
     let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
-
-    // Register a viewport covering the relevant area
     let _ = engine.register_viewport("main", &sid, 0, 0, 5, 5);
-
-    // Insert 1 column at col 1 (between A and B).
-    // A1 stays at (0,0), B1 moves to (0,2), A2 stays at (1,0)
     let change = StructureChange::InsertCols {
         at: 1,
         count: 1,
         new_col_ids: vec![],
     };
-    let (patches_packed, result) = engine.structure_change(&sid, &change).unwrap();
-    let positions = patch_positions_from_packed(&patches_packed);
+    let result = engine.structure_change(&sid, &change).unwrap();
 
-    assert!(
-        positions.len() < 36,
-        "structural edits must not emit viewport-wide synthetic patches; got {positions:?}"
-    );
     assert!(
         result.structure_changes.iter().any(|change| {
             change.sheet_id == sid.to_uuid_string()
@@ -59,10 +35,6 @@ fn test_structural_viewport_insert_col_formula_cell_visible() {
     );
 }
 
-// -------------------------------------------------------------------
-// Test: Insert rows reports structure change without viewport-wide patches
-// -------------------------------------------------------------------
-
 #[test]
 fn test_structural_viewport_insert_rows() {
     let snap = simple_snapshot();
@@ -76,13 +48,8 @@ fn test_structural_viewport_insert_rows() {
         count: 1,
         new_row_ids: vec![],
     };
-    let (patches_packed, result) = engine.structure_change(&sid, &change).unwrap();
-    let positions = patch_positions_from_packed(&patches_packed);
+    let result = engine.structure_change(&sid, &change).unwrap();
 
-    assert!(
-        positions.len() < 12,
-        "insert rows must not emit viewport-wide synthetic patches; got {positions:?}"
-    );
     assert!(
         result.structure_changes.iter().any(|change| {
             change.sheet_id == sid.to_uuid_string()
@@ -94,10 +61,6 @@ fn test_structural_viewport_insert_rows() {
     );
 }
 
-// -------------------------------------------------------------------
-// Test: Delete columns reports structure change without viewport-wide patches
-// -------------------------------------------------------------------
-
 #[test]
 fn test_structural_viewport_delete_cols() {
     let snap = simple_snapshot(); // A1=10, B1=20, A2=A1+B1
@@ -105,20 +68,13 @@ fn test_structural_viewport_delete_cols() {
     let sid = sheet_id();
 
     let _ = engine.register_viewport("main", &sid, 0, 0, 3, 3);
-
-    // Delete column 0 (A). B1 at (0,1) should move to (0,0).
     let change = StructureChange::DeleteCols {
         at: 0,
         count: 1,
         deleted_cell_ids: vec![],
     };
-    let (patches_packed, result) = engine.structure_change(&sid, &change).unwrap();
-    let positions = patch_positions_from_packed(&patches_packed);
+    let result = engine.structure_change(&sid, &change).unwrap();
 
-    assert!(
-        positions.len() < 16,
-        "delete cols must not emit viewport-wide synthetic patches; got {positions:?}"
-    );
     assert!(
         result.structure_changes.iter().any(|change| {
             change.sheet_id == sid.to_uuid_string()
@@ -135,10 +91,6 @@ fn test_structural_viewport_delete_cols() {
     );
 }
 
-// -------------------------------------------------------------------
-// Test: Delete rows reports structure change without viewport-wide patches
-// -------------------------------------------------------------------
-
 #[test]
 fn test_structural_viewport_delete_rows() {
     let snap = simple_snapshot();
@@ -146,20 +98,13 @@ fn test_structural_viewport_delete_rows() {
     let sid = sheet_id();
 
     let _ = engine.register_viewport("main", &sid, 0, 0, 3, 2);
-
-    // Delete row 0 (A1). A2 at (1,0) should move to (0,0).
     let change = StructureChange::DeleteRows {
         at: 0,
         count: 1,
         deleted_cell_ids: vec![],
     };
-    let (patches_packed, result) = engine.structure_change(&sid, &change).unwrap();
-    let positions = patch_positions_from_packed(&patches_packed);
+    let result = engine.structure_change(&sid, &change).unwrap();
 
-    assert!(
-        positions.len() < 12,
-        "delete rows must not emit viewport-wide synthetic patches; got {positions:?}"
-    );
     assert!(
         result.structure_changes.iter().any(|change| {
             change.sheet_id == sid.to_uuid_string()
@@ -171,17 +116,11 @@ fn test_structural_viewport_delete_rows() {
     );
 }
 
-// -------------------------------------------------------------------
-// Test: No viewport registered -> no structural patches (no crash)
-// -------------------------------------------------------------------
-
 #[test]
 fn test_structural_change_without_viewport_no_crash() {
     let snap = simple_snapshot();
     let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
-
-    // No viewport registered -- structural change should still work
     let change = StructureChange::InsertCols {
         at: 1,
         count: 1,

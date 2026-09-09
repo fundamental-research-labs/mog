@@ -2,7 +2,6 @@ use super::super::ComputeEngine;
 use super::super::services;
 use crate::snapshot::{MutationResult, RecalcResult};
 use cell_types::SheetId;
-use compute_wire::mutation::serialize_multi_viewport_patches;
 use value_types::{CellValue, ComputeError};
 
 impl ComputeEngine {
@@ -15,12 +14,12 @@ impl ComputeEngine {
         src_end_col: u32,
         target_row: u32,
         target_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         // Range guard: reject if the sheet is Range-backed. Relocating cells
         // on a Range-backed sheet would mint random CellIds via ensure_cell_id,
         // corrupting the virtual CellId scheme.
         if self
-            .mirror
+            .cell_store
             .get_sheet(sheet_id)
             .is_some_and(|s| !s.range_views_is_empty())
         {
@@ -35,7 +34,7 @@ impl ComputeEngine {
         //    `cell_value_to_input_string` and lose them; now it keeps them typed
         //    and we hand them off to `import_values` (lossless entry point).
         let cells_to_move = services::structural::collect_relocate_values(
-            &self.mirror,
+            &self.cell_store,
             sheet_id,
             src_start_row,
             src_start_col,
@@ -44,18 +43,19 @@ impl ComputeEngine {
         );
 
         // 2. Clear source cells.
-        let mut last_result = (
-            serialize_multi_viewport_patches(&[]),
-            MutationResult::from_recalc(RecalcResult::empty()),
-        );
+        let mut last_result = MutationResult::from_recalc(RecalcResult::empty());
         for row in src_start_row..=src_end_row {
             for col in src_start_col..=src_end_col {
-                let grid = self.stores.grid_indexes.get_mut(sheet_id).ok_or_else(|| {
-                    ComputeError::SheetNotFound {
-                        sheet_id: sheet_id.to_uuid_string(),
-                    }
+                let cell_id = services::cell_editing::ensure_cell_id(
+                    &mut self.stores,
+                    &mut self.cell_store,
+                    sheet_id,
+                    row,
+                    col,
+                )
+                .ok_or_else(|| ComputeError::SheetNotFound {
+                    sheet_id: sheet_id.to_uuid_string(),
                 })?;
-                let cell_id = grid.ensure_cell_id(row, col);
                 last_result = self.set_cell(
                     sheet_id,
                     cell_id,

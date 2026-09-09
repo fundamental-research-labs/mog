@@ -1,6 +1,7 @@
-use super::cell::get_cell_format;
+use super::cell::get_cell_format_by_id;
+use super::string_ids::get_cell_format;
 use crate::storage::WorkbookStorage;
-use cell_types::SheetId;
+use cell_types::{CellId, SheetId};
 
 /// Check if a cell is locked (for protection purposes).
 ///
@@ -17,6 +18,26 @@ pub fn is_cell_locked(storage: &WorkbookStorage, sheet_id: &SheetId, cell_id: &s
 /// Defaults to `false` -- formulas are visible unless explicitly hidden.
 pub fn is_formula_hidden(storage: &WorkbookStorage, sheet_id: &SheetId, cell_id: &str) -> bool {
     get_cell_format(storage, sheet_id, cell_id)
+        .and_then(|f| f.hidden)
+        .unwrap_or(false)
+}
+
+pub fn is_cell_locked_by_id(
+    storage: &WorkbookStorage,
+    sheet_id: &SheetId,
+    cell_id: &CellId,
+) -> bool {
+    get_cell_format_by_id(storage, sheet_id, cell_id)
+        .and_then(|f| f.locked)
+        .unwrap_or(true)
+}
+
+pub fn is_formula_hidden_by_id(
+    storage: &WorkbookStorage,
+    sheet_id: &SheetId,
+    cell_id: &CellId,
+) -> bool {
+    get_cell_format_by_id(storage, sheet_id, cell_id)
         .and_then(|f| f.hidden)
         .unwrap_or(false)
 }

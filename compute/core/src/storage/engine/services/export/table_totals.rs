@@ -2,13 +2,13 @@ use cell_types::{SheetId, SheetPos};
 use domain_types::domain::table::{TableCatalogEntry, TableSpec};
 use value_types::CellValue;
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::storage::engine::formula_read;
 use crate::storage::engine::stores::EngineStores;
 
 pub(super) fn apply_runtime_table_totals_to_spec(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     table: &TableCatalogEntry,
     spec: &mut TableSpec,
@@ -34,13 +34,13 @@ pub(super) fn apply_runtime_table_totals_to_spec(
         }
 
         let pos = SheetPos::new(totals_row, col);
-        let cell_id = mirror.resolve_cell_id(sheet_id, pos);
+        let cell_id = cell_store.resolve_cell_id(sheet_id, pos);
 
         if column.totals_row_formula.is_none()
             && column.totals_function.is_none()
             && let Some(formula) = formula_read::formula_text_at(
                 stores,
-                mirror,
+                cell_store,
                 sheet_id,
                 totals_row,
                 col,
@@ -53,7 +53,7 @@ pub(super) fn apply_runtime_table_totals_to_spec(
         if column.totals_label.is_none()
             && column.totals_row_formula.is_none()
             && column.totals_function.is_none()
-            && let Some(CellValue::Text(text)) = mirror.get_cell_value_at(sheet_id, pos)
+            && let Some(CellValue::Text(text)) = cell_store.get_cell_value_at(sheet_id, pos)
         {
             let label = text.trim();
             if !label.is_empty() {

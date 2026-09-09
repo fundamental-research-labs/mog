@@ -1,4 +1,4 @@
-use crate::identity::GridIndex;
+use crate::cells::SheetStore;
 use cell_types::CellId;
 use compute_document::hex::id_to_hex;
 use domain_types::domain::merge::{IdentityMergedRegion, ResolvedMergedRegion};
@@ -17,7 +17,7 @@ impl StoredMerge {
             bottom_right_id: id_to_hex(self.bottom_right_id.as_u128()).to_string(),
         }
     }
-    pub fn resolve(&self, grid: &GridIndex) -> Option<ResolvedMergedRegion> {
+    pub fn resolve(&self, grid: &SheetStore) -> Option<ResolvedMergedRegion> {
         let (sr, sc) = grid.cell_position(&self.top_left_id)?;
         let (er, ec) = grid.cell_position(&self.bottom_right_id)?;
         if sr > er || sc > ec || (sr == er && sc == ec) {

@@ -1,13 +1,10 @@
-//! Viewport module — consolidated viewport rendering, registration, patches,
-//! and service logic for `ComputeEngine`.
+//! Explicit viewport rendering, registration, and query services for `ComputeEngine`.
 
 mod functions;
-mod patches;
 mod registry;
 mod render;
 pub(crate) mod service;
 
-// Re-export render helper used by other engine modules
 // Re-export CF merge helpers used by formatting endpoints and the viewport pipeline.
 pub(crate) use functions::{apply_cf_to_format, apply_number_format_color, merge_cf_into_format};
 
@@ -36,7 +33,7 @@ impl ComputeEngine {
         let is_sheet_protected = self.is_sheet_protected(sheet_id);
         functions::get_active_cell(
             &self.stores,
-            &self.mirror,
+            &self.cell_store,
             &self.settings,
             sheet_id,
             cell_id,
@@ -62,14 +59,14 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         ranges: &[(u32, u32, u32, u32)], // Vec of (start_row, start_col, end_row, end_col)
     ) -> SelectionAggregates {
-        let mirror = &self.mirror;
+        let cell_store = &self.cell_store;
         let mut sum = 0.0_f64;
         let mut count = 0_u64;
         let mut numeric_count = 0_u64;
         let mut min = f64::INFINITY;
         let mut max = f64::NEG_INFINITY;
 
-        if let Some(grid) = self.stores.grid_indexes.get(sheet_id) {
+        if let Some(grid) = self.cell_store.get_sheet(sheet_id) {
             // Build merge child→origin lookup for aggregation
             let merge_origins: std::collections::HashMap<(u32, u32), (u32, u32)> = {
                 let all_merges = merges::get_all_merges(&self.stores.storage, *sheet_id, grid);
@@ -95,16 +92,20 @@ impl ComputeEngine {
                             continue;
                         }
 
-                        if let Some(cell_id) = grid.cell_id_at(row, col) {
-                            // ComputeCore-first value read, mirror fallback (zero-clone)
-                            let mirror_val;
-                            let value: &CellValue = if let Some(v) =
-                                self.stores.compute.get_cell_value(&self.mirror, &cell_id)
+                        if let Some(cell_id) = cell_store
+                            .resolve_cell_id(sheet_id, cell_types::SheetPos::new(row, col))
+                        {
+                            // ComputeCore-first value read, cell_store fallback (zero-clone)
+                            let store_val;
+                            let value: &CellValue = if let Some(v) = self
+                                .stores
+                                .compute
+                                .get_cell_value(&self.cell_store, &cell_id)
                             {
                                 v
                             } else {
-                                mirror_val = mirror.get_cell_value_in_sheet(sheet_id, &cell_id);
-                                match mirror_val {
+                                store_val = cell_store.get_cell_value_in_sheet(sheet_id, &cell_id);
+                                match store_val {
                                     Some(v) => v,
                                     None => &CellValue::Null,
                                 }
@@ -389,13 +390,10 @@ impl ComputeEngine {
     pub fn reset_viewport_state(
         &mut self,
         sheet_id: &SheetId,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.without_history(|engine| {
             let result = functions::reset_viewport_state(&engine.viewport, sheet_id)?;
-            Ok((
-                compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-                result,
-            ))
+            Ok(result)
         })
     }
 }

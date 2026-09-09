@@ -259,7 +259,7 @@ fn snapshot_with_reference_bearing_defined_name_recalculates_formula_dependents(
     let (engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     assert_eq!(
-        engine.mirror().get_cell_value(&formula_cell),
+        engine.cell_store().get_cell_value(&formula_cell),
         Some(&CellValue::Number(FiniteF64::must(30.0))),
         "snapshot init should evaluate formulas against reference-bearing named ranges"
     );
@@ -288,7 +288,7 @@ fn snapshot_with_raw_a1_defined_name_exposes_backing_cell_dependencies() {
     let sheet_id = SheetId::from_uuid_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
 
     assert_eq!(
-        engine.mirror().get_cell_value(&formula_cell),
+        engine.cell_store().get_cell_value(&formula_cell),
         Some(&CellValue::Number(FiniteF64::must(60.0))),
         "raw-A1 defined names should still evaluate during snapshot init"
     );
@@ -431,7 +431,7 @@ fn named_range_rename_preserves_scope_and_incremental_dependencies() {
         .unwrap();
     assert_eq!(cell_value_at(&engine, &first, 1, 0), num(16.0));
     assert_eq!(cell_value_at(&engine, &second, 1, 0), num(201.0));
-    let rebuilt = construction::build_workbook_snapshot(&engine.stores, &engine.mirror);
+    let rebuilt = construction::build_workbook_snapshot(&engine.stores, &engine.cell_store);
     assert_eq!(rebuilt.named_ranges.len(), 2);
     let (reloaded, _) = ComputeEngine::from_snapshot(rebuilt).unwrap();
     assert_eq!(cell_value_at(&reloaded, &first, 1, 0), num(16.0));

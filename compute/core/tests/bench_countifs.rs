@@ -12,7 +12,7 @@
 
 #![cfg(feature = "perf-tests")]
 
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
 use std::time::Instant;
@@ -164,10 +164,10 @@ fn bench_countifs_full_column() {
 
     // Init ComputeCore (parse + full recalc)
     let t1 = Instant::now();
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init_from_snapshot failed");
     let init_ms = t1.elapsed().as_millis();
 
@@ -205,10 +205,10 @@ fn bench_countifs_small() {
     let snapshot = build_snapshot(data_rows, formula_count);
 
     let t1 = Instant::now();
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     let init_ms = t1.elapsed().as_millis();
 
@@ -332,10 +332,10 @@ fn bench_sumifs_full_column() {
 
     println!("\n=== SUMIFS Full-Column Benchmark ===");
     let t1 = Instant::now();
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     let init_ms = t1.elapsed().as_millis();
 

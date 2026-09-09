@@ -63,7 +63,7 @@ fn cell_value_at(engine: &ComputeEngine, sheet_id: &SheetId, row: u32, col: u32)
     // Position-based lookup — after relocate or paste, the cell at (row, col)
     // may have a cell_id that differs from the seed uuid.
     engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(sheet_id, cell_types::SheetPos::new(row, col))
         .cloned()
         .unwrap_or(CellValue::Null)
@@ -79,7 +79,7 @@ fn ref_error() -> CellValue {
 
 fn two_by_two_array() -> CellValue {
     // Simulate an already-spilled 2x2 array value. Array cells don't arise
-    // from user typing, but they can sit in the mirror as formula outputs —
+    // from user typing, but they can sit in the cell store as formula outputs —
     // the write path must not flatten them to Null on sync.
     let rows = vec![
         vec![CellValue::number(1.0), CellValue::number(2.0)],

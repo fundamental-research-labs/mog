@@ -113,7 +113,7 @@ csv-parser = { path = "../../file-io/csv-parser" }
 # Wire format types and binary serialization (viewport/mutation protocols)
 compute-wire = { path = "crates/compute-wire" }
 
-# Spatial layout index (Fenwick tree over dimension deltas for O(log k) cell-to-pixel mapping)
+# Sparse pixel layout (derived dimension prefixes, allocated on demand)
 compute-layout-index = { path = "crates/compute-layout-index" }
 
 # Text measurement engine (rustybuzz-based text shaping for autofit, PDF export)

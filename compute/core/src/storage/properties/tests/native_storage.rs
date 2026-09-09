@@ -2,6 +2,100 @@ use super::support::*;
 use super::*;
 
 #[test]
+fn typed_properties_preserve_full_width_ids_and_shared_style_metadata() {
+    let (mut storage, sid, _) = storage_with_sheet();
+    insert_style_palette_entry(
+        &mut storage,
+        3,
+        &CellFormat {
+            bold: Some(true),
+            ..Default::default()
+        },
+    );
+    for raw in [0, u128::MAX, 0x123456789abcdef0123456789abcdef0] {
+        let id = cell_types::CellId::from_raw(raw);
+        let props = CellProperties {
+            style_id: Some(3),
+            original_sst_index: Some(7),
+            original_value: Some("shared value".into()),
+            ..Default::default()
+        };
+        set_properties_by_id(&mut storage, &sid, &id, &props);
+        let mut expected = props.clone();
+        expected.format = Some(CellFormat {
+            bold: Some(true),
+            ..Default::default()
+        });
+        assert_eq!(
+            get_properties_by_id(&storage, &sid, &id),
+            Some(expected.clone())
+        );
+        assert_eq!(
+            get_properties(&storage, &sid, &id_to_hex(raw)),
+            Some(expected)
+        );
+        clear_cell_format_by_id(&mut storage, &sid, &id);
+        let remaining = get_properties_by_id(&storage, &sid, &id).unwrap();
+        assert!(remaining.format.is_none());
+        assert_eq!(remaining.original_value, props.original_value);
+        clear_properties_by_id(&mut storage, &sid, &id);
+        assert!(get_properties_by_id(&storage, &sid, &id).is_none());
+    }
+}
+
+#[test]
+fn typed_bulk_format_patch_validates_before_mutating_and_keeps_metadata() {
+    let (mut storage, sid, _) = storage_with_sheet();
+    let ids = [
+        cell_types::CellId::from_raw(1),
+        cell_types::CellId::from_raw(u128::MAX),
+    ];
+    for id in &ids {
+        set_properties_by_id(
+            &mut storage,
+            &sid,
+            id,
+            &CellProperties {
+                original_value: Some("preserved".into()),
+                ..Default::default()
+            },
+        );
+    }
+    let before = get_all_properties(&storage, &sid);
+    let format = CellFormat {
+        bold: Some(true),
+        ..Default::default()
+    };
+    assert!(
+        patch_cell_formats_by_id(&mut storage, &sid, &ids, &format, &["invalidField".into()])
+            .is_err()
+    );
+    assert_eq!(get_all_properties(&storage, &sid), before);
+    let invalid_fields = ["invalidField".into()];
+    assert!(patch_cell_formats(&mut storage, &sid, &[], &format, &invalid_fields).is_ok());
+    for string_ids in [vec!["invalid-id"], vec!["1", "invalid-id"]] {
+        assert!(
+            patch_cell_formats(&mut storage, &sid, &string_ids, &format, &invalid_fields).is_err()
+        );
+        assert_eq!(get_all_properties(&storage, &sid), before);
+    }
+    patch_cell_formats(&mut storage, &sid, &["invalid-id", "1"], &format, &[]).unwrap();
+    assert_eq!(
+        get_cell_format_by_id(&storage, &sid, &ids[0]).unwrap().bold,
+        Some(true)
+    );
+    assert!(get_cell_format_by_id(&storage, &sid, &ids[1]).is_none());
+    patch_cell_formats_by_id(&mut storage, &sid, &ids, &format, &[]).unwrap();
+    for id in &ids {
+        let props = get_properties_by_id(&storage, &sid, id).unwrap();
+        assert_eq!(props.format.unwrap().bold, Some(true));
+        assert_eq!(props.original_value.as_deref(), Some("preserved"));
+    }
+    clear_cell_formats_by_id(&mut storage, &sid, &ids);
+    assert_eq!(get_all_properties(&storage, &sid), before);
+}
+
+#[test]
 fn test_get_all_properties_resolves_shared_styles_and_metadata() {
     let (mut storage, sid, _gi) = storage_with_sheet();
     let styled_cell = cell_types::CellId::from_raw(0x100);

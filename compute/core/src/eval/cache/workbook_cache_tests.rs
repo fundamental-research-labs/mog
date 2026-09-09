@@ -1,20 +1,20 @@
 use super::*;
+use crate::cells::{CellStore, SheetStore};
 use crate::eval::context::traits::EvalMetadata;
-use crate::eval_bridge::{MirrorContext, OverrideContext};
-use crate::mirror::{CellMirror, SheetMirror};
+use crate::eval_bridge::{EvalContext, OverrideContext};
 use cell_types::{CellId, SheetPos};
 use std::cell::{Cell, RefCell};
 
-fn fixture() -> (CellMirror, SheetId) {
-    let mut mirror = CellMirror::new();
+fn fixture() -> (CellStore, SheetId) {
+    let mut cell_store = CellStore::new();
     let sheet = SheetId::from_raw(1);
-    mirror.add_sheet_mirror(
+    cell_store.add_sheet_store(
         sheet,
         "Sheet1".into(),
-        SheetMirror::new(sheet, "Sheet1".into(), 10, 2),
+        SheetStore::new(sheet, "Sheet1".into(), 10, 2),
     );
     for (row, value) in [1.0, 2.0, 1.0, 2.0].into_iter().enumerate() {
-        mirror.apply_edit(
+        cell_store.apply_edit(
             &sheet,
             CellId::from_raw(row as u128 + 100),
             SheetPos::new(row as u32, 0),
@@ -22,7 +22,7 @@ fn fixture() -> (CellMirror, SheetId) {
             None,
         );
     }
-    (mirror, sheet)
+    (cell_store, sheet)
 }
 
 #[test]
@@ -40,7 +40,7 @@ fn native_bitmask_cache_borrows_on_miss_and_refreshes_versions_and_collisions() 
             self.values.get(row)
         }
     }
-    let (mut mirror, sheet) = fixture();
+    let (mut cell_store, sheet) = fixture();
     let cache = WorkbookCache::new();
     let values = [
         CellValue::number(1.0),
@@ -55,7 +55,7 @@ fn native_bitmask_cache_borrows_on_miss_and_refreshes_versions_and_collisions() 
     let criterion = CellValue::number(1.0);
     for _ in 0..3 {
         let mask = cache
-            .get_or_build_bitmask(key, &mirror, &criterion, &counted)
+            .get_or_build_bitmask(key, &cell_store, &criterion, &counted)
             .unwrap();
         assert_eq!(mask.ones().collect::<Vec<_>>(), vec![0, 2]);
         assert_eq!(counted.reads.get(), 3, "cache hit reread native values");
@@ -71,21 +71,21 @@ fn native_bitmask_cache_borrows_on_miss_and_refreshes_versions_and_collisions() 
     );
     // A forced hash collision must compare the raw criterion and rebuild.
     let other = CellValue::number(2.0);
-    assert!(cache.try_get_bitmask(&key, &mirror, &other).is_none());
+    assert!(cache.try_get_bitmask(&key, &cell_store, &other).is_none());
     let mask = cache
-        .get_or_build_bitmask(key, &mirror, &other, &counted)
+        .get_or_build_bitmask(key, &cell_store, &other, &counted)
         .unwrap();
     assert_eq!(mask.ones().collect::<Vec<_>>(), vec![1]);
     assert_eq!(counted.reads.get(), 6);
-    mirror.set_value_mut(&CellId::from_raw(100), CellValue::number(2.0));
-    assert!(cache.try_get_bitmask(&key, &mirror, &other).is_none());
+    cell_store.set_value_mut(&CellId::from_raw(100), CellValue::number(2.0));
+    assert!(cache.try_get_bitmask(&key, &cell_store, &other).is_none());
     let changed = [
         CellValue::number(2.0),
         CellValue::number(2.0),
         CellValue::number(1.0),
     ];
     let mask = cache
-        .get_or_build_bitmask(key, &mirror, &other, &changed)
+        .get_or_build_bitmask(key, &cell_store, &other, &changed)
         .unwrap();
     assert_eq!(mask.ones().collect::<Vec<_>>(), vec![0, 1]);
 }
@@ -101,12 +101,17 @@ fn native_bitmask_cache_bounds_retained_bytes_and_rejects_oversized_builds() {
             panic!("oversized mask must not scan")
         }
     }
-    let (mirror, sheet) = fixture();
+    let (cell_store, sheet) = fixture();
     let cache = WorkbookCache::new();
     let criterion = CellValue::number(1.0);
     assert!(
         cache
-            .get_or_build_bitmask((sheet, 0, 0, u32::MAX, 0), &mirror, &criterion, &Oversized)
+            .get_or_build_bitmask(
+                (sheet, 0, 0, u32::MAX, 0),
+                &cell_store,
+                &criterion,
+                &Oversized
+            )
             .is_none()
     );
     for hash in 0..64 {
@@ -118,7 +123,7 @@ fn native_bitmask_cache_bounds_retained_bytes_and_rejects_oversized_builds() {
                 criteria: criterion.clone(),
                 bitmask: mask,
             },
-            RangeVersion::capture(&mirror, &sheet, 0, 0),
+            RangeVersion::capture(&cell_store, &sheet, 0, 0),
         );
         cache.insert_bitmask((sheet, 0, 0, 7_999_999, hash), entry, bytes);
         let stats = cache.stats_snapshot();
@@ -134,17 +139,17 @@ fn native_bitmask_cache_bounds_retained_bytes_and_rejects_oversized_builds() {
 
 #[test]
 fn native_bitmask_context_uses_borrowed_window_and_bypasses_probe_overrides() {
-    let (mirror, sheet) = fixture();
+    let (cell_store, sheet) = fixture();
     let cache = WorkbookCache::new();
     let current = CellId::from_raw(100);
-    let column = mirror
+    let column = cell_store
         .get_sheet(&sheet)
         .unwrap()
         .get_column_view(0)
         .unwrap();
     let window = column.slice(1..4);
     let criterion = CellValue::number(1.0);
-    let mut context = MirrorContext::new(&mirror, current, sheet);
+    let mut context = EvalContext::new(&cell_store, current, sheet);
     context.workbook_cache = Some(&cache);
     let mask = context
         .get_or_build_criteria_bitmask(&sheet, 0, 1, 3, &criterion, window)
@@ -162,11 +167,11 @@ fn native_bitmask_context_uses_borrowed_window_and_bypasses_probe_overrides() {
             .is_none()
     );
 
-    let mut pending = MirrorContext::with_pending_override(
-        &mirror,
+    let mut pending = EvalContext::with_pending_override(
+        &cell_store,
         current,
         sheet,
-        crate::eval_bridge::mirror_access::PendingCellOverride {
+        crate::eval_bridge::store_access::PendingCellOverride {
             sheet,
             pos: SheetPos::new(1, 0),
             value: CellValue::number(1.0),
@@ -188,7 +193,7 @@ fn native_bitmask_context_uses_borrowed_window_and_bypasses_probe_overrides() {
     let eval_cache = RefCell::new(rustc_hash::FxHashMap::default());
     let evaluating = RefCell::new(rustc_hash::FxHashSet::default());
     let probe = OverrideContext::new(
-        &mirror,
+        &cell_store,
         current,
         sheet,
         &overrides,

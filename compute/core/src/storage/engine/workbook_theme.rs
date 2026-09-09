@@ -27,20 +27,14 @@ impl ComputeEngine {
 
     /// Update the cached locale when the workbook culture changes.
     #[bridge::write(scope = "workbook")]
-    pub fn set_culture(
-        &mut self,
-        culture: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    pub fn set_culture(&mut self, culture: &str) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             capture_workbook_field!(engine.stores.storage, settings.culture);
             engine.stores.storage.metadata.settings.culture = culture.to_owned();
             engine.settings.locale = compute_formats::get_culture(culture);
             // Locale affects date/number parsing — safest to require a fresh recalc.
             engine.stores.compute.mark_dirty();
-            Ok((
-                compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-                MutationResult::empty(),
-            ))
+            Ok(MutationResult::empty())
         })
     }
 
@@ -67,7 +61,7 @@ impl ComputeEngine {
     pub fn set_workbook_theme(
         &mut self,
         theme: domain_types::domain::theme::ThemeData,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             capture_workbook_field!(engine.stores.storage, theme);
             engine.stores.storage.metadata.theme = Some(theme);
@@ -84,10 +78,7 @@ impl ComputeEngine {
             // 4. Invalidate viewport format palettes (stale theme-resolved colors)
             engine.viewport.clear_all_palettes();
 
-            Ok((
-                compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-                MutationResult::empty(),
-            ))
+            Ok(MutationResult::empty())
         })
     }
 

@@ -4,7 +4,7 @@
 //! `KEY_HIDDEN_COLS` maps. Outline groups (Data > Group / Outline) collapse
 //! state was tracked separately and not surfaced by the layout queries, so
 //! the renderer would paint collapsed rows at their stored height. The TS
-//! devtools API used to mirror the collapse state into a JS shim to mask
+//! devtools API used to cell_store the collapse state into a JS shim to mask
 //! this gap. The shim is now deleted; the queries themselves return 0 for
 //! rows/cols inside a collapsed outline group.
 
@@ -29,14 +29,6 @@ fn created_group_id(group_result: MutationResult) -> String {
         .id
 }
 
-fn assert_empty_viewport_patches(patches: &[u8]) {
-    assert_eq!(
-        patches,
-        &[0, 0],
-        "visibility-changing outline mutations should not duplicate the client geometry refresh"
-    );
-}
-
 #[test]
 fn collapsed_outline_group_returns_zero_row_height() {
     let snap = simple_snapshot();
@@ -44,7 +36,7 @@ fn collapsed_outline_group_returns_zero_row_height() {
     let sid = sheet_id();
 
     // Group rows 2..=4 (inclusive). Three rows, default height before collapse.
-    let (_, group_result) = engine.group_rows(&sid, 2, 4).expect("group_rows");
+    let group_result = engine.group_rows(&sid, 2, 4).expect("group_rows");
     let group_id = created_group_id(group_result);
 
     // Sanity: before collapse, rows 2..=4 have non-zero height.
@@ -96,7 +88,7 @@ fn collapsed_outline_column_group_returns_zero_col_width() {
     let sid = sheet_id();
 
     // Group columns 3..=6 (inclusive).
-    let (_, group_result) = engine.group_columns(&sid, 3, 6).expect("group_columns");
+    let group_result = engine.group_columns(&sid, 3, 6).expect("group_columns");
     let group_id = created_group_id(group_result);
 
     // Before collapse: non-zero widths.
@@ -182,7 +174,7 @@ fn imported_hidden_outline_columns_expand_to_visible_columns() {
         ..Default::default()
     };
     let mut engine = engine_from_parse_output_normal(&input);
-    let sid = *engine.mirror().sheet_ids().next().expect("sheet id");
+    let sid = *engine.cell_store().sheet_ids().next().expect("sheet id");
 
     assert_eq!(engine.get_col_width_query(&sid, 3), 0.0);
     assert!(
@@ -281,7 +273,7 @@ fn imported_hidden_outline_rows_expand_to_visible_rows() {
         ..Default::default()
     };
     let mut engine = engine_from_parse_output_normal(&input);
-    let sid = *engine.mirror().sheet_ids().next().expect("sheet id");
+    let sid = *engine.cell_store().sheet_ids().next().expect("sheet id");
 
     assert_eq!(engine.get_row_height_query(&sid, 3), 0.0);
     assert!(
@@ -389,10 +381,10 @@ fn collapsed_outline_group_updates_layout_index_and_defers_viewport_refresh_rows
         .register_viewport("main", &sid, 0, 0, 8, 6)
         .expect("register viewport");
 
-    let (_, group_result) = engine.group_rows(&sid, 2, 4).expect("group_rows");
+    let group_result = engine.group_rows(&sid, 2, 4).expect("group_rows");
     let group_id = created_group_id(group_result);
 
-    let (collapse_patches, collapse_result) = engine
+    let collapse_result = engine
         .set_group_collapsed(&sid, &group_id, true)
         .expect("set_group_collapsed");
     assert_eq!(
@@ -409,7 +401,7 @@ fn collapsed_outline_group_updates_layout_index_and_defers_viewport_refresh_rows
         "outline collapse must surface effective row visibility transitions"
     );
 
-    let layout = engine.layout_index(&sid).expect("layout index");
+    let layout = engine.pixel_layout(&sid).expect("layout index");
     assert_eq!(layout.get_row_height(2).0, 0.0);
     assert_eq!(layout.get_row_height(3).0, 0.0);
     assert_eq!(layout.get_row_height(4).0, 0.0);
@@ -423,9 +415,7 @@ fn collapsed_outline_group_updates_layout_index_and_defers_viewport_refresh_rows
         "outline collapse affects effective height, not explicit hidden state"
     );
 
-    assert_empty_viewport_patches(&collapse_patches);
-
-    let (expand_patches, expand_result) = engine
+    let expand_result = engine
         .set_group_collapsed(&sid, &group_id, false)
         .expect("set_group_collapsed");
     assert_eq!(
@@ -441,12 +431,10 @@ fn collapsed_outline_group_updates_layout_index_and_defers_viewport_refresh_rows
         ],
         "outline expansion must surface effective row visibility transitions"
     );
-    let layout = engine.layout_index(&sid).expect("layout index");
+    let layout = engine.pixel_layout(&sid).expect("layout index");
     assert!(layout.get_row_height(2).0 > 0.0);
     assert!(layout.get_row_height(3).0 > 0.0);
     assert!(layout.get_row_height(4).0 > 0.0);
-
-    assert_empty_viewport_patches(&expand_patches);
 }
 
 #[test]
@@ -459,10 +447,10 @@ fn collapsed_outline_group_updates_layout_index_and_defers_viewport_refresh_colu
         .register_viewport("main", &sid, 0, 0, 8, 8)
         .expect("register viewport");
 
-    let (_, group_result) = engine.group_columns(&sid, 3, 6).expect("group_columns");
+    let group_result = engine.group_columns(&sid, 3, 6).expect("group_columns");
     let group_id = created_group_id(group_result);
 
-    let (collapse_patches, collapse_result) = engine
+    let collapse_result = engine
         .set_group_collapsed(&sid, &group_id, true)
         .expect("set_group_collapsed");
     assert_eq!(
@@ -480,7 +468,7 @@ fn collapsed_outline_group_updates_layout_index_and_defers_viewport_refresh_colu
         "outline collapse must surface effective column visibility transitions"
     );
 
-    let layout = engine.layout_index(&sid).expect("layout index");
+    let layout = engine.pixel_layout(&sid).expect("layout index");
     assert_eq!(layout.get_col_width(3).0, 0.0);
     assert_eq!(layout.get_col_width(4).0, 0.0);
     assert_eq!(layout.get_col_width(5).0, 0.0);
@@ -495,6 +483,4 @@ fn collapsed_outline_group_updates_layout_index_and_defers_viewport_refresh_colu
         !render_data.col_dimensions[3].hidden,
         "outline collapse affects effective width, not explicit hidden state"
     );
-
-    assert_empty_viewport_patches(&collapse_patches);
 }

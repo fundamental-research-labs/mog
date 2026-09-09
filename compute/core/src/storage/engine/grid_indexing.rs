@@ -1,15 +1,15 @@
+use crate::cells::CellStore;
 use crate::identity::GridIndex;
-use crate::mirror::CellMirror;
 use crate::snapshot::SheetSnapshot;
-use cell_types::{CellId, SheetId};
+use cell_types::SheetId;
 
 pub(in crate::storage::engine) fn build_grid_from_native_sheet(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: SheetId,
     snapshot: &SheetSnapshot,
     allocator: std::sync::Arc<cell_types::IdAllocator>,
 ) -> Result<GridIndex, value_types::ComputeError> {
-    let mut grid = if let Some(sheet) = mirror.get_sheet(&sheet_id)
+    let grid = if let Some(sheet) = cell_store.get_sheet(&sheet_id)
         && (sheet.row_axis.len() != 0 || snapshot.rows == 0)
         && (sheet.col_axis.len() != 0 || snapshot.cols == 0)
     {
@@ -24,21 +24,5 @@ pub(in crate::storage::engine) fn build_grid_from_native_sheet(
     } else {
         GridIndex::new(sheet_id, snapshot.rows, snapshot.cols, allocator)
     };
-    for cell in &snapshot.cells {
-        let id = CellId::from_uuid_str(&cell.cell_id)?;
-        grid.register_cell(id, cell.row, cell.col);
-    }
-    for identity in &snapshot.identities {
-        if grid.cell_id_at(identity.row, identity.col).is_none() {
-            grid.register_cell(identity.cell_id, identity.row, identity.col);
-        }
-    }
-    if let Some(sheet) = mirror.get_sheet(&sheet_id) {
-        for (&id, &pos) in &sheet.id_to_pos {
-            if grid.cell_id_at(pos.row(), pos.col()).is_none() {
-                grid.register_cell(id, pos.row(), pos.col());
-            }
-        }
-    }
     Ok(grid)
 }

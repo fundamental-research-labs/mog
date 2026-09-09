@@ -23,7 +23,7 @@ use stress_common::*;
 
 use cell_types::SheetId;
 use compute_core::bridge_types::CellInput;
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::{ComputeCore, WriteTrust};
 use snapshot_types::DataTableRegionDef;
 use value_types::{CellValue, ComputeError, FiniteF64};
@@ -33,7 +33,7 @@ use value_types::{CellValue, ComputeError, FiniteF64};
 // ---------------------------------------------------------------------------
 
 /// Build a 2×2 Data Table at B2:C3 with master at B2, plus header /
-/// input cells. Returns `(core, mirror, sheet_id)` ready to receive
+/// input cells. Returns `(core, cell_store, sheet_id)` ready to receive
 /// edits.
 ///
 /// Pre-allocates CellIds for every cell in the region so that
@@ -41,9 +41,9 @@ use value_types::{CellValue, ComputeError, FiniteF64};
 /// stable identity to target. Master B2 carries the `=TABLE($A$2,$A$1)`
 /// formula stub (Stream E will eventually evaluate it; D1.5 only cares
 /// about partial-write rejection).
-fn make_data_table_workbook() -> (ComputeCore, CellMirror, SheetId) {
+fn make_data_table_workbook() -> (ComputeCore, CellStore, SheetId) {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![(
         "Sheet1",
         50,
@@ -83,9 +83,9 @@ fn make_data_table_workbook() -> (ComputeCore, CellMirror, SheetId) {
         ooxml_flags: None,
     }];
 
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
     let sheet_id = sid(0);
-    (core, mirror, sheet_id)
+    (core, cell_store, sheet_id)
 }
 
 // ---------------------------------------------------------------------------
@@ -94,12 +94,12 @@ fn make_data_table_workbook() -> (ComputeCore, CellMirror, SheetId) {
 
 #[test]
 fn set_cell_into_data_table_body_rejects_with_partial_array_write() {
-    let (mut core, mut mirror, sheet_id) = make_data_table_workbook();
+    let (mut core, mut cell_store, sheet_id) = make_data_table_workbook();
 
     // C3 = (row=2, col=2) — a body cell. Literal write must reject.
     let c3_id = cid(0, 2, 2);
     let result = core.set_cell(
-        &mut mirror,
+        &mut cell_store,
         &sheet_id,
         c3_id,
         2,
@@ -129,23 +129,23 @@ fn set_cell_into_data_table_body_rejects_with_partial_array_write() {
             "expected PartialArrayWrite, got Ok(_) — set_cell silently \
              overwrote a Data Table body cell. The unified region guard \
              at scheduler/edit.rs::check_region_partial_write was not \
-             extended to consult mirror.find_data_table_at."
+             extended to consult cell_store.find_data_table_at."
         ),
     }
 
     // Atomicity: C3 must still hold its cached value 21.0.
-    assert_pos_number(&mirror, 0, 2, 2, 21.0);
+    assert_pos_number(&cell_store, 0, 2, 2, 21.0);
 }
 
 #[test]
 fn set_cell_into_data_table_master_literal_rejects() {
-    let (mut core, mut mirror, sheet_id) = make_data_table_workbook();
+    let (mut core, mut cell_store, sheet_id) = make_data_table_workbook();
 
     // B2 = (row=1, col=1) — the master. Literal overwrites are
     // rejected: the TABLE formula is the region's source of truth.
     let b2_id = cid(0, 1, 1);
     let result = core.set_cell(
-        &mut mirror,
+        &mut cell_store,
         &sheet_id,
         b2_id,
         1,
@@ -174,13 +174,13 @@ fn set_cell_into_data_table_master_literal_rejects() {
 
 #[test]
 fn set_cell_into_data_table_master_parse_rejects() {
-    let (mut core, mut mirror, sheet_id) = make_data_table_workbook();
+    let (mut core, mut cell_store, sheet_id) = make_data_table_workbook();
 
     // B2 — Parse (formula entry) is also rejected. User must clear
     // the entire region first to remove the Data Table.
     let b2_id = cid(0, 1, 1);
     let result = core.set_cell(
-        &mut mirror,
+        &mut cell_store,
         &sheet_id,
         b2_id,
         1,
@@ -212,7 +212,7 @@ fn set_cell_into_data_table_master_parse_rejects() {
 
 #[test]
 fn set_cells_batch_with_data_table_intersection_rejects_atomically() {
-    let (mut core, mut mirror, sheet_id) = make_data_table_workbook();
+    let (mut core, mut cell_store, sheet_id) = make_data_table_workbook();
 
     // Batch with one cell outside the region (D5) and one inside (B3).
     // The whole batch must reject; D5 must NOT have been written.
@@ -240,7 +240,7 @@ fn set_cells_batch_with_data_table_intersection_rejects_atomically() {
         ),
     ];
 
-    let result = core.set_cells(&mut mirror, &edits, false);
+    let result = core.set_cells(&mut cell_store, &edits, false);
     match result {
         Err(ComputeError::PartialArrayWrite {
             row,
@@ -261,7 +261,7 @@ fn set_cells_batch_with_data_table_intersection_rejects_atomically() {
     }
 
     // Atomicity: D5 (outside region) must NOT have been written.
-    let d5_value = mirror.get_cell_value(&d5_id);
+    let d5_value = cell_store.get_cell_value(&d5_id);
     assert!(
         matches!(d5_value, None | Some(value_types::CellValue::Null)),
         "D5 was written despite atomic rejection: {:?}",
@@ -275,11 +275,11 @@ fn set_cells_batch_with_data_table_intersection_rejects_atomically() {
 
 #[test]
 fn clear_cells_data_table_member_rejects() {
-    let (mut core, mut mirror, sheet_id) = make_data_table_workbook();
+    let (mut core, mut cell_store, sheet_id) = make_data_table_workbook();
 
     // Clear a body cell C3 via set_cell with `Clear`. Must reject.
     let c3_id = cid(0, 2, 2);
-    let result = core.set_cell(&mut mirror, &sheet_id, c3_id, 2, 2, CellInput::Clear);
+    let result = core.set_cell(&mut cell_store, &sheet_id, c3_id, 2, 2, CellInput::Clear);
 
     match result {
         Err(ComputeError::PartialArrayWrite {
@@ -305,7 +305,7 @@ fn clear_cells_data_table_member_rejects() {
     }
 
     // Atomicity: C3's cached value must still be 21.
-    assert_pos_number(&mirror, 0, 2, 2, 21.0);
+    assert_pos_number(&cell_store, 0, 2, 2, 21.0);
 }
 
 // ---------------------------------------------------------------------------
@@ -314,7 +314,7 @@ fn clear_cells_data_table_member_rejects() {
 
 #[test]
 fn set_cells_raw_user_edit_rejects_data_table_partial_write() {
-    let (mut core, mut mirror, sheet_id) = make_data_table_workbook();
+    let (mut core, mut cell_store, sheet_id) = make_data_table_workbook();
 
     // Typed value-write into C3 with UserEdit trust. The Stream A′
     // guard at `set_cells_raw_with_trust(WriteTrust::UserEdit)` rejects
@@ -330,7 +330,8 @@ fn set_cells_raw_user_edit_rejects_data_table_partial_write() {
         None::<String>,
     )];
 
-    let result = core.set_cells_raw_with_trust(&mut mirror, &edits, false, WriteTrust::UserEdit);
+    let result =
+        core.set_cells_raw_with_trust(&mut cell_store, &edits, false, WriteTrust::UserEdit);
     match result {
         Err(ComputeError::PartialArrayWrite {
             anchor_row,
@@ -347,7 +348,7 @@ fn set_cells_raw_user_edit_rejects_data_table_partial_write() {
     }
 
     // Atomicity: C3's cached value must still be 21.
-    assert_pos_number(&mirror, 0, 2, 2, 21.0);
+    assert_pos_number(&cell_store, 0, 2, 2, 21.0);
 }
 
 #[test]
@@ -356,7 +357,7 @@ fn set_cells_raw_trusted_replay_skips_data_table_guard() {
     // op (collab peer's user edit) already passed its guard, so the
     // replay is consistent with the region invariant. This test
     // documents the contract.
-    let (mut core, mut mirror, sheet_id) = make_data_table_workbook();
+    let (mut core, mut cell_store, sheet_id) = make_data_table_workbook();
 
     let c3_id = cid(0, 2, 2);
     let edits = vec![(
@@ -370,7 +371,7 @@ fn set_cells_raw_trusted_replay_skips_data_table_guard() {
 
     // TrustedReplay must NOT reject — collab/replay path semantics.
     let result =
-        core.set_cells_raw_with_trust(&mut mirror, &edits, false, WriteTrust::TrustedReplay);
+        core.set_cells_raw_with_trust(&mut cell_store, &edits, false, WriteTrust::TrustedReplay);
     assert!(
         result.is_ok(),
         "TrustedReplay must skip the region guard; got {:?}",

@@ -58,7 +58,7 @@ fn undo_move_sheet_emits_order_sheet_change() {
     let sid = sheet_id();
 
     // Forward: move Sheet1 from index 0 to index 1.
-    let (_patches, fwd_result) = engine.move_sheet(&sid, 1).unwrap();
+    let fwd_result = engine.move_sheet(&sid, 1).unwrap();
     // Forward should emit Order SheetChange.
     assert!(
         fwd_result
@@ -74,7 +74,7 @@ fn undo_move_sheet_emits_order_sheet_change() {
     assert_eq!(order_after_move[1], sid);
 
     // Undo: should revert to [Sheet1, Sheet2].
-    let (_patches, undo_result) = engine.undo().unwrap();
+    let undo_result = engine.undo().unwrap();
 
     // The undo MutationResult must contain Order SheetChange entries.
     let order_changes: Vec<_> = undo_result
@@ -112,7 +112,7 @@ fn redo_move_sheet_emits_order_sheet_change() {
     engine.undo().unwrap();
 
     // Redo: should re-apply the move.
-    let (_patches, redo_result) = engine.redo().unwrap();
+    let redo_result = engine.redo().unwrap();
 
     let order_changes: Vec<_> = redo_result
         .sheet_changes
@@ -146,7 +146,7 @@ fn undo_create_sheet_removes_only_created_sheet() {
     let order_after_create = engine.storage().sheet_order();
     assert_eq!(order_after_create, vec![original_sid, new_sid]);
 
-    let (_patches, undo_result) = engine.undo().unwrap();
+    let undo_result = engine.undo().unwrap();
 
     let order_after_undo = engine.storage().sheet_order();
     assert_eq!(
@@ -190,7 +190,7 @@ fn redo_create_sheet_restores_created_sheet() {
     let new_sid = sheet_id_from_hex(&new_hex);
     engine.undo().unwrap();
 
-    let (_patches, redo_result) = engine.redo().unwrap();
+    let redo_result = engine.redo().unwrap();
 
     let order_after_redo = engine.storage().sheet_order();
     assert_eq!(
@@ -228,7 +228,7 @@ fn undo_set_tab_color_emits_tab_color_sheet_change() {
     let sid = sheet_id();
     engine.set_tab_color(&sid, Some("#FF0000".into())).unwrap();
 
-    let (_patches, undo_result) = engine.undo().unwrap();
+    let undo_result = engine.undo().unwrap();
 
     let tab_changes: Vec<_> = undo_result
         .sheet_changes
@@ -255,7 +255,7 @@ fn undo_rename_sheet_emits_name_sheet_change() {
     let sid = sheet_id();
     engine.rename_compute_sheet(&sid, "Renamed").unwrap();
 
-    let (_patches, undo_result) = engine.undo().unwrap();
+    let undo_result = engine.undo().unwrap();
 
     let name_changes: Vec<_> = undo_result
         .sheet_changes
@@ -282,7 +282,7 @@ fn undo_set_sheet_hidden_emits_hidden_sheet_change() {
     let sid = sheet_id();
     engine.set_sheet_hidden(&sid, true).unwrap();
 
-    let (_patches, undo_result) = engine.undo().unwrap();
+    let undo_result = engine.undo().unwrap();
 
     let hidden_changes: Vec<_> = undo_result
         .sheet_changes
@@ -309,7 +309,7 @@ fn undo_set_sheet_visibility_emits_visibility_sheet_change() {
     let sid = sheet_id();
     engine.set_sheet_visibility(&sid, "veryHidden").unwrap();
 
-    let (_patches, undo_result) = engine.undo().unwrap();
+    let undo_result = engine.undo().unwrap();
 
     let vis_changes: Vec<_> = undo_result
         .sheet_changes
@@ -336,7 +336,7 @@ fn undo_set_frozen_panes_emits_frozen_sheet_change() {
     let sid = sheet_id();
     engine.set_frozen_panes(&sid, 3, 2).unwrap();
 
-    let (_patches, undo_result) = engine.undo().unwrap();
+    let undo_result = engine.undo().unwrap();
 
     let frozen_changes: Vec<_> = undo_result
         .sheet_changes

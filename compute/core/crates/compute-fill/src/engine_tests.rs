@@ -959,7 +959,7 @@ mod tests {
     // FillUpdate::Formula entries with properly adjusted refs.
     //
     // Bug context: the storage layer's mutation_auto_fill creates new CellIds
-    // via grid_id_alloc that are NOT registered in the CellMirror, causing
+    // via grid_id_alloc that are NOT registered in the CellStore, causing
     // to_a1_display to produce #REF! instead of valid A1 references. The bug
     // is in the storage integration, NOT in compute_fill itself. These tests
     // document that the engine output is correct.

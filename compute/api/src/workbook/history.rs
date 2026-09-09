@@ -16,22 +16,20 @@ impl WorkbookHistory {
 
     /// Undo the last user edit.
     ///
-    /// Returns the mutation result (viewport patches are stripped).
+    /// Returns the mutation result.
     pub fn undo(&self) -> Result<MutationResult, ComputeApiError> {
-        self.dispatch.call_engine(move |e| e.undo()).and_then(|r| {
-            r.map(|(_vp, mutation)| mutation)
-                .map_err(ComputeApiError::from)
-        })
+        self.dispatch
+            .call_engine(move |e| e.undo())
+            .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
     /// Redo the last undone edit.
     ///
-    /// Returns the mutation result (viewport patches are stripped).
+    /// Returns the mutation result.
     pub fn redo(&self) -> Result<MutationResult, ComputeApiError> {
-        self.dispatch.call_engine(move |e| e.redo()).and_then(|r| {
-            r.map(|(_vp, mutation)| mutation)
-                .map_err(ComputeApiError::from)
-        })
+        self.dispatch
+            .call_engine(move |e| e.redo())
+            .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
     /// Check whether undo is available.
@@ -53,14 +51,14 @@ impl WorkbookHistory {
     /// collapsed into a single undo step. Supports nesting.
     pub fn begin_undo_group(&self) -> Result<MutationResult, ComputeApiError> {
         self.dispatch
-            .call_engine(move |e| e.begin_undo_group().map(|(_, r)| r))
+            .call_engine(move |e| e.begin_undo_group())
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
     /// End an undo group. After this, mutations become individual undo steps again.
     pub fn end_undo_group(&self) -> Result<MutationResult, ComputeApiError> {
         self.dispatch
-            .call_engine(move |e| e.end_undo_group().map(|(_, r)| r))
+            .call_engine(move |e| e.end_undo_group())
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 }

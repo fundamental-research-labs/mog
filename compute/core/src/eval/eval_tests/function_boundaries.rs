@@ -11,7 +11,7 @@ use super::*;
 
 #[test]
 fn percentrank_single_element_returns_zero() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let arr = ASTNode::Array {
         rows: vec![vec![ASTNode::Number(5.0)]],
@@ -22,7 +22,7 @@ fn percentrank_single_element_returns_zero() {
 
 #[test]
 fn percentrank_inc_single_element_returns_zero() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let arr = ASTNode::Array {
         rows: vec![vec![ASTNode::Number(5.0)]],
@@ -33,7 +33,7 @@ fn percentrank_inc_single_element_returns_zero() {
 
 #[test]
 fn percentrank_single_element_with_significance() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let arr = ASTNode::Array {
         rows: vec![vec![ASTNode::Number(7.0)]],
@@ -54,7 +54,7 @@ fn percentrank_single_element_with_significance() {
 
 #[test]
 fn makearray_zero_rows_returns_value_error() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let lambda = func(
         "LAMBDA",
@@ -73,7 +73,7 @@ fn makearray_zero_rows_returns_value_error() {
 
 #[test]
 fn makearray_negative_rows_returns_value_error() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let lambda = func(
         "LAMBDA",
@@ -92,7 +92,7 @@ fn makearray_negative_rows_returns_value_error() {
 
 #[test]
 fn makearray_negative_cols_returns_value_error() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let lambda = func(
         "LAMBDA",
@@ -118,7 +118,7 @@ fn makearray_negative_cols_returns_value_error() {
 
 #[test]
 fn subtotal_sum() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let arr = ASTNode::Array {
         rows: vec![vec![
@@ -135,7 +135,7 @@ fn subtotal_sum() {
 
 #[test]
 fn subtotal_average() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let arr = ASTNode::Array {
         rows: vec![vec![

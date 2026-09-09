@@ -13,7 +13,7 @@
 
 use regex::Regex;
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use cell_types::{SheetId, SheetPos};
 
 pub use crate::engine_types::cell_ops::*;
@@ -201,7 +201,7 @@ pub fn split_all_values(
 /// Column keys remain separate so embedded NUL characters cannot collide.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn unique_rows(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,
@@ -230,7 +230,7 @@ pub(crate) fn unique_rows(
         let key: Vec<_> = columns
             .iter()
             .map(|col| {
-                let text = mirror
+                let text = cell_store
                     .get_cell_value_at(sheet_id, SheetPos::new(row, *col))
                     .filter(|value| !value.is_null())
                     .map(ToString::to_string)
@@ -279,7 +279,7 @@ pub fn has_significant_leading_zero(s: &str) -> bool {
 /// Preview native cell text without allocating identities or changing values.
 #[allow(clippy::too_many_arguments)]
 pub fn preview_text_to_columns(
-    mirror: &crate::mirror::CellMirror,
+    cell_store: &crate::cells::CellStore,
     sheet_id: SheetId,
     source_start_row: u32,
     source_end_row: u32,
@@ -287,13 +287,13 @@ pub fn preview_text_to_columns(
     options: &TextToColumnsOptions,
     max_preview_rows: u32,
 ) -> Vec<Vec<String>> {
-    if source_start_row > source_end_row || mirror.get_sheet(&sheet_id).is_none() {
+    if source_start_row > source_end_row || cell_store.get_sheet(&sheet_id).is_none() {
         return Vec::new();
     }
     let values = (source_start_row..=source_end_row)
         .take(max_preview_rows as usize)
         .map(|row| {
-            mirror
+            cell_store
                 .get_cell_value_at(&sheet_id, cell_types::SheetPos::new(row, source_col))
                 .filter(|value| !value.is_null())
                 .map(ToString::to_string)

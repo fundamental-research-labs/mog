@@ -71,7 +71,7 @@ fn advanced_filter_in_place_tracks_filter_owned_hidden_rows() {
 
     engine.hide_rows(&sid, &[1]).unwrap();
 
-    let (_, result) = engine
+    let result = engine
         .apply_advanced_filter(
             &sid,
             advanced_filter_request(filters::AdvancedFilterMode::InPlace),
@@ -103,7 +103,7 @@ fn manual_unhide_keeps_rows_hidden_by_advanced_filter() {
 
     engine.hide_rows(&sid, &[2]).unwrap();
 
-    let (_, apply_result) = engine
+    let apply_result = engine
         .apply_advanced_filter(
             &sid,
             advanced_filter_request(filters::AdvancedFilterMode::InPlace),
@@ -112,7 +112,7 @@ fn manual_unhide_keeps_rows_hidden_by_advanced_filter() {
     let change = apply_result.filter_changes.first().expect("filter change");
     assert_eq!(engine.get_hidden_rows(&sid), vec![2, 4]);
 
-    let (_, unhide_result) = engine.unhide_rows(&sid, &[2]).unwrap();
+    let unhide_result = engine.unhide_rows(&sid, &[2]).unwrap();
     assert!(unhide_result.visibility_changes.is_empty());
     assert_eq!(engine.get_hidden_rows(&sid), vec![2, 4]);
 
@@ -127,7 +127,7 @@ fn clear_all_column_filters_clears_advanced_filter_activity() {
 
     engine.hide_rows(&sid, &[1]).unwrap();
 
-    let (_, apply_result) = engine
+    let apply_result = engine
         .apply_advanced_filter(
             &sid,
             advanced_filter_request(filters::AdvancedFilterMode::InPlace),
@@ -141,7 +141,7 @@ fn clear_all_column_filters_clears_advanced_filter_activity() {
         .clone();
     assert_eq!(engine.get_hidden_rows(&sid), vec![1, 2, 4]);
 
-    let (_, clear_result) = engine
+    let clear_result = engine
         .clear_all_column_filters(&sid, &filter_id)
         .expect("clear advanced filter criteria");
 
@@ -169,7 +169,7 @@ fn advanced_filter_copy_to_writes_matching_rows_without_hiding_source() {
     request.copy_to_range = Some("F1".to_string());
     request.unique_records_only = false;
 
-    let (_, result) = engine.apply_advanced_filter(&sid, request).unwrap();
+    let result = engine.apply_advanced_filter(&sid, request).unwrap();
     let receipt: filters::AdvancedFilterResult =
         serde_json::from_value(result.data.clone().unwrap()).unwrap();
 

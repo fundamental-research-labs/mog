@@ -13,7 +13,7 @@ mod transpose_spill;
 mod xlsx_cascade_repro;
 
 use cell_types::{CellId, SheetId};
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::CellValue;
@@ -133,8 +133,8 @@ pub fn build_snapshot_with_array_ref(
     }
 }
 
-pub fn assert_mirror_number(mirror: &CellMirror, cell_id: &CellId, expected: f64, label: &str) {
-    match mirror.get_cell_value(cell_id) {
+pub fn assert_store_number(cell_store: &CellStore, cell_id: &CellId, expected: f64, label: &str) {
+    match cell_store.get_cell_value(cell_id) {
         Some(CellValue::Number(n)) => {
             assert!(
                 (n.get() - expected).abs() < 1e-6,
@@ -146,7 +146,7 @@ pub fn assert_mirror_number(mirror: &CellMirror, cell_id: &CellId, expected: f64
         }
         Some(other) => panic!("{}: expected Number({}), got {:?}", label, expected, other),
         None => panic!(
-            "{}: cell not found in mirror (expected Number({}))",
+            "{}: cell not found in cell_store (expected Number({}))",
             label, expected
         ),
     }
@@ -154,17 +154,17 @@ pub fn assert_mirror_number(mirror: &CellMirror, cell_id: &CellId, expected: f64
 
 /// Assert a projected value via col_data (no phantom CellIds).
 pub fn assert_col_data_number(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
     expected: f64,
     label: &str,
 ) {
-    let sheet_mirror = mirror
+    let sheet_store = cell_store
         .get_sheet(sheet_id)
         .unwrap_or_else(|| panic!("{}: sheet not found", label));
-    let col_slice = sheet_mirror
+    let col_slice = sheet_store
         .get_column_view(col)
         .unwrap_or_else(|| panic!("{}: col_data for column {} not found", label, col));
     match &col_slice[row as usize] {
@@ -186,16 +186,16 @@ pub fn assert_col_data_number(
 
 /// Assert that col_data at (row, col) is Null or Number(0).
 pub fn assert_col_data_null_or_zero(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
     label: &str,
 ) {
-    let sheet_mirror = mirror
+    let sheet_store = cell_store
         .get_sheet(sheet_id)
         .unwrap_or_else(|| panic!("{}: sheet not found", label));
-    if let Some(col_slice) = sheet_mirror.get_column_view(col) {
+    if let Some(col_slice) = sheet_store.get_column_view(col) {
         // If row is beyond the col_data extent, it's implicitly Null — OK
         if (row as usize) >= col_slice.len() {
             return;

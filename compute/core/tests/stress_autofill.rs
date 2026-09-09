@@ -25,7 +25,7 @@ fn test_autofill_value_series() {
         make_cell(2, 0, num(3.0), None), // A3=3
     ]);
     let (mut engine, _recalc) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // D1 = =A1+10
     engine
@@ -61,7 +61,7 @@ fn test_autofill_formula_ref_adjustment() {
         make_cell(1, 0, num(20.0), None), // A2=20
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // B1 = =A1*2
     engine
@@ -90,7 +90,7 @@ fn test_autofill_creates_formula_deps() {
         make_cell(1, 0, num(2.0), None), // A2=2
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // B1 = =A1+1, B2 = =A2+1
     engine
@@ -129,7 +129,7 @@ fn test_autofill_numeric_series() {
         make_cell(3, 0, num(4.0), None), // A4=4
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // Autofill A1:A4 -> A5:A8 (rows 0..3 -> rows 4..7)
     let req = fill_request(0, 0, 3, 0, 4, 0, 7, 0, "down");
@@ -155,7 +155,7 @@ fn test_autofill_formula_down() {
         make_cell(1, 1, num(21.0), None), // B2=21
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // C1 = =A1+B1
     engine
@@ -184,7 +184,7 @@ fn test_autofill_numeric_series_right() {
         make_cell(0, 1, num(20.0), None), // B1=20
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // Autofill A1:B1 right -> C1:E1 (row 0, cols 0..1 -> row 0, cols 2..4)
     let req = fill_request(0, 0, 0, 1, 0, 2, 0, 4, "right");
@@ -210,7 +210,7 @@ fn test_autofill_formula_then_edit() {
         make_cell(0, 0, num(10.0), None), // A1=10
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // B1 = =A1*2
     engine
@@ -251,7 +251,7 @@ fn test_flash_fill_pattern() {
         make_cell(1, 0, CellValue::Text("Jane Doe".into()), None),   // A2
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // B1 = "John" (example)
     engine
@@ -297,7 +297,7 @@ fn test_copy_values_from_formulas() {
         make_cell(0, 0, num(10.0), None), // A1=10
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // B1 = =A1*3
     engine
@@ -340,7 +340,7 @@ fn test_autofill_long_numeric_series() {
         make_cell(1, 0, num(2.0), None), // A2=2
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // Autofill A1:A2 -> A3:A12 (rows 0..1 -> rows 2..11)
     let req = fill_request(0, 0, 1, 0, 2, 0, 11, 0, "down");
@@ -365,7 +365,7 @@ fn test_autofill_then_clear_range() {
         make_cell(0, 0, num(10.0), None), // A1=10
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // B1 = =A1+1
     engine
@@ -404,7 +404,7 @@ fn test_autofill_1000_rows() {
         make_cell(1, 0, num(2.0), None), // A2=2
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // Autofill A1:A2 -> A3:A1000 (rows 0..1 -> rows 2..999)
     let req = fill_request(0, 0, 1, 0, 2, 0, 999, 0, "down");

@@ -82,10 +82,7 @@ impl SheetComments {
         let cid = comment_id.to_string();
         self.dispatch
             .call_engine(move |e| e.set_note_visible(&sid, &cid, visible))
-            .and_then(|r| {
-                r.map(|(_patches, result)| result)
-                    .map_err(ComputeApiError::from)
-            })
+            .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
     /// Set the height and/or width of a note (in points).
@@ -99,10 +96,7 @@ impl SheetComments {
         let cid = comment_id.to_string();
         self.dispatch
             .call_engine(move |e| e.set_note_dimensions(&sid, &cid, height, width))
-            .and_then(|r| {
-                r.map(|(_patches, result)| result)
-                    .map_err(ComputeApiError::from)
-            })
+            .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
     /// Check whether a cell has any comments.
@@ -141,10 +135,7 @@ impl SheetComments {
         let pid = parent_id.map(|s| s.to_string());
         self.dispatch
             .call_engine(move |e| e.add_comment(&sid, &cid, &txt, &auth, aid, pid, comment_type))
-            .and_then(|r| {
-                r.map(|(_patches, result)| result)
-                    .map_err(ComputeApiError::from)
-            })
+            .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
     /// Convert an existing note into a threaded comment. Returns
@@ -157,10 +148,7 @@ impl SheetComments {
         let cid = comment_id.to_string();
         self.dispatch
             .call_engine(move |e| e.convert_note_to_thread(&sid, &cid))
-            .and_then(|r| {
-                r.map(|(_patches, result)| result)
-                    .map_err(ComputeApiError::from)
-            })
+            .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
     /// Update a comment's text.
@@ -170,10 +158,7 @@ impl SheetComments {
         let txt = text.to_string();
         self.dispatch
             .call_engine(move |e| e.update_comment(&sid, &cid, &txt))
-            .and_then(|r| {
-                r.map(|(_patches, result)| result)
-                    .map_err(ComputeApiError::from)
-            })
+            .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
     /// Update a comment with mention content.
@@ -188,10 +173,7 @@ impl SheetComments {
         let cnt = content.to_string();
         self.dispatch
             .call_engine(move |e| e.update_comment_mentions(&sid, &cid, &cnt, mentions))
-            .and_then(|r| {
-                r.map(|(_patches, result)| result)
-                    .map_err(ComputeApiError::from)
-            })
+            .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
     /// Delete a comment by ID.
@@ -200,10 +182,7 @@ impl SheetComments {
         let cid = comment_id.to_string();
         self.dispatch
             .call_engine(move |e| e.delete_comment(&sid, &cid))
-            .and_then(|r| {
-                r.map(|(_patches, result)| result)
-                    .map_err(ComputeApiError::from)
-            })
+            .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
     /// Set thread resolved status.
@@ -216,10 +195,7 @@ impl SheetComments {
         let cid = cell_id.to_string();
         self.dispatch
             .call_engine(move |e| e.set_thread_resolved(&sid, &cid, resolved))
-            .and_then(|r| {
-                r.map(|(_patches, result)| result)
-                    .map_err(ComputeApiError::from)
-            })
+            .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
     /// Delete all comments associated with a specific cell.
@@ -228,10 +204,7 @@ impl SheetComments {
         let cid = cell_id.to_string();
         self.dispatch
             .call_engine(move |e| e.delete_comments_for_cell(&sid, &cid))
-            .and_then(|r| {
-                r.map(|(_patches, result)| result)
-                    .map_err(ComputeApiError::from)
-            })
+            .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
     /// Remove all comments from this sheet.
@@ -239,9 +212,6 @@ impl SheetComments {
         let sid = self.sheet_id;
         self.dispatch
             .call_engine(move |e| e.clear_all_comments(&sid))
-            .and_then(|r| {
-                r.map(|(_patches, result)| result)
-                    .map_err(ComputeApiError::from)
-            })
+            .and_then(|r| r.map_err(ComputeApiError::from))
     }
 }

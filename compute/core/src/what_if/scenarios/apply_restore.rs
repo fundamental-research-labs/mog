@@ -1,4 +1,4 @@
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::snapshot::{
     ScenarioActiveState, ScenarioApplyResult, ScenarioCreateInput, ScenarioOriginalCellValue,
     ScenarioRestoreResult, ScenarioValidationError,
@@ -57,13 +57,13 @@ fn baseline_original_index(baseline: &ScenarioBaseline, cell_id: &CellId) -> Opt
 
 fn original_cell_wire(
     compute: &crate::scheduler::ComputeCore,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     original: &ScenarioBaselineCell,
 ) -> ScenarioOriginalCellValue {
     let formula = original
         .formula
         .as_ref()
-        .map(|formula| compute.to_a1_display(mirror, &original.sheet_id, formula));
+        .map(|formula| compute.to_a1_display(cell_store, &original.sheet_id, formula));
     ScenarioOriginalCellValue {
         sheet_id: original.sheet_id.to_uuid_string(),
         cell_id: original.cell_id.to_uuid_string(),
@@ -73,18 +73,18 @@ fn original_cell_wire(
 }
 
 fn validate_scenario_target(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
 ) -> Option<ScenarioValidationError> {
-    if mirror.cse_anchor_covering(sheet_id, row, col).is_some() {
+    if cell_store.cse_anchor_covering(sheet_id, row, col).is_some() {
         return Some(scenario_error(
             "changingCells",
             "Scenario changing cell is inside an array formula region",
         ));
     }
-    if mirror.find_data_table_at(sheet_id, row, col).is_some() {
+    if cell_store.find_data_table_at(sheet_id, row, col).is_some() {
         return Some(scenario_error(
             "changingCells",
             "Scenario changing cell is inside a data table region",
@@ -114,7 +114,7 @@ pub(crate) fn active_state(
 /// succeeds.
 pub(crate) fn prepare_apply(
     storage: &WorkbookStorage,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     compute: &crate::scheduler::ComputeCore,
     session: &ScenarioSessionState,
     scenario_id: &str,
@@ -181,16 +181,16 @@ pub(crate) fn prepare_apply(
             }
         };
 
-        let Some(sheet_id) = mirror.sheet_for_cell(&cell_id) else {
+        let Some(sheet_id) = cell_store.sheet_for_cell(&cell_id) else {
             skipped_cells.push(cell_id_text.clone());
             continue;
         };
-        let Some(pos) = mirror.resolve_position(&cell_id) else {
+        let Some(pos) = cell_store.resolve_position(&cell_id) else {
             skipped_cells.push(cell_id_text.clone());
             continue;
         };
 
-        if let Some(error) = validate_scenario_target(mirror, &sheet_id, pos.row(), pos.col()) {
+        if let Some(error) = validate_scenario_target(cell_store, &sheet_id, pos.row(), pos.col()) {
             errors.push(error);
             continue;
         }
@@ -201,11 +201,11 @@ pub(crate) fn prepare_apply(
                 let original = ScenarioBaselineCell {
                     sheet_id,
                     cell_id,
-                    value: mirror
+                    value: cell_store
                         .get_cell_value(&cell_id)
                         .cloned()
                         .unwrap_or(CellValue::Null),
-                    formula: mirror.get_formula(&cell_id).cloned(),
+                    formula: cell_store.get_formula(&cell_id).cloned(),
                 };
                 baseline.originals.push(original);
                 baseline.originals.len() - 1
@@ -213,7 +213,7 @@ pub(crate) fn prepare_apply(
         };
         original_values.push(original_cell_wire(
             compute,
-            mirror,
+            cell_store,
             &baseline.originals[baseline_index],
         ));
         edits.push((sheet_id, cell_id, pos.row(), pos.col(), value.clone(), None));
@@ -243,7 +243,7 @@ pub(crate) fn prepare_apply(
 
 /// Build the edits for restoring a session baseline.
 pub(crate) fn prepare_restore(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     compute: &crate::scheduler::ComputeCore,
     session: &ScenarioSessionState,
     baseline_id: &str,
@@ -270,16 +270,16 @@ pub(crate) fn prepare_restore(
     let mut errors = Vec::new();
 
     for original in &baseline.originals {
-        let Some(sheet_id) = mirror.sheet_for_cell(&original.cell_id) else {
+        let Some(sheet_id) = cell_store.sheet_for_cell(&original.cell_id) else {
             skipped_cells.push(original.cell_id.to_uuid_string());
             continue;
         };
-        let Some(pos) = mirror.resolve_position(&original.cell_id) else {
+        let Some(pos) = cell_store.resolve_position(&original.cell_id) else {
             skipped_cells.push(original.cell_id.to_uuid_string());
             continue;
         };
 
-        if let Some(error) = validate_scenario_target(mirror, &sheet_id, pos.row(), pos.col()) {
+        if let Some(error) = validate_scenario_target(cell_store, &sheet_id, pos.row(), pos.col()) {
             errors.push(error);
             continue;
         }
@@ -287,7 +287,7 @@ pub(crate) fn prepare_restore(
         let formula = original
             .formula
             .as_ref()
-            .map(|formula| compute.to_a1_display(mirror, &sheet_id, formula));
+            .map(|formula| compute.to_a1_display(cell_store, &sheet_id, formula));
         edits.push((
             sheet_id,
             original.cell_id,

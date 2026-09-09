@@ -5,14 +5,14 @@ use crate::storage::engine::mutation::CellInput;
 
 impl ComputeCore {
     pub(super) fn rendered_formula_string_or_fallback(
-        mirror: &CellMirror,
+        cell_store: &CellStore,
         sheet_id: SheetId,
         identity_formula: Option<&IdentityFormula>,
         fallback: &str,
     ) -> String {
         identity_formula
             .map(|formula| {
-                let lookup = MirrorPositionLookup::new(mirror, sheet_id);
+                let lookup = StorePositionLookup::new(cell_store, sheet_id);
                 compute_parser::to_a1_string(formula, &lookup)
             })
             .unwrap_or_else(|| fallback.to_string())
@@ -35,7 +35,7 @@ impl ComputeCore {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn process_input(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         sheet_id: &SheetId,
         cell_id: CellId,
         row: u32,
@@ -44,7 +44,7 @@ impl ComputeCore {
         skip_cycle_check: bool,
     ) -> (Vec<CellId>, Vec<ProjectionChange>) {
         self.process_input_with_target(
-            mirror,
+            cell_store,
             sheet_id,
             cell_id,
             row,
@@ -60,12 +60,12 @@ impl ComputeCore {
     /// `target` is the cell's effective number-format category. Used by
     /// the Parse arm to apply G1 (percent ÷100 on bare numbers), G2 (text
     /// format → store as string, beats formula prefix), and G3 (fraction
-    /// `"n/d"` → f64) before the value reaches the mirror. `target == None`
+    /// `"n/d"` → f64) before the value reaches the cell store. `target == None`
     /// preserves the format-blind path verbatim.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn process_input_with_target(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         sheet_id: &SheetId,
         cell_id: CellId,
         row: u32,
@@ -75,7 +75,7 @@ impl ComputeCore {
         target: Option<compute_formats::FormatType>,
     ) -> (Vec<CellId>, Vec<ProjectionChange>) {
         self.process_input_with_context(
-            mirror,
+            cell_store,
             sheet_id,
             cell_id,
             row,
@@ -89,7 +89,7 @@ impl ComputeCore {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn process_input_with_context(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         sheet_id: &SheetId,
         cell_id: CellId,
         row: u32,
@@ -105,7 +105,7 @@ impl ComputeCore {
         // projection (but is NOT the source cell), the user's edit creates a real cell
         // that blocks the projection. Find the source and mark it for re-eval (#SPILL!).
         if let Some((proj_source, old_proj)) =
-            self.invalidate_projection_at(mirror, sheet_id, row, col, cell_id)
+            self.invalidate_projection_at(cell_store, sheet_id, row, col, cell_id)
         {
             extra_dirty.push(proj_source);
             if let Some(pc) = super::spill::build_teardown_projection_change(proj_source, &old_proj)
@@ -115,7 +115,7 @@ impl ComputeCore {
         }
 
         // Projection cleanup: if this cell has a registered projection, clear it
-        if let Some(old_proj) = self.clear_projection_for_cell(mirror, &cell_id)
+        if let Some(old_proj) = self.clear_projection_for_cell(cell_store, &cell_id)
             && let Some(pc) = super::spill::build_teardown_projection_change(cell_id, &old_proj)
         {
             teardown_pcs.push(pc);
@@ -127,7 +127,7 @@ impl ComputeCore {
                 value: CellValue::Null,
             } => {
                 // Clear the cell
-                mirror.apply_edit(
+                cell_store.apply_edit(
                     sheet_id,
                     cell_id,
                     SheetPos::new(row, col),
@@ -135,7 +135,7 @@ impl ComputeCore {
                     None,
                 );
                 // Only remove precedents (own deps), not dependents (what depends on us)
-                self.clear_formula_deps(mirror, cell_id);
+                self.clear_formula_deps(cell_store, cell_id);
                 // If this cell was blocking a spill projection, re-dirty the
                 // spill source so recalc can attempt to restore the projection.
                 if let Some(spill_source) = self.spill_blockers.remove(&cell_id) {
@@ -145,20 +145,20 @@ impl ComputeCore {
             CellInput::Literal { text } => {
                 // Store the exact text — no coercion, no trimming, no formula parsing.
                 let value = CellValue::Text(text.clone().into());
-                mirror.apply_edit(sheet_id, cell_id, SheetPos::new(row, col), value, None);
-                self.clear_formula_deps(mirror, cell_id);
+                cell_store.apply_edit(sheet_id, cell_id, SheetPos::new(row, col), value, None);
+                self.clear_formula_deps(cell_store, cell_id);
             }
             CellInput::Value { value } => {
                 // Store the already-typed value verbatim. This is the same
                 // lossless path as process_value_input's value arm.
-                mirror.apply_edit(
+                cell_store.apply_edit(
                     sheet_id,
                     cell_id,
                     SheetPos::new(row, col),
                     value.clone(),
                     None,
                 );
-                self.clear_formula_deps(mirror, cell_id);
+                self.clear_formula_deps(cell_store, cell_id);
             }
             CellInput::Parse { text } => {
                 // Trim only for dispatch decisions (formula detection, empty check).
@@ -172,29 +172,29 @@ impl ComputeCore {
                     // Whitespace-only Parse: fall through to Clear semantics to
                     // match the legacy behaviour. This is reachable only by
                     // internal paths; the SDK boundary must emit Clear.
-                    mirror.apply_edit(
+                    cell_store.apply_edit(
                         sheet_id,
                         cell_id,
                         SheetPos::new(row, col),
                         CellValue::Null,
                         None,
                     );
-                    self.clear_formula_deps(mirror, cell_id);
+                    self.clear_formula_deps(cell_store, cell_id);
                 } else if matches!(context.target, Some(compute_formats::FormatType::Text)) {
                     // Text-formatted cell stores any
                     // input — including formula-shaped strings and apostrophe
                     // prefixes — as the literal string. Beats both the `'`
                     // strip and the `=` formula branch.
                     let value = CellValue::Text(text.clone().into());
-                    mirror.apply_edit(sheet_id, cell_id, SheetPos::new(row, col), value, None);
-                    self.clear_formula_deps(mirror, cell_id);
+                    cell_store.apply_edit(sheet_id, cell_id, SheetPos::new(row, col), value, None);
+                    self.clear_formula_deps(cell_store, cell_id);
                 } else if let Some(stripped) = trimmed.strip_prefix('\'') {
                     // Leading apostrophe = forced text mode (Excel convention).
                     // Strip the prefix and store as literal text — no formula
                     // interpretation, no type coercion.
                     let value = CellValue::Text(stripped.to_string().into());
-                    mirror.apply_edit(sheet_id, cell_id, SheetPos::new(row, col), value, None);
-                    self.clear_formula_deps(mirror, cell_id);
+                    cell_store.apply_edit(sheet_id, cell_id, SheetPos::new(row, col), value, None);
+                    self.clear_formula_deps(cell_store, cell_id);
                 } else if trimmed.starts_with('=') {
                     // Formula — store None for CellEntry.formula (IdentityFormula);
                     // the formula string goes into formula_strings via parse_and_register_formula.
@@ -207,7 +207,7 @@ impl ComputeCore {
                     //
                     // Exception: if the cell holds an Error (e.g., #REF! from incremental
                     // cycle detection), always reset — errors are not valid seeds.
-                    let current_is_error = mirror
+                    let current_is_error = cell_store
                         .get_cell_value(&cell_id)
                         .is_some_and(|v| matches!(v, CellValue::Error(..)));
                     let same_formula = !current_is_error
@@ -217,7 +217,7 @@ impl ComputeCore {
                             .or_else(|| self.formula_strings.get(&cell_id))
                             .is_some_and(|existing| *existing == formula_str);
                     if !same_formula {
-                        mirror.apply_edit(
+                        cell_store.apply_edit(
                             sheet_id,
                             cell_id,
                             SheetPos::new(row, col),
@@ -227,7 +227,7 @@ impl ComputeCore {
                     }
 
                     self.parse_and_register_formula(
-                        mirror,
+                        cell_store,
                         cell_id,
                         *sheet_id,
                         formula_str,
@@ -240,8 +240,8 @@ impl ComputeCore {
                     // None case is identical to the legacy `parse_plain_value`.
                     let (value, _) =
                         super::value_utils::parse_plain_value_with_context(text, context);
-                    mirror.apply_edit(sheet_id, cell_id, SheetPos::new(row, col), value, None);
-                    self.clear_formula_deps(mirror, cell_id);
+                    cell_store.apply_edit(sheet_id, cell_id, SheetPos::new(row, col), value, None);
+                    self.clear_formula_deps(cell_store, cell_id);
                 }
             }
         }
@@ -261,14 +261,14 @@ impl ComputeCore {
     ///   `=…` branch of [`process_input`]. The leading `=` is optional: if present
     ///   it passes through, if absent it is prepended before parsing. Callers that
     ///   provide either form are accepted.
-    /// - `formula = None` — store `value` directly via `mirror.apply_edit` and
+    /// - `formula = None` — store `value` directly via `cell_store.apply_edit` and
     ///   clear any pre-existing formula deps. No parser involvement, no coercion.
     ///
     /// Returns `(extra_dirty, teardown_pcs)`. See [`process_input`] for details.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn process_value_input(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         sheet_id: &SheetId,
         cell_id: CellId,
         row: u32,
@@ -284,7 +284,7 @@ impl ComputeCore {
         // target position falls within a projection (but is NOT the source),
         // mark the source dirty so it re-evaluates to #SPILL!.
         if let Some((proj_source, old_proj)) =
-            self.invalidate_projection_at(mirror, sheet_id, row, col, cell_id)
+            self.invalidate_projection_at(cell_store, sheet_id, row, col, cell_id)
         {
             extra_dirty.push(proj_source);
             if let Some(pc) = super::spill::build_teardown_projection_change(proj_source, &old_proj)
@@ -292,7 +292,7 @@ impl ComputeCore {
                 teardown_pcs.push(pc);
             }
         }
-        if let Some(old_proj) = self.clear_projection_for_cell(mirror, &cell_id)
+        if let Some(old_proj) = self.clear_projection_for_cell(cell_store, &cell_id)
             && let Some(pc) = super::spill::build_teardown_projection_change(cell_id, &old_proj)
         {
             teardown_pcs.push(pc);
@@ -300,7 +300,7 @@ impl ComputeCore {
 
         match formula {
             Some(formula_body) => {
-                // Formula path — mirror the `starts_with('=')` branch of process_input.
+                // Formula path — cell_store the `starts_with('=')` branch of process_input.
                 // The formula body here is the raw expression without the leading '='.
                 // Prepend '=' so downstream consumers (formula_strings, normalize)
                 // see the canonical form.
@@ -312,7 +312,7 @@ impl ComputeCore {
 
                 // Preserve the existing cell value when re-entering the same formula —
                 // matches process_input's convergence-seed behavior for iterative calc.
-                let current_is_error = mirror
+                let current_is_error = cell_store
                     .get_cell_value(&cell_id)
                     .is_some_and(|v| matches!(v, CellValue::Error(..)));
                 let same_formula = !current_is_error
@@ -322,7 +322,7 @@ impl ComputeCore {
                         .or_else(|| self.formula_strings.get(&cell_id))
                         .is_some_and(|existing| *existing == formula_str);
                 if !same_formula {
-                    mirror.apply_edit(
+                    cell_store.apply_edit(
                         sheet_id,
                         cell_id,
                         SheetPos::new(row, col),
@@ -332,7 +332,7 @@ impl ComputeCore {
                 }
 
                 self.parse_and_register_formula(
-                    mirror,
+                    cell_store,
                     cell_id,
                     *sheet_id,
                     formula_str,
@@ -341,8 +341,8 @@ impl ComputeCore {
             }
             None => {
                 // Plain value path — store verbatim, no parser involvement.
-                mirror.apply_edit(sheet_id, cell_id, SheetPos::new(row, col), value, None);
-                self.clear_formula_deps(mirror, cell_id);
+                cell_store.apply_edit(sheet_id, cell_id, SheetPos::new(row, col), value, None);
+                self.clear_formula_deps(cell_store, cell_id);
             }
         }
 
@@ -359,7 +359,7 @@ impl ComputeCore {
     ///
     /// Instead, we set its precedents to empty (which cleans up old reverse edges
     /// for its own deps) and then remove the precedents entry entirely.
-    pub(super) fn clear_formula_deps(&mut self, mirror: &mut CellMirror, cell_id: CellId) {
+    pub(super) fn clear_formula_deps(&mut self, cell_store: &mut CellStore, cell_id: CellId) {
         if self.ast_cache.contains_key(&cell_id) {
             // Clear its own deps by setting empty precedents
             // (this removes old reverse edges via remove_old_edges internally)
@@ -372,7 +372,7 @@ impl ComputeCore {
         self.cell_formula_text.remove(&cell_id);
         self.cell_range_keys.remove(&cell_id);
         // Clear IdentityFormula from CellEntry
-        mirror.set_formula(&cell_id, None);
+        cell_store.set_formula(&cell_id, None);
     }
 
     // -----------------------------------------------------------------------
@@ -381,38 +381,43 @@ impl ComputeCore {
 
     pub fn validate_formula_circular_reference(
         &self,
-        mirror: &CellMirror,
+        cell_store: &CellStore,
         sheet_id: &SheetId,
         row: u32,
         col: u32,
         formula: &str,
     ) -> Option<crate::engine_types::FormulaCircularReferenceValidation> {
         let formula = {
-            let sheet_names: Vec<&str> = mirror
+            let sheet_names: Vec<&str> = cell_store
                 .sheet_ids()
-                .filter_map(|id| mirror.get_sheet(id).map(|s| s.name.as_str()))
+                .filter_map(|id| cell_store.get_sheet(id).map(|s| s.name.as_str()))
                 .collect();
             compute_parser::normalize_formula_input(formula, &sheet_names)
         };
 
-        let resolver = MirrorCellRefResolver {
-            mirror,
+        let resolver = StoreCellRefResolver {
+            cell_store,
             current_sheet: *sheet_id,
         };
         let ast = parse_formula(&formula, Some(&resolver)).ok()?.into_inner();
 
         let target_pos = SheetPos::new(row, col);
-        let cell_id = mirror
+        let cell_id = cell_store
             .resolve_cell_id(sheet_id, target_pos)
             .unwrap_or_else(|| CellId::from_raw(u128::MAX));
 
-        let extracted =
-            extract_deps_and_volatility(&ast, sheet_id, mirror, self.ordered_sheets(), Some(row));
+        let extracted = extract_deps_and_volatility(
+            &ast,
+            sheet_id,
+            cell_store,
+            self.ordered_sheets(),
+            Some(row),
+        );
         let edit = compute_graph::HypotheticalDependencyEdit {
             cell: cell_id,
             new_precedents: extracted.value_deps,
         };
-        let positions = compute_graph::positions::WithOverrides::new(mirror).with_override(
+        let positions = compute_graph::positions::WithOverrides::new(cell_store).with_override(
             cell_id,
             compute_graph::positions::CellPosition {
                 sheet: *sheet_id,
@@ -452,7 +457,7 @@ impl ComputeCore {
     /// calls `get_evaluation_order` and handles cycles via `handle_cycles_and_recalc`.
     pub(super) fn parse_and_register_formula(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         cell_id: CellId,
         sheet_id: SheetId,
         formula: String,
@@ -461,9 +466,9 @@ impl ComputeCore {
         // Qualify implicit structured refs: [@Col] → TableName[@Col]
         // when the cell is inside a table.
         let formula = {
-            let table_name = mirror.resolve_position(&cell_id).and_then(|pos| {
+            let table_name = cell_store.resolve_position(&cell_id).and_then(|pos| {
                 let sheet_hex = sheet_id.to_uuid_string();
-                mirror
+                cell_store
                     .all_tables()
                     .iter()
                     .find(|t| {
@@ -480,17 +485,17 @@ impl ComputeCore {
 
         // Normalize: auto-quote sheet names, close parens, canonicalize refs
         let formula = {
-            let sheet_names: Vec<&str> = mirror
+            let sheet_names: Vec<&str> = cell_store
                 .sheet_ids()
-                .filter_map(|id| mirror.get_sheet(id).map(|s| s.name.as_str()))
+                .filter_map(|id| cell_store.get_sheet(id).map(|s| s.name.as_str()))
                 .collect();
             compute_parser::normalize_formula_input(&formula, &sheet_names)
         };
 
         // Step 1: Parse to AST with immutable resolver (resolves existing CellIds)
         let ast = {
-            let resolver = MirrorCellRefResolver {
-                mirror: &*mirror,
+            let resolver = StoreCellRefResolver {
+                cell_store: &*cell_store,
                 current_sheet: sheet_id,
             };
             parse_formula(&formula, Some(&resolver))
@@ -499,12 +504,12 @@ impl ComputeCore {
         match ast {
             Ok(spanned) => {
                 let ast = spanned.into_inner();
-                // Step 2: Convert to IdentityFormula (needs &mut mirror for ensure_cell_id).
+                // Step 2: Convert to IdentityFormula (needs &mut cell_store for ensure_cell_id).
                 //         This is done BEFORE dep extraction so ghost cells created by
                 //         ensure_cell_id are visible to extract_deps_and_volatility.
                 let identity_formula = {
                     let id_resolver = CoreIdentityResolver {
-                        mirror: std::cell::RefCell::new(mirror),
+                        cell_store: std::cell::RefCell::new(cell_store),
                         id_alloc: &self.id_alloc,
                         current_sheet: sheet_id,
                     };
@@ -513,19 +518,19 @@ impl ComputeCore {
 
                 // Step 3: Store IdentityFormula in CellEntry
                 let rendered_formula = Self::rendered_formula_string_or_fallback(
-                    mirror,
+                    cell_store,
                     sheet_id,
                     identity_formula.as_ref(),
                     &formula,
                 );
-                mirror.set_formula(&cell_id, identity_formula);
+                cell_store.set_formula(&cell_id, identity_formula);
 
                 // Step 4: Extract dependencies and check volatility in a single AST walk
-                let current_row = mirror.resolve_position(&cell_id).map(|pos| pos.row());
+                let current_row = cell_store.resolve_position(&cell_id).map(|pos| pos.row());
                 let extracted = extract_deps_and_volatility(
                     &ast,
                     &sheet_id,
-                    &*mirror,
+                    &*cell_store,
                     self.ordered_sheets(),
                     current_row,
                 );
@@ -540,13 +545,16 @@ impl ComputeCore {
                         cell: cell_id,
                         new_precedents: deps.clone(),
                     };
-                    // The cell's position is already in the mirror (set by apply_edit above),
-                    // so no WithOverrides needed — the mirror resolves it directly.
-                    let creates_cycle = self.graph.would_create_cycle(&edit, &*mirror).into_value();
+                    // The cell's position is already in the cell store (set by apply_edit above),
+                    // so no WithOverrides needed — the cell store resolves it directly.
+                    let creates_cycle = self
+                        .graph
+                        .would_create_cycle(&edit, &*cell_store)
+                        .into_value();
 
                     if creates_cycle {
                         // Cycle detected — set cell to #REF! and skip registration
-                        mirror.set_value_mut(&cell_id, CellValue::Error(CellError::Ref, None));
+                        cell_store.set_value_mut(&cell_id, CellValue::Error(CellError::Ref, None));
                         // Clear any existing deps for this cell (but keep it as a dependency target)
                         self.graph.set_precedents(&cell_id, vec![]);
                         self.graph.unmark_volatile(&cell_id);
@@ -576,10 +584,13 @@ impl ComputeCore {
 
                 // Update pre-computed range keys for this cell
                 {
-                    let sheet_ctx = mirror.sheet_for_cell(&cell_id);
+                    let sheet_ctx = cell_store.sheet_for_cell(&cell_id);
                     let mut plan = crate::eval::cache::range_store::DataPlan::default();
                     crate::eval::cache::range_store::collect_static_ranges_pub(
-                        &ast, sheet_ctx, &*mirror, &mut plan,
+                        &ast,
+                        sheet_ctx,
+                        &*cell_store,
+                        &mut plan,
                     );
                     if plan.is_empty() {
                         self.cell_range_keys.remove(&cell_id);
@@ -601,11 +612,11 @@ impl ComputeCore {
             }
             Err(_parse_err) => {
                 // Parse failed — set cell to #NAME? error
-                mirror.set_value_mut(&cell_id, CellValue::Error(CellError::Name, None));
+                cell_store.set_value_mut(&cell_id, CellValue::Error(CellError::Name, None));
                 // An invalid formula is still a value-producing dependency
                 // target. Keep reverse edges so its error, and later repairs,
                 // reach formulas that reference this cell.
-                self.clear_formula_deps(mirror, cell_id);
+                self.clear_formula_deps(cell_store, cell_id);
                 self.formula_strings.insert(cell_id, formula.clone());
                 self.cell_formula_text.insert(cell_id, formula);
             }
@@ -616,23 +627,23 @@ impl ComputeCore {
     /// Evaluation is performed by the caller after all related metadata is updated.
     pub(crate) fn rewrite_formula_sources(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         rewrite: impl Fn(Option<u32>, &str) -> String,
     ) -> Vec<CellId> {
         let updates: Vec<(CellId, SheetId, String)> = self
             .cell_formula_text
             .iter()
             .filter_map(|(cell_id, formula)| {
-                let row = mirror.resolve_position(cell_id).map(|pos| pos.row());
+                let row = cell_store.resolve_position(cell_id).map(|pos| pos.row());
                 let rewritten = rewrite(row, formula);
                 (rewritten != *formula)
-                    .then(|| Some((*cell_id, mirror.sheet_for_cell(cell_id)?, rewritten)))
+                    .then(|| Some((*cell_id, cell_store.sheet_for_cell(cell_id)?, rewritten)))
                     .flatten()
             })
             .collect();
         let mut dirty = Vec::with_capacity(updates.len());
         for (cell_id, sheet_id, formula) in updates {
-            self.parse_and_register_formula(mirror, cell_id, sheet_id, formula, false);
+            self.parse_and_register_formula(cell_store, cell_id, sheet_id, formula, false);
             dirty.push(cell_id);
         }
         dirty
@@ -650,16 +661,16 @@ impl ComputeCore {
     ///
     /// Called during `init_from_snapshot` after cell formulas are registered
     /// and during `rebuild_dep_graph_from_asts`.
-    pub(super) fn register_all_variables(&mut self, mirror: &CellMirror) {
+    pub(super) fn register_all_variables(&mut self, cell_store: &CellStore) {
         // Collect variable data to avoid borrow conflicts with self
-        let vars: Vec<(formula_types::Scope, String, Option<String>)> = mirror
+        let vars: Vec<(formula_types::Scope, String, Option<String>)> = cell_store
             .variables
             .all_variables()
             .map(|(scope, name, def)| (scope.clone(), name.clone(), def.raw_expression.clone()))
             .collect();
 
         for (scope, name, raw_expr) in vars {
-            self.register_single_variable(mirror, &scope, &name, raw_expr.as_deref());
+            self.register_single_variable(cell_store, &scope, &name, raw_expr.as_deref());
         }
     }
 
@@ -670,10 +681,10 @@ impl ComputeCore {
     /// names enter the snapshot as `raw_expression` with empty `refers_to.refs`.
     /// Evaluation can still parse the raw name through the synthetic variable node,
     /// but formula dependency extraction only inlines backing cells when the
-    /// `NamedRangeDef` already carries identity refs. Normalize the in-memory mirror
+    /// `NamedRangeDef` already carries identity refs. Normalize the in-memory cell_store
     /// here so imported names have the same graph/API behavior as SDK-created names.
-    pub(super) fn normalize_raw_named_ranges_for_graph(&mut self, mirror: &mut CellMirror) {
-        let defs: Vec<formula_types::NamedRangeDef> = mirror
+    pub(super) fn normalize_raw_named_ranges_for_graph(&mut self, cell_store: &mut CellStore) {
+        let defs: Vec<formula_types::NamedRangeDef> = cell_store
             .variables
             .all_variables()
             .map(|(_, _, def)| def.clone())
@@ -684,17 +695,17 @@ impl ComputeCore {
                 continue;
             }
             let name = def.name.clone();
-            let resolved = self.resolve_named_range_def_for_graph(mirror, def);
+            let resolved = self.resolve_named_range_def_for_graph(cell_store, def);
             if resolved.refers_to.refs.is_empty() {
                 continue;
             }
-            mirror.set_named_range(name, resolved);
+            cell_store.set_named_range(name, resolved);
         }
     }
 
     pub(super) fn resolve_named_range_def_for_graph(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         mut def: formula_types::NamedRangeDef,
     ) -> formula_types::NamedRangeDef {
         if !def.refers_to.refs.is_empty() {
@@ -714,7 +725,7 @@ impl ComputeCore {
                 .ordered_sheets()
                 .first()
                 .copied()
-                .or_else(|| mirror.sheet_ids().next().copied()),
+                .or_else(|| cell_store.sheet_ids().next().copied()),
         };
         let Some(context_sheet) = context_sheet else {
             return def;
@@ -726,7 +737,7 @@ impl ComputeCore {
             format!("={raw_expr}")
         };
 
-        let Ok(identity) = self.to_identity_formula(mirror, &context_sheet, &formula) else {
+        let Ok(identity) = self.to_identity_formula(cell_store, &context_sheet, &formula) else {
             return def;
         };
         if identity.refs.is_empty() {
@@ -747,12 +758,12 @@ impl ComputeCore {
     /// 5. Mark volatile if expression contains NOW(), RAND(), etc.
     pub(super) fn register_single_variable(
         &mut self,
-        mirror: &CellMirror,
+        cell_store: &CellStore,
         scope: &formula_types::Scope,
         name: &str,
         raw_expr: Option<&str>,
     ) {
-        let cell_id = match mirror.variables.get_variable_cell_id(scope, name) {
+        let cell_id = match cell_store.variables.get_variable_cell_id(scope, name) {
             Some(id) => id,
             None => return, // Variable not in store
         };
@@ -779,15 +790,15 @@ impl ComputeCore {
 
         // Normalize the formula string (sheet name quoting, paren closing, etc.)
         let formula_str = {
-            let sheet_names: Vec<&str> = mirror
+            let sheet_names: Vec<&str> = cell_store
                 .sheet_ids()
-                .filter_map(|id| mirror.get_sheet(id).map(|s| s.name.as_str()))
+                .filter_map(|id| cell_store.get_sheet(id).map(|s| s.name.as_str()))
                 .collect();
             compute_parser::normalize_formula_input(&formula_str, &sheet_names)
         };
 
-        let resolver = MirrorCellRefResolver {
-            mirror,
+        let resolver = StoreCellRefResolver {
+            cell_store,
             current_sheet: sheet_id,
         };
 
@@ -799,7 +810,7 @@ impl ComputeCore {
                 let extracted = extract_deps_and_volatility(
                     &ast,
                     &sheet_id,
-                    mirror,
+                    cell_store,
                     self.ordered_sheets(),
                     None,
                 );

@@ -27,7 +27,7 @@ impl SheetLayout {
     pub fn set_row_height(&self, row: u32, height: f64) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.set_row_height(&sid, row, height).map(|(_, r)| r))
+            .call_engine(move |e| e.set_row_height(&sid, row, height))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -35,7 +35,7 @@ impl SheetLayout {
     pub fn set_col_width(&self, col: u32, width: f64) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.set_col_width(&sid, col, width).map(|(_, r)| r))
+            .call_engine(move |e| e.set_col_width(&sid, col, width))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -46,7 +46,7 @@ impl SheetLayout {
     ) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.set_col_widths(&sid, &widths).map(|(_, r)| r))
+            .call_engine(move |e| e.set_col_widths(&sid, &widths))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -57,7 +57,7 @@ impl SheetLayout {
     ) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.set_col_widths_chars(&sid, &widths).map(|(_, r)| r))
+            .call_engine(move |e| e.set_col_widths_chars(&sid, &widths))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -97,7 +97,7 @@ impl SheetLayout {
     pub fn hide_rows(&self, rows: Vec<u32>) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.hide_rows(&sid, &rows).map(|(_, r)| r))
+            .call_engine(move |e| e.hide_rows(&sid, &rows))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -105,7 +105,7 @@ impl SheetLayout {
     pub fn unhide_rows(&self, rows: Vec<u32>) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.unhide_rows(&sid, &rows).map(|(_, r)| r))
+            .call_engine(move |e| e.unhide_rows(&sid, &rows))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -113,7 +113,7 @@ impl SheetLayout {
     pub fn hide_columns(&self, cols: Vec<u32>) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.hide_columns(&sid, &cols).map(|(_, r)| r))
+            .call_engine(move |e| e.hide_columns(&sid, &cols))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -121,7 +121,7 @@ impl SheetLayout {
     pub fn unhide_columns(&self, cols: Vec<u32>) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.unhide_columns(&sid, &cols).map(|(_, r)| r))
+            .call_engine(move |e| e.unhide_columns(&sid, &cols))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -171,7 +171,7 @@ impl SheetLayout {
     ) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.set_frozen_panes(&sid, rows, cols).map(|(_, r)| r))
+            .call_engine(move |e| e.set_frozen_panes(&sid, rows, cols))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -186,7 +186,7 @@ impl SheetLayout {
     pub fn freeze_rows(&self, count: u32) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.freeze_rows(&sid, count).map(|(_, r)| r))
+            .call_engine(move |e| e.freeze_rows(&sid, count))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -194,7 +194,7 @@ impl SheetLayout {
     pub fn freeze_columns(&self, count: u32) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.freeze_columns(&sid, count).map(|(_, r)| r))
+            .call_engine(move |e| e.freeze_columns(&sid, count))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 }

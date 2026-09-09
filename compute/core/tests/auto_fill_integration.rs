@@ -1,9 +1,9 @@
 // Integration tests for mutation_auto_fill: exercises the full engine pipeline
-// (ComputeEngine → CellMirror → GridIndexes → build_adjusted_formula → to_a1_display).
+// (ComputeEngine → CellStore → GridIndexes → build_adjusted_formula → to_a1_display).
 //
-// These tests reproduce the bugs documented in workstream-b-autofill-cellmirror.md:
+// These tests reproduce the bugs documented in workstream-b-autofill-cellstore.md:
 //   Bug #2: AutoFill overwrites source range
-//   Bug #3: AutoFill formulas produce #REF! (CellMirror desync)
+//   Bug #3: AutoFill formulas produce #REF! (CellStore desync)
 
 use cell_types::{CellId, SheetId, SheetPos};
 use compute_core::engine_types::fill::{BridgeAutoFillRequest, BridgeFillRangeSpec};
@@ -130,7 +130,7 @@ fn bug3_formula_fill_down_no_ref_error() {
         make_cell(0, 1, num(20.0)), // B1 = 20
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // Set C1 = =A1+B1 via the parsing API (creates identity formula + CellIds)
     engine
@@ -139,18 +139,18 @@ fn bug3_formula_fill_down_no_ref_error() {
 
     // Verify C1 computed correctly before fill
     let c1_val = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sheet_id, SheetPos::new(0, 2));
     assert_eq!(*c1_val.unwrap(), num(30.0), "C1 should compute A1+B1 = 30");
 
     // Fill C1 → C2:C5
     let request = fill_request(0, 2, 0, 2, 1, 2, 4, 2, "down");
-    let (_patches, _result) = engine.auto_fill(&sheet_id, request).unwrap();
+    let _result = engine.auto_fill(&sheet_id, request).unwrap();
 
     // Verify filled cells have formulas, not #REF!
     for target_row in 1..=4u32 {
         let pos = SheetPos::new(target_row, 2);
-        let cell_id = engine.mirror().resolve_cell_id(&sheet_id, pos);
+        let cell_id = engine.cell_store().resolve_cell_id(&sheet_id, pos);
         assert!(
             cell_id.is_some(),
             "row {} col 2 should have a CellId after fill",
@@ -158,7 +158,7 @@ fn bug3_formula_fill_down_no_ref_error() {
         );
 
         // Check the formula display string via the engine's to_a1_display
-        let formula = engine.mirror().get_formula(&cell_id.unwrap());
+        let formula = engine.cell_store().get_formula(&cell_id.unwrap());
         assert!(
             formula.is_some(),
             "row {} col 2 should have a formula after fill",
@@ -186,7 +186,7 @@ fn bug3_formula_fill_down_no_ref_error() {
 fn auto_fill_preview_adjusts_formula_without_mutating_cells() {
     let snapshot = make_snapshot(vec![make_cell(0, 0, num(10.0)), make_cell(0, 1, num(20.0))]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     engine
         .set_cell_value_parsed(&sheet_id, 0, 2, "=A1+B1")
@@ -201,7 +201,7 @@ fn auto_fill_preview_adjusts_formula_without_mutating_cells() {
 
     assert!(
         engine
-            .mirror()
+            .cell_store()
             .resolve_cell_id(&sheet_id, SheetPos::new(1, 2))
             .is_none(),
         "preview must not create a target cell"
@@ -237,7 +237,7 @@ fn bug3_formula_fill_right_no_ref_error() {
         make_cell(1, 0, num(2.0)), // A2
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // A3 = =A1+A2
     engine
@@ -246,17 +246,17 @@ fn bug3_formula_fill_right_no_ref_error() {
 
     // Fill A3 → B3:D3
     let request = fill_request(2, 0, 2, 0, 2, 1, 2, 3, "right");
-    let (_patches, _result) = engine.auto_fill(&sheet_id, request).unwrap();
+    let _result = engine.auto_fill(&sheet_id, request).unwrap();
 
     let expected_formulas = ["=B1+B2", "=C1+C2", "=D1+D2"];
     for (i, target_col) in (1..=3u32).enumerate() {
         let pos = SheetPos::new(2, target_col);
         let cell_id = engine
-            .mirror()
+            .cell_store()
             .resolve_cell_id(&sheet_id, pos)
             .unwrap_or_else(|| panic!("row 2 col {} should have a CellId after fill", target_col));
         let formula = engine
-            .mirror()
+            .cell_store()
             .get_formula(&cell_id)
             .unwrap_or_else(|| panic!("row 2 col {} should have a formula after fill", target_col));
         let display = engine.to_a1_display(&sheet_id, formula);
@@ -286,7 +286,7 @@ fn bug3_formula_fill_range_ref_no_ref_error() {
         make_cell(2, 0, num(3.0)),
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // B1 = =SUM(A1:A3)
     engine
@@ -295,15 +295,15 @@ fn bug3_formula_fill_range_ref_no_ref_error() {
 
     // Fill B1 → B2:B3
     let request = fill_request(0, 1, 0, 1, 1, 1, 2, 1, "down");
-    let (_patches, _result) = engine.auto_fill(&sheet_id, request).unwrap();
+    let _result = engine.auto_fill(&sheet_id, request).unwrap();
 
     // Get the source formula's identity for comparison
     let source_cell_id = engine
-        .mirror()
+        .cell_store()
         .resolve_cell_id(&sheet_id, SheetPos::new(0, 1))
         .unwrap();
     let source_formula = engine
-        .mirror()
+        .cell_store()
         .get_formula(&source_cell_id)
         .cloned()
         .unwrap();
@@ -312,11 +312,11 @@ fn bug3_formula_fill_range_ref_no_ref_error() {
     for (i, target_row) in (1..=2u32).enumerate() {
         let pos = SheetPos::new(target_row, 1);
         let cell_id = engine
-            .mirror()
+            .cell_store()
             .resolve_cell_id(&sheet_id, pos)
             .unwrap_or_else(|| panic!("row {} col 1 should have a CellId", target_row));
         let formula = engine
-            .mirror()
+            .cell_store()
             .get_formula(&cell_id)
             .unwrap_or_else(|| panic!("row {} col 1 should have a formula", target_row));
 
@@ -346,7 +346,7 @@ fn bug3_formula_fill_range_ref_no_ref_error() {
 fn bug3_formula_fill_absolute_ref_stays_fixed() {
     let snapshot = make_snapshot(vec![make_cell(0, 0, num(100.0))]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // B1 = =$A$1*2
     engine
@@ -355,16 +355,16 @@ fn bug3_formula_fill_absolute_ref_stays_fixed() {
 
     // Fill B1 → B2:B4
     let request = fill_request(0, 1, 0, 1, 1, 1, 3, 1, "down");
-    let (_patches, _result) = engine.auto_fill(&sheet_id, request).unwrap();
+    let _result = engine.auto_fill(&sheet_id, request).unwrap();
 
     for target_row in 1..=3u32 {
         let pos = SheetPos::new(target_row, 1);
         let cell_id = engine
-            .mirror()
+            .cell_store()
             .resolve_cell_id(&sheet_id, pos)
             .unwrap_or_else(|| panic!("row {} col 1 should have a CellId", target_row));
         let formula = engine
-            .mirror()
+            .cell_store()
             .get_formula(&cell_id)
             .unwrap_or_else(|| panic!("row {} col 1 should have a formula", target_row));
         let display = engine.to_a1_display(&sheet_id, formula);
@@ -390,7 +390,7 @@ fn bug3_formula_fill_absolute_ref_stays_fixed() {
 fn bug3_formula_fill_mixed_refs() {
     let snapshot = make_snapshot(vec![make_cell(0, 0, num(1.0)), make_cell(0, 1, num(2.0))]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // C1 = =$A$1+B1
     engine
@@ -399,13 +399,13 @@ fn bug3_formula_fill_mixed_refs() {
 
     // Fill C1 → C2:C3
     let request = fill_request(0, 2, 0, 2, 1, 2, 2, 2, "down");
-    let (_patches, _result) = engine.auto_fill(&sheet_id, request).unwrap();
+    let _result = engine.auto_fill(&sheet_id, request).unwrap();
 
     let expected = ["=$A$1+B2", "=$A$1+B3"];
     for (i, target_row) in (1..=2u32).enumerate() {
         let pos = SheetPos::new(target_row, 2);
-        let cell_id = engine.mirror().resolve_cell_id(&sheet_id, pos).unwrap();
-        let formula = engine.mirror().get_formula(&cell_id).unwrap();
+        let cell_id = engine.cell_store().resolve_cell_id(&sheet_id, pos).unwrap();
+        let formula = engine.cell_store().get_formula(&cell_id).unwrap();
         let display = engine.to_a1_display(&sheet_id, formula);
         assert!(
             !display.contains("#REF!"),
@@ -430,27 +430,27 @@ fn bug2_autofill_preserves_source_values() {
         make_cell(1, 0, num(2.0)), // A2 = 2
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // Fill A1:A2 → A3:A10
     let request = fill_request(0, 0, 1, 0, 2, 0, 9, 0, "down");
-    let (_patches, _result) = engine.auto_fill(&sheet_id, request).unwrap();
+    let _result = engine.auto_fill(&sheet_id, request).unwrap();
 
     // Source cells MUST be untouched
     let a1 = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sheet_id, SheetPos::new(0, 0));
     assert_eq!(*a1.unwrap(), num(1.0), "A1 must remain 1 after fill");
 
     let a2 = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sheet_id, SheetPos::new(1, 0));
     assert_eq!(*a2.unwrap(), num(2.0), "A2 must remain 2 after fill");
 
     // Target cells should have the series continuation: 3,4,5,6,7,8,9,10
     for target_row in 2..=9u32 {
         let val = engine
-            .mirror()
+            .cell_store()
             .get_cell_value_at(&sheet_id, SheetPos::new(target_row, 0));
         assert!(
             val.is_some(),
@@ -476,7 +476,7 @@ fn bug2_autofill_preserves_source_formula() {
         make_cell(0, 1, num(20.0)), // B1 = 20
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // C1 = =A1+B1
     engine
@@ -485,21 +485,21 @@ fn bug2_autofill_preserves_source_formula() {
 
     // Capture the source formula before fill
     let source_cell_id = engine
-        .mirror()
+        .cell_store()
         .resolve_cell_id(&sheet_id, SheetPos::new(0, 2))
         .unwrap();
     let source_formula_before = engine
-        .mirror()
+        .cell_store()
         .get_formula(&source_cell_id)
         .cloned()
         .unwrap();
 
     // Fill C1 → C2:C3
     let request = fill_request(0, 2, 0, 2, 1, 2, 2, 2, "down");
-    let (_patches, _result) = engine.auto_fill(&sheet_id, request).unwrap();
+    let _result = engine.auto_fill(&sheet_id, request).unwrap();
 
     // Source cell C1 must still have its original formula
-    let source_formula_after = engine.mirror().get_formula(&source_cell_id);
+    let source_formula_after = engine.cell_store().get_formula(&source_cell_id);
     assert!(
         source_formula_after.is_some(),
         "C1 must still have a formula after fill"
@@ -512,7 +512,7 @@ fn bug2_autofill_preserves_source_formula() {
 
     // Source cell value must still be correct
     let c1_val = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sheet_id, SheetPos::new(0, 2));
     assert_eq!(
         *c1_val.unwrap(),
@@ -525,7 +525,7 @@ fn bug2_autofill_preserves_source_formula() {
 fn autofill_copies_formats_for_value_and_formula_source_columns() {
     let snapshot = make_snapshot(vec![make_cell(0, 0, num(10.0)), make_cell(0, 1, num(20.0))]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     engine
         .set_cell_value_parsed(&sheet_id, 0, 2, "=A1+B1")
@@ -567,7 +567,7 @@ fn autofill_copies_formats_for_value_and_formula_source_columns() {
     );
 
     let request = fill_request(0, 0, 0, 2, 1, 0, 2, 2, "down");
-    let (_patches, _result) = engine.auto_fill(&sheet_id, request).unwrap();
+    let _result = engine.auto_fill(&sheet_id, request).unwrap();
 
     for row in 1..=2 {
         let a_fmt = format_at(&engine, &sheet_id, row, 0);
@@ -622,7 +622,7 @@ fn formula_fill_up_adjusts_references() {
         make_cell(4, 1, num(10.0)), // B5
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // C5 = =A5+B5
     engine
@@ -631,13 +631,13 @@ fn formula_fill_up_adjusts_references() {
 
     // Fill C5 up to C3:C4
     let request = fill_request(4, 2, 4, 2, 2, 2, 3, 2, "up");
-    let (_patches, _result) = engine.auto_fill(&sheet_id, request).unwrap();
+    let _result = engine.auto_fill(&sheet_id, request).unwrap();
 
     let expected = [("=A3+B3", 2u32), ("=A4+B4", 3)];
     for (exp_formula, target_row) in &expected {
         let pos = SheetPos::new(*target_row, 2);
-        let cell_id = engine.mirror().resolve_cell_id(&sheet_id, pos).unwrap();
-        let formula = engine.mirror().get_formula(&cell_id).unwrap();
+        let cell_id = engine.cell_store().resolve_cell_id(&sheet_id, pos).unwrap();
+        let formula = engine.cell_store().get_formula(&cell_id).unwrap();
         let display = engine.to_a1_display(&sheet_id, formula);
         assert!(
             !display.contains("#REF!"),
@@ -657,7 +657,7 @@ fn formula_fill_multi_source_pattern() {
         make_cell(1, 0, num(2.0)), // A2
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // B1 = =A1*10, B2 = =A2*10
     engine
@@ -669,17 +669,17 @@ fn formula_fill_multi_source_pattern() {
 
     // Fill B1:B2 → B3:B6
     let request = fill_request(0, 1, 1, 1, 2, 1, 5, 1, "down");
-    let (_patches, _result) = engine.auto_fill(&sheet_id, request).unwrap();
+    let _result = engine.auto_fill(&sheet_id, request).unwrap();
 
     let expected = ["=A3*10", "=A4*10", "=A5*10", "=A6*10"];
     for (i, target_row) in (2..=5u32).enumerate() {
         let pos = SheetPos::new(target_row, 1);
         let cell_id = engine
-            .mirror()
+            .cell_store()
             .resolve_cell_id(&sheet_id, pos)
             .unwrap_or_else(|| panic!("row {} col 1 should have a CellId", target_row));
         let formula = engine
-            .mirror()
+            .cell_store()
             .get_formula(&cell_id)
             .unwrap_or_else(|| panic!("row {} col 1 should have a formula", target_row));
         let display = engine.to_a1_display(&sheet_id, formula);

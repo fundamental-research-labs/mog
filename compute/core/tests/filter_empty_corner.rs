@@ -112,13 +112,13 @@ fn is_row_hidden(engine: &ComputeEngine, sid: &SheetId, row: u32) -> bool {
 fn create_filter_allocates_cell_ids_for_empty_corners() {
     let (mut engine, _) =
         ComputeEngine::from_snapshot(snapshot_with_empty_corner()).expect("from_snapshot");
-    let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
+    let sid = engine.cell_store().sheet_by_name("Sheet1").expect("Sheet1");
 
-    // Pre-condition: corner cells (1..=4, 1..=2) are *all* empty in the mirror.
+    // Pre-condition: corner cells (1..=4, 1..=2) are *all* empty in the cell store.
     for row in 1..=4u32 {
         for col in 1..=2u32 {
             let v = engine
-                .mirror()
+                .cell_store()
                 .get_cell_value_at(&sid, SheetPos::new(row, col))
                 .cloned()
                 .unwrap_or(CellValue::Null);
@@ -145,9 +145,7 @@ fn create_filter_allocates_cell_ids_for_empty_corners() {
         )
         .expect("create_filter");
 
-    // The bridge returns (Vec<u8>, MutationResult); MutationResult.data
-    // carries the FilterState as JSON. Pull it back via get_filters_in_sheet
-    // for clarity instead of decoding the wire payload.
+    // Query the native filter metadata after applying the mutation.
     let _ = result;
     let filters = engine.get_filters_in_sheet(&sid);
     assert_eq!(filters.len(), 1, "exactly one filter created");
@@ -197,7 +195,7 @@ fn apply_filter_hides_rows_after_empty_corner_create() {
 
     let (mut engine, _) =
         ComputeEngine::from_snapshot(snapshot_with_empty_corner()).expect("from_snapshot");
-    let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
+    let sid = engine.cell_store().sheet_by_name("Sheet1").expect("Sheet1");
 
     engine
         .create_filter(
@@ -255,7 +253,7 @@ fn row_dim_binary_marks_filter_hidden_rows() {
 
     let (mut engine, _) =
         ComputeEngine::from_snapshot(snapshot_with_empty_corner()).expect("from_snapshot");
-    let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
+    let sid = engine.cell_store().sheet_by_name("Sheet1").expect("Sheet1");
 
     engine
         .create_filter(

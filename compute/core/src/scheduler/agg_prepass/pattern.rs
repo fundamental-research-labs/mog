@@ -8,7 +8,7 @@ use compute_graph::positions::PositionResolver;
 
 /// Resolve a `CellRef` to `(sheet, row, col)`.
 /// `Positional` is extracted directly; `Resolved(CellId)` is looked up via the
-/// caller-provided resolver (backed by the mirror in production).
+/// caller-provided resolver (backed by the cell store in production).
 fn resolve_cell_ref(cr: &CellRef, resolver: &impl PositionResolver) -> Option<(SheetId, u32, u32)> {
     match cr {
         CellRef::Positional { sheet, row, col } => Some((*sheet, *row, *col)),

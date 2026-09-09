@@ -1,7 +1,7 @@
 use cell_types::{CellId, SheetId, SheetPos};
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use crate::mirror::{CellMirror, MirrorPositionLookup};
+use crate::cells::{CellStore, StorePositionLookup};
 
 pub const FORMULA_TEXT_DISPLAY_LIMIT: usize = 8192;
 
@@ -31,7 +31,7 @@ impl<'a> FormulaTextProvider<'a> {
         }
     }
 
-    pub fn mirror_identity_only_for_test_unavailable() -> Self {
+    pub fn store_identity_only_for_test_unavailable() -> Self {
         Self {
             cell_formula_text: None,
             formula_strings: None,
@@ -40,16 +40,16 @@ impl<'a> FormulaTextProvider<'a> {
 
     pub fn lookup(
         &self,
-        mirror: &CellMirror,
+        cell_store: &CellStore,
         sheet: &SheetId,
         row: u32,
         col: u32,
     ) -> FormulaTextLookup {
-        if mirror.get_sheet(sheet).is_none() {
+        if cell_store.get_sheet(sheet).is_none() {
             return FormulaTextLookup::InvalidRef;
         }
 
-        let Some(cell_id) = mirror.resolve_cell_id(sheet, SheetPos::new(row, col)) else {
+        let Some(cell_id) = cell_store.resolve_cell_id(sheet, SheetPos::new(row, col)) else {
             return FormulaTextLookup::NotFormula;
         };
 
@@ -61,8 +61,8 @@ impl<'a> FormulaTextProvider<'a> {
             return visible_or_unavailable(text);
         }
 
-        if let Some(formula) = mirror.get_formula(&cell_id) {
-            let lookup = MirrorPositionLookup::new(mirror, *sheet);
+        if let Some(formula) = cell_store.get_formula(&cell_id) {
+            let lookup = StorePositionLookup::new(cell_store, *sheet);
             let text = compute_parser::to_a1_string(formula, &lookup);
             return visible_or_unavailable(&text);
         }

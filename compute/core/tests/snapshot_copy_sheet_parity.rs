@@ -56,42 +56,46 @@ fn copy_sheet_preserves_source_dimensions_50x20() {
     };
 
     let (mut engine, _) = ComputeEngine::from_snapshot(snap).expect("from_snapshot");
-    let src_sid = *engine.mirror().sheet_ids().next().expect("source sheet");
+    let src_sid = *engine
+        .cell_store()
+        .sheet_ids()
+        .next()
+        .expect("source sheet");
 
     // Sanity: source has the declared dimensions.
     let src = engine
-        .mirror()
+        .cell_store()
         .get_sheet(&src_sid)
-        .expect("source SheetMirror");
+        .expect("source SheetStore");
     assert_eq!(
         (src.rows, src.cols),
         (50, 20),
-        "sanity: source sheet mirror dims"
+        "sanity: source sheet store dims"
     );
 
     let (new_hex, _result) = engine.copy_sheet(&src_sid, "Copy").expect("copy_sheet");
-    // Find the new sheet's id via mirror.
+    // Find the new sheet's id via cell store.
     let new_sid = *engine
-        .mirror()
+        .cell_store()
         .sheet_ids()
         .find(|s| {
             engine
-                .mirror()
+                .cell_store()
                 .get_sheet(s)
                 .map(|sm| sm.name == "Copy")
                 .unwrap_or(false)
         })
         .unwrap_or_else(|| panic!("copied sheet 'Copy' not found (new_hex={})", new_hex));
 
-    // Assertion 1: mirror reflects the source dims.
+    // Assertion 1: cell_store reflects the source dims.
     let copy = engine
-        .mirror()
+        .cell_store()
         .get_sheet(&new_sid)
-        .expect("copied SheetMirror");
+        .expect("copied SheetStore");
     assert_eq!(
         (copy.rows, copy.cols),
         (50, 20),
-        "copy_sheet must preserve source dims 50×20 in the mirror; got ({}, {}) — if this is (100, 26) the hardcoded fallback in storage/sheet/meta.rs:1545-1554 fired",
+        "copy_sheet must preserve source dims 50×20 in the cell_store; got ({}, {}) — if this is (100, 26) the hardcoded fallback in storage/sheet/meta.rs:1545-1554 fired",
         copy.rows,
         copy.cols
     );

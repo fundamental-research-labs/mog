@@ -9,7 +9,7 @@ use super::*;
 #[test]
 fn test_vlookup_array_lookup() {
     // VLOOKUP({1,2,3}, table, 2, TRUE) should return {"a","b","c"}
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let table = ASTNode::Array {
         rows: vec![
@@ -50,7 +50,7 @@ fn test_vlookup_array_lookup() {
 #[test]
 fn test_vlookup_array_lookup_not_found() {
     // VLOOKUP({1,99,3}, table, 2, TRUE) → {"a", #N/A, "c"}
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let table = ASTNode::Array {
         rows: vec![
@@ -90,7 +90,7 @@ fn test_vlookup_array_lookup_not_found() {
 #[test]
 fn test_vlookup_array_2d_lookup_rejected() {
     // VLOOKUP({1,2;3,4}, table, 2, TRUE) → #VALUE! (2D array rejected)
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let table = ASTNode::Array {
         rows: vec![
@@ -119,7 +119,7 @@ fn test_vlookup_array_2d_lookup_rejected() {
 #[test]
 fn test_hlookup_array_lookup() {
     // HLOOKUP({1,2,3}, table, 2, TRUE) should return {"a","b","c"}
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let table = ASTNode::Array {
         rows: vec![
@@ -167,7 +167,7 @@ fn test_hlookup_array_lookup() {
 #[test]
 fn test_hlookup_array_2d_lookup_rejected() {
     // HLOOKUP({1,2;3,4}, table, 2, TRUE) → #VALUE! (2D array rejected)
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let table = ASTNode::Array {
         rows: vec![
@@ -203,7 +203,7 @@ fn test_not_isnumber_composition() {
     // ISNUMBER(1)=TRUE  → NOT → FALSE
     // ISNUMBER("text")=FALSE → NOT → TRUE
     // ISNUMBER(TRUE)=FALSE → NOT → TRUE
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let arr = ASTNode::Array {
         rows: vec![vec![
@@ -232,7 +232,7 @@ fn test_not_isblank_composition() {
     // ISBLANK(1)=FALSE → NOT → TRUE
     // ISBLANK("")=FALSE → NOT → TRUE  (empty string is not blank in Excel)
     // ISBLANK(0)=FALSE → NOT → TRUE
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let arr = ASTNode::Array {
         rows: vec![vec![
@@ -261,7 +261,7 @@ fn test_sumproduct_not_isblank() {
     // SUMPRODUCT(NOT(ISBLANK({1,0,""})))
     // ISBLANK → {FALSE,FALSE,FALSE} → NOT → {TRUE,TRUE,TRUE}
     // SUMPRODUCT coerces booleans: TRUE=1 → 1+1+1 = 3
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let arr = ASTNode::Array {
         rows: vec![vec![
@@ -280,7 +280,7 @@ fn test_sumproduct_not_isblank() {
 fn test_sumproduct_text_empty_string_treated_as_zero() {
     // SUMPRODUCT({1,"",3}, {4,5,6}) = 1*4 + 0*5 + 3*6 = 22
     // Empty text "" should be treated as 0 in SUMPRODUCT
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let arr1 = ASTNode::Array {
         rows: vec![vec![
@@ -304,7 +304,7 @@ fn test_sumproduct_text_empty_string_treated_as_zero() {
 fn test_sumproduct_text_nonempty_string_treated_as_zero() {
     // SUMPRODUCT({1,"hello",3}, {4,5,6}) = 1*4 + 0*5 + 3*6 = 22
     // Non-empty text "hello" should be treated as 0 in SUMPRODUCT
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let arr1 = ASTNode::Array {
         rows: vec![vec![
@@ -328,7 +328,7 @@ fn test_sumproduct_text_nonempty_string_treated_as_zero() {
 fn test_sumproduct_error_propagates() {
     // SUMPRODUCT({1,#N/A,3}, {4,5,6}) → #N/A
     // Errors in arrays should still propagate
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let arr1 = ASTNode::Array {
         rows: vec![vec![
@@ -355,7 +355,7 @@ fn test_sumproduct_error_propagates() {
 #[test]
 fn test_sumproduct_boolean_mul_chain() {
     // SUMPRODUCT(({TRUE;FALSE;TRUE}) * {10;20;30}) = 1*10 + 0*20 + 1*30 = 40
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let bools = ASTNode::Array {
         rows: vec![
@@ -380,7 +380,7 @@ fn test_sumproduct_boolean_mul_chain() {
 fn test_sumproduct_comparison_mul_pattern() {
     // SUMPRODUCT(({1;2;3;1;2} = 1) * {10;20;30;40;50})
     // Matches: rows 0(10) and 3(40) → 50
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let vals = ASTNode::Array {
         rows: vec![
@@ -414,7 +414,7 @@ fn test_sumproduct_double_boolean_criteria() {
     // Row 2: (1=1)*(30>15) = TRUE*TRUE = 1
     // Row 3: (2=1)*(40>15) = FALSE*TRUE = 0
     // Sum = 1
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let cats = ASTNode::Array {
         rows: vec![
@@ -445,7 +445,7 @@ fn test_sumproduct_date_multi_array_in_fused_path() {
     // DATE produces 3 date serials: Jan, Feb, Jan
     // Comparison with Jan 1 2024: {TRUE;FALSE;TRUE}
     // Multiply by values: 100 + 0 + 300 = 400
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let years = ASTNode::Array {
         rows: vec![
@@ -491,7 +491,7 @@ fn test_sumproduct_nested_year_month_date_pattern() {
     // YEAR(45323)=2024, MONTH(45323)=2, DATE(2024,2,1)=45323
     // Comparison with 45292: {TRUE;FALSE;TRUE}
     // 10 + 0 + 30 = 40
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let serial_jan = 45292.0; // 2024-01-01
     let serial_feb = 45323.0; // 2024-02-01
@@ -534,7 +534,7 @@ fn test_ifs_array_basic() {
     // Element 1: cond1[1]=FALSE → cond2=TRUE → result = 50
     // Element 2: cond1[2]=TRUE  → result = 30
     // → {10, 50, 30}
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let cond1 = ASTNode::Array {
         rows: vec![vec![
@@ -574,7 +574,7 @@ fn test_ifs_array_basic() {
 #[test]
 fn test_ifs_array_all_false() {
     // IFS({FALSE,FALSE}, {10,20}) → {#N/A, #N/A}
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let cond = ASTNode::Array {
         rows: vec![vec![ASTNode::Boolean(false), ASTNode::Boolean(false)]],
@@ -604,7 +604,7 @@ fn test_ifs_array_all_false() {
 fn test_ifs_scalar_condition_array_value() {
     // IFS(TRUE, {10,20,30}) → scalar condition TRUE means all elements match
     // → {10, 20, 30}  (value array is returned directly since condition is scalar TRUE)
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let cond = ASTNode::Boolean(true);
     let val = ASTNode::Array {
@@ -636,8 +636,8 @@ fn test_ifs_scalar_condition_array_value() {
 #[test]
 fn test_xlookup_array_lookup_single_col_return() {
     // XLOOKUP({0,10,20}, A1:A5, B1:B5) should return {1,11,21}
-    // test_mirror: col A = [0,10,20,30,40], col B = [1,11,21,31,41]
-    let (m, s) = test_mirror();
+    // test_store: col A = [0,10,20,30,40], col B = [1,11,21,31,41]
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
 
     let lookup_arr = ASTNode::Array {
@@ -695,7 +695,7 @@ fn test_xlookup_array_lookup_single_col_return() {
 #[test]
 fn test_xlookup_array_lookup_not_found() {
     // XLOOKUP({0,99,20}, A1:A5, B1:B5) — 99 is not found → {1,#N/A,21}
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
 
     let lookup_arr = ASTNode::Array {
@@ -753,7 +753,7 @@ fn test_xlookup_array_lookup_not_found() {
 #[test]
 fn test_xlookup_array_2d_lookup_rejected() {
     // XLOOKUP({1;2\3;4}, A1:A5, B1:B5) — 2D lookup array → #VALUE!
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
 
     let lookup_arr = ASTNode::Array {
@@ -802,7 +802,7 @@ fn test_xlookup_array_2d_lookup_rejected() {
 fn test_xlookup_array_if_not_found_lazy() {
     // XLOOKUP({0,99,20}, A1:A5, B1:B5, "missing") — if_not_found only applied to missing
     // Should return {1,"missing",21}
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
 
     let lookup_arr = ASTNode::Array {
@@ -888,7 +888,7 @@ fn test_filter_scalar_true_times_bool_array_preserves_length() {
     // Pattern from the broken formula: FILTER(col, (col=val) * TRUE * TRUE)
     // Data: 5 rows {"x"; "y"; "x"; ""; "x"}, 3 of them equal "x".
     // Expected: FILTER returns exactly 3 rows, all "x".
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
 
     // NOTE: Two independent copies so the AST can pass one to FILTER and one

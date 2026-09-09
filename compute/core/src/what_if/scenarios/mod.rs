@@ -18,10 +18,6 @@ pub use types::{
     MAX_CHANGING_CELLS_PER_SCENARIO, MAX_SCENARIO_COMMENT_LENGTH, MAX_SCENARIO_NAME_LENGTH,
     MAX_SCENARIOS,
 };
-#[cfg(test)]
-pub(crate) use types::{
-    ScenarioApplyPlan, ScenarioBaseline, ScenarioBaselineCell, ScenarioRestorePlan,
-};
 pub use validation::{
     validate_changing_cells, validate_scenario_comment, validate_scenario_input,
     validate_scenario_name, validate_values,

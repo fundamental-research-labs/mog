@@ -2,13 +2,12 @@
 //!
 //! These functions implement the `mutation_*` methods that were previously
 //! on `ComputeEngine`. Each takes explicit references to the stores,
-//! mirror, and mutation coordinator it needs.
+//! metadata, cell store, and scheduler it needs.
 
+use crate::cells::CellStore;
 use std::collections::HashMap;
 
 use cell_types::{CellId, SheetId};
-
-use crate::storage::engine::stores::EngineStores;
 
 mod cell_mutations;
 mod fill;
@@ -33,31 +32,17 @@ type AdjustedFormulaResult = Option<(
     HashMap<CellId, (SheetId, u32, u32)>,
 )>;
 
-/// Collect all CellIds in the given range using the sparse grid index.
-/// Falls back to position-by-position lookup when no grid index exists.
+/// Collect authored and metadata-only identities without scanning empty grid slots.
 pub(in crate::storage::engine) fn collect_cell_ids_in_range(
-    stores: &EngineStores,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,
     end_row: u32,
     end_col: u32,
 ) -> Vec<CellId> {
-    if let Some(grid) = stores.grid_indexes.get(sheet_id) {
-        grid.cells_in_range(start_row, start_col, end_row, end_col)
-            .map(|(cell_id, _, _)| cell_id)
-            .collect()
-    } else {
-        let mut ids = Vec::new();
-        for row in start_row..=end_row {
-            for col in start_col..=end_col {
-                if let Some(cell_id) =
-                    super::cell_editing::find_cell_id_at(stores, sheet_id, row, col)
-                {
-                    ids.push(cell_id);
-                }
-            }
-        }
-        ids
-    }
+    cell_store
+        .cells_in_range(sheet_id, start_row, start_col, end_row, end_col)
+        .map(|(cell_id, _, _)| cell_id)
+        .collect()
 }

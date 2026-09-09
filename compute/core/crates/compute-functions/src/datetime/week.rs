@@ -10,48 +10,14 @@ use crate::helpers::coercion::check_error;
 use crate::helpers::date_serial::{date_to_serial, serial_to_date};
 use crate::{FunctionContext, FunctionRegistry, PureFunction};
 
-/// Convert only the date argument into the canonical 1900 serial system.
-/// Negative serials intentionally remain unchanged so the existing #NUM!
-/// behavior for dates before the supported epoch is retained.
-fn canonical_date_arg(arg: &CellValue, context: &FunctionContext) -> Result<CellValue, CellValue> {
-    match canonical_date_value(arg, context) {
-        Ok(serial) => Ok(CellValue::number(serial)),
-        Err(error) => {
-            if let Some(original) = check_error(arg) {
-                Err(original)
-            } else {
-                Err(CellValue::Error(error, None))
-            }
-        }
-    }
-}
-
 pub struct FnWeekday;
-impl PureFunction for FnWeekday {
-    fn name(&self) -> &'static str {
-        "WEEKDAY"
-    }
-    fn min_args(&self) -> usize {
-        1
-    }
-    fn max_args(&self) -> Option<usize> {
-        Some(2)
-    }
-    fn default_for_arg(&self, index: usize) -> Option<CellValue> {
-        match index {
-            1 => Some(CellValue::number(1.0)), // return_type defaults to 1 (Sunday=1)
-            _ => None,
-        }
-    }
-    fn is_scalar_arg(&self, _index: usize) -> bool {
-        true
-    }
-    fn call(&self, args: &[CellValue]) -> CellValue {
+impl FnWeekday {
+    fn evaluate(args: &[CellValue], context: &FunctionContext) -> CellValue {
         if let Some(e) = check_error(&args[0]) {
             return e;
         }
-        let serial = match args[0].coerce_to_number() {
-            Ok(n) => n,
+        let serial = match canonical_date_value(&args[0], context) {
+            Ok(serial) => serial,
             Err(e) => return CellValue::Error(e, None),
         };
         let return_type = if args.len() > 1 {
@@ -108,21 +74,50 @@ impl PureFunction for FnWeekday {
             ),
         }
     }
+}
+
+impl PureFunction for FnWeekday {
+    fn name(&self) -> &'static str {
+        "WEEKDAY"
+    }
+    fn min_args(&self) -> usize {
+        1
+    }
+    fn max_args(&self) -> Option<usize> {
+        Some(2)
+    }
+    fn default_for_arg(&self, index: usize) -> Option<CellValue> {
+        match index {
+            1 => Some(CellValue::number(1.0)), // return_type defaults to 1 (Sunday=1)
+            _ => None,
+        }
+    }
+    fn is_scalar_arg(&self, _index: usize) -> bool {
+        true
+    }
+    fn call(&self, args: &[CellValue]) -> CellValue {
+        Self::evaluate(args, &FunctionContext::default())
+    }
 
     fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
-        if !context.date1904 {
-            return self.call(args);
-        }
-        let date_arg = match canonical_date_arg(&args[0], context) {
-            Ok(arg) => arg,
-            Err(error) => return error,
-        };
-        let mut canonical_args = args.to_vec();
-        canonical_args[0] = date_arg;
-        self.call(&canonical_args)
+        Self::evaluate(args, context)
     }
 }
 pub struct FnIsoWeekNum;
+
+impl FnIsoWeekNum {
+    fn evaluate(args: &[CellValue], context: &FunctionContext) -> CellValue {
+        if let Some(e) = check_error(&args[0]) {
+            return e;
+        }
+        let serial = match canonical_date_value(&args[0], context) {
+            Ok(serial) => serial,
+            Err(e) => return CellValue::Error(e, None),
+        };
+        // Use Excel serial-based ISO week calculation for Lotus bug consistency
+        CellValue::number(excel_iso_week_from_serial(serial) as f64)
+    }
+}
 
 impl PureFunction for FnIsoWeekNum {
     fn name(&self) -> &'static str {
@@ -138,55 +133,22 @@ impl PureFunction for FnIsoWeekNum {
         true
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
-        if let Some(e) = check_error(&args[0]) {
-            return e;
-        }
-        let serial = match args[0].coerce_to_number() {
-            Ok(n) => n,
-            Err(e) => return CellValue::Error(e, None),
-        };
-        // Use Excel serial-based ISO week calculation for Lotus bug consistency
-        CellValue::number(excel_iso_week_from_serial(serial) as f64)
+        Self::evaluate(args, &FunctionContext::default())
     }
 
     fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
-        if !context.date1904 {
-            return self.call(args);
-        }
-        let date_arg = match canonical_date_arg(&args[0], context) {
-            Ok(arg) => arg,
-            Err(error) => return error,
-        };
-        self.call(&[date_arg])
+        Self::evaluate(args, context)
     }
 }
 
 pub struct FnWeekNum;
-impl PureFunction for FnWeekNum {
-    fn name(&self) -> &'static str {
-        "WEEKNUM"
-    }
-    fn min_args(&self) -> usize {
-        1
-    }
-    fn max_args(&self) -> Option<usize> {
-        Some(2)
-    }
-    fn default_for_arg(&self, index: usize) -> Option<CellValue> {
-        match index {
-            1 => Some(CellValue::number(1.0)), // return_type defaults to 1 (Sunday start)
-            _ => None,
-        }
-    }
-    fn is_scalar_arg(&self, _index: usize) -> bool {
-        true
-    }
-    fn call(&self, args: &[CellValue]) -> CellValue {
+impl FnWeekNum {
+    fn evaluate(args: &[CellValue], context: &FunctionContext) -> CellValue {
         if let Some(e) = check_error(&args[0]) {
             return e;
         }
-        let serial = match args[0].coerce_to_number() {
-            Ok(n) => n,
+        let serial = match canonical_date_value(&args[0], context) {
+            Ok(serial) => serial,
             Err(e) => return CellValue::Error(e, None),
         };
         let return_type = if args.len() > 1 {
@@ -257,18 +219,33 @@ impl PureFunction for FnWeekNum {
 
         CellValue::number(week as f64)
     }
+}
+
+impl PureFunction for FnWeekNum {
+    fn name(&self) -> &'static str {
+        "WEEKNUM"
+    }
+    fn min_args(&self) -> usize {
+        1
+    }
+    fn max_args(&self) -> Option<usize> {
+        Some(2)
+    }
+    fn default_for_arg(&self, index: usize) -> Option<CellValue> {
+        match index {
+            1 => Some(CellValue::number(1.0)), // return_type defaults to 1 (Sunday start)
+            _ => None,
+        }
+    }
+    fn is_scalar_arg(&self, _index: usize) -> bool {
+        true
+    }
+    fn call(&self, args: &[CellValue]) -> CellValue {
+        Self::evaluate(args, &FunctionContext::default())
+    }
 
     fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
-        if !context.date1904 {
-            return self.call(args);
-        }
-        let date_arg = match canonical_date_arg(&args[0], context) {
-            Ok(arg) => arg,
-            Err(error) => return error,
-        };
-        let mut canonical_args = args.to_vec();
-        canonical_args[0] = date_arg;
-        self.call(&canonical_args)
+        Self::evaluate(args, context)
     }
 }
 
@@ -288,6 +265,7 @@ pub(super) fn register_weeknum(registry: &mut FunctionRegistry) {
 mod tests {
     use super::*;
     use crate::PureFunction;
+    use crate::datetime::date_context::MAX_CANONICAL_DATE_SERIAL;
     use crate::datetime::test_helpers::*;
     use crate::helpers::date_serial::date_to_serial;
     use chrono::NaiveDate;
@@ -385,6 +363,36 @@ mod tests {
         assert_eq!(
             FnWeekNum.call_with_context(&[num(workbook_serial), num(21.0)], &context),
             FnWeekNum.call(&[num(canonical_serial), num(21.0)])
+        );
+    }
+
+    #[test]
+    fn test_week_functions_reject_dates_after_9999_in_both_systems() {
+        let context = FunctionContext {
+            date1904: true,
+            ..FunctionContext::default()
+        };
+        let too_large_1900 = MAX_CANONICAL_DATE_SERIAL + 1.0;
+        let too_large_1904 = context.from_canonical_date_serial(too_large_1900);
+
+        assert_eq!(FnWeekday.call(&[num(too_large_1900)]), err(CellError::Num));
+        assert_eq!(
+            FnIsoWeekNum.call(&[num(too_large_1900)]),
+            err(CellError::Num)
+        );
+        assert_eq!(FnWeekNum.call(&[num(too_large_1900)]), err(CellError::Num));
+
+        assert_eq!(
+            FnWeekday.call_with_context(&[num(too_large_1904)], &context),
+            err(CellError::Num)
+        );
+        assert_eq!(
+            FnIsoWeekNum.call_with_context(&[num(too_large_1904)], &context),
+            err(CellError::Num)
+        );
+        assert_eq!(
+            FnWeekNum.call_with_context(&[num(too_large_1904)], &context),
+            err(CellError::Num)
         );
     }
 

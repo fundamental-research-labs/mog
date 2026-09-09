@@ -11,32 +11,20 @@ use crate::helpers::date_serial::serial_to_date;
 use crate::{FunctionContext, FunctionRegistry, PureFunction};
 
 pub struct FnYearFrac;
-impl PureFunction for FnYearFrac {
-    fn name(&self) -> &'static str {
-        "YEARFRAC"
-    }
-    fn min_args(&self) -> usize {
-        2
-    }
-    fn max_args(&self) -> Option<usize> {
-        Some(3)
-    }
-    fn is_scalar_arg(&self, _index: usize) -> bool {
-        true
-    }
-    fn call(&self, args: &[CellValue]) -> CellValue {
+impl FnYearFrac {
+    fn evaluate(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         if let Some(e) = check_error(&args[0]) {
             return e;
         }
         if let Some(e) = check_error(&args[1]) {
             return e;
         }
-        let start_serial = match args[0].coerce_to_number() {
-            Ok(n) => n,
+        let start_serial = match canonical_date_value(&args[0], context) {
+            Ok(serial) => serial,
             Err(e) => return CellValue::Error(e, None),
         };
-        let end_serial = match args[1].coerce_to_number() {
-            Ok(n) => n,
+        let end_serial = match canonical_date_value(&args[1], context) {
+            Ok(serial) => serial,
             Err(e) => return CellValue::Error(e, None),
         };
         let basis = if args.len() > 2 {
@@ -138,26 +126,27 @@ impl PureFunction for FnYearFrac {
 
         CellValue::number(result)
     }
+}
+
+impl PureFunction for FnYearFrac {
+    fn name(&self) -> &'static str {
+        "YEARFRAC"
+    }
+    fn min_args(&self) -> usize {
+        2
+    }
+    fn max_args(&self) -> Option<usize> {
+        Some(3)
+    }
+    fn is_scalar_arg(&self, _index: usize) -> bool {
+        true
+    }
+    fn call(&self, args: &[CellValue]) -> CellValue {
+        self.evaluate(args, &FunctionContext::default())
+    }
 
     fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
-        if !context.date1904 {
-            return self.call(args);
-        }
-
-        // YEARFRAC's first two arguments are calendar dates.  Rewrite only
-        // those positions; the optional basis is a plain numeric selector.
-        let mut canonical_args = args.to_vec();
-        for index in 0..2 {
-            if let Some(error) = check_error(&canonical_args[index]) {
-                return error;
-            }
-            let serial = match canonical_date_value(&canonical_args[index], context) {
-                Ok(serial) => serial,
-                Err(error) => return CellValue::Error(error, None),
-            };
-            canonical_args[index] = CellValue::number(serial);
-        }
-        self.call(&canonical_args)
+        self.evaluate(args, context)
     }
 }
 
@@ -173,6 +162,7 @@ pub(super) fn register(registry: &mut FunctionRegistry) {
 mod tests {
     use super::*;
     use crate::PureFunction;
+    use crate::datetime::date_context::MAX_CANONICAL_DATE_SERIAL;
     use crate::datetime::test_helpers::*;
     use crate::helpers::date_serial::date_to_serial;
     use chrono::NaiveDate;
@@ -254,6 +244,25 @@ mod tests {
             FnYearFrac
                 .call_with_context(&[text("1/1/2023"), text("1/1/2024"), num(3.0)], &context,),
             FnYearFrac.call(&[num(start_1900), num(end_1900), num(3.0)])
+        );
+    }
+
+    #[test]
+    fn test_yearfrac_rejects_dates_after_9999_in_both_systems() {
+        let context = FunctionContext {
+            date1904: true,
+            ..FunctionContext::default()
+        };
+        let too_large_1900 = MAX_CANONICAL_DATE_SERIAL + 1.0;
+        let too_large_1904 = context.from_canonical_date_serial(too_large_1900);
+
+        assert_eq!(
+            FnYearFrac.call(&[num(too_large_1900), num(too_large_1900)]),
+            err(CellError::Num)
+        );
+        assert_eq!(
+            FnYearFrac.call_with_context(&[num(too_large_1904), num(too_large_1904)], &context),
+            err(CellError::Num)
         );
     }
 }

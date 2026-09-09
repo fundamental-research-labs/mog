@@ -5,7 +5,9 @@ use chrono::NaiveDate;
 use value_types::{CellError, CellValue};
 
 use crate::datetime::calendar::{excel_dow_from_serial, is_excel_weekend, is_excel_weekend_mask};
-use crate::datetime::date_context::canonical_date_value;
+use crate::datetime::date_context::{
+    MAX_CANONICAL_DATE_SERIAL, canonical_date_value, validate_canonical_date_serial,
+};
 use crate::helpers::coercion::{check_error, flatten_values};
 use crate::helpers::date_serial::{date_to_serial, serial_to_date};
 use crate::{FunctionContext, FunctionRegistry, PureFunction};
@@ -28,6 +30,34 @@ fn holiday_serials(value: &CellValue, context: &FunctionContext) -> Vec<f64> {
                 .map(|serial| serial.floor())
         })
         .collect()
+}
+
+#[inline]
+fn workday_span_is_supported(start_serial: f64, days: i32) -> bool {
+    let start_day = start_serial.floor();
+    if !start_day.is_finite() {
+        return false;
+    }
+    let days = i64::from(days) as f64;
+    let result_day = start_day + days;
+    result_day >= 1.0 && result_day <= MAX_CANONICAL_DATE_SERIAL
+}
+
+#[inline]
+fn workday_result_or_error(serial: f64, context: &FunctionContext, function: &str) -> CellValue {
+    if serial < 1.0 {
+        return CellValue::error_with_message(
+            CellError::Num,
+            format!("{function}: resulting date is before the epoch"),
+        );
+    }
+    if validate_canonical_date_serial(serial).is_err() {
+        return CellValue::error_with_message(
+            CellError::Num,
+            format!("{function}: resulting date is out of range"),
+        );
+    }
+    CellValue::number(context.from_canonical_date_serial(serial))
 }
 
 pub struct FnNetworkdays;
@@ -225,6 +255,13 @@ impl PureFunction for FnWorkday {
             Err(e) => return CellValue::Error(e, None),
         };
 
+        if !workday_span_is_supported(start_serial, days) {
+            return CellValue::error_with_message(
+                CellError::Num,
+                "WORKDAY: resulting date is out of range".to_string(),
+            );
+        }
+
         let holidays: Vec<f64> = if args.len() > 2 {
             holiday_serials(&args[2], context)
         } else {
@@ -248,15 +285,7 @@ impl PureFunction for FnWorkday {
         match result {
             Some(d) => {
                 let serial = date_to_serial(&d);
-                // Excel WORKDAY returns #NUM! when result date is before the epoch (serial < 1)
-                if serial < 1.0 {
-                    CellValue::error_with_message(
-                        CellError::Num,
-                        "WORKDAY: resulting date is before the epoch".to_string(),
-                    )
-                } else {
-                    CellValue::number(context.from_canonical_date_serial(serial))
-                }
+                workday_result_or_error(serial, context, "WORKDAY")
             }
             None => CellValue::error_with_message(
                 CellError::Num,
@@ -301,6 +330,13 @@ impl PureFunction for FnWorkdayIntl {
             Err(e) => return CellValue::Error(e, None),
         };
 
+        if !workday_span_is_supported(start_serial, days) {
+            return CellValue::error_with_message(
+                CellError::Num,
+                "WORKDAY.INTL: resulting date is out of range".to_string(),
+            );
+        }
+
         let weekend_mask = if args.len() > 2 {
             parse_weekend_param(&args[2])
         } else {
@@ -310,6 +346,13 @@ impl PureFunction for FnWorkdayIntl {
             Ok(m) => m,
             Err(e) => return CellValue::Error(e, None),
         };
+
+        if days != 0 && weekend_mask.iter().all(|&day| day) {
+            return CellValue::error_with_message(
+                CellError::Num,
+                "WORKDAY.INTL: no workdays in weekend mask".to_string(),
+            );
+        }
 
         let holidays: Vec<f64> = if args.len() > 3 {
             holiday_serials(&args[3], context)
@@ -331,15 +374,7 @@ impl PureFunction for FnWorkdayIntl {
         match result {
             Some(d) => {
                 let serial = date_to_serial(&d);
-                // Excel WORKDAY.INTL returns #NUM! when result date is before the epoch
-                if serial < 1.0 {
-                    CellValue::error_with_message(
-                        CellError::Num,
-                        "WORKDAY.INTL: resulting date is before the epoch".to_string(),
-                    )
-                } else {
-                    CellValue::number(context.from_canonical_date_serial(serial))
-                }
+                workday_result_or_error(serial, context, "WORKDAY.INTL")
             }
             None => CellValue::error_with_message(
                 CellError::Num,
@@ -402,8 +437,9 @@ fn advance_workdays(
     if days == 0 {
         return Some(start);
     }
-    let step: i64 = if days > 0 { 1 } else { -1 };
-    let mut remaining = days.abs();
+    let signed_days = i64::from(days);
+    let step: i64 = if signed_days > 0 { 1 } else { -1 };
+    let mut remaining = signed_days.abs();
     let mut current_serial = date_to_serial(&start).floor() as i64;
 
     // Safety limit to prevent infinite loops
@@ -454,6 +490,7 @@ pub(super) fn register_workday_intl(registry: &mut FunctionRegistry) {
 mod tests {
     use super::*;
     use crate::PureFunction;
+    use crate::datetime::date_context::MAX_CANONICAL_DATE_SERIAL;
     use crate::datetime::test_helpers::*;
     use crate::helpers::date_serial::{date_to_serial, serial_to_date};
     use chrono::NaiveDate;
@@ -632,6 +669,72 @@ mod tests {
             FnWorkdayIntl
                 .call_with_context(&[num(start_1904), num(1.0), num(1.0), holidays], &context,),
             num(expected_workday)
+        );
+    }
+
+    #[test]
+    fn test_workday_functions_reject_out_of_range_and_huge_finite_inputs() {
+        let context = FunctionContext {
+            date1904: true,
+            ..FunctionContext::default()
+        };
+        let too_large_1900 = MAX_CANONICAL_DATE_SERIAL + 1.0;
+        let too_large_1904 = context.from_canonical_date_serial(too_large_1900);
+        let huge = 1.0e300;
+
+        // The upper-bound guard runs before NETWORKDAYS can enter its serial
+        // loop, including for a finite value far beyond f64's integer range.
+        assert_eq!(
+            FnNetworkdays.call(&[num(1.0), num(huge)]),
+            err(CellError::Num)
+        );
+        assert_eq!(
+            FnNetworkdays.call(&[num(1.0), num(too_large_1900)]),
+            err(CellError::Num)
+        );
+        assert_eq!(
+            FnNetworkdays.call_with_context(&[num(0.0), num(too_large_1904)], &context),
+            err(CellError::Num)
+        );
+        assert_eq!(
+            FnNetworkdaysIntl
+                .call_with_context(&[num(0.0), num(too_large_1904), num(1.0)], &context,),
+            err(CellError::Num)
+        );
+
+        // WORKDAY's day-count span is checked before advance_workdays, so a
+        // huge finite days argument cannot trigger billions of iterations.
+        let start = date_to_serial(&NaiveDate::from_ymd_opt(2024, 1, 1).unwrap());
+        assert_eq!(
+            FnWorkday.call(&[num(start), num(huge)]),
+            err(CellError::Num)
+        );
+        assert_eq!(
+            FnWorkdayIntl.call_with_context(
+                &[
+                    num(context.from_canonical_date_serial(start)),
+                    num(huge),
+                    num(1.0)
+                ],
+                &context,
+            ),
+            err(CellError::Num)
+        );
+
+        assert_eq!(
+            FnWorkday.call(&[num(MAX_CANONICAL_DATE_SERIAL), num(1.0)]),
+            err(CellError::Num)
+        );
+        assert_eq!(
+            FnWorkdayIntl.call_with_context(
+                &[
+                    num(context.from_canonical_date_serial(MAX_CANONICAL_DATE_SERIAL)),
+                    num(1.0),
+                    num(1.0),
+                ],
+                &context,
+            ),
+            err(CellError::Num)
         );
     }
 }

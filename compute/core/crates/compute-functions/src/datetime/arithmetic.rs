@@ -6,7 +6,7 @@ use value_types::{CellError, CellValue};
 
 use crate::datetime::array_lift::{array_get, broadcast_dims, has_any_array};
 use crate::datetime::calendar::{add_months, last_day_of_month};
-use crate::datetime::date_context::canonical_date_value;
+use crate::datetime::date_context::{canonical_date_value, validate_canonical_date_serial};
 use crate::helpers::coercion::check_error;
 use crate::helpers::date_serial::{date_to_serial, serial_to_date};
 use crate::{FunctionContext, FunctionRegistry, PureFunction};
@@ -22,6 +22,36 @@ fn canonical_date_arg_with_input(
     let input_serial = value.coerce_to_number()?;
     let serial = canonical_date_value(value, context)?;
     Ok((input_serial, serial))
+}
+
+#[inline]
+fn checked_add_months(date: NaiveDate, months: i32) -> Option<NaiveDate> {
+    // Compute the target month in a wide type before calling the legacy
+    // i32-based calendar helper. This rejects impossible years before its
+    // intermediate `year * 12 + months` expression can overflow.
+    let total_months = i64::from(date.year()) * 12 + i64::from(date.month0()) + i64::from(months);
+    let target_year = total_months.div_euclid(12);
+    if !(1..=9999).contains(&target_year) {
+        return None;
+    }
+    add_months(date, months)
+}
+
+#[inline]
+fn date_result_or_error(serial: f64, context: &FunctionContext, function: &str) -> CellValue {
+    if serial < 1.0 {
+        return CellValue::error_with_message(
+            CellError::Num,
+            format!("{function}: resulting date is before the epoch"),
+        );
+    }
+    if validate_canonical_date_serial(serial).is_err() {
+        return CellValue::error_with_message(
+            CellError::Num,
+            format!("{function}: resulting date is out of range"),
+        );
+    }
+    CellValue::number(context.from_canonical_date_serial(serial))
 }
 
 pub struct FnEdate;
@@ -42,17 +72,10 @@ fn edate_scalar(args: &[CellValue], context: &FunctionContext) -> CellValue {
         Err(e) => return CellValue::Error(e, None),
     };
     match serial_to_date(serial) {
-        Some(d) => match add_months(d, months) {
+        Some(d) => match checked_add_months(d, months) {
             Some(new_date) => {
                 let serial = date_to_serial(&new_date);
-                if serial < 1.0 {
-                    CellValue::error_with_message(
-                        CellError::Num,
-                        "EDATE: resulting date is before the epoch".to_string(),
-                    )
-                } else {
-                    CellValue::number(context.from_canonical_date_serial(serial))
-                }
+                date_result_or_error(serial, context, "EDATE")
             }
             None => CellValue::error_with_message(
                 CellError::Num,
@@ -123,20 +146,23 @@ fn eomonth_scalar(args: &[CellValue], context: &FunctionContext) -> CellValue {
     };
     match serial_to_date(serial) {
         Some(d) => {
-            let target_year = d.year() + (d.month0() as i32 + months).div_euclid(12);
-            let target_month = ((d.month0() as i32 + months).rem_euclid(12) + 1) as u32;
+            let total_months = i64::from(d.year()) * 12 + i64::from(d.month0()) + i64::from(months);
+            let target_year = total_months.div_euclid(12);
+            let target_month = (total_months.rem_euclid(12) + 1) as u32;
+            if !(1..=9999).contains(&target_year) {
+                return CellValue::error_with_message(
+                    CellError::Num,
+                    format!(
+                        "EOMONTH: could not construct end-of-month date for {target_year}-{target_month}"
+                    ),
+                );
+            }
+            let target_year = target_year as i32;
             let last_day = last_day_of_month(target_year, target_month);
             match NaiveDate::from_ymd_opt(target_year, target_month, last_day) {
                 Some(end_date) => {
                     let serial = date_to_serial(&end_date);
-                    if serial < 1.0 {
-                        CellValue::error_with_message(
-                            CellError::Num,
-                            "EOMONTH: resulting date is before the epoch".to_string(),
-                        )
-                    } else {
-                        CellValue::number(context.from_canonical_date_serial(serial))
-                    }
+                    date_result_or_error(serial, context, "EOMONTH")
                 }
                 None => CellValue::error_with_message(
                     CellError::Num,
@@ -531,6 +557,7 @@ pub(super) fn register_days360(registry: &mut FunctionRegistry) {
 mod tests {
     use super::*;
     use crate::PureFunction;
+    use crate::datetime::date_context::MAX_CANONICAL_DATE_SERIAL;
     use crate::datetime::test_helpers::*;
     use crate::helpers::date_serial::{date_to_serial, serial_to_date};
     use chrono::NaiveDate;
@@ -802,6 +829,66 @@ mod tests {
         assert_eq!(
             FnDays360.call_with_context(&[num(start_1904), num(end_1904)], &context),
             FnDays360.call(&[num(start_1900), num(end_1900)])
+        );
+    }
+
+    #[test]
+    fn test_calendar_arithmetic_rejects_dates_after_9999_in_both_systems() {
+        let context = FunctionContext {
+            date1904: true,
+            ..FunctionContext::default()
+        };
+        let default_context = FunctionContext::default();
+        let too_large_1900 = MAX_CANONICAL_DATE_SERIAL + 1.0;
+        let too_large_1904 = context.from_canonical_date_serial(too_large_1900);
+
+        for serial in [too_large_1900, too_large_1904] {
+            let date_context = if serial == too_large_1904 {
+                &context
+            } else {
+                &default_context
+            };
+            assert_eq!(
+                FnEdate.call_with_context(&[num(serial), num(0.0)], date_context),
+                err(CellError::Num)
+            );
+            assert_eq!(
+                FnEomonth.call_with_context(&[num(serial), num(0.0)], date_context),
+                err(CellError::Num)
+            );
+            assert_eq!(
+                FnDatedif.call_with_context(&[num(serial), num(serial), text("D")], date_context),
+                err(CellError::Num)
+            );
+            assert_eq!(
+                FnDays.call_with_context(&[num(serial), num(serial)], date_context),
+                err(CellError::Num)
+            );
+            assert_eq!(
+                FnDays360.call_with_context(&[num(serial), num(serial)], date_context),
+                err(CellError::Num)
+            );
+        }
+
+        // Calendar-producing arithmetic must reject a result beyond
+        // 31-Dec-9999 even when its input is the last supported date.
+        assert_eq!(
+            FnEdate.call(&[num(MAX_CANONICAL_DATE_SERIAL), num(1.0)]),
+            err(CellError::Num)
+        );
+        assert_eq!(
+            FnEomonth.call(&[num(MAX_CANONICAL_DATE_SERIAL), num(1.0)]),
+            err(CellError::Num)
+        );
+        assert_eq!(
+            FnEdate.call_with_context(
+                &[
+                    num(context.from_canonical_date_serial(MAX_CANONICAL_DATE_SERIAL)),
+                    num(1.0)
+                ],
+                &context,
+            ),
+            err(CellError::Num)
         );
     }
 }

@@ -4,6 +4,7 @@ use chrono::Timelike;
 
 use value_types::{CellError, CellValue};
 
+use crate::datetime::date_context::validate_canonical_date_serial;
 use crate::helpers::coercion::check_error;
 use crate::{FunctionContext, FunctionRegistry, PureFunction};
 
@@ -47,9 +48,10 @@ impl PureFunction for FnDatevalue {
             return self.call(args);
         }
         match self.call(args) {
-            CellValue::Number(number) => {
-                CellValue::number(context.from_canonical_date_serial(number.get()))
-            }
+            CellValue::Number(number) => match validate_canonical_date_serial(number.get()) {
+                Ok(serial) => CellValue::number(context.from_canonical_date_serial(serial)),
+                Err(error) => CellValue::Error(error, None),
+            },
             other => other,
         }
     }
@@ -198,6 +200,22 @@ mod tests {
                 "unexpectedly parsed {text_value}"
             );
         }
+    }
+
+    #[test]
+    fn test_datevalue_maximum_date_converts_for_1904_context() {
+        let context = FunctionContext {
+            date1904: true,
+            ..FunctionContext::default()
+        };
+        assert_eq!(
+            FnDatevalue.call_with_context(&[text("9999-12-31")], &context),
+            num(2_957_003.0)
+        );
+        assert_eq!(
+            FnDatevalue.call_with_context(&[text("10000-01-01")], &context),
+            err(CellError::Value)
+        );
     }
 
     #[test]

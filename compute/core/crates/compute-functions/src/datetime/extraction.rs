@@ -2,9 +2,69 @@
 
 use value_types::{CellError, CellValue};
 
-use super::date_context::canonical_date_value;
+#[cfg(test)]
+use super::date_context::{MAX_CANONICAL_DATE_SERIAL, MAX_CANONICAL_DATE_SERIAL_EXCLUSIVE};
+use super::date_context::{canonical_date_value, validate_canonical_date_serial};
 use crate::helpers::coercion::check_error;
 use crate::{FunctionContext, FunctionRegistry, PureFunction};
+
+fn extraction_serial(args: &[CellValue], function_name: &str) -> Result<f64, CellValue> {
+    if let Some(error) = check_error(&args[0]) {
+        return Err(error);
+    }
+    let serial = match args[0].coerce_to_number() {
+        Ok(serial) => serial,
+        Err(error) => return Err(CellValue::Error(error, None)),
+    };
+    if serial < 0.0 {
+        return Err(CellValue::error_with_message(
+            CellError::Num,
+            format!("{function_name}: serial number must be non-negative, got {serial}"),
+        ));
+    }
+    validate_canonical_date_serial(serial).map_err(|_| {
+        CellValue::error_with_message(
+            CellError::Num,
+            format!("{function_name}: serial number exceeds the supported date range"),
+        )
+    })
+}
+
+fn time_component_serial(args: &[CellValue], function_name: &str) -> Result<f64, CellValue> {
+    if let Some(error) = check_error(&args[0]) {
+        return Err(error);
+    }
+    let serial = match args[0].coerce_to_number() {
+        Ok(serial) => serial,
+        Err(error) => return Err(CellValue::Error(error, None)),
+    };
+    validate_canonical_date_serial(serial).map_err(|_| {
+        CellValue::error_with_message(
+            CellError::Num,
+            format!("{function_name}: serial number exceeds the supported date range"),
+        )
+    })
+}
+
+fn canonicalized_time_arg(
+    args: &[CellValue],
+    context: &FunctionContext,
+) -> Result<CellValue, CellValue> {
+    if let Some(error) = check_error(&args[0]) {
+        return Err(error);
+    }
+    // Time extraction depends only on the fractional part. Validate the
+    // workbook serial after applying the date-system offset, but retain the
+    // original coerced value so adding 1462 cannot perturb its low bits near
+    // the upper date bound. Civil date/datetime text is already canonical in
+    // `canonical_date_value`, so it follows the same path without shifting.
+    let raw = args[0]
+        .coerce_to_number()
+        .map_err(|error| CellValue::Error(error, None))?;
+    canonical_date_value(&args[0], context)
+        .map(|_| CellValue::number(raw))
+        .map_err(|error| CellValue::Error(error, None))
+}
 
 fn canonicalized_date_arg(
     args: &[CellValue],
@@ -33,23 +93,12 @@ impl PureFunction for FnYear {
         true
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
-        if let Some(e) = check_error(&args[0]) {
-            return e;
-        }
-        match args[0].coerce_to_number() {
-            Ok(n) => {
-                if n < 0.0 {
-                    CellValue::error_with_message(
-                        CellError::Num,
-                        format!("YEAR: serial number must be non-negative, got {n}"),
-                    )
-                } else {
-                    let (y, _, _) = crate::helpers::date_serial::serial_to_ymd(n);
-                    CellValue::number(y as f64)
-                }
-            }
-            Err(e) => CellValue::Error(e, None),
-        }
+        let n = match extraction_serial(args, "YEAR") {
+            Ok(n) => n,
+            Err(error) => return error,
+        };
+        let (y, _, _) = crate::helpers::date_serial::serial_to_ymd(n);
+        CellValue::number(y as f64)
     }
 
     fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
@@ -78,23 +127,12 @@ impl PureFunction for FnMonth {
         true
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
-        if let Some(e) = check_error(&args[0]) {
-            return e;
-        }
-        match args[0].coerce_to_number() {
-            Ok(n) => {
-                if n < 0.0 {
-                    CellValue::error_with_message(
-                        CellError::Num,
-                        format!("MONTH: serial number must be non-negative, got {n}"),
-                    )
-                } else {
-                    let (_, m, _) = crate::helpers::date_serial::serial_to_ymd(n);
-                    CellValue::number(m as f64)
-                }
-            }
-            Err(e) => CellValue::Error(e, None),
-        }
+        let n = match extraction_serial(args, "MONTH") {
+            Ok(n) => n,
+            Err(error) => return error,
+        };
+        let (_, m, _) = crate::helpers::date_serial::serial_to_ymd(n);
+        CellValue::number(m as f64)
     }
 
     fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
@@ -123,23 +161,12 @@ impl PureFunction for FnDay {
         true
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
-        if let Some(e) = check_error(&args[0]) {
-            return e;
-        }
-        match args[0].coerce_to_number() {
-            Ok(n) => {
-                if n < 0.0 {
-                    CellValue::error_with_message(
-                        CellError::Num,
-                        format!("DAY: serial number must be non-negative, got {n}"),
-                    )
-                } else {
-                    let (_, _, d) = crate::helpers::date_serial::serial_to_ymd(n);
-                    CellValue::number(d as f64)
-                }
-            }
-            Err(e) => CellValue::Error(e, None),
-        }
+        let n = match extraction_serial(args, "DAY") {
+            Ok(n) => n,
+            Err(error) => return error,
+        };
+        let (_, _, d) = crate::helpers::date_serial::serial_to_ymd(n);
+        CellValue::number(d as f64)
     }
 
     fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
@@ -168,17 +195,23 @@ impl PureFunction for FnHour {
         true
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
-        if let Some(e) = check_error(&args[0]) {
-            return e;
+        let n = match time_component_serial(args, "HOUR") {
+            Ok(n) => n,
+            Err(error) => return error,
+        };
+        let frac = n - n.floor();
+        let total_seconds = (frac * 86400.0).round() as u32;
+        let hours = total_seconds / 3600;
+        CellValue::number(hours as f64)
+    }
+
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
+        if !context.date1904 {
+            return self.call(args);
         }
-        match args[0].coerce_to_number() {
-            Ok(n) => {
-                let frac = n - n.floor();
-                let total_seconds = (frac * 86400.0).round() as u32;
-                let hours = total_seconds / 3600;
-                CellValue::number(hours as f64)
-            }
-            Err(e) => CellValue::Error(e, None),
+        match canonicalized_time_arg(args, context) {
+            Ok(arg) => self.call(&[arg]),
+            Err(error) => error,
         }
     }
 }
@@ -198,17 +231,23 @@ impl PureFunction for FnMinute {
         true
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
-        if let Some(e) = check_error(&args[0]) {
-            return e;
+        let n = match time_component_serial(args, "MINUTE") {
+            Ok(n) => n,
+            Err(error) => return error,
+        };
+        let frac = n - n.floor();
+        let total_seconds = (frac * 86400.0).round() as u32;
+        let minutes = (total_seconds % 3600) / 60;
+        CellValue::number(minutes as f64)
+    }
+
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
+        if !context.date1904 {
+            return self.call(args);
         }
-        match args[0].coerce_to_number() {
-            Ok(n) => {
-                let frac = n - n.floor();
-                let total_seconds = (frac * 86400.0).round() as u32;
-                let minutes = (total_seconds % 3600) / 60;
-                CellValue::number(minutes as f64)
-            }
-            Err(e) => CellValue::Error(e, None),
+        match canonicalized_time_arg(args, context) {
+            Ok(arg) => self.call(&[arg]),
+            Err(error) => error,
         }
     }
 }
@@ -228,17 +267,23 @@ impl PureFunction for FnSecond {
         true
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
-        if let Some(e) = check_error(&args[0]) {
-            return e;
+        let n = match time_component_serial(args, "SECOND") {
+            Ok(n) => n,
+            Err(error) => return error,
+        };
+        let frac = n - n.floor();
+        let total_seconds = (frac * 86400.0).round() as u32;
+        let seconds = total_seconds % 60;
+        CellValue::number(seconds as f64)
+    }
+
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
+        if !context.date1904 {
+            return self.call(args);
         }
-        match args[0].coerce_to_number() {
-            Ok(n) => {
-                let frac = n - n.floor();
-                let total_seconds = (frac * 86400.0).round() as u32;
-                let seconds = total_seconds % 60;
-                CellValue::number(seconds as f64)
-            }
-            Err(e) => CellValue::Error(e, None),
+        match canonicalized_time_arg(args, context) {
+            Ok(arg) => self.call(&[arg]),
+            Err(error) => error,
         }
     }
 }
@@ -358,5 +403,51 @@ mod tests {
             FnYear.call_with_context(&[text("43830")], &context),
             num(2024.0)
         );
+    }
+
+    #[test]
+    fn test_extraction_rejects_dates_after_9999_without_clamping() {
+        assert_eq!(FnYear.call(&[num(MAX_CANONICAL_DATE_SERIAL)]), num(9999.0));
+        assert_eq!(
+            FnYear.call(&[num(MAX_CANONICAL_DATE_SERIAL + 0.999_999)]),
+            num(9999.0)
+        );
+        assert!(matches!(
+            FnYear.call(&[num(MAX_CANONICAL_DATE_SERIAL_EXCLUSIVE)]),
+            CellValue::Error(CellError::Num, _)
+        ));
+        assert!(matches!(
+            FnMonth.call(&[num(1.0e300)]),
+            CellValue::Error(CellError::Num, _)
+        ));
+        assert!(matches!(
+            FnHour.call(&[num(MAX_CANONICAL_DATE_SERIAL_EXCLUSIVE)]),
+            CellValue::Error(CellError::Num, _)
+        ));
+        assert!(matches!(
+            FnMinute.call(&[num(1.0e300)]),
+            CellValue::Error(CellError::Num, _)
+        ));
+        assert!(matches!(
+            FnSecond.call(&[num(1.0e300)]),
+            CellValue::Error(CellError::Num, _)
+        ));
+
+        let context = FunctionContext {
+            date1904: true,
+            ..FunctionContext::default()
+        };
+        let max_1904 = context.from_canonical_date_serial(MAX_CANONICAL_DATE_SERIAL);
+        assert_eq!(
+            FnYear.call_with_context(&[num(max_1904 + 0.5)], &context),
+            num(9999.0)
+        );
+        assert!(matches!(
+            FnYear.call_with_context(
+                &[num(MAX_CANONICAL_DATE_SERIAL_EXCLUSIVE - 1_462.0)],
+                &context
+            ),
+            CellValue::Error(CellError::Num, _)
+        ));
     }
 }

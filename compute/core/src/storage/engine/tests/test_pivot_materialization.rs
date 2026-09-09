@@ -4,21 +4,6 @@ use crate::snapshot::{CellData, SheetSnapshot};
 use serde_json::json;
 use value_types::{CellValue, ComputeError, FiniteF64};
 
-fn stored_number_format_at(
-    engine: &ComputeEngine,
-    sheet_id: &SheetId,
-    row: u32,
-    col: u32,
-) -> Option<String> {
-    let cell_id = engine
-        .mirror()
-        .resolve_cell_id(sheet_id, SheetPos::new(row, col))
-        .expect("cell allocated");
-    engine
-        .get_cell_format(sheet_id, &cell_id, row, col)
-        .number_format
-}
-
 fn pivot_snapshot(sid: SheetId) -> WorkbookSnapshot {
     WorkbookSnapshot {
         axis_run_high_water_mark: None,
@@ -165,7 +150,7 @@ fn api_created_pivot_exports_refresh_safe_ooxml_metadata() {
     engine.recalculate().expect("materialize pivot");
 
     let def = engine
-        .mirror()
+        .cell_store()
         .find_pivot_table_def(&pivot_id, "ExportSafePivot", &output_sid.to_uuid_string())
         .expect("materialized pivot definition")
         .clone();

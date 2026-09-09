@@ -33,14 +33,14 @@ fn wrapped_sumifs_parallel_snapshot() -> WorkbookSnapshot {
 #[cfg(feature = "native")]
 #[test]
 fn test_wrapped_sumifs_warm_cache_seeds_parallel_eval() {
-    let (mut core, mut mirror) = init_core(wrapped_sumifs_parallel_snapshot());
+    let (mut core, mut cell_store) = init_core(wrapped_sumifs_parallel_snapshot());
 
     compute_functions::helpers::sumifs_result_cache::reset_diagnostics();
     let sheet_id = sid(1);
-    let source_id = mirror
+    let source_id = cell_store
         .resolve_cell_id(&sheet_id, cell_types::SheetPos::new(0, 2))
         .expect("source value cell");
-    core.set_cell(&mut mirror, &sheet_id, source_id, 0, 2, "1000")
+    core.set_cell(&mut cell_store, &sheet_id, source_id, 0, 2, "1000")
         .unwrap();
 
     let diag = compute_functions::helpers::sumifs_result_cache::diagnostics();
@@ -64,25 +64,25 @@ fn test_wrapped_sumifs_warm_cache_seeds_parallel_eval() {
 #[cfg(feature = "native")]
 #[test]
 fn test_sumifs_worker_tls_entries_do_not_survive_recalc_epoch() {
-    let (mut core, mut mirror) = init_core(wrapped_sumifs_parallel_snapshot());
+    let (mut core, mut cell_store) = init_core(wrapped_sumifs_parallel_snapshot());
 
     let sheet_id = sid(1);
-    let formula_id = mirror
+    let formula_id = cell_store
         .resolve_cell_id(&sheet_id, cell_types::SheetPos::new(0, 5))
         .expect("formula cell");
     assert_eq!(
-        core.get_cell_value(&mirror, &formula_id).cloned(),
+        core.get_cell_value(&cell_store, &formula_id).cloned(),
         Some(CellValue::number(45.0))
     );
 
-    let source_id = mirror
+    let source_id = cell_store
         .resolve_cell_id(&sheet_id, cell_types::SheetPos::new(0, 2))
         .expect("source value cell");
-    core.set_cell(&mut mirror, &sheet_id, source_id, 0, 2, "1000")
+    core.set_cell(&mut cell_store, &sheet_id, source_id, 0, 2, "1000")
         .unwrap();
 
     assert_eq!(
-        core.get_cell_value(&mirror, &formula_id).cloned(),
+        core.get_cell_value(&cell_store, &formula_id).cloned(),
         Some(CellValue::number(1044.0))
     );
 }
@@ -203,11 +203,11 @@ fn test_sumifs_cache_preserves_criteria_order_for_multiple_layouts() {
         },
     ];
     let snap = single_sheet_snapshot("Sheet1", 3, 8, cells);
-    let (core, mirror) = init_core(snap);
+    let (core, cell_store) = init_core(snap);
     let formula_id = CellId::from_uuid_str("00000000-0000-0000-0000-00000000900c").unwrap();
 
     assert_eq!(
-        core.get_cell_value(&mirror, &formula_id).cloned(),
+        core.get_cell_value(&cell_store, &formula_id).cloned(),
         Some(CellValue::number(80.0))
     );
 }

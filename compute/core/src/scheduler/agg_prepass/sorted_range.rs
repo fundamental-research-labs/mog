@@ -154,7 +154,7 @@ fn parse_range_op(prefix: &str) -> Option<RangeOp> {
 pub(super) fn build_sorted_range_index(
     plan: &RangePrepassPlan,
     pattern: &AggPattern,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
 ) -> Option<Vec<SortedRangeEntry>> {
     // Read all criteria column slices.
     // Missing columns (not in col_data) are treated as empty — all rows read
@@ -162,7 +162,7 @@ pub(super) fn build_sorted_range_index(
     let empty_col = ColumnView::empty();
     let mut criteria_slices: SmallVec<[ColumnView<'_>; 4]> = SmallVec::new();
     for pair in &pattern.pairs {
-        let sheet = mirror.get_sheet(&pair.data_sheet)?;
+        let sheet = cell_store.get_sheet(&pair.data_sheet)?;
         let slice = sheet.get_column_view(pair.data_col).unwrap_or(empty_col);
         criteria_slices.push(slice);
     }
@@ -170,7 +170,7 @@ pub(super) fn build_sorted_range_index(
     // Read value column slice (for SUMIFS etc.)
     // Missing column → empty slice (all values treated as 0.0 per Excel SUMIFS semantics).
     let value_slice: Option<ColumnView<'_>> = if let Some((vs, vc, _, _)) = &pattern.value_range {
-        let sheet = mirror.get_sheet(vs)?;
+        let sheet = cell_store.get_sheet(vs)?;
         Some(sheet.get_column_view(*vc).unwrap_or(empty_col))
     } else {
         None
@@ -179,7 +179,7 @@ pub(super) fn build_sorted_range_index(
     // Read range column slice.
     // Missing column → empty slice (no numeric values → empty sorted index → all results 0).
     let (range_sheet, range_col, _range_start, _range_end) = plan.range_data_col;
-    let range_sheet_data = mirror.get_sheet(&range_sheet)?;
+    let range_sheet_data = cell_store.get_sheet(&range_sheet)?;
     let range_slice = range_sheet_data
         .get_column_view(range_col)
         .unwrap_or(empty_col);
@@ -227,7 +227,7 @@ pub(super) fn build_sorted_range_index(
         .iter()
         .map(|pair| match &pair.criteria {
             CriteriaSource::StaticFromCell { sheet, row, col } => {
-                let val = mirror
+                let val = cell_store
                     .get_cell_value_at(sheet, SheetPos::new(*row, *col))
                     .unwrap_or(&CellValue::Null);
                 let key = NormalizedKey::from_cell_value(val);
@@ -365,7 +365,7 @@ pub(super) fn execute_sorted_range_prepass(
     group: &AggFormulaGroup,
     plan: &RangePrepassPlan,
     sorted_index: &[SortedRangeEntry],
-    mirror: &CellMirror,
+    cell_store: &CellStore,
 ) -> Option<Vec<(CellId, CellValue)>> {
     let _span = tracing::info_span!(
         "agg_prepass_sorted_range",
@@ -376,11 +376,11 @@ pub(super) fn execute_sorted_range_prepass(
 
     // Pre-load dynamic column slices for bound resolution
     let lower_slice: Option<ColumnView<'_>> = plan.lower_bound.as_ref().and_then(|b| {
-        let sh = mirror.get_sheet(&b.dynamic_sheet)?;
+        let sh = cell_store.get_sheet(&b.dynamic_sheet)?;
         sh.get_column_view(b.dynamic_col)
     });
     let upper_slice: Option<ColumnView<'_>> = plan.upper_bound.as_ref().and_then(|b| {
-        let sh = mirror.get_sheet(&b.dynamic_sheet)?;
+        let sh = cell_store.get_sheet(&b.dynamic_sheet)?;
         sh.get_column_view(b.dynamic_col)
     });
 
@@ -407,7 +407,7 @@ pub(super) fn execute_sorted_range_prepass(
                     // Push 0 result for this cell and continue.
                     let result = zero_result_for_agg(group.pattern.agg_fn);
                     let final_result = if let Some(ref post_op) = group.post_op {
-                        apply_post_op(result, post_op, mirror)
+                        apply_post_op(result, post_op, cell_store)
                     } else {
                         result
                     };
@@ -436,7 +436,7 @@ pub(super) fn execute_sorted_range_prepass(
                     // Non-numeric bound — no rows can match.
                     let result = zero_result_for_agg(group.pattern.agg_fn);
                     let final_result = if let Some(ref post_op) = group.post_op {
-                        apply_post_op(result, post_op, mirror)
+                        apply_post_op(result, post_op, cell_store)
                     } else {
                         result
                     };
@@ -509,7 +509,7 @@ pub(super) fn execute_sorted_range_prepass(
 
         // Apply post-op if present
         let final_result = if let Some(ref post_op) = group.post_op {
-            apply_post_op(result, post_op, mirror)
+            apply_post_op(result, post_op, cell_store)
         } else {
             result
         };

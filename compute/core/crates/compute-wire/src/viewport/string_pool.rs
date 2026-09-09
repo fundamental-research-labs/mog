@@ -1,4 +1,4 @@
-//! String interning helpers for viewport and mutation binary sections.
+//! String interning helpers for viewport binary sections.
 
 use std::collections::HashMap;
 
@@ -54,36 +54,6 @@ impl DedupStringPool {
     pub(super) fn into_bytes(self) -> Vec<u8> {
         self.pool
     }
-}
-
-/// Append an optional string to the pool. Returns `(offset, len)` or
-/// `(NO_STRING, 0)` if `None`. Strings exceeding `u16::MAX` bytes are
-/// truncated at a UTF-8 boundary.
-///
-/// Legacy non-dedup variant used by mutation paths that pass a raw `Vec<u8>`.
-#[inline]
-#[allow(clippy::cast_possible_truncation)] // pool offset < 4 GB, string < 64 KB
-pub(crate) fn intern_optional_string(pool: &mut Vec<u8>, text: Option<&str>) -> (u32, u16) {
-    match text {
-        Some(s) => intern_str(pool, s),
-        None => (NO_STRING, 0),
-    }
-}
-
-/// Append a `&str` to the pool. Returns `(offset, len)`.
-///
-/// Legacy non-dedup variant used by mutation paths that pass a raw `Vec<u8>`.
-/// Strings longer than `u16::MAX` bytes are truncated to `u16::MAX` bytes at
-/// a UTF-8 character boundary.
-#[inline]
-#[allow(clippy::cast_possible_truncation)] // pool offset < 4 GB; len guarded below
-pub(crate) fn intern_str(pool: &mut Vec<u8>, s: &str) -> (u32, u16) {
-    let bytes = s.as_bytes();
-    let truncated = truncate_to_u16_boundary(s, bytes);
-    let off = pool.len() as u32;
-    let len = truncated.len() as u16;
-    pool.extend_from_slice(truncated);
-    (off, len)
 }
 
 fn truncate_to_u16_boundary<'a>(s: &str, bytes: &'a [u8]) -> &'a [u8] {

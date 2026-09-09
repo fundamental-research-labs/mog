@@ -106,9 +106,7 @@ fn assert_not_found_without_side_effects<F>(
     slicer_id: &str,
     operation: F,
 ) where
-    F: FnOnce(
-        &mut ComputeEngine,
-    ) -> Result<(Vec<u8>, crate::snapshot::MutationResult), ComputeError>,
+    F: FnOnce(&mut ComputeEngine) -> Result<crate::snapshot::MutationResult, ComputeError>,
 {
     let before_dirty = engine.stores.compute.is_dirty();
     let before_map_presence = has_slicer_map(engine);
@@ -127,7 +125,7 @@ fn slicer_crud_and_selection_emit_mutation_result_changes() {
     let (mut engine, _recalc) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
 
-    let (_patches, create_result) = engine
+    let create_result = engine
         .create_slicer(&sid, table_slicer("slicer-1"))
         .expect("create slicer");
     assert_eq!(create_result.slicer_changes.len(), 1);
@@ -140,7 +138,7 @@ fn slicer_crud_and_selection_emit_mutation_result_changes() {
         Some("slicer-1")
     );
 
-    let (_patches, update_result) = engine
+    let update_result = engine
         .update_slicer_config(
             &sid,
             "slicer-1",
@@ -167,7 +165,7 @@ fn slicer_crud_and_selection_emit_mutation_result_changes() {
         Some("Region Updated")
     );
 
-    let (_patches, toggle_result) = engine
+    let toggle_result = engine
         .toggle_slicer_item(&sid, "slicer-1", CellValue::Text("West".into()))
         .expect("toggle slicer");
     let toggle_change = &toggle_result.slicer_changes[0];
@@ -188,7 +186,7 @@ fn slicer_crud_and_selection_emit_mutation_result_changes() {
         Some([CellValue::Text("West".into())].as_slice())
     );
 
-    let (_patches, clear_result) = engine
+    let clear_result = engine
         .clear_slicer_selection(&sid, "slicer-1")
         .expect("clear slicer selection");
     let clear_change = &clear_result.slicer_changes[0];
@@ -207,7 +205,7 @@ fn slicer_crud_and_selection_emit_mutation_result_changes() {
             .is_empty()
     );
 
-    let (_patches, delete_result) = engine
+    let delete_result = engine
         .delete_slicer(&sid, "slicer-1")
         .expect("delete slicer");
     let delete_change = &delete_result.slicer_changes[0];
@@ -303,7 +301,7 @@ fn wrong_sheet_targets_are_absent_and_all_strict_mutations_reject() {
         engine.clear_slicer_selection(&other, slicer_id)
     });
 
-    let (_, retry) = engine
+    let retry = engine
         .set_slicer_selection(&owner, slicer_id, vec![CellValue::Text("West".into())])
         .expect("correct owner still works after rejection");
     assert_eq!(retry.slicer_changes.len(), 1);
@@ -390,7 +388,7 @@ fn create_rejects_duplicate_and_invalid_owner_without_side_effects() {
 
     let mut canonical_equivalent = table_slicer("canonical-owner");
     canonical_equivalent.sheet_id = uuid::Uuid::from_u128(owner.as_u128()).to_string();
-    let (_, result) = engine
+    let result = engine
         .create_slicer(&owner, canonical_equivalent)
         .expect("equivalent dashed owner ID is accepted");
     assert_eq!(
@@ -415,7 +413,7 @@ fn generated_id_collision_retries_and_cross_sheet_source_is_allowed() {
         table_id: "table-on-another-sheet".to_string(),
         column_cell_id: "region".to_string(),
     };
-    let (_, result) = engine.create_slicer(&owner, generated).unwrap();
+    let result = engine.create_slicer(&owner, generated).unwrap();
     let created = result.slicer_changes[0].data.as_ref().unwrap();
     assert_eq!(created.id, expected_generated_id);
     assert_eq!(created.sheet_id, owner.to_uuid_string());
@@ -444,7 +442,7 @@ fn atomic_set_selection_emits_one_authoritative_post_state() {
         CellValue::Text("West".into()),
         CellValue::Text("East".into()),
     ];
-    let (_, result) = engine
+    let result = engine
         .set_slicer_selection(&sid, "slicer-1", values.clone())
         .unwrap();
     assert_eq!(result.slicer_changes.len(), 1);
@@ -467,7 +465,7 @@ fn atomic_set_selection_emits_one_authoritative_post_state() {
         change.data.as_ref().unwrap().selected_values
     );
 
-    let (_, toggle_result) = engine
+    let toggle_result = engine
         .toggle_slicer_item(&sid, "slicer-1", CellValue::Text("West".into()))
         .unwrap();
     let expected_after_toggle = vec![CellValue::Text("East".into())];
@@ -514,10 +512,10 @@ fn bulk_delete_validates_all_targets_before_one_atomic_removal() {
     assert!(engine.get_slicer_state(&owner, "first").is_some());
     assert!(engine.get_slicer_state(&other, "foreign").is_some());
 
-    let (_, empty_result) = engine.delete_slicers(&owner, Vec::new()).unwrap();
+    let empty_result = engine.delete_slicers(&owner, Vec::new()).unwrap();
     assert!(empty_result.slicer_changes.is_empty());
 
-    let (_, result) = engine
+    let result = engine
         .delete_slicers(
             &owner,
             vec!["second".into(), "first".into(), "second".into()],

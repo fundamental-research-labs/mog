@@ -67,7 +67,7 @@ fn workbook() -> WorkbookSnapshot {
 
 fn value_at(engine: &ComputeEngine, sheet_id: &SheetId, row: u32, col: u32) -> CellValue {
     engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(sheet_id, SheetPos::new(row, col))
         .cloned()
         .unwrap_or(CellValue::Null)

@@ -38,7 +38,7 @@ pub(in crate::storage::engine) use workbook::{
 use super::super::export::pos_to_a1;
 use super::objects::get_all_comments;
 use super::queries;
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::{dimensions as dims_mod, merges, print};
 use cell_types::SheetId;
@@ -52,7 +52,6 @@ use domain_types::{
 use named_ranges::export_workbook_named_ranges;
 #[cfg(feature = "native")]
 use palette::SharedPalette;
-use sheet_metadata::resolve_hydrated_comment_position;
 use workbook::{
     export_calculation_properties, export_custom_workbook_views_xml, export_document_properties,
     export_external_links, export_file_sharing, export_file_version, export_shared_string_hints,
@@ -68,7 +67,7 @@ struct ExportedSheetData {
 
 fn export_single_sheet(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     sheet_idx: usize,
     palette: &impl PaletteOps,
@@ -78,12 +77,12 @@ fn export_single_sheet(
 
     let name = queries::get_sheet_name(stores, sheet_id)?;
 
-    let cells = export_cells_for_sheet(stores, mirror, sheet_id, palette);
+    let cells = export_cells_for_sheet(stores, cell_store, sheet_id, palette);
     let authored_style_runs =
-        export_authored_style_runs_for_sheet(stores, mirror, sheet_id, palette);
+        export_authored_style_runs_for_sheet(stores, cell_store, sheet_id, palette);
 
-    let merges_raw = match stores.grid_indexes.get(sheet_id) {
-        Some(grid) => merges::get_all_merges(&stores.storage, *sheet_id, grid),
+    let merges_raw = match cell_store.get_sheet(sheet_id) {
+        Some(sheet) => merges::get_all_merges(&stores.storage, *sheet_id, sheet),
         None => Vec::new(),
     };
     let merge_regions: Vec<MergeRegion> = merges_raw
@@ -110,26 +109,25 @@ fn export_single_sheet(
     let extra_sheet_views = metadata.extra_views.clone();
 
     let stored_max_col = dims_mod::get_max_materialized_col(stores.grid_indexes.get(sheet_id));
-    let sheet_dimensions = export_dimensions_for_sheet(stores, mirror, sheet_id, stored_max_col);
+    let sheet_dimensions =
+        export_dimensions_for_sheet(stores, cell_store, sheet_id, stored_max_col);
 
     let raw_comments = get_all_comments(stores, sheet_id);
     let comments_out: Vec<Comment> = raw_comments
         .into_iter()
         .filter_map(|mut cc| {
-            let a1_ref = if let Some(pos) =
-                resolve_hydrated_comment_position(stores, sheet_id, &cc.cell_ref)
-                    .or_else(|| resolve_cell_position(mirror, sheet_id, &cc.cell_ref))
-            {
-                pos_to_a1(pos.0, pos.1)
-            } else {
-                tracing::warn!(
-                    sheet_id = %sheet_id.to_uuid_string(),
-                    comment_id = %cc.id,
-                    stored_ref = %cc.cell_ref,
-                    "skipping comment with unresolved hydrated CellId"
-                );
-                return None;
-            };
+            let a1_ref =
+                if let Some(pos) = resolve_cell_position(cell_store, sheet_id, &cc.cell_ref) {
+                    pos_to_a1(pos.0, pos.1)
+                } else {
+                    tracing::warn!(
+                        sheet_id = %sheet_id.to_uuid_string(),
+                        comment_id = %cc.id,
+                        stored_ref = %cc.cell_ref,
+                        "skipping comment with unresolved hydrated CellId"
+                    );
+                    return None;
+                };
             let has_thread = cc.comment_type == CommentType::ThreadedComment;
             let content_text = if has_thread {
                 cc.content.clone().unwrap_or_else(|| {
@@ -152,7 +150,7 @@ fn export_single_sheet(
         })
         .collect();
 
-    let hyperlinks_out = export_hyperlinks_for_sheet(stores, sheet_id);
+    let hyperlinks_out = export_hyperlinks_for_sheet(stores, cell_store, sheet_id);
 
     let conditional_formats: Vec<DomainConditionalFormat> =
         export_conditional_formats_for_sheet(stores, sheet_id);
@@ -166,14 +164,14 @@ fn export_single_sheet(
 
     let protection = export_sheet_protection(stores, sheet_id);
 
-    let data_bounds = queries::get_data_bounds(stores, mirror, sheet_id);
+    let data_bounds = queries::get_data_bounds(stores, cell_store, sheet_id);
     let max_row = data_bounds.as_ref().map(|b| b.max_row + 1).unwrap_or(0);
     let data_max_col = data_bounds.as_ref().map(|b| b.max_col + 1).unwrap_or(0);
     let max_col = stored_max_col
         .map(|c| data_max_col.max(c + 1))
         .unwrap_or(data_max_col);
     let _sheet_max_col = max_col;
-    let (stored_rows, stored_cols) = mirror
+    let (stored_rows, stored_cols) = cell_store
         .get_sheet(sheet_id)
         .map(|sheet| (Some(sheet.grid_rows), Some(sheet.grid_cols)))
         .unwrap_or((None, None));
@@ -206,21 +204,22 @@ fn export_single_sheet(
 
     let (row_styles, col_styles) =
         export_row_col_styles_for_sheet(stores, sheet_id, style_max_row, max_col, palette);
-    let col_style_ranges = export_col_style_ranges_for_sheet(mirror, sheet_id, palette);
+    let col_style_ranges = export_col_style_ranges_for_sheet(cell_store, sheet_id, palette);
 
     let sparklines = export_sparklines_for_sheet(stores, sheet_id);
     let sparkline_groups = export_sparkline_groups_for_sheet(stores, sheet_id);
 
     let page_breaks = export_page_breaks_for_sheet(stores, sheet_id);
 
-    let pos_resolver =
-        |cell_id: &str| -> Option<(u32, u32)> { resolve_cell_position(mirror, sheet_id, cell_id) };
+    let pos_resolver = |cell_id: &str| -> Option<(u32, u32)> {
+        resolve_cell_position(cell_store, sheet_id, cell_id)
+    };
     let auto_filter = export_auto_filter_for_sheet(stores, sheet_id, &pos_resolver);
     let sort_state = export_sort_state_for_sheet(stores, sheet_id);
 
     let (outline_groups, outline_properties) = export_outline_groups_for_sheet(stores, sheet_id);
 
-    let exported_tables = export_tables_for_sheet(stores, mirror, sheet_id);
+    let exported_tables = export_tables_for_sheet(stores, cell_store, sheet_id);
     let table_projection_inputs = exported_tables
         .iter()
         .map(|table| table.projection_input.clone())
@@ -231,7 +230,7 @@ fn export_single_sheet(
         .collect();
 
     let (all_fobjs, slicers, slicer_anchors, timelines, timeline_anchors) =
-        export_floating_objects_for_sheet(stores, mirror, sheet_id);
+        export_floating_objects_for_sheet(stores, cell_store, sheet_id);
 
     let (charts, floating_objects) = chart_sources::split_charts_for_sheet_export(all_fobjs);
 
@@ -329,8 +328,11 @@ fn export_single_sheet(
     })
 }
 
-fn export_data_table_regions(mirror: &CellMirror, sheet_ids: &[SheetId]) -> Vec<DataTableRegion> {
-    let mut regions: Vec<DataTableRegion> = mirror
+fn export_data_table_regions(
+    cell_store: &CellStore,
+    sheet_ids: &[SheetId],
+) -> Vec<DataTableRegion> {
+    let mut regions: Vec<DataTableRegion> = cell_store
         .all_data_table_regions()
         .iter()
         .filter_map(|region| {
@@ -380,7 +382,7 @@ fn export_data_table_regions(mirror: &CellMirror, sheet_ids: &[SheetId]) -> Vec<
 /// shared thread-safe style palette. On WASM, sheets are processed sequentially.
 pub(in crate::storage::engine) fn build_parse_output(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
 ) -> ParseOutput {
     let sheet_ids = stores.storage.sheet_order();
     let mut workbook_stylesheet = export_workbook_stylesheet(stores);
@@ -399,7 +401,7 @@ pub(in crate::storage::engine) fn build_parse_output(
             .par_iter()
             .enumerate()
             .filter_map(|(sheet_idx, sheet_id)| {
-                export_single_sheet(stores, mirror, sheet_id, sheet_idx, &palette)
+                export_single_sheet(stores, cell_store, sheet_id, sheet_idx, &palette)
             })
             .collect();
         let table_projection_inputs: Vec<Vec<ExportedTableProjectionInput>> = exported_sheets
@@ -423,7 +425,7 @@ pub(in crate::storage::engine) fn build_parse_output(
             .iter()
             .enumerate()
             .filter_map(|(sheet_idx, sheet_id)| {
-                export_single_sheet(stores, mirror, sheet_id, sheet_idx, &palette)
+                export_single_sheet(stores, cell_store, sheet_id, sheet_idx, &palette)
             })
             .collect();
         let table_projection_inputs: Vec<Vec<ExportedTableProjectionInput>> = exported_sheets
@@ -440,7 +442,7 @@ pub(in crate::storage::engine) fn build_parse_output(
     let table_projection: TableExportProjection =
         finalize_table_export_projection(&mut output_sheets, &table_projection_inputs);
 
-    let named_ranges = export_workbook_named_ranges(stores, mirror, &sheet_ids);
+    let named_ranges = export_workbook_named_ranges(stores, cell_store, &sheet_ids);
 
     let theme = export_workbook_theme(stores);
     let wb_protection = export_workbook_protection(stores);
@@ -452,7 +454,7 @@ pub(in crate::storage::engine) fn build_parse_output(
         let stylesheet = workbook_stylesheet.get_or_insert_with(Default::default);
         stylesheet.dxf_registry.extend(generated_table_style_dxfs);
     }
-    let data_table_regions = export_data_table_regions(mirror, &sheet_ids);
+    let data_table_regions = export_data_table_regions(cell_store, &sheet_ids);
     let connections = workbook::export_workbook_connections(stores);
     let workbook_views = export_workbook_views_for_sheets(stores, &sheet_ids, &mut output_sheets);
 
@@ -460,7 +462,7 @@ pub(in crate::storage::engine) fn build_parse_output(
     let has_persons_part = !persons.is_empty()
         || workbook::export_workbook_threaded_comment_persons_part_present(stores);
     let pivot_tables =
-        export_workbook_parsed_pivot_tables(stores, mirror, default_pivot_style.as_deref());
+        export_workbook_parsed_pivot_tables(stores, cell_store, default_pivot_style.as_deref());
 
     let mut output = ParseOutput {
         sheets: output_sheets,
@@ -511,12 +513,12 @@ pub(in crate::storage::engine) fn build_parse_output(
     output
 }
 
-/// Helper: resolve a cell_id hex string to (row, col) via the compute mirror.
+/// Helper: resolve a cell_id hex string to (row, col) via the compute cell_store.
 fn resolve_cell_position(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     cell_id_hex: &str,
 ) -> Option<(u32, u32)> {
-    let result = queries::get_cell_position(mirror, sheet_id, cell_id_hex)?;
+    let result = queries::get_cell_position(cell_store, sheet_id, cell_id_hex)?;
     Some((result.row, result.col))
 }

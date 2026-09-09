@@ -8,7 +8,6 @@ use super::{ComputeEngine, services};
 use crate::snapshot::MutationResult;
 use bridge_core as bridge;
 use cell_types::SheetId;
-use compute_wire::mutation::serialize_multi_viewport_patches;
 use value_types::ComputeError;
 
 #[bridge::api(
@@ -22,7 +21,7 @@ impl ComputeEngine {
     /// Get the pixel position (top edge) of a row.
     #[bridge::read(scope = "sheet")]
     pub fn get_row_position(&self, sheet_id: &SheetId, row: u32) -> f64 {
-        self.stores.layout_indexes.get(sheet_id).map_or(
+        self.stores.pixel_layout(sheet_id).as_deref().map_or(
             row as f64 * self.stores.layout_metrics.default_row_height_px,
             |li| li.get_row_position(row as usize).0,
         )
@@ -31,7 +30,7 @@ impl ComputeEngine {
     /// Get the pixel position (left edge) of a column.
     #[bridge::read(scope = "sheet")]
     pub fn get_col_position(&self, sheet_id: &SheetId, col: u32) -> f64 {
-        self.stores.layout_indexes.get(sheet_id).map_or(
+        self.stores.pixel_layout(sheet_id).as_deref().map_or(
             col as f64 * self.stores.layout_metrics.default_column_width_px,
             |li| li.get_col_position(col as usize).0,
         )
@@ -40,7 +39,7 @@ impl ComputeEngine {
     /// Find the row index at a pixel Y position.
     #[bridge::read(scope = "sheet")]
     pub fn get_row_at_pixel(&self, sheet_id: &SheetId, y: f64) -> u32 {
-        self.stores.layout_indexes.get(sheet_id).map_or(
+        self.stores.pixel_layout(sheet_id).as_deref().map_or(
             (y / self.stores.layout_metrics.default_row_height_px).max(0.0) as u32,
             |li| li.get_row_at_pixel(domain_types::units::Pixels(y)) as u32,
         )
@@ -49,7 +48,7 @@ impl ComputeEngine {
     /// Find the column index at a pixel X position.
     #[bridge::read(scope = "sheet")]
     pub fn get_col_at_pixel(&self, sheet_id: &SheetId, x: f64) -> u32 {
-        self.stores.layout_indexes.get(sheet_id).map_or(
+        self.stores.pixel_layout(sheet_id).as_deref().map_or(
             (x / self.stores.layout_metrics.default_column_width_px).max(0.0) as u32,
             |li| li.get_col_at_pixel(domain_types::units::Pixels(x)) as u32,
         )
@@ -59,8 +58,8 @@ impl ComputeEngine {
     #[bridge::read(scope = "sheet")]
     pub fn get_row_height_from_index(&self, sheet_id: &SheetId, row: u32) -> f64 {
         self.stores
-            .layout_indexes
-            .get(sheet_id)
+            .pixel_layout(sheet_id)
+            .as_deref()
             .map_or(self.stores.layout_metrics.default_row_height_px, |li| {
                 li.get_row_height(row as usize).0
             })
@@ -70,8 +69,8 @@ impl ComputeEngine {
     #[bridge::read(scope = "sheet")]
     pub fn get_col_width_from_index(&self, sheet_id: &SheetId, col: u32) -> f64 {
         self.stores
-            .layout_indexes
-            .get(sheet_id)
+            .pixel_layout(sheet_id)
+            .as_deref()
             .map_or(self.stores.layout_metrics.default_column_width_px, |li| {
                 li.get_col_width(col as usize).0
             })
@@ -87,16 +86,16 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let result = services::autofit::auto_fit_column_and_set(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 &engine.settings,
                 sheet_id,
                 col,
             )?;
-            Ok((serialize_multi_viewport_patches(&[]), result))
+            Ok(result)
         })
     }
 
@@ -106,16 +105,16 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         cols: Vec<u32>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let result = services::autofit::auto_fit_columns_and_set(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 &engine.settings,
                 sheet_id,
                 &cols,
             )?;
-            Ok((serialize_multi_viewport_patches(&[]), result))
+            Ok(result)
         })
     }
 
@@ -125,16 +124,16 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         rows: Vec<u32>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let result = services::autofit::auto_fit_rows_and_set(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 &engine.settings,
                 sheet_id,
                 &rows,
             )?;
-            Ok((serialize_multi_viewport_patches(&[]), result))
+            Ok(result)
         })
     }
 }

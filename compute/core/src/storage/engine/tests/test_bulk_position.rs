@@ -60,8 +60,10 @@ fn duplicate_set_cells_by_position_uses_last_write_and_one_identity() {
         .unwrap();
 
     assert_eq!(cell_value_at(&engine, &sid, 0, 0), num(2.0));
-    let grid = engine.grid_index(&sid).expect("grid index");
-    let cell_id = grid.cell_id_at(0, 0).expect("winning cell id");
+    let grid = engine.cell_store().get_sheet(&sid).expect("grid index");
+    let cell_id = grid
+        .cell_id_at(cell_types::SheetPos::new(0, 0))
+        .expect("winning cell id");
     assert_eq!(
         grid.cells().filter(|(id, _, _)| *id == cell_id).count(),
         1,

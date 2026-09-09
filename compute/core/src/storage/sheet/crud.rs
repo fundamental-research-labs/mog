@@ -7,7 +7,7 @@ use compute_document::hex::{hex_to_id, id_to_hex};
 use domain_types::units::CharWidth;
 use value_types::ComputeError;
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::storage::WorkbookStorage;
 
 struct SheetCreationOptions {
@@ -36,12 +36,12 @@ impl WorkbookStorage {
     #[cfg(test)]
     pub(crate) fn create_sheet(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         name: &str,
         id_alloc: &cell_types::IdAllocator,
     ) -> Result<SheetId, ComputeError> {
         self.create_sheet_with_width(
-            mirror,
+            cell_store,
             name,
             id_alloc,
             domain_types::units::DEFAULT_COL_WIDTH,
@@ -51,7 +51,7 @@ impl WorkbookStorage {
     /// Create a sheet using the requested default column width.
     pub(crate) fn create_sheet_with_width(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         name: &str,
         id_alloc: &cell_types::IdAllocator,
         default_col_width: CharWidth,
@@ -59,7 +59,7 @@ impl WorkbookStorage {
         let sheet_id = self.next_unused_sheet_id(id_alloc);
         // Default: 100 rows x 26 cols
         self.add_sheet_with_width(
-            mirror,
+            cell_store,
             sheet_id,
             name,
             100,
@@ -72,7 +72,7 @@ impl WorkbookStorage {
     /// Copy values and metadata with fresh sheet, axis, and cell identities.
     pub(crate) fn copy_sheet(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         source_id: &SheetId,
         new_name: &str,
         id_alloc: &cell_types::IdAllocator,
@@ -84,14 +84,15 @@ impl WorkbookStorage {
         // Native values and axes are copied with fresh identities. Compact payloads
         // share immutable memory until either sheet edits a value.
         let mut cell_id_remap: HashMap<String, String> = HashMap::new();
-        let source = mirror
-            .get_sheet(source_id)
-            .ok_or_else(|| ComputeError::SheetNotFound {
-                sheet_id: source_hex.to_string(),
-            })?;
+        let source =
+            cell_store
+                .get_sheet(source_id)
+                .ok_or_else(|| ComputeError::SheetNotFound {
+                    sheet_id: source_hex.to_string(),
+                })?;
         let native_copy = super::copy_native::NativeSheetCopy::new(
             source,
-            mirror,
+            cell_store,
             new_id,
             new_name,
             id_alloc,
@@ -268,7 +269,7 @@ impl WorkbookStorage {
         metadata
             .floating_objects
             .remap_for_copy(new_id, &native_copy.cell_remap, id_alloc);
-        native_copy.install(mirror, new_id)?;
+        native_copy.install(cell_store, new_id)?;
         let pivot_copies = source_pivot_keys
             .into_iter()
             .zip(copied_pivots.iter())
@@ -304,21 +305,21 @@ impl WorkbookStorage {
     }
 
     // -----------------------------------------------------------------
-    // Low-level sheet-map + mirror lifecycle
+    // Low-level sheet-map + cell_store lifecycle
     // -----------------------------------------------------------------
 
     /// Test helper that adds a sheet with `ORIGIN_USER_EDIT`.
     #[cfg(test)]
     pub(crate) fn add_sheet(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         sheet_id: SheetId,
         name: &str,
         rows: u32,
         cols: u32,
     ) -> Result<(), ComputeError> {
         self.add_sheet_with_width(
-            mirror,
+            cell_store,
             sheet_id,
             name,
             rows,
@@ -331,7 +332,7 @@ impl WorkbookStorage {
 
     fn add_sheet_with_width(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         sheet_id: SheetId,
         name: &str,
         rows: u32,
@@ -346,7 +347,7 @@ impl WorkbookStorage {
         }
 
         crate::storage::engine::history::structure::capture_new_sheet(self, sheet_id);
-        // Update mirror
+        // Update cell_store
         let snap = crate::snapshot::SheetSnapshot {
             identities: Vec::new(),
             row_axis: None,
@@ -358,7 +359,7 @@ impl WorkbookStorage {
             cells: vec![],
             ranges: vec![],
         };
-        mirror.add_sheet(snap)?;
+        cell_store.add_sheet(snap)?;
         let mut metadata = super::SheetMetadata {
             name: name.to_owned(),
             ..Default::default()
@@ -373,12 +374,12 @@ impl WorkbookStorage {
     }
 
     /// Remove the sheet, its values, and its owned metadata.
-    pub(crate) fn remove_sheet(&mut self, mirror: &mut CellMirror, sheet_id: &SheetId) {
+    pub(crate) fn remove_sheet(&mut self, cell_store: &mut CellStore, sheet_id: &SheetId) {
         crate::storage::engine::history::metadata::capture_workbook_field!(self, sheet_order);
         self.metadata.sheet_order.retain(|id| id != sheet_id);
-        // Update mirror
+        // Update cell_store
         self.cell_metadata
-            .retain(|id, _| mirror.sheet_for_cell(id).as_ref() != Some(sheet_id));
+            .retain(|id, _| cell_store.sheet_for_cell(id).as_ref() != Some(sheet_id));
         let slicers: Vec<_> = self
             .metadata
             .slicers
@@ -415,7 +416,7 @@ impl WorkbookStorage {
                 .as_ref()
                 != Some(sheet_id)
         });
-        mirror.remove_sheet(sheet_id);
+        cell_store.remove_sheet(sheet_id);
         self.sheet_metadata.remove(sheet_id);
     }
 
@@ -440,7 +441,7 @@ mod tests {
     use super::super::order::get_sheet_order;
     use super::super::properties::get_sheet_name;
     use super::super::test_support::{make_sheet_id, setup};
-    use crate::mirror::CellMirror;
+    use crate::cells::CellStore;
     use crate::storage::WorkbookStorage;
     use cell_types::IdAllocator;
     use value_types::ComputeError;
@@ -448,9 +449,13 @@ mod tests {
     #[test]
     fn test_create_sheet() {
         let mut storage = WorkbookStorage::new();
-        let mut mirror = CellMirror::new();
+        let mut cell_store = CellStore::new();
         let sid = storage
-            .create_sheet(&mut mirror, "My Sheet", &*crate::storage::STORAGE_ID_ALLOC)
+            .create_sheet(
+                &mut cell_store,
+                "My Sheet",
+                &*crate::storage::STORAGE_ID_ALLOC,
+            )
             .unwrap();
         let order = get_sheet_order(&storage);
         assert_eq!(order.len(), 1);
@@ -460,10 +465,10 @@ mod tests {
 
     #[test]
     fn test_copy_sheet() {
-        let (mut storage, mut mirror, sid) = setup();
+        let (mut storage, mut cell_store, sid) = setup();
         let copy_id = storage
             .copy_sheet(
-                &mut mirror,
+                &mut cell_store,
                 &sid,
                 "Sheet1 (2)",
                 &*crate::storage::STORAGE_ID_ALLOC,
@@ -485,11 +490,11 @@ mod tests {
 
     #[test]
     fn test_copy_sheet_skips_existing_allocated_id() {
-        let (mut storage, mut mirror, sid) = setup();
+        let (mut storage, mut cell_store, sid) = setup();
         let alloc = IdAllocator::with_seed(1);
 
         let copy_id = storage
-            .copy_sheet(&mut mirror, &sid, "Sheet1 (2)", &alloc)
+            .copy_sheet(&mut cell_store, &sid, "Sheet1 (2)", &alloc)
             .unwrap();
 
         assert_eq!(copy_id, make_sheet_id(2));
@@ -503,10 +508,12 @@ mod tests {
 
     #[test]
     fn test_create_sheet_skips_existing_allocated_id() {
-        let (mut storage, mut mirror, sid) = setup();
+        let (mut storage, mut cell_store, sid) = setup();
         let alloc = IdAllocator::with_seed(1);
 
-        let created_id = storage.create_sheet(&mut mirror, "Sheet2", &alloc).unwrap();
+        let created_id = storage
+            .create_sheet(&mut cell_store, "Sheet2", &alloc)
+            .unwrap();
 
         assert_eq!(created_id, make_sheet_id(2));
         assert_eq!(get_sheet_order(&storage), vec![sid, created_id]);
@@ -514,9 +521,9 @@ mod tests {
 
     #[test]
     fn test_add_sheet_rejects_duplicate_id() {
-        let (mut storage, mut mirror, sid) = setup();
+        let (mut storage, mut cell_store, sid) = setup();
 
-        let result = storage.add_sheet(&mut mirror, sid, "Duplicate", 10, 5);
+        let result = storage.add_sheet(&mut cell_store, sid, "Duplicate", 10, 5);
 
         assert!(matches!(result, Err(ComputeError::InvalidInput { .. })));
         assert_eq!(get_sheet_order(&storage), vec![sid]);
@@ -525,9 +532,9 @@ mod tests {
 
     #[test]
     fn test_copy_nonexistent_sheet() {
-        let (mut storage, mut mirror, _sid) = setup();
+        let (mut storage, mut cell_store, _sid) = setup();
         let result = storage.copy_sheet(
-            &mut mirror,
+            &mut cell_store,
             &make_sheet_id(999),
             "Copy",
             &*crate::storage::STORAGE_ID_ALLOC,

@@ -10,8 +10,8 @@ use formula_types::{IdentityFormula, IdentityFormulaRef};
 use rustc_hash::FxHashMap;
 use value_types::ComputeError;
 
-use crate::mirror::range_view::RangeView;
-use crate::mirror::{CellMirror, SheetMirror};
+use crate::cells::range_view::RangeView;
+use crate::cells::{CellStore, SheetStore};
 use crate::snapshot::{CellData, SheetSnapshot};
 
 pub(super) struct NativeSheetCopy {
@@ -30,23 +30,25 @@ pub(super) struct NativeSheetCopy {
 
 impl NativeSheetCopy {
     pub(super) fn new(
-        source: &SheetMirror,
-        mirror: &CellMirror,
+        source: &SheetStore,
+        cell_store: &CellStore,
         sheet_id: SheetId,
         name: &str,
         allocator: &IdAllocator,
         cell_hex_remap: &mut HashMap<String, String>,
     ) -> Self {
         fn new_axis<Id: cell_types::AxisIdentityId + std::hash::Hash>(
+            sheet_id: SheetId,
             len: u32,
             allocator: &IdAllocator,
         ) -> Arc<AxisIndex<Id>> {
-            Arc::new(AxisIndex::new(cell_types::AxisIdentityStore::from_runs([
-                allocator.next_axis_run(len),
-            ])))
+            Arc::new(AxisIndex::new(
+                sheet_id,
+                cell_types::AxisIdentityStore::from_runs([allocator.next_axis_run(len)]),
+            ))
         }
-        let rows = new_axis(source.row_axis.len(), allocator);
-        let cols = new_axis(source.col_axis.len(), allocator);
+        let rows = new_axis(sheet_id, source.row_axis.len(), allocator);
+        let cols = new_axis(sheet_id, source.col_axis.len(), allocator);
         let remap_row = |id: RowId| {
             source
                 .row_index_of(&id)
@@ -58,7 +60,8 @@ impl NativeSheetCopy {
                 .and_then(|pos| cols.identity_at(sheet_id, pos))
         };
         let mut cells = FxHashMap::default();
-        for (&old_id, &pos) in &source.id_to_pos {
+        for (old_id, row, col) in source.cells() {
+            let pos = cell_types::SheetPos::new(row, col);
             let new_id = if old_id.is_virtual() {
                 CellId::virtual_at(
                     sheet_id,
@@ -81,7 +84,7 @@ impl NativeSheetCopy {
             .filter_map(|(old_id, entry)| {
                 let pos = source.position_of(old_id)?;
                 let new_id = *cells.get(old_id)?;
-                let mut formula = entry.formula.as_deref().cloned();
+                let mut formula = source.formula(old_id).cloned();
                 if let Some(formula) = &mut formula {
                     remap_formula(formula, source.id, sheet_id, &cells, remap_row, remap_col);
                 }
@@ -92,7 +95,7 @@ impl NativeSheetCopy {
                     value: entry.value.clone(),
                     formula: None,
                     identity_formula: formula,
-                    array_ref: mirror
+                    array_ref: cell_store
                         .projection_registry
                         .get(old_id)
                         .filter(|projection| projection.rows > 0 && projection.cols > 0)
@@ -115,16 +118,18 @@ impl NativeSheetCopy {
             .map(|(_, range)| {
                 let mut copied = range.clone();
                 copied.range_id = allocator.next_range_id();
-                copied.row_offset_by_id = range
-                    .row_offset_by_id
-                    .iter()
-                    .filter_map(|(id, &offset)| remap_row(*id).map(|id| (id, offset)))
-                    .collect();
-                copied.col_offset_by_id = range
-                    .col_offset_by_id
-                    .iter()
-                    .filter_map(|(id, &offset)| remap_col(*id).map(|id| (id, offset)))
-                    .collect();
+                copied.row_offset_by_id = range.row_offset_by_id.remap_positions(
+                    source.id,
+                    &source.row_axis,
+                    sheet_id,
+                    &rows,
+                );
+                copied.col_offset_by_id = range.col_offset_by_id.remap_positions(
+                    source.id,
+                    &source.col_axis,
+                    sheet_id,
+                    &cols,
+                );
                 copied.anchor = match &range.anchor {
                     RangeAnchor::Elastic {
                         start_row,
@@ -144,37 +149,35 @@ impl NativeSheetCopy {
                         }
                     }
                     _ => {
-                        let mut range_rows: Vec<_> = range
-                            .row_offset_by_id
-                            .keys()
-                            .filter_map(|id| {
-                                source
-                                    .row_index_of(id)
-                                    .map(|pos| (pos, remap_row(*id).unwrap()))
-                            })
-                            .collect();
-                        let mut range_cols: Vec<_> = range
-                            .col_offset_by_id
-                            .keys()
-                            .filter_map(|id| {
-                                source
-                                    .col_index_of(id)
-                                    .map(|pos| (pos, remap_col(*id).unwrap()))
-                            })
-                            .collect();
-                        range_rows.sort_unstable_by_key(|&(pos, _)| pos);
-                        range_cols.sort_unstable_by_key(|&(pos, _)| pos);
                         if matches!(range.anchor, RangeAnchor::Elastic { .. })
-                            && !range_rows.is_empty()
-                            && !range_cols.is_empty()
+                            && let (Some((first_row, last_row)), Some((first_col, last_col))) = (
+                                copied.row_offset_by_id.position_bounds(sheet_id, &rows),
+                                copied.col_offset_by_id.position_bounds(sheet_id, &cols),
+                            )
                         {
                             RangeAnchor::Elastic {
-                                start_row: range_rows[0].1,
-                                end_row: range_rows.last().unwrap().1,
-                                start_col: range_cols[0].1,
-                                end_col: range_cols.last().unwrap().1,
+                                start_row: rows.identity_at(sheet_id, first_row).unwrap(),
+                                end_row: rows.identity_at(sheet_id, last_row).unwrap(),
+                                start_col: cols.identity_at(sheet_id, first_col).unwrap(),
+                                end_col: cols.identity_at(sheet_id, last_col).unwrap(),
                             }
                         } else {
+                            let mut range_rows: Vec<_> = copied
+                                .row_offset_by_id
+                                .keys()
+                                .filter_map(|id| {
+                                    rows.position_of(sheet_id, id).map(|pos| (pos, id))
+                                })
+                                .collect();
+                            let mut range_cols: Vec<_> = copied
+                                .col_offset_by_id
+                                .keys()
+                                .filter_map(|id| {
+                                    cols.position_of(sheet_id, id).map(|pos| (pos, id))
+                                })
+                                .collect();
+                            range_rows.sort_unstable_by_key(|&(pos, _)| pos);
+                            range_cols.sort_unstable_by_key(|&(pos, _)| pos);
                             RangeAnchor::Strict {
                                 row_ids: range_rows.into_iter().map(|(_, id)| id).collect(),
                                 col_ids: range_cols.into_iter().map(|(_, id)| id).collect(),
@@ -186,9 +189,8 @@ impl NativeSheetCopy {
             })
             .collect();
         let identities = source
-            .id_to_pos
-            .iter()
-            .map(|(old, &pos)| (cells[old], pos))
+            .cells()
+            .map(|(old, row, col)| (cells[&old], cell_types::SheetPos::new(row, col)))
             .collect();
         Self {
             formats: crate::storage::properties::CopiedFormats::from_sheet(source, allocator),
@@ -196,13 +198,13 @@ impl NativeSheetCopy {
             destination_id: sheet_id,
             source_rows: source.row_axis.clone(),
             source_cols: source.col_axis.clone(),
-            rows,
-            cols,
+            rows: rows.clone(),
+            cols: cols.clone(),
             cell_remap: cells,
             snapshot: SheetSnapshot {
                 identities: Vec::new(),
-                row_axis: None,
-                col_axis: None,
+                row_axis: Some(rows.store().clone()),
+                col_axis: Some(cols.store().clone()),
                 id: sheet_id.to_uuid_string(),
                 name: name.to_owned(),
                 rows: source.grid_rows,
@@ -229,21 +231,21 @@ impl NativeSheetCopy {
 
     pub(super) fn install(
         self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         sheet_id: SheetId,
     ) -> Result<(), ComputeError> {
-        mirror.add_sheet(self.snapshot)?;
-        if let Some(sheet) = mirror.get_sheet_mut(&sheet_id) {
+        cell_store.add_sheet(self.snapshot)?;
+        if let Some(sheet) = cell_store.get_sheet_mut(&sheet_id) {
             self.formats.install(sheet);
             for range in self.ranges {
                 sheet.range_views.insert(range.range_id, range);
             }
         }
         for (id, pos) in self.identities {
-            mirror.register_identity_position(sheet_id, pos, id);
+            cell_store.register_identity_position(sheet_id, pos, id);
         }
-        mirror.install_sheet_axes(sheet_id, self.rows, self.cols);
-        mirror.finalize_sheet_range_hydration(sheet_id);
+        cell_store.install_sheet_axes(sheet_id, self.rows, self.cols);
+        cell_store.finalize_sheet_range_hydration(sheet_id);
         Ok(())
     }
 }

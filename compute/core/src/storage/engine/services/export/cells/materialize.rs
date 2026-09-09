@@ -3,7 +3,7 @@ use domain_types::{CellData, DocumentFormat, ImportedCellProjectionRole};
 use rustc_hash::FxHashMap;
 use value_types::CellValue;
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::properties::CellProperties;
 
@@ -13,7 +13,7 @@ use super::super::PaletteOps;
 #[allow(clippy::too_many_arguments)]
 pub(super) fn build_cell_data_for_cell_id(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     cell_id: &CellId,
     row: u32,
@@ -29,11 +29,11 @@ pub(super) fn build_cell_data_for_cell_id(
     // Effective reads fall back to imported range or projected values for Null ghost
     // cells; that is correct for formulas and viewport reads, but it would turn
     // authored blank/style-only cells into real XLSX value cells on save.
-    let value = mirror
+    let value = cell_store
         .get_cell_value_raw(cell_id)
         .map(export_scalar_value)
         .unwrap_or_else(|| {
-            mirror
+            cell_store
                 .get_cell_value_in_sheet(sheet_id, cell_id)
                 .map(export_scalar_value)
                 .unwrap_or(CellValue::Null)
@@ -44,13 +44,13 @@ pub(super) fn build_cell_data_for_cell_id(
         .get_formula(cell_id)
         .map(|s| s.to_string())
         .or_else(|| {
-            mirror
+            cell_store
                 .get_formula(cell_id)
                 .map(|f| format!("={}", f.template))
         });
 
     let cell_props = all_props.get(cell_id);
-    let style_id = cell_style_id(stores, mirror, sheet_id, row, col, cell_props, palette);
+    let style_id = cell_style_id(stores, cell_store, sheet_id, row, col, cell_props, palette);
 
     let cell_metadata_index = cell_props.and_then(|props| props.cell_metadata_index);
     let vm = cell_props.and_then(|props| props.vm);
@@ -168,7 +168,7 @@ fn is_imported_style_only_blank(
 #[allow(clippy::too_many_arguments)]
 fn cell_style_id(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -195,7 +195,7 @@ fn cell_style_id(
     // authored cascade. Conditional formatting is deliberately excluded: it is
     // exported independently and must remain dynamic.
     let table_format = crate::storage::engine::services::resolve_structured_format_at_cell(
-        mirror, sheet_id, row, col,
+        cell_store, sheet_id, row, col,
     );
     let effective = crate::storage::properties::get_effective_format_preloaded(
         &stores.storage,
@@ -205,7 +205,7 @@ fn cell_style_id(
         table_format.as_ref(),
         Some(props),
         stores.grid_indexes.get(sheet_id),
-        mirror.get_sheet(sheet_id),
+        cell_store.get_sheet(sheet_id),
     );
     let doc_fmt = cell_format_to_document_format(&effective);
     Some(palette.get_or_insert(doc_fmt))

@@ -159,7 +159,7 @@ fn sdk_authored_form_controls_export_identity_refs_as_xlsx_refs() {
         SheetId::from_uuid_str(&engine.get_all_sheet_ids()[0]).expect("valid hydrated sheet id");
     let cell_id_hex = |row, col| {
         let cell_id = engine
-            .mirror()
+            .cell_store()
             .resolve_cell_id(&sheet_id_after_hydration, SheetPos::new(row, col))
             .expect("cell id should exist");
         compute_document::hex::id_to_hex(cell_id.as_u128()).to_string()

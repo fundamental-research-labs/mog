@@ -4,7 +4,7 @@
 //! dependencies via function parameter types. Bridge methods on
 //! `ComputeEngine` delegate to these functions.
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use cell_types::SheetId;
 use domain_types::CellFormat;
 use value_types::CellValue;
@@ -55,13 +55,13 @@ pub(crate) fn parse_rich_value_with_context(
 }
 
 pub(in crate::storage::engine) fn resolve_structured_format_at_cell(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
 ) -> Option<CellFormat> {
-    let table_format = tables::resolve_table_format_at_cell(mirror, sheet_id, row, col);
-    let pivot_format = objects::resolve_pivot_format_at_cell(mirror, sheet_id, row, col);
+    let table_format = tables::resolve_table_format_at_cell(cell_store, sheet_id, row, col);
+    let pivot_format = objects::resolve_pivot_format_at_cell(cell_store, sheet_id, row, col);
 
     match (table_format, pivot_format) {
         (Some(table_format), Some(pivot_format)) => Some(

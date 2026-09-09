@@ -36,7 +36,7 @@
 //!     --test unique_blank_source_coerced_to_zero -- --nocapture
 
 use cell_types::SheetPos;
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::CellValue;
@@ -113,22 +113,22 @@ fn build_single_sheet_snapshot(
     }
 }
 
-/// Read a spilled cell value from the mirror at `(sheet_name, row, col)`.
+/// Read a spilled cell value from the cell store at `(sheet_name, row, col)`.
 ///
 /// Spill children for a host with no explicit `array_ref` are projected into
 /// `col_data` rather than as discrete `changed_cells`, so we read via
-/// `CellMirror::get_cell_value_at`, which falls back to the projection.
-fn read_mirror(mirror: &CellMirror, sheet_name: &str, row: u32, col: u32) -> Option<CellValue> {
-    let sheet_id = mirror
+/// `CellStore::get_cell_value_at`, which falls back to the projection.
+fn read_store(cell_store: &CellStore, sheet_name: &str, row: u32, col: u32) -> Option<CellValue> {
+    let sheet_id = cell_store
         .sheet_ids()
         .find(|sid| {
-            mirror
+            cell_store
                 .get_sheet(sid)
                 .map(|sm| sm.name == sheet_name)
                 .unwrap_or(false)
         })
         .copied()?;
-    mirror
+    cell_store
         .get_cell_value_at(&sheet_id, SheetPos::new(row, col))
         .cloned()
 }
@@ -160,14 +160,14 @@ fn unique_coerces_blank_source_cells_to_zero_before_dedup() {
 
     let snapshot = build_single_sheet_snapshot("Sheet1", 10, 5, data_cells, formulas);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let _result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     // C1 (row 0, col 2) — first unique row, "alpha".
-    let c1 = read_mirror(&mirror, "Sheet1", 0, 2);
+    let c1 = read_store(&cell_store, "Sheet1", 0, 2);
     match &c1 {
         Some(CellValue::Text(s)) => assert_eq!(
             s.as_ref(),
@@ -178,7 +178,7 @@ fn unique_coerces_blank_source_cells_to_zero_before_dedup() {
     }
 
     // C2 (row 1, col 2) — second unique row, "beta".
-    let c2 = read_mirror(&mirror, "Sheet1", 1, 2);
+    let c2 = read_store(&cell_store, "Sheet1", 1, 2);
     match &c2 {
         Some(CellValue::Text(s)) => assert_eq!(
             s.as_ref(),
@@ -191,7 +191,7 @@ fn unique_coerces_blank_source_cells_to_zero_before_dedup() {
     // C3 (row 2, col 2) — third unique row should be `0` (the blanks A3..A5
     // collapse into a single distinct row, coerced from blank to literal zero
     // *before* dedup).
-    let c3 = read_mirror(&mirror, "Sheet1", 2, 2);
+    let c3 = read_store(&cell_store, "Sheet1", 2, 2);
     // Excel rule: UNIQUE coerces blanks to 0 before dedup. Currently broken: see dynamic_arrays.rs:592-598.
     match &c3 {
         Some(CellValue::Number(n)) => assert!(

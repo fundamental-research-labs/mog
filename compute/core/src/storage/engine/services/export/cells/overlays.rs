@@ -2,7 +2,7 @@ use cell_types::{SheetId, SheetPos};
 use domain_types::CellData;
 use rustc_hash::FxHashMap;
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::storage::engine::stores::EngineStores;
 
 use super::super::PaletteOps;
@@ -12,7 +12,7 @@ use super::style_ids::positional_style_id_at;
 
 pub(in crate::storage::engine) fn export_cells_for_sheet(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     palette: &impl PaletteOps,
 ) -> Vec<CellData> {
@@ -20,19 +20,15 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
 
     // Read native cell properties and formula metadata using typed CellId keys.
     let (all_props, array_refs, formula_metadata, rich_strings) =
-        batch_read_props_array_refs_and_formula_metadata(stores, mirror, sheet_id);
+        batch_read_props_array_refs_and_formula_metadata(stores, cell_store, sheet_id);
 
-    // Build a reverse map: cell_id → (row, col) from grid_indexes.
-    let grid = stores.grid_indexes.get(sheet_id);
-    let sheet_mirror = mirror.get_sheet(sheet_id);
     let mut cells_by_pos: FxHashMap<(u32, u32), CellData> = FxHashMap::default();
-    // Iterate all cells registered in the grid index.
-    if let Some(grid) = grid {
-        profile.counter("grid_cells", grid.cells().count() as u64);
-        for (cell_id, row, col) in grid.cells() {
+    if let Some(sheet) = cell_store.get_sheet(sheet_id) {
+        profile.counter("registered_cells", sheet.cells().count() as u64);
+        for (cell_id, row, col) in sheet.cells() {
             if let Some(mut cell) = build_cell_data_for_cell_id(
                 stores,
-                mirror,
+                cell_store,
                 sheet_id,
                 &cell_id,
                 row,
@@ -42,51 +38,13 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
                 &formula_metadata,
                 &rich_strings,
                 palette,
-                false,
-            ) {
-                if cell.style_id.is_none() {
-                    cell.style_id =
-                        positional_style_id_at(stores, mirror, sheet_id, row, col, palette);
-                }
-                cells_by_pos.insert((row, col), cell);
-            }
-        }
-    }
-
-    if let Some(sheet) = sheet_mirror {
-        // Native authored entries can exist without an eagerly allocated grid CellId.
-        for (cell_id, _) in sheet.cells_iter() {
-            let Some(pos) = sheet.position_of(cell_id) else {
-                continue;
-            };
-            if cells_by_pos.contains_key(&(pos.row(), pos.col())) {
-                continue;
-            }
-            if let Some(mut cell) = build_cell_data_for_cell_id(
-                stores,
-                mirror,
-                sheet_id,
-                cell_id,
-                pos.row(),
-                pos.col(),
-                &all_props,
-                &array_refs,
-                &formula_metadata,
-                &rich_strings,
-                palette,
                 cell_id.is_virtual(),
             ) {
                 if cell.style_id.is_none() {
-                    cell.style_id = positional_style_id_at(
-                        stores,
-                        mirror,
-                        sheet_id,
-                        pos.row(),
-                        pos.col(),
-                        palette,
-                    );
+                    cell.style_id =
+                        positional_style_id_at(stores, cell_store, sheet_id, row, col, palette);
                 }
-                cells_by_pos.insert((pos.row(), pos.col()), cell);
+                cells_by_pos.insert((row, col), cell);
             }
         }
 
@@ -103,7 +61,7 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
                 None => {
                     let mut cell = range_payload_cell(row, col, value);
                     cell.style_id =
-                        positional_style_id_at(stores, mirror, sheet_id, row, col, palette);
+                        positional_style_id_at(stores, cell_store, sheet_id, row, col, palette);
                     cells_by_pos.insert((row, col), cell);
                 }
             }
@@ -111,7 +69,7 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
     }
 
     let sheet_uuid = sheet_id.to_uuid_string();
-    for pivot in mirror
+    for pivot in cell_store
         .all_pivot_tables()
         .iter()
         .filter(|pivot| pivot.sheet == sheet_uuid)
@@ -131,7 +89,7 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
 
         for row in pivot.start_row..=end_row {
             for col in pivot.start_col..=end_col {
-                let Some(value) = mirror.get_cell_value_at(sheet_id, SheetPos::new(row, col))
+                let Some(value) = cell_store.get_cell_value_at(sheet_id, SheetPos::new(row, col))
                 else {
                     continue;
                 };

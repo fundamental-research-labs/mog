@@ -113,7 +113,7 @@ fn test_iterative_convergence_dampening() {
 
 /// A1 = =B1+10, B1 = =A1+20, both with CellValue::Null (no cached value).
 /// iterative_calc = true.
-/// Cycle seed should be 0.0 (the default for cells with no mirror value).
+/// Cycle seed should be 0.0 (the default for cells with no cell_store value).
 /// First pass: A1 needs B1 → B1 needs A1 → cycle → seed 0.0
 /// B1 = 0.0 + 20 = 20, A1 = 20 + 10 = 30 (or similar depending on eval order).
 /// Key assertion: both cells are Numbers (not errors), and their values are
@@ -176,7 +176,7 @@ fn test_new_cells_no_cached_value_seed_zero() {
 
 /// A1 = =A1*0.5+1 with iterative_calc enabled.
 /// Fixed point: x = 0.5*x + 1 → x = 2.0.
-/// With mirror seed of Null (treated as 0 in arithmetic):
+/// With cell_store seed of Null (treated as 0 in arithmetic):
 ///   Pass 0: A1 = 0*0.5+1 = 1.0
 ///   The convergence loop should run additional passes.
 /// The result should be a Number (not an error).

@@ -6,7 +6,7 @@
 //! Run:
 //!   cargo test -p compute-core --test formula_accuracy_misc -- --nocapture
 
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{CellData, RecalcResult, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellError, CellValue};
@@ -146,10 +146,10 @@ fn test_eomonth_basic() {
         ],
     )]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== test_eomonth_basic ===");
@@ -174,10 +174,10 @@ fn test_eomonth_positive_months() {
         vec![(0, 0, CellValue::Null, Some("EOMONTH(45658,3)"))],
     )]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== test_eomonth_positive_months ===");
@@ -203,10 +203,10 @@ fn test_eomonth_negative_months() {
         vec![(0, 0, CellValue::Null, Some("EOMONTH(45658,-1)"))],
     )]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== test_eomonth_negative_months ===");
@@ -233,10 +233,10 @@ fn test_eomonth_feb_leap_year() {
         vec![(0, 0, CellValue::Null, Some("EOMONTH(45292,1)"))],
     )]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== test_eomonth_feb_leap_year ===");
@@ -268,10 +268,10 @@ fn test_eomonth_in_if_formula() {
         ],
     )]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== test_eomonth_in_if_formula ===");
@@ -327,10 +327,10 @@ fn test_no_false_circular_ref_simple() {
         ],
     )]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== test_no_false_circular_ref_simple ===");
@@ -378,10 +378,10 @@ fn test_no_false_circular_ref_cross_sheet() {
         ),
     ]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== test_no_false_circular_ref_cross_sheet ===");
@@ -422,10 +422,10 @@ fn test_actual_circular_ref_detected() {
         ],
     )]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== test_actual_circular_ref_detected ===");
@@ -473,10 +473,10 @@ fn test_no_false_circular_with_shared_dependency() {
         ],
     )]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== test_no_false_circular_with_shared_dependency ===");
@@ -525,10 +525,10 @@ fn test_sum_with_error_in_range() {
         ],
     )]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== test_sum_with_error_in_range ===");
@@ -573,10 +573,10 @@ fn test_sum_with_empty_cells() {
         ],
     )]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== test_sum_with_empty_cells ===");
@@ -612,10 +612,10 @@ fn test_sum_cross_sheet() {
         ("Sheet2", 20, 10, sheet2_cells),
     ]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== test_sum_cross_sheet ===");
@@ -653,10 +653,10 @@ fn test_sumproduct_basic() {
         ],
     )]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== test_sumproduct_basic ===");
@@ -696,10 +696,10 @@ fn test_sumproduct_with_isnumber_search() {
         ],
     )]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== test_sumproduct_with_isnumber_search ===");
@@ -753,10 +753,10 @@ fn test_sumproduct_boolean_coercion() {
         ],
     )]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== test_sumproduct_boolean_coercion ===");

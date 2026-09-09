@@ -37,12 +37,7 @@ pub(super) fn unhide_expanded_row_group(
         );
     }
 
-    let default_height_px = domain_types::units::points_to_pixels(dimensions::DEFAULT_ROW_HEIGHT);
-    if let Some(layout) = stores.layout_indexes.get_mut(sheet_id) {
-        for row in zero_height_rows {
-            layout.set_row_height(row as usize, default_height_px);
-        }
-    }
+    stores.invalidate_pixel_layout(sheet_id);
 }
 
 fn clear_expanded_row_group_metadata(

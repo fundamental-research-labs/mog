@@ -214,10 +214,10 @@ pub fn sort_desc(col: u32) -> BridgeSortOptions {
 // Value read helpers
 // ---------------------------------------------------------------------------
 
-/// Read f64 from engine mirror. Panics if not Number.
+/// Read f64 from engine cell_store. Panics if not Number.
 pub fn read_num(engine: &ComputeEngine, sheet_id: &cell_types::SheetId, row: u32, col: u32) -> f64 {
     match engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(sheet_id, SheetPos::new(row, col))
     {
         Some(CellValue::Number(n)) => n.get(),
@@ -233,7 +233,7 @@ pub fn read_value(
     col: u32,
 ) -> Option<CellValue> {
     engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(sheet_id, SheetPos::new(row, col))
         .cloned()
 }
@@ -296,7 +296,7 @@ pub fn assert_error(
     expected: CellError,
 ) {
     match engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(sheet_id, SheetPos::new(row, col))
     {
         Some(CellValue::Error(e, _)) => assert_eq!(
@@ -314,7 +314,7 @@ pub fn assert_error(
 /// Assert cell is Null (empty / cleared).
 pub fn assert_null(engine: &ComputeEngine, sheet_id: &cell_types::SheetId, row: u32, col: u32) {
     match engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(sheet_id, SheetPos::new(row, col))
     {
         Some(CellValue::Null) | None => {}
@@ -331,7 +331,7 @@ pub fn assert_text(
     expected: &str,
 ) {
     match engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(sheet_id, SheetPos::new(row, col))
     {
         Some(CellValue::Text(t)) => assert_eq!(
@@ -349,7 +349,7 @@ pub fn assert_text(
 /// Assert cell is any Error (when we care it's an error but not which kind).
 pub fn assert_is_error(engine: &ComputeEngine, sheet_id: &cell_types::SheetId, row: u32, col: u32) {
     match engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(sheet_id, SheetPos::new(row, col))
     {
         Some(CellValue::Error(_, _)) => {}

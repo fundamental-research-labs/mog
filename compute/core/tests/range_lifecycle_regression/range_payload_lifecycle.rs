@@ -21,11 +21,11 @@ fn lifecycle_compaction() {
     }
 
     let cid_r0 = engine
-        .mirror()
+        .cell_store()
         .resolve_cell_id(&sid, SheetPos::new(0, 0))
         .expect("CellId at (0,0)");
     let cid_r2 = engine
-        .mirror()
+        .cell_store()
         .resolve_cell_id(&sid, SheetPos::new(2, 0))
         .expect("CellId at (2,0)");
 
@@ -48,13 +48,13 @@ fn lifecycle_compaction() {
         );
     }
 
-    let pos_r0 = engine.mirror().resolve_position(&cid_r0);
+    let pos_r0 = engine.cell_store().resolve_position(&cid_r0);
     assert_eq!(
         pos_r0.map(|p| p.row()),
         Some(0),
         "CellId at row 0 should still resolve to row 0 after compaction"
     );
-    let pos_r2 = engine.mirror().resolve_position(&cid_r2);
+    let pos_r2 = engine.cell_store().resolve_position(&cid_r2);
     assert_eq!(
         pos_r2.map(|p| p.row()),
         Some(2),
@@ -147,7 +147,7 @@ fn lifecycle_data_range_overlap_rejection() {
     }
 
     let cid = engine
-        .mirror()
+        .cell_store()
         .resolve_cell_id(&sid, SheetPos::new(1, 0))
         .expect("CellId at (1,0)");
     engine

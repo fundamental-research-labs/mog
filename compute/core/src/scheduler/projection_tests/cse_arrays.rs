@@ -3,7 +3,7 @@
 use super::super::test_helpers::*;
 use super::super::*;
 use super::helpers::*;
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::snapshot::CellData;
 use std::sync::Arc;
 use value_types::CellValue;
@@ -22,24 +22,33 @@ fn test_set_array_formula_marks_anchor_and_registers_projection() {
     }]);
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     let sheet_id = sid(1);
     let a1_id = cell_id_from_str(&a1_str);
 
     // Enter `=SEQUENCE(2,3)` as a 2x3 CSE on A1:C2.
     let _result = core
-        .set_array_formula(&mut mirror, &sheet_id, a1_id, 0, 0, 1, 2, "=SEQUENCE(2,3)")
+        .set_array_formula(
+            &mut cell_store,
+            &sheet_id,
+            a1_id,
+            0,
+            0,
+            1,
+            2,
+            "=SEQUENCE(2,3)",
+        )
         .expect("set_array_formula should succeed");
 
     // Anchor is marked.
     assert!(
-        mirror.is_cse_anchor(&a1_id),
-        "anchor must be in mirror.cse_anchors after set_array_formula"
+        cell_store.is_cse_anchor(&a1_id),
+        "anchor must be in cell_store.cse_anchors after set_array_formula"
     );
     // Projection extent matches the user's selection.
-    let proj = mirror
+    let proj = cell_store
         .projection_registry
         .get(&a1_id)
         .expect("projection registered");
@@ -48,16 +57,16 @@ fn test_set_array_formula_marks_anchor_and_registers_projection() {
     assert_eq!(proj.rows, 2);
     assert_eq!(proj.cols, 3);
     // Anchor lookup answers correctly for the anchor cell and a member.
-    let (a, _) = mirror
+    let (a, _) = cell_store
         .cse_anchor_covering(&sheet_id, 0, 0)
         .expect("anchor covers itself");
     assert_eq!(a, a1_id);
-    let (a, _) = mirror
+    let (a, _) = cell_store
         .cse_anchor_covering(&sheet_id, 1, 2)
         .expect("anchor covers (1,2)");
     assert_eq!(a, a1_id);
     // Out-of-extent positions are not covered.
-    assert!(mirror.cse_anchor_covering(&sheet_id, 2, 0).is_none());
+    assert!(cell_store.cse_anchor_covering(&sheet_id, 2, 0).is_none());
 }
 
 #[test]
@@ -89,20 +98,29 @@ fn test_set_cell_rejects_partial_array_write_on_member() {
     ]);
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     let sheet_id = sid(1);
     let a1_id = cell_id_from_str(&a1_str);
     let b2_id = cell_id_from_str(&b2_str);
 
     // Enter a 2x3 CSE on A1:C2.
-    core.set_array_formula(&mut mirror, &sheet_id, a1_id, 0, 0, 1, 2, "=SEQUENCE(2,3)")
-        .expect("set_array_formula should succeed");
+    core.set_array_formula(
+        &mut cell_store,
+        &sheet_id,
+        a1_id,
+        0,
+        0,
+        1,
+        2,
+        "=SEQUENCE(2,3)",
+    )
+    .expect("set_array_formula should succeed");
 
     // Writing to B2 (a member) must be rejected.
     let err = core
-        .set_cell(&mut mirror, &sheet_id, b2_id, 1, 1, "X")
+        .set_cell(&mut cell_store, &sheet_id, b2_id, 1, 1, "X")
         .expect_err("partial-array write must be rejected");
     match err {
         ComputeError::PartialArrayWrite {
@@ -133,19 +151,28 @@ fn test_set_cell_rejects_partial_array_write_on_anchor() {
     }]);
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     let sheet_id = sid(1);
     let a1_id = cell_id_from_str(&a1_str);
 
-    core.set_array_formula(&mut mirror, &sheet_id, a1_id, 0, 0, 1, 2, "=SEQUENCE(2,3)")
-        .expect("set_array_formula should succeed");
+    core.set_array_formula(
+        &mut cell_store,
+        &sheet_id,
+        a1_id,
+        0,
+        0,
+        1,
+        2,
+        "=SEQUENCE(2,3)",
+    )
+    .expect("set_array_formula should succeed");
 
     // Re-typing into the anchor (non-Clear) must be rejected — the
     // user must clear the array first.
     let err = core
-        .set_cell(&mut mirror, &sheet_id, a1_id, 0, 0, "=A1+1")
+        .set_cell(&mut cell_store, &sheet_id, a1_id, 0, 0, "=A1+1")
         .expect_err("anchor non-clear write must be rejected");
     assert!(
         matches!(err, ComputeError::PartialArrayWrite { .. }),
@@ -168,25 +195,34 @@ fn test_clear_cells_on_anchor_tears_down_cse() {
     }]);
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     let sheet_id = sid(1);
     let a1_id = cell_id_from_str(&a1_str);
 
-    core.set_array_formula(&mut mirror, &sheet_id, a1_id, 0, 0, 1, 2, "=SEQUENCE(2,3)")
-        .expect("set_array_formula should succeed");
-    assert!(mirror.is_cse_anchor(&a1_id));
+    core.set_array_formula(
+        &mut cell_store,
+        &sheet_id,
+        a1_id,
+        0,
+        0,
+        1,
+        2,
+        "=SEQUENCE(2,3)",
+    )
+    .expect("set_array_formula should succeed");
+    assert!(cell_store.is_cse_anchor(&a1_id));
 
     // clear_cells on the anchor tears down the CSE registration.
-    let _ = core.clear_cells(&mut mirror, &[a1_id]).unwrap();
+    let _ = core.clear_cells(&mut cell_store, &[a1_id]).unwrap();
 
     assert!(
-        !mirror.is_cse_anchor(&a1_id),
+        !cell_store.is_cse_anchor(&a1_id),
         "anchor must be unmarked after clear_cells",
     );
     assert!(
-        mirror.projection_registry.get(&a1_id).is_none(),
+        cell_store.projection_registry.get(&a1_id).is_none(),
         "projection must be cleared after clear_cells",
     );
 }
@@ -211,22 +247,31 @@ fn test_clear_anchor_via_set_cell_tears_down_cse() {
     }]);
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     let sheet_id = sid(1);
     let a1_id = cell_id_from_str(&a1_str);
 
-    core.set_array_formula(&mut mirror, &sheet_id, a1_id, 0, 0, 1, 2, "=SEQUENCE(2,3)")
-        .expect("set_array_formula should succeed");
+    core.set_array_formula(
+        &mut cell_store,
+        &sheet_id,
+        a1_id,
+        0,
+        0,
+        1,
+        2,
+        "=SEQUENCE(2,3)",
+    )
+    .expect("set_array_formula should succeed");
 
     // Clear the anchor via set_cell with CellInput::Clear.
     use crate::storage::engine::mutation::CellInput;
-    core.set_cell(&mut mirror, &sheet_id, a1_id, 0, 0, CellInput::Clear)
+    core.set_cell(&mut cell_store, &sheet_id, a1_id, 0, 0, CellInput::Clear)
         .expect("Clear on anchor must succeed");
 
     assert!(
-        !mirror.is_cse_anchor(&a1_id),
+        !cell_store.is_cse_anchor(&a1_id),
         "anchor must be unmarked after Clear on anchor",
     );
 }
@@ -245,23 +290,44 @@ fn test_set_array_formula_re_entry_replaces_extent() {
     }]);
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     let sheet_id = sid(1);
     let a1_id = cell_id_from_str(&a1_str);
 
     // First entry: 2x3
-    core.set_array_formula(&mut mirror, &sheet_id, a1_id, 0, 0, 1, 2, "=SEQUENCE(2,3)")
-        .unwrap();
+    core.set_array_formula(
+        &mut cell_store,
+        &sheet_id,
+        a1_id,
+        0,
+        0,
+        1,
+        2,
+        "=SEQUENCE(2,3)",
+    )
+    .unwrap();
     // Re-entry on the same anchor: 1x2 — should replace the prior extent.
-    core.set_array_formula(&mut mirror, &sheet_id, a1_id, 0, 0, 0, 1, "=SEQUENCE(1,2)")
-        .unwrap();
+    core.set_array_formula(
+        &mut cell_store,
+        &sheet_id,
+        a1_id,
+        0,
+        0,
+        0,
+        1,
+        "=SEQUENCE(1,2)",
+    )
+    .unwrap();
 
-    let proj = mirror.projection_registry.get(&a1_id).expect("registered");
+    let proj = cell_store
+        .projection_registry
+        .get(&a1_id)
+        .expect("registered");
     assert_eq!(proj.rows, 1);
     assert_eq!(proj.cols, 2);
-    assert!(mirror.is_cse_anchor(&a1_id));
+    assert!(cell_store.is_cse_anchor(&a1_id));
 }
 
 // ---------------------------------------------------------------------------
@@ -307,21 +373,30 @@ fn t6_clear_on_cse_member_rejects_with_partial_array_write() {
     ]);
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     let sheet_id = sid(1);
     let a1_id = cell_id_from_str(&a1_str);
     let b2_id = cell_id_from_str(&b2_str);
 
-    core.set_array_formula(&mut mirror, &sheet_id, a1_id, 0, 0, 1, 2, "=SEQUENCE(2,3)")
-        .expect("set_array_formula");
+    core.set_array_formula(
+        &mut cell_store,
+        &sheet_id,
+        a1_id,
+        0,
+        0,
+        1,
+        2,
+        "=SEQUENCE(2,3)",
+    )
+    .expect("set_array_formula");
 
-    assert!(mirror.is_cse_anchor(&a1_id));
+    assert!(cell_store.is_cse_anchor(&a1_id));
 
     use crate::storage::engine::mutation::CellInput;
     let err = core
-        .set_cell(&mut mirror, &sheet_id, b2_id, 1, 1, CellInput::Clear)
+        .set_cell(&mut cell_store, &sheet_id, b2_id, 1, 1, CellInput::Clear)
         .expect_err("Clear on CSE member must be rejected");
     assert!(
         matches!(err, ComputeError::PartialArrayWrite { .. }),
@@ -329,7 +404,7 @@ fn t6_clear_on_cse_member_rejects_with_partial_array_write() {
         err
     );
     assert!(
-        mirror.is_cse_anchor(&a1_id),
+        cell_store.is_cse_anchor(&a1_id),
         "CSE must remain intact after rejected member-Clear",
     );
 }
@@ -362,20 +437,29 @@ fn t6_clear_on_cse_member_via_clear_cells_tears_down_whole_array() {
     ]);
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     let sheet_id = sid(1);
     let a1_id = cell_id_from_str(&a1_str);
     let b2_id = cell_id_from_str(&b2_str);
 
-    core.set_array_formula(&mut mirror, &sheet_id, a1_id, 0, 0, 1, 2, "=SEQUENCE(2,3)")
-        .expect("set_array_formula");
+    core.set_array_formula(
+        &mut cell_store,
+        &sheet_id,
+        a1_id,
+        0,
+        0,
+        1,
+        2,
+        "=SEQUENCE(2,3)",
+    )
+    .expect("set_array_formula");
 
-    let _ = core.clear_cells(&mut mirror, &[b2_id]).unwrap();
+    let _ = core.clear_cells(&mut cell_store, &[b2_id]).unwrap();
 
     assert!(
-        !mirror.is_cse_anchor(&a1_id),
+        !cell_store.is_cse_anchor(&a1_id),
         "anchor must be unmarked after clear_cells on member",
     );
 }
@@ -408,19 +492,28 @@ fn t6_type_into_member_still_rejected_with_partial_array_write() {
     ]);
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     let sheet_id = sid(1);
     let a1_id = cell_id_from_str(&a1_str);
     let b2_id = cell_id_from_str(&b2_str);
 
-    core.set_array_formula(&mut mirror, &sheet_id, a1_id, 0, 0, 1, 2, "=SEQUENCE(2,3)")
-        .expect("set_array_formula");
+    core.set_array_formula(
+        &mut cell_store,
+        &sheet_id,
+        a1_id,
+        0,
+        0,
+        1,
+        2,
+        "=SEQUENCE(2,3)",
+    )
+    .expect("set_array_formula");
 
     // Type "X" into B2 — text input on a CSE member: reject.
     let err = core
-        .set_cell(&mut mirror, &sheet_id, b2_id, 1, 1, "X")
+        .set_cell(&mut cell_store, &sheet_id, b2_id, 1, 1, "X")
         .expect_err("Parse on CSE member must reject");
     assert!(
         matches!(err, ComputeError::PartialArrayWrite { .. }),
@@ -428,7 +521,7 @@ fn t6_type_into_member_still_rejected_with_partial_array_write() {
         err
     );
     // The CSE itself must NOT be torn down by the rejected attempt.
-    assert!(mirror.is_cse_anchor(&a1_id));
+    assert!(cell_store.is_cse_anchor(&a1_id));
 }
 
 #[test]
@@ -460,22 +553,40 @@ fn t6_set_array_formula_overlap_detected_by_interior_cells() {
     ]);
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     let sheet_id = sid(1);
     let a2_id = cell_id_from_str(&a2_str);
     let c1_id = cell_id_from_str(&c1_str);
 
     // Existing CSE: A2:E2 (1 row × 5 cols, anchored at A2).
-    core.set_array_formula(&mut mirror, &sheet_id, a2_id, 1, 0, 1, 4, "=SEQUENCE(1,5)")
-        .expect("first set_array_formula");
+    core.set_array_formula(
+        &mut cell_store,
+        &sheet_id,
+        a2_id,
+        1,
+        0,
+        1,
+        4,
+        "=SEQUENCE(1,5)",
+    )
+    .expect("first set_array_formula");
 
     // New CSE: C1:D3 (3 rows × 2 cols, anchored at C1). Top-left C1
     // is OUTSIDE the existing A2:E2; but interior cells C2/D2 are
     // inside. Must be rejected.
     let err = core
-        .set_array_formula(&mut mirror, &sheet_id, c1_id, 0, 2, 2, 3, "=SEQUENCE(3,2)")
+        .set_array_formula(
+            &mut cell_store,
+            &sheet_id,
+            c1_id,
+            0,
+            2,
+            2,
+            3,
+            "=SEQUENCE(3,2)",
+        )
         .expect_err("interior-cell overlap must be rejected");
     assert!(
         matches!(err, ComputeError::PartialArrayWrite { .. }),
@@ -511,20 +622,38 @@ fn t6_set_array_formula_non_overlapping_succeeds() {
     ]);
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     let sheet_id = sid(1);
     let a1_id = cell_id_from_str(&a1_str);
     let d1_id = cell_id_from_str(&d1_str);
 
     // A1:B2
-    core.set_array_formula(&mut mirror, &sheet_id, a1_id, 0, 0, 1, 1, "=SEQUENCE(2,2)")
-        .expect("first set_array_formula");
+    core.set_array_formula(
+        &mut cell_store,
+        &sheet_id,
+        a1_id,
+        0,
+        0,
+        1,
+        1,
+        "=SEQUENCE(2,2)",
+    )
+    .expect("first set_array_formula");
     // D1:E2 — adjacent, no overlap.
-    core.set_array_formula(&mut mirror, &sheet_id, d1_id, 0, 3, 1, 4, "=SEQUENCE(2,2)")
-        .expect("non-overlapping must succeed");
+    core.set_array_formula(
+        &mut cell_store,
+        &sheet_id,
+        d1_id,
+        0,
+        3,
+        1,
+        4,
+        "=SEQUENCE(2,2)",
+    )
+    .expect("non-overlapping must succeed");
 
-    assert!(mirror.is_cse_anchor(&a1_id));
-    assert!(mirror.is_cse_anchor(&d1_id));
+    assert!(cell_store.is_cse_anchor(&a1_id));
+    assert!(cell_store.is_cse_anchor(&d1_id));
 }

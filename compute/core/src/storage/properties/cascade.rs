@@ -1,12 +1,12 @@
-use super::cell::get_properties;
+use super::cell::get_properties_by_id;
 use super::defaults::default_format;
 use super::merge::merge_formats;
 use super::row_col::{get_col_format, get_row_format};
+use crate::cells::SheetStore;
 use crate::identity::GridIndex;
-use crate::mirror::SheetMirror;
 use crate::storage::WorkbookStorage;
 use crate::storage::properties::CellProperties;
-use cell_types::SheetId;
+use cell_types::{CellId, SheetId};
 use domain_types::{CellFormat, CellVerticalAlign};
 use ooxml_types::styles::{HorizontalAlign, PatternType};
 
@@ -18,8 +18,8 @@ use ooxml_types::styles::{HorizontalAlign, PatternType};
 /// Each property is resolved independently -- a cell can inherit font
 /// from row, color from column, and alignment from default.
 ///
-/// The `sheet_mirror` parameter is optional; when provided, Format Ranges
-/// in the mirror's spatial index are consulted. When `None`, the cascade
+/// The `sheet_store` parameter is optional; when provided, Format Ranges
+/// in the cell store's spatial index are consulted. When `None`, the cascade
 /// skips the Format Range layer.
 pub fn get_effective_format(
     storage: &WorkbookStorage,
@@ -29,12 +29,36 @@ pub fn get_effective_format(
     col: u32,
     table_format: Option<&CellFormat>,
     grid_index: Option<&GridIndex>,
-    sheet_mirror: Option<&SheetMirror>,
+    sheet_store: Option<&SheetStore>,
+) -> CellFormat {
+    let id = compute_document::hex::parse_cell_id(cell_id);
+    get_effective_format_by_id(
+        storage,
+        sheet_id,
+        id.as_ref(),
+        row,
+        col,
+        table_format,
+        grid_index,
+        sheet_store,
+    )
+}
+
+/// Resolve the format cascade using an already-resolved cell identity.
+pub fn get_effective_format_by_id(
+    storage: &WorkbookStorage,
+    sheet_id: &SheetId,
+    cell_id: Option<&CellId>,
+    row: u32,
+    col: u32,
+    table_format: Option<&CellFormat>,
+    grid_index: Option<&GridIndex>,
+    sheet_store: Option<&SheetStore>,
 ) -> CellFormat {
     let base = get_workbook_base_format(storage);
     let col_format = get_col_format(storage, sheet_id, col, grid_index);
     let row_format = get_row_format(storage, sheet_id, row, grid_index);
-    let cell_props = get_properties(storage, sheet_id, cell_id);
+    let cell_props = cell_id.and_then(|id| get_properties_by_id(storage, sheet_id, id));
     let cell_format = materialize_cell_layer_format(cell_props.as_ref());
     get_effective_format_from_preloaded_layers(
         &base,
@@ -44,7 +68,7 @@ pub fn get_effective_format(
         col,
         table_format,
         Some(&cell_format),
-        sheet_mirror,
+        sheet_store,
         false,
     )
 }
@@ -60,7 +84,7 @@ pub fn get_effective_format_preloaded(
     table_format: Option<&CellFormat>,
     cell_properties: Option<&CellProperties>,
     grid_index: Option<&GridIndex>,
-    sheet_mirror: Option<&SheetMirror>,
+    sheet_store: Option<&SheetStore>,
 ) -> CellFormat {
     let base = get_workbook_base_format(storage);
     let col_format = get_col_format(storage, sheet_id, col, grid_index);
@@ -74,7 +98,7 @@ pub fn get_effective_format_preloaded(
         col,
         table_format,
         Some(&cell_format),
-        sheet_mirror,
+        sheet_store,
         false,
     )
 }
@@ -91,7 +115,7 @@ pub fn get_positional_format(
     row: u32,
     col: u32,
     grid_index: Option<&GridIndex>,
-    sheet_mirror: Option<&SheetMirror>,
+    sheet_store: Option<&SheetStore>,
 ) -> CellFormat {
     let base = get_workbook_base_format(storage);
     let col_format = get_col_format(storage, sheet_id, col, grid_index);
@@ -104,7 +128,7 @@ pub fn get_positional_format(
         col,
         None,
         None,
-        sheet_mirror,
+        sheet_store,
         true,
     )
 }
@@ -123,11 +147,11 @@ pub(crate) fn get_effective_format_from_preloaded_layers(
     col: u32,
     table_format: Option<&CellFormat>,
     cell_format: Option<&CellFormat>,
-    sheet_mirror: Option<&SheetMirror>,
+    sheet_store: Option<&SheetStore>,
     include_imported_xlsx_col_ranges: bool,
 ) -> CellFormat {
     let after_col_range =
-        apply_col_format_range_layer(base, col, sheet_mirror, include_imported_xlsx_col_ranges);
+        apply_col_format_range_layer(base, col, sheet_store, include_imported_xlsx_col_ranges);
     let after_col = match col_format {
         Some(format) => merge_formats(&after_col_range, format),
         None => after_col_range,
@@ -136,12 +160,12 @@ pub(crate) fn get_effective_format_from_preloaded_layers(
         Some(format) => merge_formats(&after_col, format),
         None => after_col,
     };
-    let after_range = apply_format_range_layer(&after_row, row, col, sheet_mirror);
+    let after_range = apply_format_range_layer(&after_row, row, col, sheet_store);
     let after_table = match table_format {
         Some(format) => merge_formats(&after_range, format),
         None => after_range,
     };
-    let after_table = apply_direct_format_range_layer(&after_table, row, col, sheet_mirror);
+    let after_table = apply_direct_format_range_layer(&after_table, row, col, sheet_store);
     let effective = match cell_format {
         Some(format) => merge_formats(&after_table, format),
         None => after_table,
@@ -164,11 +188,11 @@ pub(crate) fn get_effective_format_from_preloaded_layers_with_range(
     direct_range: Option<&CellFormat>,
     table_format: Option<&CellFormat>,
     cell_format: Option<&CellFormat>,
-    sheet_mirror: Option<&SheetMirror>,
+    sheet_store: Option<&SheetStore>,
     include_imported_xlsx_col_ranges: bool,
 ) -> CellFormat {
     let after_col_range =
-        apply_col_format_range_layer(base, col, sheet_mirror, include_imported_xlsx_col_ranges);
+        apply_col_format_range_layer(base, col, sheet_store, include_imported_xlsx_col_ranges);
     let after_col = match col_format {
         Some(format) => merge_formats(&after_col_range, format),
         None => after_col_range,
@@ -287,15 +311,15 @@ fn fill_fields_are_absent(format: &CellFormat) -> bool {
 fn apply_col_format_range_layer(
     base: &CellFormat,
     col: u32,
-    sheet_mirror: Option<&SheetMirror>,
+    sheet_store: Option<&SheetStore>,
     include_imported_xlsx_ranges: bool,
 ) -> CellFormat {
-    let mirror = match sheet_mirror {
+    let cell_store = match sheet_store {
         Some(m) => m,
         None => return base.clone(),
     };
 
-    let matching = mirror.col_format_ranges_at(col);
+    let matching = cell_store.col_format_ranges_at(col);
     if matching.is_empty() {
         return base.clone();
     }
@@ -305,7 +329,8 @@ fn apply_col_format_range_layer(
         // Excel treats imported `<col style>` defaults as positional defaults
         // for empty cells; populated cells keep workbook Normal unless another
         // cell/row/user-authored column layer applies.
-        if !include_imported_xlsx_ranges && mirror.col_range_xlsx_style_id_cache().contains_key(id)
+        if !include_imported_xlsx_ranges
+            && cell_store.col_range_xlsx_style_id_cache().contains_key(id)
         {
             continue;
         }
@@ -320,24 +345,27 @@ fn apply_col_format_range_layer(
 
 /// Apply the Format Range layer to the cascade.
 ///
-/// Queries the mirror's format range spatial index for all Format Ranges
+/// Queries the cell store's format range spatial index for all Format Ranges
 /// covering `(row, col)`, merges them field-by-field in stable precedence order, and merges the result into `base`.
 ///
-/// When `sheet_mirror` is `None`, this is a no-op that returns `base` unchanged
-/// (backward-compatible with code paths that don't have a mirror reference).
+/// When `sheet_store` is `None`, this is a no-op that returns `base` unchanged
+/// (backward-compatible with code paths that don't have a cell store reference).
 pub(in crate::storage::properties) fn apply_format_range_layer(
     base: &CellFormat,
     row: u32,
     col: u32,
-    sheet_mirror: Option<&SheetMirror>,
+    sheet_store: Option<&SheetStore>,
 ) -> CellFormat {
-    let mirror = match sheet_mirror {
+    let cell_store = match sheet_store {
         Some(m) => m,
         None => return base.clone(),
     };
 
-    let matching =
-        mirror.format_ranges_at_layer(row, col, Some(crate::mirror::FormatRangeLayer::Inherited));
+    let matching = cell_store.format_ranges_at_layer(
+        row,
+        col,
+        Some(crate::cells::FormatRangeLayer::Inherited),
+    );
     if matching.is_empty() {
         return base.clone();
     }
@@ -356,13 +384,13 @@ fn apply_direct_format_range_layer(
     base: &CellFormat,
     row: u32,
     col: u32,
-    sheet: Option<&SheetMirror>,
+    sheet: Option<&SheetStore>,
 ) -> CellFormat {
     let Some(sheet) = sheet else {
         return base.clone();
     };
     sheet
-        .format_ranges_at_layer(row, col, Some(crate::mirror::FormatRangeLayer::Direct))
+        .format_ranges_at_layer(row, col, Some(crate::cells::FormatRangeLayer::Direct))
         .into_iter()
         .fold(base.clone(), |format, (_, overlay)| {
             merge_formats(&format, overlay)

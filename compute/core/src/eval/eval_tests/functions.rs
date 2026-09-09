@@ -34,7 +34,7 @@ fn range(sheet: SheetId, sr: u32, sc: u32, er: u32, ec: u32) -> ASTNode {
 
 #[test]
 fn test_not_horizontal_array() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // NOT({TRUE,FALSE,TRUE}) → {FALSE,TRUE,FALSE}
     let arr = ASTNode::Array {
@@ -59,7 +59,7 @@ fn test_not_horizontal_array() {
 
 #[test]
 fn test_not_vertical_array() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // NOT({TRUE;FALSE;TRUE}) → {FALSE;TRUE;FALSE}
     let arr = ASTNode::Array {
@@ -84,7 +84,7 @@ fn test_not_vertical_array() {
 
 #[test]
 fn test_not_mixed_types_array() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // NOT({1,0,"text"}) → {FALSE,TRUE,#VALUE!}
     // 1 coerces to TRUE → NOT gives FALSE
@@ -115,7 +115,7 @@ fn test_not_mixed_types_array() {
 
 #[test]
 fn test_abs_sqrt() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     assert_eq!(
         eval(&func("ABS", vec![ASTNode::Number(-7.0)]), &ctx),
@@ -133,7 +133,7 @@ fn test_abs_sqrt() {
 
 #[test]
 fn test_len_upper_lower_trim() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     assert_eq!(
         eval(&func("LEN", vec![ASTNode::Text("hello".into())]), &ctx),
@@ -155,7 +155,7 @@ fn test_len_upper_lower_trim() {
 
 #[test]
 fn test_left_right_mid() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     assert_eq!(
         eval(
@@ -195,7 +195,7 @@ fn test_left_right_mid() {
 
 #[test]
 fn test_vlookup_exact() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // Build a table array inline: {1,"a";2,"b";3,"c"}
     let table = ASTNode::Array {
@@ -219,7 +219,7 @@ fn test_vlookup_exact() {
 
 #[test]
 fn test_vlookup_not_found() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let table = ASTNode::Array {
         rows: vec![vec![ASTNode::Number(1.0), ASTNode::Text("a".into())]],
@@ -238,7 +238,7 @@ fn test_vlookup_not_found() {
 
 #[test]
 fn test_match_exact() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let arr = ASTNode::Array {
         rows: vec![
@@ -256,7 +256,7 @@ fn test_match_exact() {
 
 #[test]
 fn test_index() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let arr = ASTNode::Array {
         rows: vec![
@@ -277,7 +277,7 @@ fn test_index() {
 
 #[test]
 fn test_nested_functions() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // IF(SUM(1,2) > 2, "big", "small")
     let sum = func("SUM", vec![ASTNode::Number(1.0), ASTNode::Number(2.0)]);
@@ -299,7 +299,7 @@ fn test_nested_functions() {
 
 #[test]
 fn test_array_scalar_broadcast() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let arr = ASTNode::Array {
         rows: vec![
@@ -321,7 +321,7 @@ fn test_array_scalar_broadcast() {
 
 #[test]
 fn test_array_array_broadcast() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let a = ASTNode::Array {
         rows: vec![vec![ASTNode::Number(1.0), ASTNode::Number(2.0)]],
@@ -351,7 +351,7 @@ fn test_max_depth_exceeded() {
     let result = std::thread::Builder::new()
         .stack_size(16 * 1024 * 1024) // 16 MB
         .spawn(|| {
-            let (m, s) = test_mirror();
+            let (m, s) = test_store();
             let ctx = make_ctx(&m, s);
             // Build deeply nested parens past MAX_DEPTH (512)
             let mut node = ASTNode::Number(1.0);
@@ -372,7 +372,7 @@ fn test_max_depth_exceeded() {
 
 #[test]
 fn test_unknown_function() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     assert_eq!(
         eval(&func("DOESNOTEXIST", vec![]), &ctx),
@@ -386,7 +386,7 @@ fn test_unknown_function() {
 
 #[test]
 fn test_identifier_not_found() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     assert_eq!(
         eval(&ASTNode::Identifier("mystery".into()), &ctx),
@@ -400,7 +400,7 @@ fn test_identifier_not_found() {
 
 #[test]
 fn test_unresolved_sheet_ref() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = ASTNode::UnresolvedSheetRef {
         sheet_name: "NoSheet".into(),
@@ -415,19 +415,19 @@ fn test_unresolved_sheet_ref() {
 
 #[test]
 fn test_paren() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = ASTNode::Paren(Box::new(ASTNode::Number(99.0)));
     assert_eq!(eval(&node, &ctx), CellValue::number(99.0));
 }
 
 // -----------------------------------------------------------------------
-// MirrorContext integration
+// EvalContext integration
 // -----------------------------------------------------------------------
 
 #[test]
-fn test_mirror_context_range_sum() {
-    let (m, s) = test_mirror();
+fn test_eval_context_range_sum() {
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // SUM(A1:A3) -> cells (0,0),(1,0),(2,0) -> 0+10+20 = 30
     let range = ASTNode::Range(RangeRef {
@@ -452,8 +452,8 @@ fn test_mirror_context_range_sum() {
 }
 
 #[test]
-fn test_mirror_context_row_col() {
-    let (m, s) = test_mirror();
+fn test_eval_context_row_col() {
+    let (m, s) = test_store();
     // current cell is at (0,0), id=1000
     let ctx = make_ctx(&m, s);
     assert_eq!(eval(&func("ROW", vec![]), &ctx), CellValue::number(1.0));
@@ -466,7 +466,7 @@ fn test_mirror_context_row_col() {
 
 #[test]
 fn test_count_counta() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let arr = ASTNode::Array {
         rows: vec![vec![
@@ -487,7 +487,7 @@ fn test_count_counta() {
 
 #[test]
 fn test_min_max() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node_min = func(
         "MIN",
@@ -515,7 +515,7 @@ fn test_min_max() {
 
 #[test]
 fn test_round() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     assert_eq!(
         eval(
@@ -528,7 +528,7 @@ fn test_round() {
 
 #[test]
 fn test_mod_fn() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     assert_eq!(
         eval(
@@ -548,7 +548,7 @@ fn test_mod_fn() {
 
 #[test]
 fn test_int_fn() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     assert_eq!(
         eval(&func("INT", vec![ASTNode::Number(7.9)]), &ctx),
@@ -562,7 +562,7 @@ fn test_int_fn() {
 
 #[test]
 fn test_is_functions() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     assert_eq!(
         eval(&func("ISERROR", vec![ASTNode::Error(CellError::Na)]), &ctx),
@@ -596,7 +596,7 @@ fn test_is_functions() {
 
 #[test]
 fn test_constant_functions() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     assert_eq!(eval(&func("TRUE", vec![]), &ctx), CellValue::Boolean(true));
     assert_eq!(
@@ -623,7 +623,7 @@ fn test_constant_functions() {
 
 #[test]
 fn test_concatenate() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = func(
         "CONCATENATE",
@@ -642,7 +642,7 @@ fn test_concatenate() {
 
 #[test]
 fn test_hlookup_exact() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let table = ASTNode::Array {
         rows: vec![
@@ -676,7 +676,7 @@ fn test_hlookup_exact() {
 
 #[test]
 fn test_rows_columns() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let arr = ASTNode::Array {
         rows: vec![
@@ -704,7 +704,7 @@ fn test_rows_columns() {
 
 #[test]
 fn test_areas_counts_reference_union_members() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
 
     assert_eq!(
@@ -753,7 +753,7 @@ fn test_areas_counts_reference_union_members() {
 
 #[test]
 fn test_areas_counts_wrapped_nested_reference_unions() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
 
     let wrapped_union = ASTNode::SheetRef {
@@ -783,7 +783,7 @@ fn test_areas_counts_wrapped_nested_reference_unions() {
 
 #[test]
 fn test_array_literal() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = ASTNode::Array {
         rows: vec![vec![ASTNode::Number(1.0), ASTNode::Number(2.0)]],
@@ -803,7 +803,7 @@ fn test_array_literal() {
 
 #[test]
 fn test_sum_with_error() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let arr = ASTNode::Array {
         rows: vec![vec![
@@ -824,7 +824,7 @@ fn test_sum_with_error() {
 
 #[test]
 fn test_average_no_numbers() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let arr = ASTNode::Array {
         rows: vec![vec![ASTNode::Text("a".into()), ASTNode::Text("b".into())]],

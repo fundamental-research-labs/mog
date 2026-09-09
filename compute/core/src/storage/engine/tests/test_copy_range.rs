@@ -19,7 +19,7 @@ fn test_copy_range_values_only() {
     let sid = sheet_id();
 
     // Copy A1:B1 (10, 20) to A5:B5 as values only
-    let output = engine
+    engine
         .apply_mutation(EngineMutation::CopyRange {
             source_sheet_id: sid,
             src_start_row: 0,
@@ -37,11 +37,11 @@ fn test_copy_range_values_only() {
 
     // Verify target cells have the copied values
     let a5 = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sid, SheetPos::new(4, 0))
         .cloned();
     let b5 = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sid, SheetPos::new(4, 1))
         .cloned();
     assert_eq!(
@@ -57,7 +57,7 @@ fn test_copy_range_values_only() {
 
     // Source cells should be unchanged
     let a1 = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sid, SheetPos::new(0, 0))
         .cloned();
     assert_eq!(
@@ -80,7 +80,7 @@ fn test_copy_range_formulas() {
 
     // Verify C1 = A1+B1 = 30
     let c1_val = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sid, SheetPos::new(0, 2))
         .cloned();
     assert_eq!(
@@ -108,7 +108,7 @@ fn test_copy_range_formulas() {
 
     // C2 should have value =A2+B2 = 30+40 = 70
     let c2_val = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sid, SheetPos::new(1, 2))
         .cloned();
     assert_eq!(
@@ -245,7 +245,7 @@ fn test_copy_range_values_from_formula_cell() {
 
     // D1 should have the computed value 30 (not the formula)
     let d1_val = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sid, SheetPos::new(0, 3))
         .cloned();
     assert_eq!(
@@ -267,8 +267,14 @@ fn test_copy_range_skip_blanks() {
     let sid = sheet_id();
 
     // First, set up target: D5=999
-    let grid = engine.stores.grid_indexes.get_mut(&sid).unwrap();
-    let d5_cell_id = grid.ensure_cell_id(4, 3);
+    let d5_cell_id = services::cell_editing::ensure_cell_id(
+        &mut engine.stores,
+        &mut engine.cell_store,
+        &sid,
+        4,
+        3,
+    )
+    .unwrap();
     engine
         .set_cell(
             &sid,
@@ -281,7 +287,7 @@ fn test_copy_range_skip_blanks() {
 
     // Verify D5 = 999
     let d5_val = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sid, SheetPos::new(4, 3))
         .cloned();
     assert_eq!(d5_val.unwrap(), CellValue::Number(FiniteF64::must(999.0)));
@@ -305,7 +311,7 @@ fn test_copy_range_skip_blanks() {
         .unwrap();
 
     let d5_val = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sid, SheetPos::new(4, 3))
         .cloned()
         .unwrap_or(CellValue::Null);
@@ -344,7 +350,7 @@ fn test_copy_range_skip_blanks() {
 
     // D5 should still be 999 because source was blank and skip_blanks=true
     let d5_val = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sid, SheetPos::new(4, 3))
         .cloned();
     assert_eq!(
@@ -388,7 +394,7 @@ fn test_copy_range_transpose() {
 
     // E1 should be 10 (from A1, offset (0,0) -> transpose -> (0,0))
     let e1 = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sid, SheetPos::new(0, 4))
         .cloned();
     assert_eq!(
@@ -399,7 +405,7 @@ fn test_copy_range_transpose() {
 
     // F1 should be 30 (from A2, offset (1,0) -> transpose -> (0,1))
     let f1 = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sid, SheetPos::new(0, 5))
         .cloned();
     assert_eq!(
@@ -410,7 +416,7 @@ fn test_copy_range_transpose() {
 
     // E2 should be 20 (from B1, offset (0,1) -> transpose -> (1,0))
     let e2 = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sid, SheetPos::new(1, 4))
         .cloned();
     assert_eq!(
@@ -421,7 +427,7 @@ fn test_copy_range_transpose() {
 
     // F2 should be 40 (from B2, offset (1,1) -> transpose -> (1,1))
     let f2 = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sid, SheetPos::new(1, 5))
         .cloned();
     assert_eq!(
@@ -558,16 +564,15 @@ fn formula_at(
     row: u32,
     col: u32,
 ) -> Option<String> {
-    let sm = engine.mirror().get_sheet(sheet)?;
+    let sm = engine.cell_store().get_sheet(sheet)?;
     let cell_id = sm.cell_id_at(SheetPos::new(row, col))?;
-    let entry = sm.get_cell(&cell_id)?;
-    let formula = entry.formula.as_ref()?;
+    let formula = sm.formula(&cell_id)?;
     Some(engine.to_a1_display(display_sheet, formula))
 }
 
 fn formula_text_at(engine: &ComputeEngine, sheet: &SheetId, row: u32, col: u32) -> Option<String> {
     let cell_id = engine
-        .mirror()
+        .cell_store()
         .get_sheet(sheet)?
         .cell_id_at(SheetPos::new(row, col))?;
     engine.get_formula(&cell_id)
@@ -637,7 +642,7 @@ fn test_copy_range_cross_sheet_rebinds_naked_refs() {
     // Computed value: Sheet2!C1 = Sheet2!A1 + Sheet2!B1. Both are empty/Null,
     // so the result is 0 (numeric coercion of empty operands in arithmetic).
     let c1_value = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sheet2, SheetPos::new(0, 2))
         .cloned()
         .unwrap_or(CellValue::Null);
@@ -649,7 +654,7 @@ fn test_copy_range_cross_sheet_rebinds_naked_refs() {
 
     // Sheet2!D1 = Sheet3!A1 = 77 (the qualifier still points to Sheet3).
     let d1_value = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sheet2, SheetPos::new(0, 3))
         .cloned()
         .unwrap_or(CellValue::Null);
@@ -743,7 +748,7 @@ fn test_copy_range_cross_sheet_preserves_explicit_target_sheet_ref_text() {
     );
     assert_eq!(
         engine
-            .mirror()
+            .cell_store()
             .get_cell_value_at(&sheet2, SheetPos::new(0, 1))
             .cloned(),
         Some(CellValue::Text("Sheet2Data".into())),
@@ -766,7 +771,7 @@ fn test_copy_range_cross_sheet_preserves_explicit_target_sheet_ref_text() {
 
     assert_eq!(
         engine
-            .mirror()
+            .cell_store()
             .get_cell_value_at(&sheet2, SheetPos::new(0, 1))
             .cloned(),
         Some(CellValue::Text("ChangedSheet2Data".into())),
@@ -875,8 +880,8 @@ fn test_copy_range_cross_sheet_preserves_explicit_source_sheet_ref_after_formula
         "authored same-sheet qualifiers are part of the copy contract"
     );
 
-    engine.with_internals_for_test(|stores, mirror, _mutation| {
-        stores.compute.regenerate_formula_strings(mirror);
+    engine.with_internals_for_test(|stores, cell_store| {
+        stores.compute.regenerate_formula_strings(cell_store);
     });
 
     assert_eq!(
@@ -908,7 +913,7 @@ fn test_copy_range_cross_sheet_preserves_explicit_source_sheet_ref_after_formula
     );
     assert_eq!(
         engine
-            .mirror()
+            .cell_store()
             .get_cell_value_at(&sheet2, SheetPos::new(0, 4))
             .cloned(),
         Some(CellValue::Number(FiniteF64::must(12.0))),

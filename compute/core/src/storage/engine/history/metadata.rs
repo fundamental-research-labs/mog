@@ -5,7 +5,7 @@ use std::fmt::Debug;
 use cell_types::{CellId, ColId, RowId, SheetId};
 
 use crate::{
-    mirror::{CellMirror, SheetMirror},
+    cells::{CellStore, SheetStore},
     storage::WorkbookStorage,
 };
 
@@ -75,7 +75,7 @@ pub(crate) enum MetadataImpact {
 }
 
 impl MetadataImpact {
-    fn mark(self, mirror: &CellMirror, effects: &mut HistoryEffects) {
+    fn mark(self, cell_store: &CellStore, effects: &mut HistoryEffects) {
         match self {
             Self::Sheet(sheet) => {
                 effects.sheets.insert(sheet);
@@ -85,7 +85,7 @@ impl MetadataImpact {
                 effects.recalc = true;
             }
             Self::Workbook | Self::Settings | Self::Names => {
-                effects.sheets.extend(mirror.sheet_ids().copied());
+                effects.sheets.extend(cell_store.sheet_ids().copied());
                 match self {
                     Self::Settings => {
                         effects.settings = true;
@@ -103,11 +103,11 @@ impl MetadataImpact {
 }
 
 trait MetadataSwap: Debug + Send + Sync {
-    fn is_changed(&self, storage: &WorkbookStorage, mirror: &CellMirror) -> bool;
+    fn is_changed(&self, storage: &WorkbookStorage, cell_store: &CellStore) -> bool;
     fn rebase_ui_format(
         &mut self,
         _storage: &WorkbookStorage,
-        _mirror: &CellMirror,
+        _store: &CellStore,
         _sheet: SheetId,
         _ranges: &[(u32, u32, u32, u32)],
         _format: &domain_types::CellFormat,
@@ -116,7 +116,7 @@ trait MetadataSwap: Debug + Send + Sync {
     fn swap(
         &mut self,
         storage: &mut WorkbookStorage,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         effects: &mut HistoryEffects,
     );
 }
@@ -130,26 +130,26 @@ impl MetadataPatch {
     pub(crate) fn rebase_ui_format(
         &mut self,
         storage: &WorkbookStorage,
-        mirror: &CellMirror,
+        cell_store: &CellStore,
         sheet: SheetId,
         ranges: &[(u32, u32, u32, u32)],
         format: &domain_types::CellFormat,
     ) {
         self.0
-            .rebase_ui_format(storage, mirror, sheet, ranges, format);
+            .rebase_ui_format(storage, cell_store, sheet, ranges, format);
     }
 
-    pub(crate) fn is_changed(&self, storage: &WorkbookStorage, mirror: &CellMirror) -> bool {
-        self.0.is_changed(storage, mirror)
+    pub(crate) fn is_changed(&self, storage: &WorkbookStorage, cell_store: &CellStore) -> bool {
+        self.0.is_changed(storage, cell_store)
     }
 
     pub(crate) fn swap(
         &mut self,
         storage: &mut WorkbookStorage,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         effects: &mut HistoryEffects,
     ) {
-        self.0.swap(storage, mirror, effects);
+        self.0.swap(storage, cell_store, effects);
     }
 }
 
@@ -166,24 +166,26 @@ struct StoredValue<T> {
 }
 
 impl<T: Debug + PartialEq + Send + Sync + 'static> MetadataSwap for StoredValue<T> {
-    fn is_changed(&self, storage: &WorkbookStorage, _: &CellMirror) -> bool {
+    fn is_changed(&self, storage: &WorkbookStorage, _: &CellStore) -> bool {
         (self.read)(storage, &self.key) != self.old.as_ref()
     }
 
     fn swap(
         &mut self,
         storage: &mut WorkbookStorage,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         effects: &mut HistoryEffects,
     ) {
-        effects.metadata_events.record(&self.key, storage, mirror);
+        effects
+            .metadata_events
+            .record(&self.key, storage, cell_store);
         (self.swap_value)(storage, &self.key, &mut self.old);
         if let MetadataKey::SheetEntry(sheet, "sparklines.items" | "sparklines.groups", _) =
             &self.key
         {
             effects.sparkline_sheets.insert(*sheet);
         }
-        self.impact.mark(mirror, effects);
+        self.impact.mark(cell_store, effects);
     }
 }
 
@@ -225,7 +227,7 @@ struct VectorEntry<T> {
     impact: MetadataImpact,
 }
 impl<T: Debug + PartialEq + Send + Sync + 'static> MetadataSwap for VectorEntry<T> {
-    fn is_changed(&self, storage: &WorkbookStorage, _: &CellMirror) -> bool {
+    fn is_changed(&self, storage: &WorkbookStorage, _: &CellStore) -> bool {
         let current = (self.read)(storage, &self.key)
             .and_then(|values| values.iter().find(|value| (self.matches)(value, &self.key)));
         current != self.old.as_ref().map(|(_, value)| value)
@@ -233,10 +235,12 @@ impl<T: Debug + PartialEq + Send + Sync + 'static> MetadataSwap for VectorEntry<
     fn swap(
         &mut self,
         storage: &mut WorkbookStorage,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         effects: &mut HistoryEffects,
     ) {
-        effects.metadata_events.record(&self.key, storage, mirror);
+        effects
+            .metadata_events
+            .record(&self.key, storage, cell_store);
         if let Some(values) = (self.write)(storage, &self.key) {
             let current = values
                 .iter()
@@ -253,7 +257,7 @@ impl<T: Debug + PartialEq + Send + Sync + 'static> MetadataSwap for VectorEntry<
             }
             self.old = current;
         }
-        self.impact.mark(mirror, effects);
+        self.impact.mark(cell_store, effects);
     }
 }
 pub(crate) fn capture_vector_entry<T: Debug + Clone + PartialEq + Send + Sync + 'static>(

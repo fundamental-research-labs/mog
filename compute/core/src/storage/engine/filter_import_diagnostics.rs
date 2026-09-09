@@ -1,8 +1,7 @@
 use cell_types::{CellId, SheetId};
 use compute_document::hex::hex_to_id;
 
-use crate::mirror::CellMirror;
-use crate::storage::engine::stores::EngineStores;
+use crate::cells::CellStore;
 use crate::storage::sheet::filters;
 
 pub(in crate::storage::engine) fn unsupported_filter_import_diagnostic(
@@ -118,20 +117,12 @@ pub(in crate::storage::engine) fn upsert_import_diagnostic_phase(
 }
 
 pub(in crate::storage::engine) fn resolve_filter_cell_pos(
-    stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     cell_id_hex: &str,
 ) -> Option<(u32, u32)> {
-    let id = hex_to_id(cell_id_hex)?;
-    let cell_id = CellId::from_raw(id);
-    if let Some(pos) = mirror.resolve_position(&cell_id) {
-        return Some((pos.row(), pos.col()));
-    }
-    stores
-        .grid_indexes
-        .get(sheet_id)
-        .and_then(|grid| grid.cell_position(&cell_id))
+    let cell_id = CellId::from_raw(hex_to_id(cell_id_hex)?);
+    cell_store.get_sheet(sheet_id)?.cell_position(&cell_id)
 }
 
 fn reason_tokens(reasons: &[filters::ImportFilterUnsupportedReason]) -> Vec<String> {

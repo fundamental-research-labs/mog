@@ -10,8 +10,6 @@ use crate::storage::sheet::cf_store::{CFCellRange, CFIconSetPreset, CFPresetCate
 use crate::storage::sheet::schemas::{CellValidationResult, ColumnSchema, RangeSchema};
 use bridge_core as bridge;
 use cell_types::{CellId, SheetId, SheetPos};
-use compute_document::hex::id_to_hex;
-use compute_wire::mutation::serialize_multi_viewport_patches;
 use domain_types::CellFormat;
 use domain_types::ResolvedCellFormat;
 use domain_types::domain::conditional_format::{CFRule, ConditionalFormat};
@@ -65,7 +63,7 @@ impl ComputeEngine {
     }
 
     #[bridge::write(scope = "workbook")]
-    pub fn clear_schemas(&mut self) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    pub fn clear_schemas(&mut self) -> Result<MutationResult, ComputeError> {
         self.without_history(|engine| schema_map::clear_schemas(engine))
     }
 
@@ -117,7 +115,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         cell_id: &CellId,
         format: &CellFormat,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| cell_formats::set_cell_format(engine, sheet_id, cell_id, format))
     }
 
@@ -126,7 +124,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         cell_id: &CellId,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| cell_formats::clear_cell_format(engine, sheet_id, cell_id))
     }
 
@@ -138,7 +136,7 @@ impl ComputeEngine {
         property: &str,
         active_row: u32,
         active_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             range_mutations::toggle_format_property(
                 engine, sheet_id, ranges, property, active_row, active_col,
@@ -152,7 +150,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         ranges: &[(u32, u32, u32, u32)],
         format: &CellFormat,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             range_mutations::set_format_for_ranges(engine, sheet_id, ranges, format)
         })
@@ -165,7 +163,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         ranges: &[(u32, u32, u32, u32)],
         format: &CellFormat,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         let result =
             self.without_history(|engine| engine.set_format_for_ranges(sheet_id, ranges, format));
         if result.is_ok() {
@@ -183,7 +181,7 @@ impl ComputeEngine {
         ranges: &[(u32, u32, u32, u32)],
         format: &CellFormat,
         clear_fields: &[String],
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             range_mutations::patch_format_for_ranges(engine, sheet_id, ranges, format, clear_fields)
         })
@@ -197,7 +195,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         operations: Vec<BorderPatchOperation>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| range_mutations::patch_borders(engine, sheet_id, operations))
     }
 
@@ -206,7 +204,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         ranges: &[(u32, u32, u32, u32)],
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             range_mutations::clear_format_for_ranges(engine, sheet_id, ranges)
         })
@@ -217,7 +215,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         updates: Vec<(u32, u32, CellFormat)>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             range_mutations::set_cell_properties_batch(engine, sheet_id, updates)
         })
@@ -228,7 +226,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         updates: Vec<(u32, u32, CellFormat, Vec<String>)>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             range_mutations::patch_cell_properties_batch(engine, sheet_id, updates)
         })
@@ -239,7 +237,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         rule: serde_json::Value,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| conditional_formats::add_cf_rule(engine, sheet_id, rule))
     }
 
@@ -249,7 +247,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         rule_id: &str,
         updates: serde_json::Value,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             conditional_formats::update_cf_rule(engine, sheet_id, rule_id, updates)
         })
@@ -260,7 +258,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         rule_id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| conditional_formats::delete_cf_rule(engine, sheet_id, rule_id))
     }
 
@@ -269,7 +267,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         rule_ids: Vec<String>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             conditional_formats::reorder_cf_rules(engine, sheet_id, rule_ids)
         })
@@ -310,7 +308,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         format_id: &str,
         new_ranges: &[CFCellRange],
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             conditional_formats::update_cf_ranges(engine, sheet_id, format_id, new_ranges)
         })
@@ -320,7 +318,7 @@ impl ComputeEngine {
     pub fn clear_cf_formats_for_sheet(
         &mut self,
         sheet_id: &SheetId,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             conditional_formats::clear_cf_formats_for_sheet(engine, sheet_id)
         })
@@ -332,7 +330,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         format_id: &str,
         rule: &CFRule,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             conditional_formats::add_rule_to_cf(engine, sheet_id, format_id, rule)
         })
@@ -345,7 +343,7 @@ impl ComputeEngine {
         format_id: &str,
         rule_id: &str,
         updates: serde_json::Value,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             conditional_formats::update_rule_in_cf(engine, sheet_id, format_id, rule_id, updates)
         })
@@ -357,7 +355,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         format_id: &str,
         rule_id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             conditional_formats::delete_rule_from_cf(engine, sheet_id, format_id, rule_id)
         })
@@ -408,7 +406,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         row: u32,
         format: CellFormat,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| row_col::set_row_format(engine, sheet_id, row, format))
     }
 
@@ -419,7 +417,7 @@ impl ComputeEngine {
         row: u32,
         format: CellFormat,
         clear_fields: Vec<String>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             row_col::patch_row_format(engine, sheet_id, row, format, clear_fields)
         })
@@ -431,7 +429,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         col: u32,
         format: CellFormat,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| row_col::set_col_format(engine, sheet_id, col, format))
     }
 
@@ -442,7 +440,7 @@ impl ComputeEngine {
         col: u32,
         format: CellFormat,
         clear_fields: Vec<String>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             row_col::patch_col_format(engine, sheet_id, col, format, clear_fields)
         })
@@ -453,7 +451,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| row_col::clear_col_format(engine, sheet_id, col))
     }
 
@@ -464,7 +462,7 @@ impl ComputeEngine {
         start_col: u32,
         end_col: u32,
         format: CellFormat,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             row_col::set_col_format_range(engine, sheet_id, start_col, end_col, format)
         })
@@ -484,7 +482,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         updates: Vec<(u32, CellFormat)>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| row_col::set_row_formats(engine, sheet_id, updates))
     }
 
@@ -493,7 +491,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         updates: Vec<(u32, CellFormat, Vec<String>)>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| row_col::patch_row_formats(engine, sheet_id, updates))
     }
 
@@ -511,7 +509,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         updates: Vec<(u32, CellFormat)>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| row_col::set_col_formats(engine, sheet_id, updates))
     }
 
@@ -520,7 +518,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         updates: Vec<(u32, CellFormat, Vec<String>)>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| row_col::patch_col_formats(engine, sheet_id, updates))
     }
 
@@ -573,7 +571,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         col_index: u32,
         schema: &ColumnSchema,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| schemas::set_column_schema(engine, sheet_id, col_index, schema))
     }
 
@@ -582,7 +580,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         col_index: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| schemas::clear_column_schema(engine, sheet_id, col_index))
     }
 
@@ -606,7 +604,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         schema: &RangeSchema,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| schemas::set_range_schema(engine, sheet_id, schema))
     }
 
@@ -616,7 +614,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         schema_id: &str,
         updates: &RangeSchema,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             schemas::update_range_schema(engine, sheet_id, schema_id, updates)
         })
@@ -627,7 +625,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         schema_id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| schemas::delete_range_schema(engine, sheet_id, schema_id))
     }
 

@@ -53,7 +53,7 @@ fn hyperlink_mutations_preserve_native_values_formulas_and_identities() {
             .set_hyperlink(&sid, row, 0, "https://example.com")
             .unwrap();
         let id = engine
-            .mirror()
+            .cell_store()
             .resolve_cell_id(&sid, SheetPos::new(row, 0))
             .unwrap();
         assert_eq!(
@@ -66,7 +66,9 @@ fn hyperlink_mutations_preserve_native_values_formulas_and_identities() {
         engine.remove_hyperlink(&sid, row, 0).unwrap();
         assert_eq!(engine.get_hyperlink(&sid, row, 0), None);
         assert_eq!(
-            engine.mirror().resolve_cell_id(&sid, SheetPos::new(row, 0)),
+            engine
+                .cell_store()
+                .resolve_cell_id(&sid, SheetPos::new(row, 0)),
             Some(id)
         );
         assert_eq!(engine.get_raw_value(&sid, row, 0), before);
@@ -103,8 +105,14 @@ fn explicit_metadata_preserves_overlapping_ranges_order_and_all_attributes() {
     engine
         .set_hyperlink(&sid, 4, 4, "https://seed.example")
         .unwrap();
-    let start = engine.grid_index(&sid).unwrap().cell_id_at(0, 0).unwrap();
-    let end = engine.grid_index(&sid).unwrap().cell_id_at(4, 4).unwrap();
+    let start = engine
+        .cell_store()
+        .resolve_cell_id(&sid, cell_types::SheetPos::new(0, 0))
+        .unwrap();
+    let end = engine
+        .cell_store()
+        .resolve_cell_id(&sid, cell_types::SheetPos::new(4, 4))
+        .unwrap();
     let data = Hyperlink {
         target: Some("#Sheet2!A1".into()),
         location: Some("Sheet2!B2".into()),
@@ -167,16 +175,20 @@ fn hyperlinks_support_url_schemes_and_native_axis_growth() {
         engine.set_hyperlink(&sid, row, 30, url).unwrap();
         assert_eq!(engine.get_hyperlink(&sid, row, 30).as_deref(), Some(url));
         let id = engine
-            .mirror()
+            .cell_store()
             .resolve_cell_id(&sid, SheetPos::new(row, 30))
             .unwrap();
         assert_eq!(
-            engine.grid_index(&sid).unwrap().cell_position(&id),
+            engine
+                .cell_store()
+                .get_sheet(&sid)
+                .unwrap()
+                .cell_position(&id),
             Some((row, 30))
         );
         assert_eq!(
             engine
-                .mirror()
+                .cell_store()
                 .get_cell_value_at(&sid, SheetPos::new(row, 30)),
             None
         );

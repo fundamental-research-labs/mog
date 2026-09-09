@@ -3,10 +3,10 @@ use crate::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
 use cell_types::CellId;
 use value_types::CellValue;
 
-fn native_rows(rows: &[&[&str]]) -> (CellMirror, SheetId) {
+fn native_rows(rows: &[&[&str]]) -> (CellStore, SheetId) {
     let sheet_id = SheetId::from_raw(1);
     let cols = rows.iter().map(|row| row.len()).max().unwrap_or(0) as u32;
-    let mirror = CellMirror::from_snapshot(WorkbookSnapshot {
+    let cell_store = CellStore::from_snapshot(WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
             identities: Vec::new(),
             row_axis: None,
@@ -36,12 +36,12 @@ fn native_rows(rows: &[&[&str]]) -> (CellMirror, SheetId) {
         ..Default::default()
     })
     .unwrap();
-    (mirror, sheet_id)
+    (cell_store, sheet_id)
 }
 
 #[test]
 fn duplicate_keys_respect_case_and_selected_columns() {
-    let (mirror, sheet) = native_rows(&[
+    let (cell_store, sheet) = native_rows(&[
         &["Alice", "1"],
         &["alice", "2"],
         &["Bob", "3"],
@@ -56,7 +56,7 @@ fn duplicate_keys_respect_case_and_selected_columns() {
     ] {
         assert_eq!(
             unique_rows(
-                &mirror,
+                &cell_store,
                 &sheet,
                 0,
                 0,
@@ -71,30 +71,30 @@ fn duplicate_keys_respect_case_and_selected_columns() {
             expected
         );
     }
-    assert_eq!(mirror.get_sheet(&sheet).unwrap().cell_count(), 8);
+    assert_eq!(cell_store.get_sheet(&sheet).unwrap().cell_count(), 8);
 }
 
 #[test]
 fn headers_do_not_participate_in_duplicate_detection() {
-    let (mirror, sheet) = native_rows(&[&["Name"], &["Name"], &["Alice"], &["Name"]]);
+    let (cell_store, sheet) = native_rows(&[&["Name"], &["Name"], &["Alice"], &["Name"]]);
     let options = RemoveDuplicatesOptions {
         has_headers: true,
         columns_to_compare: vec![],
         case_sensitive: true,
     };
     assert_eq!(
-        unique_rows(&mirror, &sheet, 0, 0, 3, 0, &options),
+        unique_rows(&cell_store, &sheet, 0, 0, 3, 0, &options),
         vec![1, 2]
     );
-    assert!(unique_rows(&mirror, &sheet, 0, 0, 0, 0, &options).is_empty());
+    assert!(unique_rows(&cell_store, &sheet, 0, 0, 0, 0, &options).is_empty());
 }
 
 #[test]
 fn embedded_nul_keys_do_not_collide_across_columns() {
-    let (mirror, sheet) = native_rows(&[&["a\0b", "c"], &["a", "b\0c"], &["a\0b", "c"]]);
+    let (cell_store, sheet) = native_rows(&[&["a\0b", "c"], &["a", "b\0c"], &["a\0b", "c"]]);
     assert_eq!(
         unique_rows(
-            &mirror,
+            &cell_store,
             &sheet,
             0,
             0,

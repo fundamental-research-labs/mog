@@ -1,4 +1,5 @@
 #![allow(unused_imports, unused_variables)]
+use crate::cells::StorePositionLookup;
 use crate::diagnostics::formula_references::{
     FormulaReferenceDiagnosticsOptions, FormulaReferenceDiagnosticsPage,
 };
@@ -9,8 +10,7 @@ use crate::engine_types::{
 };
 use crate::eval::Evaluator;
 use crate::eval::sync_block_on;
-use crate::eval_bridge::MirrorContext;
-use crate::mirror::MirrorPositionLookup;
+use crate::eval_bridge::EvalContext;
 use crate::range_manager::{self, A1CellRef, A1RangeRef};
 use crate::snapshot::{
     BatchRangeEntry, BatchRangeRequest, BatchRangeResponse, BatchRangeResult, CalculationSettings,
@@ -26,7 +26,6 @@ use crate::storage::sheet::{hyperlinks, merges, properties as sheets};
 use crate::storage::workbook::settings as workbook;
 use cell_types::{CellId, SheetId, SheetPos};
 use compute_document::hex::{hex_to_id, id_to_hex};
-use compute_wire::mutation::serialize_multi_viewport_patches;
 use domain_types::domain::merge::{CellMergeInfo, MergeRegion, ResolvedMergedRegion};
 use domain_types::domain::sheet::{FrozenPanes, SheetMeta, SheetScrollPosition, SheetViewOptions};
 use domain_types::domain::slicer::{NamedSlicerStyle, SlicerCustomStyle};
@@ -44,12 +43,9 @@ pub(in crate::storage::engine) fn get_document_properties(
 pub(in crate::storage::engine) fn set_document_properties(
     engine: &mut ComputeEngine,
     props: domain_types::DocumentProperties,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     services::queries::set_document_properties(&mut engine.stores, &props);
-    Ok((
-        serialize_multi_viewport_patches(&[]),
-        MutationResult::empty(),
-    ))
+    Ok(MutationResult::empty())
 }
 
 pub(in crate::storage::engine) fn get_all_sheet_ids(engine: &ComputeEngine) -> Vec<String> {
@@ -74,7 +70,7 @@ pub(in crate::storage::engine) fn is_sheet_calculation_enabled(
     engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> bool {
-    engine.mirror.is_calculation_enabled(sheet_id)
+    engine.cell_store.is_calculation_enabled(sheet_id)
 }
 
 pub(in crate::storage::engine) fn is_sheet_protected(
@@ -125,7 +121,7 @@ pub(in crate::storage::engine) fn get_data_bounds(
     engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> Option<DataBounds> {
-    services::queries::get_data_bounds(&engine.stores, &engine.mirror, sheet_id)
+    services::queries::get_data_bounds(&engine.stores, &engine.cell_store, sheet_id)
 }
 
 pub(in crate::storage::engine) fn get_sheet_index(
@@ -295,7 +291,7 @@ pub(in crate::storage::engine) fn get_dependents(
     col: u32,
 ) -> Vec<CellPositionResult> {
     let pos = SheetPos::new(row, col);
-    let cell_id = match engine.mirror.resolve_cell_id(sheet_id, pos) {
+    let cell_id = match engine.cell_store.resolve_cell_id(sheet_id, pos) {
         Some(id) => id,
         None => return Vec::new(),
     };
@@ -305,8 +301,8 @@ pub(in crate::storage::engine) fn get_dependents(
         .get_dependents(&cell_id)
         .into_iter()
         .filter_map(|dep_id| {
-            let dep_sheet = engine.mirror.sheet_for_cell(&dep_id)?;
-            let dep_pos = engine.mirror.resolve_position(&dep_id)?;
+            let dep_sheet = engine.cell_store.sheet_for_cell(&dep_id)?;
+            let dep_pos = engine.cell_store.resolve_position(&dep_id)?;
             let dep_name =
                 services::queries::get_sheet_name(&engine.stores, &dep_sheet).unwrap_or_default();
             Some(CellPositionResult {
@@ -326,7 +322,7 @@ pub(in crate::storage::engine) fn get_precedents(
     col: u32,
 ) -> Vec<CellPositionResult> {
     let pos = SheetPos::new(row, col);
-    let cell_id = match engine.mirror.resolve_cell_id(sheet_id, pos) {
+    let cell_id = match engine.cell_store.resolve_cell_id(sheet_id, pos) {
         Some(id) => id,
         None => return Vec::new(),
     };
@@ -341,8 +337,8 @@ pub(in crate::storage::engine) fn get_precedents(
                 compute_graph::DepTarget::Cell(id) => *id,
                 compute_graph::DepTarget::Range(_, _) => return None,
             };
-            let dep_sheet = engine.mirror.sheet_for_cell(&target_id)?;
-            let dep_pos = engine.mirror.resolve_position(&target_id)?;
+            let dep_sheet = engine.cell_store.sheet_for_cell(&target_id)?;
+            let dep_pos = engine.cell_store.resolve_position(&target_id)?;
             let dep_name =
                 services::queries::get_sheet_name(&engine.stores, &dep_sheet).unwrap_or_default();
             Some(CellPositionResult {
@@ -361,14 +357,20 @@ pub(in crate::storage::engine) fn get_merge_at_cell_query(
     row: u32,
     col: u32,
 ) -> Option<CellMergeInfo> {
-    services::queries::get_merge_at_cell_query(&engine.stores, sheet_id, row, col)
+    services::queries::get_merge_at_cell_query(
+        &engine.stores,
+        &engine.cell_store,
+        sheet_id,
+        row,
+        col,
+    )
 }
 
 pub(in crate::storage::engine) fn get_all_merges_in_sheet(
     engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> Vec<ResolvedMergedRegion> {
-    services::queries::get_all_merges_in_sheet(&engine.stores, sheet_id)
+    services::queries::get_all_merges_in_sheet(&engine.stores, &engine.cell_store, sheet_id)
 }
 
 pub(in crate::storage::engine) fn get_cell_id_at(
@@ -377,7 +379,7 @@ pub(in crate::storage::engine) fn get_cell_id_at(
     row: u32,
     col: u32,
 ) -> Option<String> {
-    services::queries::get_cell_id_at(&engine.stores, sheet_id, row, col)
+    services::queries::get_cell_id_at(&engine.cell_store, sheet_id, row, col)
 }
 
 pub(in crate::storage::engine) fn get_cell_position(
@@ -386,7 +388,7 @@ pub(in crate::storage::engine) fn get_cell_position(
     cell_id_hex: &str,
 ) -> Option<CellPositionResult> {
     if let Some(mut result) =
-        services::queries::get_cell_position(&engine.mirror, sheet_id, cell_id_hex)
+        services::queries::get_cell_position(&engine.cell_store, sheet_id, cell_id_hex)
     {
         if let Ok(sid) = SheetId::from_uuid_str(&result.sheet_id) {
             result.sheet_name =
@@ -394,25 +396,14 @@ pub(in crate::storage::engine) fn get_cell_position(
         }
         return Some(result);
     }
-    let raw_id = hex_to_id(cell_id_hex)?;
-    let cell_id = CellId::from_raw(raw_id);
-    let grid = engine.stores.grid_indexes.get(sheet_id)?;
-    let (row, col) = grid.cell_position(&cell_id)?;
-    let sheet_name =
-        services::queries::get_sheet_name(&engine.stores, sheet_id).unwrap_or_default();
-    Some(CellPositionResult {
-        sheet_id: id_to_hex(sheet_id.as_u128()).into(),
-        sheet_name,
-        row,
-        col,
-    })
+    None
 }
 
 pub(in crate::storage::engine) fn resolve_cell_positions(
     engine: &ComputeEngine,
     cell_id_hexes: Vec<String>,
 ) -> Vec<Option<CellPositionResult>> {
-    services::queries::resolve_cell_positions(&engine.mirror, &cell_id_hexes)
+    services::queries::resolve_cell_positions(&engine.cell_store, &cell_id_hexes)
         .into_iter()
         .map(|opt| {
             opt.map(|mut r| {
@@ -432,7 +423,7 @@ pub(in crate::storage::engine) fn is_projection_source(
     row: u32,
     col: u32,
 ) -> bool {
-    services::queries::is_projection_source(&engine.mirror, sheet_id, row, col)
+    services::queries::is_projection_source(&engine.cell_store, sheet_id, row, col)
 }
 
 pub(in crate::storage::engine) fn is_projected_position(
@@ -441,5 +432,5 @@ pub(in crate::storage::engine) fn is_projected_position(
     row: u32,
     col: u32,
 ) -> bool {
-    services::queries::is_projected_position(&engine.mirror, sheet_id, row, col)
+    services::queries::is_projected_position(&engine.cell_store, sheet_id, row, col)
 }

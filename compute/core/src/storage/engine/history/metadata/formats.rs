@@ -1,5 +1,5 @@
 use super::*;
-use crate::mirror::{ColumnFormatRange, FormatRange};
+use crate::cells::{ColumnFormatRange, FormatRange};
 use cell_types::RangeId;
 use cell_types::interval_tree::RectLike;
 use domain_types::CellFormat;
@@ -13,8 +13,8 @@ struct FormatEntry<R> {
 macro_rules! format_patch {
     ($ty:ty,$function:ident,$column:expr,$ranges:ident,$formats:ident,$styles:ident,$rebuild:ident) => {
         impl MetadataSwap for FormatEntry<$ty> {
-            fn is_changed(&self, _: &WorkbookStorage, mirror: &CellMirror) -> bool {
-                let current = mirror.get_sheet(&self.sheet).and_then(|sheet| {
+            fn is_changed(&self, _: &WorkbookStorage, cell_store: &CellStore) -> bool {
+                let current = cell_store.get_sheet(&self.sheet).and_then(|sheet| {
                     sheet
                         .$ranges
                         .iter()
@@ -30,10 +30,10 @@ macro_rules! format_patch {
             fn swap(
                 &mut self,
                 _: &mut WorkbookStorage,
-                mirror: &mut CellMirror,
+                cell_store: &mut CellStore,
                 effects: &mut HistoryEffects,
             ) {
-                if let Some(sheet) = mirror.get_sheet_mut(&self.sheet) {
+                if let Some(sheet) = cell_store.get_sheet_mut(&self.sheet) {
                     let current = sheet.$ranges.iter().position(|r| r.id == self.id).map(|i| {
                         (
                             VectorPosition::capture(&sheet.$ranges, i, |r| {
@@ -69,7 +69,7 @@ macro_rules! format_patch {
                 effects.sheets.insert(self.sheet);
             }
         }
-        pub(crate) fn $function(sheet: &SheetMirror, id: RangeId) {
+        pub(crate) fn $function(sheet: &SheetStore, id: RangeId) {
             if !sheet.history.is_active() || sheet.history.owns_sheet(sheet.id) {
                 return;
             }

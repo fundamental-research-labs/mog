@@ -13,7 +13,7 @@ use domain_types::{
     domain::workbook::{CalculationProperties, RefMode, WorkbookProtection, WorkbookWebPublishing},
 };
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::snapshot::{CalcMode, CalculationSettings};
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::pivots;
@@ -257,7 +257,7 @@ pub(in crate::storage::engine) fn export_workbook_timeline_caches(
 /// pivotTables maps using imported-pivot associations as the authority.
 pub(in crate::storage::engine) fn export_workbook_parsed_pivot_tables(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     default_pivot_style: Option<&str>,
 ) -> Vec<domain_types::domain::pivot::ParsedPivotTable> {
     let specs = read_workbook_pivot_specs(stores);
@@ -270,7 +270,7 @@ pub(in crate::storage::engine) fn export_workbook_parsed_pivot_tables(
     if associations.is_empty() {
         return export_workbook_parsed_pivot_tables_legacy_name_dedup(
             stores,
-            mirror,
+            cell_store,
             default_pivot_style,
         );
     }
@@ -342,7 +342,7 @@ pub(in crate::storage::engine) fn export_workbook_parsed_pivot_tables(
                     config: project_live_pivot_export_metadata(
                         live_config,
                         &output_sheet_id,
-                        mirror,
+                        cell_store,
                         None,
                         false,
                     ),
@@ -364,7 +364,7 @@ pub(in crate::storage::engine) fn export_workbook_parsed_pivot_tables(
             let config = project_live_pivot_export_metadata(
                 config,
                 sheet_id,
-                mirror,
+                cell_store,
                 default_pivot_style,
                 true,
             );
@@ -381,7 +381,7 @@ pub(in crate::storage::engine) fn export_workbook_parsed_pivot_tables(
 
 fn export_workbook_parsed_pivot_tables_legacy_name_dedup(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     default_pivot_style: Option<&str>,
 ) -> Vec<domain_types::domain::pivot::ParsedPivotTable> {
     // 1. Collect workbook-level parsed pivot tables (from XLSX import hydration).
@@ -404,7 +404,7 @@ fn export_workbook_parsed_pivot_tables_legacy_name_dedup(
             let config = project_live_pivot_export_metadata(
                 config,
                 sheet_id,
-                mirror,
+                cell_store,
                 default_pivot_style,
                 true,
             );
@@ -422,7 +422,7 @@ fn export_workbook_parsed_pivot_tables_legacy_name_dedup(
 fn project_live_pivot_export_metadata(
     mut config: domain_types::domain::pivot::PivotTableConfig,
     storage_sheet_id: &SheetId,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     default_pivot_style: Option<&str>,
     apply_default_style: bool,
 ) -> domain_types::domain::pivot::PivotTableConfig {
@@ -430,10 +430,10 @@ fn project_live_pivot_export_metadata(
         .output_sheet_id
         .as_deref()
         .and_then(|value| SheetId::from_uuid_str(value).ok())
-        .or_else(|| mirror.sheet_by_name(&config.output_sheet_name))
+        .or_else(|| cell_store.sheet_by_name(&config.output_sheet_name))
         .unwrap_or(*storage_sheet_id);
     if let Some(def) =
-        mirror.find_pivot_table_def(&config.id, &config.name, &output_sheet_id.to_uuid_string())
+        cell_store.find_pivot_table_def(&config.id, &config.name, &output_sheet_id.to_uuid_string())
         && !def.is_empty_rendered_region()
     {
         config.ref_range = Some(format!(

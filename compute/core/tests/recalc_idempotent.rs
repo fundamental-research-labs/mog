@@ -77,7 +77,7 @@ fn sheet_id() -> cell_types::SheetId {
 
 fn number_at(engine: &ComputeEngine, row: u32, col: u32) -> f64 {
     match engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sheet_id(), SheetPos::new(row, col))
     {
         Some(CellValue::Number(n)) => n.get(),

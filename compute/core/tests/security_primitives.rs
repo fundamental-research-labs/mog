@@ -140,7 +140,7 @@ fn active_matrix_cache_invalidates_on_structure_version_bump() {
 }
 
 #[test]
-fn effective_access_workbook_mirrors_matrix_default() {
+fn effective_access_workbook_stores_matrix_default() {
     // ARCHITECTURE.md §6.2 invariant:
     // `effective_access(Workbook) == active_matrix(...).sheet_default()`.
     // R5.1's attenuation relies on this equality — this test pins it.

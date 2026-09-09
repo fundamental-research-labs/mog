@@ -61,7 +61,7 @@ pub(super) fn sheet_snap(idx: u32, name: &str, cells: Vec<CellData>) -> SheetSna
 
 pub(super) fn cell_at(engine: &ComputeEngine, sid: &SheetId, row: u32, col: u32) -> CellValue {
     engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(sid, SheetPos::new(row, col))
         .cloned()
         .unwrap_or(CellValue::Null)

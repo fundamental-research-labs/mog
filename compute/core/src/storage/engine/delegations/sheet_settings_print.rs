@@ -3,10 +3,9 @@ use crate::snapshot::{
     SheetSettingsChange,
 };
 use crate::storage::engine::ComputeEngine;
-use crate::storage::engine::{construction, services};
+use crate::storage::engine::services;
 use crate::storage::sheet::{print, protection, settings, split_view};
 use cell_types::SheetId;
-use compute_wire::mutation::serialize_multi_viewport_patches;
 use domain_types::domain::print::PageBreaks;
 use domain_types::domain::sheet::{
     PrintRange, PrintTitles, SheetProtectionOptions, SheetSettings, SplitViewConfig,
@@ -33,7 +32,7 @@ pub(in crate::storage::engine) fn set_sheet_setting(
     sheet_id: &SheetId,
     key: &str,
     value: &str,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     settings::set_sheet_setting_with_layout_metrics(
         &mut engine.stores.storage,
         sheet_id,
@@ -41,7 +40,7 @@ pub(in crate::storage::engine) fn set_sheet_setting(
         value,
         engine.stores.layout_metrics,
     );
-    rebuild_layout_index_if_dimension_default_changed(engine, sheet_id, key);
+    invalidate_pixel_layout_if_dimension_default_changed(engine, sheet_id, key);
     let settings = sheet_settings_for_engine(engine, sheet_id);
     let mut result = MutationResult::empty();
     result.settings_changes.push(SheetSettingsChange {
@@ -50,10 +49,10 @@ pub(in crate::storage::engine) fn set_sheet_setting(
         changed_key: key.to_string(),
         settings: serde_json::to_value(&settings).expect("SheetSettings must serialize"),
     });
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }
 
-fn rebuild_layout_index_if_dimension_default_changed(
+fn invalidate_pixel_layout_if_dimension_default_changed(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     key: &str,
@@ -62,26 +61,14 @@ fn rebuild_layout_index_if_dimension_default_changed(
         return;
     }
 
-    let Some(grid) = engine.stores.grid_indexes.get(sheet_id) else {
-        return;
-    };
-    let (rows, cols) = (grid.row_count(), grid.col_count());
-    let layout = construction::build_layout_index_for_sheet(
-        &engine.stores.storage,
-        sheet_id,
-        rows,
-        cols,
-        engine.stores.grid_indexes.get(sheet_id),
-        engine.stores.layout_metrics,
-    );
-    engine.stores.layout_indexes.insert(*sheet_id, layout);
+    engine.stores.invalidate_pixel_layout(sheet_id);
 }
 
 pub(in crate::storage::engine) fn protect_sheet(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     password_hash: Option<String>,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     protection::protect_sheet(
         &mut engine.stores.storage,
         sheet_id,
@@ -95,7 +82,7 @@ pub(in crate::storage::engine) fn protect_sheet(
         changed_key: "protectionDetails".to_string(),
         settings: serde_json::to_value(&settings).expect("SheetSettings must serialize"),
     });
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }
 
 pub(in crate::storage::engine) fn protect_sheet_with_options(
@@ -103,7 +90,7 @@ pub(in crate::storage::engine) fn protect_sheet_with_options(
     sheet_id: &SheetId,
     password_hash: Option<String>,
     options: SheetProtectionOptions,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     protection::protect_sheet_with_options(
         &mut engine.stores.storage,
         sheet_id,
@@ -118,14 +105,14 @@ pub(in crate::storage::engine) fn protect_sheet_with_options(
         changed_key: "protectionDetails".to_string(),
         settings: serde_json::to_value(&settings).expect("SheetSettings must serialize"),
     });
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }
 
 pub(in crate::storage::engine) fn set_sheet_protection_options(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     options: SheetProtectionOptions,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     protection::set_sheet_protection_options(&mut engine.stores.storage, sheet_id, &options);
     let settings = sheet_settings_for_engine(engine, sheet_id);
     let mut result = MutationResult::empty();
@@ -135,14 +122,14 @@ pub(in crate::storage::engine) fn set_sheet_protection_options(
         changed_key: "protectionDetails".to_string(),
         settings: serde_json::to_value(&settings).expect("SheetSettings must serialize"),
     });
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }
 
 pub(in crate::storage::engine) fn unprotect_sheet(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     password_hash: Option<String>,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let success = protection::unprotect_sheet(
         &mut engine.stores.storage,
         sheet_id,
@@ -161,7 +148,7 @@ pub(in crate::storage::engine) fn unprotect_sheet(
         changed_key: "protectionDetails".to_string(),
         settings: serde_json::to_value(&settings).expect("SheetSettings must serialize"),
     });
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }
 
 pub(in crate::storage::engine) fn get_page_breaks(
@@ -175,7 +162,7 @@ pub(in crate::storage::engine) fn add_horizontal_page_break(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     print::add_horizontal_page_break(&mut engine.stores.storage, sheet_id, row);
     let breaks = print::get_page_breaks(&engine.stores.storage, sheet_id);
     let mut result = MutationResult::empty();
@@ -183,14 +170,14 @@ pub(in crate::storage::engine) fn add_horizontal_page_break(
         sheet_id: sheet_id.to_uuid_string(),
         breaks,
     });
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }
 
 pub(in crate::storage::engine) fn remove_horizontal_page_break(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     print::remove_horizontal_page_break(&mut engine.stores.storage, sheet_id, row);
     let breaks = print::get_page_breaks(&engine.stores.storage, sheet_id);
     let mut result = MutationResult::empty();
@@ -198,14 +185,14 @@ pub(in crate::storage::engine) fn remove_horizontal_page_break(
         sheet_id: sheet_id.to_uuid_string(),
         breaks,
     });
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }
 
 pub(in crate::storage::engine) fn add_vertical_page_break(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     col: u32,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     print::add_vertical_page_break(&mut engine.stores.storage, sheet_id, col);
     let breaks = print::get_page_breaks(&engine.stores.storage, sheet_id);
     let mut result = MutationResult::empty();
@@ -213,14 +200,14 @@ pub(in crate::storage::engine) fn add_vertical_page_break(
         sheet_id: sheet_id.to_uuid_string(),
         breaks,
     });
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }
 
 pub(in crate::storage::engine) fn remove_vertical_page_break(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     col: u32,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     print::remove_vertical_page_break(&mut engine.stores.storage, sheet_id, col);
     let breaks = print::get_page_breaks(&engine.stores.storage, sheet_id);
     let mut result = MutationResult::empty();
@@ -228,13 +215,13 @@ pub(in crate::storage::engine) fn remove_vertical_page_break(
         sheet_id: sheet_id.to_uuid_string(),
         breaks,
     });
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }
 
 pub(in crate::storage::engine) fn clear_all_page_breaks(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     print::clear_all_page_breaks(&mut engine.stores.storage, sheet_id);
     let breaks = print::get_page_breaks(&engine.stores.storage, sheet_id);
     let mut result = MutationResult::empty();
@@ -242,7 +229,7 @@ pub(in crate::storage::engine) fn clear_all_page_breaks(
         sheet_id: sheet_id.to_uuid_string(),
         breaks,
     });
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }
 
 pub(in crate::storage::engine) fn get_print_area(
@@ -256,7 +243,7 @@ pub(in crate::storage::engine) fn set_print_area(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     area: Option<PrintRange>,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     print::set_print_area(&mut engine.stores.storage, sheet_id, area.as_ref());
     let kind = if area.is_some() {
         ChangeKind::Set
@@ -269,7 +256,7 @@ pub(in crate::storage::engine) fn set_print_area(
         kind,
         area,
     });
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }
 
 pub(in crate::storage::engine) fn get_print_titles(
@@ -283,14 +270,14 @@ pub(in crate::storage::engine) fn set_print_titles(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     titles: PrintTitles,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     print::set_print_titles(&mut engine.stores.storage, sheet_id, &titles);
     let mut result = MutationResult::empty();
     result.print_titles_changes.push(PrintTitlesChange {
         sheet_id: sheet_id.to_uuid_string(),
         titles,
     });
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }
 
 pub(in crate::storage::engine) fn get_split_config(
@@ -304,8 +291,8 @@ pub(in crate::storage::engine) fn set_split_config(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     config: Option<SplitViewConfig>,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let result =
         services::delegations::set_split_config(&mut engine.stores, sheet_id, config.as_ref())?;
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }

@@ -44,7 +44,7 @@ impl WorkbookSheets {
     pub fn delete_sheet(&self, sheet_id: &SheetId) -> Result<MutationResult, ComputeApiError> {
         let sid = *sheet_id;
         self.dispatch
-            .call_engine(move |e| e.delete_sheet(&sid).map(|(_, r)| r))
+            .call_engine(move |e| e.delete_sheet(&sid))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -57,7 +57,7 @@ impl WorkbookSheets {
         let sid = *sheet_id;
         let owned_name = name.to_owned();
         self.dispatch
-            .call_engine(move |e| e.rename_compute_sheet(&sid, &owned_name).map(|(_, r)| r))
+            .call_engine(move |e| e.rename_compute_sheet(&sid, &owned_name))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -67,7 +67,7 @@ impl WorkbookSheets {
         new_order: Vec<String>,
     ) -> Result<MutationResult, ComputeApiError> {
         self.dispatch
-            .call_engine(move |e| e.reorder_sheets(new_order).map(|(_, r)| r))
+            .call_engine(move |e| e.reorder_sheets(new_order))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -94,7 +94,7 @@ impl WorkbookSheets {
     ) -> Result<MutationResult, ComputeApiError> {
         let sid = *sheet_id;
         self.dispatch
-            .call_engine(move |e| e.set_sheet_hidden(&sid, hidden).map(|(_, r)| r))
+            .call_engine(move |e| e.set_sheet_hidden(&sid, hidden))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -107,7 +107,7 @@ impl WorkbookSheets {
         let sid = *sheet_id;
         let owned_color = color.map(|c| c.to_owned());
         self.dispatch
-            .call_engine(move |e| e.set_tab_color(&sid, owned_color).map(|(_, r)| r))
+            .call_engine(move |e| e.set_tab_color(&sid, owned_color))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -119,7 +119,7 @@ impl WorkbookSheets {
     ) -> Result<MutationResult, ComputeApiError> {
         let sid = *sheet_id;
         self.dispatch
-            .call_engine(move |e| e.move_sheet(&sid, new_index).map(|(_, r)| r))
+            .call_engine(move |e| e.move_sheet(&sid, new_index))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -144,10 +144,7 @@ impl WorkbookSheets {
         let owned_key = key.to_owned();
         let owned_value = value.to_owned();
         self.dispatch
-            .call_engine(move |e| {
-                e.set_sheet_setting(&sid, &owned_key, &owned_value)
-                    .map(|(_, r)| r)
-            })
+            .call_engine(move |e| e.set_sheet_setting(&sid, &owned_key, &owned_value))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 }

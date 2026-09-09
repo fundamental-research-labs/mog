@@ -1,9 +1,9 @@
-use compute_layout_index::LayoutIndex;
+use compute_layout_index::PixelLayout;
 use domain_types::units::Pixels;
 
 /// Verify the position-dimension invariant for all rows in [0, count).
 /// pos(i+1) == pos(i) + height(i)
-pub fn assert_row_position_invariant(li: &LayoutIndex) {
+pub fn assert_row_position_invariant(li: &PixelLayout) {
     for i in 0..li.row_count() {
         let lhs = li.get_row_position(i + 1);
         let rhs = Pixels(li.get_row_position(i).0 + li.get_row_height(i).0);
@@ -21,7 +21,7 @@ pub fn assert_row_position_invariant(li: &LayoutIndex) {
 }
 
 /// Verify the position-dimension invariant for all cols in [0, count).
-pub fn assert_col_position_invariant(li: &LayoutIndex) {
+pub fn assert_col_position_invariant(li: &PixelLayout) {
     for j in 0..li.col_count() {
         let lhs = li.get_col_position(j + 1);
         let rhs = Pixels(li.get_col_position(j).0 + li.get_col_width(j).0);

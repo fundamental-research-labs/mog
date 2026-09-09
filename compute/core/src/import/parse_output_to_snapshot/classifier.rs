@@ -424,16 +424,15 @@ fn flush_run(
     // Encode payload.
     let payload = encode_payload(encoding, run, cells);
 
-    // Build row_ids for the range.
-    let row_ids: Vec<RowId> = run
-        .iter()
-        .map(|entry| {
-            sheet_row_axis
-                .identity_at(sheet_id, entry.row)
-                .expect("range row within allocated axis")
-        })
-        .collect();
-
+    let rows = crate::cells::range_view::RangeOffsets::from_positions(
+        sheet_id,
+        sheet_row_axis,
+        run.iter().map(|entry| entry.row),
+    );
+    let cols =
+        crate::cells::range_view::RangeOffsets::from_positions(sheet_id, sheet_col_axis, [col]);
+    let row_axis = rows.axis_ref();
+    let col_axis = cols.axis_ref();
     let col_id = sheet_col_axis
         .identity_at(sheet_id, col)
         .expect("range column within allocated axis");
@@ -442,17 +441,27 @@ fn flush_run(
         range_id: allocator.alloc_range_id(),
         kind: RangeKind::Data,
         anchor: RangeAnchor::Elastic {
-            start_row: row_ids[0],
-            end_row: *row_ids.last().unwrap(),
+            start_row: sheet_row_axis.identity_at(sheet_id, run[0].row).unwrap(),
+            end_row: sheet_row_axis
+                .identity_at(sheet_id, run.last().unwrap().row)
+                .unwrap(),
             start_col: col_id,
             end_col: col_id,
         },
         encoding,
         payload,
-        row_axis: None,
-        col_axis: None,
-        row_ids,
-        col_ids: vec![col_id],
+        row_ids: if row_axis.is_none() {
+            rows.ordered_ids()
+        } else {
+            Vec::new()
+        },
+        col_ids: if col_axis.is_none() {
+            cols.ordered_ids()
+        } else {
+            Vec::new()
+        },
+        row_axis,
+        col_axis,
     };
 
     range_data.push(rd);
@@ -476,7 +485,7 @@ fn is_empty_null_cell(cell: &CellData) -> bool {
 // ---------------------------------------------------------------------------
 
 fn encode_payload(encoding: PayloadEncoding, run: &[RunEntry], cells: &[CellData]) -> Vec<u8> {
-    crate::mirror::range_view::encode_values(
+    crate::cells::range_view::encode_values(
         encoding,
         run.iter().map(|entry| &cells[entry.cell_idx].value),
     )

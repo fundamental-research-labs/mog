@@ -1,11 +1,11 @@
-//! Native format ranges: the sheet mirror owns overlays and its derived spatial indexes.
+//! Native format ranges: the sheet store owns overlays and its derived spatial indexes.
 use super::merge::{merge_formats, normalize_format_patch};
-use crate::mirror::SheetMirror;
+use crate::cells::SheetStore;
 use cell_types::{IdAllocator, RangeId};
 use domain_types::CellFormat;
 
 pub fn add_format_range(
-    mirror: &mut SheetMirror,
+    cell_store: &mut SheetStore,
     range_id: RangeId,
     sr: u32,
     sc: u32,
@@ -13,30 +13,34 @@ pub fn add_format_range(
     ec: u32,
     format: &CellFormat,
 ) {
-    crate::storage::engine::history::metadata::capture_format_range(mirror, range_id);
-    mirror.format_ranges.retain(|range| range.id != range_id);
-    mirror.format_ranges.push(crate::mirror::FormatRange {
+    crate::storage::engine::history::metadata::capture_format_range(cell_store, range_id);
+    cell_store
+        .format_ranges
+        .retain(|range| range.id != range_id);
+    cell_store.format_ranges.push(crate::cells::FormatRange {
         id: range_id,
         precedence: range_id.as_u128(),
-        layer: crate::mirror::FormatRangeLayer::Inherited,
+        layer: crate::cells::FormatRangeLayer::Inherited,
         start_row: sr,
         start_col: sc,
         end_row: er,
         end_col: ec,
     });
-    mirror
+    cell_store
         .range_format_cache
         .insert(range_id, normalize_format_patch(format));
-    mirror.range_xlsx_style_id_cache.remove(&range_id);
-    mirror.rebuild_format_range_spatial_index();
+    cell_store.range_xlsx_style_id_cache.remove(&range_id);
+    cell_store.rebuild_format_range_spatial_index();
 }
 
-pub fn remove_format_range(mirror: &mut SheetMirror, range_id: RangeId) {
-    crate::storage::engine::history::metadata::capture_format_range(mirror, range_id);
-    mirror.format_ranges.retain(|range| range.id != range_id);
-    mirror.range_format_cache.remove(&range_id);
-    mirror.range_xlsx_style_id_cache.remove(&range_id);
-    mirror.rebuild_format_range_spatial_index();
+pub fn remove_format_range(cell_store: &mut SheetStore, range_id: RangeId) {
+    crate::storage::engine::history::metadata::capture_format_range(cell_store, range_id);
+    cell_store
+        .format_ranges
+        .retain(|range| range.id != range_id);
+    cell_store.range_format_cache.remove(&range_id);
+    cell_store.range_xlsx_style_id_cache.remove(&range_id);
+    cell_store.rebuild_format_range_spatial_index();
 }
 
 #[derive(Clone)]
@@ -47,8 +51,8 @@ struct ColFormatRangeRecord {
     format: CellFormat,
     xlsx_style_id: Option<u32>,
 }
-fn column_records(mirror: &SheetMirror) -> Vec<ColFormatRangeRecord> {
-    mirror
+fn column_records(cell_store: &SheetStore) -> Vec<ColFormatRangeRecord> {
+    cell_store
         .col_format_ranges
         .iter()
         .filter_map(|range| {
@@ -56,25 +60,28 @@ fn column_records(mirror: &SheetMirror) -> Vec<ColFormatRangeRecord> {
                 id: range.id,
                 start_col: range.start_col,
                 end_col: range.end_col,
-                format: mirror.col_format_range_cache.get(&range.id)?.clone(),
-                xlsx_style_id: mirror.col_range_xlsx_style_id_cache.get(&range.id).copied(),
+                format: cell_store.col_format_range_cache.get(&range.id)?.clone(),
+                xlsx_style_id: cell_store
+                    .col_range_xlsx_style_id_cache
+                    .get(&range.id)
+                    .copied(),
             })
         })
         .collect()
 }
-fn install_column_record(mirror: &mut SheetMirror, record: ColFormatRangeRecord) {
-    mirror
+fn install_column_record(cell_store: &mut SheetStore, record: ColFormatRangeRecord) {
+    cell_store
         .col_format_ranges
-        .push(crate::mirror::ColumnFormatRange {
+        .push(crate::cells::ColumnFormatRange {
             id: record.id,
             start_col: record.start_col,
             end_col: record.end_col,
         });
-    mirror
+    cell_store
         .col_format_range_cache
         .insert(record.id, record.format);
     if let Some(index) = record.xlsx_style_id {
-        mirror
+        cell_store
             .col_range_xlsx_style_id_cache
             .insert(record.id, index);
     }
@@ -147,7 +154,7 @@ fn column_range_segments_for_patch(
 }
 
 pub(crate) fn set_col_format_range_with_alloc(
-    mirror: &mut SheetMirror,
+    cell_store: &mut SheetStore,
     start_col: u32,
     end_col: u32,
     format: &CellFormat,
@@ -156,26 +163,28 @@ pub(crate) fn set_col_format_range_with_alloc(
     if start_col > end_col {
         return;
     }
-    let records = column_records(mirror);
+    let records = column_records(cell_store);
     let mut segments = column_range_segments_for_patch(
         &records,
         start_col,
         end_col,
         &normalize_format_patch(format),
     );
-    clear_col_format_ranges_in_span(mirror, start_col, end_col, id_alloc);
+    clear_col_format_ranges_in_span(cell_store, start_col, end_col, id_alloc);
     for segment in &mut segments {
         segment.id = id_alloc.next_range_id();
     }
     for segment in segments {
-        crate::storage::engine::history::metadata::capture_column_format_range(mirror, segment.id);
-        install_column_record(mirror, segment);
+        crate::storage::engine::history::metadata::capture_column_format_range(
+            cell_store, segment.id,
+        );
+        install_column_record(cell_store, segment);
     }
-    mirror.rebuild_col_format_range_spatial_index();
+    cell_store.rebuild_col_format_range_spatial_index();
 }
 
 pub(crate) fn clear_col_format_ranges_in_span(
-    mirror: &mut SheetMirror,
+    cell_store: &mut SheetStore,
     start_col: u32,
     end_col: u32,
     id_alloc: &IdAllocator,
@@ -183,29 +192,29 @@ pub(crate) fn clear_col_format_ranges_in_span(
     if start_col > end_col {
         return;
     }
-    let records = column_records(mirror);
-    if mirror.history.is_active() {
+    let records = column_records(cell_store);
+    if cell_store.history.is_active() {
         for record in &records {
             if record.end_col >= start_col && record.start_col <= end_col {
                 crate::storage::engine::history::metadata::capture_column_format_range(
-                    mirror, record.id,
+                    cell_store, record.id,
                 );
             }
         }
     }
-    mirror.col_format_ranges.clear();
-    mirror.col_format_range_cache.clear();
-    mirror.col_range_xlsx_style_id_cache.clear();
+    cell_store.col_format_ranges.clear();
+    cell_store.col_format_range_cache.clear();
+    cell_store.col_range_xlsx_style_id_cache.clear();
     for record in records {
         if record.end_col < start_col || record.start_col > end_col {
-            install_column_record(mirror, record);
+            install_column_record(cell_store, record);
             continue;
         }
         let mut original_id_available = true;
         if record.start_col < start_col {
             let mut left = record.clone();
             left.end_col = start_col - 1;
-            install_column_record(mirror, left);
+            install_column_record(cell_store, left);
             original_id_available = false;
         }
         if record.end_col > end_col {
@@ -213,14 +222,14 @@ pub(crate) fn clear_col_format_ranges_in_span(
             if !original_id_available {
                 right.id = id_alloc.next_range_id();
                 crate::storage::engine::history::metadata::capture_column_format_range(
-                    mirror, right.id,
+                    cell_store, right.id,
                 );
             }
             right.start_col = end_col + 1;
-            install_column_record(mirror, right);
+            install_column_record(cell_store, right);
         }
     }
-    mirror.rebuild_col_format_range_spatial_index();
+    cell_store.rebuild_col_format_range_spatial_index();
 }
 
 /// Transient import records, consumed once when building the native sheet.
@@ -257,7 +266,7 @@ impl ImportedFormats {
                 .collect(),
         }
     }
-    pub(crate) fn install(&self, mirror: &mut SheetMirror, palette: &[CellFormat]) {
+    pub(crate) fn install(&self, cell_store: &mut SheetStore, palette: &[CellFormat]) {
         for (id, range) in &self.columns {
             if range.start_col > range.end_col {
                 continue;
@@ -266,7 +275,7 @@ impl ImportedFormats {
                 continue;
             };
             install_column_record(
-                mirror,
+                cell_store,
                 ColFormatRangeRecord {
                     id: *id,
                     start_col: range.start_col,
@@ -285,32 +294,32 @@ impl ImportedFormats {
                 .cloned()
                 .unwrap_or_default();
             super::cascade::materialize_imported_cell_xf_defaults(&mut format);
-            mirror.format_ranges.push(crate::mirror::FormatRange {
+            cell_store.format_ranges.push(crate::cells::FormatRange {
                 id: range.range_id,
                 precedence: range.range_id.as_u128(),
-                layer: crate::mirror::FormatRangeLayer::Inherited,
+                layer: crate::cells::FormatRangeLayer::Inherited,
                 start_row: range.start_row,
                 start_col: range.start_col,
                 end_row: range.end_row,
                 end_col: range.end_col,
             });
-            mirror.range_format_cache.insert(range.range_id, format);
-            mirror
+            cell_store.range_format_cache.insert(range.range_id, format);
+            cell_store
                 .range_xlsx_style_id_cache
                 .insert(range.range_id, range.style_id);
         }
-        mirror.rebuild_format_range_spatial_index();
-        mirror.rebuild_col_format_range_spatial_index();
+        cell_store.rebuild_format_range_spatial_index();
+        cell_store.rebuild_col_format_range_spatial_index();
     }
 }
 
 /// Owned copy of the source sheet's native format ranges, with new RangeIds.
 pub(crate) struct CopiedFormats {
-    rectangles: Vec<(crate::mirror::FormatRange, CellFormat, Option<u32>)>,
+    rectangles: Vec<(crate::cells::FormatRange, CellFormat, Option<u32>)>,
     columns: Vec<ColFormatRangeRecord>,
 }
 impl CopiedFormats {
-    pub(crate) fn from_sheet(source: &SheetMirror, allocator: &IdAllocator) -> Self {
+    pub(crate) fn from_sheet(source: &SheetStore, allocator: &IdAllocator) -> Self {
         let rectangles = source
             .format_ranges
             .iter()
@@ -331,26 +340,26 @@ impl CopiedFormats {
             columns,
         }
     }
-    pub(crate) fn install(self, mirror: &mut SheetMirror) {
+    pub(crate) fn install(self, cell_store: &mut SheetStore) {
         for (range, format, style) in self.rectangles {
-            mirror.format_ranges.push(range);
-            mirror.range_format_cache.insert(range.id, format);
+            cell_store.format_ranges.push(range);
+            cell_store.range_format_cache.insert(range.id, format);
             if let Some(style) = style {
-                mirror.range_xlsx_style_id_cache.insert(range.id, style);
+                cell_store.range_xlsx_style_id_cache.insert(range.id, style);
             }
         }
         for column in self.columns {
-            install_column_record(mirror, column);
+            install_column_record(cell_store, column);
         }
-        mirror.rebuild_format_range_spatial_index();
-        mirror.rebuild_col_format_range_spatial_index();
+        cell_store.rebuild_format_range_spatial_index();
+        cell_store.rebuild_col_format_range_spatial_index();
     }
 }
 
 /// Clear selected overlay fields in a rectangle, then add an optional direct patch.
 /// Splits only intersecting metadata rectangles; cell values and identities are untouched.
 pub(crate) fn patch_native_format_ranges(
-    mirror: &mut SheetMirror,
+    cell_store: &mut SheetStore,
     bounds: cell_types::SheetRange,
     clear: impl Fn(&CellFormat) -> Result<CellFormat, value_types::ComputeError>,
     direct: Option<&CellFormat>,
@@ -358,12 +367,12 @@ pub(crate) fn patch_native_format_ranges(
 ) -> Result<(), value_types::ComputeError> {
     let mut records = Vec::new();
     let mut max_precedence = 0;
-    for range in &mirror.format_ranges {
+    for range in &cell_store.format_ranges {
         max_precedence = max_precedence.max(range.precedence);
-        let Some(format) = mirror.range_format_cache.get(&range.id) else {
+        let Some(format) = cell_store.range_format_cache.get(&range.id) else {
             continue;
         };
-        let style = mirror.range_xlsx_style_id_cache.get(&range.id).copied();
+        let style = cell_store.range_xlsx_style_id_cache.get(&range.id).copied();
         let original = cell_types::SheetRange::new(
             range.start_row,
             range.start_col,
@@ -394,14 +403,14 @@ pub(crate) fn patch_native_format_ranges(
     if let Some(format) = direct.filter(|format| **format != CellFormat::default()) {
         let id = allocator.next_range_id();
         records.push((
-            crate::mirror::FormatRange {
+            crate::cells::FormatRange {
                 id,
                 precedence: max_precedence.checked_add(1).ok_or_else(|| {
                     value_types::ComputeError::InvalidInput {
                         message: "Format overlay precedence exhausted".into(),
                     }
                 })?,
-                layer: crate::mirror::FormatRangeLayer::Direct,
+                layer: crate::cells::FormatRangeLayer::Direct,
                 start_row: bounds.start_row(),
                 start_col: bounds.start_col(),
                 end_row: bounds.end_row(),
@@ -411,43 +420,47 @@ pub(crate) fn patch_native_format_ranges(
             None,
         ));
     }
-    if mirror.history.is_active() {
+    if cell_store.history.is_active() {
         let next: rustc_hash::FxHashMap<_, _> = records
             .iter()
             .map(|(range, format, style)| (range.id, (range, format, style)))
             .collect();
-        for range in &mirror.format_ranges {
+        for range in &cell_store.format_ranges {
             if next.get(&range.id).is_none_or(|(r, f, s)| {
                 **r != *range
-                    || mirror.range_format_cache.get(&range.id) != Some(*f)
-                    || mirror.range_xlsx_style_id_cache.get(&range.id) != s.as_ref()
+                    || cell_store.range_format_cache.get(&range.id) != Some(*f)
+                    || cell_store.range_xlsx_style_id_cache.get(&range.id) != s.as_ref()
             }) {
-                crate::storage::engine::history::metadata::capture_format_range(mirror, range.id);
+                crate::storage::engine::history::metadata::capture_format_range(
+                    cell_store, range.id,
+                );
             }
         }
         let existing: rustc_hash::FxHashSet<_> =
-            mirror.format_ranges.iter().map(|r| r.id).collect();
+            cell_store.format_ranges.iter().map(|r| r.id).collect();
         for (range, _, _) in &records {
             if !existing.contains(&range.id) {
-                crate::storage::engine::history::metadata::capture_format_range(mirror, range.id);
+                crate::storage::engine::history::metadata::capture_format_range(
+                    cell_store, range.id,
+                );
             }
         }
     }
-    mirror.format_ranges.clear();
-    mirror.range_format_cache.clear();
-    mirror.range_xlsx_style_id_cache.clear();
+    cell_store.format_ranges.clear();
+    cell_store.range_format_cache.clear();
+    cell_store.range_xlsx_style_id_cache.clear();
     for (range, format, style) in records {
-        mirror.range_format_cache.insert(range.id, format);
+        cell_store.range_format_cache.insert(range.id, format);
         if let Some(style) = style {
-            mirror.range_xlsx_style_id_cache.insert(range.id, style);
+            cell_store.range_xlsx_style_id_cache.insert(range.id, style);
         }
-        mirror.format_ranges.push(range);
+        cell_store.format_ranges.push(range);
     }
-    mirror.rebuild_format_range_spatial_index();
+    cell_store.rebuild_format_range_spatial_index();
     Ok(())
 }
 
-fn set_rectangle(range: &mut crate::mirror::FormatRange, bounds: cell_types::SheetRange) {
+fn set_rectangle(range: &mut crate::cells::FormatRange, bounds: cell_types::SheetRange) {
     range.start_row = bounds.start_row();
     range.start_col = bounds.start_col();
     range.end_row = bounds.end_row();

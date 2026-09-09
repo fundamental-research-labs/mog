@@ -1,5 +1,4 @@
 use cell_types::{CellId, SheetId};
-use compute_document::identity::GridIndex;
 use domain_types::domain::hyperlink::{
     Hyperlink, HyperlinkTargetKind, hyperlink_target_kind_for_target,
 };
@@ -55,7 +54,7 @@ pub fn remove_hyperlink(storage: &mut WorkbookStorage, sheet_id: &SheetId, cell_
 pub fn clear_hyperlinks_in_range(
     storage: &mut WorkbookStorage,
     sheet_id: &SheetId,
-    grid: &GridIndex,
+    grid: &crate::cells::SheetStore,
     start_row: u32,
     start_col: u32,
     end_row: u32,
@@ -77,8 +76,7 @@ pub fn clear_hyperlinks_in_range(
 pub(crate) fn reanchor_before_delete(
     storage: &mut WorkbookStorage,
     sheet_id: SheetId,
-    grid: &mut GridIndex,
-    mirror: &mut crate::mirror::CellMirror,
+    cell_store: &mut crate::cells::CellStore,
     at: u32,
     count: u32,
     rows: bool,
@@ -94,8 +92,7 @@ pub(crate) fn reanchor_before_delete(
         let Some((start, end)) = super::super::anchor_ranges::reanchor_corners(
             link.start_id,
             link.end_id.unwrap_or(link.start_id),
-            grid,
-            mirror,
+            cell_store,
             sheet_id,
             at,
             count,

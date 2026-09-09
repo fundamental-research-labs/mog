@@ -121,14 +121,14 @@ pub(in crate::storage::engine) fn prepare_table_filter_delete(
 
 pub(in crate::storage::engine) fn finish_prepared_table_filter_delete(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     prepared: PreparedTableFilterDelete,
     visibility_transitions: &[(u32, bool)],
 ) -> MutationResult {
     imported_filters::apply_visibility_transitions(
         stores,
-        mirror,
+        cell_store,
         sheet_id,
         visibility_transitions,
     );

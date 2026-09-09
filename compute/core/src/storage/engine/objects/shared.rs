@@ -1,16 +1,8 @@
 use crate::storage::engine::history::metadata::capture_sheet_entry;
-pub(super) fn empty_patches() -> Vec<u8> {
-    compute_wire::mutation::serialize_multi_viewport_patches(&[])
-}
-
-pub(super) fn with_empty_patches<T>(result: T) -> (Vec<u8>, T) {
-    (empty_patches(), result)
-}
-
 /// Register only the sparse identities needed by changed drawing anchors.
 pub(super) fn sync_floating_anchors(
     stores: &mut crate::storage::engine::stores::EngineStores,
-    mirror: &mut crate::mirror::CellMirror,
+    cell_store: &mut crate::cells::CellStore,
     sheet_id: &cell_types::SheetId,
     result: &mut crate::snapshot::MutationResult,
     reanchor: bool,
@@ -42,7 +34,7 @@ pub(super) fn sync_floating_anchors(
                         .map(CellId::from_raw)
                         .or_else(|| CellId::from_uuid_str(id).ok())
                 })
-                .and_then(|id| stores.grid_indexes.get(sheet_id)?.cell_position(&id))
+                .and_then(|id| cell_store.get_sheet(sheet_id)?.cell_position(&id))
                 .unwrap_or(fallback)
         };
         let start = resolve(
@@ -54,15 +46,15 @@ pub(super) fn sync_floating_anchors(
             .end_row
             .zip(common.anchor.end_col)
             .map(|position| resolve(&common.to_anchor_cell_id, position));
-        let start_id = crate::storage::engine::services::cell_editing::ensure_cell_id_mirrored(
-            stores, mirror, sheet_id, start.0, start.1,
+        let start_id = crate::storage::engine::services::cell_editing::ensure_cell_id(
+            stores, cell_store, sheet_id, start.0, start.1,
         )
         .ok_or_else(|| value_types::ComputeError::SheetNotFound {
             sheet_id: sheet_id.to_uuid_string(),
         })?;
         let end_id = end.and_then(|end| {
-            crate::storage::engine::services::cell_editing::ensure_cell_id_mirrored(
-                stores, mirror, sheet_id, end.0, end.1,
+            crate::storage::engine::services::cell_editing::ensure_cell_id(
+                stores, cell_store, sheet_id, end.0, end.1,
             )
         });
         capture_sheet_entry!(
@@ -89,16 +81,16 @@ pub(super) fn sync_floating_anchors(
             object.common.anchor.end_col = Some(end.1);
         }
         let json = serde_json::to_value(object.as_ref()).ok();
-        change.bounds = json.as_ref().and_then(|json| {
-            floating_objects::compute_object_pixel_bounds(
-                stores.grid_indexes.get(sheet_id),
-                stores.layout_indexes.get(sheet_id),
-                json,
-            )
-        });
         if change.data.is_some() {
             change.data = Some(object.as_ref().clone());
         }
+        change.bounds = json.as_ref().and_then(|json| {
+            floating_objects::compute_object_pixel_bounds(
+                cell_store.get_sheet(sheet_id),
+                stores.pixel_layout(sheet_id).as_deref(),
+                json,
+            )
+        });
     }
     Ok(())
 }

@@ -9,11 +9,11 @@ use super::{
     CellValidationResult, ColumnSchema, EnforcementLevel, IdentityRangeSchemaRef, SchemaType,
     columns, range_geometry, range_view,
 };
+use crate::cells::CellStore;
 use crate::eval::sync_block_on;
-use crate::eval_bridge::MirrorContext;
-use crate::eval_bridge::mirror_access::PendingCellOverride;
+use crate::eval_bridge::EvalContext;
+use crate::eval_bridge::store_access::PendingCellOverride;
 use crate::identity::GridIndex;
-use crate::mirror::CellMirror;
 use crate::scheduler::ast_transform::shift_ast_for_cf;
 
 pub(in crate::storage::sheet) fn str_to_cell_value(s: &str) -> value_types::CellValue {
@@ -44,13 +44,13 @@ fn schema_has_formula_constraint(schema: &ColumnSchema) -> bool {
 fn validate_with_optional_formula(
     cell_value: &CellValue,
     schema: &ColumnSchema,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
     anchor_row: u32,
     anchor_col: u32,
-    grid_index: Option<&GridIndex>,
+    _grid_index: Option<&GridIndex>,
 ) -> compute_schema::types::ValidationResult {
     if !schema_has_formula_constraint(schema) {
         return compute_schema::validator::validate(cell_value, schema);
@@ -58,8 +58,8 @@ fn validate_with_optional_formula(
 
     let row_delta = row as i64 - anchor_row as i64;
     let col_delta = col as i64 - anchor_col as i64;
-    let current_cell_id = grid_index
-        .and_then(|g| g.cell_id_at(row, col))
+    let current_cell_id = cell_store
+        .resolve_cell_id(sheet_id, SheetPos::new(row, col))
         .unwrap_or_else(|| CellId::from_raw(0));
     let pending = PendingCellOverride {
         sheet: *sheet_id,
@@ -70,8 +70,8 @@ fn validate_with_optional_formula(
     compute_schema::validator::validate_with_formula_evaluator(cell_value, schema, |formula_str| {
         let spanned = parse_formula(formula_str, None).ok()?;
         let shifted = shift_ast_for_cf(&spanned.node, row_delta, col_delta, *sheet_id);
-        let ctx = MirrorContext::with_pending_override(
-            mirror,
+        let ctx = EvalContext::with_pending_override(
+            cell_store,
             current_cell_id,
             *sheet_id,
             pending.clone(),
@@ -103,7 +103,7 @@ fn validation_cell_value_to_string(value: &CellValue) -> Option<String> {
 fn resolve_enum_source_values(
     source: &IdentityRangeSchemaRef,
     default_sheet_id: &SheetId,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
 ) -> Option<Vec<String>> {
     let sheet_id = match source.sheet_id.as_deref() {
         Some(raw) => SheetId::from_uuid_str(raw).ok()?,
@@ -117,7 +117,7 @@ fn resolve_enum_source_values(
     let mut values = Vec::new();
     for row in min_row..=max_row {
         for col in min_col..=max_col {
-            if let Some(value) = mirror.get_cell_value_at(&sheet_id, SheetPos::new(row, col))
+            if let Some(value) = cell_store.get_cell_value_at(&sheet_id, SheetPos::new(row, col))
                 && let Some(display) = validation_cell_value_to_string(value)
             {
                 values.push(display);
@@ -130,7 +130,7 @@ fn resolve_enum_source_values(
 fn with_resolved_enum_source(
     schema: &ColumnSchema,
     sheet_id: &SheetId,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
 ) -> ColumnSchema {
     let mut schema = schema.clone();
     let Some(constraints) = schema.constraints.as_mut() else {
@@ -138,7 +138,7 @@ fn with_resolved_enum_source(
     };
     if constraints.enum_values.is_none()
         && let Some(source) = constraints.enum_source.as_ref()
-        && let Some(values) = resolve_enum_source_values(source, sheet_id, mirror)
+        && let Some(values) = resolve_enum_source_values(source, sheet_id, cell_store)
     {
         constraints.enum_values = Some(values);
     }
@@ -148,7 +148,7 @@ fn with_resolved_enum_source(
 fn validate_with_resolved_constraints(
     cell_value: &CellValue,
     schema: &ColumnSchema,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -156,11 +156,11 @@ fn validate_with_resolved_constraints(
     anchor_col: u32,
     grid_index: Option<&GridIndex>,
 ) -> compute_schema::types::ValidationResult {
-    let resolved_schema = with_resolved_enum_source(schema, sheet_id, mirror);
+    let resolved_schema = with_resolved_enum_source(schema, sheet_id, cell_store);
     validate_with_optional_formula(
         cell_value,
         &resolved_schema,
-        mirror,
+        cell_store,
         sheet_id,
         row,
         col,
@@ -177,7 +177,7 @@ pub(crate) fn validate_cell_value(
     col: u32,
     value: &str,
     grid_index: Option<&GridIndex>,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
 ) -> CellValidationResult {
     let cell_value = str_to_cell_value(value);
 
@@ -185,7 +185,7 @@ pub(crate) fn validate_cell_value(
         let result = validate_with_resolved_constraints(
             &cell_value,
             &cs,
-            mirror,
+            cell_store,
             sheet_id,
             row,
             col,
@@ -236,7 +236,7 @@ pub(crate) fn validate_cell_value(
         let result = validate_with_resolved_constraints(
             &cell_value,
             &col_schema,
-            mirror,
+            cell_store,
             sheet_id,
             row,
             col,
@@ -295,7 +295,7 @@ pub(crate) fn validate_cell_value_against_data_validations(
     col: u32,
     value: &CellValue,
     grid_index: Option<&GridIndex>,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
 ) -> DataValidationOutcome {
     let specs = super::get_validation_specs_for_sheet(storage, sheet_id);
 
@@ -322,7 +322,7 @@ pub(crate) fn validate_cell_value_against_data_validations(
         let result = validate_with_resolved_constraints(
             value,
             &col_schema,
-            mirror,
+            cell_store,
             sheet_id,
             row,
             col,

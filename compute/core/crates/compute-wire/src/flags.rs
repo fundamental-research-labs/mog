@@ -1,7 +1,6 @@
 //! Flag bit constants for [`super::types::ViewportRenderCell::flags`].
 //!
-//! These constants define the bitfield layout used in both the viewport
-//! binary transfer and the mutation binary transfer protocols.
+//! These constants define the bitfield layout used in viewport snapshots.
 //!
 //! # Cell flags layout (u16)
 //!
@@ -18,15 +17,6 @@
 //! Bit 11-15: reserved
 //! ```
 //!
-//! # Mutation header flags layout (u8)
-//!
-//! ```text
-//! Bit 0: MUT_HAS_PROJECTION_CHANGES
-//! Bit 1: MUT_HAS_ERRORS
-//! Bit 2: MUT_HAS_PALETTE
-//! Bit 3-7: reserved
-//! ```
-
 use value_types::CellValue;
 
 /// Error returned when converting a raw `u16` into a [`ValueType`] fails
@@ -163,17 +153,6 @@ pub const HAS_VALIDATION_ERROR: u16 = 0x200;
 pub const HAS_CF_EXTRAS: u16 = 0x400;
 /// Bit 11: cell has structured in-cell image metadata.
 pub const HAS_CELL_IMAGE: u16 = 0x800;
-
-// ---------------------------------------------------------------------------
-// Mutation header flags (u8 bitfield at header offset 10)
-// ---------------------------------------------------------------------------
-
-/// Bit 0: mutation contains projection (spill) changes.
-pub const MUT_HAS_PROJECTION_CHANGES: u8 = 0x01;
-/// Bit 1: mutation contains cell errors.
-pub const MUT_HAS_ERRORS: u8 = 0x02;
-/// Bit 2: mutation contains a format palette delta.
-pub const MUT_HAS_PALETTE: u8 = 0x04;
 
 // ---------------------------------------------------------------------------
 // Tests

@@ -15,7 +15,7 @@
 //!    unless workbook iterative calculation is enabled.
 
 use cell_types::{CellId, SheetId, SheetPos};
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{CellData, CellEdit, RecalcResult, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellError, CellValue, FiniteF64};
@@ -112,13 +112,13 @@ pub fn build_iterative_snapshot(
 
 pub fn set(
     core: &mut ComputeCore,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     si: u32,
     row: u32,
     col: u32,
     input: &str,
 ) -> RecalcResult {
-    core.set_cell(mirror, &sid(si), cid(si, row, col), row, col, input)
+    core.set_cell(cell_store, &sid(si), cid(si, row, col), row, col, input)
         .expect("set_cell failed")
 }
 
@@ -168,10 +168,10 @@ pub fn has_any_circular_error(result: &RecalcResult) -> bool {
 // Mirror read helpers — extract values with panics for type mismatches
 // ---------------------------------------------------------------------------
 
-/// Read f64 from mirror. Panics if cell is not a Number.
-pub fn read_mirror_number(mirror: &CellMirror, si: u32, row: u32, col: u32) -> f64 {
+/// Read f64 from cell_store. Panics if cell is not a Number.
+pub fn read_store_number(cell_store: &CellStore, si: u32, row: u32, col: u32) -> f64 {
     let cell_id = CellId::from_uuid_str(&cell_uuid(si, row, col)).unwrap();
-    match mirror.get_cell_value(&cell_id) {
+    match cell_store.get_cell_value(&cell_id) {
         Some(CellValue::Number(n)) => n.get(),
         other => panic!(
             "Mirror ({},{},{}) expected Number, got {:?}",
@@ -180,20 +180,20 @@ pub fn read_mirror_number(mirror: &CellMirror, si: u32, row: u32, col: u32) -> f
     }
 }
 
-/// Read CellValue from mirror. Returns None if cell doesn't exist.
-pub fn read_mirror_value(mirror: &CellMirror, si: u32, row: u32, col: u32) -> Option<CellValue> {
+/// Read CellValue from cell_store. Returns None if cell doesn't exist.
+pub fn read_store_value(cell_store: &CellStore, si: u32, row: u32, col: u32) -> Option<CellValue> {
     let cell_id = CellId::from_uuid_str(&cell_uuid(si, row, col)).unwrap();
-    mirror.get_cell_value(&cell_id).cloned()
+    cell_store.get_cell_value(&cell_id).cloned()
 }
 
 // ---------------------------------------------------------------------------
 // Exact-value assertions — these are the ONLY assertions tests should use
 // ---------------------------------------------------------------------------
 
-/// Assert mirror cell == exact Number. Tolerance: 1e-6.
-pub fn assert_mirror_number(mirror: &CellMirror, si: u32, row: u32, col: u32, expected: f64) {
+/// Assert cell_store cell == exact Number. Tolerance: 1e-6.
+pub fn assert_store_number(cell_store: &CellStore, si: u32, row: u32, col: u32, expected: f64) {
     let cell_id = CellId::from_uuid_str(&cell_uuid(si, row, col)).unwrap();
-    match mirror.get_cell_value(&cell_id) {
+    match cell_store.get_cell_value(&cell_id) {
         Some(CellValue::Number(n)) => {
             assert!(
                 (n.get() - expected).abs() < 1e-6,
@@ -216,9 +216,9 @@ pub fn assert_mirror_number(mirror: &CellMirror, si: u32, row: u32, col: u32, ex
     }
 }
 
-/// Assert mirror cell == Number within a specified tolerance.
-pub fn assert_mirror_number_tol(
-    mirror: &CellMirror,
+/// Assert cell_store cell == Number within a specified tolerance.
+pub fn assert_store_number_tol(
+    cell_store: &CellStore,
     si: u32,
     row: u32,
     col: u32,
@@ -226,7 +226,7 @@ pub fn assert_mirror_number_tol(
     tol: f64,
 ) {
     let cell_id = CellId::from_uuid_str(&cell_uuid(si, row, col)).unwrap();
-    match mirror.get_cell_value(&cell_id) {
+    match cell_store.get_cell_value(&cell_id) {
         Some(CellValue::Number(n)) => {
             assert!(
                 (n.get() - expected).abs() < tol,
@@ -250,10 +250,16 @@ pub fn assert_mirror_number_tol(
     }
 }
 
-/// Assert mirror cell == specific CellError variant.
-pub fn assert_mirror_error(mirror: &CellMirror, si: u32, row: u32, col: u32, expected: CellError) {
+/// Assert cell_store cell == specific CellError variant.
+pub fn assert_store_error(
+    cell_store: &CellStore,
+    si: u32,
+    row: u32,
+    col: u32,
+    expected: CellError,
+) {
     let cell_id = CellId::from_uuid_str(&cell_uuid(si, row, col)).unwrap();
-    match mirror.get_cell_value(&cell_id) {
+    match cell_store.get_cell_value(&cell_id) {
         Some(CellValue::Error(err, _)) => assert_eq!(
             *err, expected,
             "Mirror ({},{},{}) expected {:?}, got {:?}",
@@ -266,10 +272,10 @@ pub fn assert_mirror_error(mirror: &CellMirror, si: u32, row: u32, col: u32, exp
     }
 }
 
-/// Assert mirror cell is Null (empty).
-pub fn assert_mirror_null(mirror: &CellMirror, si: u32, row: u32, col: u32) {
+/// Assert cell_store cell is Null (empty).
+pub fn assert_store_null(cell_store: &CellStore, si: u32, row: u32, col: u32) {
     let cell_id = CellId::from_uuid_str(&cell_uuid(si, row, col)).unwrap();
-    match mirror.get_cell_value(&cell_id) {
+    match cell_store.get_cell_value(&cell_id) {
         Some(CellValue::Null) | None => {} // OK
         Some(other) => panic!(
             "Mirror ({},{},{}) expected Null, got {:?}",
@@ -285,9 +291,9 @@ pub fn assert_mirror_null(mirror: &CellMirror, si: u32, row: u32, col: u32) {
 /// Assert a projected/spill-target value by sheet position. Uses
 /// `get_cell_value_at` which checks col_data (where materialized projection
 /// values live) rather than requiring a registered CellId.
-pub fn assert_pos_number(mirror: &CellMirror, si: u32, row: u32, col: u32, expected: f64) {
+pub fn assert_pos_number(cell_store: &CellStore, si: u32, row: u32, col: u32, expected: f64) {
     let sheet_id = sid(si);
-    match mirror.get_cell_value_at(&sheet_id, SheetPos::new(row, col)) {
+    match cell_store.get_cell_value_at(&sheet_id, SheetPos::new(row, col)) {
         Some(CellValue::Number(n)) => {
             assert!(
                 (n.get() - expected).abs() < 1e-6,
@@ -312,7 +318,7 @@ pub fn assert_pos_number(mirror: &CellMirror, si: u32, row: u32, col: u32, expec
 
 /// Assert a projected value by position within a specified tolerance.
 pub fn assert_pos_number_tol(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     si: u32,
     row: u32,
     col: u32,
@@ -320,7 +326,7 @@ pub fn assert_pos_number_tol(
     tol: f64,
 ) {
     let sheet_id = sid(si);
-    match mirror.get_cell_value_at(&sheet_id, SheetPos::new(row, col)) {
+    match cell_store.get_cell_value_at(&sheet_id, SheetPos::new(row, col)) {
         Some(CellValue::Number(n)) => {
             assert!(
                 (n.get() - expected).abs() < tol,
@@ -345,9 +351,9 @@ pub fn assert_pos_number_tol(
 }
 
 /// Assert a position is Null (empty) — for cleared spill targets.
-pub fn assert_pos_null(mirror: &CellMirror, si: u32, row: u32, col: u32) {
+pub fn assert_pos_null(cell_store: &CellStore, si: u32, row: u32, col: u32) {
     let sheet_id = sid(si);
-    match mirror.get_cell_value_at(&sheet_id, SheetPos::new(row, col)) {
+    match cell_store.get_cell_value_at(&sheet_id, SheetPos::new(row, col)) {
         Some(CellValue::Null) | None => {} // OK
         Some(other) => panic!(
             "Pos ({},{},{}) expected Null, got {:?}",
@@ -356,10 +362,10 @@ pub fn assert_pos_null(mirror: &CellMirror, si: u32, row: u32, col: u32) {
     }
 }
 
-/// Assert mirror cell is Text with exact content.
-pub fn assert_mirror_text(mirror: &CellMirror, si: u32, row: u32, col: u32, expected: &str) {
+/// Assert cell_store cell is Text with exact content.
+pub fn assert_store_text(cell_store: &CellStore, si: u32, row: u32, col: u32, expected: &str) {
     let cell_id = CellId::from_uuid_str(&cell_uuid(si, row, col)).unwrap();
-    match mirror.get_cell_value(&cell_id) {
+    match cell_store.get_cell_value(&cell_id) {
         Some(CellValue::Text(t)) => assert_eq!(
             &**t, expected,
             "Mirror ({},{},{}) expected text {:?}, got {:?}",
@@ -372,19 +378,19 @@ pub fn assert_mirror_text(mirror: &CellMirror, si: u32, row: u32, col: u32, expe
     }
 }
 
-/// Check if mirror cell is #REF! error (incremental cycle detection).
-pub fn is_ref_error(mirror: &CellMirror, si: u32, row: u32, col: u32) -> bool {
+/// Check if cell_store cell is #REF! error (incremental cycle detection).
+pub fn is_ref_error(cell_store: &CellStore, si: u32, row: u32, col: u32) -> bool {
     let cell_id = CellId::from_uuid_str(&cell_uuid(si, row, col)).unwrap();
     matches!(
-        mirror.get_cell_value(&cell_id),
+        cell_store.get_cell_value(&cell_id),
         Some(CellValue::Error(CellError::Ref, _))
     )
 }
 
 /// Assert that a cell is any Error variant.
-pub fn assert_mirror_is_any_error(mirror: &CellMirror, si: u32, row: u32, col: u32) {
+pub fn assert_store_is_any_error(cell_store: &CellStore, si: u32, row: u32, col: u32) {
     let cell_id = CellId::from_uuid_str(&cell_uuid(si, row, col)).unwrap();
-    let val = mirror.get_cell_value(&cell_id);
+    let val = cell_store.get_cell_value(&cell_id);
     assert!(
         matches!(val, Some(CellValue::Error(_, _))),
         "Mirror ({},{},{}) expected Error, got {:?}",
@@ -426,17 +432,17 @@ pub fn assert_result_number(result: &RecalcResult, si: u32, row: u32, col: u32, 
 /// Numbers. We verify the formula relationship approximately holds (within `slack`).
 /// E.g. if A1's formula is "=B1+1", verify that A1 ≈ B1+1.
 pub fn assert_cycle_self_consistent(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     si: u32,
     // (row, col) of the cell to check
     row: u32,
     col: u32,
-    // Expected value as a function of other mirror values
+    // Expected value as a function of other cell_store values
     expected_fn: impl FnOnce() -> f64,
     slack: f64,
     context: &str,
 ) {
-    let actual = read_mirror_number(mirror, si, row, col);
+    let actual = read_store_number(cell_store, si, row, col);
     let expected = expected_fn();
     assert!(
         (actual - expected).abs() < slack,

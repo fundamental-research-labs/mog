@@ -4,7 +4,7 @@ mod stress_common;
 use stress_common::*;
 
 use cell_types::{CellId, SheetId};
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{CellData, CellEdit, RecalcResult, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellError, CellValue};
@@ -50,8 +50,8 @@ fn test_interest_income_circularity() {
     );
 
     let mut core = ComputeCore::default();
-    let mut mirror = CellMirror::default();
-    let _result = core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::default();
+    let _result = core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     // I = 975/0.995 ≈ 979.8994...
     let expected_income = 975.0 / 0.995;
@@ -60,9 +60,9 @@ fn test_interest_income_circularity() {
     // Int = D * 0.05
     let expected_interest = expected_debt * 0.05;
 
-    assert_mirror_number_tol(&mirror, 0, 0, 0, expected_income, 0.01); // A1: Income ≈ 979.90
-    assert_mirror_number_tol(&mirror, 0, 1, 0, expected_interest, 0.01); // A2: Interest ≈ 20.10
-    assert_mirror_number_tol(&mirror, 0, 2, 0, expected_debt, 0.01); // A3: Debt ≈ 402.01
+    assert_store_number_tol(&cell_store, 0, 0, 0, expected_income, 0.01); // A1: Income ≈ 979.90
+    assert_store_number_tol(&cell_store, 0, 1, 0, expected_interest, 0.01); // A2: Interest ≈ 20.10
+    assert_store_number_tol(&cell_store, 0, 2, 0, expected_debt, 0.01); // A3: Debt ≈ 402.01
 }
 
 /// Test 2: WACC/EV circular valuation.
@@ -98,28 +98,28 @@ fn test_wacc_ev_circularity() {
     );
 
     let mut core = ComputeCore::default();
-    let mut mirror = CellMirror::default();
-    let result = core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::default();
+    let result = core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     // From seed 0: A2=0 → A1=100/0=#DIV/0! → error propagates
     // OR the engine might handle this differently. Check actual outcome.
-    let a1_val = read_mirror_value(&mirror, 0, 0, 0);
-    let a2_val = read_mirror_value(&mirror, 0, 1, 0);
+    let a1_val = read_store_value(&cell_store, 0, 0, 0);
+    let a2_val = read_store_value(&cell_store, 0, 1, 0);
 
     match (&a1_val, &a2_val) {
         (Some(CellValue::Error(CellError::Div0, _)), _) => {
             // Error propagation path: A1=#DIV/0! because WACC starts at 0
-            assert_mirror_error(&mirror, 0, 0, 0, CellError::Div0);
+            assert_store_error(&cell_store, 0, 0, 0, CellError::Div0);
         }
         (Some(CellValue::Number(_)), Some(CellValue::Number(_))) => {
             // Convergence path: engine found a way to converge
             // Verify: W ≈ 0.09524, E ≈ 1050
-            assert_mirror_number_tol(&mirror, 0, 0, 0, 1050.0, 1.0); // EV
-            assert_mirror_number_tol(&mirror, 0, 1, 0, 0.09524, 0.001); // WACC
+            assert_store_number_tol(&cell_store, 0, 0, 0, 1050.0, 1.0); // EV
+            assert_store_number_tol(&cell_store, 0, 1, 0, 0.09524, 0.001); // WACC
         }
         _ => {
             // Any error is acceptable since seed 0 causes div-by-zero
-            assert_mirror_is_any_error(&mirror, 0, 0, 0);
+            assert_store_is_any_error(&cell_store, 0, 0, 0);
         }
     }
 
@@ -177,17 +177,17 @@ fn test_loan_amortization_circularity() {
     );
 
     let mut core = ComputeCore::default();
-    let mut mirror = CellMirror::default();
-    let _result = core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::default();
+    let _result = core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     // B = 100000/(1+k), P = B*k, PP=0, T=P
     let expected_bal = 100000.0 / (1.0 + k);
     let expected_pmt = expected_bal * k;
 
-    assert_mirror_number_tol(&mirror, 0, 0, 0, expected_pmt, 0.01); // A1: Payment ≈ 689.66
-    assert_mirror_number_tol(&mirror, 0, 1, 0, 0.0, 0.01); // A2: Prepayment = 0
-    assert_mirror_number_tol(&mirror, 0, 2, 0, expected_pmt, 0.01); // A3: TotalPmt ≈ 689.66
-    assert_mirror_number_tol(&mirror, 0, 3, 0, expected_bal, 0.01); // A4: NewBal ≈ 99310.34
+    assert_store_number_tol(&cell_store, 0, 0, 0, expected_pmt, 0.01); // A1: Payment ≈ 689.66
+    assert_store_number_tol(&cell_store, 0, 1, 0, 0.0, 0.01); // A2: Prepayment = 0
+    assert_store_number_tol(&cell_store, 0, 2, 0, expected_pmt, 0.01); // A3: TotalPmt ≈ 689.66
+    assert_store_number_tol(&cell_store, 0, 3, 0, expected_bal, 0.01); // A4: NewBal ≈ 99310.34
 }
 
 /// Test 4: Tax/pretax circular.
@@ -219,15 +219,15 @@ fn test_tax_pretax_circularity() {
     );
 
     let mut core = ComputeCore::default();
-    let mut mirror = CellMirror::default();
-    let _result = core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::default();
+    let _result = core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     // Tax = 900/1.3 = 692.30769..., PreTax = 3000 - Tax = 2307.69230...
     let expected_tax = 900.0 / 1.3;
     let expected_pretax = 3000.0 - expected_tax;
 
-    assert_mirror_number_tol(&mirror, 0, 0, 0, expected_tax, 0.01); // A1: Tax ≈ 692.31
-    assert_mirror_number_tol(&mirror, 0, 1, 0, expected_pretax, 0.01); // A2: PreTax ≈ 2307.69
+    assert_store_number_tol(&cell_store, 0, 0, 0, expected_tax, 0.01); // A1: Tax ≈ 692.31
+    assert_store_number_tol(&cell_store, 0, 1, 0, expected_pretax, 0.01); // A2: PreTax ≈ 2307.69
 }
 
 /// Test 5: DCF terminal value with cross-sheet cycle.
@@ -299,8 +299,8 @@ fn test_dcf_terminal_value_circularity() {
     );
 
     let mut core = ComputeCore::default();
-    let mut mirror = CellMirror::default();
-    let _result = core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::default();
+    let _result = core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     // PV1 = 1000/1.10 = 909.0909...
     let pv1 = fcf / (1.0 + r);
@@ -313,11 +313,11 @@ fn test_dcf_terminal_value_circularity() {
     let term_val = mult * fcf / discount_sq;
 
     // Sheet2 is index 1
-    assert_mirror_number_tol(&mirror, 1, 0, 0, pv1, 0.01); // PV1 ≈ 909.09
-    assert_mirror_number_tol(&mirror, 1, 1, 0, pv2, 0.01); // PV2 ≈ 867.77
-    assert_mirror_number_tol(&mirror, 1, 2, 0, term_val, 1.0); // TermVal
-    assert_mirror_number_tol(&mirror, 1, 3, 0, ev, 1.0); // EV ≈ 10238
-    assert_mirror_number_tol(&mirror, 1, 4, 0, mult, 0.01); // Mult ≈ 10.24
+    assert_store_number_tol(&cell_store, 1, 0, 0, pv1, 0.01); // PV1 ≈ 909.09
+    assert_store_number_tol(&cell_store, 1, 1, 0, pv2, 0.01); // PV2 ≈ 867.77
+    assert_store_number_tol(&cell_store, 1, 2, 0, term_val, 1.0); // TermVal
+    assert_store_number_tol(&cell_store, 1, 3, 0, ev, 1.0); // EV ≈ 10238
+    assert_store_number_tol(&cell_store, 1, 4, 0, mult, 0.01); // Mult ≈ 10.24
 }
 
 /// Test 6: Bonus pool circular.
@@ -347,15 +347,15 @@ fn test_bonus_pool_circularity() {
     );
 
     let mut core = ComputeCore::default();
-    let mut mirror = CellMirror::default();
-    let _result = core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::default();
+    let _result = core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     // B = 400/1.1, P = 4000 - B
     let expected_bonus = 400.0 / 1.1;
     let expected_profit = 4000.0 - expected_bonus;
 
-    assert_mirror_number_tol(&mirror, 0, 0, 0, expected_bonus, 0.01); // ≈ 363.64
-    assert_mirror_number_tol(&mirror, 0, 1, 0, expected_profit, 0.01); // ≈ 3636.36
+    assert_store_number_tol(&cell_store, 0, 0, 0, expected_bonus, 0.01); // ≈ 363.64
+    assert_store_number_tol(&cell_store, 0, 1, 0, expected_profit, 0.01); // ≈ 3636.36
 }
 
 /// Test 7: Multi-year forecast with AVERAGE cycle.
@@ -394,8 +394,8 @@ fn test_multi_year_average_cycle() {
     );
 
     let mut core = ComputeCore::default();
-    let mut mirror = CellMirror::default();
-    let _result = core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::default();
+    let _result = core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     // S = 431.0125 / 3.937975 ≈ 109.454
     let expected_s = 431.0125 / 3.937975;
@@ -403,18 +403,18 @@ fn test_multi_year_average_cycle() {
     let expected_f3 = 110.25 + 0.0205 * expected_s;
     let expected_f4 = 115.7625 + 0.031525 * expected_s;
 
-    assert_mirror_number(&mirror, 0, 0, 0, 100.0); // A1: F1
-    assert_mirror_number_tol(&mirror, 0, 1, 0, expected_f2, 0.01); // A2: F2
-    assert_mirror_number_tol(&mirror, 0, 2, 0, expected_f3, 0.01); // A3: F3
-    assert_mirror_number_tol(&mirror, 0, 3, 0, expected_f4, 0.01); // A4: F4
-    assert_mirror_number_tol(&mirror, 0, 4, 0, expected_s, 0.01); // A5: F5
+    assert_store_number(&cell_store, 0, 0, 0, 100.0); // A1: F1
+    assert_store_number_tol(&cell_store, 0, 1, 0, expected_f2, 0.01); // A2: F2
+    assert_store_number_tol(&cell_store, 0, 2, 0, expected_f3, 0.01); // A3: F3
+    assert_store_number_tol(&cell_store, 0, 3, 0, expected_f4, 0.01); // A4: F4
+    assert_store_number_tol(&cell_store, 0, 4, 0, expected_s, 0.01); // A5: F5
 
     // Self-consistency: F5 = AVERAGE(F1,F2,F3,F4)
-    let f1 = read_mirror_number(&mirror, 0, 0, 0);
-    let f2 = read_mirror_number(&mirror, 0, 1, 0);
-    let f3 = read_mirror_number(&mirror, 0, 2, 0);
-    let f4 = read_mirror_number(&mirror, 0, 3, 0);
-    let f5 = read_mirror_number(&mirror, 0, 4, 0);
+    let f1 = read_store_number(&cell_store, 0, 0, 0);
+    let f2 = read_store_number(&cell_store, 0, 1, 0);
+    let f3 = read_store_number(&cell_store, 0, 2, 0);
+    let f4 = read_store_number(&cell_store, 0, 3, 0);
+    let f5 = read_store_number(&cell_store, 0, 4, 0);
     let avg = (f1 + f2 + f3 + f4) / 4.0;
     assert!(
         (f5 - avg).abs() < 0.01,
@@ -456,17 +456,17 @@ fn test_working_capital_revenue_cycle() {
     );
 
     let mut core = ComputeCore::default();
-    let mut mirror = CellMirror::default();
-    let _result = core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::default();
+    let _result = core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     // R = 900/0.575
     let expected_rev = 900.0 / 0.575;
     let expected_wc = expected_rev * 0.15;
     let expected_inv = 0.85 * expected_rev - 200.0;
 
-    assert_mirror_number_tol(&mirror, 0, 0, 0, expected_rev, 0.01); // ≈ 1565.22
-    assert_mirror_number_tol(&mirror, 0, 1, 0, expected_wc, 0.01); // ≈ 234.78
-    assert_mirror_number_tol(&mirror, 0, 2, 0, expected_inv, 0.01); // ≈ 1130.43
+    assert_store_number_tol(&cell_store, 0, 0, 0, expected_rev, 0.01); // ≈ 1565.22
+    assert_store_number_tol(&cell_store, 0, 1, 0, expected_wc, 0.01); // ≈ 234.78
+    assert_store_number_tol(&cell_store, 0, 2, 0, expected_inv, 0.01); // ≈ 1130.43
 }
 
 /// Test 9: Depreciation/Capex/Revenue cycle.
@@ -504,8 +504,8 @@ fn test_depreciation_capex_cycle() {
     );
 
     let mut core = ComputeCore::default();
-    let mut mirror = CellMirror::default();
-    let _result = core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::default();
+    let _result = core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     // R = 982.5/0.951
     let expected_rev = 982.5 / 0.951;
@@ -513,10 +513,10 @@ fn test_depreciation_capex_cycle() {
     let expected_depr = expected_capex * 0.1 + 50.0;
     let expected_ebit = expected_rev - expected_depr - 300.0;
 
-    assert_mirror_number_tol(&mirror, 0, 0, 0, expected_rev, 0.01); // ≈ 1033.12
-    assert_mirror_number_tol(&mirror, 0, 1, 0, expected_capex, 0.01); // ≈ 206.62
-    assert_mirror_number_tol(&mirror, 0, 2, 0, expected_depr, 0.01); // ≈ 70.66
-    assert_mirror_number_tol(&mirror, 0, 3, 0, expected_ebit, 0.01); // ≈ 662.46
+    assert_store_number_tol(&cell_store, 0, 0, 0, expected_rev, 0.01); // ≈ 1033.12
+    assert_store_number_tol(&cell_store, 0, 1, 0, expected_capex, 0.01); // ≈ 206.62
+    assert_store_number_tol(&cell_store, 0, 2, 0, expected_depr, 0.01); // ≈ 70.66
+    assert_store_number_tol(&cell_store, 0, 3, 0, expected_ebit, 0.01); // ≈ 662.46
 }
 
 /// Test 10: Share dilution / EPS (treasury stock method).
@@ -555,23 +555,23 @@ fn test_share_dilution_eps_treasury_stock() {
     );
 
     let mut core = ComputeCore::default();
-    let mut mirror = CellMirror::default();
-    let _result = core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::default();
+    let _result = core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     // Check if we get numbers (seed 0 → A4=0 → A1=10000/0=#DIV/0!)
     // Same div-by-zero seed issue as test 2.
-    let a1_val = read_mirror_value(&mirror, 0, 0, 0);
+    let a1_val = read_store_value(&cell_store, 0, 0, 0);
     match &a1_val {
         Some(CellValue::Number(_)) => {
             // P = 12500/1500 = 8.3333..., DS = 1200, TSM = 200, V = 500
-            assert_mirror_number_tol(&mirror, 0, 0, 0, 12500.0 / 1500.0, 0.01); // Price ≈ 8.333
-            assert_mirror_number_tol(&mirror, 0, 1, 0, 500.0, 0.01); // Vested = 500
-            assert_mirror_number_tol(&mirror, 0, 2, 0, 200.0, 0.01); // TSM = 200
-            assert_mirror_number_tol(&mirror, 0, 3, 0, 1200.0, 0.01); // DS = 1200
+            assert_store_number_tol(&cell_store, 0, 0, 0, 12500.0 / 1500.0, 0.01); // Price ≈ 8.333
+            assert_store_number_tol(&cell_store, 0, 1, 0, 500.0, 0.01); // Vested = 500
+            assert_store_number_tol(&cell_store, 0, 2, 0, 200.0, 0.01); // TSM = 200
+            assert_store_number_tol(&cell_store, 0, 3, 0, 1200.0, 0.01); // DS = 1200
         }
         _ => {
             // Seed 0 causes div-by-zero in A1=NI/DS where DS starts at 0
-            assert_mirror_is_any_error(&mirror, 0, 0, 0);
+            assert_store_is_any_error(&cell_store, 0, 0, 0);
         }
     }
 
@@ -588,34 +588,34 @@ fn test_agent_builds_financial_model() {
     let snap = build_iterative_snapshot(vec![("Sheet1", 10, 10, vec![])], 200, 0.001);
 
     let mut core = ComputeCore::default();
-    let mut mirror = CellMirror::default();
-    let _result = core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::default();
+    let _result = core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     // Step 1: Set Revenue = 5000 at B1
-    let _r = set(&mut core, &mut mirror, 0, 0, 1, "5000");
-    assert_mirror_number(&mirror, 0, 0, 1, 5000.0);
+    let _r = set(&mut core, &mut cell_store, 0, 0, 1, "5000");
+    assert_store_number(&cell_store, 0, 0, 1, 5000.0);
 
     // Step 2: Set COGS = 2000 at B2
-    let _r = set(&mut core, &mut mirror, 0, 1, 1, "2000");
-    assert_mirror_number(&mirror, 0, 1, 1, 2000.0);
+    let _r = set(&mut core, &mut cell_store, 0, 1, 1, "2000");
+    assert_store_number(&cell_store, 0, 1, 1, 2000.0);
 
     // Step 3: Set TaxRate = 0.3 at B3
-    let _r = set(&mut core, &mut mirror, 0, 2, 1, "0.3");
-    assert_mirror_number(&mirror, 0, 2, 1, 0.3);
+    let _r = set(&mut core, &mut cell_store, 0, 2, 1, "0.3");
+    assert_store_number(&cell_store, 0, 2, 1, 0.3);
 
     // Step 4: Set PreTax formula (no cycle yet, Tax is empty/0)
     // PreTax(A2) = Revenue - COGS - Tax(A1)
-    let _r = set(&mut core, &mut mirror, 0, 1, 0, "=B1-B2-A1");
+    let _r = set(&mut core, &mut cell_store, 0, 1, 0, "=B1-B2-A1");
     // A1 is 0 (empty), so PreTax = 5000-2000-0 = 3000
-    assert_mirror_number(&mirror, 0, 1, 0, 3000.0);
+    assert_store_number(&cell_store, 0, 1, 0, 3000.0);
 
     // Step 5: Set Tax formula — creates circular ref via incremental path
     // Tax(A1) = PreTax(A2) * TaxRate(B3)
-    let _r = set(&mut core, &mut mirror, 0, 0, 0, "=A2*B3");
+    let _r = set(&mut core, &mut cell_store, 0, 0, 0, "=A2*B3");
 
     // Incremental set_cell detects the cycle → #REF! error
     // OR the engine resolves it. Check actual behavior.
-    let a1_val = read_mirror_value(&mirror, 0, 0, 0);
+    let a1_val = read_store_value(&cell_store, 0, 0, 0);
     match &a1_val {
         Some(CellValue::Error(CellError::Ref, _)) => {
             // Cycle detected in incremental mode -> #REF!
@@ -640,7 +640,7 @@ fn test_agent_builds_financial_model() {
                     },
                 ),
             ];
-            let _r2 = core.set_cells(&mut mirror, &edits, true).unwrap();
+            let _r2 = core.set_cells(&mut cell_store, &edits, true).unwrap();
         }
         _ => {
             // Already converged through some path
@@ -651,40 +651,40 @@ fn test_agent_builds_financial_model() {
     // Tax = 0.3*(3000-Tax) → 1.3*Tax = 900 → Tax = 692.31, PreTax = 2307.69
     let expected_tax = 900.0 / 1.3;
     let expected_pretax = 3000.0 - expected_tax;
-    assert_mirror_number_tol(&mirror, 0, 0, 0, expected_tax, 0.01);
-    assert_mirror_number_tol(&mirror, 0, 1, 0, expected_pretax, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 0, expected_tax, 0.01);
+    assert_store_number_tol(&cell_store, 0, 1, 0, expected_pretax, 0.01);
 
     // Steps 6-10: Change Revenue incrementally
     for (_step, rev) in [(6000.0), (7000.0), (8000.0), (9000.0), (10000.0)]
         .iter()
         .enumerate()
     {
-        let _r = set(&mut core, &mut mirror, 0, 0, 1, &rev.to_string());
-        assert_mirror_number(&mirror, 0, 0, 1, *rev);
+        let _r = set(&mut core, &mut cell_store, 0, 0, 1, &rev.to_string());
+        assert_store_number(&cell_store, 0, 0, 1, *rev);
 
         // Tax = 0.3*(Rev-2000-Tax) → 1.3*Tax = 0.3*(Rev-2000) → Tax = 0.3*(Rev-2000)/1.3
         let expected_t = 0.3 * (*rev - 2000.0) / 1.3;
         let expected_p = *rev - 2000.0 - expected_t;
-        assert_mirror_number_tol(&mirror, 0, 0, 0, expected_t, 0.01);
-        assert_mirror_number_tol(&mirror, 0, 1, 0, expected_p, 0.01);
+        assert_store_number_tol(&cell_store, 0, 0, 0, expected_t, 0.01);
+        assert_store_number_tol(&cell_store, 0, 1, 0, expected_p, 0.01);
     }
 
     // Steps 11-15: Change COGS incrementally
     for cogs in [2500.0, 3000.0, 3500.0, 4000.0, 4500.0] {
-        let _r = set(&mut core, &mut mirror, 0, 1, 1, &cogs.to_string());
-        assert_mirror_number(&mirror, 0, 1, 1, cogs);
+        let _r = set(&mut core, &mut cell_store, 0, 1, 1, &cogs.to_string());
+        assert_store_number(&cell_store, 0, 1, 1, cogs);
 
         let rev = 10000.0; // last set Revenue
         let expected_t = 0.3 * (rev - cogs) / 1.3;
         let expected_p = rev - cogs - expected_t;
-        assert_mirror_number_tol(&mirror, 0, 0, 0, expected_t, 0.01);
-        assert_mirror_number_tol(&mirror, 0, 1, 0, expected_p, 0.01);
+        assert_store_number_tol(&cell_store, 0, 0, 0, expected_t, 0.01);
+        assert_store_number_tol(&cell_store, 0, 1, 0, expected_p, 0.01);
     }
 
     // Steps 16-20: Change TaxRate incrementally
     for rate in [0.25, 0.20, 0.15, 0.10, 0.05] {
-        let _r = set(&mut core, &mut mirror, 0, 2, 1, &rate.to_string());
-        assert_mirror_number_tol(&mirror, 0, 2, 1, rate, 1e-6);
+        let _r = set(&mut core, &mut cell_store, 0, 2, 1, &rate.to_string());
+        assert_store_number_tol(&cell_store, 0, 2, 1, rate, 1e-6);
 
         let rev = 10000.0;
         let cogs = 4500.0;
@@ -692,8 +692,8 @@ fn test_agent_builds_financial_model() {
         // Tax = rate*(gross-Tax) → Tax(1+rate) = rate*gross → Tax = rate*gross/(1+rate)
         let expected_t = rate * gross / (1.0 + rate);
         let expected_p = gross - expected_t;
-        assert_mirror_number_tol(&mirror, 0, 0, 0, expected_t, 0.01);
-        assert_mirror_number_tol(&mirror, 0, 1, 0, expected_p, 0.01);
+        assert_store_number_tol(&cell_store, 0, 0, 0, expected_t, 0.01);
+        assert_store_number_tol(&cell_store, 0, 1, 0, expected_p, 0.01);
     }
 }
 
@@ -713,35 +713,35 @@ fn test_progressive_formula_replacement() {
     )]);
 
     let mut core = ComputeCore::default();
-    let mut mirror = CellMirror::default();
-    let _result = core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::default();
+    let _result = core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
-    assert_mirror_number(&mirror, 0, 0, 0, 100.0);
-    assert_mirror_number(&mirror, 0, 1, 0, 200.0);
+    assert_store_number(&cell_store, 0, 0, 0, 100.0);
+    assert_store_number(&cell_store, 0, 1, 0, 200.0);
 
     // Replace A2 with A1*3+50
-    let _r = set(&mut core, &mut mirror, 0, 1, 0, "=A1*3+50");
-    assert_mirror_number(&mirror, 0, 1, 0, 350.0);
+    let _r = set(&mut core, &mut cell_store, 0, 1, 0, "=A1*3+50");
+    assert_store_number(&cell_store, 0, 1, 0, 350.0);
 
     // Replace A2 with IF(A1>50, A1^2, A1/2)
-    let _r = set(&mut core, &mut mirror, 0, 1, 0, "=IF(A1>50,A1^2,A1/2)");
+    let _r = set(&mut core, &mut cell_store, 0, 1, 0, "=IF(A1>50,A1^2,A1/2)");
     // 100>50 is true, so A2 = 100^2 = 10000
-    assert_mirror_number(&mirror, 0, 1, 0, 10000.0);
+    assert_store_number(&cell_store, 0, 1, 0, 10000.0);
 
     // Change A1 to 30 — now condition is false
-    let _r = set(&mut core, &mut mirror, 0, 0, 0, "30");
+    let _r = set(&mut core, &mut cell_store, 0, 0, 0, "30");
     // 30>50 is false, so A2 = 30/2 = 15
-    assert_mirror_number(&mirror, 0, 1, 0, 15.0);
+    assert_store_number(&cell_store, 0, 1, 0, 15.0);
 
     // Replace A2 with SQRT(A1)*10+A1
-    let _r = set(&mut core, &mut mirror, 0, 1, 0, "=SQRT(A1)*10+A1");
+    let _r = set(&mut core, &mut cell_store, 0, 1, 0, "=SQRT(A1)*10+A1");
     // SQRT(30)*10+30 = 5.4772*10+30 = 84.772
-    assert_mirror_number_tol(&mirror, 0, 1, 0, 30.0_f64.sqrt() * 10.0 + 30.0, 1e-6);
+    assert_store_number_tol(&cell_store, 0, 1, 0, 30.0_f64.sqrt() * 10.0 + 30.0, 1e-6);
 
     // Replace with LN
-    let _r = set(&mut core, &mut mirror, 0, 1, 0, "=LN(A1)*100");
+    let _r = set(&mut core, &mut cell_store, 0, 1, 0, "=LN(A1)*100");
     // LN(30)*100 = 3.40119*100 = 340.119
-    assert_mirror_number_tol(&mirror, 0, 1, 0, 30.0_f64.ln() * 100.0, 1e-6);
+    assert_store_number_tol(&cell_store, 0, 1, 0, 30.0_f64.ln() * 100.0, 1e-6);
 }
 
 /// Test 13: Sensitivity table around circular model.
@@ -773,8 +773,8 @@ fn test_sensitivity_table_sweep() {
     )]);
 
     let mut core = ComputeCore::default();
-    let mut mirror = CellMirror::default();
-    let _result = core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::default();
+    let _result = core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     let cogs = 500.0;
     for (row, rev) in [
@@ -786,11 +786,11 @@ fn test_sensitivity_table_sweep() {
     ] {
         // Tax = 0.3*(Rev-500)/1.3
         let expected_tax = 0.3 * (rev - cogs) / 1.3;
-        assert_mirror_number_tol(&mirror, 0, row, 3, expected_tax, 1e-6);
+        assert_store_number_tol(&cell_store, 0, row, 3, expected_tax, 1e-6);
     }
 
     // Change COGS → all D-column values should update
-    let _r = set(&mut core, &mut mirror, 0, 0, 1, "800");
+    let _r = set(&mut core, &mut cell_store, 0, 0, 1, "800");
     let cogs = 800.0;
     for (row, rev) in [
         (0u32, 1000.0),
@@ -800,7 +800,7 @@ fn test_sensitivity_table_sweep() {
         (4, 5000.0),
     ] {
         let expected_tax = 0.3 * (rev - cogs) / 1.3;
-        assert_mirror_number_tol(&mirror, 0, row, 3, expected_tax, 1e-6);
+        assert_store_number_tol(&cell_store, 0, row, 3, expected_tax, 1e-6);
     }
 }
 
@@ -828,31 +828,31 @@ fn test_undo_revert_exact_restoration() {
     );
 
     let mut core = ComputeCore::default();
-    let mut mirror = CellMirror::default();
-    let _result = core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::default();
+    let _result = core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     // Original values: B = 400/1.1, P = 4000 - B
     let orig_bonus = 400.0 / 1.1;
     let orig_profit = 4000.0 - orig_bonus;
-    assert_mirror_number_tol(&mirror, 0, 0, 0, orig_bonus, 0.01);
-    assert_mirror_number_tol(&mirror, 0, 1, 0, orig_profit, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 0, orig_bonus, 0.01);
+    assert_store_number_tol(&cell_store, 0, 1, 0, orig_profit, 0.01);
 
     // Save precise values
-    let bonus_before = read_mirror_number(&mirror, 0, 0, 0);
-    let profit_before = read_mirror_number(&mirror, 0, 1, 0);
+    let bonus_before = read_store_number(&cell_store, 0, 0, 0);
+    let profit_before = read_store_number(&cell_store, 0, 1, 0);
 
     // Change Revenue to 20000
-    let _r = set(&mut core, &mut mirror, 0, 0, 1, "20000");
+    let _r = set(&mut core, &mut cell_store, 0, 0, 1, "20000");
     // New: gross = 20000-6000 = 14000, B = 0.1*14000/1.1 = 1272.73, P = 12727.27
     let new_bonus = 0.1 * 14000.0 / 1.1;
-    assert_mirror_number_tol(&mirror, 0, 0, 0, new_bonus, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 0, new_bonus, 0.01);
 
     // Revert Revenue back to 10000
-    let _r = set(&mut core, &mut mirror, 0, 0, 1, "10000");
+    let _r = set(&mut core, &mut cell_store, 0, 0, 1, "10000");
 
     // Must return to EXACT original values (within convergence tolerance)
-    let bonus_after = read_mirror_number(&mirror, 0, 0, 0);
-    let profit_after = read_mirror_number(&mirror, 0, 1, 0);
+    let bonus_after = read_store_number(&cell_store, 0, 0, 0);
+    let profit_after = read_store_number(&cell_store, 0, 1, 0);
     assert!(
         (bonus_after - bonus_before).abs() < 0.01,
         "Bonus after revert {} != before {}",
@@ -890,25 +890,25 @@ fn test_fifty_edit_stress() {
     );
 
     let mut core = ComputeCore::default();
-    let mut mirror = CellMirror::default();
-    let _result = core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::default();
+    let _result = core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     let cogs = 500.0;
 
     // 50 revenue edits: 1000, 2000, ..., 50000
     for i in 1..=50 {
         let rev = i as f64 * 1000.0;
-        let _r = set(&mut core, &mut mirror, 0, 0, 1, &rev.to_string());
+        let _r = set(&mut core, &mut cell_store, 0, 0, 1, &rev.to_string());
 
         // Verify B1 updated
-        assert_mirror_number(&mirror, 0, 0, 1, rev);
+        assert_store_number(&cell_store, 0, 0, 1, rev);
 
         // Closed-form: Tax = 0.3*(Rev-COGS) / 1.3, PreTax = (Rev-COGS) - Tax
         let gross = rev - cogs;
         let expected_tax = 0.3 * gross / 1.3;
         let expected_pretax = gross - expected_tax;
 
-        assert_mirror_number_tol(&mirror, 0, 0, 0, expected_tax, 0.01);
-        assert_mirror_number_tol(&mirror, 0, 1, 0, expected_pretax, 0.01);
+        assert_store_number_tol(&cell_store, 0, 0, 0, expected_tax, 0.01);
+        assert_store_number_tol(&cell_store, 0, 1, 0, expected_pretax, 0.01);
     }
 }

@@ -253,8 +253,8 @@ fn engine_semantic_reader_reads_formula_domain_objects_and_refs() {
             }),
         ],
     );
-    after.with_storage_and_mirror_for_test(|_storage, mirror| {
-        mirror.apply_edit(
+    after.with_storage_and_store_for_test(|_storage, cell_store| {
+        cell_store.apply_edit(
             &sheet_id,
             formula_cell,
             cell_types::SheetPos::new(2, 2),
@@ -392,15 +392,15 @@ fn engine_semantic_reader_uses_native_formula_identity() {
     .expect("engine");
     let sheet_id = engine.storage().sheet_order()[0];
 
-    engine.with_storage_and_mirror_for_test(|_storage, mirror| {
-        mirror.apply_edit(
+    engine.with_storage_and_store_for_test(|_storage, cell_store| {
+        cell_store.apply_edit(
             &sheet_id,
             formula_cell_id,
             cell_types::SheetPos::new(0, 1),
             CellValue::number(3.0),
             None,
         );
-        assert!(mirror.set_formula(&formula_cell_id, Some(formula_identity)));
+        assert!(cell_store.set_formula(&formula_cell_id, Some(formula_identity)));
     });
 
     let state = engine.read_semantic_workbook_state().expect("state");
@@ -454,12 +454,13 @@ fn engine_semantic_reader_accepts_formula_identity_from_public_position_write() 
         .expect("public formula write");
 
     let formula_cell_id = engine
-        .grid_index(&sheet_id)
+        .cell_store()
+        .get_sheet(&sheet_id)
         .unwrap()
-        .cell_id_at(0, 1)
+        .cell_id_at(cell_types::SheetPos::new(0, 1))
         .expect("formula cell id");
     let formula_text = engine.compute().get_formula(&formula_cell_id);
-    let identity = engine.mirror().get_formula(&formula_cell_id);
+    let identity = engine.cell_store().get_formula(&formula_cell_id);
     let state = engine.read_semantic_workbook_state().expect("state");
     let formula_cell = &state.sheets["sheet#0"].cells["cell:sheet#0:r0:c1"];
 

@@ -7,9 +7,9 @@ fn copying_imported_sheet_allocates_unique_id_and_preserves_custom_views() {
         include_bytes!("../../../file-io/xlsx/parser/tests/data/custom-view-printer-settings.xlsx");
     let (mut engine, _) = ComputeEngine::from_xlsx_bytes(input).unwrap();
     let source = *engine
-        .mirror()
+        .cell_store()
         .sheet_ids()
-        .find(|id| engine.mirror().get_sheet(id).unwrap().name == "Summary")
+        .find(|id| engine.cell_store().get_sheet(id).unwrap().name == "Summary")
         .unwrap();
     engine.copy_sheet(&source, "Copy").unwrap();
     let exported = engine.export_to_xlsx_bytes().unwrap();

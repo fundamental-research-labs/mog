@@ -1,6 +1,6 @@
 //! RangeStore — unified data scheduling layer for range materialization.
 //!
-//! Sits between the mirror (raw data) and evaluation contexts, providing
+//! Sits between the cell store (raw data) and evaluation contexts, providing
 //! a strategy-agnostic cache for materialized range data. Supports three modes:
 //! - Eager: bulk pre-materialize via DataPlan (topo/ready-queue)
 //! - Lazy: on-demand materialization on first access (demand)
@@ -16,6 +16,8 @@ use formula_types::{CellRef, RangeType};
 use value_types::{CellArray, CellValue};
 
 use crate::eval::context::traits::DataSource;
+use crate::eval::engine::aggregate_range::direct_aggregate_range;
+use crate::eval::functions::dense_aggregate::AggregateOp;
 
 #[cfg(feature = "native")]
 use crate::eval::lookup::index_cache::LookupIndexCache;
@@ -104,7 +106,9 @@ pub fn materialize_range(
 pub type DataPlan = FxHashSet<RangeKey>;
 
 /// Scan a set of cells' ASTs to determine which ranges they'll need.
-/// Returns a DataPlan containing all statically-resolvable range references.
+/// Returns a DataPlan of statically-resolvable ranges to materialize eagerly.
+/// Direct aggregate ranges can be consumed through column access, with arrays
+/// still available on demand if evaluation falls back.
 ///
 /// Accepts `&FxHashMap<CellId, &ASTNode>` — the caller projects AST
 /// references out of whatever cache shape it uses (e.g. `AstEntry`),
@@ -137,7 +141,7 @@ pub fn collect_static_ranges_pub(
     collect_static_ranges(node, sheet_ctx, source, out);
 }
 
-/// Recursively walk an AST node and collect all statically-resolvable range references.
+/// Collect eager range requirements, independently of dependency extraction.
 fn collect_static_ranges(
     node: &ASTNode,
     sheet_ctx: Option<SheetId>,
@@ -159,6 +163,20 @@ struct StaticRangeCollector<'a> {
 }
 
 impl AstVisitor for StaticRangeCollector<'_> {
+    fn visit_function(&mut self, name: &str, args: &[ASTNode]) {
+        if AggregateOp::from_function_name(&name.to_ascii_uppercase()).is_some()
+            && direct_aggregate_range(args).is_some()
+        {
+            // The evaluator first tries numeric/borrowed column access. A
+            // fallback still obtains the array via RangeStore on demand. Other
+            // consumers of the same range continue to add it to the eager plan.
+            return;
+        }
+        for arg in args {
+            self.visit(arg);
+        }
+    }
+
     fn visit_range(&mut self, r: &compute_parser::RangeRef) {
         if let Some(key) = resolve_range_to_key(r, self.sheet_ctx, self.source) {
             self.out.insert(key);
@@ -215,7 +233,7 @@ fn resolve_range_to_key(
         _ => {}
     }
 
-    // Clamp to actual sheet dimensions (same as mirror_access.rs get_range_values)
+    // Clamp to actual sheet dimensions (same as store_access.rs get_range_values)
     let sheet_rows = source.sheet_rows(&s_sheet);
     let sheet_cols = source.sheet_cols(&s_sheet);
     if let (Some(rows), Some(cols)) = (sheet_rows, sheet_cols) {
@@ -328,12 +346,12 @@ impl RangeStore {
         }
     }
 
-    /// Look up a materialized range, or materialize it on-demand from the mirror.
+    /// Look up a materialized range, or materialize it on-demand from the cell store.
     ///
     /// Check order:
     /// 1. Pre-materialized map (populated before compute — zero sync cost)
     /// 2. On-demand cache (DashMap on native, RefCell<FxHashMap> on WASM)
-    /// 3. Cache miss: materialize from mirror and insert into on-demand cache
+    /// 3. Cache miss: materialize from cell_store and insert into on-demand cache
     pub fn get_or_materialize(&self, key: RangeKey, source: &dyn DataSource) -> Arc<CellArray> {
         // 1. Check pre-materialized (fast, no sync)
         if let Some(data) = self.pre_materialized.get(&key) {
@@ -612,3 +630,6 @@ impl Default for RangeStore {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -134,11 +134,11 @@ fn native_single_cell_validation() {
     set_range_schema(&mut storage, &sid, &rs).unwrap();
 
     // Cell A1 (0,0) should be validated.
-    let result = validate_cell_value(&storage, &sid, 0, 0, "5", Some(&gi), &empty_mirror());
+    let result = validate_cell_value(&storage, &sid, 0, 0, "5", Some(&gi), &empty_store());
     assert!(result.valid);
 
     // Cell A2 (1,0) should NOT be validated (outside single-cell range).
-    let result = validate_cell_value(&storage, &sid, 1, 0, "999", Some(&gi), &empty_mirror());
+    let result = validate_cell_value(&storage, &sid, 1, 0, "999", Some(&gi), &empty_store());
     assert!(result.valid);
     assert_eq!(result.enforcement, EnforcementLevel::None);
 }
@@ -194,7 +194,7 @@ fn native_first_match_semantics() {
 
     // Value 150 passes rule 2 (0-200) but fails rule 1 (0-100).
     // First-match semantics: rule 1 wins, result is FAIL with Strict enforcement.
-    let result = validate_cell_value(&storage, &sid, 0, 0, "150", Some(&gi), &empty_mirror());
+    let result = validate_cell_value(&storage, &sid, 0, 0, "150", Some(&gi), &empty_store());
     assert!(!result.valid);
     assert_eq!(result.enforcement, EnforcementLevel::Strict);
 
@@ -203,7 +203,7 @@ fn native_first_match_semantics() {
     rs1_updated.enforcement = Some(EnforcementLevel::Warning);
     update_range_schema(&mut storage, &sid, "rs-first", &rs1_updated).unwrap();
 
-    let result = validate_cell_value(&storage, &sid, 0, 0, "150", Some(&gi), &empty_mirror());
+    let result = validate_cell_value(&storage, &sid, 0, 0, "150", Some(&gi), &empty_store());
     assert!(!result.valid);
     assert_eq!(result.enforcement, EnforcementLevel::Warning);
 }

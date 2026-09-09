@@ -5,13 +5,13 @@
 //! pre-flight callout inside §3a:
 //!
 //! > Before the generator lands, the Track 3 owner writes a one-call
-//! > smoke test per family exercising *engine op → mirror read → engine
-//! > inverse → mirror read matches pre-state*. Nine smoke tests, one
+//! > smoke test per family exercising *engine op → cell_store read → engine
+//! > inverse → cell_store read matches pre-state*. Nine smoke tests, one
 //! > commit, no generator work yet.
 //!
 //! These tests are **not** regression guards on cell-value arithmetic —
 //! they pin the fact that each op family has a usable engine entry point,
-//! each inverse operates correctly at the mirror-read level, and post-
+//! each inverse operates correctly at the cell store-read level, and post-
 //! inverse state equals pre-state. S2 (§3b) will wire these into the walk
 //! generator; until then, a breakage here flags a regression in the
 //! engine-surface contract the walk harness plans to depend on.
@@ -136,10 +136,10 @@ fn smoke_snapshot_two_sheets() -> WorkbookSnapshot {
     }
 }
 
-/// Helper: read a cell value at a sheet position via the mirror.
+/// Helper: read a cell value at a sheet position via the cell store.
 fn cell_at(engine: &ComputeEngine, sid: &SheetId, row: u32, col: u32) -> CellValue {
     engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(sid, SheetPos::new(row, col))
         .cloned()
         .unwrap_or(CellValue::Null)
@@ -154,14 +154,14 @@ fn merges(engine: &ComputeEngine, sid: &SheetId) -> Vec<(u32, u32, u32, u32)> {
         .collect()
 }
 
-/// Helper: sorted list of sheet names currently in the mirror.
+/// Helper: sorted list of sheet names currently in the cell store.
 fn sheet_names(engine: &ComputeEngine) -> Vec<String> {
     let mut names: Vec<String> = engine
-        .mirror()
+        .cell_store()
         .sheet_ids()
         .map(|sid| {
             engine
-                .mirror()
+                .cell_store()
                 .get_sheet(sid)
                 .map(|s| s.name.clone())
                 .unwrap_or_default()
@@ -179,7 +179,7 @@ fn sheet_names(engine: &ComputeEngine) -> Vec<String> {
 fn smoke_insert_rows_then_delete_rows() {
     let (mut engine, _) =
         ComputeEngine::from_snapshot(smoke_snapshot_one_sheet()).expect("from_snapshot");
-    let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
+    let sid = engine.cell_store().sheet_by_name("Sheet1").expect("Sheet1");
 
     // Pre-state
     let pre_row2 = cell_at(&engine, &sid, 2, 0);
@@ -230,7 +230,7 @@ fn smoke_insert_rows_then_delete_rows() {
 fn smoke_delete_rows_then_insert_rows() {
     let (mut engine, _) =
         ComputeEngine::from_snapshot(smoke_snapshot_one_sheet()).expect("from_snapshot");
-    let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
+    let sid = engine.cell_store().sheet_by_name("Sheet1").expect("Sheet1");
 
     let pre_row2 = cell_at(&engine, &sid, 2, 0);
     let pre_row10 = cell_at(&engine, &sid, 10, 0);
@@ -277,7 +277,7 @@ fn smoke_delete_rows_then_insert_rows() {
 fn smoke_insert_cols_then_delete_cols() {
     let (mut engine, _) =
         ComputeEngine::from_snapshot(smoke_snapshot_one_sheet()).expect("from_snapshot");
-    let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
+    let sid = engine.cell_store().sheet_by_name("Sheet1").expect("Sheet1");
 
     let pre_col2 = cell_at(&engine, &sid, 0, 2);
     let pre_col10 = cell_at(&engine, &sid, 0, 10);
@@ -325,7 +325,7 @@ fn smoke_insert_cols_then_delete_cols() {
 fn smoke_delete_cols_then_insert_cols() {
     let (mut engine, _) =
         ComputeEngine::from_snapshot(smoke_snapshot_one_sheet()).expect("from_snapshot");
-    let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
+    let sid = engine.cell_store().sheet_by_name("Sheet1").expect("Sheet1");
 
     let pre_col2 = cell_at(&engine, &sid, 0, 2);
     let pre_col10 = cell_at(&engine, &sid, 0, 10);
@@ -382,10 +382,13 @@ fn smoke_add_sheet_then_delete_sheet() {
     assert!(mid_names.contains(&"Gamma".to_string()));
     assert_eq!(mid_names.len(), 3);
 
-    // Resolve the SheetId for "Gamma" from the mirror — the `create_sheet`
-    // return is a hex string; mirror lookup avoids the hex-parse detour.
-    let gamma_sid = engine.mirror().sheet_by_name("Gamma").expect("Gamma sid");
-    // Sanity: hex from create_sheet matches the mirror-resolved SheetId.
+    // Resolve the SheetId for "Gamma" from the cell store — the `create_sheet`
+    // return is a hex string; cell_store lookup avoids the hex-parse detour.
+    let gamma_sid = engine
+        .cell_store()
+        .sheet_by_name("Gamma")
+        .expect("Gamma sid");
+    // Sanity: hex from create_sheet matches the cell store-resolved SheetId.
     assert_eq!(hex.len(), 32, "create_sheet returns 32-char hex");
 
     // Inverse: delete "Gamma"
@@ -417,7 +420,7 @@ fn smoke_delete_sheet_then_add_sheet() {
     let pre_names = sheet_names(&engine);
 
     // Forward: delete "Beta"
-    let beta_sid = engine.mirror().sheet_by_name("Beta").expect("Beta sid");
+    let beta_sid = engine.cell_store().sheet_by_name("Beta").expect("Beta sid");
     engine.delete_sheet(&beta_sid).expect("delete_sheet");
 
     let mid_names = sheet_names(&engine);
@@ -439,7 +442,10 @@ fn smoke_rename_sheet_then_rename_back() {
     let (mut engine, _) =
         ComputeEngine::from_snapshot(smoke_snapshot_two_sheets()).expect("from_snapshot");
 
-    let alpha_sid = engine.mirror().sheet_by_name("Alpha").expect("Alpha sid");
+    let alpha_sid = engine
+        .cell_store()
+        .sheet_by_name("Alpha")
+        .expect("Alpha sid");
     let pre_names = sheet_names(&engine);
 
     // Forward: rename Alpha → AlphaRenamed
@@ -460,7 +466,7 @@ fn smoke_rename_sheet_then_rename_back() {
 
     // Same SheetId survives a rename (identity is not name-keyed).
     let post_alpha_sid = engine
-        .mirror()
+        .cell_store()
         .sheet_by_name("Alpha")
         .expect("Alpha sid post");
     assert_eq!(post_alpha_sid, alpha_sid);
@@ -474,7 +480,7 @@ fn smoke_rename_sheet_then_rename_back() {
 fn smoke_merge_range_then_unmerge_range() {
     let (mut engine, _) =
         ComputeEngine::from_snapshot(smoke_snapshot_one_sheet()).expect("from_snapshot");
-    let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
+    let sid = engine.cell_store().sheet_by_name("Sheet1").expect("Sheet1");
 
     let pre_merges = merges(&engine, &sid);
     assert!(pre_merges.is_empty(), "no merges in default snapshot");
@@ -504,7 +510,7 @@ fn smoke_unmerge_range_then_merge_range() {
     // this op pair is therefore "B2:C3 merged".
     let (mut engine, _) =
         ComputeEngine::from_snapshot(smoke_snapshot_one_sheet()).expect("from_snapshot");
-    let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
+    let sid = engine.cell_store().sheet_by_name("Sheet1").expect("Sheet1");
     engine
         .merge_range(&sid, 1, 1, 2, 2)
         .expect("pre-merge B2:C3");

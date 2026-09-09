@@ -22,12 +22,6 @@ public_api = [
   "VersionRedactionKeySubjectWire",
   "VersionRedactionKeyWire",
   "VersionRedactionPolicyWire",
-  "VersionSyncAuthorStateWire",
-  "VersionSyncCommitGroupingWire",
-  "VersionSyncOperationContextWire",
-  "VersionSyncOriginKindWire",
-  "VersionSyncSourceKindWire",
-  "VersionSyncTrustStatusWire",
   "VersionWriteAdmissionModeWire",
 ]
 
@@ -57,10 +51,6 @@ kernel_bridge = [
   "SemanticWorkbookDiff",
   "SemanticWorkbookState",
   "SemanticWorkbookStateEnvelope",
-  "SyncApplyMutationMetadataWire",
-  "SyncApplyOperationContextWire",
-  "SyncProvenanceApplyEvaluationStatus",
-  "SyncProvenanceApplyReport",
 ]
 
 rust_only = [

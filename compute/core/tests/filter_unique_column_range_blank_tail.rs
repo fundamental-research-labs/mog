@@ -22,7 +22,7 @@
 //!     --test filter_unique_column_range_blank_tail \
 //!     -- --ignored --nocapture
 
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::CellValue;
@@ -184,10 +184,10 @@ fn rows_unique_filter_column_range_counts_blank_tail_group() {
         ("Summary", 10, 5, vec![], summary_formulas),
     ]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     // Summary is sheet index 1. Formula is at (0, 0).

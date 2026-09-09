@@ -24,7 +24,7 @@ impl SheetSparklines {
     pub fn add_sparkline(&self, sparkline: Sparkline) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.add_sparkline(&sid, sparkline).map(|(_, r)| r))
+            .call_engine(move |e| e.add_sparkline(&sid, sparkline))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -37,7 +37,7 @@ impl SheetSparklines {
         let sid = self.sheet_id;
         let owned_id = sparkline_id.to_owned();
         self.dispatch
-            .call_engine(move |e| e.update_sparkline(&sid, &owned_id, updates).map(|(_, r)| r))
+            .call_engine(move |e| e.update_sparkline(&sid, &owned_id, updates))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -46,7 +46,7 @@ impl SheetSparklines {
         let sid = self.sheet_id;
         let owned_id = sparkline_id.to_owned();
         self.dispatch
-            .call_engine(move |e| e.delete_sparkline(&sid, &owned_id).map(|(_, r)| r))
+            .call_engine(move |e| e.delete_sparkline(&sid, &owned_id))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 

@@ -60,7 +60,7 @@ impl CellPos {
 /// A position within a sheet — (row, col) without sheet identity.
 ///
 /// Unlike [`CellPos`] which includes a [`SheetId`], `SheetPos` represents
-/// a position relative to a specific sheet. Used internally by `SheetMirror`
+/// a position relative to a specific sheet. Used internally by `SheetStore`
 /// for the bidirectional position↔identity index.
 ///
 /// Field ordering gives row-major `Ord`: row 0 col 1 < row 1 col 0.

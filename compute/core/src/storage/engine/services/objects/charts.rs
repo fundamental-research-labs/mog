@@ -25,6 +25,7 @@ fn require_chart(
 
 pub(in crate::storage::engine) fn create_chart(
     stores: &mut EngineStores,
+    cell_store: &mut crate::cells::CellStore,
     sheet_id: &SheetId,
     config: &serde_json::Value,
 ) -> Result<MutationResult, ComputeError> {
@@ -32,13 +33,13 @@ pub(in crate::storage::engine) fn create_chart(
         &mut stores.storage,
         sheet_id,
         config,
-        stores.grid_indexes.get_mut(sheet_id),
+        Some(&mut *cell_store),
         &stores.id_alloc,
     )?;
     let object_id = object_json["id"].as_str().unwrap_or("").to_string();
     let bounds = compute_object_pixel_bounds(
-        stores.grid_indexes.get(sheet_id),
-        stores.layout_indexes.get(sheet_id),
+        cell_store.get_sheet(sheet_id),
+        stores.pixel_layout(sheet_id).as_deref(),
         &object_json,
     );
     let data: Option<FloatingObject> = serde_json::from_value(object_json).ok();
@@ -56,6 +57,7 @@ pub(in crate::storage::engine) fn create_chart(
 
 pub(in crate::storage::engine) fn update_chart(
     stores: &mut EngineStores,
+    cell_store: &crate::cells::CellStore,
     sheet_id: &SheetId,
     chart_id: &str,
     updates: &serde_json::Value,
@@ -67,8 +69,8 @@ pub(in crate::storage::engine) fn update_chart(
     let obj_json = floating_objects::get_floating_object(&stores.storage, sheet_id, chart_id);
     let bounds = obj_json.and_then(|json| {
         compute_object_pixel_bounds(
-            stores.grid_indexes.get(sheet_id),
-            stores.layout_indexes.get(sheet_id),
+            cell_store.get_sheet(sheet_id),
+            stores.pixel_layout(sheet_id).as_deref(),
             &json,
         )
     });

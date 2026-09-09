@@ -42,9 +42,9 @@ fn mixed_criteria_aggregates_reuse_masks_and_refresh_after_edits() {
             ));
         }
     }
-    let (mut core, mut mirror) = init_core(single_sheet_snapshot("Sheet1", 260, 12, cells));
+    let (mut core, mut cell_store) = init_core(single_sheet_snapshot("Sheet1", 260, 12, cells));
     let sheet = sid(1);
-    let check = |core: &ComputeCore, mirror: &CellMirror, data: &[(u32, bool, f64)]| {
+    let check = |core: &ComputeCore, cell_store: &CellStore, data: &[(u32, bool, f64)]| {
         for key in 0..16 {
             let values: Vec<f64> = data
                 .iter()
@@ -62,7 +62,7 @@ fn mixed_criteria_aggregates_reuse_masks_and_refresh_after_edits() {
             for (offset, value) in expected.into_iter().enumerate() {
                 assert_number_at(
                     core,
-                    mirror,
+                    cell_store,
                     &sheet,
                     key,
                     6 + offset as u32,
@@ -72,7 +72,7 @@ fn mixed_criteria_aggregates_reuse_masks_and_refresh_after_edits() {
             }
         }
     };
-    check(&core, &mirror, &data);
+    check(&core, &cell_store, &data);
     #[cfg(feature = "native")]
     {
         let stats = core.workbook_cache.stats_snapshot();
@@ -89,12 +89,12 @@ fn mixed_criteria_aggregates_reuse_masks_and_refresh_after_edits() {
             2 => data[row as usize].2 = 777.0,
             _ => unreachable!(),
         }
-        let cell_id = mirror
+        let cell_id = cell_store
             .resolve_cell_id(&sheet, cell_types::SheetPos::new(row, col))
             .unwrap();
-        core.set_cell(&mut mirror, &sheet, cell_id, row, col, input)
+        core.set_cell(&mut cell_store, &sheet, cell_id, row, col, input)
             .unwrap();
-        check(&core, &mirror, &data);
+        check(&core, &cell_store, &data);
     }
 }
 
@@ -116,11 +116,11 @@ fn mixed_criteria_masks_preserve_missing_null_rows() {
     {
         cells.push(formula_cell(&mut id, row as u32, 4, formula.into()));
     }
-    let (core, mirror) = init_core(single_sheet_snapshot("Sheet1", 5, 5, cells));
+    let (core, cell_store) = init_core(single_sheet_snapshot("Sheet1", 5, 5, cells));
     for (row, expected) in [30.0, 4.0, 30.0].into_iter().enumerate() {
         assert_number_at(
             &core,
-            &mirror,
+            &cell_store,
             &sid(1),
             row as u32,
             4,
@@ -165,12 +165,28 @@ fn mixed_criteria_masks_preserve_numeric_tolerance_and_first_error() {
     {
         cells.push(formula_cell(&mut id, row as u32, 5, formula.into()));
     }
-    let (core, mirror) = init_core(single_sheet_snapshot("Sheet1", 5, 6, cells));
-    assert_number_at(&core, &mirror, &sid(1), 0, 5, 11.0, "tolerant numeric sum");
-    assert_number_at(&core, &mirror, &sid(1), 1, 5, 3.0, "tolerant numeric count");
+    let (core, cell_store) = init_core(single_sheet_snapshot("Sheet1", 5, 6, cells));
+    assert_number_at(
+        &core,
+        &cell_store,
+        &sid(1),
+        0,
+        5,
+        11.0,
+        "tolerant numeric sum",
+    );
+    assert_number_at(
+        &core,
+        &cell_store,
+        &sid(1),
+        1,
+        5,
+        3.0,
+        "tolerant numeric count",
+    );
     assert_error_at(
         &core,
-        &mirror,
+        &cell_store,
         &sid(1),
         2,
         5,

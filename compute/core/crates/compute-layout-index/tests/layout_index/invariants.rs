@@ -1,17 +1,17 @@
 use crate::helpers::{assert_col_position_invariant, assert_row_position_invariant};
-use compute_layout_index::LayoutIndex;
+use compute_layout_index::PixelLayout;
 use domain_types::units::Pixels;
 
 #[test]
 fn fp_position_dimension_invariant_defaults() {
-    let li = LayoutIndex::with_defaults(20, 15, Pixels(20.0), Pixels(64.0));
+    let li = PixelLayout::with_defaults(20, 15, Pixels(20.0), Pixels(64.0));
     assert_row_position_invariant(&li);
     assert_col_position_invariant(&li);
 }
 
 #[test]
 fn fp_position_dimension_invariant_after_mutations() {
-    let mut li = LayoutIndex::with_defaults(10, 10, Pixels(20.0), Pixels(64.0));
+    let mut li = PixelLayout::with_defaults(10, 10, Pixels(20.0), Pixels(64.0));
     li.set_row_height(0, Pixels(5.0));
     li.set_row_height(5, Pixels(100.0));
     li.hide_row(3);
@@ -24,7 +24,7 @@ fn fp_position_dimension_invariant_after_mutations() {
 
 #[test]
 fn fp_position_dimension_invariant_from_sparse() {
-    let li = LayoutIndex::from_sparse(
+    let li = PixelLayout::from_sparse(
         10,
         8,
         Pixels(20.0),
@@ -40,7 +40,7 @@ fn fp_position_dimension_invariant_from_sparse() {
 
 #[test]
 fn fp_total_row_size_equals_sum_of_heights() {
-    let li = LayoutIndex::from_sparse(
+    let li = PixelLayout::from_sparse(
         10,
         5,
         Pixels(20.0),
@@ -61,7 +61,7 @@ fn fp_total_row_size_equals_sum_of_heights() {
 
 #[test]
 fn fp_total_col_size_equals_sum_of_widths() {
-    let li = LayoutIndex::from_sparse(
+    let li = PixelLayout::from_sparse(
         5,
         10,
         Pixels(20.0),
@@ -82,7 +82,7 @@ fn fp_total_col_size_equals_sum_of_widths() {
 
 #[test]
 fn fp_total_size_equals_last_position() {
-    let li = LayoutIndex::from_sparse(
+    let li = PixelLayout::from_sparse(
         10,
         8,
         Pixels(20.0),
@@ -98,7 +98,7 @@ fn fp_total_size_equals_last_position() {
 
 #[test]
 fn fp_multiple_mutations_position_invariant() {
-    let mut li = LayoutIndex::with_defaults(15, 12, Pixels(20.0), Pixels(64.0));
+    let mut li = PixelLayout::with_defaults(15, 12, Pixels(20.0), Pixels(64.0));
     li.set_row_height(0, Pixels(1.0));
     assert_row_position_invariant(&li);
     li.hide_row(5);

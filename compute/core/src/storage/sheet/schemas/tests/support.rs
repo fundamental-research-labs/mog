@@ -5,29 +5,25 @@ pub(super) fn make_sheet_id(n: u128) -> SheetId {
 }
 
 pub(super) fn storage_with_sheet() -> (WorkbookStorage, SheetId, GridIndex) {
-    let (storage, sid, gi, _mirror) = storage_with_sheet_and_mirror();
+    let (storage, sid, gi, _store) = storage_with_sheet_and_store();
     (storage, sid, gi)
 }
 
-pub(super) fn storage_with_sheet_and_mirror() -> (
-    WorkbookStorage,
-    SheetId,
-    GridIndex,
-    crate::mirror::CellMirror,
-) {
+pub(super) fn storage_with_sheet_and_store()
+-> (WorkbookStorage, SheetId, GridIndex, crate::cells::CellStore) {
     let mut storage = WorkbookStorage::new();
-    let mut mirror = crate::mirror::CellMirror::new();
+    let mut cell_store = crate::cells::CellStore::new();
     let sid = make_sheet_id(1);
     storage
-        .add_sheet(&mut mirror, sid, "Sheet1", 100, 26)
+        .add_sheet(&mut cell_store, sid, "Sheet1", 100, 26)
         .unwrap();
     let id_alloc = Arc::new(cell_types::IdAllocator::new());
     let gi = GridIndex::new(sid, 100, 26, id_alloc);
-    (storage, sid, gi, mirror)
+    (storage, sid, gi, cell_store)
 }
 
-pub(super) fn empty_mirror() -> crate::mirror::CellMirror {
-    crate::mirror::CellMirror::new()
+pub(super) fn empty_store() -> crate::cells::CellStore {
+    crate::cells::CellStore::new()
 }
 
 pub(super) fn validation_rule_count(storage: &WorkbookStorage, sid: &SheetId) -> usize {

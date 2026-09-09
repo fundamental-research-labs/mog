@@ -27,9 +27,7 @@ pub(super) fn remove_schema(
     services::formatting::remove_schema(&mut engine.stores, &sheet_id, column, version)
 }
 
-pub(super) fn clear_schemas(
-    engine: &mut ComputeEngine,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+pub(super) fn clear_schemas(engine: &mut ComputeEngine) -> Result<MutationResult, ComputeError> {
     let result = services::formatting::clear_schemas(&mut engine.stores)?;
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }

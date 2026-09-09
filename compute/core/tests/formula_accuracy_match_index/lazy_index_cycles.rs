@@ -39,10 +39,10 @@ fn test_cross_sheet_index_match_no_false_cycle() {
         sheet_snapshot(SHEET1_UUID, "Debt", 2, 3, debt_cells),
         sheet_snapshot(SHEET2_UUID, "Core", 2, 3, core_cells),
     ]);
-    let (mirror, _core, result) = init_core(snapshot);
+    let (cell_store, _core, result) = init_core(snapshot);
 
     assert_number_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET1_UUID,
         0,
@@ -51,7 +51,7 @@ fn test_cross_sheet_index_match_no_false_cycle() {
         "Debt!C0: INDEX(Core!A:C, MATCH('Revenue',...), 2) should return 500, not #REF!",
     );
     assert_number_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET1_UUID,
         1,
@@ -60,7 +60,7 @@ fn test_cross_sheet_index_match_no_false_cycle() {
         "Debt!C1: INDEX(Core!A:C, MATCH('Costs',...), 2) should return 300, not #REF!",
     );
     assert_number_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET2_UUID,
         0,
@@ -69,7 +69,7 @@ fn test_cross_sheet_index_match_no_false_cycle() {
         "Core!C0: INDEX(Debt!A:C, MATCH('Interest',...), 2) should return 100, not #REF!",
     );
     assert_number_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET2_UUID,
         1,
@@ -101,10 +101,10 @@ fn test_same_sheet_index_whole_column_no_false_cycle() {
         formula_cell(1, 3, 0, "B1*2"),
     ];
     let snapshot = workbook_snapshot(vec![sheet_snapshot(SHEET1_UUID, "Sheet1", 4, 2, cells)]);
-    let (mirror, _core, result) = init_core(snapshot);
+    let (cell_store, _core, result) = init_core(snapshot);
 
     assert_number_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET1_UUID,
         0,
@@ -113,7 +113,7 @@ fn test_same_sheet_index_whole_column_no_false_cycle() {
         "INDEX(A:A, 3) should return 30 (A2), not #REF!",
     );
     assert_number_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET1_UUID,
         3,

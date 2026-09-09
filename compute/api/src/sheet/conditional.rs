@@ -38,7 +38,7 @@ impl SheetConditionalFormats {
         })?;
         self.dispatch
             .call_engine(move |e| e.add_cf_rule(&sid, rule_json))
-            .and_then(|r| r.map(|(_vp, m)| m).map_err(ComputeApiError::from))
+            .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
     /// Update an existing conditional format by merging JSON updates.
@@ -51,7 +51,7 @@ impl SheetConditionalFormats {
         let owned_id = rule_id.to_owned();
         self.dispatch
             .call_engine(move |e| e.update_cf_rule(&sid, &owned_id, updates))
-            .and_then(|r| r.map(|(_vp, m)| m).map_err(ComputeApiError::from))
+            .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
     /// Delete a conditional format by ID.
@@ -60,7 +60,7 @@ impl SheetConditionalFormats {
         let owned_id = rule_id.to_owned();
         self.dispatch
             .call_engine(move |e| e.delete_cf_rule(&sid, &owned_id))
-            .and_then(|r| r.map(|(_vp, m)| m).map_err(ComputeApiError::from))
+            .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
     /// Reorder conditional formats by providing the new order of format IDs.
@@ -68,7 +68,7 @@ impl SheetConditionalFormats {
         let sid = self.sheet_id;
         self.dispatch
             .call_engine(move |e| e.reorder_cf_rules(&sid, rule_ids))
-            .and_then(|r| r.map(|(_vp, m)| m).map_err(ComputeApiError::from))
+            .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
     // -----------------------------------------------------------------
@@ -113,10 +113,7 @@ impl SheetConditionalFormats {
         let sid = self.sheet_id;
         let owned_id = format_id.to_owned();
         self.dispatch
-            .call_engine(move |e| {
-                e.update_cf_ranges(&sid, &owned_id, &new_ranges)
-                    .map(|(_, r)| r)
-            })
+            .call_engine(move |e| e.update_cf_ranges(&sid, &owned_id, &new_ranges))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -124,7 +121,7 @@ impl SheetConditionalFormats {
     pub fn clear_all(&self) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.clear_cf_formats_for_sheet(&sid).map(|(_, r)| r))
+            .call_engine(move |e| e.clear_cf_formats_for_sheet(&sid))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 }

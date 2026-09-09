@@ -3,7 +3,7 @@ use super::*;
 
 #[test]
 fn custom_formula_accepts_truthy_typed_value() {
-    let (mut storage, sid, gi, mirror) = storage_with_sheet_and_mirror();
+    let (mut storage, sid, gi, cell_store) = storage_with_sheet_and_store();
     let rs = make_custom_formula_range_schema(
         "rs-custom-truthy",
         "=ISNUMBER(E1)",
@@ -15,12 +15,12 @@ fn custom_formula_accepts_truthy_typed_value() {
     );
     set_range_schema(&mut storage, &sid, &rs).unwrap();
 
-    let result = validate_cell_value(&storage, &sid, 0, 4, "42", Some(&gi), &mirror);
+    let result = validate_cell_value(&storage, &sid, 0, 4, "42", Some(&gi), &cell_store);
     assert!(result.valid, "Numeric '42' must satisfy ISNUMBER");
 }
 #[test]
 fn custom_formula_rejects_falsy_typed_value() {
-    let (mut storage, sid, gi, mirror) = storage_with_sheet_and_mirror();
+    let (mut storage, sid, gi, cell_store) = storage_with_sheet_and_store();
     let rs = make_custom_formula_range_schema(
         "rs-custom-falsy",
         "=ISNUMBER(E1)",
@@ -32,7 +32,7 @@ fn custom_formula_rejects_falsy_typed_value() {
     );
     set_range_schema(&mut storage, &sid, &rs).unwrap();
 
-    let result = validate_cell_value(&storage, &sid, 1, 4, "hello", Some(&gi), &mirror);
+    let result = validate_cell_value(&storage, &sid, 1, 4, "hello", Some(&gi), &cell_store);
     assert!(
         !result.valid,
         "Text 'hello' must fail ISNUMBER and reject the commit"
@@ -43,7 +43,7 @@ fn custom_formula_rejects_falsy_typed_value() {
 fn custom_formula_shifts_relative_refs_per_row() {
     // =ISNUMBER(E1) on E1:E5 must evaluate as ISNUMBER(E2) for row 1, etc.
     // The pending typed value is what gets fed to the (shifted) reference.
-    let (mut storage, sid, gi, mirror) = storage_with_sheet_and_mirror();
+    let (mut storage, sid, gi, cell_store) = storage_with_sheet_and_store();
     let rs = make_custom_formula_range_schema(
         "rs-custom-shift",
         "=ISNUMBER(E1)",
@@ -57,6 +57,6 @@ fn custom_formula_shifts_relative_refs_per_row() {
 
     // Row 2 (E3): typing "3.14" shifts the formula to ISNUMBER(E3) and the
     // pending override at E3 supplies the number; ISNUMBER returns TRUE.
-    let result = validate_cell_value(&storage, &sid, 2, 4, "3.14", Some(&gi), &mirror);
+    let result = validate_cell_value(&storage, &sid, 2, 4, "3.14", Some(&gi), &cell_store);
     assert!(result.valid);
 }

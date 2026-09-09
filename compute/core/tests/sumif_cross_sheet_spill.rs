@@ -3,7 +3,7 @@
 //! Bug: The agg_prepass optimization (scheduler/agg_prepass) groups 8+ similar
 //! SUMIF/COUNTIFS formulas and evaluates them via a single hash-map lookup before
 //! normal level-based evaluation. But it read dynamic criteria values (e.g., spill
-//! targets from UNIQUE) from the mirror BEFORE those criteria cells had been
+//! targets from UNIQUE) from the cell store BEFORE those criteria cells had been
 //! evaluated, causing all SUMIFs to return 0.
 //!
 //! Fix: Added a guard in `execute_agg_group` to bail when any dynamic criteria
@@ -12,7 +12,7 @@
 //! Run:
 //!   cd os && cargo test -p compute-core --test sumif_cross_sheet_spill -- --nocapture
 
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::CellValue;
@@ -158,10 +158,10 @@ fn sumif_cross_sheet_whole_column_literal_criteria() {
         ("Report", 10, 3, vec![], report_formulas),
     ]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     let val = find_value(&result, 1, 0, 0);
@@ -198,10 +198,10 @@ fn sumif_same_sheet_spill_criteria() {
 
     let snapshot = build_multi_sheet_snapshot(vec![("Sheet1", 10, 5, data_cells, formulas)]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     let d1 = find_value(&result, 0, 0, 3);
@@ -243,10 +243,10 @@ fn sumif_cross_sheet_spill_criteria() {
         ("Report", 10, 3, vec![], report_formulas),
     ]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     let b1 = find_value(&result, 1, 0, 1);
@@ -288,10 +288,10 @@ fn sumif_cross_sheet_bounded_range_spill_criteria() {
         ("Report", 10, 3, vec![], report_formulas),
     ]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     let b1 = find_value(&result, 1, 0, 1);
@@ -325,10 +325,10 @@ fn sumif_spill_criteria_is_scalar_not_array() {
 
     let snapshot = build_multi_sheet_snapshot(vec![("Sheet1", 10, 6, data_cells, formulas)]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     let type_val = find_value(&result, 0, 0, 1);
@@ -358,10 +358,10 @@ fn sumif_cross_sheet_quoted_name_with_spaces() {
         ("Report", 10, 3, vec![], report_formulas),
     ]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     let val = find_value(&result, 1, 0, 0);
@@ -401,10 +401,10 @@ fn sumif_cross_sheet_let_spill_criteria() {
         ("Summary", 10, 12, vec![], report_formulas),
     ]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     let l4 = find_value(&result, 1, 3, 11);
@@ -455,10 +455,10 @@ fn sumif_exact_reproduction_cross_sheet_let_spill_absolute_refs() {
         ("Summary", 10, 12, vec![], report_formulas),
     ]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     let l4 = find_value(&result, 1, 3, 11);
@@ -507,10 +507,10 @@ fn sumif_cross_sheet_let_sortby_spill_criteria() {
         ("Summary", 10, 12, vec![], report_formulas),
     ]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     let l4 = find_value(&result, 1, 3, 11);
@@ -522,7 +522,7 @@ fn sumif_cross_sheet_let_sortby_spill_criteria() {
 
 // ===========================================================================
 // Agg prepass regression tests (8+ SUMIF formulas trigger the prepass)
-// The bug: agg_prepass read dynamic criteria from mirror before the spill
+// The bug: agg_prepass read dynamic criteria from cell_store before the spill
 // source formula was evaluated, getting Null instead of actual values.
 // ===========================================================================
 
@@ -557,10 +557,10 @@ fn sumif_agg_prepass_threshold_8_formulas() {
         ("Data", 20, 3, data_cells, vec![]),
         ("Report", 20, 3, vec![], report_formulas),
     ]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     for i in 0..8 {
         let expected = (i + 1) as f64 + (i + 9) as f64;
@@ -607,10 +607,10 @@ fn sumif_agg_prepass_10_formulas_200_rows() {
         ("Report", 20, 3, vec![], report_formulas),
     ]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     for i in 0..10 {
@@ -660,10 +660,10 @@ fn sumif_agg_prepass_10_formulas_500_rows() {
         ("Report", 20, 3, vec![], report_formulas),
     ]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     for i in 0..10 {
@@ -700,10 +700,10 @@ fn sumif_cross_sheet_literal_large_data() {
         ("Report", 10, 3, vec![], report_formulas),
     ]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     let v0 = find_value(&result, 1, 0, 0);
@@ -749,10 +749,10 @@ fn sumif_large_scale_no_array_ref() {
         ("Report", 20, 3, vec![], report_formulas),
     ]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     for i in 0..10 {

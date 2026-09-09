@@ -14,7 +14,7 @@ use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_ma
 use std::time::Duration;
 
 use cell_types::{CellId, SheetId};
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::CellValue;
@@ -198,8 +198,8 @@ fn bench_vlookup(c: &mut Criterion) {
             || snapshot_vlookup(NUM_ROWS_100K, 1000),
             |snapshot| {
                 let mut core = ComputeCore::new();
-                let mut mirror = CellMirror::new();
-                black_box(core.init_from_snapshot(&mut mirror, snapshot).unwrap())
+                let mut cell_store = CellStore::new();
+                black_box(core.init_from_snapshot(&mut cell_store, snapshot).unwrap())
             },
         );
     });
@@ -210,8 +210,8 @@ fn bench_vlookup(c: &mut Criterion) {
         |b| {
             let snapshot = snapshot_vlookup(NUM_ROWS_100K, 1000);
             let mut core = ComputeCore::new();
-            let mut mirror = CellMirror::new();
-            core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+            let mut cell_store = CellStore::new();
+            core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
             let sheet_id = SheetId::from_uuid_str(&sheet_uuid(0)).expect("sid");
             // Change data cell A1 (row 0, col 0) — affects lookups targeting key=1
             let cell_id = CellId::from_uuid_str(&cell_uuid(0, 0, 0)).expect("cid");
@@ -220,7 +220,7 @@ fn bench_vlookup(c: &mut Criterion) {
                 let val = if toggle { "999999" } else { "1" };
                 toggle = !toggle;
                 black_box(
-                    core.set_cell(&mut mirror, &sheet_id, cell_id, 0, 0, val)
+                    core.set_cell(&mut cell_store, &sheet_id, cell_id, 0, 0, val)
                         .unwrap(),
                 )
             });
@@ -233,8 +233,8 @@ fn bench_vlookup(c: &mut Criterion) {
         |b| {
             let snapshot = snapshot_vlookup(NUM_ROWS_100K, 1000);
             let mut core = ComputeCore::new();
-            let mut mirror = CellMirror::new();
-            core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+            let mut cell_store = CellStore::new();
+            core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
             let sheet_id = SheetId::from_uuid_str(&sheet_uuid(0)).expect("sid");
             // Change value cell B1 (row 0, col 1) — affects all lookups via table range dependency
             let cell_id = CellId::from_uuid_str(&cell_uuid(0, 0, 1)).expect("cid");
@@ -243,7 +243,7 @@ fn bench_vlookup(c: &mut Criterion) {
                 let val = if toggle { "99" } else { "10" };
                 toggle = !toggle;
                 black_box(
-                    core.set_cell(&mut mirror, &sheet_id, cell_id, 0, 1, val)
+                    core.set_cell(&mut cell_store, &sheet_id, cell_id, 0, 1, val)
                         .unwrap(),
                 )
             });
@@ -263,8 +263,8 @@ fn bench_sum_clean_column(c: &mut Criterion) {
             || snapshot_sum_clean(NUM_ROWS_100K),
             |snapshot| {
                 let mut core = ComputeCore::new();
-                let mut mirror = CellMirror::new();
-                black_box(core.init_from_snapshot(&mut mirror, snapshot).unwrap())
+                let mut cell_store = CellStore::new();
+                black_box(core.init_from_snapshot(&mut cell_store, snapshot).unwrap())
             },
         );
     });
@@ -272,8 +272,8 @@ fn bench_sum_clean_column(c: &mut Criterion) {
     group.bench_function(BenchmarkId::new("sum_clean_partial_recalc", "100k"), |b| {
         let snapshot = snapshot_sum_clean(NUM_ROWS_100K);
         let mut core = ComputeCore::new();
-        let mut mirror = CellMirror::new();
-        core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+        let mut cell_store = CellStore::new();
+        core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
         let sheet_id = SheetId::from_uuid_str(&sheet_uuid(0)).expect("sid");
         let cell_id = CellId::from_uuid_str(&cell_uuid(0, 0, 0)).expect("cid");
         let mut toggle = true;
@@ -281,7 +281,7 @@ fn bench_sum_clean_column(c: &mut Criterion) {
             let val = if toggle { "999999" } else { "1" };
             toggle = !toggle;
             black_box(
-                core.set_cell(&mut mirror, &sheet_id, cell_id, 0, 0, val)
+                core.set_cell(&mut cell_store, &sheet_id, cell_id, 0, 0, val)
                     .unwrap(),
             )
         });
@@ -292,8 +292,8 @@ fn bench_sum_clean_column(c: &mut Criterion) {
             || snapshot_sum_clean(NUM_ROWS_1M),
             |snapshot| {
                 let mut core = ComputeCore::new();
-                let mut mirror = CellMirror::new();
-                black_box(core.init_from_snapshot(&mut mirror, snapshot).unwrap())
+                let mut cell_store = CellStore::new();
+                black_box(core.init_from_snapshot(&mut cell_store, snapshot).unwrap())
             },
         );
     });
@@ -301,8 +301,8 @@ fn bench_sum_clean_column(c: &mut Criterion) {
     group.bench_function(BenchmarkId::new("sum_clean_partial_recalc", "1m"), |b| {
         let snapshot = snapshot_sum_clean(NUM_ROWS_1M);
         let mut core = ComputeCore::new();
-        let mut mirror = CellMirror::new();
-        core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+        let mut cell_store = CellStore::new();
+        core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
         let sheet_id = SheetId::from_uuid_str(&sheet_uuid(0)).expect("sid");
         let cell_id = CellId::from_uuid_str(&cell_uuid(0, 0, 0)).expect("cid");
         let mut toggle = true;
@@ -310,7 +310,7 @@ fn bench_sum_clean_column(c: &mut Criterion) {
             let val = if toggle { "999999" } else { "1" };
             toggle = !toggle;
             black_box(
-                core.set_cell(&mut mirror, &sheet_id, cell_id, 0, 0, val)
+                core.set_cell(&mut cell_store, &sheet_id, cell_id, 0, 0, val)
                     .unwrap(),
             )
         });
@@ -329,8 +329,8 @@ fn bench_sum_with_dirty_cells(c: &mut Criterion) {
             || snapshot_sum_with_dirty(NUM_ROWS_100K, 50),
             |snapshot| {
                 let mut core = ComputeCore::new();
-                let mut mirror = CellMirror::new();
-                black_box(core.init_from_snapshot(&mut mirror, snapshot).unwrap())
+                let mut cell_store = CellStore::new();
+                black_box(core.init_from_snapshot(&mut cell_store, snapshot).unwrap())
             },
         );
     });
@@ -340,8 +340,8 @@ fn bench_sum_with_dirty_cells(c: &mut Criterion) {
         |b| {
             let snapshot = snapshot_sum_with_dirty(NUM_ROWS_100K, 50);
             let mut core = ComputeCore::new();
-            let mut mirror = CellMirror::new();
-            core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+            let mut cell_store = CellStore::new();
+            core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
             let sheet_id = SheetId::from_uuid_str(&sheet_uuid(0)).expect("sid");
             let cell_id = CellId::from_uuid_str(&cell_uuid(0, 1, 0)).expect("cid");
             let mut toggle = true;
@@ -349,7 +349,7 @@ fn bench_sum_with_dirty_cells(c: &mut Criterion) {
                 let val = if toggle { "999999" } else { "2" };
                 toggle = !toggle;
                 black_box(
-                    core.set_cell(&mut mirror, &sheet_id, cell_id, 1, 0, val)
+                    core.set_cell(&mut cell_store, &sheet_id, cell_id, 1, 0, val)
                         .unwrap(),
                 )
             });
@@ -361,8 +361,8 @@ fn bench_sum_with_dirty_cells(c: &mut Criterion) {
             || snapshot_sum_with_dirty(NUM_ROWS_1M, 50),
             |snapshot| {
                 let mut core = ComputeCore::new();
-                let mut mirror = CellMirror::new();
-                black_box(core.init_from_snapshot(&mut mirror, snapshot).unwrap())
+                let mut cell_store = CellStore::new();
+                black_box(core.init_from_snapshot(&mut cell_store, snapshot).unwrap())
             },
         );
     });
@@ -370,8 +370,8 @@ fn bench_sum_with_dirty_cells(c: &mut Criterion) {
     group.bench_function(BenchmarkId::new("sum_50_dirty_partial_recalc", "1m"), |b| {
         let snapshot = snapshot_sum_with_dirty(NUM_ROWS_1M, 50);
         let mut core = ComputeCore::new();
-        let mut mirror = CellMirror::new();
-        core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+        let mut cell_store = CellStore::new();
+        core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
         let sheet_id = SheetId::from_uuid_str(&sheet_uuid(0)).expect("sid");
         let cell_id = CellId::from_uuid_str(&cell_uuid(0, 1, 0)).expect("cid");
         let mut toggle = true;
@@ -379,7 +379,7 @@ fn bench_sum_with_dirty_cells(c: &mut Criterion) {
             let val = if toggle { "999999" } else { "2" };
             toggle = !toggle;
             black_box(
-                core.set_cell(&mut mirror, &sheet_id, cell_id, 1, 0, val)
+                core.set_cell(&mut cell_store, &sheet_id, cell_id, 1, 0, val)
                     .unwrap(),
             )
         });
@@ -398,8 +398,8 @@ fn bench_vectorized_multiply(c: &mut Criterion) {
             || snapshot_vectorized_multiply(NUM_ROWS_100K),
             |snapshot| {
                 let mut core = ComputeCore::new();
-                let mut mirror = CellMirror::new();
-                black_box(core.init_from_snapshot(&mut mirror, snapshot).unwrap())
+                let mut cell_store = CellStore::new();
+                black_box(core.init_from_snapshot(&mut cell_store, snapshot).unwrap())
             },
         );
     });
@@ -407,8 +407,8 @@ fn bench_vectorized_multiply(c: &mut Criterion) {
     group.bench_function(BenchmarkId::new("multiply_partial_recalc", "100k"), |b| {
         let snapshot = snapshot_vectorized_multiply(NUM_ROWS_100K);
         let mut core = ComputeCore::new();
-        let mut mirror = CellMirror::new();
-        core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+        let mut cell_store = CellStore::new();
+        core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
         let sheet_id = SheetId::from_uuid_str(&sheet_uuid(0)).expect("sid");
         let cell_id = CellId::from_uuid_str(&cell_uuid(0, 0, 0)).expect("cid");
         let mut toggle = true;
@@ -416,7 +416,7 @@ fn bench_vectorized_multiply(c: &mut Criterion) {
             let val = if toggle { "999999" } else { "1" };
             toggle = !toggle;
             black_box(
-                core.set_cell(&mut mirror, &sheet_id, cell_id, 0, 0, val)
+                core.set_cell(&mut cell_store, &sheet_id, cell_id, 0, 0, val)
                     .unwrap(),
             )
         });
@@ -427,8 +427,8 @@ fn bench_vectorized_multiply(c: &mut Criterion) {
             || snapshot_vectorized_multiply(NUM_ROWS_1M),
             |snapshot| {
                 let mut core = ComputeCore::new();
-                let mut mirror = CellMirror::new();
-                black_box(core.init_from_snapshot(&mut mirror, snapshot).unwrap())
+                let mut cell_store = CellStore::new();
+                black_box(core.init_from_snapshot(&mut cell_store, snapshot).unwrap())
             },
         );
     });
@@ -436,8 +436,8 @@ fn bench_vectorized_multiply(c: &mut Criterion) {
     group.bench_function(BenchmarkId::new("multiply_partial_recalc", "1m"), |b| {
         let snapshot = snapshot_vectorized_multiply(NUM_ROWS_1M);
         let mut core = ComputeCore::new();
-        let mut mirror = CellMirror::new();
-        core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+        let mut cell_store = CellStore::new();
+        core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
         let sheet_id = SheetId::from_uuid_str(&sheet_uuid(0)).expect("sid");
         let cell_id = CellId::from_uuid_str(&cell_uuid(0, 0, 0)).expect("cid");
         let mut toggle = true;
@@ -445,7 +445,7 @@ fn bench_vectorized_multiply(c: &mut Criterion) {
             let val = if toggle { "999999" } else { "1" };
             toggle = !toggle;
             black_box(
-                core.set_cell(&mut mirror, &sheet_id, cell_id, 0, 0, val)
+                core.set_cell(&mut cell_store, &sheet_id, cell_id, 0, 0, val)
                     .unwrap(),
             )
         });
@@ -464,8 +464,8 @@ fn bench_vectorized_with_downstream_sum(c: &mut Criterion) {
             || snapshot_vectorized_with_sum(NUM_ROWS_100K),
             |snapshot| {
                 let mut core = ComputeCore::new();
-                let mut mirror = CellMirror::new();
-                black_box(core.init_from_snapshot(&mut mirror, snapshot).unwrap())
+                let mut cell_store = CellStore::new();
+                black_box(core.init_from_snapshot(&mut cell_store, snapshot).unwrap())
             },
         );
     });
@@ -475,8 +475,8 @@ fn bench_vectorized_with_downstream_sum(c: &mut Criterion) {
         |b| {
             let snapshot = snapshot_vectorized_with_sum(NUM_ROWS_100K);
             let mut core = ComputeCore::new();
-            let mut mirror = CellMirror::new();
-            core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+            let mut cell_store = CellStore::new();
+            core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
             let sheet_id = SheetId::from_uuid_str(&sheet_uuid(0)).expect("sid");
             let cell_id = CellId::from_uuid_str(&cell_uuid(0, 0, 0)).expect("cid");
             let mut toggle = true;
@@ -484,7 +484,7 @@ fn bench_vectorized_with_downstream_sum(c: &mut Criterion) {
                 let val = if toggle { "999999" } else { "1" };
                 toggle = !toggle;
                 black_box(
-                    core.set_cell(&mut mirror, &sheet_id, cell_id, 0, 0, val)
+                    core.set_cell(&mut cell_store, &sheet_id, cell_id, 0, 0, val)
                         .unwrap(),
                 )
             });
@@ -496,8 +496,8 @@ fn bench_vectorized_with_downstream_sum(c: &mut Criterion) {
             || snapshot_vectorized_with_sum(NUM_ROWS_1M),
             |snapshot| {
                 let mut core = ComputeCore::new();
-                let mut mirror = CellMirror::new();
-                black_box(core.init_from_snapshot(&mut mirror, snapshot).unwrap())
+                let mut cell_store = CellStore::new();
+                black_box(core.init_from_snapshot(&mut cell_store, snapshot).unwrap())
             },
         );
     });
@@ -505,8 +505,8 @@ fn bench_vectorized_with_downstream_sum(c: &mut Criterion) {
     group.bench_function(BenchmarkId::new("vec_plus_sum_partial_recalc", "1m"), |b| {
         let snapshot = snapshot_vectorized_with_sum(NUM_ROWS_1M);
         let mut core = ComputeCore::new();
-        let mut mirror = CellMirror::new();
-        core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+        let mut cell_store = CellStore::new();
+        core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
         let sheet_id = SheetId::from_uuid_str(&sheet_uuid(0)).expect("sid");
         let cell_id = CellId::from_uuid_str(&cell_uuid(0, 0, 0)).expect("cid");
         let mut toggle = true;
@@ -514,7 +514,7 @@ fn bench_vectorized_with_downstream_sum(c: &mut Criterion) {
             let val = if toggle { "999999" } else { "1" };
             toggle = !toggle;
             black_box(
-                core.set_cell(&mut mirror, &sheet_id, cell_id, 0, 0, val)
+                core.set_cell(&mut cell_store, &sheet_id, cell_id, 0, 0, val)
                     .unwrap(),
             )
         });
@@ -533,8 +533,8 @@ fn bench_e2e_data_table(c: &mut Criterion) {
             || snapshot_e2e_data_table(NUM_ROWS_100K),
             |snapshot| {
                 let mut core = ComputeCore::new();
-                let mut mirror = CellMirror::new();
-                black_box(core.init_from_snapshot(&mut mirror, snapshot).unwrap())
+                let mut cell_store = CellStore::new();
+                black_box(core.init_from_snapshot(&mut cell_store, snapshot).unwrap())
             },
         );
     });
@@ -544,8 +544,8 @@ fn bench_e2e_data_table(c: &mut Criterion) {
         |b| {
             let snapshot = snapshot_e2e_data_table(NUM_ROWS_100K);
             let mut core = ComputeCore::new();
-            let mut mirror = CellMirror::new();
-            core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+            let mut cell_store = CellStore::new();
+            core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
             let sheet_id = SheetId::from_uuid_str(&sheet_uuid(0)).expect("sid");
             let cell_id = CellId::from_uuid_str(&cell_uuid(0, 0, 0)).expect("cid");
             let mut toggle = true;
@@ -553,7 +553,7 @@ fn bench_e2e_data_table(c: &mut Criterion) {
                 let val = if toggle { "999999" } else { "1" };
                 toggle = !toggle;
                 black_box(
-                    core.set_cell(&mut mirror, &sheet_id, cell_id, 0, 0, val)
+                    core.set_cell(&mut cell_store, &sheet_id, cell_id, 0, 0, val)
                         .unwrap(),
                 )
             });

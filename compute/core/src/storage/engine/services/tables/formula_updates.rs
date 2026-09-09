@@ -5,11 +5,11 @@ use crate::storage::engine::history::metadata::{MetadataImpact, capture_workbook
 /// Apply a table edit to native sources before evaluating their new dependencies.
 pub(super) fn rewrite_table_formulas(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     edit: TableReferenceEdit<'_>,
 ) -> usize {
     // Table-owned calculated and totals formulas must export the same source as cells.
-    let tables = mirror.all_tables().to_vec();
+    let tables = cell_store.all_tables().to_vec();
     for mut table in tables {
         let mut changed = false;
         for column in &mut table.columns {
@@ -34,7 +34,7 @@ pub(super) fn rewrite_table_formulas(
             }
         }
         if changed {
-            stores.compute.set_table(mirror, table.clone());
+            stores.compute.set_table(cell_store, table.clone());
         }
     }
     let names: Vec<_> = stores
@@ -50,20 +50,20 @@ pub(super) fn rewrite_table_formulas(
             .scope
             .as_deref()
             .and_then(|id| SheetId::from_uuid_str(id).ok())
-            .or_else(|| mirror.sheet_ids().next().copied());
+            .or_else(|| cell_store.sheet_ids().next().copied());
         let Some(context) = context else {
             continue;
         };
         let source = stores
             .compute
-            .to_a1_display_qualified(mirror, &context, &name.refers_to);
+            .to_a1_display_qualified(cell_store, &context, &name.refers_to);
         let rewritten = edit.rewrite(&source, None);
         if source == rewritten {
             continue;
         }
         name.refers_to = stores
             .compute
-            .to_identity_formula_with_rect_ranges(mirror, &context, &rewritten)
+            .to_identity_formula_with_rect_ranges(cell_store, &context, &rewritten)
             .unwrap_or_else(|_| {
                 crate::storage::workbook::named_ranges::expression_template(&rewritten)
             });
@@ -82,23 +82,23 @@ pub(super) fn rewrite_table_formulas(
         |identity| {
             stores
                 .compute
-                .to_a1_display_qualified(mirror, &SheetId::from_raw(0), identity)
+                .to_a1_display_qualified(cell_store, &SheetId::from_raw(0), identity)
         },
     );
     for definition in definitions {
         stores
             .compute
-            .set_named_range(mirror, definition.name.clone(), definition);
+            .set_named_range(cell_store, definition.name.clone(), definition);
     }
     if stores.storage.history.is_active() {
         for (cell_id, formula) in stores.compute.formula_texts_for_diagnostics() {
-            if let Some(sheet) = mirror.sheet_for_cell(cell_id)
-                && let Some(pos) = mirror.resolve_position(cell_id)
+            if let Some(sheet) = cell_store.sheet_for_cell(cell_id)
+                && let Some(pos) = cell_store.resolve_position(cell_id)
                 && edit.rewrite(formula, Some(pos.row())) != formula
             {
                 crate::storage::engine::history::cells::capture_cell(
                     stores,
-                    mirror,
+                    cell_store,
                     sheet,
                     *cell_id,
                     pos.row(),
@@ -109,6 +109,6 @@ pub(super) fn rewrite_table_formulas(
     }
     let changed_cells = stores
         .compute
-        .rewrite_formula_sources(mirror, |row, formula| edit.rewrite(formula, row));
+        .rewrite_formula_sources(cell_store, |row, formula| edit.rewrite(formula, row));
     changed_cells.len() + changed_name_count
 }

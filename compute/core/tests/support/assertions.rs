@@ -47,7 +47,7 @@ pub fn assert_bit_identity_f64(before: f64, after: f64) -> Result<(), String> {
 /// * `sheet_id` — sheet containing the edited cell.
 /// * `target_cell` — cell we're editing (the "dependency source").
 /// * `target_row`, `target_col` — the cell's grid position. We need
-///   both the CellId (for mirror lookup) and row/col (for `set_cell`'s
+///   both the CellId (for cell_store lookup) and row/col (for `set_cell`'s
 ///   address arguments).
 /// * `new_input` — the forward-op input string.
 /// * `prior_input` — the inverse input string (what the cell read as
@@ -67,7 +67,7 @@ pub fn assert_identity_after_op_inverse(
 ) -> Result<(), String> {
     // Capture pre-op value of the dependent.
     let before = engine
-        .mirror()
+        .cell_store()
         .get_cell_value(dependent_cell)
         .cloned()
         .unwrap_or(CellValue::Null);
@@ -96,7 +96,7 @@ pub fn assert_identity_after_op_inverse(
 
     // Post-inverse value of the dependent.
     let after = engine
-        .mirror()
+        .cell_store()
         .get_cell_value(dependent_cell)
         .cloned()
         .unwrap_or(CellValue::Null);

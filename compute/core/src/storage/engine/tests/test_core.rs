@@ -19,17 +19,17 @@ fn test_from_snapshot_cells_accessible() {
     let (engine, recalc) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // A1 = 10
-    let a1 = engine.mirror().get_cell_value(&cell_id_a1());
+    let a1 = engine.cell_store().get_cell_value(&cell_id_a1());
     assert!(a1.is_some());
     assert_eq!(*a1.unwrap(), CellValue::Number(FiniteF64::must(10.0)));
 
     // B1 = 20
-    let b1 = engine.mirror().get_cell_value(&cell_id_b1());
+    let b1 = engine.cell_store().get_cell_value(&cell_id_b1());
     assert!(b1.is_some());
     assert_eq!(*b1.unwrap(), CellValue::Number(FiniteF64::must(20.0)));
 
     // A2 = =A1+B1, which should compute to 30
-    let a2_val = engine.mirror().get_cell_value(&cell_id_a2());
+    let a2_val = engine.cell_store().get_cell_value(&cell_id_a2());
     assert!(a2_val.is_some());
     assert_eq!(*a2_val.unwrap(), CellValue::Number(FiniteF64::must(30.0)));
 
@@ -40,7 +40,7 @@ fn test_from_snapshot_cells_accessible() {
     );
 
     // GridIndex should have entries for the 3 cells
-    let grid = engine.grid_index(&sheet_id());
+    let grid = engine.cell_store().get_sheet(&sheet_id());
     assert!(grid.is_some());
     let grid = grid.unwrap();
     assert_eq!(grid.cell_position(&cell_id_a1()), Some((0, 0)));
@@ -59,7 +59,7 @@ fn test_set_cell_triggers_recalc() {
 
     // Verify initial state: A2 = A1+B1 = 10+20 = 30
     assert_eq!(
-        *engine.mirror().get_cell_value(&cell_id_a2()).unwrap(),
+        *engine.cell_store().get_cell_value(&cell_id_a2()).unwrap(),
         CellValue::Number(FiniteF64::must(30.0))
     );
 
@@ -76,19 +76,19 @@ fn test_set_cell_triggers_recalc() {
 
     // A2 should now be 50+20 = 70
     assert_eq!(
-        *engine.mirror().get_cell_value(&cell_id_a2()).unwrap(),
+        *engine.cell_store().get_cell_value(&cell_id_a2()).unwrap(),
         CellValue::Number(FiniteF64::must(70.0))
     );
 
     // The recalc result should include A2 as changed
     assert!(
-        !result.1.recalc.changed_cells.is_empty(),
+        !result.recalc.changed_cells.is_empty(),
         "recalc should report changes"
     );
 
     // WorkbookStorage should also reflect the change
     assert_eq!(
-        *engine.mirror().get_cell_value(&cell_id_a1()).unwrap(),
+        *engine.cell_store().get_cell_value(&cell_id_a1()).unwrap(),
         CellValue::Number(FiniteF64::must(50.0))
     );
 }
@@ -105,7 +105,7 @@ fn test_structure_change_insert_rows() {
     let sid = sheet_id();
 
     // Verify initial positions: A1 at (0,0), A2 at (1,0)
-    let grid = engine.grid_index(&sid).unwrap();
+    let grid = engine.cell_store().get_sheet(&sid).unwrap();
     assert_eq!(grid.cell_position(&cell_id_a1()), Some((0, 0)));
     assert_eq!(grid.cell_position(&cell_id_a2()), Some((1, 0)));
 
@@ -119,12 +119,12 @@ fn test_structure_change_insert_rows() {
     assert!(result.is_ok(), "structure_change should succeed");
 
     // A1 stays at (0,0), A2 moves from (1,0) to (3,0)
-    let grid = engine.grid_index(&sid).unwrap();
+    let grid = engine.cell_store().get_sheet(&sid).unwrap();
     assert_eq!(grid.cell_position(&cell_id_a1()), Some((0, 0)));
     assert_eq!(grid.cell_position(&cell_id_a2()), Some((3, 0)));
 
     // Grid row count should increase
-    assert_eq!(grid.row_count(), 102); // 100 + 2
+    assert_eq!(engine.grid_index(&sid).unwrap().row_count(), 102); // 100 + 2
 }
 
 #[test]
@@ -215,7 +215,7 @@ fn pivot_source_sheet_id_survives_sheet_rename() {
         "filters": []
     });
 
-    let (_patches, created_result) = engine.pivot_create(config).expect("pivot create");
+    let created_result = engine.pivot_create(config).expect("pivot create");
     let created: compute_pivot::PivotTableConfig = created_result
         .extract_data()
         .expect("created pivot config in data");
@@ -249,7 +249,7 @@ fn pivot_legacy_source_sheet_name_resolves_to_source_sheet_id_on_read() {
         "filters": []
     });
 
-    let (_patches, created_result) = engine.pivot_create(config).expect("pivot create");
+    let created_result = engine.pivot_create(config).expect("pivot create");
     let created: compute_pivot::PivotTableConfig = created_result
         .extract_data()
         .expect("created pivot config in data");
@@ -285,7 +285,7 @@ fn pivot_create_treats_null_optional_sheet_ids_as_absent() {
         "filters": []
     });
 
-    let (_patches, created_result) = engine.pivot_create(config).expect("pivot create");
+    let created_result = engine.pivot_create(config).expect("pivot create");
     let created: compute_pivot::PivotTableConfig = created_result
         .extract_data()
         .expect("created pivot config in data");
@@ -359,7 +359,7 @@ fn pivot_update_persists_detected_fields_for_sparse_placement_config() {
         "filters": []
     });
 
-    let (_patches, created_result) = engine.pivot_create(config).expect("pivot create");
+    let created_result = engine.pivot_create(config).expect("pivot create");
     let created: domain_types::domain::pivot::PivotTableConfig = created_result
         .extract_data()
         .expect("created pivot config in data");
@@ -403,7 +403,7 @@ fn pivot_update_persists_detected_fields_for_sparse_placement_config() {
         },
     ];
 
-    let (_patches, update_result) = engine
+    let update_result = engine
         .pivot_update(&sid, &created.id, updated)
         .expect("pivot update");
     let updated_config: Option<domain_types::domain::pivot::PivotTableConfig> = update_result
@@ -535,12 +535,12 @@ fn test_set_cell_with_formula() {
 
     // A2 should now be 10*20 = 200
     assert_eq!(
-        *engine.mirror().get_cell_value(&cell_id_a2()).unwrap(),
+        *engine.cell_store().get_cell_value(&cell_id_a2()).unwrap(),
         CellValue::Number(FiniteF64::must(200.0))
     );
 
     // Result should have changes
-    assert!(!result.1.recalc.changed_cells.is_empty());
+    assert!(!result.recalc.changed_cells.is_empty());
 }
 
 // -------------------------------------------------------------------
@@ -563,5 +563,5 @@ fn test_accessors() {
     assert!(engine.grid_index(&fake_sheet).is_none());
 
     // compute() returns a reference
-    let _ = engine.mirror();
+    let _ = engine.cell_store();
 }

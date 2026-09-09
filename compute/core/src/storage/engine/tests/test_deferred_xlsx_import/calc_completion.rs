@@ -12,7 +12,7 @@ fn deferred_xlsx_full_calc_on_load_recalculates_empty_formula_caches_on_completi
     let (first, _second) = sheet_ids(&engine);
     assert_eq!(engine.get_cell_value(&first, 0, 1), CellValue::Null);
 
-    let (_, mutation) = engine
+    let mutation = engine
         .complete_deferred_hydration()
         .expect("full deferred hydration should honor fullCalcOnLoad");
     let (first, second) = sheet_ids(&engine);
@@ -36,7 +36,7 @@ fn deferred_xlsx_force_full_calc_recalculates_even_when_manual() {
         .import_from_xlsx_bytes_deferred(&bytes)
         .expect("deferred XLSX import should succeed");
 
-    let (_, mutation) = engine
+    let mutation = engine
         .complete_deferred_hydration()
         .expect("full deferred hydration should honor forceFullCalc");
     let (first, second) = sheet_ids(&engine);
@@ -67,7 +67,7 @@ fn deferred_xlsx_without_force_calc_keeps_empty_formula_caches_until_explicit_re
         .import_from_xlsx_bytes_deferred(&bytes)
         .expect("deferred XLSX import should succeed");
 
-    let (_, mutation) = engine
+    let mutation = engine
         .complete_deferred_hydration()
         .expect("full deferred hydration should not force ordinary workbooks");
     let (first, second) = sheet_ids(&engine);

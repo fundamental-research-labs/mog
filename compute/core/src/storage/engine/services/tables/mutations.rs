@@ -8,11 +8,11 @@ use crate::storage::engine::table_result_merge::merge_mutation_result;
 // Table CRUD Mutations
 // -------------------------------------------------------------------
 
-/// Create a new table from parameters and register it in the compute mirror.
+/// Create a new table from parameters and register it in the compute cell_store.
 #[allow(clippy::too_many_arguments)]
 pub(in crate::storage::engine) fn create_table(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     name: String,
     start_row: u32,
@@ -26,7 +26,7 @@ pub(in crate::storage::engine) fn create_table(
     compute_table::table::validate_table_name(&name).map_err(|err| ComputeError::Eval {
         message: err.to_string(),
     })?;
-    if mirror
+    if cell_store
         .all_tables()
         .iter()
         .any(|table| table.name.eq_ignore_ascii_case(&name))
@@ -47,8 +47,8 @@ pub(in crate::storage::engine) fn create_table(
             .map(|i| {
                 let col = start_col + i as u32;
                 if has_headers {
-                    // Read header cell value from the mirror
-                    mirror
+                    // Read header cell value from the cell store
+                    cell_store
                         .get_cell_value_at(sheet_id, cell_types::SheetPos::new(start_row, col))
                         .and_then(|v| match v {
                             value_types::CellValue::Text(s) => Some(s.to_string()),
@@ -94,30 +94,25 @@ pub(in crate::storage::engine) fn create_table(
         auto_calculated_columns: true,
         ..CanonicalTable::default()
     };
-    let grid =
-        stores
-            .grid_indexes
-            .get_mut(sheet_id)
-            .ok_or_else(|| ComputeError::SheetNotFound {
-                sheet_id: sheet_id.to_uuid_string(),
-            })?;
-    let header_start_id = grid.ensure_cell_id(start_row, start_col);
-    let header_end_id = grid.ensure_cell_id(start_row, end_col);
-    let data_end_id = grid.ensure_cell_id(end_row, end_col);
-
-    mirror.register_identity_only(
-        sheet_id,
-        SheetPos::new(start_row, start_col),
-        header_start_id,
-    );
-    mirror.register_identity_only(sheet_id, SheetPos::new(start_row, end_col), header_end_id);
-    mirror.register_identity_only(sheet_id, SheetPos::new(end_row, end_col), data_end_id);
+    let (header_start_id, header_end_id, data_end_id) = {
+        let mut ensure = |row, col| {
+            super::super::cell_editing::ensure_cell_id(stores, cell_store, sheet_id, row, col)
+                .ok_or_else(|| ComputeError::SheetNotFound {
+                    sheet_id: sheet_id.to_uuid_string(),
+                })
+        };
+        (
+            ensure(start_row, start_col)?,
+            ensure(start_row, end_col)?,
+            ensure(end_row, end_col)?,
+        )
+    };
 
     let header_start = id_to_hex(header_start_id.as_u128()).to_string();
     let header_end = id_to_hex(header_end_id.as_u128()).to_string();
     let data_end = id_to_hex(data_end_id.as_u128()).to_string();
 
-    stores.compute.set_table(mirror, table.clone());
+    stores.compute.set_table(cell_store, table.clone());
     let filter_state = create_table_filter(
         stores,
         &table,
@@ -128,9 +123,9 @@ pub(in crate::storage::engine) fn create_table(
     )?;
 
     // Re-parse formulas containing implicit structured refs now that the table exists.
-    let recalc_result = stores
-        .compute
-        .reparse_implicit_structured_refs(mirror, sheet_id, start_row, start_col, end_row, end_col);
+    let recalc_result = stores.compute.reparse_implicit_structured_refs(
+        cell_store, sheet_id, start_row, start_col, end_row, end_col,
+    );
 
     let mut result = MutationResult::empty();
     result.recalc = recalc_result;
@@ -161,10 +156,10 @@ pub(in crate::storage::engine) fn create_table(
 /// Delete a table by name.
 pub(in crate::storage::engine) fn delete_table(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     table_name: &str,
 ) -> Result<MutationResult, ComputeError> {
-    let table = mirror.get_table(table_name).cloned();
+    let table = cell_store.get_table(table_name).cloned();
     let table_filter = table.as_ref().and_then(|table| {
         let sheet_id = SheetId::from_uuid_str(&table.sheet_id).ok()?;
         filters::get_table_filter(&stores.storage, &sheet_id, &table.id)
@@ -174,16 +169,16 @@ pub(in crate::storage::engine) fn delete_table(
         .as_ref()
         .map(|(sheet_id, filter_id)| prepare_table_filter_delete(stores, sheet_id, filter_id));
 
-    stores.compute.remove_table(mirror, table_name);
+    stores.compute.remove_table(cell_store, table_name);
     rewrite_table_formulas(
         stores,
-        mirror,
+        cell_store,
         TableReferenceEdit::DeleteTable { table: table_name },
     );
     let mut result = MutationResult::from_recalc(
         stores
             .compute
-            .structure_change_with_formula_refresh(mirror, None, &[])?,
+            .structure_change_with_formula_refresh(cell_store, None, &[])?,
     );
     let visibility_transitions = if let Some(table) = table {
         let visibility_transitions = remove_table_filter(stores, table_filter.as_ref());
@@ -202,7 +197,7 @@ pub(in crate::storage::engine) fn delete_table(
     {
         let filter_result = finish_prepared_table_filter_delete(
             stores,
-            mirror,
+            cell_store,
             sheet_id,
             prepared_filter_delete,
             &visibility_transitions,
@@ -215,17 +210,17 @@ pub(in crate::storage::engine) fn delete_table(
 /// Rename a table.
 pub(in crate::storage::engine) fn rename_table(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     old_name: &str,
     new_name: &str,
 ) -> Result<MutationResult, ComputeError> {
-    let table = mirror
+    let table = cell_store
         .get_table(old_name)
         .cloned()
         .ok_or_else(|| ComputeError::Eval {
             message: format!("Table not found: {}", old_name),
         })?;
-    let other_tables: Vec<CanonicalTable> = mirror
+    let other_tables: Vec<CanonicalTable> = cell_store
         .all_tables()
         .iter()
         .filter(|table| table.name != old_name)
@@ -237,12 +232,12 @@ pub(in crate::storage::engine) fn rename_table(
                 message: err.to_string(),
             })?;
 
-    stores.compute.remove_table(mirror, old_name);
-    stores.compute.set_table(mirror, renamed.clone());
+    stores.compute.remove_table(cell_store, old_name);
+    stores.compute.set_table(cell_store, renamed.clone());
 
     rewrite_table_formulas(
         stores,
-        mirror,
+        cell_store,
         TableReferenceEdit::RenameTable {
             old: old_name,
             new: new_name,
@@ -251,21 +246,21 @@ pub(in crate::storage::engine) fn rename_table(
     Ok(MutationResult::from_recalc(
         stores
             .compute
-            .structure_change_with_formula_refresh(mirror, None, &[])?,
+            .structure_change_with_formula_refresh(cell_store, None, &[])?,
     ))
 }
 
 /// Resize a table's range.
 pub(in crate::storage::engine) fn resize_table(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     table_name: &str,
     new_start_row: u32,
     new_start_col: u32,
     new_end_row: u32,
     new_end_col: u32,
 ) -> Result<MutationResult, ComputeError> {
-    let table = mirror
+    let table = cell_store
         .get_table(table_name)
         .cloned()
         .ok_or_else(|| ComputeError::Eval {
@@ -284,7 +279,7 @@ pub(in crate::storage::engine) fn resize_table(
         let i = resized.columns.len();
         let col = new_start_col + i as u32;
         let col_name = if resized.has_header_row {
-            mirror
+            cell_store
                 .get_cell_value_at(&sheet_id, cell_types::SheetPos::new(new_start_row, col))
                 .and_then(|v| match v {
                     value_types::CellValue::Text(s) => Some(s.to_string()),
@@ -308,11 +303,11 @@ pub(in crate::storage::engine) fn resize_table(
     // If columns contracted, remove excess.
     resized.columns.truncate(new_col_count);
 
-    stores.compute.set_table(mirror, resized.clone());
+    stores.compute.set_table(cell_store, resized.clone());
 
     // Re-parse formulas with implicit structured refs in the new range.
     let _ = stores.compute.reparse_implicit_structured_refs(
-        mirror,
+        cell_store,
         &sheet_id,
         new_start_row,
         new_start_col,
@@ -326,10 +321,10 @@ pub(in crate::storage::engine) fn resize_table(
 /// Toggle the totals row on/off for a table.
 pub(in crate::storage::engine) fn toggle_totals_row(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     table_name: &str,
 ) -> Result<MutationResult, ComputeError> {
-    let table = mirror
+    let table = cell_store
         .get_table(table_name)
         .cloned()
         .ok_or_else(|| ComputeError::Eval {
@@ -355,17 +350,17 @@ pub(in crate::storage::engine) fn toggle_totals_row(
             updated.range.end_col(),
         );
     }
-    stores.compute.set_table(mirror, updated.clone());
+    stores.compute.set_table(cell_store, updated.clone());
     Ok(MutationResult::empty())
 }
 
 /// Toggle the header row on/off for a table.
 pub(in crate::storage::engine) fn toggle_header_row(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     table_name: &str,
 ) -> Result<MutationResult, ComputeError> {
-    let table = mirror
+    let table = cell_store
         .get_table(table_name)
         .cloned()
         .ok_or_else(|| ComputeError::Eval {
@@ -373,19 +368,19 @@ pub(in crate::storage::engine) fn toggle_header_row(
         })?;
     let mut updated = table;
     updated.has_header_row = !updated.has_header_row;
-    stores.compute.set_table(mirror, updated.clone());
+    stores.compute.set_table(cell_store, updated.clone());
     Ok(MutationResult::empty())
 }
 
 /// Add a column to a table at the given position.
 pub(in crate::storage::engine) fn add_table_column(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     table_name: &str,
     column_name: &str,
     position: u32,
 ) -> Result<MutationResult, ComputeError> {
-    let table = mirror
+    let table = cell_store
         .get_table(table_name)
         .cloned()
         .ok_or_else(|| ComputeError::Eval {
@@ -422,24 +417,23 @@ pub(in crate::storage::engine) fn add_table_column(
             })?;
         let row = updated.range.start_row();
         let col = updated.range.start_col() + pos as u32;
-        let cell_id = super::super::cell_editing::ensure_cell_id_mirrored(
-            stores, mirror, &sheet_id, row, col,
-        )
-        .ok_or_else(|| ComputeError::SheetNotFound {
-            sheet_id: sheet_id.to_uuid_string(),
-        })?;
+        let cell_id =
+            super::super::cell_editing::ensure_cell_id(stores, cell_store, &sheet_id, row, col)
+                .ok_or_else(|| ComputeError::SheetNotFound {
+                    sheet_id: sheet_id.to_uuid_string(),
+                })?;
         let input = CellInput::Literal {
             text: column_name.to_string(),
         };
         let recalc = super::super::cell_editing::set_cell(
-            stores, mirror, &sheet_id, cell_id, row, col, &input,
+            stores, cell_store, &sheet_id, cell_id, row, col, &input,
         )?;
         MutationResult::from_recalc(recalc)
     } else {
         MutationResult::empty()
     };
 
-    stores.compute.set_table(mirror, updated.clone());
+    stores.compute.set_table(cell_store, updated.clone());
     result.table_changes.push(TableChange {
         name: updated.name,
         table_id: Some(updated.id),
@@ -452,12 +446,12 @@ pub(in crate::storage::engine) fn add_table_column(
 /// Rename a column in a table.
 pub(in crate::storage::engine) fn rename_table_column(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     table_name: &str,
     column_index: u32,
     new_column_name: &str,
 ) -> Result<MutationResult, ComputeError> {
-    let table = mirror
+    let table = cell_store
         .get_table(table_name)
         .cloned()
         .ok_or_else(|| ComputeError::Eval {
@@ -492,37 +486,37 @@ pub(in crate::storage::engine) fn rename_table_column(
             })?;
         let row = updated.range.start_row();
         let col = updated.range.start_col() + column_index;
-        let cell_id = super::super::cell_editing::ensure_cell_id_mirrored(
-            stores, mirror, &sheet_id, row, col,
-        )
-        .ok_or_else(|| ComputeError::SheetNotFound {
-            sheet_id: sheet_id.to_uuid_string(),
-        })?;
+        let cell_id =
+            super::super::cell_editing::ensure_cell_id(stores, cell_store, &sheet_id, row, col)
+                .ok_or_else(|| ComputeError::SheetNotFound {
+                    sheet_id: sheet_id.to_uuid_string(),
+                })?;
         let input = CellInput::Literal {
             text: new_column_name.to_string(),
         };
         let recalc = super::super::cell_editing::set_cell(
-            stores, mirror, &sheet_id, cell_id, row, col, &input,
+            stores, cell_store, &sheet_id, cell_id, row, col, &input,
         )?;
         MutationResult::from_recalc(recalc)
     } else {
         MutationResult::empty()
     };
 
-    stores.compute.set_table(mirror, updated.clone());
+    stores.compute.set_table(cell_store, updated.clone());
 
     rewrite_table_formulas(
         stores,
-        mirror,
+        cell_store,
         TableReferenceEdit::RenameColumn {
             table: table_name,
             old: &old_column_name,
             new: new_column_name,
         },
     );
-    let formula_recalc = stores
-        .compute
-        .structure_change_with_formula_refresh(mirror, None, &[])?;
+    let formula_recalc =
+        stores
+            .compute
+            .structure_change_with_formula_refresh(cell_store, None, &[])?;
     merge_mutation_result(&mut result, MutationResult::from_recalc(formula_recalc));
 
     result.table_changes.push(TableChange {
@@ -538,11 +532,11 @@ pub(in crate::storage::engine) fn rename_table_column(
 /// Remove a column from a table by index.
 pub(in crate::storage::engine) fn remove_table_column(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     table_name: &str,
     column_index: u32,
 ) -> Result<MutationResult, ComputeError> {
-    let table = mirror
+    let table = cell_store
         .get_table(table_name)
         .cloned()
         .ok_or_else(|| ComputeError::Eval {
@@ -574,11 +568,11 @@ pub(in crate::storage::engine) fn remove_table_column(
             updated.range.end_col() - 1,
         );
     }
-    stores.compute.set_table(mirror, updated.clone());
+    stores.compute.set_table(cell_store, updated.clone());
 
     rewrite_table_formulas(
         stores,
-        mirror,
+        cell_store,
         TableReferenceEdit::DeleteColumn {
             table: table_name,
             column: &deleted_col_name,
@@ -587,19 +581,19 @@ pub(in crate::storage::engine) fn remove_table_column(
     Ok(MutationResult::from_recalc(
         stores
             .compute
-            .structure_change_with_formula_refresh(mirror, None, &[])?,
+            .structure_change_with_formula_refresh(cell_store, None, &[])?,
     ))
 }
 
 /// Add a calculated column to a table.
 pub(in crate::storage::engine) fn add_calculated_column(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     table_name: &str,
     column_name: &str,
     formula: &str,
 ) -> Result<MutationResult, ComputeError> {
-    let table = mirror
+    let table = cell_store
         .get_table(table_name)
         .cloned()
         .ok_or_else(|| ComputeError::Eval {
@@ -622,18 +616,18 @@ pub(in crate::storage::engine) fn add_calculated_column(
         updated.range.end_row(),
         updated.range.end_col().saturating_add(1),
     );
-    stores.compute.set_table(mirror, updated.clone());
+    stores.compute.set_table(cell_store, updated.clone());
     Ok(MutationResult::empty())
 }
 
 /// Remove a calculated column from a table by column index.
 pub(in crate::storage::engine) fn remove_calculated_column(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     table_name: &str,
     column_index: u32,
 ) -> Result<MutationResult, ComputeError> {
-    let table = mirror
+    let table = cell_store
         .get_table(table_name)
         .cloned()
         .ok_or_else(|| ComputeError::Eval {
@@ -651,19 +645,19 @@ pub(in crate::storage::engine) fn remove_calculated_column(
         });
     }
     updated.columns[idx].calculated_formula = None;
-    stores.compute.set_table(mirror, updated.clone());
+    stores.compute.set_table(cell_store, updated.clone());
     Ok(MutationResult::empty())
 }
 
 /// Update the formula for a calculated column.
 pub(in crate::storage::engine) fn update_calculated_column(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     table_name: &str,
     column_index: u32,
     formula: &str,
 ) -> Result<MutationResult, ComputeError> {
-    let table = mirror
+    let table = cell_store
         .get_table(table_name)
         .cloned()
         .ok_or_else(|| ComputeError::Eval {
@@ -681,18 +675,18 @@ pub(in crate::storage::engine) fn update_calculated_column(
         });
     }
     updated.columns[idx].calculated_formula = Some(formula.to_string());
-    stores.compute.set_table(mirror, updated.clone());
+    stores.compute.set_table(cell_store, updated.clone());
     Ok(MutationResult::empty())
 }
 
 /// Apply auto-expansion to a table.
 pub(in crate::storage::engine) fn apply_auto_expansion(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     table_name: &str,
 ) -> Result<MutationResult, ComputeError> {
     let sheet_hex = sheet_id.to_uuid_string();
-    let _table = &mirror
+    let _table = &cell_store
         .all_tables()
         .iter()
         .find(|t| t.name == table_name && t.sheet_id == sheet_hex)
@@ -756,10 +750,10 @@ pub(in crate::storage::engine) fn update_custom_table_style(
 /// Set a table definition from a `TableDef`.
 pub(in crate::storage::engine) fn set_table_def(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     table: TableDef,
 ) {
-    let existing = mirror.get_table(&table.name).cloned();
+    let existing = cell_store.get_table(&table.name).cloned();
     let table_id = existing
         .as_ref()
         .map(|table| table.id.clone())
@@ -804,19 +798,19 @@ pub(in crate::storage::engine) fn set_table_def(
         auto_calculated_columns: true,
         ..CanonicalTable::default()
     };
-    stores.compute.set_table(mirror, canonical);
+    stores.compute.set_table(cell_store, canonical);
 }
 
 /// Remove a table by name.
 pub(in crate::storage::engine) fn remove_table_def(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     name: &str,
 ) {
-    stores.compute.remove_table(mirror, name);
+    stores.compute.remove_table(cell_store, name);
     rewrite_table_formulas(
         stores,
-        mirror,
+        cell_store,
         TableReferenceEdit::DeleteTable { table: name },
     );
 }
@@ -824,10 +818,10 @@ pub(in crate::storage::engine) fn remove_table_def(
 /// Convert a table to a plain range.
 pub(in crate::storage::engine) fn convert_table_to_range(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     table_name: &str,
 ) -> Result<MutationResult, ComputeError> {
-    let table = mirror
+    let table = cell_store
         .get_table(table_name)
         .cloned()
         .ok_or_else(|| ComputeError::Eval {
@@ -848,15 +842,15 @@ pub(in crate::storage::engine) fn convert_table_to_range(
     let table_def = crate::storage::table_format::table_to_table_def(&table);
     let sheet_name = SheetId::from_uuid_str(&table.sheet_id)
         .ok()
-        .and_then(|id| mirror.get_sheet(&id).map(|sheet| sheet.name.clone()))
+        .and_then(|id| cell_store.get_sheet(&id).map(|sheet| sheet.name.clone()))
         .ok_or_else(|| ComputeError::SheetNotFound {
             sheet_id: table.sheet_id.clone(),
         })?;
-    let mut result = materialize_table_visible_formats(stores, mirror, &table)?;
-    stores.compute.remove_table(mirror, table_name);
+    let mut result = materialize_table_visible_formats(stores, cell_store, &table)?;
+    stores.compute.remove_table(cell_store, table_name);
     let converted_count = rewrite_table_formulas(
         stores,
-        mirror,
+        cell_store,
         TableReferenceEdit::ConvertToRange {
             table: &table_def,
             sheet_name: &sheet_name,
@@ -865,7 +859,7 @@ pub(in crate::storage::engine) fn convert_table_to_range(
     merge_mutation_result(
         &mut result,
         MutationResult::from_recalc(stores.compute.structure_change_with_formula_refresh(
-            mirror,
+            cell_store,
             None,
             &[],
         )?),
@@ -876,7 +870,7 @@ pub(in crate::storage::engine) fn convert_table_to_range(
     {
         let filter_result = finish_prepared_table_filter_delete(
             stores,
-            mirror,
+            cell_store,
             sheet_id,
             prepared_filter_delete,
             &visibility_transitions,

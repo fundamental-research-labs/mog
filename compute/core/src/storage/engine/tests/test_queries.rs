@@ -453,7 +453,7 @@ fn batch_column_width_setters_update_queries_and_dimension_changes() {
     let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
-    let (_, pixel_result) = engine
+    let pixel_result = engine
         .set_col_widths(&sid, &[(2, 75.0), (4, 82.0)])
         .expect("set_col_widths");
 
@@ -489,7 +489,7 @@ fn batch_column_width_setters_update_queries_and_dimension_changes() {
         ]
     );
 
-    let (_, char_result) = engine
+    let char_result = engine
         .set_col_widths_chars(&sid, &[(6, 10.0), (7, 11.0)])
         .expect("set_col_widths_chars");
 

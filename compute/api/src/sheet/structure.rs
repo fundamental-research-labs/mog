@@ -33,7 +33,7 @@ impl SheetStructure {
         };
         self.dispatch
             .call_engine(move |e| e.structure_change(&sid, &change))
-            .and_then(|r| r.map(|(_vp, m)| m).map_err(ComputeApiError::from))
+            .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
     /// Delete rows starting at the given 0-based position.
@@ -46,7 +46,7 @@ impl SheetStructure {
         };
         self.dispatch
             .call_engine(move |e| e.structure_change(&sid, &change))
-            .and_then(|r| r.map(|(_vp, m)| m).map_err(ComputeApiError::from))
+            .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
     /// Insert columns at the given 0-based position.
@@ -59,7 +59,7 @@ impl SheetStructure {
         };
         self.dispatch
             .call_engine(move |e| e.structure_change(&sid, &change))
-            .and_then(|r| r.map(|(_vp, m)| m).map_err(ComputeApiError::from))
+            .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
     /// Delete columns starting at the given 0-based position.
@@ -72,7 +72,7 @@ impl SheetStructure {
         };
         self.dispatch
             .call_engine(move |e| e.structure_change(&sid, &change))
-            .and_then(|r| r.map(|(_vp, m)| m).map_err(ComputeApiError::from))
+            .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
     /// Raw `structure_change` for callers that already have a `StructureChange`.
@@ -83,7 +83,7 @@ impl SheetStructure {
         let sid = self.sheet_id;
         self.dispatch
             .call_engine(move |e| e.structure_change(&sid, &change))
-            .and_then(|r| r.map(|(_vp, m)| m).map_err(ComputeApiError::from))
+            .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
     // -----------------------------------------------------------------
@@ -100,10 +100,7 @@ impl SheetStructure {
     ) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| {
-                e.merge_range(&sid, start_row, start_col, end_row, end_col)
-                    .map(|(_, r)| r)
-            })
+            .call_engine(move |e| e.merge_range(&sid, start_row, start_col, end_row, end_col))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -117,10 +114,7 @@ impl SheetStructure {
     ) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| {
-                e.unmerge_range(&sid, start_row, start_col, end_row, end_col)
-                    .map(|(_, r)| r)
-            })
+            .call_engine(move |e| e.unmerge_range(&sid, start_row, start_col, end_row, end_col))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -134,10 +128,7 @@ impl SheetStructure {
     ) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| {
-                e.merge_across(&sid, start_row, start_col, end_row, end_col)
-                    .map(|(_, r)| r)
-            })
+            .call_engine(move |e| e.merge_across(&sid, start_row, start_col, end_row, end_col))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -151,10 +142,7 @@ impl SheetStructure {
     ) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| {
-                e.merge_and_center(&sid, start_row, start_col, end_row, end_col)
-                    .map(|(_, r)| r)
-            })
+            .call_engine(move |e| e.merge_and_center(&sid, start_row, start_col, end_row, end_col))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -162,7 +150,7 @@ impl SheetStructure {
     pub fn clear_all_merges(&self) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.clear_all_merges(&sid).map(|(_, r)| r))
+            .call_engine(move |e| e.clear_all_merges(&sid))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -219,7 +207,7 @@ impl SheetStructure {
                     target_col,
                 )
             })
-            .and_then(|r| r.map(|(_vp, m)| m).map_err(ComputeApiError::from))
+            .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
     /// Insert cells with shift (right or down) in a sub-range.
@@ -238,7 +226,7 @@ impl SheetStructure {
             .call_engine(move |e| {
                 e.insert_cells_with_shift(&sid, row, col, row_count, col_count, shift_right)
             })
-            .and_then(|r| r.map(|(_vp, m)| m).map_err(ComputeApiError::from))
+            .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
     /// Delete cells with shift (left or up) in a sub-range.
@@ -257,7 +245,7 @@ impl SheetStructure {
             .call_engine(move |e| {
                 e.delete_cells_with_shift(&sid, row, col, row_count, col_count, shift_left)
             })
-            .and_then(|r| r.map(|(_vp, m)| m).map_err(ComputeApiError::from))
+            .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
     /// Remove duplicate rows in a range.
@@ -285,7 +273,6 @@ impl SheetStructure {
                     columns,
                     has_headers,
                 )
-                .map(|(_, r)| r)
             })
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
@@ -308,7 +295,6 @@ impl SheetStructure {
                 e.text_to_columns(
                     &sid, start_row, end_row, source_col, dest_row, dest_col, options,
                 )
-                .map(|(_, r)| r)
             })
             .and_then(|r| r.map_err(ComputeApiError::from))
     }

@@ -1,29 +1,27 @@
 use std::collections::HashSet;
 
+use crate::cells::CellStore;
 use crate::storage::WorkbookStorage;
 use cell_types::{CellId, RangePos, SheetId};
-use compute_document::identity::GridIndex;
 
 /// Clear properties for resolved cell identities. Values and formulas are cleared
 /// by the compute mutation that calls this helper.
-pub fn clear_cells_by_hex(
+pub fn clear_cells_by_id(
     storage: &mut WorkbookStorage,
     sheet_id: SheetId,
-    cell_hexes: &[String],
+    cell_ids: &[CellId],
     clear_properties: bool,
 ) {
     if clear_properties {
-        for hex in cell_hexes {
-            crate::storage::properties::clear_properties(storage, &sheet_id, hex);
+        for id in cell_ids {
+            crate::storage::properties::clear_properties_by_id(storage, &sheet_id, id);
         }
     }
 }
 
 /// Clear all cells in a range and return their CellIds.
 ///
-/// Removes properties and unbinds cell identities
-/// them from the GridIndex. Used for structural operations where `#REF!`
-/// errors are the correct behavior.
+/// Clears sparse metadata; the compute caller clears values and unbinds identities.
 ///
 /// `exclude` is an optional set of CellIds to skip (for overlapping
 /// moves — the relocation path uses this to avoid wiping cells that are
@@ -31,14 +29,15 @@ pub fn clear_cells_by_hex(
 pub fn clear_range_and_return_ids(
     storage: &mut WorkbookStorage,
     sheet_id: SheetId,
-    grid: &mut GridIndex,
+    cells: &CellStore,
     range: &RangePos,
     exclude: Option<&HashSet<CellId>>,
 ) -> Vec<CellId> {
     // Snapshot matching CellIds before mutating the grid. `cells_in_range`
     // yields `(CellId, row, col)` — we only need the id here.
-    let targets: Vec<CellId> = grid
+    let targets: Vec<CellId> = cells
         .cells_in_range(
+            &sheet_id,
             range.start_row(),
             range.start_col(),
             range.end_row(),
@@ -51,12 +50,28 @@ pub fn clear_range_and_return_ids(
         })
         .collect();
 
-    if targets.is_empty() {
-        return Vec::new();
+    clear_metadata_for_cell_ids(storage, sheet_id, &targets);
+    targets
+}
+
+/// Remove metadata for structurally deleted identities, retaining history inverses.
+pub(crate) fn clear_metadata_for_cell_ids(
+    storage: &mut WorkbookStorage,
+    sheet_id: SheetId,
+    cell_ids: &[CellId],
+) {
+    if cell_ids.is_empty() {
+        return;
     }
 
+    let target_set: HashSet<CellId> = cell_ids.iter().copied().collect();
+    crate::storage::engine::history::metadata::capture_pruned_cell_metadata(
+        storage,
+        sheet_id,
+        |id| target_set.contains(&id),
+    );
     if storage.history.is_active() {
-        for &id in &targets {
+        for &id in cell_ids {
             if storage
                 .sheet_metadata
                 .get(&sheet_id)
@@ -70,43 +85,31 @@ pub fn clear_range_and_return_ids(
     }
     crate::storage::engine::history::metadata::capture_sheet_field!(storage, sheet_id, hyperlinks);
     if let Some(sheet) = storage.sheet_metadata.get_mut(&sheet_id) {
-        for id in &targets {
+        for id in cell_ids {
             sheet.cell_properties.remove(id);
         }
     }
-    for id in &targets {
+    for id in cell_ids {
         storage.clear_cell_metadata(*id);
     }
 
-    // Drop identity bindings so these cells no longer resolve at their
-    // former positions.
-    for cid in &targets {
-        grid.remove_cell(cid);
-    }
-    crate::storage::engine::history::metadata::capture_pruned_axis_metadata(
-        storage, sheet_id, grid,
-    );
     if let Some(sheet) = storage.sheet_metadata.get_mut(&sheet_id) {
         sheet.hyperlinks.retain(|link| {
-            grid.cell_position(&link.start_id).is_some()
-                && link
-                    .end_id
-                    .is_none_or(|id| grid.cell_position(&id).is_some())
+            !target_set.contains(&link.start_id)
+                && link.end_id.is_none_or(|id| !target_set.contains(&id))
         });
         sheet.comments.retain(|comment| {
             comment
                 .cell_ref
                 .cell()
-                .is_none_or(|id| grid.cell_position(&id).is_some())
+                .is_none_or(|id| !target_set.contains(&id))
         });
         for (id, annotation) in &mut sheet.cell_annotations {
-            if grid.cell_position(id).is_none() {
+            if target_set.contains(id) {
                 annotation.status = crate::engine_types::AnnotationStatus::Stale;
                 annotation.stale_reason = Some("anchorMissing".into());
                 annotation.checked_at = None;
             }
         }
     }
-
-    targets
 }

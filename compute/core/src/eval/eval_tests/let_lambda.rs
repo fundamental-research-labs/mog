@@ -9,8 +9,8 @@ use super::*;
 #[test]
 fn test_single_column_range() {
     // SINGLE(col 0, rows 0..4) with formula cell at row 2 → value at (2,0) = 20
-    let (m, s) = test_mirror();
-    let ctx = MirrorContext::new(&m, cell_id_at(2, 3), s);
+    let (m, s) = test_store();
+    let ctx = EvalContext::new(&m, cell_id_at(2, 3), s);
     let range = ASTNode::Range(RangeRef {
         start: CellRef::Positional {
             sheet: s,
@@ -33,8 +33,8 @@ fn test_single_column_range() {
 #[test]
 fn test_single_row_range() {
     // SINGLE(row 0, cols 0..4) with formula cell at col 3 → value at (0,3) = 3
-    let (m, s) = test_mirror();
-    let ctx = MirrorContext::new(&m, cell_id_at(1, 3), s);
+    let (m, s) = test_store();
+    let ctx = EvalContext::new(&m, cell_id_at(1, 3), s);
     let range = ASTNode::Range(RangeRef {
         start: CellRef::Positional {
             sheet: s,
@@ -57,7 +57,7 @@ fn test_single_row_range() {
 #[test]
 fn test_single_single_cell() {
     // SINGLE on a single cell reference → just that value
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let cell_ref = ASTNode::CellReference(CellRefNode {
         reference: CellRef::Positional {
@@ -75,8 +75,8 @@ fn test_single_single_cell() {
 #[test]
 fn test_single_out_of_range() {
     // Formula cell at row 4, range covers rows 0..2 → #VALUE!
-    let (m, s) = test_mirror();
-    let ctx = MirrorContext::new(&m, cell_id_at(4, 0), s);
+    let (m, s) = test_store();
+    let ctx = EvalContext::new(&m, cell_id_at(4, 0), s);
     let range = ASTNode::Range(RangeRef {
         start: CellRef::Positional {
             sheet: s,
@@ -99,7 +99,7 @@ fn test_single_out_of_range() {
 #[test]
 fn test_single_multi_row_multi_col() {
     // Multi-row, multi-col range picks the both-axes-aligned cell, matching @.
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let range = ASTNode::Range(RangeRef {
         start: CellRef::Positional {
@@ -122,7 +122,7 @@ fn test_single_multi_row_multi_col() {
 
 #[test]
 fn test_single_wrong_arg_count() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // Zero args → #VALUE!
     assert_eq!(
@@ -142,7 +142,7 @@ fn test_single_wrong_arg_count() {
 #[test]
 fn test_single_scalar_passthrough() {
     // SINGLE(42) → 42 (scalar pass-through)
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = func("SINGLE", vec![ASTNode::Number(42.0)]);
     assert_eq!(eval(&node, &ctx), CellValue::number(42.0));
@@ -151,8 +151,8 @@ fn test_single_scalar_passthrough() {
 #[test]
 fn test_single_full_column_range() {
     // Full-column range (ColumnRange type): SINGLE(A:A) with formula at row 3
-    let (m, s) = test_mirror();
-    let ctx = MirrorContext::new(&m, cell_id_at(3, 2), s);
+    let (m, s) = test_store();
+    let ctx = EvalContext::new(&m, cell_id_at(3, 2), s);
     let range = ASTNode::Range(RangeRef {
         start: CellRef::Positional {
             sheet: s,
@@ -175,8 +175,8 @@ fn test_single_full_column_range() {
 #[test]
 fn test_single_full_row_range() {
     // Full-row range (RowRange type): SINGLE(1:1) with formula at col 4
-    let (m, s) = test_mirror();
-    let ctx = MirrorContext::new(&m, cell_id_at(2, 4), s);
+    let (m, s) = test_store();
+    let ctx = EvalContext::new(&m, cell_id_at(2, 4), s);
     let range = ASTNode::Range(RangeRef {
         start: CellRef::Positional {
             sheet: s,
@@ -199,8 +199,8 @@ fn test_single_full_row_range() {
 #[test]
 fn test_single_range_in_same_row() {
     // Column range where formula cell is at the first row of the range
-    let (m, s) = test_mirror();
-    let ctx = MirrorContext::new(&m, cell_id_at(0, 2), s);
+    let (m, s) = test_store();
+    let ctx = EvalContext::new(&m, cell_id_at(0, 2), s);
     let range = ASTNode::Range(RangeRef {
         start: CellRef::Positional {
             sheet: s,
@@ -228,7 +228,7 @@ fn test_single_range_in_same_row() {
 #[test]
 fn test_let_basic() {
     // =LET(x, 10, x) -> 10
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = func("LET", vec![ident("x"), ASTNode::Number(10.0), ident("x")]);
     assert_eq!(eval(&node, &ctx), CellValue::number(10.0));
@@ -237,7 +237,7 @@ fn test_let_basic() {
 #[test]
 fn test_let_multi_binding() {
     // =LET(x, 10, y, 20, x+y) -> 30
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = func(
         "LET",
@@ -255,7 +255,7 @@ fn test_let_multi_binding() {
 #[test]
 fn test_let_cascading_bindings() {
     // =LET(x, 5, y, x*2, y+1) -> 11
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = func(
         "LET",
@@ -273,7 +273,7 @@ fn test_let_cascading_bindings() {
 #[test]
 fn test_let_with_text() {
     // =LET(name, "hello", UPPER(name)) -> "HELLO"
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = func(
         "LET",
@@ -289,7 +289,7 @@ fn test_let_with_text() {
 #[test]
 fn test_let_wrong_arg_count_too_few() {
     // =LET(x, 10) -> #VALUE! (needs at least 3 args)
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = func("LET", vec![ident("x"), ASTNode::Number(10.0)]);
     assert_eq!(eval(&node, &ctx), CellValue::Error(CellError::Value, None));
@@ -298,7 +298,7 @@ fn test_let_wrong_arg_count_too_few() {
 #[test]
 fn test_let_wrong_arg_count_even() {
     // =LET(x, 10, y, 20) -> #VALUE! (even count, no final calculation)
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = func(
         "LET",
@@ -315,7 +315,7 @@ fn test_let_wrong_arg_count_even() {
 #[test]
 fn test_let_non_identifier_name() {
     // =LET(10, 20, 30) -> #VALUE! (first arg is not an identifier)
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = func(
         "LET",
@@ -331,7 +331,7 @@ fn test_let_non_identifier_name() {
 #[test]
 fn test_let_nested() {
     // =LET(x, 1, LET(y, 2, x+y)) -> 3
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let inner_let = func(
         "LET",
@@ -350,7 +350,7 @@ fn test_let_scope_isolation() {
     // Inner LET's y should not leak to outer scope
     // =LET(x, LET(y, 10, y), x+1) -> 11
     // And y should not be visible in the outer scope
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let inner_let = func("LET", vec![ident("y"), ASTNode::Number(10.0), ident("y")]);
     let node = func(
@@ -378,7 +378,7 @@ fn test_let_scope_isolation() {
 #[test]
 fn test_let_with_error_in_value() {
     // =LET(x, 1/0, x) -> #DIV/0!
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = func(
         "LET",
@@ -398,7 +398,7 @@ fn test_let_with_error_in_value() {
 #[test]
 fn test_lambda_basic_call() {
     // =(LAMBDA(x, x+1))(5) -> 6
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let lambda = func(
         "LAMBDA",
@@ -417,7 +417,7 @@ fn test_lambda_basic_call() {
 #[test]
 fn test_lambda_multi_param() {
     // =(LAMBDA(x, y, x*y))(3, 4) -> 12
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let lambda = func(
         "LAMBDA",
@@ -437,7 +437,7 @@ fn test_lambda_multi_param() {
 #[test]
 fn test_lambda_zero_params() {
     // =(LAMBDA(42))() -> 42
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let lambda = func("LAMBDA", vec![ASTNode::Number(42.0)]);
     let node = ASTNode::CallExpression {
@@ -450,7 +450,7 @@ fn test_lambda_zero_params() {
 #[test]
 fn test_lambda_wrong_arg_count() {
     // =(LAMBDA(x, y, x+y))(1) -> #VALUE! (expected 2 args, got 1)
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let lambda = func(
         "LAMBDA",
@@ -470,7 +470,7 @@ fn test_lambda_wrong_arg_count() {
 #[test]
 fn test_lambda_no_args_error() {
     // =LAMBDA() -> #VALUE! (needs at least body)
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = func("LAMBDA", vec![]);
     assert_eq!(eval(&node, &ctx), CellValue::Error(CellError::Value, None));
@@ -479,7 +479,7 @@ fn test_lambda_no_args_error() {
 #[test]
 fn test_lambda_non_identifier_param() {
     // =LAMBDA(10, 20) -> #VALUE! (first arg is not an identifier)
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = func("LAMBDA", vec![ASTNode::Number(10.0), ASTNode::Number(20.0)]);
     assert_eq!(eval(&node, &ctx), CellValue::Error(CellError::Value, None));
@@ -491,7 +491,7 @@ fn test_lambda_returns_lambda_value() {
     // to #CALC! because EvalValue::Lambda is internal-only and cannot escape.
     // (Lambda values are first-class inside the evaluator but converted at
     // the boundary by `into_cell_value()`.)
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = func(
         "LAMBDA",
@@ -511,7 +511,7 @@ fn test_lambda_returns_lambda_value() {
 #[test]
 fn test_let_with_lambda() {
     // =LET(f, LAMBDA(x, x^2), f(5)) -> 25
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let lambda = func(
         "LAMBDA",
@@ -531,7 +531,7 @@ fn test_let_with_lambda() {
 #[test]
 fn test_let_with_lambda_multi_param() {
     // =LET(add, LAMBDA(a, b, a+b), add(10, 20)) -> 30
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let lambda = func(
         "LAMBDA",
@@ -553,7 +553,7 @@ fn test_let_with_lambda_multi_param() {
 fn test_let_lambda_with_let_variable() {
     // =LET(base, 10, f, LAMBDA(x, x+base), f(5)) -> 15
     // Lambda body captures 'base' from LET scope
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let lambda = func(
         "LAMBDA",
@@ -581,7 +581,7 @@ fn test_lambda_scope_isolation() {
     // Lambda parameters should not leak to outer scope
     // =LET(f, LAMBDA(x, x+1), LET(r, f(10), x))
     // x should be #NAME? in the outer scope
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let lambda = func(
         "LAMBDA",
@@ -609,7 +609,7 @@ fn test_lambda_scope_isolation() {
 #[test]
 fn test_calling_non_lambda() {
     // Calling a number should return #VALUE!
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = ASTNode::CallExpression {
         callee: Box::new(ASTNode::Paren(Box::new(ASTNode::Number(42.0)))),
@@ -621,7 +621,7 @@ fn test_calling_non_lambda() {
 #[test]
 fn test_calling_error_propagates() {
     // Calling an error should propagate
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = ASTNode::CallExpression {
         callee: Box::new(ASTNode::Paren(Box::new(ASTNode::Error(CellError::Na)))),
@@ -633,7 +633,7 @@ fn test_calling_error_propagates() {
 #[test]
 fn test_let_with_function_calls_in_body() {
     // =LET(x, 10, y, 20, SUM(x, y)) -> 30
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = func(
         "LET",
@@ -652,7 +652,7 @@ fn test_let_with_function_calls_in_body() {
 fn test_let_shadowing() {
     // Inner LET shadows outer variable
     // =LET(x, 10, LET(x, 20, x)) -> 20
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let inner = func("LET", vec![ident("x"), ASTNode::Number(20.0), ident("x")]);
     let node = func("LET", vec![ident("x"), ASTNode::Number(10.0), inner]);
@@ -665,7 +665,7 @@ fn test_let_shadowing_restores() {
     // We can't directly test this in a single expression since LET doesn't
     // have "and then" semantics, but we can test via SUM:
     // =LET(x, 10, SUM(LET(x, 20, x), x)) -> 20 + 10 = 30
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let inner = func("LET", vec![ident("x"), ASTNode::Number(20.0), ident("x")]);
     let node = func(
@@ -690,7 +690,7 @@ fn test_scope_depth_limit() {
     let result = std::thread::Builder::new()
         .stack_size(64 * 1024 * 1024) // 64 MB
         .spawn(|| {
-            let (m, s) = test_mirror();
+            let (m, s) = test_store();
             let ctx = make_ctx(&m, s);
             // Build 600 nested LETs (exceeds MAX_SCOPE_DEPTH of 512)
             let mut node = ident("x");
@@ -708,7 +708,7 @@ fn test_scope_depth_limit() {
 #[test]
 fn test_lambda_with_expression_body() {
     // =(LAMBDA(x, y, IF(x>y, x, y)))(3, 7) -> 7
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let lambda = func(
         "LAMBDA",
@@ -735,7 +735,7 @@ fn test_lambda_with_expression_body() {
 #[test]
 fn test_lambda_error_in_arg_propagates() {
     // =(LAMBDA(x, x+1))(1/0) -> #DIV/0!
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let lambda = func(
         "LAMBDA",
@@ -758,7 +758,7 @@ fn test_lambda_error_in_arg_propagates() {
 #[test]
 fn test_let_variable_in_condition() {
     // =LET(threshold, 50, val, 75, IF(val>threshold, "pass", "fail")) -> "pass"
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = func(
         "LET",
@@ -783,7 +783,7 @@ fn test_let_variable_in_condition() {
 #[test]
 fn test_lambda_coerce_types() {
     // =(LAMBDA(x, x & " world"))("hello") -> "hello world"
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let lambda = func(
         "LAMBDA",
@@ -816,7 +816,7 @@ fn test_lambda_coerce_types() {
 fn test_let_cellref_name_position() {
     // =LET(t1, 5, t1+1) → should be 6
     // Currently: parser produces CellRef(T1) for "t1", eval_let rejects it
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // Simulate what the parser currently produces: CellRef instead of Identifier
     let t1_ref = ASTNode::CellReference(CellRefNode {
@@ -845,7 +845,7 @@ fn test_let_cellref_body_resolution() {
     // Even if we fix eval_let to accept CellRef at name positions,
     // the body expression also has CellRef(T1) that needs to resolve
     // to the LET variable, not to the actual cell T1.
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let t1_ref = ASTNode::CellReference(CellRefNode {
         reference: CellRef::Positional {
@@ -874,7 +874,7 @@ fn test_let_cellref_body_resolution() {
 #[test]
 fn test_lambda_cellref_param_resolution() {
     // =MAP({1,2,3}, LAMBDA(a1, a1*2)) — a1 is a parameter, not cell A1
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let a1_ref = ASTNode::CellReference(CellRefNode {
         reference: CellRef::Positional {
@@ -907,7 +907,7 @@ fn test_lambda_cellref_param_resolution() {
 fn test_let_cellref_case_insensitive() {
     // Excel: =LET(t1, 5, T1+1) → 6 (case-insensitive)
     // The parser produces CellRef(T1) for both "t1" and "T1"
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let t1_ref = ASTNode::CellReference(CellRefNode {
         reference: CellRef::Positional {
@@ -932,7 +932,7 @@ fn test_let_cellref_case_insensitive() {
 #[test]
 fn test_let_nested_cellref_names() {
     // =LET(x1, 10, LET(y1, x1*2, y1+1)) → 21
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let x1_ref = ASTNode::CellReference(CellRefNode {
         reference: CellRef::Positional {

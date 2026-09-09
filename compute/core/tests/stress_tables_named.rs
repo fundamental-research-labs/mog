@@ -30,7 +30,7 @@ fn test_create_table_preserves_data() {
         make_cell(2, 1, num(80.0), None),
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // Create table over A1:B3 with headers
     engine
@@ -72,7 +72,7 @@ fn test_table_formula_column() {
         make_cell(2, 1, num(80.0), None),
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // Create table over A1:C3
     engine
@@ -116,7 +116,7 @@ fn test_delete_table_preserves_data() {
         make_cell(2, 1, num(80.0), None),
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     engine
         .create_table(
@@ -160,7 +160,7 @@ fn test_delete_table_preserves_data() {
 fn test_named_range_basic_lookup() {
     let snapshot = make_snapshot(vec![make_cell(0, 0, num(100.0), None)]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // Create named range "MyVal" → Sheet1!A1
     let def = NamedRangeDef::from_expression(
@@ -196,7 +196,7 @@ fn test_named_range_redefine_target() {
         make_cell(0, 1, num(20.0), None),
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // Create NR → A1
     let def1 =
@@ -237,7 +237,7 @@ fn test_table_autofill_extends_formulas() {
         make_cell(2, 0, num(10.0), None),
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // Create table
     engine
@@ -282,7 +282,7 @@ fn test_table_autofill_extends_formulas() {
 fn test_named_range_remove_and_readd() {
     let snapshot = make_snapshot(vec![make_cell(0, 0, num(100.0), None)]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // Create workbook-scoped NR
     let def =
@@ -327,7 +327,7 @@ fn test_multiple_named_ranges_in_formula() {
         make_cell(0, 1, num(20.0), None),
     ]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // Create Alpha → A1
     let def1 = NamedRangeDef::from_expression(

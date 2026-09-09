@@ -42,7 +42,7 @@ fn typed_number_in_percent_cell_is_not_reparsed_as_user_text() {
         .unwrap();
 
     match engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sid, cell_types::SheetPos::new(0, 9))
     {
         Some(CellValue::Number(n)) => {
@@ -53,7 +53,7 @@ fn typed_number_in_percent_cell_is_not_reparsed_as_user_text() {
     assert_eq!(engine.format_cell_display(&sid, 0, 9), "18.5%");
 
     match engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sid, cell_types::SheetPos::new(0, 10))
     {
         Some(CellValue::Number(n)) => {

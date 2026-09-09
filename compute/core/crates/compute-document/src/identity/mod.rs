@@ -4,10 +4,8 @@ mod axes;
 mod axis_index;
 pub use axis_index::AxisIndex;
 mod axis_mutations;
-mod cell_lifecycle;
 mod construction;
 mod grid_index;
-mod queries;
 mod sorting;
 
 pub use grid_index::GridIndex;

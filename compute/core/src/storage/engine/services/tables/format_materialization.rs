@@ -3,7 +3,7 @@ use crate::storage::engine::table_result_merge::merge_mutation_result;
 
 pub(in crate::storage::engine) fn materialize_table_visible_formats(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     table: &CanonicalTable,
 ) -> Result<MutationResult, ComputeError> {
     let Some(sheet_id) = SheetId::from_uuid_str(&table.sheet_id).ok() else {
@@ -24,27 +24,26 @@ pub(in crate::storage::engine) fn materialize_table_visible_formats(
                 col,
             )
             .map(|format| crate::storage::table_format::table_cell_format_to_cell_format(&format));
-            let cell_hex = existing_cell_hex(stores, mirror, &sheet_id, row, col);
-            let cell_hex = cell_hex.as_ref().map(|hex| hex.as_str()).unwrap_or("");
-            let without_table = crate::storage::properties::get_effective_format(
+            let cell_id = cell_store.resolve_cell_id(&sheet_id, SheetPos::new(row, col));
+            let without_table = crate::storage::properties::get_effective_format_by_id(
                 &stores.storage,
                 &sheet_id,
-                cell_hex,
+                cell_id.as_ref(),
                 row,
                 col,
                 None,
                 stores.grid_indexes.get(&sheet_id),
-                mirror.get_sheet(&sheet_id),
+                cell_store.get_sheet(&sheet_id),
             );
-            let with_table = crate::storage::properties::get_effective_format(
+            let with_table = crate::storage::properties::get_effective_format_by_id(
                 &stores.storage,
                 &sheet_id,
-                cell_hex,
+                cell_id.as_ref(),
                 row,
                 col,
                 table_format.as_ref(),
                 stores.grid_indexes.get(&sheet_id),
-                mirror.get_sheet(&sheet_id),
+                cell_store.get_sheet(&sheet_id),
             );
             let patch = diff_cell_format(&without_table, &with_table);
 
@@ -89,28 +88,13 @@ pub(in crate::storage::engine) fn materialize_table_visible_formats(
 
     let mut result = MutationResult::empty();
     for (format, ranges) in grouped_ranges {
-        let (_, format_result) = super::super::formatting::set_format_for_ranges(
-            stores, mirror, &sheet_id, &ranges, &format,
+        let format_result = super::super::formatting::set_format_for_ranges(
+            stores, cell_store, &sheet_id, &ranges, &format,
         )?;
         merge_mutation_result(&mut result, format_result);
     }
 
     Ok(result)
-}
-
-fn existing_cell_hex(
-    stores: &EngineStores,
-    mirror: &CellMirror,
-    sheet_id: &SheetId,
-    row: u32,
-    col: u32,
-) -> Option<compute_document::hex::SmallHex> {
-    stores
-        .grid_indexes
-        .get(sheet_id)
-        .and_then(|grid| grid.cell_id_at(row, col))
-        .or_else(|| mirror.resolve_cell_id(sheet_id, SheetPos::new(row, col)))
-        .map(|cell_id| id_to_hex(cell_id.as_u128()))
 }
 
 fn push_grouped_format_range(

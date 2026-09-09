@@ -6,7 +6,7 @@ use super::*;
 
 #[test]
 fn test_variable_synthetic_cell_id_deterministic() {
-    use crate::mirror::variable_store::VariableStore;
+    use crate::cells::variable_store::VariableStore;
     use formula_types::Scope;
 
     // Same (scope, name) always produces the same CellId
@@ -28,18 +28,18 @@ fn test_variable_synthetic_cell_id_deterministic() {
 fn test_variable_dag_registration() {
     // A variable with a constant expression should get an AST entry
     // and its synthetic CellId should be in the graph.
-    use crate::mirror::variable_store::VariableStore;
+    use crate::cells::variable_store::VariableStore;
     use formula_types::{NamedRangeDef, Scope};
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, basic_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, basic_snapshot())
         .unwrap();
 
     // Add a workbook-scoped variable with a constant expression
     let def =
         NamedRangeDef::from_expression("TaxRate".to_string(), Scope::Workbook, "0.15".to_string());
-    core.set_named_range(&mut mirror, "TaxRate".to_string(), def);
+    core.set_named_range(&mut cell_store, "TaxRate".to_string(), def);
 
     // The variable should have a synthetic CellId in the AST cache
     let synth_id = VariableStore::synthetic_cell_id(&Scope::Workbook, "taxrate");
@@ -53,18 +53,18 @@ fn test_variable_dag_registration() {
 fn test_variable_formula_dag_registration() {
     // A variable with a formula expression like "=A1+B1" should have
     // its AST cached AND dependencies registered in the graph.
-    use crate::mirror::variable_store::VariableStore;
+    use crate::cells::variable_store::VariableStore;
     use formula_types::{NamedRangeDef, Scope};
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, basic_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, basic_snapshot())
         .unwrap();
 
     // Add a variable that references cells A1 and B1
     let def =
         NamedRangeDef::from_expression("MySum".to_string(), Scope::Workbook, "A1+B1".to_string());
-    core.set_named_range(&mut mirror, "MySum".to_string(), def);
+    core.set_named_range(&mut cell_store, "MySum".to_string(), def);
 
     let synth_id = VariableStore::synthetic_cell_id(&Scope::Workbook, "mysum");
 
@@ -82,7 +82,7 @@ fn test_variable_formula_dag_registration() {
 #[test]
 fn test_variable_from_snapshot_registered() {
     // Variables loaded from a snapshot should be registered as DAG nodes.
-    use crate::mirror::variable_store::VariableStore;
+    use crate::cells::variable_store::VariableStore;
     use formula_types::{NamedRangeDef, Scope};
 
     let mut snapshot = basic_snapshot();
@@ -93,8 +93,8 @@ fn test_variable_from_snapshot_registered() {
     ));
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     let synth_id = VariableStore::synthetic_cell_id(&Scope::Workbook, "constant");
     assert!(
@@ -107,7 +107,7 @@ fn test_variable_from_snapshot_registered() {
 fn test_variable_cell_dependency_edge() {
     // When a cell formula references a variable (Identifier node),
     // the dep extractor should emit an edge to the variable's synthetic CellId.
-    use crate::mirror::variable_store::VariableStore;
+    use crate::cells::variable_store::VariableStore;
     use formula_types::{NamedRangeDef, Scope};
 
     let mut snapshot = basic_snapshot();
@@ -131,8 +131,8 @@ fn test_variable_cell_dependency_edge() {
     });
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // D1 should depend on the "rate" variable's synthetic CellId
     let d1_id = cid(0x13);
@@ -152,22 +152,22 @@ fn test_variable_cell_dependency_edge() {
 #[test]
 fn test_variable_remove_cleans_dag() {
     // Removing a variable should clean up its AST cache and graph entries.
-    use crate::mirror::variable_store::VariableStore;
+    use crate::cells::variable_store::VariableStore;
     use formula_types::{NamedRangeDef, Scope};
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, basic_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, basic_snapshot())
         .unwrap();
 
     let def =
         NamedRangeDef::from_expression("TaxRate".to_string(), Scope::Workbook, "0.15".to_string());
-    core.set_named_range(&mut mirror, "TaxRate".to_string(), def);
+    core.set_named_range(&mut cell_store, "TaxRate".to_string(), def);
 
     let synth_id = VariableStore::synthetic_cell_id(&Scope::Workbook, "taxrate");
     assert!(core.ast_cache.contains_key(&synth_id));
 
-    core.remove_named_range(&mut mirror, "TaxRate");
+    core.remove_named_range(&mut cell_store, "TaxRate");
 
     assert!(
         !core.ast_cache.contains_key(&synth_id),
@@ -179,7 +179,7 @@ fn test_variable_remove_cleans_dag() {
 fn test_variable_scope_shadowing_in_dag() {
     // Sheet-scoped variable should shadow workbook-scoped variable.
     // Both should have distinct synthetic CellIds.
-    use crate::mirror::variable_store::VariableStore;
+    use crate::cells::variable_store::VariableStore;
     use formula_types::{NamedRangeDef, Scope};
 
     let sheet1 = sid(1);
@@ -192,20 +192,20 @@ fn test_variable_scope_shadowing_in_dag() {
     );
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, basic_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, basic_snapshot())
         .unwrap();
 
     // Add workbook-scoped "tax"
     core.set_named_range(
-        &mut mirror,
+        &mut cell_store,
         "tax".to_string(),
         NamedRangeDef::from_expression("tax".to_string(), Scope::Workbook, "0.10".to_string()),
     );
 
     // Add sheet-scoped "tax" (shadows the workbook one for Sheet1)
     core.set_named_range(
-        &mut mirror,
+        &mut cell_store,
         "tax".to_string(),
         NamedRangeDef::from_expression("tax".to_string(), Scope::Sheet(sheet1), "0.20".to_string()),
     );

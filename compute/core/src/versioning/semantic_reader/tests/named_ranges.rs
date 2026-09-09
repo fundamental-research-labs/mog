@@ -24,7 +24,7 @@ fn engine_semantic_reader_reports_named_range_create_update_and_delete() {
     let before_create = engine
         .read_semantic_workbook_state()
         .expect("before create");
-    let (_, create_result) = engine
+    let create_result = engine
         .create_named_range(DefinedNameInput {
             name: "Revenue".to_string(),
             refers_to: "=Sheet1!$A$1".to_string(),
@@ -60,7 +60,7 @@ fn engine_semantic_reader_reports_named_range_create_update_and_delete() {
             && change.object_id == object_id
     }));
 
-    let (_, update_result) = engine
+    let update_result = engine
         .update_named_range(
             &created.id,
             NamedRangeUpdate {

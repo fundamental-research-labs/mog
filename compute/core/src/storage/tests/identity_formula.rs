@@ -100,10 +100,10 @@ fn test_identity_formula_from_snapshot() {
         calculation_settings: None,
     };
 
-    let mirror = CellMirror::from_snapshot(snap).unwrap();
+    let cell_store = CellStore::from_snapshot(snap).unwrap();
     let cell_id = CellId::from_uuid_str("550e8400-e29b-41d4-a716-446655440003").unwrap();
 
-    let mirror_formula = mirror.get_formula(&cell_id);
-    assert!(mirror_formula.is_some());
-    assert_eq!(*mirror_formula.unwrap(), idf);
+    let store_formula = cell_store.get_formula(&cell_id);
+    assert!(store_formula.is_some());
+    assert_eq!(*store_formula.unwrap(), idf);
 }

@@ -14,7 +14,7 @@
 //! `String(rawValue)` — the original bug this test locks in against.
 
 use cell_types::{CellId, SheetId};
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
 use formula_types::CellRef;
@@ -120,12 +120,12 @@ fn data_table_snapshot() -> WorkbookSnapshot {
     }
 }
 
-fn cell_id_at(mirror: &CellMirror, sheet_id: SheetId, row: u32, col: u32) -> CellId {
-    mirror
+fn cell_id_at(cell_store: &CellStore, sheet_id: SheetId, row: u32, col: u32) -> CellId {
+    cell_store
         .get_sheet(&sheet_id)
         .and_then(|s| {
             s.cells_iter()
-                .find_map(|(id, _)| match mirror.resolve_position(id) {
+                .find_map(|(id, _)| match cell_store.resolve_position(id) {
                     Some(pos) if pos.row() == row && pos.col() == col => Some(*id),
                     _ => None,
                 })
@@ -135,16 +135,16 @@ fn cell_id_at(mirror: &CellMirror, sheet_id: SheetId, row: u32, col: u32) -> Cel
 
 #[test]
 fn data_table_hydration_preserves_body_formulas() {
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let _ = core
-        .init_from_snapshot(&mut mirror, data_table_snapshot())
+        .init_from_snapshot(&mut cell_store, data_table_snapshot())
         .expect("init_from_snapshot");
 
     let sheet_id = SheetId::from_uuid_str(&sheet_uuid(0)).expect("sheet id parse");
 
     // Master B2: must surface the TABLE formula.
-    let master = cell_id_at(&mirror, sheet_id, 1, 1);
+    let master = cell_id_at(&cell_store, sheet_id, 1, 1);
     let master_text = core.get_formula(&master).map(str::to_owned);
     assert!(
         master_text.is_some(),
@@ -158,7 +158,7 @@ fn data_table_hydration_preserves_body_formulas() {
     // preservation are out of scope for this test. The assertion is that
     // the formula propagates, full-stop.)
     for (label, row, col) in [("B3", 2, 1), ("C2", 1, 2), ("C3", 2, 2)] {
-        let cid = cell_id_at(&mirror, sheet_id, row, col);
+        let cid = cell_id_at(&cell_store, sheet_id, row, col);
         let text = core.get_formula(&cid).map(str::to_owned);
         let text = text.unwrap_or_else(|| {
             panic!(

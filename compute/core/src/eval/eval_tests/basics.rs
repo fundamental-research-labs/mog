@@ -8,14 +8,14 @@ use super::*;
 
 #[test]
 fn test_number_literal() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     assert_eq!(eval(&ASTNode::Number(42.5), &ctx), CellValue::number(42.5));
 }
 
 #[test]
 fn test_text_literal() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     assert_eq!(
         eval(&ASTNode::Text("hello".into()), &ctx),
@@ -25,7 +25,7 @@ fn test_text_literal() {
 
 #[test]
 fn test_boolean_literal() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     assert_eq!(
         eval(&ASTNode::Boolean(true), &ctx),
@@ -35,7 +35,7 @@ fn test_boolean_literal() {
 
 #[test]
 fn test_error_literal() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     assert_eq!(
         eval(&ASTNode::Error(CellError::Na), &ctx),
@@ -49,7 +49,7 @@ fn test_error_literal() {
 
 #[test]
 fn test_add() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     assert_eq!(
         eval(
@@ -62,7 +62,7 @@ fn test_add() {
 
 #[test]
 fn test_sub() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     assert_eq!(
         eval(
@@ -75,7 +75,7 @@ fn test_sub() {
 
 #[test]
 fn test_mul() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     assert_eq!(
         eval(
@@ -88,7 +88,7 @@ fn test_mul() {
 
 #[test]
 fn test_div() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     assert_eq!(
         eval(
@@ -101,7 +101,7 @@ fn test_div() {
 
 #[test]
 fn test_div_by_zero() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     assert_eq!(
         eval(
@@ -114,7 +114,7 @@ fn test_div_by_zero() {
 
 #[test]
 fn test_pow() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     assert_eq!(
         eval(
@@ -131,7 +131,7 @@ fn test_pow() {
 
 #[test]
 fn test_concat() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     assert_eq!(
         eval(
@@ -148,7 +148,7 @@ fn test_concat() {
 
 #[test]
 fn test_concat_number() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     assert_eq!(
         eval(
@@ -169,7 +169,7 @@ fn test_concat_number() {
 
 #[test]
 fn test_eq() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     assert_eq!(
         eval(
@@ -189,7 +189,7 @@ fn test_eq() {
 
 #[test]
 fn test_lt_gt() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     assert_eq!(
         eval(
@@ -209,7 +209,7 @@ fn test_lt_gt() {
 
 #[test]
 fn test_mixed_type_comparison() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // Number < Text in Excel ordering
     assert_eq!(
@@ -227,7 +227,7 @@ fn test_mixed_type_comparison() {
 
 #[test]
 fn test_unary_minus() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = ASTNode::UnaryOp {
         op: UnaryOp::Minus,
@@ -238,7 +238,7 @@ fn test_unary_minus() {
 
 #[test]
 fn test_unary_plus() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // Unary plus coerces to number (Excel semantics): +TRUE → 1
     let node = ASTNode::UnaryOp {
@@ -274,7 +274,7 @@ fn test_unary_plus() {
 
 #[test]
 fn test_unary_percent() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = ASTNode::UnaryOp {
         op: UnaryOp::Percent,
@@ -289,7 +289,7 @@ fn test_unary_percent() {
 
 #[test]
 fn test_error_propagation_binary() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     assert_eq!(
         eval(
@@ -306,7 +306,7 @@ fn test_error_propagation_binary() {
 
 #[test]
 fn test_error_propagation_unary() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = ASTNode::UnaryOp {
         op: UnaryOp::Minus,
@@ -321,7 +321,7 @@ fn test_error_propagation_unary() {
 
 #[test]
 fn test_null_in_arithmetic() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // Null -> 0 in arithmetic
     let ref_node = ASTNode::CellReference(CellRefNode {
@@ -343,7 +343,7 @@ fn test_null_in_arithmetic() {
 
 #[test]
 fn test_cell_ref_resolved() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // Cell at (0,0) has value 0.0
     let node = ASTNode::CellReference(CellRefNode {
@@ -356,7 +356,7 @@ fn test_cell_ref_resolved() {
 
 #[test]
 fn test_cell_ref_positional() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // Cell at (2,3) has value 23.0
     let node = ASTNode::CellReference(CellRefNode {
@@ -377,7 +377,7 @@ fn test_cell_ref_positional() {
 
 #[test]
 fn test_range() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = ASTNode::Range(RangeRef {
         start: CellRef::Positional {
@@ -414,7 +414,7 @@ fn test_range() {
 
 #[test]
 fn test_sum() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let range = ASTNode::Range(RangeRef {
         start: CellRef::Positional {
@@ -440,7 +440,7 @@ fn test_sum() {
 
 #[test]
 fn test_average() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     assert_eq!(
         eval(
@@ -456,7 +456,7 @@ fn test_average() {
 
 #[test]
 fn test_if_true() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = func(
         "IF",
@@ -471,7 +471,7 @@ fn test_if_true() {
 
 #[test]
 fn test_if_false() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = func(
         "IF",
@@ -486,7 +486,7 @@ fn test_if_false() {
 
 #[test]
 fn test_iferror() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = func(
         "IFERROR",
@@ -500,7 +500,7 @@ fn test_iferror() {
 
 #[test]
 fn test_and_or_not() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     assert_eq!(
         eval(

@@ -1,7 +1,7 @@
 //! Table management helpers extracted as free functions.
 //!
-//! Read-only queries take `&CellMirror` (and optionally `&EngineStores`).
-//! Mutations take `(&mut EngineStores, &mut CellMirror)`.
+//! Read-only queries take `&CellStore` (and optionally `&EngineStores`).
+//! Mutations take `(&mut EngineStores, &mut CellStore)`.
 //! Bridge methods on `ComputeEngine` delegate to these with one-line calls.
 
 use cell_types::{SheetId, SheetPos};
@@ -13,8 +13,8 @@ use domain_types::domain::table::{
 use formula_types::TableDef;
 use value_types::ComputeError;
 
+use crate::cells::CellStore;
 use crate::engine_types::{AutoExpansionResult, TableHitRegion};
-use crate::mirror::CellMirror;
 use crate::snapshot::{ChangeKind, FilterChange, MutationResult, TableChange};
 use crate::storage::cells::structured_ref_updater::TableReferenceEdit;
 use crate::storage::engine::stores::EngineStores;

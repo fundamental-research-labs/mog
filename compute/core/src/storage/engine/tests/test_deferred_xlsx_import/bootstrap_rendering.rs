@@ -103,7 +103,7 @@ fn deferred_xlsx_import_materializes_active_visible_sheet_before_full_hydration(
     let bytes = active_visible_deferred_fixture_xlsx();
 
     let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
-    let (_, import_result) = engine
+    let import_result = engine
         .import_from_xlsx_bytes_deferred(&bytes)
         .expect("deferred XLSX import should succeed");
 
@@ -173,7 +173,7 @@ fn deferred_xlsx_import_materializes_active_visible_sheet_before_full_hydration(
         "imported showButton=0 should suppress the header button: {first_header:?}"
     );
 
-    let (_, completion_result) = engine
+    let completion_result = engine
         .complete_deferred_hydration()
         .expect("full deferred hydration should succeed");
 
@@ -276,7 +276,7 @@ fn deferred_xlsx_import_emits_saved_view_before_full_hydration() {
     let bytes = saved_view_deferred_fixture_xlsx();
 
     let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
-    let (_, import_result) = engine
+    let import_result = engine
         .import_from_xlsx_bytes_deferred(&bytes)
         .expect("deferred XLSX import should succeed");
 
@@ -313,7 +313,7 @@ fn deferred_xlsx_import_emits_active_second_sheet_view_state_before_full_hydrati
     let bytes = active_second_saved_view_deferred_fixture_xlsx();
 
     let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
-    let (_, import_result) = engine
+    let import_result = engine
         .import_from_xlsx_bytes_deferred(&bytes)
         .expect("deferred XLSX import should succeed");
 
@@ -435,7 +435,7 @@ fn deferred_xlsx_import_emits_picture_floating_objects_before_full_hydration() {
     );
 
     let (mut imported, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
-    let (_patches, result) = imported
+    let result = imported
         .import_from_xlsx_bytes_deferred(&exported)
         .expect("deferred XLSX import should succeed");
 

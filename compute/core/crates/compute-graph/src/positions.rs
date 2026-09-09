@@ -5,12 +5,12 @@
 //!
 //! The core abstraction is [`PositionResolver`]: a pure lookup trait that maps
 //! `CellId` → `Option<CellPosition>`. It lives in `compute-graph` and depends
-//! only on types the crate already owns. `CellMirror` implements it up in
+//! only on types the crate already owns. `CellStore` implements it up in
 //! `compute-core`. No inverse dependency is introduced.
 //!
 //! ## Design principles
 //!
-//! - **Zero allocation** — implementors (e.g., `CellMirror`) already have position maps;
+//! - **Zero allocation** — implementors (e.g., `CellStore`) already have position maps;
 //!   no need to copy them into a snapshot.
 //! - **Composable** — [`WithOverrides`] wraps a base resolver with caller-supplied
 //!   position overrides for hypothetical edits.

@@ -28,7 +28,7 @@ pub enum RegionKind {
 
 /// Region rectangle dimensions in cells. Together with `anchor_row` /
 /// `anchor_col` describes the full region rectangle, so consumers (e.g.,
-/// canvas region outline) need no parallel mirror lookup.
+/// canvas region outline) need no parallel cell_store lookup.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct RegionBounds {
     pub rows: u32,

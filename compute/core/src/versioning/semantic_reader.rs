@@ -94,7 +94,7 @@ pub fn read_engine_semantic_workbook_state(
         .map(|(sheet_index, sheet_id)| (*sheet_id, canonical_sheet_key(sheet_index)))
         .collect();
     for (sheet_index, sheet_id) in sheet_order.into_iter().enumerate() {
-        let Some(sheet) = engine.mirror().get_sheet(&sheet_id) else {
+        let Some(sheet) = engine.cell_store().get_sheet(&sheet_id) else {
             continue;
         };
         let sheet_key = canonical_sheet_key(sheet_index);
@@ -127,7 +127,7 @@ pub fn read_engine_semantic_workbook_state(
             let cell_hex = id_to_hex(cell_id.as_u128());
             let authored_formula = engine.compute().get_formula(cell_id);
             let cell_properties =
-                properties::get_properties(engine.storage(), &sheet_id, &cell_hex);
+                properties::get_properties_by_id(engine.storage(), &sheet_id, &cell_id);
             let value_provenance =
                 cell_value_provenance(engine, &sheet_id, &cell_hex, cell_properties.as_ref());
             let direct_format = cell_properties
@@ -135,7 +135,7 @@ pub fn read_engine_semantic_workbook_state(
                 .and_then(|props| props.format.clone())
                 .map(canonical_direct_format)
                 .transpose()?;
-            if entry.is_ghost()
+            if sheet.is_ghost(cell_id)
                 && direct_format.is_none()
                 && authored_formula.is_none()
                 && value_provenance.is_empty()
@@ -151,9 +151,8 @@ pub fn read_engine_semantic_workbook_state(
             };
 
             let cell_key = canonical_cell_key(&sheet_key, pos.row(), pos.col());
-            let formula = entry
-                .formula
-                .as_deref()
+            let formula = sheet
+                .formula(cell_id)
                 .map(|formula| {
                     canonical_formula(
                         engine,
@@ -207,8 +206,9 @@ pub fn read_engine_semantic_workbook_state(
                     continue;
                 };
                 let Some((row, col)) = engine
-                    .grid_index(&sheet_id)
-                    .and_then(|grid| grid.cell_position(&cell_id))
+                    .cell_store()
+                    .get_sheet(&sheet_id)
+                    .and_then(|sheet| sheet.cell_position(&cell_id))
                 else {
                     unsupported_values.insert(
                         format!("cell:{sheet_key}:{cell_hex}:value-provenance:missing-position"),
@@ -249,8 +249,9 @@ pub fn read_engine_semantic_workbook_state(
                 continue;
             };
             let Some((row, col)) = engine
-                .grid_index(&sheet_id)
-                .and_then(|grid| grid.cell_position(&cell_id))
+                .cell_store()
+                .get_sheet(&sheet_id)
+                .and_then(|sheet| sheet.cell_position(&cell_id))
             else {
                 unsupported_values.insert(
                     format!(

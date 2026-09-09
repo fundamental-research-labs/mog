@@ -8,7 +8,7 @@ impl ComputeCore {
     /// the evaluation pass, eliminating the duplicate topo sort.
     pub(super) fn topo_evaluate_levels_with_deadline(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         levels: Vec<Vec<CellId>>,
         deadline: &Deadline,
     ) -> Result<RecalcResult, ComputeError> {
@@ -42,7 +42,7 @@ impl ComputeCore {
         // Pass 1: Single-pass topo evaluation with pre-computed levels
         let (changed_cells, projection_changes, errors, projection_deltas) = self
             .topo_evaluate_pass_with_levels(
-                mirror,
+                cell_store,
                 levels,
                 deadline,
                 &mut epoch_range_store,
@@ -71,7 +71,7 @@ impl ComputeCore {
                 &merged_projection_changes,
             );
             let (fixup_changes, fixup_proj, fixup_errors) = self.selective_dep_fixup_pass(
-                mirror,
+                cell_store,
                 &mut epoch_range_store,
                 &mut metrics,
                 None,
@@ -99,7 +99,7 @@ impl ComputeCore {
             // in topo_evaluate_pass_with_levels (per-conflict as they happen).
             // Do NOT overwrite it here with a recount — that would double-count.
             let (stab_changes, stab_projection_changes, stab_errors) = self.projection_stabilize(
-                mirror,
+                cell_store,
                 &projection_deltas,
                 deadline,
                 0,

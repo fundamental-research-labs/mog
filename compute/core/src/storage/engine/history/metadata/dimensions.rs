@@ -186,20 +186,26 @@ pub(crate) fn capture_pruned_axis_metadata(
     {
         capture_column_schema(storage, sheet, id);
     }
+}
+
+/// Capture metadata records whose cell anchors are about to be pruned.
+pub(crate) fn capture_pruned_cell_metadata(
+    storage: &crate::storage::WorkbookStorage,
+    sheet: cell_types::SheetId,
+    is_pruned: impl Fn(cell_types::CellId) -> bool,
+) {
+    if !storage.history.is_active() {
+        return;
+    }
+    let Some(meta) = storage.sheet_metadata.get(&sheet) else {
+        return;
+    };
     for comment in &meta.comments {
-        if comment
-            .cell_ref
-            .cell()
-            .is_some_and(|id| grid.cell_position(&id).is_none())
-        {
+        if comment.cell_ref.cell().is_some_and(&is_pruned) {
             capture_sheet_vector_entry!(storage,sheet,comments,comment.id,value=>value.id);
         }
     }
-    for &id in meta
-        .cell_annotations
-        .keys()
-        .filter(|id| grid.cell_position(id).is_none())
-    {
+    for &id in meta.cell_annotations.keys().filter(|id| is_pruned(**id)) {
         capture_cell_annotation(storage, sheet, id);
     }
 }

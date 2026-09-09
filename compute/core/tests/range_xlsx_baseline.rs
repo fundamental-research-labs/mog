@@ -245,7 +245,7 @@ fn xlsx_import_wall_clock_100k() {
 
     // Sanity: engine has the right number of sheets.
     assert_eq!(
-        engine.mirror().sheet_ids().count(),
+        engine.cell_store().sheet_ids().count(),
         1,
         "expected 1 sheet after import"
     );
@@ -284,7 +284,7 @@ fn xlsx_import_wall_clock_500k() {
     );
 
     assert_eq!(
-        engine.mirror().sheet_ids().count(),
+        engine.cell_store().sheet_ids().count(),
         1,
         "expected 1 sheet after import"
     );
@@ -318,7 +318,7 @@ fn xlsx_import_wall_clock_1m() {
     );
 
     assert_eq!(
-        engine.mirror().sheet_ids().count(),
+        engine.cell_store().sheet_ids().count(),
         1,
         "expected 1 sheet after import"
     );

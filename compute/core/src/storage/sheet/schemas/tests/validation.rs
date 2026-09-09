@@ -4,7 +4,7 @@ use super::*;
 #[test]
 fn test_validate_no_schema_returns_valid() {
     let (storage, sid, gi) = storage_with_sheet();
-    let result = validate_cell_value(&storage, &sid, 0, 0, "hello", Some(&gi), &empty_mirror());
+    let result = validate_cell_value(&storage, &sid, 0, 0, "hello", Some(&gi), &empty_store());
     assert!(result.valid);
     assert_eq!(result.enforcement, EnforcementLevel::None);
 }
@@ -25,7 +25,7 @@ fn test_validate_column_schema_number_valid() {
     };
     set_column_schema(&mut storage, &sid, 0, &schema, Some(&gi)).unwrap();
 
-    let result = validate_cell_value(&storage, &sid, 5, 0, "50", Some(&gi), &empty_mirror());
+    let result = validate_cell_value(&storage, &sid, 5, 0, "50", Some(&gi), &empty_store());
     assert!(result.valid);
     assert_eq!(result.enforcement, EnforcementLevel::Strict);
 }
@@ -46,7 +46,7 @@ fn test_validate_column_schema_number_invalid() {
     };
     set_column_schema(&mut storage, &sid, 0, &schema, Some(&gi)).unwrap();
 
-    let result = validate_cell_value(&storage, &sid, 5, 0, "200", Some(&gi), &empty_mirror());
+    let result = validate_cell_value(&storage, &sid, 5, 0, "200", Some(&gi), &empty_store());
     assert!(!result.valid);
     assert!(result.error_message.is_some());
     assert_eq!(result.enforcement, EnforcementLevel::Strict);
@@ -58,7 +58,7 @@ fn test_validate_range_schema_valid() {
     set_range_schema(&mut storage, &sid, &rs).unwrap();
 
     // Position (5, 3) is inside range 0:0..10:5
-    let result = validate_cell_value(&storage, &sid, 5, 3, "50", Some(&gi), &empty_mirror());
+    let result = validate_cell_value(&storage, &sid, 5, 3, "50", Some(&gi), &empty_store());
     assert!(result.valid);
     assert_eq!(result.enforcement, EnforcementLevel::Strict);
 }
@@ -69,7 +69,7 @@ fn test_validate_range_schema_invalid_with_ui() {
     set_range_schema(&mut storage, &sid, &rs).unwrap();
 
     // Value 200 exceeds max 100
-    let result = validate_cell_value(&storage, &sid, 5, 3, "200", Some(&gi), &empty_mirror());
+    let result = validate_cell_value(&storage, &sid, 5, 3, "200", Some(&gi), &empty_store());
     assert!(!result.valid);
     assert_eq!(result.enforcement, EnforcementLevel::Strict);
     assert_eq!(result.error_message, Some("Must be 0-100".to_string()));
@@ -91,7 +91,7 @@ fn test_validate_empty_value_always_valid() {
     };
     set_column_schema(&mut storage, &sid, 0, &schema, Some(&gi)).unwrap();
 
-    let result = validate_cell_value(&storage, &sid, 0, 0, "", Some(&gi), &empty_mirror());
+    let result = validate_cell_value(&storage, &sid, 0, 0, "", Some(&gi), &empty_store());
     assert!(result.valid);
 }
 #[test]
@@ -101,7 +101,7 @@ fn test_validate_range_schema_outside_range() {
     set_range_schema(&mut storage, &sid, &rs).unwrap();
 
     // Position (50, 50) is outside range 0:0..10:5
-    let result = validate_cell_value(&storage, &sid, 50, 50, "999", Some(&gi), &empty_mirror());
+    let result = validate_cell_value(&storage, &sid, 50, 50, "999", Some(&gi), &empty_store());
     assert!(result.valid);
     assert_eq!(result.enforcement, EnforcementLevel::None);
 }
@@ -125,7 +125,7 @@ fn test_validate_not_a_number() {
         0,
         "not_a_number",
         Some(&gi),
-        &empty_mirror(),
+        &empty_store(),
     );
     assert!(!result.valid);
     assert!(result.error_message.is_some());
@@ -167,7 +167,7 @@ fn test_validate_column_schema_priority_over_range() {
     // "42" is a valid number — column schema (Number, Strict) takes priority.
     // If range schema (String, Warning) had won instead, enforcement would be Warning.
     // Asserting Strict proves the column schema path was taken.
-    let result = validate_cell_value(&storage, &sid, 5, 2, "42", Some(&gi), &empty_mirror());
+    let result = validate_cell_value(&storage, &sid, 5, 2, "42", Some(&gi), &empty_store());
     assert!(result.valid);
     assert_eq!(result.enforcement, EnforcementLevel::Strict);
 }
@@ -193,7 +193,7 @@ fn test_validate_range_enforcement_warning() {
     set_range_schema(&mut storage, &sid, &range_schema).unwrap();
 
     // "abc" is not a number — should fail but with Warning enforcement.
-    let result = validate_cell_value(&storage, &sid, 3, 3, "abc", Some(&gi), &empty_mirror());
+    let result = validate_cell_value(&storage, &sid, 3, 3, "abc", Some(&gi), &empty_store());
     assert!(!result.valid);
     assert_eq!(result.enforcement, EnforcementLevel::Warning);
 }
@@ -223,7 +223,7 @@ fn test_validate_range_enforcement_info_from_none() {
     };
     set_range_schema(&mut storage, &sid, &range_schema).unwrap();
 
-    let result = validate_cell_value(&storage, &sid, 3, 3, "abc", Some(&gi), &empty_mirror());
+    let result = validate_cell_value(&storage, &sid, 3, 3, "abc", Some(&gi), &empty_store());
     assert!(!result.valid);
     assert_eq!(result.enforcement, EnforcementLevel::Info);
 }
@@ -231,7 +231,7 @@ fn test_validate_range_enforcement_info_from_none() {
 fn test_validate_cell_value_nonexistent_sheet() {
     let storage = WorkbookStorage::new();
     let sid = make_sheet_id(999);
-    let result = validate_cell_value(&storage, &sid, 0, 0, "hello", None, &empty_mirror());
+    let result = validate_cell_value(&storage, &sid, 0, 0, "hello", None, &empty_store());
     assert!(result.valid);
     assert_eq!(result.enforcement, EnforcementLevel::None);
 }

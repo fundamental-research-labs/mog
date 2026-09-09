@@ -7,7 +7,8 @@
 use value_types::{CellError, CellValue, KahanSum, kahan_sum};
 use value_types::{DenseBoolMask, DenseColumn};
 
-/// Supported fast-path aggregate operations.
+/// Supported aggregate operations.
+#[derive(Clone, Copy)]
 pub enum AggregateOp {
     Sum,
     Average,
@@ -16,6 +17,23 @@ pub enum AggregateOp {
     CountBlank,
     Min,
     Max,
+}
+
+impl AggregateOp {
+    /// Aggregate functions that can consume ranges through column access.
+    /// Shared by evaluator dispatch and the eager range-materialization planner.
+    pub(crate) fn from_function_name(name: &str) -> Option<Self> {
+        match name {
+            "SUM" => Some(Self::Sum),
+            "AVERAGE" => Some(Self::Average),
+            "COUNT" => Some(Self::Count),
+            "COUNTA" => Some(Self::CountA),
+            "COUNTBLANK" => Some(Self::CountBlank),
+            "MIN" => Some(Self::Min),
+            "MAX" => Some(Self::Max),
+            _ => None,
+        }
+    }
 }
 
 /// Result of attempting a dense aggregate.

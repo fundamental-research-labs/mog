@@ -103,16 +103,16 @@ impl ComputeEngine {
         let mut palettes = self.viewport.format_palettes_mut();
         let palette = palettes.entry(*sheet_id).or_default();
         let cf_cache_entry = self.stores.cf_cache.get(sheet_id);
-        let mirror = &self.mirror;
+        let cell_store = &self.cell_store;
         let resolve_table_format =
             |sid: &SheetId, row: u32, col: u32| -> Option<domain_types::CellFormat> {
                 crate::storage::engine::services::tables::resolve_table_format_at_cell(
-                    mirror, sid, row, col,
+                    cell_store, sid, row, col,
                 )
             };
         super::functions::build_viewport_render_data_inner(
             &self.stores,
-            &self.mirror,
+            &self.cell_store,
             &self.settings,
             palette,
             cf_cache_entry,

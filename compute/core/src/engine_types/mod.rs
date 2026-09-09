@@ -1,6 +1,6 @@
 //! Compute-core-specific engine types.
 //!
-//! These are pure serializable data contracts — no CellMirror,
+//! These are pure serializable data contracts — no CellStore,
 //! no compute-core internals. Types shared with other crates live in
 //! the `domain_types` crate — import from there directly.
 

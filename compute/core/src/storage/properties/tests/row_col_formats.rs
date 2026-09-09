@@ -179,10 +179,10 @@ fn test_clear_col_format_virtual_noop() {
 
 #[test]
 fn test_clear_col_format_splits_inherited_col_format_range() {
-    let (mut storage, sid, gi, mut mirror) = storage_with_sheet_and_mirror();
+    let (mut storage, sid, gi, mut cell_store) = storage_with_sheet_and_store();
     insert_col_format_range(
-        mirror.get_sheet_mut(&sid).unwrap(),
-        crate::mirror::RangeId::from_raw(700),
+        cell_store.get_sheet_mut(&sid).unwrap(),
+        crate::cells::RangeId::from_raw(700),
         0,
         4,
         &CellFormat {
@@ -194,27 +194,27 @@ fn test_clear_col_format_splits_inherited_col_format_range() {
 
     clear_col_format(&mut storage, &sid, 2, Some(&gi));
     clear_col_format_ranges_in_span(
-        mirror.get_sheet_mut(&sid).unwrap(),
+        cell_store.get_sheet_mut(&sid).unwrap(),
         2,
         2,
         &cell_types::IdAllocator::with_seed(10_000),
     );
 
-    let sheet_mirror = mirror.get_sheet(&sid).unwrap();
-    let mut ranges = sheet_mirror.col_format_ranges().to_vec();
+    let sheet_store = cell_store.get_sheet(&sid).unwrap();
+    let mut ranges = sheet_store.col_format_ranges().to_vec();
     ranges.sort_by_key(|range| range.start_col);
     assert_eq!(ranges.len(), 2);
     assert_eq!((ranges[0].start_col, ranges[0].end_col), (0, 1));
     assert_eq!((ranges[1].start_col, ranges[1].end_col), (3, 4));
     assert!(
         ranges.iter().all(|range| {
-            sheet_mirror.col_range_xlsx_style_id_cache().get(&range.id) == Some(&42)
+            sheet_store.col_range_xlsx_style_id_cache().get(&range.id) == Some(&42)
         })
     );
 
-    let before = get_positional_format(&storage, &sid, 0, 1, Some(&gi), Some(sheet_mirror));
-    let cleared = get_positional_format(&storage, &sid, 0, 2, Some(&gi), Some(sheet_mirror));
-    let after = get_positional_format(&storage, &sid, 0, 3, Some(&gi), Some(sheet_mirror));
+    let before = get_positional_format(&storage, &sid, 0, 1, Some(&gi), Some(sheet_store));
+    let cleared = get_positional_format(&storage, &sid, 0, 2, Some(&gi), Some(sheet_store));
+    let after = get_positional_format(&storage, &sid, 0, 3, Some(&gi), Some(sheet_store));
 
     assert_eq!(before.background_color, Some("#FFEE00".to_string()));
     assert_eq!(cleared.background_color, None);
@@ -223,10 +223,10 @@ fn test_clear_col_format_splits_inherited_col_format_range() {
 
 #[test]
 fn test_set_col_format_range_merges_inherited_defaults_sparsely() {
-    let (storage, sid, gi, mut mirror) = storage_with_sheet_and_mirror();
+    let (storage, sid, gi, mut cell_store) = storage_with_sheet_and_store();
     insert_col_format_range(
-        mirror.get_sheet_mut(&sid).unwrap(),
-        crate::mirror::RangeId::from_raw(701),
+        cell_store.get_sheet_mut(&sid).unwrap(),
+        crate::cells::RangeId::from_raw(701),
         0,
         4,
         &CellFormat {
@@ -237,7 +237,7 @@ fn test_set_col_format_range_merges_inherited_defaults_sparsely() {
     );
 
     set_col_format_range_with_alloc(
-        mirror.get_sheet_mut(&sid).unwrap(),
+        cell_store.get_sheet_mut(&sid).unwrap(),
         1,
         3,
         &CellFormat {
@@ -252,17 +252,17 @@ fn test_set_col_format_range_merges_inherited_defaults_sparsely() {
         "range formatting must not materialize explicit per-column formats"
     );
 
-    let sheet_mirror = mirror.get_sheet(&sid).unwrap();
-    let mut ranges = sheet_mirror.col_format_ranges().to_vec();
+    let sheet_store = cell_store.get_sheet(&sid).unwrap();
+    let mut ranges = sheet_store.col_format_ranges().to_vec();
     ranges.sort_by_key(|range| range.start_col);
     assert_eq!(ranges.len(), 3);
     assert_eq!((ranges[0].start_col, ranges[0].end_col), (0, 0));
     assert_eq!((ranges[1].start_col, ranges[1].end_col), (1, 3));
     assert_eq!((ranges[2].start_col, ranges[2].end_col), (4, 4));
 
-    let before = get_positional_format(&storage, &sid, 0, 0, Some(&gi), Some(sheet_mirror));
-    let patched = get_positional_format(&storage, &sid, 0, 2, Some(&gi), Some(sheet_mirror));
-    let after = get_positional_format(&storage, &sid, 0, 4, Some(&gi), Some(sheet_mirror));
+    let before = get_positional_format(&storage, &sid, 0, 0, Some(&gi), Some(sheet_store));
+    let patched = get_positional_format(&storage, &sid, 0, 2, Some(&gi), Some(sheet_store));
+    let after = get_positional_format(&storage, &sid, 0, 4, Some(&gi), Some(sheet_store));
 
     assert_eq!(before.number_format, Some("0.0".to_string()));
     assert_ne!(before.bold, Some(true));

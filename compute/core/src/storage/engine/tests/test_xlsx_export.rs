@@ -774,9 +774,8 @@ fn editing_formula_clears_explicit_empty_cached_value_metadata() {
         .next()
         .expect("sheet should exist");
     let cell_id = engine
-        .stores
-        .grid_indexes
-        .get(&sheet_id)
+        .cell_store()
+        .get_sheet(&sheet_id)
         .and_then(|grid| {
             grid.cells()
                 .find_map(|(cell_id, row, col)| (row == 0 && col == 0).then_some(cell_id))
@@ -1856,7 +1855,7 @@ fn test_xlsx_export_range_override_matches_dense_materialization() {
         .expect("range-backed override edit should succeed");
 
     let dense_value = engine
-        .mirror()
+        .cell_store()
         .get_sheet(&sid)
         .and_then(|sheet| sheet.get_column_view(1))
         .and_then(|col| col.get(1))
@@ -1885,7 +1884,7 @@ fn test_xlsx_export_blank_range_override_suppresses_payload_value() {
         .expect("range-backed clear override should succeed");
 
     let dense_value = engine
-        .mirror()
+        .cell_store()
         .get_sheet(&sid)
         .and_then(|sheet| sheet.get_column_view(2))
         .and_then(|col| col.get(2))

@@ -4,7 +4,7 @@ mod stress_common;
 use stress_common::*;
 
 use cell_types::{CellId, SheetId};
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{CellData, CellEdit, RecalcResult, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellError, CellValue, FiniteF64};
@@ -16,7 +16,7 @@ use value_types::{CellError, CellValue, FiniteF64};
 #[test]
 fn test_empty_string_in_formula_chain() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![(
         "Sheet1",
         100,
@@ -31,28 +31,28 @@ fn test_empty_string_in_formula_chain() {
             ),
         ],
     )]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
-    assert_mirror_number(&mirror, 0, 0, 0, 10.0);
-    assert_mirror_number(&mirror, 0, 0, 1, 11.0);
+    assert_store_number(&cell_store, 0, 0, 0, 10.0);
+    assert_store_number(&cell_store, 0, 0, 1, 11.0);
 
     // Set A1 to empty string
-    let _r = set(&mut core, &mut mirror, 0, 0, 0, "");
+    let _r = set(&mut core, &mut cell_store, 0, 0, 0, "");
     // A1 should now be empty (Null after clearing)
     // B1="=A1+1": empty/Null coerces to 0 in arithmetic → B1=1
     // OR if A1 is Text(""), then #VALUE!
     // The engine's set_cell with "" typically clears the cell to Null.
     // Null + 1 = 1.
     // Check what A1 actually is and assert B1 accordingly.
-    let a1_val = read_mirror_value(&mirror, 0, 0, 0);
+    let a1_val = read_store_value(&cell_store, 0, 0, 0);
     match a1_val {
         Some(CellValue::Text(_)) => {
             // Text("") + 1 → #VALUE!
-            assert_mirror_error(&mirror, 0, 0, 1, CellError::Value);
+            assert_store_error(&cell_store, 0, 0, 1, CellError::Value);
         }
         Some(CellValue::Null) | None => {
             // Null + 1 → 1
-            assert_mirror_number(&mirror, 0, 0, 1, 1.0);
+            assert_store_number(&cell_store, 0, 0, 1, 1.0);
         }
         other => panic!("A1 unexpected value: {:?}", other),
     }
@@ -65,29 +65,29 @@ fn test_empty_string_in_formula_chain() {
 #[test]
 fn test_whitespace_in_formula_chain() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![(
         "Sheet1",
         100,
         26,
         vec![(0, 1, CellValue::Number(FiniteF64::must(0.0)), Some("=A1+1"))],
     )]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // Set A1 to whitespace text
-    let _r = set(&mut core, &mut mirror, 0, 0, 0, "   ");
+    let _r = set(&mut core, &mut cell_store, 0, 0, 0, "   ");
 
     // "   " is Text. Text in arithmetic → #VALUE!
     // But some engines coerce whitespace-only text to 0.
-    let a1_val = read_mirror_value(&mirror, 0, 0, 0);
+    let a1_val = read_store_value(&cell_store, 0, 0, 0);
     match a1_val {
         Some(CellValue::Text(_)) => {
             // Text + 1 → #VALUE!
-            assert_mirror_error(&mirror, 0, 0, 1, CellError::Value);
+            assert_store_error(&cell_store, 0, 0, 1, CellError::Value);
         }
         Some(CellValue::Null) | None => {
             // If whitespace is treated as empty → Null + 1 = 1
-            assert_mirror_number(&mirror, 0, 0, 1, 1.0);
+            assert_store_number(&cell_store, 0, 0, 1, 1.0);
         }
         other => panic!("A1 unexpected value after whitespace set: {:?}", other),
     }
@@ -100,15 +100,15 @@ fn test_whitespace_in_formula_chain() {
 #[test]
 fn test_long_formula_100_additions() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![("Sheet1", 100, 26, vec![])]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // Build formula: "=1+1+1+...+1" with 100 ones (staying within stack limits)
     let formula = format!("={}", vec!["1"; 100].join("+"));
-    let _r = set(&mut core, &mut mirror, 0, 0, 0, &formula);
+    let _r = set(&mut core, &mut cell_store, 0, 0, 0, &formula);
 
-    assert_mirror_number(&mirror, 0, 0, 0, 100.0);
+    assert_store_number(&cell_store, 0, 0, 0, 100.0);
 }
 
 // ---------------------------------------------------------------------------
@@ -119,7 +119,7 @@ fn test_long_formula_100_additions() {
 #[test]
 fn test_clear_middle_of_chain() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![(
         "Sheet1",
         100,
@@ -140,18 +140,18 @@ fn test_clear_middle_of_chain() {
             ),
         ],
     )]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
-    assert_mirror_number(&mirror, 0, 0, 0, 10.0);
-    assert_mirror_number(&mirror, 0, 0, 1, 11.0);
-    assert_mirror_number(&mirror, 0, 0, 2, 12.0);
+    assert_store_number(&cell_store, 0, 0, 0, 10.0);
+    assert_store_number(&cell_store, 0, 0, 1, 11.0);
+    assert_store_number(&cell_store, 0, 0, 2, 12.0);
 
     // Clear B1
-    let _r = core.clear_cells(&mut mirror, &[cid(0, 0, 1)]).unwrap();
+    let _r = core.clear_cells(&mut cell_store, &[cid(0, 0, 1)]).unwrap();
 
-    assert_mirror_number(&mirror, 0, 0, 0, 10.0); // A1 unchanged
-    assert_mirror_null(&mirror, 0, 0, 1); // B1 cleared
-    assert_mirror_number(&mirror, 0, 0, 2, 1.0); // C1="=B1+1"=0+1=1
+    assert_store_number(&cell_store, 0, 0, 0, 10.0); // A1 unchanged
+    assert_store_null(&cell_store, 0, 0, 1); // B1 cleared
+    assert_store_number(&cell_store, 0, 0, 2, 1.0); // C1="=B1+1"=0+1=1
 }
 
 // ---------------------------------------------------------------------------
@@ -161,12 +161,12 @@ fn test_clear_middle_of_chain() {
 #[test]
 fn test_boundary_position_zero() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![("Sheet1", 100, 26, vec![])]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
-    let _r = set(&mut core, &mut mirror, 0, 0, 0, "=42");
-    assert_mirror_number(&mirror, 0, 0, 0, 42.0);
+    let _r = set(&mut core, &mut cell_store, 0, 0, 0, "=42");
+    assert_store_number(&cell_store, 0, 0, 0, 42.0);
 }
 
 // ---------------------------------------------------------------------------
@@ -176,13 +176,13 @@ fn test_boundary_position_zero() {
 #[test]
 fn test_high_row_col_position() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     // Need enough rows/cols to accommodate (1000, 100)
     let snapshot = build_snapshot(vec![("Sheet1", 2000, 200, vec![])]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
-    let _r = set(&mut core, &mut mirror, 0, 1000, 100, "=99");
-    assert_mirror_number(&mirror, 0, 1000, 100, 99.0);
+    let _r = set(&mut core, &mut cell_store, 0, 1000, 100, "=99");
+    assert_store_number(&cell_store, 0, 1000, 100, 99.0);
 }
 
 // ---------------------------------------------------------------------------
@@ -193,7 +193,7 @@ fn test_high_row_col_position() {
 #[test]
 fn test_zero_max_iterations() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_iterative_snapshot(
         vec![(
             "Sheet1",
@@ -209,11 +209,11 @@ fn test_zero_max_iterations() {
         0,
         0.001,
     );
-    let result = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let result = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // With max_iterations=0, no iterative passes run. The cell retains its
     // snapshot seed value (0.0).
-    assert_mirror_number(&mirror, 0, 0, 0, 0.0);
+    assert_store_number(&cell_store, 0, 0, 0, 0.0);
     assert!(
         result.metrics.has_circular_refs,
         "Self-ref should be detected"
@@ -228,7 +228,7 @@ fn test_zero_max_iterations() {
 #[test]
 fn test_single_max_iteration() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_iterative_snapshot(
         vec![(
             "Sheet1",
@@ -244,10 +244,10 @@ fn test_single_max_iteration() {
         1,
         0.001,
     );
-    let result = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let result = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // With max_iterations=1, one iterative pass runs from seed 0: A1=0*0.5+1=1.0
-    assert_mirror_number(&mirror, 0, 0, 0, 1.0);
+    assert_store_number(&cell_store, 0, 0, 0, 1.0);
     assert!(
         result.metrics.has_circular_refs,
         "Self-ref should be detected"
@@ -263,7 +263,7 @@ fn test_single_max_iteration() {
 #[test]
 fn test_tight_convergence_threshold() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_iterative_snapshot(
         vec![(
             "Sheet1",
@@ -279,11 +279,11 @@ fn test_tight_convergence_threshold() {
         200,
         0.0,
     );
-    let result = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let result = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // With factor 0.5, the series converges to 2.0 and floating-point delta
     // reaches exactly 0.0 well before 200 iterations.
-    assert_mirror_number_tol(&mirror, 0, 0, 0, 2.0, 1e-9);
+    assert_store_number_tol(&cell_store, 0, 0, 0, 2.0, 1e-9);
     assert!(
         result.metrics.has_circular_refs,
         "Self-ref should be detected"
@@ -310,7 +310,7 @@ fn test_tight_convergence_threshold() {
 #[test]
 fn test_if_false_static_cycle() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![(
         "Sheet1",
         100,
@@ -325,10 +325,10 @@ fn test_if_false_static_cycle() {
             (0, 1, CellValue::Number(FiniteF64::must(0.0)), Some("=A1+1")),
         ],
     )]);
-    let result = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let result = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
-    assert_mirror_number(&mirror, 0, 0, 0, 0.0);
-    assert_mirror_number(&mirror, 0, 0, 1, 0.0);
+    assert_store_number(&cell_store, 0, 0, 0, 0.0);
+    assert_store_number(&cell_store, 0, 0, 1, 0.0);
     // Static graph sees cycle
     assert!(
         result.metrics.has_circular_refs,
@@ -345,7 +345,7 @@ fn test_if_false_static_cycle() {
 #[test]
 fn test_volatile_function_in_cycle() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_iterative_snapshot(
         vec![(
             "Sheet1",
@@ -364,7 +364,7 @@ fn test_volatile_function_in_cycle() {
         100,
         0.001,
     );
-    let result = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let result = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     assert!(
         result.metrics.has_circular_refs,
@@ -372,8 +372,8 @@ fn test_volatile_function_in_cycle() {
     );
 
     // Both cells should be Numbers from iterative solving. Self-consistency:
-    let a1 = read_mirror_number(&mirror, 0, 0, 0);
-    let b1 = read_mirror_number(&mirror, 0, 0, 1);
+    let a1 = read_store_number(&cell_store, 0, 0, 0);
+    let b1 = read_store_number(&cell_store, 0, 0, 1);
     assert!(
         (b1 - (a1 + 1.0)).abs() < 2.0,
         "B1 ({}) should ≈ A1 ({}) + 1",
@@ -390,7 +390,7 @@ fn test_volatile_function_in_cycle() {
 #[test]
 fn test_cross_sheet_chain_propagation() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![
         (
             "Sheet1",
@@ -421,17 +421,17 @@ fn test_cross_sheet_chain_propagation() {
             )],
         ),
     ]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // Verify initial state
-    assert_mirror_number(&mirror, 0, 0, 0, 1.0); // Sheet1!A1=1
-    assert_mirror_number(&mirror, 1, 0, 0, 2.0); // Sheet2!A1=2
-    assert_mirror_number(&mirror, 2, 0, 0, 6.0); // Sheet3!A1=6
+    assert_store_number(&cell_store, 0, 0, 0, 1.0); // Sheet1!A1=1
+    assert_store_number(&cell_store, 1, 0, 0, 2.0); // Sheet2!A1=2
+    assert_store_number(&cell_store, 2, 0, 0, 6.0); // Sheet3!A1=6
 
     // Edit Sheet1!A1 = 10
-    let _r = set(&mut core, &mut mirror, 0, 0, 0, "10");
+    let _r = set(&mut core, &mut cell_store, 0, 0, 0, "10");
 
-    assert_mirror_number(&mirror, 0, 0, 0, 10.0); // Sheet1!A1=10
-    assert_mirror_number(&mirror, 1, 0, 0, 20.0); // Sheet2!A1=10*2=20
-    assert_mirror_number(&mirror, 2, 0, 0, 60.0); // Sheet3!A1=20*3=60
+    assert_store_number(&cell_store, 0, 0, 0, 10.0); // Sheet1!A1=10
+    assert_store_number(&cell_store, 1, 0, 0, 20.0); // Sheet2!A1=10*2=20
+    assert_store_number(&cell_store, 2, 0, 0, 60.0); // Sheet3!A1=20*3=60
 }

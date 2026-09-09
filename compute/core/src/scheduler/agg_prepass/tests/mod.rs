@@ -7,7 +7,7 @@ use compute_parser::{AbsFlags, CellRefNode, RangeRef};
 use formula_types::{CellRef, RangeType};
 use value_types::FiniteF64;
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
 
 mod test_cache_only;
@@ -112,7 +112,7 @@ fn sumifs_node(row: u32) -> ASTNode {
     }
 }
 
-/// Build a CellMirror with data for testing aggregation.
+/// Build a CellStore with data for testing aggregation.
 ///
 /// Sheet layout (5 rows, 5 cols):
 ///   Col A (0): Category -- "X", "Y", "X", "Y", "X"
@@ -120,7 +120,7 @@ fn sumifs_node(row: u32) -> ASTNode {
 ///   Col C (2): Value   -- 10, 20, 30, 40, 50
 ///   Col D (3): unused
 ///   Col E (4): Criteria (output side) -- "X", "Y", ...
-fn test_mirror() -> CellMirror {
+fn test_store() -> CellStore {
     let sid = "00000000-0000-0000-0000-000000000001";
 
     let categories = ["X", "Y", "X", "Y", "X"];
@@ -203,10 +203,10 @@ fn test_mirror() -> CellMirror {
         calculation_settings: None,
     };
 
-    CellMirror::from_snapshot(snap).unwrap()
+    CellStore::from_snapshot(snap).unwrap()
 }
 
-/// Build a CellMirror for sorted-range prepass tests.
+/// Build a CellStore for sorted-range prepass tests.
 ///
 /// Sheet layout (10 rows, 6 cols):
 ///   Col A (0): Date/range column -- 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000
@@ -215,7 +215,7 @@ fn test_mirror() -> CellMirror {
 ///   Col D (3): Value    -- 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
 ///   Col E (4): Lower bound (output side) -- 200, 400, 100, 300, 500, ...
 ///   Col F (5): Upper bound (output side) -- 500, 800, 300, 600, 900, ...
-fn sorted_range_mirror() -> CellMirror {
+fn sorted_range_store() -> CellStore {
     let sid = "00000000-0000-0000-0000-000000000001";
     let range_vals = [
         100.0, 200.0, 300.0, 400.0, 500.0, 600.0, 700.0, 800.0, 900.0, 1000.0,
@@ -327,5 +327,5 @@ fn sorted_range_mirror() -> CellMirror {
         calculation_settings: None,
     };
 
-    CellMirror::from_snapshot(snap).unwrap()
+    CellStore::from_snapshot(snap).unwrap()
 }

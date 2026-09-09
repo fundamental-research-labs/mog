@@ -40,7 +40,7 @@ fn test_agg_prepass_single_criteria_functions() {
         ));
     }
 
-    let (core, mirror) = init_core(single_sheet_snapshot("Sheet1", 20, 6, cells));
+    let (core, cell_store) = init_core(single_sheet_snapshot("Sheet1", 20, 6, cells));
     let sheet_id = sid(1);
 
     for row in 0..10u32 {
@@ -50,9 +50,9 @@ fn test_agg_prepass_single_criteria_functions() {
             (10.0, 110.0, 11.0)
         };
 
-        assert_number_at(&core, &mirror, &sheet_id, row, 3, exp_count, "COUNTIF");
-        assert_number_at(&core, &mirror, &sheet_id, row, 4, exp_sum, "SUMIF");
-        assert_number_at(&core, &mirror, &sheet_id, row, 5, exp_avg, "AVERAGEIF");
+        assert_number_at(&core, &cell_store, &sheet_id, row, 3, exp_count, "COUNTIF");
+        assert_number_at(&core, &cell_store, &sheet_id, row, 4, exp_sum, "SUMIF");
+        assert_number_at(&core, &cell_store, &sheet_id, row, 5, exp_avg, "AVERAGEIF");
     }
 }
 
@@ -86,13 +86,13 @@ fn test_agg_prepass_mixed_static_dynamic() {
         ));
     }
 
-    let (core, mirror) = init_core(single_sheet_snapshot("Sheet1", 20, 4, cells));
+    let (core, cell_store) = init_core(single_sheet_snapshot("Sheet1", 20, 4, cells));
     let sheet_id = sid(1);
 
     for row in 0..10u32 {
         assert_number_at(
             &core,
-            &mirror,
+            &cell_store,
             &sheet_id,
             row,
             3,

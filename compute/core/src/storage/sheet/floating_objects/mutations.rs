@@ -1,13 +1,13 @@
 use super::ids::{generate_object_id, now_millis};
 use super::state::state_mut;
 use super::units::px_to_emu;
+use crate::cells::CellStore;
 use crate::engine_types::floating_objects::{
     FlipAxis, MoveTarget, ResizeAnchor, ResizeConfig, ShapeStyleUpdate,
 };
 use crate::storage::WorkbookStorage;
 use cell_types::SheetId;
 use compute_document::hex::id_to_hex;
-use compute_document::identity::GridIndex;
 use domain_types::domain::floating_object::FloatingObjectData;
 
 pub fn move_floating_object_typed(
@@ -15,7 +15,7 @@ pub fn move_floating_object_typed(
     sheet: &SheetId,
     id: &str,
     target: &MoveTarget,
-    grid: Option<&mut GridIndex>,
+    grid: Option<&mut CellStore>,
 ) -> Option<serde_json::Value> {
     crate::storage::engine::history::metadata::capture_sheet_entry!(
         storage,
@@ -36,10 +36,9 @@ pub fn move_floating_object_typed(
             object.common.anchor.anchor_col_offset = px_to_emu(x_offset.get());
             object.common.anchor.anchor_row_offset = px_to_emu(y_offset.get());
             if let Some(grid) = grid {
-                grid.ensure_capacity(*anchor_row, *anchor_col);
-                object.common.anchor_cell_id = Some(
-                    id_to_hex(grid.ensure_cell_id(*anchor_row, *anchor_col).as_u128()).to_string(),
-                );
+                object.common.anchor_cell_id = grid
+                    .ensure_identity_at(sheet, cell_types::SheetPos::new(*anchor_row, *anchor_col))
+                    .map(|id| id_to_hex(id.as_u128()).to_string());
             }
         }
         MoveTarget::Delta { dx, dy } => {

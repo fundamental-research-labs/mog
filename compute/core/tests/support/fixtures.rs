@@ -83,7 +83,7 @@ pub fn one_sheet_snapshot(cells: Vec<CellData>) -> WorkbookSnapshot {
 /// The dependent formula string is inserted verbatim — the caller owns
 /// the reference shape (e.g. `SUM(A1:A10)`, `SUMIF(A:A,">0",B:B)`).
 ///
-/// Stage 1 wires this up for Class IV engine-mirror tests (which seed
+/// Stage 1 wires this up for Class IV engine-cell_store tests (which seed
 /// a single cell and check engine vs. import round-trips). Stage 2
 /// will use it for the Class I 1×2 exhaustive pass.
 #[must_use]

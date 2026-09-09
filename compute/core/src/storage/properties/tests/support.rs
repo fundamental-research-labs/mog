@@ -6,31 +6,31 @@ pub(super) fn make_sheet_id(n: u128) -> SheetId {
 
 pub(super) fn storage_with_sheet() -> (WorkbookStorage, SheetId, GridIndex) {
     let mut storage = WorkbookStorage::new();
-    let mut mirror = crate::mirror::CellMirror::new();
+    let mut cell_store = crate::cells::CellStore::new();
     let sid = make_sheet_id(1);
     storage
-        .add_sheet(&mut mirror, sid, "Sheet1", 100, 26)
+        .add_sheet(&mut cell_store, sid, "Sheet1", 100, 26)
         .unwrap();
     let id_alloc = std::sync::Arc::new(cell_types::IdAllocator::new());
     let gi = GridIndex::new(sid, 100, 26, id_alloc);
     (storage, sid, gi)
 }
 
-pub(super) fn storage_with_sheet_and_mirror() -> (
+pub(super) fn storage_with_sheet_and_store() -> (
     crate::storage::WorkbookStorage,
     SheetId,
     GridIndex,
-    crate::mirror::CellMirror,
+    crate::cells::CellStore,
 ) {
     let mut storage = crate::storage::WorkbookStorage::new();
-    let mut mirror = crate::mirror::CellMirror::new();
+    let mut cell_store = crate::cells::CellStore::new();
     let sid = make_sheet_id(1);
     storage
-        .add_sheet(&mut mirror, sid, "Sheet1", 100, 26)
+        .add_sheet(&mut cell_store, sid, "Sheet1", 100, 26)
         .unwrap();
     let id_alloc = std::sync::Arc::new(cell_types::IdAllocator::new());
     let gi = GridIndex::new(sid, 100, 26, id_alloc);
-    (storage, sid, gi, mirror)
+    (storage, sid, gi, cell_store)
 }
 
 pub(super) fn insert_style_palette_entry(
@@ -94,27 +94,27 @@ pub(super) fn insert_col_xlsx_style_id(
 }
 
 pub(super) fn insert_col_format_range(
-    mirror: &mut crate::mirror::SheetMirror,
+    cell_store: &mut crate::cells::SheetStore,
     range_id: cell_types::RangeId,
     start_col: u32,
     end_col: u32,
     format: &CellFormat,
     xlsx_style_id: Option<u32>,
 ) {
-    mirror
+    cell_store
         .col_format_ranges
-        .push(crate::mirror::ColumnFormatRange {
+        .push(crate::cells::ColumnFormatRange {
             id: range_id,
             start_col,
             end_col,
         });
-    mirror
+    cell_store
         .col_format_range_cache
         .insert(range_id, format.clone());
     if let Some(style_id) = xlsx_style_id {
-        mirror
+        cell_store
             .col_range_xlsx_style_id_cache
             .insert(range_id, style_id);
     }
-    mirror.rebuild_col_format_range_spatial_index();
+    cell_store.rebuild_col_format_range_spatial_index();
 }

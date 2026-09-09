@@ -1,4 +1,3 @@
-use super::shared;
 use crate::engine_types::PivotCreateWithSheetOptions;
 use crate::snapshot::{
     ChangeKind, MutationResult, PivotTableChange, SheetChange, SheetChangeField,
@@ -42,7 +41,7 @@ impl ComputeEngine {
             }
         }
         config.output_sheet_id = Some(sheet_uuid);
-        if let Some(sheet) = self.mirror.get_sheet(sheet_id) {
+        if let Some(sheet) = self.cell_store.get_sheet(sheet_id) {
             config.output_sheet_name = sheet.name.clone();
         }
         let config = self.resolve_pivot_source_identity(config)?;
@@ -54,7 +53,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         pivot_id: &str,
         expansion_state: Option<PivotExpansionState>,
-    ) -> Result<(SheetId, PivotTableResult), ComputeError> {
+    ) -> Result<PivotTableResult, ComputeError> {
         // 1. Look up config
         let config =
             services::objects::pivot_get(&self.stores, sheet_id, pivot_id).ok_or_else(|| {
@@ -70,14 +69,14 @@ impl ComputeEngine {
                     message: format!("Invalid pivot outputSheetId '{output_sheet_id}': {e}"),
                 }
             })?;
-            if self.mirror.get_sheet(&output_id).is_none() {
+            if self.cell_store.get_sheet(&output_id).is_none() {
                 return Err(ComputeError::SheetNotFound {
                     sheet_id: output_sheet_id.to_string(),
                 });
             }
             output_id
         } else {
-            self.mirror
+            self.cell_store
                 .sheet_by_name(&config.output_sheet_name)
                 .ok_or_else(|| ComputeError::SheetNotFound {
                     sheet_id: config.output_sheet_name.clone(),
@@ -88,14 +87,14 @@ impl ComputeEngine {
         {
             let output_sheet_uuid = output_sheet_id.to_uuid_string();
             let old_def = self
-                .mirror
+                .cell_store
                 .find_pivot_table_def(pivot_id, &config.name, &output_sheet_uuid)
                 .cloned();
             if let Some(def) = old_def {
                 let old_rows = def.rendered_row_count();
                 let old_cols = def.rendered_col_count();
                 if old_rows > 0 && old_cols > 0 {
-                    self.mirror.clear_pivot_region(
+                    self.cell_store.clear_pivot_region(
                         &output_sheet_id,
                         def.start_row,
                         def.start_col,
@@ -138,7 +137,7 @@ impl ComputeEngine {
             .as_ref()
             .and_then(|layout| layout.repeat_row_labels)
             .unwrap_or(false);
-        self.mirror.materialize_pivot_with_identities(
+        self.cell_store.materialize_pivot_with_identities(
             &output_sheet_id,
             config.output_location.row,
             config.output_location.col,
@@ -149,7 +148,7 @@ impl ComputeEngine {
         );
         apply_pivot_value_number_formats(
             &mut self.stores,
-            &self.mirror,
+            &self.cell_store,
             &output_sheet_id,
             config.output_location.row,
             config.output_location.col,
@@ -160,9 +159,9 @@ impl ComputeEngine {
         // 6. Register bounds for GETPIVOTDATA
         let bounds = &result.rendered_bounds;
         let def = engine_config.to_pivot_table_def(bounds, &output_sheet_id);
-        self.mirror.upsert_pivot_table_def(def);
+        self.cell_store.upsert_pivot_table_def(def);
 
-        Ok((output_sheet_id, result))
+        Ok(result)
     }
 
     fn resolve_pivot_sheet_insert_index(
@@ -245,12 +244,11 @@ impl ComputeEngine {
                     message: format!("Invalid pivot sourceSheetId '{source_sheet_id}': {e}"),
                 }
             })?;
-            let sheet =
-                self.mirror
-                    .get_sheet(&source_id)
-                    .ok_or_else(|| ComputeError::SheetNotFound {
-                        sheet_id: source_sheet_id.to_string(),
-                    })?;
+            let sheet = self.cell_store.get_sheet(&source_id).ok_or_else(|| {
+                ComputeError::SheetNotFound {
+                    sheet_id: source_sheet_id.to_string(),
+                }
+            })?;
             if !config.source_sheet_name.is_empty() && config.source_sheet_name != sheet.name {
                 return Err(ComputeError::InvalidInput {
                     message: format!(
@@ -272,7 +270,7 @@ impl ComputeEngine {
         }
 
         let source_id = self
-            .mirror
+            .cell_store
             .sheet_by_name(&config.source_sheet_name)
             .ok_or_else(|| ComputeError::SheetNotFound {
                 sheet_id: config.source_sheet_name.clone(),
@@ -291,12 +289,11 @@ impl ComputeEngine {
                     message: format!("Invalid pivot outputSheetId '{output_sheet_id}': {e}"),
                 }
             })?;
-            let sheet =
-                self.mirror
-                    .get_sheet(&output_id)
-                    .ok_or_else(|| ComputeError::SheetNotFound {
-                        sheet_id: output_sheet_id.to_string(),
-                    })?;
+            let sheet = self.cell_store.get_sheet(&output_id).ok_or_else(|| {
+                ComputeError::SheetNotFound {
+                    sheet_id: output_sheet_id.to_string(),
+                }
+            })?;
             if !config.output_sheet_name.is_empty() && config.output_sheet_name != sheet.name {
                 return Err(ComputeError::InvalidInput {
                     message: format!(
@@ -318,7 +315,7 @@ impl ComputeEngine {
         }
 
         let output_id = self
-            .mirror
+            .cell_store
             .sheet_by_name(&config.output_sheet_name)
             .ok_or_else(|| ComputeError::SheetNotFound {
                 sheet_id: config.output_sheet_name.clone(),
@@ -331,7 +328,7 @@ impl ComputeEngine {
         let mut resolved_source = false;
         if let Some(source_sheet_id) = config.source_sheet_id.as_deref() {
             if let Ok(source_id) = SheetId::from_uuid_str(source_sheet_id) {
-                if let Some(sheet) = self.mirror.get_sheet(&source_id) {
+                if let Some(sheet) = self.cell_store.get_sheet(&source_id) {
                     config.source_sheet_name = sheet.name.clone();
                     config.source_sheet_id = Some(source_id.to_uuid_string());
                     resolved_source = true;
@@ -342,7 +339,7 @@ impl ComputeEngine {
             && config.source_sheet_id.is_none()
             && !config.source_sheet_name.is_empty()
         {
-            if let Some(source_id) = self.mirror.sheet_by_name(&config.source_sheet_name) {
+            if let Some(source_id) = self.cell_store.sheet_by_name(&config.source_sheet_name) {
                 config.source_sheet_id = Some(source_id.to_uuid_string());
             }
         }
@@ -353,7 +350,7 @@ impl ComputeEngine {
         let mut config = self.derive_pivot_source_name(config);
         if let Some(output_sheet_id) = config.output_sheet_id.as_deref() {
             if let Ok(output_id) = SheetId::from_uuid_str(output_sheet_id) {
-                if let Some(sheet) = self.mirror.get_sheet(&output_id) {
+                if let Some(sheet) = self.cell_store.get_sheet(&output_id) {
                     config.output_sheet_name = sheet.name.clone();
                     config.output_sheet_id = Some(output_id.to_uuid_string());
                 }
@@ -369,7 +366,7 @@ impl ComputeEngine {
                     message: format!("Invalid pivot sourceSheetId '{source_sheet_id}': {e}"),
                 }
             })?;
-            if self.mirror.get_sheet(&source_id).is_some() {
+            if self.cell_store.get_sheet(&source_id).is_some() {
                 return Ok(source_id);
             }
             return Err(ComputeError::SheetNotFound {
@@ -377,7 +374,7 @@ impl ComputeEngine {
             });
         }
 
-        self.mirror
+        self.cell_store
             .sheet_by_name(&config.source_sheet_name)
             .ok_or_else(|| ComputeError::SheetNotFound {
                 sheet_id: config.source_sheet_name.clone(),
@@ -404,7 +401,7 @@ impl ComputeEngine {
                 Vec::with_capacity((range.end_col() - range.start_col() + 1) as usize);
             for col in range.start_col()..=range.end_col() {
                 let value = crate::storage::cells::values::get_effective_value(
-                    &self.mirror,
+                    &self.cell_store,
                     &source_sid,
                     row,
                     col,
@@ -488,7 +485,7 @@ impl ComputeEngine {
     pub fn pivot_create(
         &mut self,
         config: serde_json::Value,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             // Validate all fields upfront — one comprehensive error, not one-at-a-time
             validate_pivot_config_json(&config)
@@ -504,7 +501,7 @@ impl ComputeEngine {
             // Pivot CRUD doesn't touch cells but `recalculate_with_options` uses
             // `materialize_all_pivots` to render output — must not short-circuit.
             engine.stores.compute.mark_dirty();
-            Ok((shared::empty_patches(), result))
+            Ok(result)
         })
     }
 
@@ -566,7 +563,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         pivot_id: &str,
         config: PivotTableConfig,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let config = engine.normalize_pivot_update_config(sheet_id, config)?;
             let result =
@@ -574,7 +571,7 @@ impl ComputeEngine {
             // Pivot config changes layout/aggregation — next calculate must
             // re-materialize, so don't let the idempotent short-circuit skip it.
             engine.stores.compute.mark_dirty();
-            Ok((shared::empty_patches(), result))
+            Ok(result)
         })
     }
 
@@ -585,7 +582,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         pivot_id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             // Clear materialized cells before deleting
             if let Some(config) = services::objects::pivot_get(&engine.stores, sheet_id, pivot_id) {
@@ -593,18 +590,18 @@ impl ComputeEngine {
                     .output_sheet_id
                     .as_deref()
                     .and_then(|sheet_id| SheetId::from_uuid_str(sheet_id).ok())
-                    .or_else(|| engine.mirror.sheet_by_name(&config.output_sheet_name))
+                    .or_else(|| engine.cell_store.sheet_by_name(&config.output_sheet_name))
                 {
                     let output_sheet_uuid = output_sheet_id.to_uuid_string();
                     let old_def = engine
-                        .mirror
+                        .cell_store
                         .find_pivot_table_def(pivot_id, &config.name, &output_sheet_uuid)
                         .cloned();
                     if let Some(def) = old_def {
                         let old_rows = def.rendered_row_count();
                         let old_cols = def.rendered_col_count();
                         if old_rows > 0 && old_cols > 0 {
-                            engine.mirror.clear_pivot_region(
+                            engine.cell_store.clear_pivot_region(
                                 &output_sheet_id,
                                 def.start_row,
                                 def.start_col,
@@ -619,7 +616,7 @@ impl ComputeEngine {
             // Removed pivot must not be re-materialized on next calculate —
             // but cells we just cleared need the flush; mark dirty either way.
             engine.stores.compute.mark_dirty();
-            Ok((shared::empty_patches(), result))
+            Ok(result)
         })
     }
 
@@ -723,7 +720,7 @@ impl ComputeEngine {
     /// Register a rendered pivot table definition for GETPIVOTDATA formula evaluation.
     ///
     /// Called by the TS layer after computing a pivot table to register its rendered
-    /// bounds in the CellMirror. GETPIVOTDATA reads from these definitions to locate
+    /// bounds in the CellStore. GETPIVOTDATA reads from these definitions to locate
     /// values in rendered pivot cells.
     ///
     /// The `bounds` parameter provides the rendered extent from the pivot compute result.
@@ -736,11 +733,11 @@ impl ComputeEngine {
         total_cols: u32,
         first_data_row: u32,
         first_data_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.without_history(|engine| {
             services::objects::pivot_register_def(
                 &engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 sheet_id,
                 pivot_id,
                 total_rows,
@@ -748,23 +745,21 @@ impl ComputeEngine {
                 first_data_row,
                 first_data_col,
             )
-            .map(shared::with_empty_patches)
         })
     }
 
     /// Remove a pivot table definition from the GETPIVOTDATA registry.
     ///
     /// Called when a pivot table is deleted to ensure stale definitions don't
-    /// linger in the CellMirror.
+    /// linger in the CellStore.
     #[bridge::write(scope = "sheet")]
     pub fn pivot_unregister_def(
         &mut self,
         sheet_id: &SheetId,
         pivot_name: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.without_history(|engine| {
-            services::objects::pivot_unregister_def(&mut engine.mirror, sheet_id, pivot_name)
-                .map(shared::with_empty_patches)
+            services::objects::pivot_unregister_def(&mut engine.cell_store, sheet_id, pivot_name)
         })
     }
 
@@ -780,18 +775,16 @@ impl ComputeEngine {
         expansion_state: Option<PivotExpansionState>,
     ) -> Result<PivotTableResult, ComputeError> {
         self.without_history(|engine| {
-            let (_, result) =
-                engine.materialize_pivot_table(sheet_id, pivot_id, expansion_state)?;
+            let result = engine.materialize_pivot_table(sheet_id, pivot_id, expansion_state)?;
             Ok(result)
         })
     }
 
-    /// Compute and materialize a pivot table, returning viewport patches through
-    /// the standard mutation pipeline.
+    /// Compute and materialize a pivot table through the standard mutation pipeline.
     ///
     /// The generated TS bridge currently treats `pivot_materialize` as a query
     /// despite the Rust method being a write. This companion command gives the
-    /// handwritten bridge a production-path mutation tuple without changing the
+    /// handwritten bridge a mutation result without changing the
     /// generated method's public signature.
     #[bridge::skip(ts_bridge)]
     #[bridge::write(scope = "sheet")]
@@ -800,13 +793,12 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         pivot_id: &str,
         expansion_state: Option<PivotExpansionState>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.without_history(|engine| {
-            let (output_sheet_id, result) =
-                engine.materialize_pivot_table(sheet_id, pivot_id, expansion_state)?;
+            let result = engine.materialize_pivot_table(sheet_id, pivot_id, expansion_state)?;
             let mutation_result = MutationResult::empty().with_data(&result)?;
-            let patches = engine.produce_full_viewport_patches(&output_sheet_id);
-            Ok((patches, mutation_result))
+
+            Ok(mutation_result)
         })
     }
 
@@ -825,7 +817,7 @@ impl ComputeEngine {
         pivot_id: &str,
         config: PivotTableConfig,
         expansion_state: Option<PivotExpansionState>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let config = engine.normalize_pivot_update_config(sheet_id, config)?;
             let update_result =
@@ -839,17 +831,17 @@ impl ComputeEngine {
                     config: None,
                     result: None,
                 };
-                return Ok((shared::empty_patches(), update_result.with_data(&data)?));
+                return Ok(update_result.with_data(&data)?);
             }
 
-            let (output_sheet_id, pivot_result) =
+            let pivot_result =
                 engine.materialize_pivot_table(sheet_id, pivot_id, expansion_state)?;
             let data = PivotUpdateMaterializeResult {
                 config: updated_config,
                 result: Some(pivot_result),
             };
-            let patches = engine.produce_full_viewport_patches(&output_sheet_id);
-            Ok((patches, update_result.with_data(&data)?))
+
+            Ok(update_result.with_data(&data)?)
         })
     }
 }

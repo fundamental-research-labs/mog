@@ -84,7 +84,7 @@ fn sort_filter_snapshot() -> WorkbookSnapshot {
 
 fn text_at(engine: &ComputeEngine, row: u32, col: u32) -> String {
     match engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sid(), SheetPos::new(row, col))
     {
         Some(CellValue::Text(value)) => value.to_string(),

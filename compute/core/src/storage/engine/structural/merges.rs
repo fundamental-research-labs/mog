@@ -3,7 +3,6 @@ use super::super::mutation::CellInput;
 use super::super::services;
 use crate::snapshot::{MutationResult, RecalcResult};
 use cell_types::SheetId;
-use compute_wire::mutation::serialize_multi_viewport_patches;
 use value_types::ComputeError;
 
 impl ComputeEngine {
@@ -25,8 +24,7 @@ impl ComputeEngine {
         let mut seen = std::collections::HashSet::new();
         for &(start_row, start_col, end_row, end_col) in merge_ranges {
             for (row, col, id) in services::mutation_handlers::collect_authored_cells_in_range(
-                &self.stores,
-                &self.mirror,
+                &self.cell_store,
                 sheet_id,
                 start_row,
                 start_col,
@@ -40,7 +38,7 @@ impl ComputeEngine {
         }
         services::mutation_handlers::mutation_set_cells(
             &mut self.stores,
-            &mut self.mirror,
+            &mut self.cell_store,
             edits,
             true,
         )
@@ -69,12 +67,12 @@ impl ComputeEngine {
         start_col: u32,
         end_row: u32,
         end_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let (patches, result) = {
+    ) -> Result<MutationResult, ComputeError> {
+        let result = {
             let mut result = {
                 services::structural::merge_range(
                     &mut self.stores,
-                    &mut self.mirror,
+                    &mut self.cell_store,
                     sheet_id,
                     start_row,
                     start_col,
@@ -84,20 +82,12 @@ impl ComputeEngine {
             };
             let merge_ranges = Self::merge_ranges_from_changes(&result);
             let mut recalc = self.clear_merge_child_values(sheet_id, &merge_ranges)?;
-            let patches = if recalc.changed_cells.is_empty()
-                && recalc.projection_changes.is_empty()
-                && recalc.errors.is_empty()
-            {
-                serialize_multi_viewport_patches(&[])
-            } else {
-                self.prepare_recalc_for_flush(&mut recalc);
-                Self::merge_recalc_into(&mut result.recalc, recalc);
-                self.flush_viewport_patches()
-            };
-            (patches, result)
+            self.postprocess_mutation_recalc(&mut recalc);
+            Self::merge_recalc_into(&mut result.recalc, recalc);
+            result
         };
-        services::mutation::sync_mirror_merge_regions(&self.stores, &mut self.mirror, sheet_id);
-        Ok((patches, result))
+        services::mutation::sync_store_merge_regions(&self.stores, &mut self.cell_store, sheet_id);
+        Ok(result)
     }
 
     pub(super) fn apply_unmerge_range(
@@ -107,19 +97,20 @@ impl ComputeEngine {
         start_col: u32,
         end_row: u32,
         end_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         let mut result = services::structural::unmerge_range(
             &mut self.stores,
+            &self.cell_store,
             sheet_id,
             start_row,
             start_col,
             end_row,
             end_col,
         )?;
-        services::mutation::sync_mirror_merge_regions(&self.stores, &mut self.mirror, sheet_id);
+        services::mutation::sync_store_merge_regions(&self.stores, &mut self.cell_store, sheet_id);
         // Re-evaluate spill formulas that were blocked by the now-removed merge region.
         let unblocked = self.stores.compute.drain_spill_blockers_for_region(
-            &self.mirror,
+            &self.cell_store,
             sheet_id,
             start_row,
             start_col,
@@ -127,16 +118,19 @@ impl ComputeEngine {
             end_col,
         );
         if !unblocked.is_empty() {
-            let extra = self.stores.compute.recalc(&mut self.mirror, &unblocked)?;
+            let extra = self
+                .stores
+                .compute
+                .recalc(&mut self.cell_store, &unblocked)?;
             result.recalc.changed_cells.extend(extra.changed_cells);
             result
                 .recalc
                 .projection_changes
                 .extend(extra.projection_changes);
-            self.prepare_recalc_for_flush(&mut result.recalc);
-            return Ok((self.flush_viewport_patches(), result));
+            self.postprocess_mutation_recalc(&mut result.recalc);
+            return Ok(result);
         }
-        Ok((serialize_multi_viewport_patches(&[]), result))
+        Ok(result)
     }
 
     pub(super) fn apply_merge_across(
@@ -146,12 +140,12 @@ impl ComputeEngine {
         start_col: u32,
         end_row: u32,
         end_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let (patches, result) = {
+    ) -> Result<MutationResult, ComputeError> {
+        let result = {
             let mut result = {
                 services::structural::merge_across(
                     &mut self.stores,
-                    &mut self.mirror,
+                    &mut self.cell_store,
                     sheet_id,
                     start_row,
                     start_col,
@@ -161,20 +155,12 @@ impl ComputeEngine {
             };
             let merge_ranges = Self::merge_ranges_from_changes(&result);
             let mut recalc = self.clear_merge_child_values(sheet_id, &merge_ranges)?;
-            let patches = if recalc.changed_cells.is_empty()
-                && recalc.projection_changes.is_empty()
-                && recalc.errors.is_empty()
-            {
-                serialize_multi_viewport_patches(&[])
-            } else {
-                self.prepare_recalc_for_flush(&mut recalc);
-                Self::merge_recalc_into(&mut result.recalc, recalc);
-                self.flush_viewport_patches()
-            };
-            (patches, result)
+            self.postprocess_mutation_recalc(&mut recalc);
+            Self::merge_recalc_into(&mut result.recalc, recalc);
+            result
         };
-        services::mutation::sync_mirror_merge_regions(&self.stores, &mut self.mirror, sheet_id);
-        Ok((patches, result))
+        services::mutation::sync_store_merge_regions(&self.stores, &mut self.cell_store, sheet_id);
+        Ok(result)
     }
 
     pub(super) fn apply_merge_and_center(
@@ -184,12 +170,12 @@ impl ComputeEngine {
         start_col: u32,
         end_row: u32,
         end_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         let mut result = {
             let mut result = {
                 services::structural::merge_and_center(
                     &mut self.stores,
-                    &mut self.mirror,
+                    &mut self.cell_store,
                     sheet_id,
                     start_row,
                     start_col,
@@ -203,17 +189,17 @@ impl ComputeEngine {
                 || !recalc.projection_changes.is_empty()
                 || !recalc.errors.is_empty()
             {
-                self.prepare_recalc_for_flush(&mut recalc);
+                self.postprocess_mutation_recalc(&mut recalc);
                 Self::merge_recalc_into(&mut result.recalc, recalc);
             }
             result
         };
-        services::mutation::sync_mirror_merge_regions(&self.stores, &mut self.mirror, sheet_id);
+        services::mutation::sync_store_merge_regions(&self.stores, &mut self.cell_store, sheet_id);
         // Drain spill blockers for the target region — merge_and_center first
         // unmerges any existing overlap before (re-)merging, so previously-blocked
         // spills may now be free.
         let unblocked = self.stores.compute.drain_spill_blockers_for_region(
-            &self.mirror,
+            &self.cell_store,
             sheet_id,
             start_row,
             start_col,
@@ -221,22 +207,25 @@ impl ComputeEngine {
             end_col,
         );
         if !unblocked.is_empty() {
-            let extra = self.stores.compute.recalc(&mut self.mirror, &unblocked)?;
+            let extra = self
+                .stores
+                .compute
+                .recalc(&mut self.cell_store, &unblocked)?;
             result.recalc.changed_cells.extend(extra.changed_cells);
             result
                 .recalc
                 .projection_changes
                 .extend(extra.projection_changes);
-            self.prepare_recalc_for_flush(&mut result.recalc);
-            return Ok((self.flush_viewport_patches(), result));
+            self.postprocess_mutation_recalc(&mut result.recalc);
+            return Ok(result);
         }
         if result.recalc.changed_cells.is_empty()
             && result.recalc.projection_changes.is_empty()
             && result.recalc.errors.is_empty()
         {
-            Ok((serialize_multi_viewport_patches(&[]), result))
+            Ok(result)
         } else {
-            Ok((self.flush_viewport_patches(), result))
+            Ok(result)
         }
     }
 
@@ -249,7 +238,7 @@ impl ComputeEngine {
         end_col: u32,
     ) -> (bool, u32) {
         services::structural::check_merge_data_loss(
-            &self.mirror,
+            &self.cell_store,
             sheet_id,
             start_row,
             start_col,
@@ -259,39 +248,46 @@ impl ComputeEngine {
     }
 
     pub(super) fn apply_is_merge_origin(&self, sheet_id: &SheetId, row: u32, col: u32) -> bool {
-        services::structural::is_merge_origin(&self.stores, sheet_id, row, col)
+        services::structural::is_merge_origin(&self.stores, &self.cell_store, sheet_id, row, col)
     }
 
     pub(super) fn apply_clear_all_merges(
         &mut self,
         sheet_id: &SheetId,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         let mut result = services::structural::clear_all_merges(&mut self.stores, sheet_id)?;
-        services::mutation::sync_mirror_merge_regions(&self.stores, &mut self.mirror, sheet_id);
+        services::mutation::sync_store_merge_regions(&self.stores, &mut self.cell_store, sheet_id);
         // All merges removed — drain all sheet-level spill blockers and recalc.
         let unblocked = self
             .stores
             .compute
-            .drain_spill_blockers_for_sheet(&self.mirror, sheet_id);
+            .drain_spill_blockers_for_sheet(&self.cell_store, sheet_id);
         if !unblocked.is_empty() {
-            let extra = self.stores.compute.recalc(&mut self.mirror, &unblocked)?;
+            let extra = self
+                .stores
+                .compute
+                .recalc(&mut self.cell_store, &unblocked)?;
             result.recalc.changed_cells.extend(extra.changed_cells);
             result
                 .recalc
                 .projection_changes
                 .extend(extra.projection_changes);
-            self.prepare_recalc_for_flush(&mut result.recalc);
-            return Ok((self.flush_viewport_patches(), result));
+            self.postprocess_mutation_recalc(&mut result.recalc);
+            return Ok(result);
         }
-        Ok((serialize_multi_viewport_patches(&[]), result))
+        Ok(result)
     }
 
     pub(super) fn apply_validate_and_clean_merges(
         &mut self,
         sheet_id: &SheetId,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let result = services::structural::validate_and_clean_merges(&mut self.stores, sheet_id)?;
-        services::mutation::sync_mirror_merge_regions(&self.stores, &mut self.mirror, sheet_id);
-        Ok((serialize_multi_viewport_patches(&[]), result))
+    ) -> Result<MutationResult, ComputeError> {
+        let result = services::structural::validate_and_clean_merges(
+            &mut self.stores,
+            &self.cell_store,
+            sheet_id,
+        )?;
+        services::mutation::sync_store_merge_regions(&self.stores, &mut self.cell_store, sheet_id);
+        Ok(result)
     }
 }

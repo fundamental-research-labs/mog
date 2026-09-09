@@ -101,7 +101,7 @@ fn set_cells_by_position_same_formula_rewrite_does_not_emit_placeholder_value() 
     let mutation_result = apply_set_b1_formula(&mut engine, "=A1*2");
 
     assert_eq!(
-        engine.mirror().get_cell_value(&cell_id_b1()).cloned(),
+        engine.cell_store().get_cell_value(&cell_id_b1()).cloned(),
         Some(num(20.0))
     );
 

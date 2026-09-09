@@ -7,17 +7,17 @@ pub(super) fn get_cell_format(
     row: u32,
     col: u32,
 ) -> CellFormat {
-    let cell_hex = id_to_hex(cell_id.as_u128());
-    let table_fmt = services::resolve_structured_format_at_cell(&engine.mirror, sheet_id, row, col);
-    properties::get_effective_format(
+    let table_fmt =
+        services::resolve_structured_format_at_cell(&engine.cell_store, sheet_id, row, col);
+    properties::get_effective_format_by_id(
         &engine.stores.storage,
         sheet_id,
-        &cell_hex,
+        Some(&cell_id),
         row,
         col,
         table_fmt.as_ref(),
         engine.stores.grid_indexes.get(sheet_id),
-        engine.mirror.get_sheet(sheet_id),
+        engine.cell_store.get_sheet(sheet_id),
     )
 }
 
@@ -48,27 +48,21 @@ fn get_transferable_cell_format(
 ) -> (CellFormat, bool) {
     // Resolve eager identities first, then compact native range positions.
     let pos = SheetPos::new(row, col);
-    let cell_id = engine
-        .stores
-        .grid_indexes
-        .get(sheet_id)
-        .and_then(|grid| grid.cell_id_at(row, col))
-        .or_else(|| engine.mirror.resolve_cell_id(sheet_id, pos));
+    let cell_id = engine.cell_store.resolve_cell_id(sheet_id, pos);
 
     let fmt = if let Some(cid) = cell_id {
         // Cell exists: full cascade (default -> col -> row -> Format Range -> table -> cell)
-        let cell_hex = id_to_hex(cid.as_u128());
         let table_fmt =
-            services::resolve_structured_format_at_cell(&engine.mirror, sheet_id, row, col);
-        properties::get_effective_format(
+            services::resolve_structured_format_at_cell(&engine.cell_store, sheet_id, row, col);
+        properties::get_effective_format_by_id(
             &engine.stores.storage,
             sheet_id,
-            &cell_hex,
+            Some(&cid),
             row,
             col,
             table_fmt.as_ref(),
             engine.stores.grid_indexes.get(sheet_id),
-            engine.mirror.get_sheet(sheet_id),
+            engine.cell_store.get_sheet(sheet_id),
         )
     } else {
         // No cell: positional only (default -> col -> row -> Format Range)
@@ -78,7 +72,7 @@ fn get_transferable_cell_format(
             row,
             col,
             engine.stores.grid_indexes.get(sheet_id),
-            engine.mirror.get_sheet(sheet_id),
+            engine.cell_store.get_sheet(sheet_id),
         )
     };
 
@@ -124,25 +118,17 @@ pub(super) fn set_cell_format(
     sheet_id: &SheetId,
     cell_id: &CellId,
     format: &CellFormat,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     validation::format::validate_cell_format(format)?;
-    let cell_hex = id_to_hex(cell_id.as_u128());
-    services::formatting::set_cell_format(&mut engine.stores, sheet_id, &cell_hex, format);
-    Ok((
-        serialize_multi_viewport_patches(&[]),
-        MutationResult::empty(),
-    ))
+    services::formatting::set_cell_format(&mut engine.stores, sheet_id, cell_id, format);
+    Ok(MutationResult::empty())
 }
 
 pub(super) fn clear_cell_format(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     cell_id: &CellId,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    let cell_hex = id_to_hex(cell_id.as_u128());
-    services::formatting::clear_cell_format(&mut engine.stores, sheet_id, &cell_hex);
-    Ok((
-        serialize_multi_viewport_patches(&[]),
-        MutationResult::empty(),
-    ))
+) -> Result<MutationResult, ComputeError> {
+    services::formatting::clear_cell_format(&mut engine.stores, sheet_id, cell_id);
+    Ok(MutationResult::empty())
 }

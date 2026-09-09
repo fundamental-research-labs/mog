@@ -43,10 +43,7 @@ impl SheetValidation {
     ) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| {
-                e.set_column_schema(&sid, col_index, &schema)
-                    .map(|(_, r)| r)
-            })
+            .call_engine(move |e| e.set_column_schema(&sid, col_index, &schema))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -54,7 +51,7 @@ impl SheetValidation {
     pub fn clear_column_schema(&self, col_index: u32) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.clear_column_schema(&sid, col_index).map(|(_, r)| r))
+            .call_engine(move |e| e.clear_column_schema(&sid, col_index))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -91,7 +88,7 @@ impl SheetValidation {
     pub fn set_range_schema(&self, schema: RangeSchema) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.set_range_schema(&sid, &schema).map(|(_, r)| r))
+            .call_engine(move |e| e.set_range_schema(&sid, &schema))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -104,10 +101,7 @@ impl SheetValidation {
         let sid = self.sheet_id;
         let owned_id = schema_id.to_owned();
         self.dispatch
-            .call_engine(move |e| {
-                e.update_range_schema(&sid, &owned_id, &updates)
-                    .map(|(_, r)| r)
-            })
+            .call_engine(move |e| e.update_range_schema(&sid, &owned_id, &updates))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -116,7 +110,7 @@ impl SheetValidation {
         let sid = self.sheet_id;
         let owned_id = schema_id.to_owned();
         self.dispatch
-            .call_engine(move |e| e.delete_range_schema(&sid, &owned_id).map(|(_, r)| r))
+            .call_engine(move |e| e.delete_range_schema(&sid, &owned_id))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 

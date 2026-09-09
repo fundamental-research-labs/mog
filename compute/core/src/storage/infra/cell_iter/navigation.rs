@@ -1,3 +1,4 @@
+use crate::cells::CellStore;
 use std::collections::HashSet;
 
 use cell_types::{CellId, SheetId};
@@ -24,6 +25,7 @@ pub(crate) fn find_data_edge(
     storage: &crate::storage::WorkbookStorage,
     sheet_id: SheetId,
     grid: &GridIndex,
+    cell_store: &CellStore,
     start_row: u32,
     start_col: u32,
     direction: &str,
@@ -31,6 +33,12 @@ pub(crate) fn find_data_edge(
 ) -> snapshot_types::queries::CellPosition {
     use crate::storage::sheet::{dimensions, grouping, merges};
 
+    let Some(cells) = cell_store.get_sheet(&sheet_id) else {
+        return snapshot_types::queries::CellPosition {
+            row: start_row,
+            col: start_col,
+        };
+    };
     const MAX_ROW: u32 = 1_048_575;
     const MAX_COL: u32 = 16_383;
 
@@ -88,8 +96,9 @@ pub(crate) fn find_data_edge(
     let is_traversable_structural_row =
         |r: u32| -> bool { dr != 0 && structural_hidden_rows.contains(&r) };
 
-    let relevant_filter_ids =
-        relevant_vertical_filter_ids(storage, &sheet_id, grid, start_row, start_col, direction);
+    let relevant_filter_ids = relevant_vertical_filter_ids(
+        storage, &sheet_id, cell_store, start_row, start_col, direction,
+    );
 
     let is_filter_skipped_row = |r: u32, _c: u32| -> bool {
         if dc != 0 || !rendered_hidden_rows.contains(&r) {
@@ -152,7 +161,7 @@ pub(crate) fn find_data_edge(
 
     // Check data at a cell, accounting for merges (check merge origin).
     let cell_has_data = |r: u32, c: u32| -> bool {
-        if let Some(info) = merges::get_merge_for_cell(&storage, sheet_id, grid, r, c) {
+        if let Some(info) = merges::get_merge_for_cell(&storage, sheet_id, cells, r, c) {
             let m = &info.merge;
             return has_data(m.start_row, m.start_col);
         }
@@ -161,7 +170,7 @@ pub(crate) fn find_data_edge(
 
     // Advance past a merged cell in the walking direction.
     let advance_past_merge = |r: u32, c: u32| -> (i64, i64) {
-        if let Some(info) = merges::get_merge_for_cell(&storage, sheet_id, grid, r, c) {
+        if let Some(info) = merges::get_merge_for_cell(&storage, sheet_id, cells, r, c) {
             let m = &info.merge;
             if dr > 0 {
                 return (m.end_row as i64 + 1, c as i64);
@@ -181,7 +190,7 @@ pub(crate) fn find_data_edge(
 
     // Return merge origin for a cell, or the cell itself.
     let to_merge_origin = |r: u32, c: u32| -> snapshot_types::queries::CellPosition {
-        if let Some(info) = merges::get_merge_for_cell(&storage, sheet_id, grid, r, c) {
+        if let Some(info) = merges::get_merge_for_cell(&storage, sheet_id, cells, r, c) {
             let m = &info.merge;
             return snapshot_types::queries::CellPosition {
                 row: m.start_row,
@@ -375,7 +384,7 @@ pub(crate) fn find_data_edge(
 fn relevant_vertical_filter_ids(
     storage: &crate::storage::WorkbookStorage,
     sheet_id: &SheetId,
-    grid: &GridIndex,
+    cell_store: &CellStore,
     start_row: u32,
     start_col: u32,
     direction: &str,
@@ -389,9 +398,11 @@ fn relevant_vertical_filter_ids(
         .filter(|filter| !filter.column_filters.is_empty())
         .filter_map(|filter| {
             let (header_row, filter_start_col) =
-                resolve_filter_cell_pos(grid, &filter.header_start_cell_id)?;
-            let (_, filter_end_col) = resolve_filter_cell_pos(grid, &filter.header_end_cell_id)?;
-            let (data_end_row, _) = resolve_filter_cell_pos(grid, &filter.data_end_cell_id)?;
+                resolve_filter_cell_pos(cell_store, sheet_id, &filter.header_start_cell_id)?;
+            let (_, filter_end_col) =
+                resolve_filter_cell_pos(cell_store, sheet_id, &filter.header_end_cell_id)?;
+            let (data_end_row, _) =
+                resolve_filter_cell_pos(cell_store, sheet_id, &filter.data_end_cell_id)?;
 
             let start_col_in_range = start_col >= filter_start_col.min(filter_end_col)
                 && start_col <= filter_start_col.max(filter_end_col);
@@ -406,7 +417,11 @@ fn relevant_vertical_filter_ids(
         .collect()
 }
 
-fn resolve_filter_cell_pos(grid: &GridIndex, cell_id_hex: &str) -> Option<(u32, u32)> {
+fn resolve_filter_cell_pos(
+    cell_store: &CellStore,
+    sheet_id: &SheetId,
+    cell_id_hex: &str,
+) -> Option<(u32, u32)> {
     let cell_id = CellId::from_raw(hex_to_id(cell_id_hex)?);
-    grid.cell_position(&cell_id)
+    cell_store.get_sheet(sheet_id)?.cell_position(&cell_id)
 }

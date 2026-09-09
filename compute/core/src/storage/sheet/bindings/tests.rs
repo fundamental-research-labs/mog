@@ -9,10 +9,10 @@ use value_types::ComputeError;
 /// Create a WorkbookStorage with one sheet and return (storage, sheet_hex).
 fn storage_with_sheet() -> (WorkbookStorage, String) {
     let mut storage = WorkbookStorage::new();
-    let mut mirror = crate::mirror::CellMirror::new();
+    let mut cell_store = crate::cells::CellStore::new();
     let sheet_id = cell_types::SheetId::from_raw(1);
     storage
-        .add_sheet(&mut mirror, sheet_id, "Sheet1", 100, 26)
+        .add_sheet(&mut cell_store, sheet_id, "Sheet1", 100, 26)
         .expect("add_sheet should succeed");
     let sheet_hex = format!("{:032x}", 1u128);
     (storage, sheet_hex)
@@ -21,14 +21,14 @@ fn storage_with_sheet() -> (WorkbookStorage, String) {
 /// Create a WorkbookStorage with two sheets and return (storage, sheet1_hex, sheet2_hex).
 fn storage_with_two_sheets() -> (WorkbookStorage, String, String) {
     let mut storage = WorkbookStorage::new();
-    let mut mirror = crate::mirror::CellMirror::new();
+    let mut cell_store = crate::cells::CellStore::new();
     let s1 = cell_types::SheetId::from_raw(1);
     let s2 = cell_types::SheetId::from_raw(2);
     storage
-        .add_sheet(&mut mirror, s1, "Sheet1", 100, 26)
+        .add_sheet(&mut cell_store, s1, "Sheet1", 100, 26)
         .unwrap();
     storage
-        .add_sheet(&mut mirror, s2, "Sheet2", 100, 26)
+        .add_sheet(&mut cell_store, s2, "Sheet2", 100, 26)
         .unwrap();
     let hex1 = format!("{:032x}", 1u128);
     let hex2 = format!("{:032x}", 2u128);

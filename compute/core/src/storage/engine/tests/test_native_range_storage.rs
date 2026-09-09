@@ -121,10 +121,10 @@ fn native_snapshot_preserves_compact_range_values_after_removed_axes() {
             },
         )
         .unwrap();
-    let snap = construction::build_workbook_snapshot(&engine.stores, &engine.mirror);
+    let snap = construction::build_workbook_snapshot(&engine.stores, &engine.cell_store);
     assert_eq!(snap.sheets[0].ranges[0].row_ids.len(), 4);
     assert_eq!(snap.sheets[0].ranges[0].col_ids.len(), 1);
-    let serialized_values = crate::mirror::range_view::RangeView::decode_payload(
+    let serialized_values = crate::cells::range_view::RangeView::decode_payload(
         snap.sheets[0].ranges[0].encoding,
         &snap.sheets[0].ranges[0].payload,
         4,
@@ -135,12 +135,12 @@ fn native_snapshot_preserves_compact_range_values_after_removed_axes() {
     );
     let bytes = engine.export_to_xlsx_bytes().unwrap();
     let (reloaded, _) = ComputeEngine::from_xlsx_bytes(&bytes).unwrap();
-    let sid = reloaded.mirror().sheet_by_name("Sheet1").unwrap();
+    let sid = reloaded.cell_store().sheet_by_name("Sheet1").unwrap();
     for (row, expected) in [10.0, 30.0, 40.0, 50.0].into_iter().enumerate() {
         assert_eq!(
             as_f64(
                 reloaded
-                    .mirror()
+                    .cell_store()
                     .get_cell_value_at(&sid, SheetPos::new(row as u32, 0))
             ),
             Some(expected)
@@ -151,7 +151,7 @@ fn native_snapshot_preserves_compact_range_values_after_removed_axes() {
 #[test]
 fn native_data_range_has_no_duplicate_persisted_payload() {
     let (engine, _) = ComputeEngine::from_snapshot(range_backed_snapshot()).unwrap();
-    let sheet = engine.mirror().get_sheet(&test_sheet_id()).unwrap();
+    let sheet = engine.cell_store().get_sheet(&test_sheet_id()).unwrap();
     assert_eq!(sheet.iter_ranges().count(), 1);
     assert_eq!(
         sheet.cells_iter().count(),
@@ -161,7 +161,7 @@ fn native_data_range_has_no_duplicate_persisted_payload() {
     assert_eq!(
         as_f64(
             engine
-                .mirror()
+                .cell_store()
                 .get_cell_value_at(&test_sheet_id(), SheetPos::new(4, 1))
         ),
         Some(50.0)
@@ -181,14 +181,14 @@ fn compact_csv_constructor_and_replacement_preserve_range_reads_and_edits() {
     }
 
     fn assert_import_and_edit(engine: &mut ComputeEngine, row_count: u32, multiplier: u32) {
-        assert_eq!(engine.mirror().sheet_count(), 1);
-        let sid = *engine.mirror().sheet_ids().next().unwrap();
-        let sheet = engine.mirror().get_sheet(&sid).unwrap();
+        assert_eq!(engine.cell_store().sheet_count(), 1);
+        let sid = *engine.cell_store().sheet_ids().next().unwrap();
+        let sheet = engine.cell_store().get_sheet(&sid).unwrap();
         assert!(sheet.iter_ranges().count() > 0);
         assert_eq!(sheet.cells_iter().count(), 0);
         assert!(
             engine
-                .mirror()
+                .cell_store()
                 .get_cell_value_at(&sid, SheetPos::new(0, 2))
                 .is_none(),
             "replacement must discard the previous workbook's formula"
@@ -202,7 +202,7 @@ fn compact_csv_constructor_and_replacement_preserve_range_reads_and_edits() {
             assert_eq!(
                 as_f64(
                     engine
-                        .mirror()
+                        .cell_store()
                         .get_cell_value_at(&sid, SheetPos::new(row, col))
                 ),
                 Some(f64::from(expected))
@@ -210,13 +210,17 @@ fn compact_csv_constructor_and_replacement_preserve_range_reads_and_edits() {
         }
 
         let last_pos = SheetPos::new(row_count - 1, 0);
-        let last_id = engine.mirror().resolve_cell_id(&sid, last_pos).unwrap();
+        let last_id = engine.cell_store().resolve_cell_id(&sid, last_pos).unwrap();
         engine
             .set_cell_value_parsed(&sid, 0, 2, &format!("=SUM(A1:A{row_count})"))
             .unwrap();
         let sum = row_count * (row_count + 1) / 2 * multiplier;
         assert_eq!(
-            as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(0, 2))),
+            as_f64(
+                engine
+                    .cell_store()
+                    .get_cell_value_at(&sid, SheetPos::new(0, 2))
+            ),
             Some(f64::from(sum))
         );
 
@@ -225,16 +229,23 @@ fn compact_csv_constructor_and_replacement_preserve_range_reads_and_edits() {
             .set_cell_value_parsed(&sid, row_count - 1, 0, &edited.to_string())
             .unwrap();
         assert_eq!(
-            engine.mirror().resolve_cell_id(&sid, last_pos),
+            engine.cell_store().resolve_cell_id(&sid, last_pos),
             Some(last_id)
         );
-        assert_eq!(engine.mirror().resolve_position(&last_id), Some(last_pos));
         assert_eq!(
-            as_f64(engine.mirror().get_cell_value(&last_id)),
+            engine.cell_store().resolve_position(&last_id),
+            Some(last_pos)
+        );
+        assert_eq!(
+            as_f64(engine.cell_store().get_cell_value(&last_id)),
             Some(f64::from(edited))
         );
         assert_eq!(
-            as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(0, 2))),
+            as_f64(
+                engine
+                    .cell_store()
+                    .get_cell_value_at(&sid, SheetPos::new(0, 2))
+            ),
             Some(f64::from(sum + 100))
         );
     }
@@ -262,7 +273,7 @@ fn copy_native_ranges_and_formulas_owns_distinct_axes_and_edits() {
     engine.set_row_height(&source, 2, 42.0).unwrap();
     engine.set_col_width(&source, 1, 123.0).unwrap();
     engine.copy_sheet(&source, "Copy").unwrap();
-    let copy = engine.mirror().sheet_by_name("Copy").unwrap();
+    let copy = engine.cell_store().sheet_by_name("Copy").unwrap();
     assert_eq!(
         engine.get_row_height_query(&copy, 2),
         engine.get_row_height_query(&source, 2)
@@ -271,8 +282,8 @@ fn copy_native_ranges_and_formulas_owns_distinct_axes_and_edits() {
         engine.get_col_width_query(&copy, 1),
         engine.get_col_width_query(&source, 1)
     );
-    let original = engine.mirror().get_sheet(&source).unwrap();
-    let copied = engine.mirror().get_sheet(&copy).unwrap();
+    let original = engine.cell_store().get_sheet(&source).unwrap();
+    let copied = engine.cell_store().get_sheet(&copy).unwrap();
     assert!(
         original
             .row_axis
@@ -293,7 +304,7 @@ fn copy_native_ranges_and_formulas_owns_distinct_axes_and_edits() {
         &copied_range.values
     ));
     let id = engine
-        .mirror()
+        .cell_store()
         .resolve_cell_id(&copy, SheetPos::new(0, 0))
         .unwrap();
     engine.set_cell(&copy, id, 0, 0, "100".into()).unwrap();
@@ -309,7 +320,7 @@ fn copy_native_ranges_and_formulas_owns_distinct_axes_and_edits() {
         assert_eq!(
             as_f64(
                 engine
-                    .mirror()
+                    .cell_store()
                     .get_cell_value_at(&sheet, SheetPos::new(0, col))
             ),
             Some(expected),
@@ -317,7 +328,7 @@ fn copy_native_ranges_and_formulas_owns_distinct_axes_and_edits() {
         );
     }
     let original = engine
-        .mirror()
+        .cell_store()
         .get_sheet(&source)
         .unwrap()
         .iter_ranges()
@@ -331,17 +342,17 @@ fn copy_native_ranges_and_formulas_owns_distinct_axes_and_edits() {
 fn native_snapshot_preserves_identity_only_range_positions_without_blank_overrides() {
     let (engine, _) = ComputeEngine::from_snapshot(range_backed_snapshot()).unwrap();
     let sid = test_sheet_id();
-    let source = engine.mirror.get_sheet(&sid).unwrap();
+    let source = engine.cell_store.get_sheet(&sid).unwrap();
     assert_eq!(source.cells_iter().count(), 0);
     let row = source.row_id_at(0).unwrap();
     let col = source.col_id_at(0).unwrap();
-    let snapshot = construction::build_workbook_snapshot(&engine.stores, &engine.mirror);
+    let snapshot = construction::build_workbook_snapshot(&engine.stores, &engine.cell_store);
     assert!(snapshot.sheets[0].cells.is_empty());
     assert!(!snapshot.sheets[0].identities.is_empty());
     let bytes = serde_json::to_vec(&snapshot).unwrap();
     let decoded = serde_json::from_slice(&bytes).unwrap();
     let (restored, _) = ComputeEngine::from_snapshot(decoded).unwrap();
-    let sheet = restored.mirror.get_sheet(&sid).unwrap();
+    let sheet = restored.cell_store.get_sheet(&sid).unwrap();
     assert_eq!(sheet.cells_iter().count(), 0);
     assert_eq!(sheet.row_id_at(0), Some(row));
     assert_eq!(sheet.col_id_at(0), Some(col));
@@ -382,7 +393,7 @@ fn native_snapshot_does_not_reuse_deleted_axis_runs_or_cells() {
             },
         )
         .unwrap();
-    let snapshot = construction::build_workbook_snapshot(&engine.stores, &engine.mirror);
+    let snapshot = construction::build_workbook_snapshot(&engine.stores, &engine.cell_store);
     let counter = snapshot.identity_high_water_mark.unwrap();
     let run_counter = snapshot.axis_run_high_water_mark.unwrap();
     assert!(counter > deleted_cell.as_u128() as u64);
@@ -403,16 +414,16 @@ fn native_snapshot_does_not_reuse_deleted_axis_runs_or_cells() {
         Some(deleted_row)
     );
     assert_ne!(restored.stores.grid_id_alloc.next_cell_id(), deleted_cell);
-    assert_eq!(restored.mirror.row_index_lookup(&deleted_row), None);
+    assert_eq!(restored.cell_store.row_index_lookup(&deleted_row), None);
 }
 
 #[test]
 fn metadata_only_growth_shares_native_axes_and_remains_value_sparse() {
     let sid = test_sheet_id();
     let (mut engine, _) = ComputeEngine::from_snapshot(range_backed_snapshot()).unwrap();
-    let cell_id = services::cell_editing::ensure_cell_id_mirrored(
+    let cell_id = services::cell_editing::ensure_cell_id(
         &mut engine.stores,
-        &mut engine.mirror,
+        &mut engine.cell_store,
         &sid,
         100_000,
         15,
@@ -421,30 +432,37 @@ fn metadata_only_growth_shares_native_axes_and_remains_value_sparse() {
     let grid = &engine.stores.grid_indexes[&sid];
     let row_id = grid.row_id(100_000).unwrap();
     let col_id = grid.col_id(15).unwrap();
-    let sheet = engine.mirror.get_sheet(&sid).unwrap();
+    let sheet = engine.cell_store.get_sheet(&sid).unwrap();
     assert!(std::sync::Arc::ptr_eq(&sheet.row_axis, &grid.row_axis()));
     assert!(std::sync::Arc::ptr_eq(&sheet.col_axis, &grid.col_axis()));
     assert_eq!(
-        engine.mirror.row_index_lookup(&row_id),
+        engine.cell_store.row_index_lookup(&row_id),
         Some((sid, 100_000))
     );
-    assert_eq!(engine.mirror.col_index_lookup(&col_id), Some((sid, 15)));
+    assert_eq!(engine.cell_store.col_index_lookup(&col_id), Some((sid, 15)));
     assert_eq!(sheet.cells_iter().count(), 0);
     assert_eq!(
         sheet.position_of(&cell_id),
         Some(SheetPos::new(100_000, 15))
     );
 
-    let snapshot = construction::build_workbook_snapshot(&engine.stores, &engine.mirror);
+    let snapshot = construction::build_workbook_snapshot(&engine.stores, &engine.cell_store);
     assert!(snapshot.sheets[0].cells.is_empty());
     let (restored, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     assert_eq!(
-        restored.mirror.row_index_lookup(&row_id),
+        restored.cell_store.row_index_lookup(&row_id),
         Some((sid, 100_000))
     );
-    assert_eq!(restored.mirror.col_index_lookup(&col_id), Some((sid, 15)));
     assert_eq!(
-        as_f64(restored.mirror.get_cell_value_at(&sid, SheetPos::new(0, 0))),
+        restored.cell_store.col_index_lookup(&col_id),
+        Some((sid, 15))
+    );
+    assert_eq!(
+        as_f64(
+            restored
+                .cell_store
+                .get_cell_value_at(&sid, SheetPos::new(0, 0))
+        ),
         Some(1.0)
     );
 }
@@ -467,9 +485,9 @@ fn sparse_million_row_import_keeps_shared_compact_axes_and_snapshot_identities()
         }],
         ..Default::default()
     });
-    let sid = engine.mirror().sheet_by_name("Sparse").unwrap();
+    let sid = engine.cell_store().sheet_by_name("Sparse").unwrap();
     let grid = &engine.stores.grid_indexes[&sid];
-    let sheet = engine.mirror().get_sheet(&sid).unwrap();
+    let sheet = engine.cell_store().get_sheet(&sid).unwrap();
     assert!(std::sync::Arc::ptr_eq(&sheet.row_axis, &grid.row_axis()));
     assert!(std::sync::Arc::ptr_eq(&sheet.col_axis, &grid.col_axis()));
     let AxisIdentityStore::Runs(rows) = sheet.row_axis.store() else {
@@ -481,14 +499,14 @@ fn sparse_million_row_import_keeps_shared_compact_axes_and_snapshot_identities()
     assert_eq!(rows.segments().len(), 1);
     assert_eq!(cols.segments().len(), 1);
     assert_eq!(sheet.cells_iter().count(), 1);
-    assert_eq!(sheet.id_to_pos.len(), 1);
+    assert_eq!(sheet.cells().count(), 1);
     let last_row = sheet.row_axis.identity_at(sid, 999_999).unwrap();
-    let snapshot = construction::build_workbook_snapshot(&engine.stores, &engine.mirror);
+    let snapshot = construction::build_workbook_snapshot(&engine.stores, &engine.cell_store);
     assert!(serde_json::to_vec(&snapshot).unwrap().len() < 10_000);
     let (restored, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     assert_eq!(
         restored
-            .mirror()
+            .cell_store()
             .get_sheet(&sid)
             .unwrap()
             .row_axis
@@ -505,7 +523,7 @@ fn sparse_million_row_import_keeps_shared_compact_axes_and_snapshot_identities()
             },
         )
         .unwrap();
-    let sheet = engine.mirror().get_sheet(&sid).unwrap();
+    let sheet = engine.cell_store().get_sheet(&sid).unwrap();
     assert_eq!(sheet.row_axis.position_of(sid, last_row), Some(1_000_001));
     let AxisIdentityStore::Runs(rows) = sheet.row_axis.store() else {
         panic!("expanded rows after insertion");
@@ -513,7 +531,7 @@ fn sparse_million_row_import_keeps_shared_compact_axes_and_snapshot_identities()
     assert_eq!(rows.segments().len(), 3);
     assert_eq!(
         engine
-            .mirror()
+            .cell_store()
             .get_cell_value_at(&sid, SheetPos::new(1_000_001, 16_383)),
         Some(&CellValue::from(7.0))
     );
@@ -561,7 +579,7 @@ fn explicit_snapshot_axes_reserve_embedded_compact_runs_before_growth() {
             },
         )
         .unwrap();
-    let sheet = engine.mirror().get_sheet(&sid).unwrap();
+    let sheet = engine.cell_store().get_sheet(&sid).unwrap();
     assert_eq!(sheet.row_axis.position_of(sid, first), Some(2));
     assert_eq!(sheet.row_axis.position_of(sid, second), Some(3));
     let inserted = sheet.row_axis.identity_at(sid, 0).unwrap();

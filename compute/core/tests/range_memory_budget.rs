@@ -10,7 +10,7 @@
 //!   cargo test -p compute-core --test range_memory_budget -- --nocapture
 
 use cell_types::{CellId, SheetId, SheetPos};
-use compute_core::mirror::{CellEntry, CellMirror};
+use compute_core::cells::{CellEntry, CellStore};
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
@@ -115,27 +115,16 @@ fn range_payload_size_f64le(row_count: u32, col_count: u32) -> usize {
     (row_count as usize) * (col_count as usize) * 8
 }
 
-/// Estimate per-cell (sparse) memory: each cell needs entries in three
-/// FxHashMaps (cells, pos_to_id, id_to_pos) plus the CellEntry itself.
-///
-/// - cells: FxHashMap<CellId, CellEntry>
-///   key=CellId(u128=16) + value=CellEntry(CellValue + Option<IdentityFormula>) + hash(8)
-/// - pos_to_id: FxHashMap<SheetPos, CellId>
-///   key=SheetPos(8) + value=CellId(16) + hash(8)
-/// - id_to_pos: FxHashMap<CellId, SheetPos>
-///   key=CellId(16) + value=SheetPos(8) + hash(8)
-fn estimate_per_cell_memory(cell_count: usize, cell_value_size: usize) -> usize {
-    let cell_entry_size =
-        cell_value_size + std::mem::size_of::<Option<formula_types::IdentityFormula>>();
-
-    // cells map: key(16) + value(cell_entry_size) + hash_overhead(8)
-    let cells_per = 16 + cell_entry_size + 8;
-    // pos_to_id: key(8) + value(16) + hash(8)
-    let pos_to_id_per = 8 + 16 + 8;
-    // id_to_pos: key(16) + value(8) + hash(8)
-    let id_to_pos_per = 16 + 8 + 8;
-
-    cell_count * (cells_per + pos_to_id_per + id_to_pos_per)
+/// Estimate authored numeric-cell storage, excluding allocator slack and axis vectors.
+/// Each cell has a value entry and both directions of its stable axis-identity lookup.
+/// Formula-free cells have no formula-sidecar entry.
+fn estimate_per_cell_memory(cell_count: usize) -> usize {
+    let cell_id_size = std::mem::size_of::<CellId>();
+    let axis_key_size = std::mem::size_of::<(cell_types::RowId, cell_types::ColId)>();
+    let estimated_bucket_overhead = 8;
+    let value_entry = cell_id_size + std::mem::size_of::<CellEntry>() + estimated_bucket_overhead;
+    let identity_entry = cell_id_size + axis_key_size + estimated_bucket_overhead;
+    cell_count * (value_entry + 2 * identity_entry)
 }
 
 // ===========================================================================
@@ -308,7 +297,7 @@ fn per_cell_vs_range_memory() {
 
     // --- Per-cell (sparse) memory ---
     // Each cell requires entries in 3 HashMaps + the CellEntry payload.
-    let per_cell_total = estimate_per_cell_memory(cell_count, cell_value_size);
+    let per_cell_total = estimate_per_cell_memory(cell_count);
 
     // --- col_data (dense columnar) memory ---
     // Same data materialized as col_data[col] = Vec<CellValue>.
@@ -391,17 +380,17 @@ fn engine_hydration_col_data_sanity() {
 
     let snapshot = build_numeric_snapshot(rows, cols);
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
 
     let _result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init_from_snapshot should succeed");
 
-    // Verify the mirror has the sheet
+    // Verify the cell store has the sheet
     let sheet_id = sid(0);
-    let sheet = mirror
+    let sheet = cell_store
         .get_sheet(&sheet_id)
-        .expect("Sheet should exist in mirror");
+        .expect("Sheet should exist in cell_store");
 
     // The engine populates cells via the sparse path (cells + pos_to_id + id_to_pos).
     // col_data may or may not be populated depending on whether aggregation
@@ -427,11 +416,10 @@ fn engine_hydration_col_data_sanity() {
     // Print memory summary for the hydrated sheet
     let theoretical_payload = range_payload_size_f64le(rows, cols);
     let theoretical_col_data = estimate_col_data_memory(cols, rows, cell_value_size).0;
-    let theoretical_sparse =
-        estimate_per_cell_memory((rows as usize) * (cols as usize), cell_value_size);
+    let theoretical_sparse = estimate_per_cell_memory((rows as usize) * (cols as usize));
 
     println!("=== Engine Hydration Sanity ({}x{}) ===", rows, cols);
-    println!("  Cells in mirror:      {}", sheet.cell_count());
+    println!("  Cells in cell_store:      {}", sheet.cell_count());
     println!(
         "  col_data populated:   {}",
         !sheet.column_values_are_empty()

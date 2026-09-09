@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::storage::engine::stores::EngineStores;
 use cell_types::{CellId, SheetId};
 use value_types::ComputeError;
@@ -8,7 +8,7 @@ use value_types::ComputeError;
 /// Grow native axes once per sheet and register identities touched by this batch.
 pub(super) fn register_cell_positions(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     positions: impl Iterator<Item = (SheetId, CellId, u32, u32)> + Clone,
 ) -> Result<(), ComputeError> {
     let mut max_by_sheet: HashMap<SheetId, (u32, u32)> = HashMap::new();
@@ -28,7 +28,9 @@ pub(super) fn register_cell_positions(
                 sheet_id: sheet_id.to_uuid_string(),
             });
         }
-        crate::storage::engine::history::structure::capture_sheet_extent(stores, mirror, *sheet_id);
+        crate::storage::engine::history::structure::capture_sheet_extent(
+            stores, cell_store, *sheet_id,
+        );
     }
     for (sheet_id, (row, col)) in max_by_sheet {
         let grid =
@@ -38,18 +40,18 @@ pub(super) fn register_cell_positions(
                 .ok_or_else(|| ComputeError::SheetNotFound {
                     sheet_id: sheet_id.to_uuid_string(),
                 })?;
+        if let Some(sheet) = cell_store.get_sheet(&sheet_id) {
+            grid.restore_shared_axes(sheet.row_axis.clone(), sheet.col_axis.clone());
+        }
         grid.ensure_capacity(row, col);
-        mirror.install_sheet_axes(sheet_id, grid.row_axis(), grid.col_axis());
+        cell_store.install_sheet_axes(sheet_id, grid.row_axis(), grid.col_axis());
     }
     for (sheet_id, cell_id, row, col) in positions {
-        let grid =
-            stores
-                .grid_indexes
-                .get_mut(&sheet_id)
-                .ok_or_else(|| ComputeError::SheetNotFound {
-                    sheet_id: sheet_id.to_uuid_string(),
-                })?;
-        grid.register_cell(cell_id, row, col);
+        cell_store.register_identity_position(
+            sheet_id,
+            cell_types::SheetPos::new(row, col),
+            cell_id,
+        );
     }
     Ok(())
 }

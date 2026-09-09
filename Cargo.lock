@@ -682,17 +682,14 @@ name = "compute-wire"
 version = "0.1.0"
 dependencies = [
  "cell-types",
- "compute-cf",
  "compute-security",
  "compute-wire",
  "criterion",
  "domain-types",
- "formula-types",
  "ooxml-types",
  "proptest",
  "serde",
  "serde_json",
- "snapshot-types",
  "tracing",
  "value-types",
 ]

@@ -6,7 +6,6 @@
 //! live in the sibling modules.
 
 pub mod construction;
-mod mutation_coordinator;
 mod mutation_dispatch;
 mod pivot_materialization;
 mod recalc;
@@ -15,7 +14,6 @@ mod settings;
 mod stores;
 mod viewport;
 // Wire format types and serialization — now in compute-wire crate
-pub use compute_wire::mutation as mutation_binary;
 pub use compute_wire::palette as format_palette;
 pub use compute_wire::types as viewport_render_types;
 pub use compute_wire::viewport as viewport_binary;
@@ -89,10 +87,9 @@ use snapshot_types::MutationResult;
 // captured.
 pub use csv_parser::CsvImportOptions;
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 
 pub(in crate::storage::engine) use grid_indexing::build_grid_from_native_sheet;
-use mutation_coordinator::MutationCoordinator;
 use settings::EngineSettings;
 pub(crate) use stores::CFCacheEntry;
 use stores::EngineStores;
@@ -100,9 +97,8 @@ use viewport::service::ViewportService;
 
 /// Native spreadsheet state, identity tracking, and the formula scheduler.
 pub struct ComputeEngine {
-    mirror: CellMirror,
+    cell_store: CellStore,
     pub(crate) stores: EngineStores,
-    pub(crate) mutation: MutationCoordinator,
     history: history::HistoryStack,
     pub(crate) viewport: ViewportService,
     pub(crate) settings: EngineSettings,

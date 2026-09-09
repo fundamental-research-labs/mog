@@ -8,7 +8,7 @@
 //! Run:
 //!   cargo test -p compute-core --test recalc_vectorized -- --nocapture
 
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{CellData, RecalcResult, SheetSnapshot, WorkbookSnapshot};
 use value_types::CellValue;
@@ -133,10 +133,10 @@ fn test_simple_multiply_column() {
         .collect();
 
     let snapshot = build_snapshot(vec![("Sheet1", 500, 2, cells)]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== test_simple_multiply_column ===");
@@ -177,10 +177,10 @@ fn test_add_two_columns() {
         .collect();
 
     let snapshot = build_snapshot(vec![("Sheet1", 500, 3, cells)]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== test_add_two_columns ===");
@@ -216,10 +216,10 @@ fn test_chained_columns() {
         .collect();
 
     let snapshot = build_snapshot(vec![("Sheet1", 500, 3, cells)]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== test_chained_columns ===");
@@ -258,10 +258,10 @@ fn test_chained_with_downstream_sum() {
         .collect();
 
     let snapshot = build_snapshot(vec![("Sheet1", 500, 4, cells)]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== test_chained_with_downstream_sum ===");
@@ -300,10 +300,10 @@ fn test_mixed_vectorizable_and_non_vectorizable() {
         .collect();
 
     let snapshot = build_snapshot(vec![("Sheet1", 300, 2, cells)]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== test_mixed_vectorizable_and_non_vectorizable ===");
@@ -341,10 +341,10 @@ fn test_negation_column() {
         .collect();
 
     let snapshot = build_snapshot(vec![("Sheet1", 300, 2, cells)]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== test_negation_column ===");
@@ -378,10 +378,10 @@ fn test_constant_multiply_plus_offset() {
         .collect();
 
     let snapshot = build_snapshot(vec![("Sheet1", 300, 2, cells)]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== test_constant_multiply_plus_offset ===");
@@ -415,10 +415,10 @@ fn test_large_column_correctness() {
         .collect();
 
     let snapshot = build_snapshot(vec![("Sheet1", 1000, 2, cells)]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== test_large_column_correctness ===");

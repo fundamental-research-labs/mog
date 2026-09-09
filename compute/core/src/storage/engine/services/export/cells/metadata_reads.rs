@@ -6,7 +6,7 @@ use crate::storage::properties::{self, CellProperties};
 
 pub(super) fn batch_read_props_array_refs_and_formula_metadata(
     stores: &EngineStores,
-    mirror: &crate::mirror::CellMirror,
+    cell_store: &crate::cells::CellStore,
     sheet_id: &SheetId,
 ) -> (
     FxHashMap<CellId, CellProperties>,
@@ -23,11 +23,11 @@ pub(super) fn batch_read_props_array_refs_and_formula_metadata(
     let mut formula_metadata = FxHashMap::default();
     let mut rich_strings = FxHashMap::default();
     for (cell_id, metadata) in &stores.storage.cell_metadata {
-        if mirror.sheet_for_cell(cell_id).as_ref() != Some(sheet_id) {
+        if cell_store.sheet_for_cell(cell_id).as_ref() != Some(sheet_id) {
             continue;
         }
         let array_ref = metadata.array_ref.as_ref().map(|imported| {
-            mirror.projection_registry.get(cell_id).map_or_else(
+            cell_store.projection_registry.get(cell_id).map_or_else(
                 || imported.clone(),
                 |projection| {
                     let start = crate::storage::engine::export::pos_to_a1(

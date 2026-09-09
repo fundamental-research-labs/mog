@@ -7,7 +7,7 @@
 use cell_types::SheetId;
 use formula_types::CellRef;
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::range_manager::{A1CellRef, stringify_cell};
 
 /// Return the Excel formula-bar text for the Data Table containing `(row, col)`.
@@ -15,18 +15,18 @@ use crate::range_manager::{A1CellRef, stringify_cell};
 /// The returned string includes the leading `=`. Returns `None` outside a Data
 /// Table region or when the region has neither input ref.
 pub(crate) fn formula_at(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
 ) -> Option<String> {
-    let region = mirror.find_data_table_at(sheet_id, row, col)?;
-    formula_for_region(mirror, sheet_id, region)
+    let region = cell_store.find_data_table_at(sheet_id, row, col)?;
+    formula_for_region(cell_store, sheet_id, region)
 }
 
 /// Synthesize a region's formula before installing its definition in the store.
 pub(super) fn formula_for_region(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     region: &snapshot_types::DataTableRegionDef,
 ) -> Option<String> {
@@ -37,18 +37,22 @@ pub(super) fn formula_for_region(
     let row_arg = region
         .row_input_ref
         .as_ref()
-        .and_then(|r| ref_to_a1(mirror, sheet_id, r))
+        .and_then(|r| ref_to_a1(cell_store, sheet_id, r))
         .unwrap_or_default();
     let col_arg = region
         .col_input_ref
         .as_ref()
-        .and_then(|r| ref_to_a1(mirror, sheet_id, r))
+        .and_then(|r| ref_to_a1(cell_store, sheet_id, r))
         .unwrap_or_default();
 
     Some(format!("=TABLE({row_arg},{col_arg})"))
 }
 
-fn ref_to_a1(mirror: &CellMirror, current_sheet: &SheetId, cell_ref: &CellRef) -> Option<String> {
+fn ref_to_a1(
+    cell_store: &CellStore,
+    current_sheet: &SheetId,
+    cell_ref: &CellRef,
+) -> Option<String> {
     let (sheet_id, row, col) = match cell_ref {
         CellRef::Positional { sheet, row, col } => {
             let sheet_id = if *sheet == SheetId::from_raw(0) {
@@ -59,8 +63,8 @@ fn ref_to_a1(mirror: &CellMirror, current_sheet: &SheetId, cell_ref: &CellRef) -
             (sheet_id, *row, *col)
         }
         CellRef::Resolved(cell_id) => {
-            let sheet_id = mirror.sheet_for_cell(cell_id)?;
-            let pos = mirror.resolve_position(cell_id)?;
+            let sheet_id = cell_store.sheet_for_cell(cell_id)?;
+            let pos = cell_store.resolve_position(cell_id)?;
             (sheet_id, pos.row(), pos.col())
         }
     };
@@ -76,7 +80,7 @@ fn ref_to_a1(mirror: &CellMirror, current_sheet: &SheetId, cell_ref: &CellRef) -
         return Some(cell);
     }
 
-    let sheet_name = mirror
+    let sheet_name = cell_store
         .get_sheet(&sheet_id)
         .map(|s| s.name.as_str())
         .unwrap_or("");
@@ -107,7 +111,7 @@ mod tests {
     #[test]
     fn positional_ref_formats_as_absolute_a1() {
         let sheet = SheetId::from_uuid_str("000000000000000000000000000000aa").unwrap();
-        let mirror = CellMirror::new();
+        let cell_store = CellStore::new();
         let cell_ref = CellRef::Positional {
             sheet,
             row: 4,
@@ -115,7 +119,7 @@ mod tests {
         };
 
         assert_eq!(
-            ref_to_a1(&mirror, &sheet, &cell_ref).as_deref(),
+            ref_to_a1(&cell_store, &sheet, &cell_ref).as_deref(),
             Some("$AB$5")
         );
     }

@@ -72,9 +72,13 @@ fn patch_borders_composes_edges_and_preserves_other_format() {
         )
         .unwrap();
 
-    let cell_id =
-        crate::storage::engine::services::cell_editing::find_cell_id_at(&engine.stores, &sid, 0, 0)
-            .unwrap();
+    let cell_id = crate::storage::engine::services::cell_editing::find_cell_id_at(
+        &engine.cell_store,
+        &sid,
+        0,
+        0,
+    )
+    .unwrap();
     let patched = engine.get_cell_format(&sid, &cell_id, 0, 0);
     let borders = patched.borders.unwrap();
     assert_eq!(patched.bold, Some(true));

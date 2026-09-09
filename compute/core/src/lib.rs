@@ -18,9 +18,9 @@ pub mod time_compat;
 
 pub(crate) mod xlsx_profile;
 
-// Cell Mirror — internal, but exposed for integration tests and dev tools (formula-eval)
+// Cell Store — internal, but exposed for integration tests and dev tools (formula-eval)
 #[doc(hidden)]
-pub mod mirror;
+pub mod cells;
 
 // Formula Parser (extracted to compute-parser crate)
 
@@ -28,7 +28,7 @@ pub mod mirror;
 #[doc(hidden)]
 pub mod eval;
 
-// Eval bridge — concrete trait impls wiring eval traits to CellMirror
+// Eval bridge — concrete trait impls wiring eval traits to CellStore
 #[doc(hidden)]
 pub mod eval_bridge;
 

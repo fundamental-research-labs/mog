@@ -1,4 +1,4 @@
-//! Tests that blank-workbook bootstrap and settle_for_mirror both emit
+//! Tests that blank-workbook bootstrap and settle_for_store both emit
 //! hydration-shape MutationResults (the same shape as XLSX/CSV import).
 
 use super::super::*;
@@ -59,14 +59,14 @@ fn create_default_sheet_emits_hydration_shape_settings() {
 }
 
 #[test]
-fn settle_for_mirror_returns_hydration_shape() {
+fn settle_for_store_returns_hydration_shape() {
     use snapshot_types::WorkbookSnapshot;
 
     let (mut engine, _) = ComputeEngine::from_snapshot(WorkbookSnapshot::default()).unwrap();
     // Create a sheet first so settle has something to enumerate.
     let _ = engine.create_default_sheet("Sheet1").unwrap();
 
-    let (_patches, result) = engine.settle_for_mirror().expect("settle should succeed");
+    let result = engine.settle_for_store().expect("settle should succeed");
 
     // Same assertions as bootstrap: full hydration shape.
     assert!(

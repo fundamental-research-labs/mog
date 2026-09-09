@@ -322,7 +322,7 @@ fn unsupported_imported_table_autofilter_records_import_diagnostic() {
     let mut report = domain_types::ImportReport::default();
     crate::storage::engine::services::imported_filters::normalize_imported_auto_filter_visibility(
         &mut engine.stores,
-        &mut engine.mirror,
+        &mut engine.cell_store,
         Some(&mut report),
         domain_types::ImportPhase::FullHydration,
     );
@@ -385,12 +385,12 @@ fn unsupported_imported_table_autofilter_runtime_diagnostics_distinguish_apply_a
         .table_id
         .expect("unsupported imported table filter should use stable table id");
 
-    let (_, apply_result) = engine
+    let apply_result = engine
         .apply_filter(&sheet_id, &filter_id)
         .expect("apply unsupported imported filter");
     assert_unsupported_runtime_diagnostic(&apply_result, "applyFilter", "1", &stable_table_id);
 
-    let (_, reapply_result) = engine
+    let reapply_result = engine
         .reapply_filter(&sheet_id, &filter_id)
         .expect("reapply unsupported imported filter");
     assert_unsupported_runtime_diagnostic(&reapply_result, "reapplyFilter", "2", &stable_table_id);
@@ -600,7 +600,7 @@ fn copied_native_filter_has_independent_ids_visibility_and_lossless_metadata() {
         ..Default::default()
     };
     let mut engine = engine_from_parse_output_normal(&input);
-    let source = *engine.mirror.sheet_ids().next().unwrap();
+    let source = *engine.cell_store.sheet_ids().next().unwrap();
     let original = engine.get_filters_in_sheet(&source).pop().unwrap();
     engine.apply_filter(&source, &original.id).unwrap();
     filters::set_filter_sort_state(

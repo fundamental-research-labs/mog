@@ -121,7 +121,11 @@ fn sheet_id_by_name(engine: &ComputeEngine, name: &str) -> cell_types::SheetId {
 fn xlsx_rename_sheet_persists_on_export() {
     let bytes = xlsx_bytes_for(one_cell_fixture("Original"));
     let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
-    let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
+    let sid = *engine
+        .cell_store()
+        .sheet_ids()
+        .next()
+        .expect("sheet present");
 
     engine
         .rename_compute_sheet(&sid, "Renamed")
@@ -142,7 +146,11 @@ fn xlsx_rename_sheet_persists_on_export() {
 fn xlsx_set_tab_color_persists_on_export() {
     let bytes = xlsx_bytes_for(one_cell_fixture("TabColor"));
     let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
-    let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
+    let sid = *engine
+        .cell_store()
+        .sheet_ids()
+        .next()
+        .expect("sheet present");
 
     engine
         .set_tab_color(&sid, Some("FFFF0000".to_string()))
@@ -254,13 +262,13 @@ fn xlsx_set_sheet_hidden_persists_on_export() {
     let bytes = xlsx_bytes_for(snap);
     let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
 
-    // Find the "ToHide" sheet id via mirror.
+    // Find the "ToHide" sheet id via cell store.
     let sid_hide = *engine
-        .mirror()
+        .cell_store()
         .sheet_ids()
         .find(|s| {
             engine
-                .mirror()
+                .cell_store()
                 .get_sheet(s)
                 .map(|sm| sm.name == "ToHide")
                 .unwrap_or(false)

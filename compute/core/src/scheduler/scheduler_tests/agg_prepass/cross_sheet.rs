@@ -61,14 +61,14 @@ fn agg_cross_sheet_snapshot() -> WorkbookSnapshot {
 
 #[test]
 fn test_agg_prepass_cross_sheet_countifs() {
-    let (core, mirror) = init_core(agg_cross_sheet_snapshot());
+    let (core, cell_store) = init_core(agg_cross_sheet_snapshot());
     let report_sid = sid(2);
     let expected_counts = [7.0, 7.0, 6.0, 7.0, 7.0, 6.0, 7.0, 7.0, 6.0, 7.0];
 
     for row in 0..10u32 {
         assert_number_at(
             &core,
-            &mirror,
+            &cell_store,
             &report_sid,
             row,
             1,
@@ -80,7 +80,7 @@ fn test_agg_prepass_cross_sheet_countifs() {
 
 #[test]
 fn test_agg_prepass_cross_sheet_sumifs() {
-    let (core, mirror) = init_core(agg_cross_sheet_snapshot());
+    let (core, cell_store) = init_core(agg_cross_sheet_snapshot());
     let report_sid = sid(2);
     let expected_sums = [
         350.0, 385.0, 315.0, 350.0, 385.0, 315.0, 350.0, 385.0, 315.0, 350.0,
@@ -89,7 +89,7 @@ fn test_agg_prepass_cross_sheet_sumifs() {
     for row in 0..10u32 {
         assert_number_at(
             &core,
-            &mirror,
+            &cell_store,
             &report_sid,
             row,
             2,

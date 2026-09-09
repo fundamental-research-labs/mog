@@ -3,7 +3,7 @@
 //!
 //! These are functions whose semantics cannot be expressed through the standard
 //! `PureFunction::call()` interface because they require lazy argument evaluation,
-//! filtered aggregation, or direct mirror/dense-column access.
+//! filtered aggregation, or direct cell_store/dense-column access.
 
 pub(crate) mod borrowed_multi_criteria;
 pub(crate) mod dense_aggregate;

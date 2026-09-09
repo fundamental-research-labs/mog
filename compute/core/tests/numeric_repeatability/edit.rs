@@ -26,7 +26,7 @@ pub(crate) fn overwrite_number(
 
 pub(crate) fn read_number_at(engine: &ComputeEngine, sid: &SheetId, pos: SheetPos) -> Option<f64> {
     engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(sid, pos)
         .and_then(|v| v.as_number())
 }
@@ -36,7 +36,7 @@ pub(crate) fn read_value_at(
     sid: &SheetId,
     pos: SheetPos,
 ) -> Option<CellValue> {
-    engine.mirror().get_cell_value_at(sid, pos).cloned()
+    engine.cell_store().get_cell_value_at(sid, pos).cloned()
 }
 
 /// Apply one forward/inverse pair on (row, col) and compare the dependent

@@ -21,7 +21,7 @@ impl ComputeCore {
     /// `RequiresPython` for multi-variable problems.
     pub fn solve(
         &self,
-        mirror: &CellMirror,
+        cell_store: &CellStore,
         params: &crate::solver::SolverParams,
     ) -> Result<crate::solver::SolverResult, ComputeError> {
         // For root finding, we need the objective cell's AST and the first variable's cell
@@ -36,7 +36,7 @@ impl ComputeCore {
             .ast
             .clone();
 
-        let sheet_id = compute_graph::PositionResolver::resolve(mirror, &objective_cell_id)
+        let sheet_id = compute_graph::PositionResolver::resolve(cell_store, &objective_cell_id)
             .map(|p| p.sheet)
             .ok_or_else(|| ComputeError::Eval {
                 message: format!(
@@ -59,7 +59,7 @@ impl ComputeCore {
             }
             eval_cache.borrow_mut().clear();
             let ctx = crate::eval_bridge::OverrideContext::with_formula_text_provider(
-                mirror,
+                cell_store,
                 objective_cell_id,
                 sheet_id,
                 &overrides,
@@ -84,10 +84,10 @@ impl ComputeCore {
     /// Run Goal Seek: find the input value that makes a formula achieve a target value.
     ///
     /// This is a read-only operation. The formula cell's AST is evaluated with
-    /// temporary overrides applied to the input cell. The CellMirror is not modified.
+    /// temporary overrides applied to the input cell. The CellStore is not modified.
     pub fn goal_seek(
         &self,
-        mirror: &CellMirror,
+        cell_store: &CellStore,
         params: &crate::solver::GoalSeekParams,
     ) -> Result<crate::solver::GoalSeekResult, ComputeError> {
         let formula_cell_id = CellId::from_uuid_str(&params.formula_cell)?;
@@ -104,7 +104,7 @@ impl ComputeCore {
             .clone();
 
         // Find sheet for formula cell
-        let sheet_id = compute_graph::PositionResolver::resolve(mirror, &formula_cell_id)
+        let sheet_id = compute_graph::PositionResolver::resolve(cell_store, &formula_cell_id)
             .map(|p| p.sheet)
             .ok_or_else(|| ComputeError::Eval {
                 message: format!("Cell not found: {}", formula_cell_id.to_uuid_string()),
@@ -120,7 +120,7 @@ impl ComputeCore {
             overrides.insert(input_cell_id, CellValue::number(input_value));
             eval_cache.borrow_mut().clear();
             let ctx = crate::eval_bridge::OverrideContext::with_formula_text_provider(
-                mirror,
+                cell_store,
                 formula_cell_id,
                 sheet_id,
                 &overrides,
@@ -161,10 +161,10 @@ impl ComputeCore {
     /// Calculate a data table: evaluate formula with each combination of input values.
     ///
     /// This is a read-only operation. The formula cell's AST is evaluated with
-    /// temporary overrides applied to the input cells. The CellMirror is not modified.
+    /// temporary overrides applied to the input cells. The CellStore is not modified.
     pub fn data_table(
         &self,
-        mirror: &CellMirror,
+        cell_store: &CellStore,
         params: &crate::data_table::DataTableParams,
     ) -> Result<crate::data_table::DataTableResult, ComputeError> {
         let formula_cell_id = CellId::from_uuid_str(&params.formula_cell)?;
@@ -192,7 +192,7 @@ impl ComputeCore {
             .clone();
 
         // Find sheet for formula cell
-        let sheet_id = compute_graph::PositionResolver::resolve(mirror, &formula_cell_id)
+        let sheet_id = compute_graph::PositionResolver::resolve(cell_store, &formula_cell_id)
             .map(|p| p.sheet)
             .ok_or_else(|| ComputeError::Eval {
                 message: format!("Cell not found: {}", formula_cell_id.to_uuid_string()),
@@ -206,7 +206,7 @@ impl ComputeCore {
         let evaluate = |overrides: &FxHashMap<CellId, CellValue>| -> CellValue {
             eval_cache.borrow_mut().clear();
             let ctx = crate::eval_bridge::OverrideContext::with_formula_text_provider(
-                mirror,
+                cell_store,
                 formula_cell_id,
                 sheet_id,
                 overrides,

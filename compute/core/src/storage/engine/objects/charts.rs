@@ -20,17 +20,22 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         config: &serde_json::Value,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
-            let mut result = services::objects::create_chart(&mut engine.stores, sheet_id, config)?;
+            let mut result = services::objects::create_chart(
+                &mut engine.stores,
+                &mut engine.cell_store,
+                sheet_id,
+                config,
+            )?;
             shared::sync_floating_anchors(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 sheet_id,
                 &mut result,
                 true,
             )?;
-            Ok(shared::with_empty_patches(result))
+            Ok(result)
         })
     }
 
@@ -41,18 +46,23 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         chart_id: &str,
         updates: &serde_json::Value,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
-            let mut result =
-                services::objects::update_chart(&mut engine.stores, sheet_id, chart_id, updates)?;
+            let mut result = services::objects::update_chart(
+                &mut engine.stores,
+                &engine.cell_store,
+                sheet_id,
+                chart_id,
+                updates,
+            )?;
             shared::sync_floating_anchors(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 sheet_id,
                 &mut result,
                 shared::changes_anchor(updates),
             )?;
-            Ok(shared::with_empty_patches(result))
+            Ok(result)
         })
     }
 
@@ -62,10 +72,9 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         chart_id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             services::objects::delete_chart(&mut engine.stores, sheet_id, chart_id)
-                .map(shared::with_empty_patches)
         })
     }
 
@@ -87,10 +96,9 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         chart_id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             services::objects::bring_chart_to_front(&mut engine.stores, sheet_id, chart_id)
-                .map(shared::with_empty_patches)
         })
     }
 
@@ -100,10 +108,9 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         chart_id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             services::objects::send_chart_to_back(&mut engine.stores, sheet_id, chart_id)
-                .map(shared::with_empty_patches)
         })
     }
 
@@ -113,10 +120,9 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         chart_id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             services::objects::bring_chart_forward(&mut engine.stores, sheet_id, chart_id)
-                .map(shared::with_empty_patches)
         })
     }
 
@@ -126,10 +132,9 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         chart_id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             services::objects::send_chart_backward(&mut engine.stores, sheet_id, chart_id)
-                .map(shared::with_empty_patches)
         })
     }
 
@@ -146,10 +151,9 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         chart_id: &str,
         table_id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             services::objects::link_chart_to_table(&mut engine.stores, sheet_id, chart_id, table_id)
-                .map(shared::with_empty_patches)
         })
     }
 
@@ -159,10 +163,9 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         chart_id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             services::objects::unlink_chart_from_table(&mut engine.stores, sheet_id, chart_id)
-                .map(shared::with_empty_patches)
         })
     }
 

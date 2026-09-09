@@ -12,7 +12,7 @@ impl ComputeCore {
     #[tracing::instrument(name = "scheduler_init_from_snapshot", skip_all)]
     pub fn init_from_snapshot(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         snapshot: WorkbookSnapshot,
     ) -> Result<RecalcResult, ComputeError> {
         // Store iterative calculation settings before consuming snapshot
@@ -35,8 +35,8 @@ impl ComputeCore {
         self.rebuild_ordered_sheets_cache();
 
         // Pre-extract formula cells from snapshot before consuming it.
-        // CellEntry.formula is now IdentityFormula (and set to None during snapshot loading),
-        // so we must extract formula strings here while the snapshot data is still available.
+        // Raw formula strings are parsed into the formula sidecar after values load,
+        // so extract them while the snapshot is still available.
         let formula_cells = {
             let _span = tracing::info_span!("collect_formula_cells").entered();
             Self::extract_formula_cells_from_snapshot(&snapshot)
@@ -52,10 +52,11 @@ impl ComputeCore {
                 ));
         }
 
-        // 1. Populate the cell mirror from snapshot.
+        // 1. Populate the cell store from snapshot.
         let total_cell_count: usize = snapshot.sheets.iter().map(|s| s.cells.len()).sum();
-        *mirror = CellMirror::from_snapshot(snapshot)?;
-        self.normalize_raw_named_ranges_for_graph(mirror);
+        *cell_store = CellStore::from_snapshot(snapshot)?;
+        cell_store.set_id_alloc(self.id_alloc.clone());
+        self.normalize_raw_named_ranges_for_graph(cell_store);
         let formula_count = formula_cells.len();
         // Pre-size graph: `precedents` needs formula_count entries, `dependents` needs
         // total_cell_count entries (data cells that are depended upon + formula cells).
@@ -70,17 +71,17 @@ impl ComputeCore {
         // 2. For each cell with a formula, parse and register dependencies.
         //    Skip per-edge cycle detection during bulk init — the topological sort
         //    in full_recalc will catch any cycles. This avoids O(F^2*D) overhead.
-        self.bulk_parse_and_register(mirror, formula_cells);
+        self.bulk_parse_and_register(cell_store, formula_cells);
 
         // 2.1: Register variable formulas as DAG nodes. Variables with raw_expression
         //      get parsed, their ASTs cached under synthetic CellIds, and their
         //      dependencies registered in the graph — just like regular cell formulas.
-        self.register_all_variables(mirror);
+        self.register_all_variables(cell_store);
 
         // 3. Full recalc: evaluate all formula cells in topological order.
         //    get_evaluation_order uses Kahn's algorithm which detects cycles and
         //    returns Err(GraphError::CycleDetected) — handled by handle_cycles_and_recalc.
-        let result = self.full_recalc(mirror)?;
+        let result = self.full_recalc(cell_store)?;
 
         // Init finished with a successful full recalc — subsequent
         // `recalculate_with_options()` calls can short-circuit until the
@@ -90,15 +91,15 @@ impl ComputeCore {
         Ok(result)
     }
 
-    /// Initialize from a workbook snapshot using an already-populated mirror.
+    /// Initialize from a workbook snapshot using an already-populated cell_store.
     ///
     /// Rebuild paths that need range-backed values during initial recalc must
-    /// install mirror row/column identity maps and finalize range hydration
-    /// before formulas evaluate. This variant keeps the caller-provided mirror
+    /// install cell_store row/column identity maps and finalize range hydration
+    /// before formulas evaluate. This variant keeps the caller-provided cell_store
     /// intact and rebuilds only ComputeCore state from the supplied snapshot.
-    pub(crate) fn init_from_snapshot_with_prebuilt_mirror(
+    pub(crate) fn init_from_snapshot_with_prebuilt_store(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         snapshot: WorkbookSnapshot,
     ) -> Result<RecalcResult, ComputeError> {
         self.iterative_calc = snapshot.iterative_calc;
@@ -132,7 +133,8 @@ impl ComputeCore {
         }
 
         let total_cell_count: usize = snapshot.sheets.iter().map(|s| s.cells.len()).sum();
-        self.normalize_raw_named_ranges_for_graph(mirror);
+        cell_store.set_id_alloc(self.id_alloc.clone());
+        self.normalize_raw_named_ranges_for_graph(cell_store);
         let formula_count = formula_cells.len();
         self.graph = DependencyGraph::with_capacity_full(formula_count, total_cell_count);
         self.ast_cache = FxHashMap::with_capacity_and_hasher(formula_count, Default::default());
@@ -142,10 +144,10 @@ impl ComputeCore {
             FxHashMap::with_capacity_and_hasher(formula_count, Default::default());
         self.seed_cell_formula_text(&formula_cells);
 
-        self.bulk_parse_and_register(mirror, formula_cells);
-        self.register_all_variables(mirror);
+        self.bulk_parse_and_register(cell_store, formula_cells);
+        self.register_all_variables(cell_store);
 
-        let result = self.full_recalc(mirror)?;
+        let result = self.full_recalc(cell_store)?;
         self.clear_dirty();
 
         Ok(result)
@@ -159,7 +161,7 @@ impl ComputeCore {
     /// but no cells are evaluated.
     pub fn init_from_snapshot_no_recalc(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         snapshot: WorkbookSnapshot,
     ) -> Result<RecalcResult, ComputeError> {
         self.iterative_calc = snapshot.iterative_calc;
@@ -193,8 +195,9 @@ impl ComputeCore {
         }
 
         let total_cell_count: usize = snapshot.sheets.iter().map(|s| s.cells.len()).sum();
-        *mirror = CellMirror::from_snapshot(snapshot)?;
-        self.normalize_raw_named_ranges_for_graph(mirror);
+        *cell_store = CellStore::from_snapshot(snapshot)?;
+        cell_store.set_id_alloc(self.id_alloc.clone());
+        self.normalize_raw_named_ranges_for_graph(cell_store);
         let formula_count = formula_cells.len();
         self.graph = DependencyGraph::with_capacity_full(formula_count, total_cell_count);
         self.ast_cache = FxHashMap::with_capacity_and_hasher(formula_count, Default::default());
@@ -204,8 +207,8 @@ impl ComputeCore {
             FxHashMap::with_capacity_and_hasher(formula_count, Default::default());
         self.seed_cell_formula_text(&formula_cells);
 
-        self.bulk_parse_and_register(mirror, formula_cells);
-        self.register_all_variables(mirror);
+        self.bulk_parse_and_register(cell_store, formula_cells);
+        self.register_all_variables(cell_store);
 
         // Skip full_recalc — cached values from snapshot are sufficient.
         Ok(RecalcResult::empty())
@@ -214,13 +217,13 @@ impl ComputeCore {
     /// Initialize from a WorkbookSnapshot with MINIMAL processing.
     ///
     /// Skips BOTH formula parsing AND recalc. The dependency graph is NOT built.
-    /// Only the cell mirror is populated from the snapshot.
+    /// Only the cell store is populated from the snapshot.
     ///
     /// Use this on WASM for fast initial load: cached values render immediately.
     /// The graph is built lazily on the first mutation (via `ensure_graph_built`).
     pub fn init_from_snapshot_minimal(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         snapshot: WorkbookSnapshot,
     ) -> Result<RecalcResult, ComputeError> {
         self.iterative_calc = snapshot.iterative_calc;
@@ -254,8 +257,9 @@ impl ComputeCore {
                 ));
         }
 
-        *mirror = CellMirror::from_snapshot(snapshot)?;
-        self.normalize_raw_named_ranges_for_graph(mirror);
+        *cell_store = CellStore::from_snapshot(snapshot)?;
+        cell_store.set_id_alloc(self.id_alloc.clone());
+        self.normalize_raw_named_ranges_for_graph(cell_store);
 
         // Formula text is document identity, not graph output. Seed it before
         // deferred graph construction so readback/UI/export can identify
@@ -274,7 +278,7 @@ impl ComputeCore {
     /// the caller. The graph remains deferred until all sheets are available.
     pub(crate) fn init_native_formula_descriptors(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         sheet_order: &[SheetId],
         settings: &snapshot_types::CalculationSettings,
         formula_cells: Vec<(CellId, SheetId, String)>,
@@ -291,7 +295,8 @@ impl ComputeCore {
             .collect();
         self.rebuild_ordered_sheets_cache();
         self.id_alloc = allocator;
-        self.normalize_raw_named_ranges_for_graph(mirror);
+        cell_store.set_id_alloc(self.id_alloc.clone());
+        self.normalize_raw_named_ranges_for_graph(cell_store);
         self.seed_cell_formula_text(&formula_cells);
         self.deferred_formula_cells = Some(formula_cells);
         self.workbook_load_pending = false;
@@ -299,11 +304,11 @@ impl ComputeCore {
 
     /// Ultra-minimal init for deferred-hydration XLSX import.
     /// Seeds formula text for materialized cells but defers graph construction.
-    /// Builds CellMirror from the sparse first-paint snapshot, which includes
+    /// Builds CellStore from the sparse first-paint snapshot, which includes
     /// all sheet headers but only the critical sheet's materialized cells.
     pub fn init_from_snapshot_viewport_only(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         snapshot: WorkbookSnapshot,
     ) -> Result<RecalcResult, ComputeError> {
         self.iterative_calc = snapshot.iterative_calc;
@@ -334,7 +339,8 @@ impl ComputeCore {
         // Readback does not depend on this marker.
         self.workbook_load_pending = true;
 
-        *mirror = CellMirror::from_snapshot(snapshot)?;
+        *cell_store = CellStore::from_snapshot(snapshot)?;
+        cell_store.set_id_alloc(self.id_alloc.clone());
 
         Ok(RecalcResult::empty())
     }
@@ -343,11 +349,11 @@ impl ComputeCore {
     ///
     /// Called automatically before any recalc or mutation that needs the graph.
     /// After this call, `deferred_formula_cells` is consumed and the graph is ready.
-    pub fn ensure_graph_built(&mut self, mirror: &mut CellMirror) -> Result<(), ComputeError> {
+    pub fn ensure_graph_built(&mut self, cell_store: &mut CellStore) -> Result<(), ComputeError> {
         // Path 1: formula cells were pre-extracted during init_from_snapshot_minimal
         if let Some(formula_cells) = self.deferred_formula_cells.take() {
             let formula_count = formula_cells.len();
-            let total_cell_count = mirror.total_cell_count();
+            let total_cell_count = cell_store.total_cell_count();
             self.graph = DependencyGraph::with_capacity_full(formula_count, total_cell_count);
             self.ast_cache = FxHashMap::with_capacity_and_hasher(formula_count, Default::default());
             self.formula_strings =
@@ -356,8 +362,8 @@ impl ComputeCore {
                 FxHashMap::with_capacity_and_hasher(formula_count, Default::default());
             self.seed_cell_formula_text(&formula_cells);
 
-            self.bulk_parse_and_register(mirror, formula_cells);
-            self.register_all_variables(mirror);
+            self.bulk_parse_and_register(cell_store, formula_cells);
+            self.register_all_variables(cell_store);
             return Ok(());
         }
         self.ensure_graph_construction_ready()?;
@@ -448,12 +454,12 @@ impl ComputeCore {
     /// Used by init_from_snapshot, structure_change, and add_sheet where the graph has been
     /// cleared (or cells are brand-new) and formulas need to be parsed from scratch.
     ///
-    /// Pass 1: Parse formulas and extract deps in parallel (read-only on mirror).
+    /// Pass 1: Parse formulas and extract deps in parallel (read-only on cell_store).
     /// Pass 2: Register in graph sequentially using set_precedents_fresh (no old edges).
     /// Pass 3: Rebuild the spatial range index.
     pub(super) fn bulk_parse_and_register(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         formula_cells: Vec<(CellId, SheetId, String)>,
     ) {
         let _span =
@@ -467,7 +473,7 @@ impl ComputeCore {
             use rayon::prelude::*;
 
             // Pass 1: Parallel parse + dep extraction + identity resolution
-            let mirror_ref = &*mirror;
+            let store_ref = &*cell_store;
             // Ghost cells are typically ~1-5% of formula count (references to
             // empty cells that need CellIds). Pre-size to avoid rehash storms.
             let ghost_cells: DashMap<(SheetId, SheetPos), CellId> =
@@ -484,25 +490,25 @@ impl ComputeCore {
                 formula_cells
                     .into_par_iter()
                     .map(|(cell_id, sheet_id, formula)| {
-                        let resolver = MirrorCellRefResolver {
-                            mirror: mirror_ref,
+                        let resolver = StoreCellRefResolver {
+                            cell_store: store_ref,
                             current_sheet: sheet_id,
                         };
                         match parse_formula(&formula, Some(&resolver)) {
                             Ok(spanned) => {
                                 let ast = spanned.into_inner();
                                 let current_row =
-                                    mirror_ref.resolve_position(&cell_id).map(|pos| pos.row());
+                                    store_ref.resolve_position(&cell_id).map(|pos| pos.row());
                                 let extracted = extract_deps_and_volatility(
                                     &ast,
                                     &sheet_id,
-                                    mirror_ref,
+                                    store_ref,
                                     &ordered_sheets,
                                     current_row,
                                 );
                                 // Identity resolution — now parallel!
                                 let id_resolver = ConcurrentIdentityResolver {
-                                    mirror: mirror_ref,
+                                    cell_store: store_ref,
                                     ghost_cells: ghost_ref,
                                     id_alloc: &self.id_alloc,
                                     current_sheet: sheet_id,
@@ -515,11 +521,11 @@ impl ComputeCore {
                                 // Range key extraction — moved to parallel phase to avoid
                                 // redundant sequential AST walk during recalc.
                                 let range_keys = {
-                                    let sheet_ctx = mirror_ref.sheet_for_cell(&cell_id);
+                                    let sheet_ctx = store_ref.sheet_for_cell(&cell_id);
                                     let mut plan =
                                         crate::eval::cache::range_store::DataPlan::default();
                                     crate::eval::cache::range_store::collect_static_ranges_pub(
-                                        &ast, sheet_ctx, mirror_ref, &mut plan,
+                                        &ast, sheet_ctx, store_ref, &mut plan,
                                     );
                                     plan.into_iter().collect::<Vec<_>>()
                                 };
@@ -544,10 +550,10 @@ impl ComputeCore {
                     .collect()
             };
 
-            // Flush ghost cells into mirror with their exact CellIds
+            // Flush ghost cells into cell_store with their exact CellIds
             for entry in ghost_cells.into_iter() {
                 let ((sheet_id, pos), cell_id) = entry;
-                mirror.register_ghost_cell(&sheet_id, pos, cell_id);
+                cell_store.register_ghost_cell(&sheet_id, pos, cell_id);
             }
 
             // Pass 2: Sequential graph registration ONLY (no parsing, no identity)
@@ -571,12 +577,12 @@ impl ComputeCore {
                         range_keys,
                     )) => {
                         let rendered_formula = Self::rendered_formula_string_or_fallback(
-                            mirror,
+                            cell_store,
                             sheet_id,
                             identity_formula.as_ref(),
                             &formula,
                         );
-                        mirror.set_formula(&cell_id, identity_formula);
+                        cell_store.set_formula(&cell_id, identity_formula);
                         graph_edges.push((cell_id, deps));
                         self.formula_text_deps.replace(cell_id, formula_text_deps);
                         if is_volatile {
@@ -596,7 +602,7 @@ impl ComputeCore {
                         }
                     }
                     Err(formula) => {
-                        mirror.set_value_mut(&cell_id, CellValue::Error(CellError::Name, None));
+                        cell_store.set_value_mut(&cell_id, CellValue::Error(CellError::Name, None));
                         self.formula_strings.insert(cell_id, formula.clone());
                         self.cell_formula_text.insert(cell_id, formula);
                     }
@@ -623,25 +629,26 @@ impl ComputeCore {
             );
 
             for (cell_id, sheet_id, formula) in formula_cells {
-                let resolver = MirrorCellRefResolver {
-                    mirror: &*mirror,
+                let resolver = StoreCellRefResolver {
+                    cell_store: &*cell_store,
                     current_sheet: sheet_id,
                 };
                 match parse_formula(&formula, Some(&resolver)) {
                     Ok(spanned) => {
                         let ast = spanned.into_inner();
-                        let current_row = mirror.resolve_position(&cell_id).map(|pos| pos.row());
+                        let current_row =
+                            cell_store.resolve_position(&cell_id).map(|pos| pos.row());
                         let extracted = extract_deps_and_volatility(
                             &ast,
                             &sheet_id,
-                            &*mirror,
+                            &*cell_store,
                             &ordered_sheets,
                             current_row,
                         );
                         // Identity resolution (sequential, using FxHashMap for ghost cells)
                         let identity_formula = {
                             struct SeqResolver<'a> {
-                                mirror: &'a CellMirror,
+                                cell_store: &'a CellStore,
                                 ghost_cells: &'a RefCell<FxHashMap<(SheetId, SheetPos), CellId>>,
                                 id_alloc: &'a IdAllocator,
                                 current_sheet: SheetId,
@@ -654,7 +661,7 @@ impl ComputeCore {
                                     col: u32,
                                 ) -> CellId {
                                     let pos = SheetPos::new(row, col);
-                                    if let Some(id) = self.mirror.resolve_cell_id(sheet, pos) {
+                                    if let Some(id) = self.cell_store.resolve_cell_id(sheet, pos) {
                                         return id;
                                     }
                                     let key = (*sheet, pos);
@@ -671,14 +678,14 @@ impl ComputeCore {
                                     None
                                 }
                                 fn resolve_sheet_name(&self, name: &str) -> Option<SheetId> {
-                                    self.mirror.sheet_by_name(name)
+                                    self.cell_store.sheet_by_name(name)
                                 }
                                 fn current_sheet(&self) -> SheetId {
                                     self.current_sheet
                                 }
                             }
                             let resolver = SeqResolver {
-                                mirror: &*mirror,
+                                cell_store: &*cell_store,
                                 ghost_cells: &ghost_cells,
                                 id_alloc: &self.id_alloc,
                                 current_sheet: sheet_id,
@@ -687,21 +694,24 @@ impl ComputeCore {
                         };
                         let is_dynamic_array = Self::ast_contains_array_function(&ast, registry);
                         let range_keys = {
-                            let sheet_ctx = mirror.sheet_for_cell(&cell_id);
+                            let sheet_ctx = cell_store.sheet_for_cell(&cell_id);
                             let mut plan = crate::eval::cache::range_store::DataPlan::default();
                             crate::eval::cache::range_store::collect_static_ranges_pub(
-                                &ast, sheet_ctx, &*mirror, &mut plan,
+                                &ast,
+                                sheet_ctx,
+                                &*cell_store,
+                                &mut plan,
                             );
                             plan.into_iter().collect::<Vec<_>>()
                         };
 
                         let rendered_formula = Self::rendered_formula_string_or_fallback(
-                            mirror,
+                            cell_store,
                             sheet_id,
                             identity_formula.as_ref(),
                             &formula,
                         );
-                        mirror.set_formula(&cell_id, identity_formula);
+                        cell_store.set_formula(&cell_id, identity_formula);
                         graph_edges.push((cell_id, extracted.value_deps));
                         self.formula_text_deps
                             .replace(cell_id, extracted.formula_text_deps);
@@ -722,16 +732,16 @@ impl ComputeCore {
                         }
                     }
                     Err(_) => {
-                        mirror.set_value_mut(&cell_id, CellValue::Error(CellError::Name, None));
+                        cell_store.set_value_mut(&cell_id, CellValue::Error(CellError::Name, None));
                         self.formula_strings.insert(cell_id, formula.clone());
                         self.cell_formula_text.insert(cell_id, formula);
                     }
                 }
             }
 
-            // Register ghost cells in mirror
+            // Register ghost cells in cell_store
             for ((sheet_id, pos), cell_id) in ghost_cells.into_inner() {
-                mirror.register_ghost_cell(&sheet_id, pos, cell_id);
+                cell_store.register_ghost_cell(&sheet_id, pos, cell_id);
             }
 
             builder.bulk_set_precedents(graph_edges);

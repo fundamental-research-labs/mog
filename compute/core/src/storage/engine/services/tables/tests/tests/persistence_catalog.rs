@@ -5,7 +5,7 @@ fn table_catalog_table_by_key(
     key: &str,
 ) -> Option<domain_types::domain::table::Table> {
     engine
-        .mirror
+        .cell_store
         .all_tables()
         .iter()
         .find(|table| table.id == key)
@@ -37,7 +37,7 @@ fn replace_catalog_spec(
     engine
         .stores
         .compute
-        .set_table(&mut engine.mirror, table.clone());
+        .set_table(&mut engine.cell_store, table.clone());
     table
 }
 
@@ -45,7 +45,7 @@ fn insert_catalog_table(engine: &mut ComputeEngine, table: &domain_types::domain
     engine
         .stores
         .compute
-        .set_table(&mut engine.mirror, table.clone());
+        .set_table(&mut engine.cell_store, table.clone());
 }
 
 #[test]

@@ -1,7 +1,7 @@
 use cell_types::SheetId;
 use domain_types::{CellFormat, DocumentFormat};
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::storage::engine::stores::EngineStores;
 
 use super::super::super::super::export::cell_format_to_document_format;
@@ -20,13 +20,13 @@ pub(super) fn style_id_for_cell_format(
 
 pub(super) fn positional_style_id_at(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
     palette: &impl PaletteOps,
 ) -> Option<u32> {
-    let sheet = mirror.get_sheet(sheet_id)?;
+    let sheet = cell_store.get_sheet(sheet_id)?;
     let matching = sheet.format_ranges_at(row, col);
     if matching.is_empty() {
         let grid = stores.grid_indexes.get(sheet_id);
@@ -47,14 +47,14 @@ pub(super) fn positional_style_id_at(
         if !native_axis_format && !native_column_range {
             return None;
         }
-        return resolved_range_style_id(stores, mirror, sheet_id, row, col, false, palette);
+        return resolved_range_style_id(stores, cell_store, sheet_id, row, col, false, palette);
     }
 
     if matching
         .iter()
         .any(|(id, _)| !sheet.range_xlsx_style_id_cache().contains_key(id))
     {
-        return resolved_range_style_id(stores, mirror, sheet_id, row, col, false, palette);
+        return resolved_range_style_id(stores, cell_store, sheet_id, row, col, false, palette);
     }
     let (range_id, format) = matching.last()?;
     sheet
@@ -65,7 +65,7 @@ pub(super) fn positional_style_id_at(
 }
 pub(super) fn resolved_range_style_id(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -77,7 +77,8 @@ pub(super) fn resolved_range_style_id(
     let base = properties::get_workbook_base_format(&stores.storage);
     let column = properties::get_col_format(&stores.storage, sheet_id, col, grid);
     let row_format = properties::get_row_format(&stores.storage, sheet_id, row, grid);
-    let table = super::super::super::resolve_structured_format_at_cell(mirror, sheet_id, row, col);
+    let table =
+        super::super::super::resolve_structured_format_at_cell(cell_store, sheet_id, row, col);
     let format = properties::get_effective_format_from_preloaded_layers(
         &base,
         column.as_ref(),
@@ -86,7 +87,7 @@ pub(super) fn resolved_range_style_id(
         col,
         table.as_ref(),
         None,
-        mirror.get_sheet(sheet_id),
+        cell_store.get_sheet(sheet_id),
         include_imported_column_ranges,
     );
     style_id_for_cell_format(&format, palette)

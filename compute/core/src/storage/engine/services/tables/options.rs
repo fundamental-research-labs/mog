@@ -8,12 +8,12 @@ use super::*;
 /// Set a boolean option on a table (proper set semantics, not toggle).
 pub(in crate::storage::engine) fn set_table_bool_option(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     table_name: &str,
     option: &str,
     value: bool,
 ) -> Result<MutationResult, ComputeError> {
-    let table = mirror
+    let table = cell_store
         .get_table(table_name)
         .cloned()
         .ok_or_else(|| ComputeError::Eval {
@@ -34,65 +34,67 @@ pub(in crate::storage::engine) fn set_table_bool_option(
     };
 
     let updated = compute_table::table::set_table_option(&table, opt, value);
-    stores.compute.set_table(mirror, updated.clone());
+    stores.compute.set_table(cell_store, updated.clone());
     Ok(MutationResult::empty())
 }
 
 /// Set table auto-expansion policy.
 pub(in crate::storage::engine) fn set_table_auto_expand(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     table_name: &str,
     enabled: bool,
 ) -> Result<MutationResult, ComputeError> {
-    let mut table = mirror
-        .get_table(table_name)
-        .cloned()
-        .ok_or_else(|| ComputeError::Eval {
-            message: format!("Table not found: {}", table_name),
-        })?;
+    let mut table =
+        cell_store
+            .get_table(table_name)
+            .cloned()
+            .ok_or_else(|| ComputeError::Eval {
+                message: format!("Table not found: {}", table_name),
+            })?;
 
     if table.auto_expand == enabled {
         return Ok(MutationResult::empty());
     }
 
     table.auto_expand = enabled;
-    stores.compute.set_table(mirror, table.clone());
+    stores.compute.set_table(cell_store, table.clone());
     Ok(MutationResult::empty())
 }
 
 /// Set table automatic calculated-column policy.
 pub(in crate::storage::engine) fn set_table_auto_calculated_columns(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     table_name: &str,
     enabled: bool,
 ) -> Result<MutationResult, ComputeError> {
-    let mut table = mirror
-        .get_table(table_name)
-        .cloned()
-        .ok_or_else(|| ComputeError::Eval {
-            message: format!("Table not found: {}", table_name),
-        })?;
+    let mut table =
+        cell_store
+            .get_table(table_name)
+            .cloned()
+            .ok_or_else(|| ComputeError::Eval {
+                message: format!("Table not found: {}", table_name),
+            })?;
 
     if table.auto_calculated_columns == enabled {
         return Ok(MutationResult::empty());
     }
 
     table.auto_calculated_columns = enabled;
-    stores.compute.set_table(mirror, table.clone());
+    stores.compute.set_table(cell_store, table.clone());
     Ok(MutationResult::empty())
 }
 
 /// Set totals-row function metadata for a table column.
 pub(in crate::storage::engine) fn set_table_totals_function(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     table_name: &str,
     column_id: &str,
     func: compute_table::types::TotalsFunction,
 ) -> Result<MutationResult, ComputeError> {
-    let table = mirror
+    let table = cell_store
         .get_table(table_name)
         .cloned()
         .ok_or_else(|| ComputeError::Eval {
@@ -100,18 +102,18 @@ pub(in crate::storage::engine) fn set_table_totals_function(
         })?;
 
     let updated = compute_table::table::set_totals_function(&table, column_id, func);
-    stores.compute.set_table(mirror, updated.clone());
+    stores.compute.set_table(cell_store, updated.clone());
     Ok(MutationResult::empty())
 }
 
 /// Add a data row to a table at the given relative position.
 pub(in crate::storage::engine) fn add_table_data_row(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     table_name: &str,
     relative_row: Option<u32>,
 ) -> Result<MutationResult, ComputeError> {
-    let table = mirror
+    let table = cell_store
         .get_table(table_name)
         .cloned()
         .ok_or_else(|| ComputeError::Eval {
@@ -119,7 +121,7 @@ pub(in crate::storage::engine) fn add_table_data_row(
         })?;
 
     let result = compute_table::operations::add_data_row(&table, relative_row);
-    stores.compute.set_table(mirror, result.table.clone());
+    stores.compute.set_table(cell_store, result.table.clone());
 
     // Return both the insert row and whether the caller needs to expand
     // the table range post-structural-change (see add_data_row docs).
@@ -133,11 +135,11 @@ pub(in crate::storage::engine) fn add_table_data_row(
 /// Remove a data row from a table by relative index.
 pub(in crate::storage::engine) fn remove_table_data_row(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     table_name: &str,
     relative_row: u32,
 ) -> Result<MutationResult, ComputeError> {
-    let table = mirror
+    let table = cell_store
         .get_table(table_name)
         .cloned()
         .ok_or_else(|| ComputeError::Eval {
@@ -153,6 +155,6 @@ pub(in crate::storage::engine) fn remove_table_data_row(
                 ),
             }
         })?;
-    stores.compute.set_table(mirror, result.table.clone());
+    stores.compute.set_table(cell_store, result.table.clone());
     Ok(MutationResult::empty().with_data(&result.removed_row)?)
 }

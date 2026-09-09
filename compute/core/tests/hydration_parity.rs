@@ -187,9 +187,9 @@ fn snapshot_and_xlsx_paths_preserve_native_authored_state() {
     assert_eq!(canon_snap["Sheet1"].merges.len(), 1);
     assert_eq!(canon_snap["Sheet2"].hyperlinks.len(), 1);
     let reloaded_sheet3 = *engine_xlsx
-        .mirror()
+        .cell_store()
         .sheet_ids()
-        .find(|id| engine_xlsx.mirror().get_sheet(id).unwrap().name == "Sheet3")
+        .find(|id| engine_xlsx.cell_store().get_sheet(id).unwrap().name == "Sheet3")
         .unwrap();
     let id = engine_xlsx.get_cell_id_at(&reloaded_sheet3, 0, 0).unwrap();
     let id = CellId::from_uuid_str(&id).unwrap();

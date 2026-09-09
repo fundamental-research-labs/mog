@@ -3,7 +3,7 @@
 //! This module defines the `EngineMutation` enum that represents all possible
 //! state-changing operations on the engine. The `apply_mutation()` method on
 //! `ComputeEngine` is the single dispatch point that guarantees all
-//! stores (document, mirror, grid indexes, compute) stay in sync.
+//! stores (document, cell_store, grid indexes, compute) stay in sync.
 
 use crate::snapshot::MutationResult;
 use cell_types::{CellId, SheetId};
@@ -409,8 +409,7 @@ pub(crate) enum EngineMutation {
 /// Result of applying a mutation. Some mutations produce recalc results,
 /// others produce sheet IDs, some produce nothing notable.
 pub(crate) enum MutationOutput {
-    /// Mutation result with pending recalc (most cell mutations).
-    /// Viewport patches are pulled separately via `flush_viewport_patches()`.
+    /// Recalculated cell changes and associated metadata.
     Recalc(MutationResult),
     /// New sheet ID as hex string + mutation result (create_sheet, copy_sheet).
     SheetId(String, MutationResult),

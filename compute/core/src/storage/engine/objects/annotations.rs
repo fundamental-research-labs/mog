@@ -1,4 +1,3 @@
-use super::shared;
 use crate::engine_types::AnnotationRecord;
 use crate::snapshot::MutationResult;
 use crate::storage::engine::ComputeEngine;
@@ -22,17 +21,17 @@ impl ComputeEngine {
         row: u32,
         col: u32,
         text: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let result = services::objects::set_cell_annotation_by_position(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 sheet_id,
                 row,
                 col,
                 text,
             )?;
-            Ok(shared::with_empty_patches(result))
+            Ok(result)
         })
     }
 
@@ -45,7 +44,7 @@ impl ComputeEngine {
     ) -> Result<Option<AnnotationRecord>, ComputeError> {
         services::objects::get_cell_annotation_by_position(
             &self.stores,
-            &self.mirror,
+            &self.cell_store,
             sheet_id,
             row,
             col,
@@ -58,15 +57,16 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         row: u32,
         col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let result = services::objects::remove_cell_annotation_by_position(
                 &mut engine.stores,
+                &engine.cell_store,
                 sheet_id,
                 row,
                 col,
             )?;
-            Ok(shared::with_empty_patches(result))
+            Ok(result)
         })
     }
 
@@ -75,7 +75,7 @@ impl ComputeEngine {
         &self,
         sheet_id: &SheetId,
     ) -> Result<Vec<AnnotationRecord>, ComputeError> {
-        services::objects::list_cell_annotations(&self.stores, &self.mirror, sheet_id)
+        services::objects::list_cell_annotations(&self.stores, &self.cell_store, sheet_id)
     }
 
     #[bridge::write(scope = "workbook")]
@@ -83,15 +83,15 @@ impl ComputeEngine {
         &mut self,
         table_ref: &str,
         text: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let result = services::objects::set_table_annotation(
                 &mut engine.stores,
-                &engine.mirror,
+                &engine.cell_store,
                 table_ref,
                 text,
             )?;
-            Ok(shared::with_empty_patches(result))
+            Ok(result)
         })
     }
 
@@ -100,26 +100,26 @@ impl ComputeEngine {
         &self,
         table_ref: &str,
     ) -> Result<Option<AnnotationRecord>, ComputeError> {
-        services::objects::get_table_annotation(&self.stores, &self.mirror, table_ref)
+        services::objects::get_table_annotation(&self.stores, &self.cell_store, table_ref)
     }
 
     #[bridge::write(scope = "workbook")]
     pub fn remove_table_annotation(
         &mut self,
         table_ref: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let result = services::objects::remove_table_annotation(
                 &mut engine.stores,
-                &engine.mirror,
+                &engine.cell_store,
                 table_ref,
             )?;
-            Ok(shared::with_empty_patches(result))
+            Ok(result)
         })
     }
 
     #[bridge::read(scope = "workbook")]
     pub fn list_table_annotations(&self) -> Result<Vec<AnnotationRecord>, ComputeError> {
-        services::objects::list_table_annotations(&self.stores, &self.mirror)
+        services::objects::list_table_annotations(&self.stores, &self.cell_store)
     }
 }

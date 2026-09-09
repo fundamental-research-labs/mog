@@ -60,9 +60,9 @@ fn test_xlsx_repro_three_sheet_transpose_sum_cascade() {
             ],
         ),
     ]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
-    core.init_from_snapshot(&mut mirror, snapshot)
+    core.init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     let sid2 = SheetId::from_uuid_str(&sheet_uuid(2)).expect("sid Output");
     let b1 = CellId::from_uuid_str(&cell_uuid(2, 0, 1)).expect("b1");
@@ -74,32 +74,32 @@ fn test_xlsx_repro_three_sheet_transpose_sum_cascade() {
     let f3 = CellId::from_uuid_str(&cell_uuid(2, 2, 5)).expect("f3");
 
     // TRANSPOSE anchors should have their first values
-    assert_mirror_number(&mirror, &b1, 0.0, "B1 TRANSPOSE(SourceA) source");
-    assert_mirror_number(&mirror, &b2, 197.0, "B2 TRANSPOSE(SourceB) source");
+    assert_store_number(&cell_store, &b1, 0.0, "B1 TRANSPOSE(SourceA) source");
+    assert_store_number(&cell_store, &b2, 197.0, "B2 TRANSPOSE(SourceB) source");
 
     // Spill targets for row 0 (SourceA): C1=0, D1=1, E1=7, F1=192
-    assert_col_data_null_or_zero(&mirror, &sid2, 0, 2, "C1 SourceA spill (0)");
-    assert_col_data_number(&mirror, &sid2, 0, 3, 1.0, "D1 SourceA spill");
-    assert_col_data_number(&mirror, &sid2, 0, 4, 7.0, "E1 SourceA spill");
-    assert_col_data_number(&mirror, &sid2, 0, 5, 192.0, "F1 SourceA spill");
+    assert_col_data_null_or_zero(&cell_store, &sid2, 0, 2, "C1 SourceA spill (0)");
+    assert_col_data_number(&cell_store, &sid2, 0, 3, 1.0, "D1 SourceA spill");
+    assert_col_data_number(&cell_store, &sid2, 0, 4, 7.0, "E1 SourceA spill");
+    assert_col_data_number(&cell_store, &sid2, 0, 5, 192.0, "F1 SourceA spill");
 
     // Spill targets for row 1 (SourceB): C2=448, D2=475, E2=529, F2=377
-    assert_col_data_number(&mirror, &sid2, 1, 2, 448.0, "C2 SourceB spill");
-    assert_col_data_number(&mirror, &sid2, 1, 3, 475.0, "D2 SourceB spill");
-    assert_col_data_number(&mirror, &sid2, 1, 4, 529.0, "E2 SourceB spill");
-    assert_col_data_number(&mirror, &sid2, 1, 5, 377.0, "F2 SourceB spill");
+    assert_col_data_number(&cell_store, &sid2, 1, 2, 448.0, "C2 SourceB spill");
+    assert_col_data_number(&cell_store, &sid2, 1, 3, 475.0, "D2 SourceB spill");
+    assert_col_data_number(&cell_store, &sid2, 1, 4, 529.0, "E2 SourceB spill");
+    assert_col_data_number(&cell_store, &sid2, 1, 5, 377.0, "F2 SourceB spill");
 
     // SUM of each column: SourceA + SourceB
     // B3 = SUM(B1:B2) = 0 + 197 = 197
-    assert_mirror_number(&mirror, &b3, 197.0, "B3 SUM(B1:B2)");
+    assert_store_number(&cell_store, &b3, 197.0, "B3 SUM(B1:B2)");
     // C3 = SUM(C1:C2) = 0 + 448 = 448
-    assert_mirror_number(&mirror, &c3, 448.0, "C3 SUM(C1:C2)");
+    assert_store_number(&cell_store, &c3, 448.0, "C3 SUM(C1:C2)");
     // D3 = SUM(D1:D2) = 1 + 475 = 476
-    assert_mirror_number(&mirror, &d3, 476.0, "D3 SUM(D1:D2)");
+    assert_store_number(&cell_store, &d3, 476.0, "D3 SUM(D1:D2)");
     // E3 = SUM(E1:E2) = 7 + 529 = 536
-    assert_mirror_number(&mirror, &e3, 536.0, "E3 SUM(E1:E2)");
+    assert_store_number(&cell_store, &e3, 536.0, "E3 SUM(E1:E2)");
     // F3 = SUM(F1:F2) = 192 + 377 = 569
-    assert_mirror_number(&mirror, &f3, 569.0, "F3 SUM(F1:F2)");
+    assert_store_number(&cell_store, &f3, 569.0, "F3 SUM(F1:F2)");
 }
 
 /// R2: Chained TRANSPOSE — TRANSPOSE reads from another TRANSPOSE's spill targets.
@@ -150,9 +150,9 @@ fn test_xlsx_repro_chained_transpose_cross_sheet() {
             ],
         ),
     ]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
-    core.init_from_snapshot(&mut mirror, snapshot)
+    core.init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     let sid1 = SheetId::from_uuid_str(&sheet_uuid(1)).expect("sid Bridge");
     let sid2 = SheetId::from_uuid_str(&sheet_uuid(2)).expect("sid Consumer");
@@ -160,28 +160,28 @@ fn test_xlsx_repro_chained_transpose_cross_sheet() {
     let consumer_a1 = CellId::from_uuid_str(&cell_uuid(2, 0, 0)).expect("consumer a1");
 
     // Bridge B1 = first value (197)
-    assert_mirror_number(&mirror, &bridge_b1, 197.0, "Bridge!B1 TRANSPOSE source");
+    assert_store_number(&cell_store, &bridge_b1, 197.0, "Bridge!B1 TRANSPOSE source");
 
     // Bridge spill targets: C1=448, D1=475, E1=529, F1=377
-    assert_col_data_number(&mirror, &sid1, 0, 2, 448.0, "Bridge!C1 spill");
-    assert_col_data_number(&mirror, &sid1, 0, 3, 475.0, "Bridge!D1 spill");
-    assert_col_data_number(&mirror, &sid1, 0, 4, 529.0, "Bridge!E1 spill");
-    assert_col_data_number(&mirror, &sid1, 0, 5, 377.0, "Bridge!F1 spill");
+    assert_col_data_number(&cell_store, &sid1, 0, 2, 448.0, "Bridge!C1 spill");
+    assert_col_data_number(&cell_store, &sid1, 0, 3, 475.0, "Bridge!D1 spill");
+    assert_col_data_number(&cell_store, &sid1, 0, 4, 529.0, "Bridge!E1 spill");
+    assert_col_data_number(&cell_store, &sid1, 0, 5, 377.0, "Bridge!F1 spill");
 
     // Consumer A1 = TRANSPOSE of Bridge's horizontal spill → back to vertical
     // A1 should be 197 (first element)
-    assert_mirror_number(
-        &mirror,
+    assert_store_number(
+        &cell_store,
         &consumer_a1,
         197.0,
         "Consumer!A1 chained TRANSPOSE source",
     );
 
     // Consumer spill targets: A2=448, A3=475, A4=529, A5=377
-    assert_col_data_number(&mirror, &sid2, 1, 0, 448.0, "Consumer!A2 chained spill");
-    assert_col_data_number(&mirror, &sid2, 2, 0, 475.0, "Consumer!A3 chained spill");
-    assert_col_data_number(&mirror, &sid2, 3, 0, 529.0, "Consumer!A4 chained spill");
-    assert_col_data_number(&mirror, &sid2, 4, 0, 377.0, "Consumer!A5 chained spill");
+    assert_col_data_number(&cell_store, &sid2, 1, 0, 448.0, "Consumer!A2 chained spill");
+    assert_col_data_number(&cell_store, &sid2, 2, 0, 475.0, "Consumer!A3 chained spill");
+    assert_col_data_number(&cell_store, &sid2, 3, 0, 529.0, "Consumer!A4 chained spill");
+    assert_col_data_number(&cell_store, &sid2, 4, 0, 377.0, "Consumer!A5 chained spill");
 }
 
 /// R3: IF formula reading from chained TRANSPOSE spill target.
@@ -237,9 +237,9 @@ fn test_xlsx_repro_if_reads_chained_transpose_spill() {
             ],
         ),
     ]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
-    core.init_from_snapshot(&mut mirror, snapshot)
+    core.init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     let sid2 = SheetId::from_uuid_str(&sheet_uuid(2)).expect("sid Projection");
     let d1 = CellId::from_uuid_str(&cell_uuid(2, 0, 3)).expect("d1");
@@ -250,46 +250,46 @@ fn test_xlsx_repro_if_reads_chained_transpose_spill() {
     let e5 = CellId::from_uuid_str(&cell_uuid(2, 4, 4)).expect("e5");
 
     // D1 = TRANSPOSE anchor = 197
-    assert_mirror_number(&mirror, &d1, 197.0, "Projection!D1 TRANSPOSE source");
+    assert_store_number(&cell_store, &d1, 197.0, "Projection!D1 TRANSPOSE source");
 
     // D column spill targets
-    assert_col_data_number(&mirror, &sid2, 1, 3, 448.0, "Projection!D2 spill");
-    assert_col_data_number(&mirror, &sid2, 2, 3, 475.0, "Projection!D3 spill");
-    assert_col_data_number(&mirror, &sid2, 3, 3, 529.0, "Projection!D4 spill");
-    assert_col_data_number(&mirror, &sid2, 4, 3, 377.0, "Projection!D5 spill");
+    assert_col_data_number(&cell_store, &sid2, 1, 3, 448.0, "Projection!D2 spill");
+    assert_col_data_number(&cell_store, &sid2, 2, 3, 475.0, "Projection!D3 spill");
+    assert_col_data_number(&cell_store, &sid2, 3, 3, 529.0, "Projection!D4 spill");
+    assert_col_data_number(&cell_store, &sid2, 4, 3, 377.0, "Projection!D5 spill");
 
     // IF formulas should read from D column spill targets
     // E1 = IF(197>0, 197*2, 0) = 394
-    assert_mirror_number(
-        &mirror,
+    assert_store_number(
+        &cell_store,
         &e1,
         394.0,
         "Projection!E1 IF reads TRANSPOSE anchor",
     );
     // E2 = IF(448>0, 448*2, 0) = 896
-    assert_mirror_number(
-        &mirror,
+    assert_store_number(
+        &cell_store,
         &e2,
         896.0,
         "Projection!E2 IF reads spill target D2",
     );
     // E3 = IF(475>0, 475*2, 0) = 950
-    assert_mirror_number(
-        &mirror,
+    assert_store_number(
+        &cell_store,
         &e3,
         950.0,
         "Projection!E3 IF reads spill target D3",
     );
     // E4 = IF(529>0, 529*2, 0) = 1058
-    assert_mirror_number(
-        &mirror,
+    assert_store_number(
+        &cell_store,
         &e4,
         1058.0,
         "Projection!E4 IF reads spill target D4",
     );
     // E5 = IF(377>0, 377*2, 0) = 754
-    assert_mirror_number(
-        &mirror,
+    assert_store_number(
+        &cell_store,
         &e5,
         754.0,
         "Projection!E5 IF reads spill target D5",
@@ -373,9 +373,9 @@ fn test_xlsx_repro_full_four_sheet_cascade() {
             ],
         ),
     ]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
-    core.init_from_snapshot(&mut mirror, snapshot)
+    core.init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     let sid2 = SheetId::from_uuid_str(&sheet_uuid(2)).expect("sid Output");
     let sid3 = SheetId::from_uuid_str(&sheet_uuid(3)).expect("sid Projection");
@@ -388,19 +388,29 @@ fn test_xlsx_repro_full_four_sheet_cascade() {
     let rb_d3 = CellId::from_uuid_str(&cell_uuid(2, 2, 3)).expect("rb d3");
 
     // TRANSPOSE anchors
-    assert_mirror_number(&mirror, &rb_b1, 0.0, "Output!B1 SourceA TRANSPOSE anchor");
-    assert_mirror_number(&mirror, &rb_b2, 197.0, "Output!B2 SourceB TRANSPOSE anchor");
+    assert_store_number(
+        &cell_store,
+        &rb_b1,
+        0.0,
+        "Output!B1 SourceA TRANSPOSE anchor",
+    );
+    assert_store_number(
+        &cell_store,
+        &rb_b2,
+        197.0,
+        "Output!B2 SourceB TRANSPOSE anchor",
+    );
 
     // Output spill — SourceB row (row 1): C2=448, D2=475, E2=529, F2=377
-    assert_col_data_number(&mirror, &sid2, 1, 2, 448.0, "Output!C2 SourceB spill");
-    assert_col_data_number(&mirror, &sid2, 1, 3, 475.0, "Output!D2 SourceB spill");
-    assert_col_data_number(&mirror, &sid2, 1, 4, 529.0, "Output!E2 SourceB spill");
-    assert_col_data_number(&mirror, &sid2, 1, 5, 377.0, "Output!F2 SourceB spill");
+    assert_col_data_number(&cell_store, &sid2, 1, 2, 448.0, "Output!C2 SourceB spill");
+    assert_col_data_number(&cell_store, &sid2, 1, 3, 475.0, "Output!D2 SourceB spill");
+    assert_col_data_number(&cell_store, &sid2, 1, 4, 529.0, "Output!E2 SourceB spill");
+    assert_col_data_number(&cell_store, &sid2, 1, 5, 377.0, "Output!F2 SourceB spill");
 
     // SUM row
-    assert_mirror_number(&mirror, &rb_b3, 197.0, "Output!B3 SUM");
-    assert_mirror_number(&mirror, &rb_c3, 448.0, "Output!C3 SUM");
-    assert_mirror_number(&mirror, &rb_d3, 476.0, "Output!D3 SUM");
+    assert_store_number(&cell_store, &rb_b3, 197.0, "Output!B3 SUM");
+    assert_store_number(&cell_store, &rb_c3, 448.0, "Output!C3 SUM");
+    assert_store_number(&cell_store, &rb_d3, 476.0, "Output!D3 SUM");
 
     // === Projection assertions ===
     let fc_a1 = CellId::from_uuid_str(&cell_uuid(3, 0, 0)).expect("fc a1");
@@ -409,23 +419,51 @@ fn test_xlsx_repro_full_four_sheet_cascade() {
     let fc_b3 = CellId::from_uuid_str(&cell_uuid(3, 2, 1)).expect("fc b3");
 
     // Projection!A1 = chained TRANSPOSE anchor (first value from SourceB row = 197)
-    assert_mirror_number(
-        &mirror,
+    assert_store_number(
+        &cell_store,
         &fc_a1,
         197.0,
         "Projection!A1 chained TRANSPOSE anchor",
     );
 
     // Projection spill targets: A2=448, A3=475, A4=529, A5=377
-    assert_col_data_number(&mirror, &sid3, 1, 0, 448.0, "Projection!A2 chained spill");
-    assert_col_data_number(&mirror, &sid3, 2, 0, 475.0, "Projection!A3 chained spill");
-    assert_col_data_number(&mirror, &sid3, 3, 0, 529.0, "Projection!A4 chained spill");
-    assert_col_data_number(&mirror, &sid3, 4, 0, 377.0, "Projection!A5 chained spill");
+    assert_col_data_number(
+        &cell_store,
+        &sid3,
+        1,
+        0,
+        448.0,
+        "Projection!A2 chained spill",
+    );
+    assert_col_data_number(
+        &cell_store,
+        &sid3,
+        2,
+        0,
+        475.0,
+        "Projection!A3 chained spill",
+    );
+    assert_col_data_number(
+        &cell_store,
+        &sid3,
+        3,
+        0,
+        529.0,
+        "Projection!A4 chained spill",
+    );
+    assert_col_data_number(
+        &cell_store,
+        &sid3,
+        4,
+        0,
+        377.0,
+        "Projection!A5 chained spill",
+    );
 
     // IF formulas
-    assert_mirror_number(&mirror, &fc_b1, 394.0, "Projection!B1 IF(A1>0)"); // 197*2
-    assert_mirror_number(&mirror, &fc_b2, 896.0, "Projection!B2 IF(A2>0)"); // 448*2
-    assert_mirror_number(&mirror, &fc_b3, 950.0, "Projection!B3 IF(A3>0)"); // 475*2
+    assert_store_number(&cell_store, &fc_b1, 394.0, "Projection!B1 IF(A1>0)"); // 197*2
+    assert_store_number(&cell_store, &fc_b2, 896.0, "Projection!B2 IF(A2>0)"); // 448*2
+    assert_store_number(&cell_store, &fc_b3, 950.0, "Projection!B3 IF(A3>0)"); // 475*2
 }
 
 /// R5: INDEX reading from TRANSPOSE spill targets.
@@ -481,22 +519,22 @@ fn test_xlsx_repro_index_reads_transpose_spill() {
             ],
         ),
     ]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
-    core.init_from_snapshot(&mut mirror, snapshot)
+    core.init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     let sid1 = SheetId::from_uuid_str(&sheet_uuid(1)).expect("sid Projection");
     let _sid2 = SheetId::from_uuid_str(&sheet_uuid(2)).expect("sid Output");
 
     // Projection!A1 = TRANSPOSE anchor = 10
     let fc_a1 = CellId::from_uuid_str(&cell_uuid(1, 0, 0)).expect("fc a1");
-    assert_mirror_number(&mirror, &fc_a1, 10.0, "Projection!A1 TRANSPOSE anchor");
+    assert_store_number(&cell_store, &fc_a1, 10.0, "Projection!A1 TRANSPOSE anchor");
 
     // Projection spill: A2=20, A3=30, A4=40, A5=50
-    assert_col_data_number(&mirror, &sid1, 1, 0, 20.0, "Projection!A2 spill");
-    assert_col_data_number(&mirror, &sid1, 2, 0, 30.0, "Projection!A3 spill");
-    assert_col_data_number(&mirror, &sid1, 3, 0, 40.0, "Projection!A4 spill");
-    assert_col_data_number(&mirror, &sid1, 4, 0, 50.0, "Projection!A5 spill");
+    assert_col_data_number(&cell_store, &sid1, 1, 0, 20.0, "Projection!A2 spill");
+    assert_col_data_number(&cell_store, &sid1, 2, 0, 30.0, "Projection!A3 spill");
+    assert_col_data_number(&cell_store, &sid1, 3, 0, 40.0, "Projection!A4 spill");
+    assert_col_data_number(&cell_store, &sid1, 4, 0, 50.0, "Projection!A5 spill");
 
     // Output!A1:A5 = INDEX reads from Projection spill targets
     let rb_a1 = CellId::from_uuid_str(&cell_uuid(2, 0, 0)).expect("rb a1");
@@ -505,11 +543,11 @@ fn test_xlsx_repro_index_reads_transpose_spill() {
     let rb_a4 = CellId::from_uuid_str(&cell_uuid(2, 3, 0)).expect("rb a4");
     let rb_a5 = CellId::from_uuid_str(&cell_uuid(2, 4, 0)).expect("rb a5");
 
-    assert_mirror_number(&mirror, &rb_a1, 10.0, "Output!A1 INDEX(A:A,1)");
-    assert_mirror_number(&mirror, &rb_a2, 20.0, "Output!A2 INDEX(A:A,2)");
-    assert_mirror_number(&mirror, &rb_a3, 30.0, "Output!A3 INDEX(A:A,3)");
-    assert_mirror_number(&mirror, &rb_a4, 40.0, "Output!A4 INDEX(A:A,4)");
-    assert_mirror_number(&mirror, &rb_a5, 50.0, "Output!A5 INDEX(A:A,5)");
+    assert_store_number(&cell_store, &rb_a1, 10.0, "Output!A1 INDEX(A:A,1)");
+    assert_store_number(&cell_store, &rb_a2, 20.0, "Output!A2 INDEX(A:A,2)");
+    assert_store_number(&cell_store, &rb_a3, 30.0, "Output!A3 INDEX(A:A,3)");
+    assert_store_number(&cell_store, &rb_a4, 40.0, "Output!A4 INDEX(A:A,4)");
+    assert_store_number(&cell_store, &rb_a5, 50.0, "Output!A5 INDEX(A:A,5)");
 }
 
 /// R6: SUMIFS reading from TRANSPOSE spill targets with date criteria.
@@ -554,19 +592,24 @@ fn test_xlsx_repro_sumifs_over_transpose_spill() {
             ],
         ),
     ]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
-    core.init_from_snapshot(&mut mirror, snapshot)
+    core.init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     let sid1 = SheetId::from_uuid_str(&sheet_uuid(1)).expect("sid Main");
 
     // Verify spill
     let b1 = CellId::from_uuid_str(&cell_uuid(1, 0, 1)).expect("b1");
-    assert_mirror_number(&mirror, &b1, 100.0, "Main!B1 TRANSPOSE anchor");
-    assert_col_data_number(&mirror, &sid1, 0, 2, 200.0, "Main!C1 spill");
-    assert_col_data_number(&mirror, &sid1, 0, 3, 300.0, "Main!D1 spill");
+    assert_store_number(&cell_store, &b1, 100.0, "Main!B1 TRANSPOSE anchor");
+    assert_col_data_number(&cell_store, &sid1, 0, 2, 200.0, "Main!C1 spill");
+    assert_col_data_number(&cell_store, &sid1, 0, 3, 300.0, "Main!D1 spill");
 
     // SUMIFS(B1:D1, B2:D2, "X") = 100 + 300 = 400
     let b3 = CellId::from_uuid_str(&cell_uuid(1, 2, 1)).expect("b3");
-    assert_mirror_number(&mirror, &b3, 400.0, "Main!B3 SUMIFS over TRANSPOSE spill");
+    assert_store_number(
+        &cell_store,
+        &b3,
+        400.0,
+        "Main!B3 SUMIFS over TRANSPOSE spill",
+    );
 }

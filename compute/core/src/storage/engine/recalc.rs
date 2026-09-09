@@ -30,7 +30,7 @@ impl ComputeEngine {
                 return Ok(crate::snapshot::RecalcResult::empty());
             }
             engine.materialize_all_pivots();
-            let result = engine.stores.compute.full_recalc(&mut engine.mirror)?;
+            let result = engine.stores.compute.full_recalc(&mut engine.cell_store)?;
             engine.init_cf_caches();
             engine.stores.compute.clear_dirty();
             Ok(result)
@@ -70,7 +70,7 @@ impl ComputeEngine {
             let result = engine
                 .stores
                 .compute
-                .full_recalc_with_options(&mut engine.mirror, options)?;
+                .full_recalc_with_options(&mut engine.cell_store, options)?;
             engine.init_cf_caches();
             engine.stores.compute.clear_dirty();
             Ok(result)
@@ -80,8 +80,9 @@ impl ComputeEngine {
     /// Rebuild the `ComputeCore` from the engine's own internal state.
     pub fn rebuild_compute_core(&mut self) -> Result<crate::snapshot::RecalcResult, ComputeError> {
         self.without_history(|engine| {
-            let snapshot = construction::build_workbook_snapshot(&engine.stores, &engine.mirror);
-            let mut rebuilt_mirror = construction::build_finalized_mirror_from_snapshot(
+            let snapshot =
+                construction::build_workbook_snapshot(&engine.stores, &engine.cell_store);
+            let mut rebuilt_store = construction::build_finalized_store_from_snapshot(
                 &engine.stores.storage,
                 &snapshot,
                 &engine.stores.grid_indexes,
@@ -90,12 +91,13 @@ impl ComputeEngine {
             let recalc = engine
                 .stores
                 .compute
-                .init_from_snapshot_with_prebuilt_mirror(&mut rebuilt_mirror, snapshot)?;
+                .init_from_snapshot_with_prebuilt_store(&mut rebuilt_store, snapshot)?;
             engine
                 .stores
                 .compute
                 .set_id_alloc(engine.stores.grid_id_alloc.clone());
-            engine.mirror = rebuilt_mirror;
+            rebuilt_store.set_id_alloc(engine.stores.grid_id_alloc.clone());
+            engine.cell_store = rebuilt_store;
             engine.init_cf_caches();
             // `init_from_snapshot` already cleared the dirty bit after its
             // internal full recalc. Belt-and-braces — rebuild leaves the

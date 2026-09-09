@@ -53,7 +53,11 @@ fn one_cell_fixture() -> WorkbookSnapshot {
 fn xlsx_add_hyperlink_persists_on_export() {
     let bytes = xlsx_bytes_for(one_cell_fixture());
     let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
-    let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
+    let sid = *engine
+        .cell_store()
+        .sheet_ids()
+        .next()
+        .expect("sheet present");
 
     engine
         .set_hyperlink(&sid, 0, 0, "https://example.com/a")
@@ -74,7 +78,11 @@ fn xlsx_add_hyperlink_persists_on_export() {
 fn xlsx_update_hyperlink_persists_on_export() {
     let bytes = xlsx_bytes_for(one_cell_fixture());
     let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
-    let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
+    let sid = *engine
+        .cell_store()
+        .sheet_ids()
+        .next()
+        .expect("sheet present");
 
     engine
         .set_hyperlink(&sid, 0, 0, "https://example.com/old")
@@ -109,7 +117,11 @@ fn xlsx_update_hyperlink_persists_on_export() {
 fn xlsx_remove_hyperlink_clears_on_export() {
     let bytes = xlsx_bytes_for(one_cell_fixture());
     let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
-    let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
+    let sid = *engine
+        .cell_store()
+        .sheet_ids()
+        .next()
+        .expect("sheet present");
 
     engine
         .set_hyperlink(&sid, 0, 0, "https://example.com/a")
@@ -130,7 +142,11 @@ fn xlsx_remove_hyperlink_clears_on_export() {
 #[test]
 fn remove_missing_hyperlink_is_an_error() {
     let (mut engine, _) = ComputeEngine::from_snapshot(one_cell_fixture()).expect("from_snapshot");
-    let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
+    let sid = *engine
+        .cell_store()
+        .sheet_ids()
+        .next()
+        .expect("sheet present");
 
     let err = engine
         .remove_hyperlink(&sid, 4, 4)
@@ -197,10 +213,10 @@ fn compact_hyperlinks_preserve_values_metadata_order_copy_and_structural_anchors
         .remove(0)
         .hyperlinks;
     let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).unwrap();
-    let sid = *engine.mirror().sheet_ids().next().unwrap();
+    let sid = *engine.cell_store().sheet_ids().next().unwrap();
     assert!(
         engine
-            .mirror()
+            .cell_store()
             .get_sheet(&sid)
             .unwrap()
             .iter_ranges()
@@ -211,24 +227,28 @@ fn compact_hyperlinks_preserve_values_metadata_order_copy_and_structural_anchors
     for row in [100, 104, 200, 300] {
         assert_eq!(
             engine
-                .mirror()
+                .cell_store()
                 .get_cell_value_at(&sid, SheetPos::new(row, 0)),
             Some(&CellValue::from(10.0))
         );
     }
-    let existing = engine.mirror().resolve_cell_id(&sid, SheetPos::new(300, 0));
+    let existing = engine
+        .cell_store()
+        .resolve_cell_id(&sid, SheetPos::new(300, 0));
     engine
         .set_hyperlink(&sid, 300, 0, "https://added.example")
         .unwrap();
     assert_eq!(
         engine
-            .mirror()
+            .cell_store()
             .get_cell_value_at(&sid, SheetPos::new(300, 0)),
         Some(&CellValue::from(10.0))
     );
     if let Some(existing) = existing {
         assert_eq!(
-            engine.mirror().resolve_cell_id(&sid, SheetPos::new(300, 0)),
+            engine
+                .cell_store()
+                .resolve_cell_id(&sid, SheetPos::new(300, 0)),
             Some(existing)
         );
     }
@@ -237,8 +257,16 @@ fn compact_hyperlinks_preserve_values_metadata_order_copy_and_structural_anchors
     let copy = SheetId::from_uuid_str(&copy).unwrap();
     assert_eq!(engine.get_hyperlinks(&copy), authored);
     assert_ne!(
-        engine.grid_index(&sid).unwrap().cell_id_at(100, 0),
-        engine.grid_index(&copy).unwrap().cell_id_at(100, 0)
+        engine
+            .cell_store()
+            .get_sheet(&sid)
+            .unwrap()
+            .cell_id_at(cell_types::SheetPos::new(100, 0)),
+        engine
+            .cell_store()
+            .get_sheet(&copy)
+            .unwrap()
+            .cell_id_at(cell_types::SheetPos::new(100, 0))
     );
 
     engine
@@ -258,7 +286,7 @@ fn compact_hyperlinks_preserve_values_metadata_order_copy_and_structural_anchors
     assert_eq!(engine.get_hyperlinks(&copy), authored);
     assert_eq!(
         engine
-            .mirror()
+            .cell_store()
             .get_cell_value_at(&sid, SheetPos::new(100, 0)),
         Some(&CellValue::from(10.0))
     );
@@ -267,16 +295,16 @@ fn compact_hyperlinks_preserve_values_metadata_order_copy_and_structural_anchors
         let (reloaded, _) = ComputeEngine::from_xlsx_bytes(&bytes).unwrap();
         engine = reloaded;
         let original = engine
-            .mirror()
+            .cell_store()
             .sheet_ids()
             .copied()
-            .find(|id| engine.mirror().get_sheet(id).unwrap().name == "Link")
+            .find(|id| engine.cell_store().get_sheet(id).unwrap().name == "Link")
             .unwrap();
         let copied = engine
-            .mirror()
+            .cell_store()
             .sheet_ids()
             .copied()
-            .find(|id| engine.mirror().get_sheet(id).unwrap().name == "Copy")
+            .find(|id| engine.cell_store().get_sheet(id).unwrap().name == "Copy")
             .unwrap();
         assert_eq!(engine.get_hyperlinks(&original), expected);
         assert_eq!(engine.get_hyperlinks(&copied), authored);

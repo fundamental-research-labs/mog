@@ -24,7 +24,7 @@ use formula_types::StructureChange;
 fn test_agent_builds_data_pipeline() {
     let snapshot = make_snapshot(vec![]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // Steps 1-5: Set A1:A5 = 10,20,30,40,50
     engine.set_cell_value_parsed(&sheet_id, 0, 0, "10").unwrap();
@@ -131,7 +131,7 @@ fn test_agent_restructures_model() {
     }
     let snapshot = make_snapshot(cells);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // Steps 1-5: Assert initial state
     assert_num(&engine, &sheet_id, 0, 0, 1.0);
@@ -235,7 +235,7 @@ fn test_agent_restructures_model() {
 fn test_agent_builds_table() {
     let snapshot = make_snapshot(vec![]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // Steps 1-3: Enter headers
     engine
@@ -357,7 +357,7 @@ fn test_agent_builds_table() {
 fn test_agent_iterates_financial_model() {
     let snapshot = make_snapshot(vec![]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // Steps 1-6: Set up model labels and assumptions
     engine
@@ -516,7 +516,7 @@ fn test_adversarial_100_random_ops() {
     }
     let snapshot = make_snapshot_large(100, 26, cells);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet_id = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // LCG PRNG
     let mut state: u64 = 42;

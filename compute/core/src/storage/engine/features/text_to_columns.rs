@@ -14,10 +14,10 @@ pub(super) fn text_to_columns(
     dest_row: u32,
     dest_col: u32,
     options: serde_json::Value,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let mut result = svc::text_to_columns(
         &mut engine.stores,
-        &mut engine.mirror,
+        &mut engine.cell_store,
         *sheet_id,
         start_row,
         end_row,
@@ -26,11 +26,9 @@ pub(super) fn text_to_columns(
         dest_col,
         options,
     )?;
-    // R5: seed `pending_recalc` so `flush_viewport_patches` has changes to
-    // serialize. The kernel-side `forceRefreshAllViewports` band-aid that
-    // used to mask this gap was removed in recalc idempotency.
-    engine.prepare_recalc_for_flush(&mut result.recalc);
-    Ok((engine.flush_viewport_patches(), result))
+    // Enrich changed cells with display, formatting, and validation data.
+    engine.postprocess_mutation_recalc(&mut result.recalc);
+    Ok(result)
 }
 
 pub(super) fn text_to_columns_simple(
@@ -45,7 +43,7 @@ pub(super) fn text_to_columns_simple(
     custom_delimiter: Option<String>,
     treat_consecutive_as_one: bool,
     text_qualifier: &str,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     // Build the nested JSON options that the existing service function expects
     let mut delimiters = serde_json::json!({
         "tab": delimiter == "tab",
@@ -74,7 +72,7 @@ pub(super) fn text_to_columns_simple(
 
     let mut result = svc::text_to_columns(
         &mut engine.stores,
-        &mut engine.mirror,
+        &mut engine.cell_store,
         *sheet_id,
         start_row,
         end_row,
@@ -83,10 +81,9 @@ pub(super) fn text_to_columns_simple(
         dest_col,
         options,
     )?;
-    // R5: seed `pending_recalc` so `flush_viewport_patches` has changes to
-    // serialize. Same fix as `text_to_columns`.
-    engine.prepare_recalc_for_flush(&mut result.recalc);
-    Ok((engine.flush_viewport_patches(), result))
+    // Enrich changed cells with display, formatting, and validation data.
+    engine.postprocess_mutation_recalc(&mut result.recalc);
+    Ok(result)
 }
 
 pub(super) fn preview_text_to_columns(
@@ -99,7 +96,7 @@ pub(super) fn preview_text_to_columns(
     max_preview_rows: u32,
 ) -> Vec<Vec<String>> {
     svc::preview_text_to_columns(
-        &engine.mirror,
+        &engine.cell_store,
         *sheet_id,
         source_start_row,
         source_end_row,

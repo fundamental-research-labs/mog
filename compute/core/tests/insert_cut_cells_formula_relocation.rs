@@ -1,6 +1,5 @@
 use cell_types::CellId;
 use compute_core::storage::engine::ComputeEngine;
-use compute_wire::constants::{MUTATION_HEADER_SIZE, PATCH_STRIDE};
 use compute_wire::flags::{VALUE_TYPE_MASK, VALUE_TYPE_NUMBER};
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
@@ -37,109 +36,6 @@ fn formula_cell(id_suffix: u32, row: u32, col: u32, formula: &str, value: f64) -
     }
 }
 
-#[derive(Debug, Clone)]
-struct DecodedPatch {
-    row: u32,
-    col: u32,
-    flags: u16,
-    number_value: f64,
-}
-
-fn decode_patches(mutation_bytes: &[u8]) -> Vec<DecodedPatch> {
-    if mutation_bytes.len() < MUTATION_HEADER_SIZE {
-        return Vec::new();
-    }
-    let patch_count = u32::from_le_bytes([
-        mutation_bytes[0],
-        mutation_bytes[1],
-        mutation_bytes[2],
-        mutation_bytes[3],
-    ]) as usize;
-    let sheet_id_len = u16::from_le_bytes([mutation_bytes[8], mutation_bytes[9]]) as usize;
-    let patches_start = MUTATION_HEADER_SIZE + sheet_id_len;
-
-    let mut out = Vec::with_capacity(patch_count);
-    for i in 0..patch_count {
-        let off = patches_start + i * PATCH_STRIDE;
-        if off + PATCH_STRIDE > mutation_bytes.len() {
-            break;
-        }
-        let row = u32::from_le_bytes([
-            mutation_bytes[off],
-            mutation_bytes[off + 1],
-            mutation_bytes[off + 2],
-            mutation_bytes[off + 3],
-        ]);
-        let col = u32::from_le_bytes([
-            mutation_bytes[off + 4],
-            mutation_bytes[off + 5],
-            mutation_bytes[off + 6],
-            mutation_bytes[off + 7],
-        ]);
-        let number_value = f64::from_le_bytes([
-            mutation_bytes[off + 8],
-            mutation_bytes[off + 9],
-            mutation_bytes[off + 10],
-            mutation_bytes[off + 11],
-            mutation_bytes[off + 12],
-            mutation_bytes[off + 13],
-            mutation_bytes[off + 14],
-            mutation_bytes[off + 15],
-        ]);
-        let flags = u16::from_le_bytes([mutation_bytes[off + 24], mutation_bytes[off + 25]]);
-        out.push(DecodedPatch {
-            row,
-            col,
-            flags,
-            number_value,
-        });
-    }
-    out
-}
-
-fn effective_value_type_at(mutation_bytes: &[u8], row: u32, col: u32) -> Option<u16> {
-    decode_patches(mutation_bytes)
-        .into_iter()
-        .rfind(|patch| patch.row == row && patch.col == col)
-        .map(|patch| patch.flags & VALUE_TYPE_MASK)
-}
-
-fn effective_number_at(mutation_bytes: &[u8], row: u32, col: u32) -> Option<f64> {
-    decode_patches(mutation_bytes)
-        .into_iter()
-        .rfind(|patch| patch.row == row && patch.col == col)
-        .map(|patch| patch.number_value)
-}
-
-fn viewport_bytes<'a>(packed: &'a [u8], vp_id: &str) -> Option<&'a [u8]> {
-    if packed.len() < 2 {
-        return None;
-    }
-    let count = u16::from_le_bytes([packed[0], packed[1]]) as usize;
-    let mut offset = 2usize;
-    for _ in 0..count {
-        if offset >= packed.len() {
-            return None;
-        }
-        let id_len = packed[offset] as usize;
-        offset += 1;
-        let id = std::str::from_utf8(&packed[offset..offset + id_len]).ok()?;
-        offset += id_len;
-        let patch_len = u32::from_le_bytes([
-            packed[offset],
-            packed[offset + 1],
-            packed[offset + 2],
-            packed[offset + 3],
-        ]) as usize;
-        offset += 4;
-        if id == vp_id {
-            return Some(&packed[offset..offset + patch_len]);
-        }
-        offset += patch_len;
-    }
-    None
-}
-
 #[test]
 fn insert_cut_cells_right_preserves_formula_ref_to_moved_precedent() {
     let snapshot = WorkbookSnapshot {
@@ -163,7 +59,7 @@ fn insert_cut_cells_right_preserves_formula_ref_to_moved_precedent() {
         ..Default::default()
     };
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
-    let sid = engine.mirror().sheet_by_name("S1").expect("S1");
+    let sid = engine.cell_store().sheet_by_name("S1").expect("S1");
 
     engine
         .register_viewport("vp", &sid, 18, 8, 36, 28)
@@ -184,16 +80,17 @@ fn insert_cut_cells_right_preserves_formula_ref_to_moved_precedent() {
         CellValue::Number(FiniteF64::must(7509.0))
     );
 
-    let (patches, _result) = engine
+    let _result = engine
         .relocate_cells(&sid, 20, 29, 20, 30, &sid, 20, 15)
         .expect("relocate shifted AD21:AE21 to P21:Q21");
-    let patch = viewport_bytes(&patches, "vp").expect("vp patch");
+    let rendered = engine.build_viewport_render_data(&sid, 20, 16, 21, 17);
+    let cell = rendered.cells.first().expect("rendered Q21");
     assert_eq!(
-        effective_value_type_at(patch, 20, 16),
+        Some(cell.flags & VALUE_TYPE_MASK),
         Some(VALUE_TYPE_NUMBER),
         "Q21 moved formula target must emit a numeric patch even when the computed value is unchanged"
     );
-    let q21_patch_value = effective_number_at(patch, 20, 16).expect("Q21 patch value");
+    let q21_patch_value = Some(cell.number_value).expect("Q21 patch value");
     assert!(
         (q21_patch_value - 7509.0).abs() < f64::EPSILON,
         "Q21 patch expected 7509, got {q21_patch_value}"
@@ -246,7 +143,7 @@ fn insert_cut_cells_down_preserves_formula_refs_to_moved_row_precedents() {
         ..Default::default()
     };
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
-    let sid = engine.mirror().sheet_by_name("S1").expect("S1");
+    let sid = engine.cell_store().sheet_by_name("S1").expect("S1");
 
     engine
         .set_cell_value_parsed(&sid, 16, 15, "24336")

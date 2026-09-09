@@ -9,10 +9,10 @@ pub(super) fn make_sheet_id(n: u128) -> SheetId {
 
 pub(super) fn storage_with_sheet() -> (WorkbookStorage, SheetId) {
     let mut storage = WorkbookStorage::new();
-    let mut mirror = crate::mirror::CellMirror::new();
+    let mut cell_store = crate::cells::CellStore::new();
     let sheet_id = make_sheet_id(1);
     storage
-        .add_sheet(&mut mirror, sheet_id, "Sheet1", 100, 26)
+        .add_sheet(&mut cell_store, sheet_id, "Sheet1", 100, 26)
         .expect("add_sheet should succeed");
     (storage, sheet_id)
 }
@@ -24,16 +24,8 @@ pub(super) fn simple_runs(text: &str) -> Vec<RichTextRun> {
     }]
 }
 
-pub(super) fn native_grid_with_cell(
-    sheet_id: SheetId,
-    key: &str,
-) -> compute_document::identity::GridIndex {
-    let mut grid = compute_document::identity::GridIndex::new(
-        sheet_id,
-        100,
-        26,
-        std::sync::Arc::new(cell_types::IdAllocator::new()),
-    );
+pub(super) fn native_grid_with_cell(sheet_id: SheetId, key: &str) -> crate::cells::SheetStore {
+    let mut grid = crate::cells::SheetStore::new(sheet_id, "Sheet1".into(), 100, 26);
     let id = cell_types::CellId::from_raw(compute_document::hex::hex_to_id(key).unwrap());
     grid.register_cell(id, 0, 0);
     grid

@@ -188,18 +188,22 @@ fn sumifs_text_criterion_snapshot() -> WorkbookSnapshot {
 /// and return `(pre_op, post_inverse)` values of `Summary!A1`.
 fn run_class1_op_pair_via_set_cell(engine: &mut ComputeEngine) -> (CellValue, CellValue) {
     let src_sid = engine
-        .mirror()
+        .cell_store()
         .sheet_by_name("SourceData")
         .expect("SourceData");
-    let sum_sid = engine.mirror().sheet_by_name("Summary").expect("Summary");
+    let sum_sid = engine
+        .cell_store()
+        .sheet_by_name("Summary")
+        .expect("Summary");
     let edit_cid = engine
-        .grid_index(&src_sid)
+        .cell_store()
+        .get_sheet(&src_sid)
         .expect("SourceData grid")
-        .cell_id_at(4, 0)
+        .cell_id_at(cell_types::SheetPos::new(4, 0))
         .expect("A5 present");
 
     let pre = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sum_sid, SheetPos::new(0, 0))
         .cloned()
         .unwrap_or(CellValue::Null);
@@ -212,7 +216,7 @@ fn run_class1_op_pair_via_set_cell(engine: &mut ComputeEngine) -> (CellValue, Ce
         .expect("inverse");
 
     let post = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sum_sid, SheetPos::new(0, 0))
         .cloned()
         .unwrap_or(CellValue::Null);
@@ -279,18 +283,22 @@ fn class1_sumifs_text_criterion_xlsx_reducer_import_values_inverse() {
 
     let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
     let src_sid = engine
-        .mirror()
+        .cell_store()
         .sheet_by_name("SourceData")
         .expect("SourceData");
-    let sum_sid = engine.mirror().sheet_by_name("Summary").expect("Summary");
+    let sum_sid = engine
+        .cell_store()
+        .sheet_by_name("Summary")
+        .expect("Summary");
     let edit_cid = engine
-        .grid_index(&src_sid)
+        .cell_store()
+        .get_sheet(&src_sid)
         .expect("SourceData grid")
-        .cell_id_at(4, 0)
+        .cell_id_at(cell_types::SheetPos::new(4, 0))
         .expect("A5 present");
 
     let pre = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sum_sid, SheetPos::new(0, 0))
         .cloned()
         .unwrap_or(CellValue::Null);
@@ -306,7 +314,7 @@ fn class1_sumifs_text_criterion_xlsx_reducer_import_values_inverse() {
         .expect("inverse via import_values");
 
     let post = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sum_sid, SheetPos::new(0, 0))
         .cloned()
         .unwrap_or(CellValue::Null);
@@ -386,22 +394,23 @@ fn external_sumifs_inverse_leaves_stale_result() {
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
 
     let edit_sheet = engine
-        .mirror()
+        .cell_store()
         .sheet_by_name(&edit_sheet_name)
         .expect("edit sheet should exist");
     let dep_sheet = engine
-        .mirror()
+        .cell_store()
         .sheet_by_name(&dep_sheet_name)
         .expect("dependent sheet should exist");
 
     let edit_cid = engine
-        .grid_index(&edit_sheet)
+        .cell_store()
+        .get_sheet(&edit_sheet)
         .expect("grid")
-        .cell_id_at(edit_row, edit_col)
+        .cell_id_at(cell_types::SheetPos::new(edit_row, edit_col))
         .expect("edit cell should exist");
 
     let pre = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&dep_sheet, SheetPos::new(dep_row, dep_col))
         .cloned()
         .unwrap_or(CellValue::Null);
@@ -409,7 +418,7 @@ fn external_sumifs_inverse_leaves_stale_result() {
     eprintln!(
         "pre edit = {:?}",
         engine
-            .mirror()
+            .cell_store()
             .get_cell_value_at(&edit_sheet, SheetPos::new(edit_row, edit_col))
     );
 
@@ -437,7 +446,7 @@ fn external_sumifs_inverse_leaves_stale_result() {
         .expect("inverse via import_values");
 
     let post = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&dep_sheet, SheetPos::new(dep_row, dep_col))
         .cloned()
         .unwrap_or(CellValue::Null);
@@ -445,7 +454,7 @@ fn external_sumifs_inverse_leaves_stale_result() {
     eprintln!(
         "post edit = {:?}",
         engine
-            .mirror()
+            .cell_store()
             .get_cell_value_at(&edit_sheet, SheetPos::new(edit_row, edit_col))
     );
 

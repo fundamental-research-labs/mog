@@ -7,7 +7,7 @@ use crate::storage::sheet::floating_objects::{
 
 #[test]
 fn test_z_index_empty_sheet() {
-    let (mut storage, sheet_id) = storage_with_sheet();
+    let (storage, sheet_id) = storage_with_sheet();
     assert_eq!(get_floating_object_max_z_index(&storage, &sheet_id), 0);
     assert_eq!(get_floating_object_min_z_index(&storage, &sheet_id), 0);
 }

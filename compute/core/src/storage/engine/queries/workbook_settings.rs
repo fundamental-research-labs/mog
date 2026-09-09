@@ -1,5 +1,6 @@
 #![allow(unused_imports, unused_variables)]
 use super::helpers::diff_top_level_keys;
+use crate::cells::StorePositionLookup;
 use crate::diagnostics::formula_references::{
     FormulaReferenceDiagnosticsOptions, FormulaReferenceDiagnosticsPage,
 };
@@ -10,8 +11,7 @@ use crate::engine_types::{
 };
 use crate::eval::Evaluator;
 use crate::eval::sync_block_on;
-use crate::eval_bridge::MirrorContext;
-use crate::mirror::MirrorPositionLookup;
+use crate::eval_bridge::EvalContext;
 use crate::range_manager::{self, A1CellRef, A1RangeRef};
 use crate::snapshot::{
     BatchRangeEntry, BatchRangeRequest, BatchRangeResponse, BatchRangeResult, CalculationSettings,
@@ -28,7 +28,6 @@ use crate::storage::sheet::{hyperlinks, merges, properties as sheets};
 use crate::storage::workbook::settings as workbook;
 use cell_types::{CellId, SheetId, SheetPos};
 use compute_document::hex::{hex_to_id, id_to_hex};
-use compute_wire::mutation::serialize_multi_viewport_patches;
 use domain_types::domain::merge::{CellMergeInfo, MergeRegion, ResolvedMergedRegion};
 use domain_types::domain::sheet::{FrozenPanes, SheetMeta, SheetScrollPosition, SheetViewOptions};
 use domain_types::domain::slicer::{NamedSlicerStyle, SlicerCustomStyle};
@@ -48,7 +47,7 @@ pub(in crate::storage::engine) fn get_formula_reference_diagnostics(
     options: FormulaReferenceDiagnosticsOptions,
 ) -> Result<FormulaReferenceDiagnosticsPage, ComputeError> {
     crate::diagnostics::formula_references::collect_formula_reference_diagnostics(
-        &engine.mirror,
+        &engine.cell_store,
         &engine.stores.compute,
         options,
     )
@@ -57,7 +56,7 @@ pub(in crate::storage::engine) fn get_formula_reference_diagnostics(
 pub(in crate::storage::engine) fn set_workbook_settings(
     engine: &mut ComputeEngine,
     settings: WorkbookSettings,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let pre = workbook::get_settings(&engine.stores.storage.metadata);
     let pre_json = serde_json::to_value(&pre).expect("WorkbookSettings must serialize");
 
@@ -76,23 +75,20 @@ pub(in crate::storage::engine) fn set_workbook_settings(
             changed_keys,
             settings: post_json,
         });
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }
 
 pub(in crate::storage::engine) fn patch_workbook_settings(
     engine: &mut ComputeEngine,
     patch: RustWorkbookSettingsPatch,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let pre = workbook::get_settings(&engine.stores.storage.metadata);
     let pre_json = serde_json::to_value(&pre).expect("WorkbookSettings must serialize");
 
     capture_workbook_settings(&engine.stores.storage);
     let changed = workbook::patch_settings(&mut engine.stores.storage.metadata, &patch);
     if !changed {
-        return Ok((
-            serialize_multi_viewport_patches(&[]),
-            MutationResult::empty(),
-        ));
+        return Ok(MutationResult::empty());
     }
 
     let post = workbook::get_settings(&engine.stores.storage.metadata);
@@ -108,5 +104,5 @@ pub(in crate::storage::engine) fn patch_workbook_settings(
             changed_keys,
             settings: post_json,
         });
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }

@@ -58,14 +58,14 @@ impl compute_security::RedactMaybe for CellInfo {
 impl ComputeEngine {
     /// Get the semantic value of a cell.
     ///
-    /// For formula cells, returns the computed value from the mirror.
+    /// For formula cells, returns the computed value from the cell store.
     /// For value cells, returns the raw value.
     /// For empty cells, returns `CellValue::Null`.
     ///
     /// Resolves both sparse cells and compact ranges from the native value store.
     #[bridge::read(scope = "cell")]
     pub fn get_cell_value(&self, sheet_id: &SheetId, row: u32, col: u32) -> CellValue {
-        match cell_values::get_effective_value(&self.mirror, sheet_id, row, col) {
+        match cell_values::get_effective_value(&self.cell_store, sheet_id, row, col) {
             Some(v) => v,
             None => CellValue::Null,
         }
@@ -111,11 +111,11 @@ impl ComputeEngine {
         // formulas, then formula-owning region anchors such as CSE arrays.
         let formula = {
             let cell_id = self
-                .mirror
+                .cell_store
                 .resolve_cell_id(sheet_id, SheetPos::new(row, col));
             if let Some(formula) = super::formula_read::formula_text_at(
                 &self.stores,
-                &self.mirror,
+                &self.cell_store,
                 sheet_id,
                 row,
                 col,
@@ -128,18 +128,18 @@ impl ComputeEngine {
         };
 
         // Get effective format
-        let cell_id_hex = self.format_lookup_cell_id_hex(sheet_id, row, col);
+        let cell_id = self.format_lookup_cell_id(sheet_id, row, col);
         let table_fmt =
-            services::resolve_structured_format_at_cell(&self.mirror, sheet_id, row, col);
-        let effective = properties::get_effective_format(
+            services::resolve_structured_format_at_cell(&self.cell_store, sheet_id, row, col);
+        let effective = properties::get_effective_format_by_id(
             &self.stores.storage,
             sheet_id,
-            &cell_id_hex,
+            cell_id.as_ref(),
             row,
             col,
             table_fmt.as_ref(),
             self.stores.grid_indexes.get(sheet_id),
-            self.mirror.get_sheet(sheet_id),
+            self.cell_store.get_sheet(sheet_id),
         );
 
         // Get formatted display string
@@ -180,12 +180,12 @@ impl ComputeEngine {
     ) -> Option<crate::snapshot::RawCellData> {
         let pos = SheetPos::new(row, col);
 
-        let cell_id = self.mirror.resolve_cell_id(sheet_id, pos);
+        let cell_id = self.cell_store.resolve_cell_id(sheet_id, pos);
 
         let formula = if include_formula {
             super::formula_read::formula_text_at(
                 &self.stores,
-                &self.mirror,
+                &self.cell_store,
                 sheet_id,
                 row,
                 col,
@@ -195,16 +195,16 @@ impl ComputeEngine {
             None
         };
 
-        let mirror_value = self.mirror.get_cell_value_at(sheet_id, pos).cloned();
+        let store_value = self.cell_store.get_cell_value_at(sheet_id, pos).cloned();
 
-        if mirror_value.is_none() && formula.is_none() {
+        if store_value.is_none() && formula.is_none() {
             return None;
         }
 
         let (raw, computed) = if formula.is_some() {
-            (Some(CellValue::Null), mirror_value)
+            (Some(CellValue::Null), store_value)
         } else {
-            (mirror_value, None)
+            (store_value, None)
         };
 
         Some(crate::snapshot::RawCellData {
@@ -220,7 +220,7 @@ impl ComputeEngine {
     /// Otherwise returns the raw value as a string.
     #[bridge::read(scope = "cell")]
     pub fn get_value_for_editing(&self, sheet_id: &SheetId, row: u32, col: u32) -> String {
-        super::services::queries::get_raw_value(&self.mirror, &self.stores, sheet_id, row, col)
+        super::services::queries::get_raw_value(&self.cell_store, &self.stores, sheet_id, row, col)
     }
 
     // -------------------------------------------------------------------

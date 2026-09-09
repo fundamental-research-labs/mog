@@ -836,6 +836,58 @@ fn test_col_styles_roundtrip() {
 }
 
 #[test]
+fn styled_column_without_width_uses_base_col_width_as_the_sheet_default() {
+    // A sheet that carries only `baseColWidth` has no `defaultColWidth` to read.
+    // Synthesizing the <col> at the workbook default would make styled columns
+    // visibly narrower than their unstyled neighbours.
+    use super::sheet_builder::build_sheet;
+    use crate::write::SharedStringsWriter;
+
+    let sheet_data = SheetData {
+        name: "Sheet1".to_string(),
+        dimensions: SheetDimensions {
+            base_col_width: Some(10),
+            ..Default::default()
+        },
+        col_styles: vec![ColStyleEntry {
+            col: 0,
+            style_id: 15,
+        }],
+        cells: vec![make_cell(
+            0,
+            0,
+            DomainValue::Number(FiniteF64::new(1.0).unwrap()),
+        )],
+        ..Default::default()
+    };
+
+    let mut shared_strings = SharedStringsWriter::new();
+    let no_dt_bodies: std::collections::HashSet<(u32, u32)> = std::collections::HashSet::new();
+    let no_dt_regions = Vec::new();
+    let style_remapper = super::super::style_remap::StyleExportRemapper::palette_projection(16);
+    let writer = build_sheet(
+        &sheet_data,
+        &mut shared_strings,
+        &no_dt_bodies,
+        &no_dt_regions,
+        true,
+        &style_remapper,
+    );
+    let xml = String::from_utf8(writer.to_xml()).unwrap();
+
+    assert!(
+        xml.contains("width=\"10\""),
+        "styled column should take the base-derived sheet default, got: {}",
+        &xml[..xml.len().min(2000)]
+    );
+    assert!(
+        !xml.contains("width=\"8.43\""),
+        "workbook default must not override baseColWidth, got: {}",
+        &xml[..xml.len().min(2000)]
+    );
+}
+
+#[test]
 fn test_sparse_col_style_ranges_export_as_col_metadata() {
     use super::sheet_builder::build_sheet;
     use crate::write::SharedStringsWriter;

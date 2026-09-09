@@ -68,6 +68,45 @@ fn test_get_default_col_width() {
 }
 
 #[test]
+fn base_col_width_supplies_the_sheet_default_when_default_col_width_is_absent() {
+    // Reading `default_col_width` directly drops a `baseColWidth`-only sheet to
+    // the workbook default while the grid layout index uses the base-derived
+    // width, so the same sheet reports two different defaults.
+    let (mut storage, sid, gi) = setup();
+    // A newly authored sheet carries an explicit width; an imported
+    // `baseColWidth`-only workbook does not.
+    let format = &mut storage.sheet_metadata.get_mut(&sid).unwrap().format;
+    format.default_col_width = None;
+    format.base_col_width = Some(10);
+
+    assert_eq!(
+        get_sheet_default_col_width(&storage, &sid),
+        CharWidth(10.0)
+    );
+    assert_eq!(
+        get_col_width(&storage, &sid, 0, Some(&gi)),
+        CharWidth(10.0)
+    );
+}
+
+#[test]
+fn explicit_default_col_width_outranks_base_col_width() {
+    let (mut storage, sid, gi) = setup();
+    let format = &mut storage.sheet_metadata.get_mut(&sid).unwrap().format;
+    format.base_col_width = Some(10);
+    format.default_col_width = Some(9.25);
+
+    assert_eq!(
+        get_sheet_default_col_width(&storage, &sid),
+        CharWidth(9.25)
+    );
+    assert_eq!(
+        get_col_width(&storage, &sid, 0, Some(&gi)),
+        CharWidth(9.25)
+    );
+}
+
+#[test]
 fn test_reset_col_width_to_default_removes_entry() {
     let (mut storage, sid, gi) = setup();
     set_col_width(&mut storage, &sid, 0, CharWidth(200.0), Some(&gi)).unwrap();

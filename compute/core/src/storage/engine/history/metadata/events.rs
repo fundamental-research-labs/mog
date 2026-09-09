@@ -217,13 +217,7 @@ pub(crate) fn emit_events(
                         grids.get(&sid),
                     )
                     .unwrap_or_else(|| {
-                        domain_types::units::CharWidth(
-                            storage
-                                .sheet_metadata
-                                .get(&sid)
-                                .and_then(|meta| meta.format.default_col_width)
-                                .unwrap_or(8.43),
-                        )
+                        sheet::dimensions::get_sheet_default_col_width(storage, &sid)
                     });
                     let size = value_types::FiniteF64::new(
                         char_width_to_pixels(width, metrics.column_width_mdw).0,

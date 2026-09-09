@@ -30,7 +30,7 @@ pub(crate) fn get_sheet_meta(storage: &WorkbookStorage, sheet_id: &SheetId) -> O
         id: id_to_hex(sheet_id.as_u128()).to_string(),
         name: meta.name.clone(),
         default_row_height: meta.format.default_row_height.unwrap_or(15.0),
-        default_col_width: meta.format.default_col_width.unwrap_or(8.43),
+        default_col_width: meta.format.effective_default_col_width().0,
         frozen_rows: frozen.rows,
         frozen_cols: frozen.cols,
         tab_color,

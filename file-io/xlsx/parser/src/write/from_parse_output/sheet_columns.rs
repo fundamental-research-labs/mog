@@ -117,7 +117,7 @@ pub(super) fn apply_columns(
         emitted_cols.insert(col_dim.col);
     }
 
-    let default_cw = sheet_data.dimensions.default_col_width.unwrap_or(8.43);
+    let default_cw = sheet_data.dimensions.effective_default_col_width().0;
     for cs in &sheet_data.col_styles {
         if !emitted_cols.contains(&cs.col) {
             let outline_level = col_outline_levels.get(&cs.col).copied();

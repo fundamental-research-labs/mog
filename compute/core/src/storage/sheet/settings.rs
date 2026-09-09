@@ -3,8 +3,8 @@ use crate::storage::WorkbookStorage;
 use cell_types::SheetId;
 use domain_types::domain::sheet::{SheetProtectionOptions, SheetSettings};
 use domain_types::units::{
-    CharWidth, LayoutMetrics, Pixels, Points, char_width_to_pixels, pixels_to_char_width,
-    pixels_to_points, points_to_pixels,
+    CharWidth, LayoutMetrics, Pixels, Points, pixels_to_char_width, pixels_to_points,
+    points_to_pixels, resolve_default_column_width,
 };
 
 pub const SHEET_SETTINGS_KEYS: &[&str] = &[
@@ -69,10 +69,12 @@ pub(crate) fn get_sheet_settings_with_layout_metrics(
             meta.format.default_row_height.unwrap_or(15.0),
         ))
         .0,
-        default_col_width: char_width_to_pixels(
-            CharWidth(meta.format.default_col_width.unwrap_or(8.43)),
-            layout_metrics.column_width_mdw,
+        default_col_width: resolve_default_column_width(
+            meta.format.default_col_width.map(CharWidth),
+            meta.format.base_col_width,
+            layout_metrics,
         )
+        .pixels
         .0,
     }
 }

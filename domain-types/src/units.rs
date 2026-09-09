@@ -276,38 +276,71 @@ pub struct ResolvedDefaultColumnWidth {
     pub source: DefaultColumnWidthSource,
 }
 
-/// Resolve the effective default column width for a sheet.
+/// A sheet default column width in character units, and the branch that won.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct EffectiveDefaultColumnWidth {
+    pub width: CharWidth,
+    pub source: DefaultColumnWidthSource,
+}
+
+/// Resolve a sheet's effective default column width in character units.
 ///
-/// OOXML gives `defaultColWidth` precedence over `baseColWidth`. A base width
-/// is a count of Normal-style maximum-digit-width characters and excludes the
-/// cell margins and gridline; convert it with the active MDW so the resulting
-/// pixels use the same padding/quantization as an explicit column width.
-/// When neither value is present, retain the caller's profile fallback.
-pub fn resolve_default_column_width(
-    default_col_width: Option<CharWidth>,
+/// OOXML gives `defaultColWidth` precedence over `baseColWidth`; a base width
+/// is a count of Normal-style maximum-digit-width characters. When neither is
+/// present the workbook default applies.
+///
+/// This is the one precedence rule for a sheet default width. Callers holding
+/// [`LayoutMetrics`] should prefer [`resolve_default_column_width`], which
+/// reports pixels and honours the layout profile's own fallback; this entry
+/// point serves metadata and serialization surfaces that speak the file
+/// format's character units and hold no layout metrics.
+pub fn effective_default_column_width(
+    default_col_width: Option<f64>,
     base_col_width: Option<u32>,
-    layout_metrics: LayoutMetrics,
-) -> ResolvedDefaultColumnWidth {
+) -> EffectiveDefaultColumnWidth {
     if let Some(width) = default_col_width {
-        return ResolvedDefaultColumnWidth {
-            pixels: char_width_to_pixels(width, layout_metrics.column_width_mdw),
+        return EffectiveDefaultColumnWidth {
+            width: CharWidth(width),
             source: DefaultColumnWidthSource::ExplicitDefault,
         };
     }
 
     if let Some(base_width) = base_col_width {
-        return ResolvedDefaultColumnWidth {
-            pixels: char_width_to_pixels(
-                CharWidth(base_width as f64),
-                layout_metrics.column_width_mdw,
-            ),
+        return EffectiveDefaultColumnWidth {
+            width: CharWidth(f64::from(base_width)),
             source: DefaultColumnWidthSource::BaseDerived,
         };
     }
 
-    ResolvedDefaultColumnWidth {
-        pixels: layout_metrics.default_column_width(),
+    EffectiveDefaultColumnWidth {
+        width: DEFAULT_COL_WIDTH,
         source: DefaultColumnWidthSource::ProfileFallback,
+    }
+}
+
+/// Resolve the effective default column width for a sheet, in pixels.
+///
+/// Applies the precedence in [`effective_default_column_width`]. A base width
+/// excludes the cell margins and gridline, so convert it with the active MDW to
+/// give the resulting pixels the same padding and quantization as an explicit
+/// column width. When neither sheet-level value is present, retain the caller's
+/// profile fallback instead of converting [`DEFAULT_COL_WIDTH`], so a
+/// runtime-detected profile can override the compiled default.
+pub fn resolve_default_column_width(
+    default_col_width: Option<CharWidth>,
+    base_col_width: Option<u32>,
+    layout_metrics: LayoutMetrics,
+) -> ResolvedDefaultColumnWidth {
+    let effective = effective_default_column_width(default_col_width.map(|w| w.0), base_col_width);
+    let pixels = match effective.source {
+        DefaultColumnWidthSource::ProfileFallback => layout_metrics.default_column_width(),
+        DefaultColumnWidthSource::ExplicitDefault | DefaultColumnWidthSource::BaseDerived => {
+            char_width_to_pixels(effective.width, layout_metrics.column_width_mdw)
+        }
+    };
+    ResolvedDefaultColumnWidth {
+        pixels,
+        source: effective.source,
     }
 }
 
@@ -382,6 +415,53 @@ mod tests {
             DefaultColumnWidthSource::BaseDerived
         );
         assert_eq!(macos_resolved.source, DefaultColumnWidthSource::BaseDerived);
+    }
+
+    #[test]
+    fn effective_default_column_width_prefers_explicit_default() {
+        let effective = effective_default_column_width(Some(9.25), Some(10));
+
+        assert_eq!(effective.width, CharWidth(9.25));
+        assert_eq!(effective.source, DefaultColumnWidthSource::ExplicitDefault);
+    }
+
+    #[test]
+    fn effective_default_column_width_falls_back_to_base_character_count() {
+        let effective = effective_default_column_width(None, Some(10));
+
+        assert_eq!(effective.width, CharWidth(10.0));
+        assert_eq!(effective.source, DefaultColumnWidthSource::BaseDerived);
+    }
+
+    #[test]
+    fn effective_default_column_width_uses_workbook_default_when_absent() {
+        let effective = effective_default_column_width(None, None);
+
+        assert_eq!(effective.width, DEFAULT_COL_WIDTH);
+        assert_eq!(effective.source, DefaultColumnWidthSource::ProfileFallback);
+    }
+
+    #[test]
+    fn character_and_pixel_resolution_agree_on_the_same_branch() {
+        // The metadata surfaces resolve in character units and the layout index
+        // resolves in pixels; a sheet carrying only `baseColWidth` must not get
+        // two different answers.
+        let metrics = LayoutMetrics::from_column_width_mdw(MDW_CALIBRI_11_96DPI).unwrap();
+        for (default_width, base_width) in
+            [(Some(9.25), Some(10)), (None, Some(10)), (None, None)]
+        {
+            let chars = effective_default_column_width(default_width, base_width);
+            let pixels =
+                resolve_default_column_width(default_width.map(CharWidth), base_width, metrics);
+
+            assert_eq!(chars.source, pixels.source);
+            if chars.source != DefaultColumnWidthSource::ProfileFallback {
+                assert_eq!(
+                    pixels.pixels,
+                    char_width_to_pixels(chars.width, MDW_CALIBRI_11_96DPI)
+                );
+            }
+        }
     }
 
     #[test]

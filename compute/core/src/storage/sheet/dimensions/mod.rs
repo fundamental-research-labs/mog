@@ -15,7 +15,10 @@ mod tests;
 pub use col_visibility::{get_hidden_columns, hide_columns, is_column_hidden, unhide_columns};
 #[cfg(test)]
 pub use cols::get_col_width_stored;
-pub use cols::{DEFAULT_COL_WIDTH, get_col_width, get_col_width_explicit, set_col_width};
+pub use cols::{
+    DEFAULT_COL_WIDTH, get_col_width, get_col_width_explicit, get_sheet_default_col_width,
+    set_col_width,
+};
 pub use row_visibility::{
     clear_filter_hidden_rows, get_hidden_rows, get_row_visibility_ownership, hide_manual_rows,
     is_row_hidden, is_row_hidden_by_any_filter, is_row_hidden_by_any_filter_id,

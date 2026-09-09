@@ -48,7 +48,7 @@ pub(in crate::storage::engine) fn export_dimensions_for_sheet(
     };
     let grid = stores.grid_indexes.get(sheet_id);
     let default_row = domain_types::units::Points(meta.format.default_row_height.unwrap_or(15.0));
-    let default_col = domain_types::units::CharWidth(meta.format.default_col_width.unwrap_or(8.43));
+    let default_col = meta.format.effective_default_col_width();
     let hidden_rows: std::collections::BTreeSet<_> = queries::get_hidden_rows(stores, sheet_id)
         .into_iter()
         .collect();

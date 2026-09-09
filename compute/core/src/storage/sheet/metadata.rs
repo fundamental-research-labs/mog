@@ -234,6 +234,22 @@ pub(crate) struct SheetFormatMetadata {
     pub trailing_col_ranges: Vec<TrailingColRange>,
 }
 
+impl SheetFormatMetadata {
+    /// The sheet's effective default column width in character units.
+    ///
+    /// `defaultColWidth` wins, then `baseColWidth`, then the workbook default.
+    /// Every consumer of the sheet default must go through this; reading
+    /// `default_col_width` directly drops `baseColWidth`-only sheets back to
+    /// the workbook default and disagrees with the grid layout index.
+    pub(crate) fn effective_default_col_width(&self) -> domain_types::units::CharWidth {
+        domain_types::units::effective_default_column_width(
+            self.default_col_width,
+            self.base_col_width,
+        )
+        .width
+    }
+}
+
 impl From<&SheetDimensions> for SheetFormatMetadata {
     fn from(dimensions: &SheetDimensions) -> Self {
         Self {

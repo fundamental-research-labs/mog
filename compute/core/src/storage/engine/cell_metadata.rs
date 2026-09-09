@@ -212,7 +212,7 @@ impl CellMetadataProvider for StorageCellMetadata {
                 storage
                     .sheet_metadata
                     .get(sheet)
-                    .and_then(|metadata| metadata.format.default_col_width)
+                    .map(|metadata| metadata.format.effective_default_col_width().0)
                     .unwrap_or(dimensions::DEFAULT_COL_WIDTH.0)
             })
         };

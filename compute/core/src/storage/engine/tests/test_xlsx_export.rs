@@ -657,6 +657,7 @@ fn pivot_cache_sources_survive_yrs_hydration_export_without_context() {
                 vec![CellValue::Text(Arc::from("A"))],
                 vec![CellValue::Number(FiniteF64::new(42.0).unwrap())],
             ],
+            ..Default::default()
         });
 
     let engine = engine_from_parse_output_normal(&input);

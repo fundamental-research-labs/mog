@@ -183,6 +183,7 @@ fn imported_pivot_export_parse_output(
                     vec![CellValue::Text(Arc::from("A"))],
                     vec![CellValue::Number(FiniteF64::new(42.0).unwrap())],
                 ],
+                ..Default::default()
             });
         output.pivot_cache_records.insert(
             *cache_id,
@@ -477,4 +478,264 @@ fn unsupported_external_imported_pivot_keeps_external_cache_source_on_export() {
     assert!(definition_xml.contains(r#"sheet="ExternalData""#));
     assert!(definition_xml.contains(r#"ref="A1:B3""#));
     assert!(!definition_xml.contains(r#"sheet="Data""#));
+}
+
+/// Build a real package with hand-authored cache XML so writer and parser bugs
+/// cannot agree with one another and hide an import regression.
+fn imported_pivot_cache_xml_fixture(fields: &str, records: &str, record_count: u32) -> Vec<u8> {
+    let mut input = imported_pivot_export_parse_output(
+        vec![imported_pivot_for_export_test("TypedCache", 7, 0)],
+        &[7],
+    );
+    input.sheets[0].rows = record_count + 1;
+    input.pivot_tables[0].config.source_range = CellRange::new(0, 0, record_count, 1);
+    input.pivot_cache_sources[0].source_range = Some(format!("A1:B{}", record_count + 1));
+    let seed = engine_from_parse_output_normal(&input)
+        .export_to_xlsx_bytes()
+        .expect("export fixture package");
+    let definition = format!(
+        r#"<pivotCacheDefinition xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId1" recordCount="{record_count}"><cacheSource type="worksheet"><worksheetSource ref="A1:B{}" sheet="Data"/></cacheSource><cacheFields count="2">{fields}</cacheFields></pivotCacheDefinition>"#,
+        record_count + 1,
+    );
+    let records = format!(
+        r#"<pivotCacheRecords xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="{record_count}">{records}</pivotCacheRecords>"#,
+    );
+    let archive = xlsx_parser::zip::XlsxArchive::new(&seed).expect("fixture archive");
+    let mut writer = xlsx_parser::write::ZipWriter::new();
+    for entry in archive.entries() {
+        let data = match entry.name.as_str() {
+            "xl/pivotCache/pivotCacheDefinition1.xml" => definition.as_bytes().to_vec(),
+            "xl/pivotCache/pivotCacheRecords1.xml" => records.as_bytes().to_vec(),
+            _ => archive.read_file(&entry.name).expect("fixture part"),
+        };
+        writer.add_file(&entry.name, data);
+    }
+    writer.finish().expect("assemble fixture package")
+}
+
+fn imported_date_cache_fixture() -> Vec<u8> {
+    imported_pivot_cache_xml_fixture(
+        r#"<cacheField name="Category"><sharedItems containsSemiMixedTypes="0" containsString="0" containsNumber="1" containsInteger="1" minValue="13" maxValue="42" count="0"/></cacheField>
+        <cacheField name="Amount" numFmtId="16" caption="Calendar" sqlType="93" uniqueList="0"><sharedItems containsSemiMixedTypes="0" containsNonDate="0" containsDate="1" containsString="0" minDate="2021-01-01T00:00:00" maxDate="2022-12-31T00:00:00" count="2"><d v="2021-01-01T00:00:00"/><d v="2022-12-31T00:00:00"/></sharedItems></cacheField>"#,
+        r#"<r><n v="42"/><x v="0"/></r><r><n v="13"/><x v="1"/></r>"#,
+        2,
+    )
+}
+
+#[test]
+fn imported_pivot_empty_numeric_and_date_metadata_survive_engine_xlsx_roundtrip() {
+    use ooxml_types::pivot::{PivotRecordValue, SharedItem};
+
+    let bytes = imported_date_cache_fixture();
+    let (parsed, _) = xlsx_parser::parse_xlsx_to_output(&bytes).expect("parse hand-authored cache");
+    let source = exported_cache_source(&parsed, 7);
+    assert_eq!(source.cache_fields.len(), 2);
+    let numeric = source.cache_fields[0].shared_items.as_ref().unwrap();
+    assert!(
+        numeric.items.is_empty(),
+        "self-closing sharedItems must not consume the next field"
+    );
+    assert!(numeric.contains_number);
+    assert!(numeric.contains_integer);
+    assert!(!numeric.contains_semi_mixed_types);
+    assert!(!numeric.contains_string);
+    assert_eq!(
+        (numeric.min_value, numeric.max_value),
+        (Some(13.0), Some(42.0))
+    );
+    let date_field = &source.cache_fields[1];
+    assert_eq!(date_field.num_fmt_id, Some(16));
+    let dates = date_field.shared_items.as_ref().unwrap();
+    assert!(dates.contains_date);
+    assert!(!dates.contains_non_date);
+    assert!(!dates.contains_string);
+    assert!(!dates.contains_semi_mixed_types);
+    assert_eq!(dates.min_date.as_deref(), Some("2021-01-01T00:00:00"));
+    assert_eq!(dates.max_date.as_deref(), Some("2022-12-31T00:00:00"));
+    assert_eq!(
+        dates.items,
+        vec![
+            SharedItem::DateTime("2021-01-01T00:00:00".into()),
+            SharedItem::DateTime("2022-12-31T00:00:00".into()),
+        ]
+    );
+    assert_eq!(
+        source.typed_records.as_ref().unwrap().records[0].values,
+        vec![PivotRecordValue::Number(42.0), PivotRecordValue::Index(0),]
+    );
+
+    let engine = engine_from_parse_output_normal(&parsed);
+    let exported_bytes = engine.export_to_xlsx_bytes().expect("engine export");
+    let (reparsed, _) =
+        xlsx_parser::parse_xlsx_to_output(&exported_bytes).expect("reparse engine export");
+    let exported_source = exported_cache_source(&reparsed, 7);
+    assert_eq!(exported_source.cache_fields, source.cache_fields);
+    assert_eq!(exported_source.typed_records, source.typed_records);
+    assert_eq!(reparsed.pivot_cache_records, parsed.pivot_cache_records);
+}
+
+#[test]
+fn imported_pivot_all_record_types_and_shared_item_identity_survive_engine_xlsx_roundtrip() {
+    use ooxml_types::pivot::{PivotRecordValue, SharedItem};
+
+    let bytes = imported_pivot_cache_xml_fixture(
+        r##"<cacheField name="Category"><sharedItems containsDate="1" containsNumber="1" containsBlank="1" containsMixedTypes="1" count="7"><d v="2021-01-01T00:00:00"/><s v="2021-01-01T00:00:00"/><n v="42"/><b v="1"/><e v="#DIV/0!"/><e v="#FUTURE!"/><m/></sharedItems></cacheField>
+        <cacheField name="Amount"><sharedItems count="0"/></cacheField>"##,
+        r##"<r><x v="0"/><d v="2021-01-01T00:00:00"/></r>
+        <r><x v="1"/><s v="2021-01-01T00:00:00"/></r>
+        <r><x v="2"/><n v="13"/></r>
+        <r><x v="3"/><b v="0"/></r>
+        <r><x v="4"/><e v="#DIV/0!"/></r>
+        <r><x v="5"/><e v="#FUTURE!"/></r>
+        <r><x v="6"/><m/></r>"##,
+        7,
+    );
+    let (parsed, _) = xlsx_parser::parse_xlsx_to_output(&bytes).expect("parse typed cache");
+    let source = exported_cache_source(&parsed, 7);
+    assert_eq!(
+        source.cache_fields[0].shared_items.as_ref().unwrap().items,
+        vec![
+            SharedItem::DateTime("2021-01-01T00:00:00".into()),
+            SharedItem::String("2021-01-01T00:00:00".into()),
+            SharedItem::Number(42.0),
+            SharedItem::Boolean(true),
+            SharedItem::Error("#DIV/0!".into()),
+            SharedItem::Error("#FUTURE!".into()),
+            SharedItem::Missing,
+        ]
+    );
+    let expected_inline = vec![
+        PivotRecordValue::DateTime("2021-01-01T00:00:00".into()),
+        PivotRecordValue::String("2021-01-01T00:00:00".into()),
+        PivotRecordValue::Number(13.0),
+        PivotRecordValue::Boolean(false),
+        PivotRecordValue::Error("#DIV/0!".into()),
+        PivotRecordValue::Error("#FUTURE!".into()),
+        PivotRecordValue::Missing,
+    ];
+    let records = source.typed_records.as_ref().unwrap();
+    assert_eq!(records.records.len(), expected_inline.len());
+    for (index, expected) in expected_inline.into_iter().enumerate() {
+        assert_eq!(
+            records.records[index].values,
+            vec![PivotRecordValue::Index(index as u32), expected]
+        );
+    }
+    let engine = engine_from_parse_output_normal(&parsed);
+    let exported_bytes = engine.export_to_xlsx_bytes().expect("engine export");
+    let (reparsed, _) =
+        xlsx_parser::parse_xlsx_to_output(&exported_bytes).expect("reparse engine export");
+    let exported_source = exported_cache_source(&reparsed, 7);
+    assert_eq!(exported_source.cache_fields, source.cache_fields);
+    assert_eq!(exported_source.typed_records, source.typed_records);
+    assert_eq!(reparsed.pivot_cache_records, parsed.pivot_cache_records);
+
+    // Refresh one value while preserving every other typed record, including
+    // the date/string pair whose cell projections are identical.
+    let mut refreshed = parsed.clone();
+    refreshed.pivot_cache_records.get_mut(&7).unwrap()[2][1] = CellValue::number(99.0);
+    let refreshed_bytes = engine_from_parse_output_normal(&refreshed)
+        .export_to_xlsx_bytes()
+        .expect("export partially refreshed typed cache");
+    let (refreshed_output, _) = xlsx_parser::parse_xlsx_to_output(&refreshed_bytes)
+        .expect("reparse partially refreshed cache");
+    let mut expected_records = source.typed_records.clone().unwrap();
+    expected_records.records[2].values[1] = PivotRecordValue::Number(99.0);
+    assert_eq!(
+        exported_cache_source(&refreshed_output, 7)
+            .typed_records
+            .as_ref(),
+        Some(&expected_records)
+    );
+}
+
+#[test]
+fn imported_pivot_changed_cache_values_do_not_replay_stale_typed_records() {
+    let bytes = imported_date_cache_fixture();
+    let (mut parsed, _) = xlsx_parser::parse_xlsx_to_output(&bytes).expect("parse typed cache");
+    // A refreshed cache snapshot must take precedence over imported OOXML data.
+    parsed.pivot_cache_records.get_mut(&7).unwrap()[0][0] =
+        CellValue::Number(FiniteF64::must(123.0));
+    let engine = engine_from_parse_output_normal(&parsed);
+    let exported_bytes = engine
+        .export_to_xlsx_bytes()
+        .expect("engine export refreshed cache");
+    let (reparsed, _) =
+        xlsx_parser::parse_xlsx_to_output(&exported_bytes).expect("reparse refreshed cache");
+    assert_eq!(
+        reparsed.pivot_cache_records[&7][0][0],
+        CellValue::Number(FiniteF64::must(123.0))
+    );
+    let source = exported_cache_source(&reparsed, 7);
+    let original_source = exported_cache_source(&parsed, 7);
+    assert_eq!(source.cache_fields[1], original_source.cache_fields[1]);
+    let numbers = source.cache_fields[0].shared_items.as_ref().unwrap();
+    assert!(numbers.contains_number);
+    assert_eq!(
+        (numbers.min_value, numbers.max_value),
+        (Some(13.0), Some(123.0))
+    );
+    assert_eq!(
+        source.typed_records.as_ref().unwrap().records[0].values[1],
+        ooxml_types::pivot::PivotRecordValue::Index(0)
+    );
+}
+
+#[test]
+fn imported_pivot_definition_without_records_preserves_typed_field_metadata() {
+    let seed = imported_date_cache_fixture();
+    let archive = xlsx_parser::zip::XlsxArchive::new(&seed).expect("fixture archive");
+    let mut writer = xlsx_parser::write::ZipWriter::new();
+    for entry in archive.entries() {
+        if entry.name == "xl/pivotCache/pivotCacheRecords1.xml"
+            || entry.name == "xl/pivotCache/_rels/pivotCacheDefinition1.xml.rels"
+        {
+            continue;
+        }
+        let mut data = archive.read_file(&entry.name).expect("fixture part");
+        if entry.name == "xl/pivotCache/pivotCacheDefinition1.xml" {
+            data = String::from_utf8(data)
+                .unwrap()
+                .replace(r#" r:id="rId1""#, "")
+                .replace(r#"recordCount="2""#, r#"saveData="0""#)
+                .into_bytes();
+        } else if entry.name == "[Content_Types].xml" {
+            let mut xml = String::from_utf8(data).unwrap();
+            let part = xml.find("/xl/pivotCache/pivotCacheRecords1.xml").unwrap();
+            let start = xml[..part].rfind('<').unwrap();
+            let end = part + xml[part..].find("/>").unwrap() + 2;
+            xml.replace_range(start..end, "");
+            data = xml.into_bytes();
+        }
+        writer.add_file(&entry.name, data);
+    }
+    let bytes = writer.finish().expect("assemble definition-only fixture");
+    let (parsed, _) =
+        xlsx_parser::parse_xlsx_to_output(&bytes).expect("parse definition-only cache");
+    let source = exported_cache_source(&parsed, 7);
+    assert!(source.typed_records.is_none());
+    assert!(!parsed.pivot_cache_records.contains_key(&7));
+    assert_eq!(source.cache_fields[1].num_fmt_id, Some(16));
+    assert_eq!(source.cache_fields[1].caption.as_deref(), Some("Calendar"));
+
+    let engine = engine_from_parse_output_normal(&parsed);
+    let bytes = engine
+        .export_to_xlsx_bytes()
+        .expect("export definition-only cache");
+    let (reparsed, _) =
+        xlsx_parser::parse_xlsx_to_output(&bytes).expect("reparse definition-only cache");
+    let exported = exported_cache_source(&reparsed, 7);
+    assert_eq!(exported.cache_fields, source.cache_fields);
+    assert!(exported.typed_records.is_none());
+    assert!(!reparsed.pivot_cache_records.contains_key(&7));
+    let archive = xlsx_parser::zip::XlsxArchive::new(&bytes).unwrap();
+    assert!(
+        !archive
+            .entries()
+            .iter()
+            .any(|entry| entry.name.contains("pivotCacheRecords"))
+    );
+    let definition = first_pivot_cache_definition_xml(&bytes);
+    assert!(definition.contains(r#"saveData="0""#));
+    assert!(!definition.contains(" r:id="));
 }

@@ -75,3 +75,5 @@ pub use types::{
 
 pub use cache_writer::PivotCacheWriter;
 pub use table_writer::PivotTableWriter;
+
+pub(crate) mod typed_cache_fields;

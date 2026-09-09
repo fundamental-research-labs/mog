@@ -140,6 +140,7 @@ fn external_worksheet_pivot_cache_exports_snapshot_and_relationship() {
                 ],
                 vec![],
             ],
+            ..Default::default()
         });
     output.pivot_cache_records.insert(
         11,
@@ -391,6 +392,7 @@ fn live_pivot_cache_source_schema_is_not_truncated_to_source_range_width() {
                 vec![],
                 vec![DomainValue::Text(Arc::from("Legacy"))],
             ],
+            ..Default::default()
         });
 
     let bytes = write_xlsx_from_parse_output(&output).unwrap();
@@ -504,6 +506,7 @@ fn named_table_pivot_cache_source_resolves_unique_live_table_prefix() {
                     DomainValue::Number(FiniteF64::new(20.0).unwrap()),
                 ],
             ],
+            ..Default::default()
         });
 
     let bytes = write_xlsx_from_parse_output(&output).unwrap();

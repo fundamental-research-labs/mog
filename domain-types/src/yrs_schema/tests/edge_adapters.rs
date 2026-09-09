@@ -146,6 +146,7 @@ fn pivot_cache_sources_round_trip_external_worksheet_binding() {
         }),
         field_names: vec!["Category".to_string(), "Amount".to_string()],
         shared_items: Vec::new(),
+        ..Default::default()
     }];
 
     assert_eq!(

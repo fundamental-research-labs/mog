@@ -306,7 +306,7 @@ pub struct PivotStyleDef {
 }
 
 /// Pivot cache source metadata — tells the writer where to read data from.
-/// The actual cache data is regenerated at export time.
+/// Typed imported cache values retain their OOXML identity alongside the runtime cell projection.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PivotCacheSourceDef {
@@ -339,6 +339,13 @@ pub struct PivotCacheSourceDef {
     /// Used to resolve PivotFieldItem.value indices to actual CellValues for filtering.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub shared_items: Vec<Vec<value_types::CellValue>>,
+    /// Lossless imported field definitions, including typed shared items and formatting.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cache_fields: Vec<ooxml_types::pivot::PivotCacheField>,
+    /// Imported record representation before dereferencing shared-item indices.
+    /// Reused only while its cell projection matches the current cache snapshot.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub typed_records: Option<ooxml_types::pivot::PivotCacheRecords>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]

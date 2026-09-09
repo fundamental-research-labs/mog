@@ -9,24 +9,14 @@ pub(crate) fn resolve_cache_records(
         None => return Vec::new(),
     };
 
-    let fields = &pc.definition.cache_fields.items;
-    let records = &pc.records.records;
+    resolve_typed_cache_records(&pc.definition.cache_fields.items, &pc.records.records)
+}
 
-    fn shared_item_to_cell_value(item: &ooxml_types::pivot::SharedItem) -> value_types::CellValue {
-        use ooxml_types::pivot::SharedItem;
-        match item {
-            SharedItem::Number(n) => value_types::CellValue::number(*n),
-            SharedItem::String(s) => value_types::CellValue::Text(s.as_str().into()),
-            SharedItem::Boolean(b) => value_types::CellValue::Boolean(*b),
-            SharedItem::Error(e) => e
-                .parse::<value_types::CellError>()
-                .map(|e| value_types::CellValue::Error(e, None))
-                .unwrap_or(value_types::CellValue::Null),
-            SharedItem::DateTime(s) => value_types::CellValue::Text(s.as_str().into()),
-            SharedItem::Missing => value_types::CellValue::Null,
-        }
-    }
-
+/// Project typed cache data for computation without discarding the stored representation.
+pub(crate) fn resolve_typed_cache_records(
+    fields: &[ooxml_types::pivot::PivotCacheField],
+    records: &[ooxml_types::pivot::cache::PivotRecord],
+) -> Vec<Vec<value_types::CellValue>> {
     records
         .iter()
         .map(|record| {
@@ -61,6 +51,23 @@ pub(crate) fn resolve_cache_records(
                 .collect()
         })
         .collect()
+}
+
+pub(crate) fn shared_item_to_cell_value(
+    item: &ooxml_types::pivot::SharedItem,
+) -> value_types::CellValue {
+    use ooxml_types::pivot::SharedItem;
+    match item {
+        SharedItem::Number(n) => value_types::CellValue::number(*n),
+        SharedItem::String(s) => value_types::CellValue::Text(s.as_str().into()),
+        SharedItem::Boolean(b) => value_types::CellValue::Boolean(*b),
+        SharedItem::Error(e) => e
+            .parse::<value_types::CellError>()
+            .map(|e| value_types::CellValue::Error(e, None))
+            .unwrap_or(value_types::CellValue::Null),
+        SharedItem::DateTime(s) => value_types::CellValue::Text(s.as_str().into()),
+        SharedItem::Missing => value_types::CellValue::Null,
+    }
 }
 
 #[cfg(test)]

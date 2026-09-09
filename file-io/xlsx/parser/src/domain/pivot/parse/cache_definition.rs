@@ -3,7 +3,10 @@
 use crate::domain::pivot::model::{CacheField, CacheSourceType, PivotCache};
 use crate::domain::pivot::parse::shared_items::parse_shared_items;
 use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
-use crate::infra::xml::{parse_bool_attr, parse_i32_attr, parse_string_attr, parse_u32_attr};
+use crate::infra::xml::{
+    parse_bool_attr, parse_bool_attr_opt, parse_bool_attr_with_default, parse_f64_attr,
+    parse_i32_attr, parse_string_attr, parse_u32_attr,
+};
 
 /// Parse a pivot cache definition from pivotCacheDefinition*.xml.
 pub fn parse_pivot_cache_definition(xml: &[u8]) -> PivotCache {
@@ -58,7 +61,9 @@ pub(crate) fn parse_cache_fields(xml: &[u8]) -> Vec<CacheField> {
     let mut pos = 0;
 
     while let Some(field_start) = find_tag_simd(xml, b"cacheField", pos) {
-        let tag_end = find_gt_simd(xml, field_start).unwrap_or(xml.len());
+        let Some(tag_end) = find_gt_simd(xml, field_start) else {
+            break;
+        };
         let is_self_closing = tag_end > 0 && xml.get(tag_end - 1) == Some(&b'/');
         let element = &xml[field_start..tag_end + 1];
 
@@ -69,27 +74,45 @@ pub(crate) fn parse_cache_fields(xml: &[u8]) -> Vec<CacheField> {
             caption: parse_string_attr(element, b"caption=\""),
             ..Default::default()
         };
+        field.field_metadata = Some(ooxml_types::pivot::PivotCacheField {
+            name: field.name.clone(),
+            caption: field.caption.clone(),
+            num_fmt_id: field.num_fmt_id,
+            sql_type: field.sql_type,
+            formula: parse_string_attr(element, b"formula=\""),
+            hierarchy: parse_i32_attr(element, b"hierarchy=\""),
+            level: parse_u32_attr(element, b"level=\""),
+            database_field: parse_bool_attr_with_default(element, b"databaseField=\"", true),
+            unique_list: parse_bool_attr_opt(element, b"uniqueList=\""),
+            member_property_field: parse_bool_attr(element, b"memberPropertyField=\""),
+            server_field: parse_bool_attr(element, b"serverField=\""),
+            property_name: parse_string_attr(element, b"propertyName=\""),
+            mapping_count: parse_u32_attr(element, b"mappingCount=\""),
+            ..Default::default()
+        });
 
         if !is_self_closing {
             let field_end = find_closing_tag(xml, b"cacheField", field_start).unwrap_or(xml.len());
 
-            if let Some(items_start) =
-                find_tag_simd(&xml[field_start..field_end], b"sharedItems", 0)
-            {
-                let items_abs_start = field_start + items_start;
-                let items_tag_end = find_gt_simd(xml, items_abs_start).unwrap_or(field_end);
-                let items_element = &xml[items_abs_start..items_tag_end + 1];
+            let field_body = &xml[tag_end + 1..field_end];
+            if let Some(items_start) = find_tag_simd(field_body, b"sharedItems", 0) {
+                if let Some(items_tag_end) = find_gt_simd(field_body, items_start) {
+                    let items_element = &field_body[items_start..items_tag_end + 1];
+                    let metadata = parse_shared_items_metadata(items_element);
+                    field.contains_date = metadata.contains_date;
+                    field.contains_number = metadata.contains_number;
+                    field.contains_integer = metadata.contains_integer;
+                    field.contains_blank = metadata.contains_blank;
+                    field.contains_mixed_types = metadata.contains_mixed_types;
+                    field.shared_items_metadata = Some(metadata);
 
-                field.contains_date = parse_bool_attr(items_element, b"containsDate=\"");
-                field.contains_number = parse_bool_attr(items_element, b"containsNumber=\"");
-                field.contains_integer = parse_bool_attr(items_element, b"containsInteger=\"");
-                field.contains_blank = parse_bool_attr(items_element, b"containsBlank=\"");
-                field.contains_mixed_types =
-                    parse_bool_attr(items_element, b"containsMixedTypes=\"");
-
-                let items_end =
-                    find_closing_tag(xml, b"sharedItems", items_abs_start).unwrap_or(field_end);
-                field.shared_items = parse_shared_items(&xml[items_abs_start..items_end]);
+                    if field_body.get(items_tag_end - 1) != Some(&b'/') {
+                        let items_end = find_closing_tag(field_body, b"sharedItems", items_start)
+                            .unwrap_or(field_body.len());
+                        field.shared_items =
+                            parse_shared_items(&field_body[items_tag_end + 1..items_end]);
+                    }
+                }
             }
 
             pos = field_end + 1;
@@ -101,6 +124,30 @@ pub(crate) fn parse_cache_fields(xml: &[u8]) -> Vec<CacheField> {
     }
 
     fields
+}
+
+fn parse_shared_items_metadata(element: &[u8]) -> ooxml_types::pivot::SharedItems {
+    ooxml_types::pivot::SharedItems {
+        contains_semi_mixed_types: parse_bool_attr_with_default(
+            element,
+            b"containsSemiMixedTypes=\"",
+            true,
+        ),
+        contains_non_date: parse_bool_attr_with_default(element, b"containsNonDate=\"", true),
+        contains_string: parse_bool_attr_with_default(element, b"containsString=\"", true),
+        contains_date: parse_bool_attr(element, b"containsDate=\""),
+        contains_number: parse_bool_attr(element, b"containsNumber=\""),
+        contains_integer: parse_bool_attr(element, b"containsInteger=\""),
+        contains_blank: parse_bool_attr(element, b"containsBlank=\""),
+        contains_mixed_types: parse_bool_attr(element, b"containsMixedTypes=\""),
+        long_text: parse_bool_attr(element, b"longText=\""),
+        min_value: parse_f64_attr(element, b"minValue=\""),
+        max_value: parse_f64_attr(element, b"maxValue=\""),
+        min_date: parse_string_attr(element, b"minDate=\""),
+        max_date: parse_string_attr(element, b"maxDate=\""),
+        count: parse_u32_attr(element, b"count=\""),
+        ..Default::default()
+    }
 }
 
 #[cfg(test)]
@@ -212,5 +259,45 @@ mod tests {
         assert!(field.contains_integer);
         assert!(field.contains_blank);
         assert!(field.contains_mixed_types);
+    }
+
+    #[test]
+    fn empty_shared_items_never_consume_following_fields() {
+        for empty_items in ["<sharedItems count=\"0\"/>", "<sharedItems></sharedItems>"] {
+            let xml = format!(
+                r#"<pivotCacheDefinition><cacheFields count="4">
+                    <cacheField name="Absent"/>
+                    <cacheField name="Empty">{empty_items}</cacheField>
+                    <cacheField name="Dates" numFmtId="16"><sharedItems containsDate="1"><d v="2024-01-15T00:00:00"/></sharedItems></cacheField>
+                    <cacheField name="Numbers"><sharedItems><n v="3"/></sharedItems></cacheField>
+                </cacheFields></pivotCacheDefinition>"#
+            );
+            let cache = parse_pivot_cache_definition(xml.as_bytes());
+            assert_eq!(cache.fields.len(), 4);
+            assert!(cache.fields[0].shared_items_metadata.is_none());
+            assert!(cache.fields[1].shared_items_metadata.is_some());
+            assert!(cache.fields[1].shared_items.is_empty());
+            assert_eq!(cache.fields[2].num_fmt_id, Some(16));
+            assert_eq!(
+                cache.fields[2].shared_items,
+                vec![SharedItem::DateTime("2024-01-15T00:00:00".to_string())]
+            );
+            assert_eq!(cache.fields[3].shared_items, vec![SharedItem::Number(3.0)]);
+        }
+    }
+
+    #[test]
+    fn unterminated_shared_items_are_bounded_to_their_cache_field() {
+        let cache = parse_pivot_cache_definition(
+            br#"<pivotCacheDefinition><cacheFields>
+                <cacheField name="First"><sharedItems><n v="1"/></cacheField>
+                <cacheField name="Second"><sharedItems><s v="next"/></sharedItems></cacheField>
+            </cacheFields></pivotCacheDefinition>"#,
+        );
+        assert_eq!(cache.fields[0].shared_items, vec![SharedItem::Number(1.0)]);
+        assert_eq!(
+            cache.fields[1].shared_items,
+            vec![SharedItem::String("next".to_string())]
+        );
     }
 }

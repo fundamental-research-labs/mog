@@ -17,7 +17,7 @@ pub use workbook_xml::{
 };
 
 use crate::domain::pivot::write::convert::pivot_table_def_to_writer;
-use crate::write::pivot_writer::cache_data::build_cache;
+use crate::write::pivot_writer::cache_data::{build_cache, preserve_definition_without_records};
 use crate::write::pivot_writer::cache_sources::assign_cache_sources;
 use crate::write::pivot_writer::config_to_def::parsed_pivot_to_def;
 use crate::write::pivot_writer::part_paths::{
@@ -214,6 +214,9 @@ fn build_pivot_cache_entries(
                     records_relationship_id_hint.as_deref(),
                     external_relationship_id_for_xml.as_deref(),
                 );
+            let definition_only = preserve_definition_without_records(
+                cache_src, output.pivot_cache_records.get(&cache_src.cache_id).map(Vec::as_slice),
+            );
             let (definition_xml, records_xml) = build_cache(
                 cache_src,
                 &output.sheets,
@@ -253,12 +256,12 @@ fn build_pivot_cache_entries(
                         pivot_cache_records_path,
                     )
                 });
-            reserved_paths.insert(records_path.clone());
+            if !definition_only { reserved_paths.insert(records_path.clone()); }
             let rels_path = pivot_cache_rels_path_for_definition(&definition_path);
             selected_paths.insert(rels_path.clone());
 
             generated_part_paths.insert(definition_path.clone());
-            generated_part_paths.insert(records_path.clone());
+            if !definition_only { generated_part_paths.insert(records_path.clone()); }
             generated_part_paths.insert(rels_path);
 
             Some(PivotCacheEntry {
@@ -266,7 +269,7 @@ fn build_pivot_cache_entries(
                 cache_id: cache_src.cache_id,
                 workbook_ref_scope: cache_src.workbook_ref_scope,
                 definition_path,
-                records_path: Some(records_path),
+                records_path: (!definition_only).then_some(records_path),
                 workbook_relationship_id_hint: fidelity
                     .map(|package| package.workbook_relationship_id.clone()),
                 workbook_relationship_type: fidelity
@@ -275,7 +278,7 @@ fn build_pivot_cache_entries(
                         "http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition"
                             .to_string()
                     }),
-                records_relationship_id_hint: Some(records_relationship_id_for_xml),
+                records_relationship_id_hint: (!definition_only).then_some(records_relationship_id_for_xml),
                 records_relationship_type: fidelity
                     .and_then(|package| package.records_relationship_type.clone())
                     .or_else(|| {
@@ -298,7 +301,7 @@ fn build_pivot_cache_entries(
                     .as_ref()
                     .and_then(|source| source.target_mode.clone()),
                 definition_xml,
-                records_xml: Some(records_xml),
+                records_xml: (!definition_only).then_some(records_xml),
             })
         })
         .collect()

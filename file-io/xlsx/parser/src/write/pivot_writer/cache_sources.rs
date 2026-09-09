@@ -87,6 +87,7 @@ pub(super) fn assign_cache_sources(
                         external_worksheet: None,
                         field_names,
                         shared_items: pt.ooxml_preservation.cache_shared_items.clone(),
+                        ..Default::default()
                     }),
             );
             cache_id

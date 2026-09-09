@@ -117,9 +117,42 @@ pub(crate) fn convert_sheets(
                         .collect()
                 })
                 .unwrap_or_default();
+            // Spill targets are intentionally omitted from `cells`: their
+            // imported cache is a separate value sidecar, so retaining the
+            // authored cache here would turn it into a real blocker.  Keep
+            // the allocated positional identity, however, so native style
+            // metadata and structural moves can resolve the target cell.
+            let mut known_identity_ids: HashSet<_> =
+                identities.iter().map(|identity| identity.cell_id).collect();
+            for (cell_idx, cell) in sheet.cells.iter().enumerate() {
+                if cell.projection_role != ImportedCellProjectionRole::DynamicArraySpillTarget {
+                    continue;
+                }
+                let cell_id = id_map
+                    .and_then(|map| map.cell_ids.get(sheet_idx))
+                    .and_then(|cell_ids| cell_ids.get(cell_idx))
+                    .copied()
+                    .unwrap_or_else(|| crate::storage::STORAGE_ID_ALLOC.next_cell_id());
+                if known_identity_ids.insert(cell_id) {
+                    identities.push(snapshot_types::CellIdentityPosition {
+                        cell_id,
+                        row: cell.row,
+                        col: cell.col,
+                    });
+                }
+            }
             if id_map.is_none() {
-                let occupied: HashSet<(u32, u32)> =
+                let mut occupied: HashSet<(u32, u32)> =
                     cells.iter().map(|cell| (cell.row, cell.col)).collect();
+                // Feature anchors may share a position with a spill target.
+                // The target identity was added above even though its cached
+                // value is omitted from `cells`; keep that position occupied
+                // so anchor allocation cannot mint a second identity there.
+                occupied.extend(
+                    identities
+                        .iter()
+                        .map(|identity| (identity.row, identity.col)),
+                );
                 let mut anchors: Vec<_> =
                     super::anchor_collection::collect_identity_required_anchors(sheet)
                         .into_keys()

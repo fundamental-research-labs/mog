@@ -94,12 +94,13 @@ pub(crate) fn convert_parsed_charts_to_chart_specs(sheet: &FullParsedSheet) -> V
                 &sheet.name,
                 &sheet.cells,
             );
-            let relationship_closure = standard_chart_relationship_closure(
+            let relationship_closure = standard_chart_relationship_closure_with_xml(
                 chart.original_path.as_deref(),
                 chart_space,
                 &spec.chart_relationships,
                 &spec.chart_auxiliary_files,
                 spec.title.as_deref(),
+                chart.raw_chart_xml.as_deref(),
             );
             if !relationship_closure.diagnostics.is_empty() {
                 append_chart_import_status_diagnostics(
@@ -290,18 +291,28 @@ fn is_unqualified_local_a1_reference(formula: &str) -> bool {
         .is_some_and(|range| range.range_type == formula_types::RangeType::CellRange)
 }
 
-fn standard_chart_relationship_closure(
+fn standard_chart_relationship_closure_with_xml(
     chart_path: Option<&str>,
     chart_space: &ooxml_types::charts::ChartSpace,
     relationships: &[domain_types::chart::ChartRelationshipData],
     auxiliary_files: &[(String, Vec<u8>)],
     object_name: Option<&str>,
+    chart_xml: Option<&[u8]>,
 ) -> ChartRelationshipClosure {
     let external_data_r_id = chart_space
         .external_data
         .as_ref()
         .map(|external_data| external_data.r_id.as_str());
     let user_shapes_r_id = chart_space.user_shapes.as_deref();
+    // Picture fills are represented by DrawingML shape properties, while
+    // their image parts live in the chart relationship graph. Decode the
+    // canonical typed chart once so missing embedded and external picture
+    // relationships are diagnosed at import time.
+    let picture_relationship_ids = chart_xml
+        .map(crate::domain::charts::write_canonical::chart_picture_relationship_ids_from_xml)
+        .unwrap_or_else(|| {
+            crate::domain::charts::write_canonical::chart_picture_relationship_ids(chart_space)
+        });
     let mut diagnostics = Vec::new();
 
     if let Some(r_id) = external_data_r_id
@@ -326,6 +337,17 @@ fn standard_chart_relationship_closure(
             Some(r_id),
         ));
     }
+    for r_id in &picture_relationship_ids {
+        if !relationships.iter().any(|rel| rel.r_id == *r_id) {
+            diagnostics.push(chart_relationship_diagnostic(
+                domain_types::ImportDiagnosticCode::MissingRelationshipTarget,
+                format!("Chart picture fill references missing relationship `{r_id}`"),
+                chart_path,
+                object_name,
+                Some(r_id),
+            ));
+        }
+    }
 
     for rel in relationships {
         if let Some(diagnostic) = validate_standard_chart_relationship(
@@ -333,6 +355,7 @@ fn standard_chart_relationship_closure(
             chart_path,
             external_data_r_id,
             user_shapes_r_id,
+            &picture_relationship_ids,
             auxiliary_files,
             object_name,
         ) {
@@ -363,6 +386,7 @@ fn validate_standard_chart_relationship(
     chart_path: Option<&str>,
     external_data_r_id: Option<&str>,
     user_shapes_r_id: Option<&str>,
+    picture_relationship_ids: &std::collections::BTreeSet<String>,
     auxiliary_files: &[(String, Vec<u8>)],
     object_name: Option<&str>,
 ) -> Option<domain_types::ImportDiagnosticRef> {
@@ -391,6 +415,15 @@ fn validate_standard_chart_relationship(
             && rel_type == crate::infra::opc::REL_EXTERNAL_LINK
             && !target.trim().is_empty()
         {
+            return None;
+        }
+        if picture_relationship_ids.contains(r_id)
+            && rel_type == REL_IMAGE
+            && !target.trim().is_empty()
+        {
+            // `r:link` on a chart picture fill is a valid chart-owned
+            // relationship even though its external image has no package
+            // media part to copy into the output archive.
             return None;
         }
         return Some(chart_relationship_diagnostic(
@@ -432,6 +465,15 @@ fn validate_standard_chart_relationship(
             return Some(chart_relationship_diagnostic(
                 domain_types::ImportDiagnosticCode::InvalidRelationship,
                 format!("Chart userShapes relationship `{r_id}` is not referenced by c:userShapes"),
+                Some(chart_path),
+                object_name,
+                Some(r_id),
+            ));
+        }
+        if rel_type == REL_IMAGE && !picture_relationship_ids.contains(r_id) {
+            return Some(chart_relationship_diagnostic(
+                domain_types::ImportDiagnosticCode::InvalidRelationship,
+                format!("Chart image relationship `{r_id}` is not referenced by a picture fill"),
                 Some(chart_path),
                 object_name,
                 Some(r_id),

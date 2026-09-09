@@ -313,6 +313,68 @@ pub(super) fn chart_allows_current_auxiliary_replay(
     )
 }
 
+/// Remap relationship attributes in a standard chart part after package-graph
+/// resolution. Relationship IDs are allocated only when the graph is
+/// resolved, so a duplicate or invalid imported hint can differ from the ID
+/// retained in the typed chart model. The chart XML must follow that final
+/// owner-local ID.
+pub(super) fn remap_standard_chart_relationship_ids(
+    package_graph: &crate::write::package_graph::ResolvedPackageGraph,
+    chart_spec: &domain_types::ChartSpec,
+    chart_path: &str,
+    xml: Vec<u8>,
+) -> Vec<u8> {
+    let owner = crate::write::package_graph::PackageOwner::Part {
+        path: chart_path.to_string(),
+    };
+    let mut mappings = std::collections::HashMap::new();
+    for relationship in &chart_spec.chart_relationships {
+        let (Some(rel_type), Some(target)) = (
+            relationship.relationship_type.as_deref(),
+            relationship.target.as_deref(),
+        ) else {
+            continue;
+        };
+        let Some(resolved_id) = package_graph.relationship_id(&owner, rel_type, target) else {
+            continue;
+        };
+        if resolved_id == relationship.r_id {
+            continue;
+        }
+        mappings.insert(relationship.r_id.clone(), resolved_id.to_string());
+        // The relationship remapper operates on serialized attribute text,
+        // whereas chart XML writers escape attribute values. Keep a key for
+        // both the decoded model ID and its XML representation.
+        let escaped_id = escape_xml_attribute_value(&relationship.r_id);
+        if escaped_id != relationship.r_id {
+            mappings.insert(escaped_id, resolved_id.to_string());
+        }
+    }
+    if mappings.is_empty() {
+        return xml;
+    }
+    let xml = match String::from_utf8(xml) {
+        Ok(xml) => xml,
+        Err(error) => return error.into_bytes(),
+    };
+    crate::infra::xml::remap_relationship_attrs(&xml, &mappings).into_bytes()
+}
+
+fn escape_xml_attribute_value(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for character in value.chars() {
+        match character {
+            '&' => escaped.push_str("&amp;"),
+            '<' => escaped.push_str("&lt;"),
+            '>' => escaped.push_str("&gt;"),
+            '"' => escaped.push_str("&quot;"),
+            '\'' => escaped.push_str("&apos;"),
+            _ => escaped.push(character),
+        }
+    }
+    escaped
+}
+
 pub(super) fn standard_chart_original_number_with_current_auxiliary_replay(
     chart_spec: &domain_types::ChartSpec,
 ) -> Option<usize> {
@@ -563,6 +625,7 @@ pub(super) fn register_chart_owned_external_relationships(
     package_graph_builder: &mut crate::write::package_graph::PackageGraphBuilder,
     chart_path: &str,
     chart_spec: &domain_types::ChartSpec,
+    chart_xml: &[u8],
 ) -> Result<(), WriteError> {
     if let Some((_, rel)) = chart_auxiliary::chart_external_data_relationship(chart_spec) {
         if chart_auxiliary::chart_external_data_relationship_is_supported(rel)
@@ -577,6 +640,21 @@ pub(super) fn register_chart_owned_external_relationships(
                 &rel.r_id,
             );
         }
+    }
+
+    for rel in chart_auxiliary::chart_external_image_relationships(chart_spec, Some(chart_xml)) {
+        let (Some(rel_type), Some(target)) =
+            (rel.relationship_type.as_deref(), rel.target.as_deref())
+        else {
+            continue;
+        };
+        crate::write::package_graph::register_chart_external_relationship(
+            package_graph_builder,
+            chart_path,
+            rel_type,
+            target,
+            &rel.r_id,
+        );
     }
 
     if let Some(user_shapes) = chart_auxiliary::chart_user_shapes_data(chart_spec, chart_path) {

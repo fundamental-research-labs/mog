@@ -99,12 +99,13 @@ fn standard_chart_relationship_closure_allows_referenced_external_data() {
         target_mode: Some("External".to_string()),
     }];
 
-    let closure = standard_chart_relationship_closure(
+    let closure = standard_chart_relationship_closure_with_xml(
         Some("xl/charts/chart1.xml"),
         &chart_space,
         &relationships,
         &[],
         Some("Revenue"),
+        None,
     );
 
     assert!(closure.current);
@@ -132,12 +133,13 @@ fn standard_chart_relationship_closure_reports_unsupported_relationships() {
         },
     ];
 
-    let closure = standard_chart_relationship_closure(
+    let closure = standard_chart_relationship_closure_with_xml(
         Some("xl/charts/chart1.xml"),
         &chart_space,
         &relationships,
         &[],
         Some("Revenue"),
+        None,
     );
     let codes = closure
         .diagnostics
@@ -173,12 +175,13 @@ fn standard_chart_relationship_closure_reports_missing_user_shapes_nested_media(
         ),
     ];
 
-    let closure = standard_chart_relationship_closure(
+    let closure = standard_chart_relationship_closure_with_xml(
         Some("xl/charts/chart1.xml"),
         &chart_space,
         &relationships,
         &auxiliary_files,
         Some("Revenue"),
+        None,
     );
 
     assert!(!closure.current);

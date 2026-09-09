@@ -206,6 +206,7 @@ fn append_standard_chart_export_diagnostics(
             chart,
             chart_path,
             allows_current_auxiliary_replay,
+            None,
         );
         let supported_paths =
             super::chart_auxiliary::supported_auxiliary_file_paths(&aux, chart_path);

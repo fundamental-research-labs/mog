@@ -5,6 +5,17 @@ use crate::scheduler::ComputeCore;
 use super::{ComputeEngine, construction};
 
 impl ComputeEngine {
+    /// Propagate cache invalidations recorded by the live mirror to the
+    /// durable import sidecar.  The scheduler records an owner as soon as it
+    /// publishes a result, so dependents cannot read an obsolete package
+    /// value during the same recalculation pass.
+    pub(super) fn sync_imported_array_cache_invalidations(&mut self) {
+        let invalidated = self.mirror.take_imported_array_cache_invalidations();
+        self.stores
+            .storage
+            .invalidate_imported_array_caches_at(invalidated);
+    }
+
     pub(super) fn metadata_requires_recalc(&self) -> bool {
         self.mirror
             .cell_metadata_provider
@@ -56,6 +67,7 @@ impl ComputeEngine {
                 engine.stores.layout_metrics,
             );
             let result = engine.stores.compute.full_recalc(&mut engine.mirror)?;
+            engine.sync_imported_array_cache_invalidations();
             engine.init_cf_caches();
             engine.stores.compute.clear_dirty();
             engine.mark_metadata_evaluated();
@@ -109,6 +121,7 @@ impl ComputeEngine {
                 .stores
                 .compute
                 .full_recalc_with_options(&mut engine.mirror, options)?;
+            engine.sync_imported_array_cache_invalidations();
             engine.init_cf_caches();
             engine.stores.compute.clear_dirty();
             engine.mark_metadata_evaluated();
@@ -133,6 +146,11 @@ impl ComputeEngine {
                 .stores
                 .compute
                 .init_from_snapshot_with_prebuilt_mirror(&mut rebuilt_mirror, snapshot)?;
+            let invalidated = rebuilt_mirror.take_imported_array_cache_invalidations();
+            engine
+                .stores
+                .storage
+                .invalidate_imported_array_caches_at(invalidated);
             engine
                 .stores
                 .compute

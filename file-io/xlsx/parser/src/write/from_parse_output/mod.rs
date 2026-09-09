@@ -1450,10 +1450,16 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             if let Some(aux) = chart_auxiliary::chart_auxiliary_data(chart_spec) {
                 let allows_current_auxiliary_replay =
                     chart_replay::chart_allows_current_auxiliary_replay(chart_spec, &chart_path);
+                let picture_relationship_ids =
+                    chart_auxiliary::chart_picture_relationship_ids_for_export(
+                        chart_spec,
+                        Some(entry.xml.as_slice()),
+                    );
                 let auxiliary_paths = chart_auxiliary::auxiliary_file_paths_for_export(
                     chart_spec,
                     &chart_path,
                     allows_current_auxiliary_replay,
+                    Some(entry.xml.as_slice()),
                 );
                 for (path, _) in aux.auxiliary_files {
                     if !auxiliary_paths.contains(path.trim_start_matches('/')) {
@@ -1472,6 +1478,15 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                     else {
                         continue;
                     };
+                    // Register only image relationships actually referenced by
+                    // the emitted chart. Multiple imported IDs may alias one
+                    // media part; keeping an unreferenced first alias would
+                    // make graph deduplication choose the wrong ID.
+                    if rel_type == crate::infra::opc::REL_IMAGE
+                        && !picture_relationship_ids.contains(&rel.r_id)
+                    {
+                        continue;
+                    }
                     let Some(target_path) =
                         crate::infra::opc::resolve_relationship_target(Some(&chart_path), target)
                             .ok()
@@ -1495,6 +1510,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                 &mut package_graph_builder,
                 &chart_path,
                 chart_spec,
+                entry.xml.as_slice(),
             )?;
         }
     }
@@ -1516,10 +1532,16 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             if let Some(aux) = chart_auxiliary::chart_auxiliary_data(chart_spec) {
                 let allows_current_auxiliary_replay =
                     chart_replay::chart_allows_current_auxiliary_replay(chart_spec, &chart_path);
+                let picture_relationship_ids =
+                    chart_auxiliary::chart_picture_relationship_ids_for_export(
+                        chart_spec,
+                        Some(entry.xml.as_slice()),
+                    );
                 let auxiliary_paths = chart_auxiliary::auxiliary_file_paths_for_export(
                     chart_spec,
                     &chart_path,
                     allows_current_auxiliary_replay,
+                    Some(entry.xml.as_slice()),
                 );
                 for (path, _) in aux.auxiliary_files {
                     if !auxiliary_paths.contains(path.trim_start_matches('/')) {
@@ -1538,6 +1560,11 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                     else {
                         continue;
                     };
+                    if rel_type == crate::infra::opc::REL_IMAGE
+                        && !picture_relationship_ids.contains(&rel.r_id)
+                    {
+                        continue;
+                    }
                     let Some(target_path) =
                         crate::infra::opc::resolve_relationship_target(Some(&chart_path), target)
                             .ok()

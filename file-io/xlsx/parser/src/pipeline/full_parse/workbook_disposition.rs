@@ -1,4 +1,6 @@
 use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
+use crate::infra::xml_namespaces::NS_MC;
+use quick_xml::{events::Event, name::ResolveResult, NsReader};
 
 const UNSUPPORTED_WORKBOOK_ELEMENTS: &[(&[u8], &str)] = &[
     (b"functionGroups", "functionGroups"),
@@ -10,6 +12,11 @@ const UNSUPPORTED_WORKBOOK_ELEMENTS: &[(&[u8], &str)] = &[
     (b"extLst", "extLst"),
 ];
 
+/// List schema-known workbook children that have no typed parser.
+///
+/// This is an import inventory used by legacy diagnostics. Whether a listed
+/// child is actually dropped is decided by `WorkbookXmlFidelity`: safe inert
+/// children can still be preserved as raw payloads.
 pub(super) fn unsupported_workbook_elements(workbook_xml: &[u8]) -> Vec<String> {
     let Some((body_start, body_end)) = workbook_body_bounds(workbook_xml) else {
         return Vec::new();
@@ -24,10 +31,19 @@ pub(super) fn unsupported_workbook_elements(workbook_xml: &[u8]) -> Vec<String> 
         .collect()
 }
 
+/// List workbook-level MCE constructs that the writer cannot safely replay.
+/// `mc:Ignorable` is handled by the root namespace writer; processing and
+/// branch-selection directives remain diagnostic-only until their owners are
+/// modeled.
 pub(super) fn unsupported_workbook_mce(workbook_xml: &[u8]) -> Vec<String> {
     let mut unsupported = Vec::new();
-    if workbook_root_start_tag(workbook_xml).is_some_and(contains_must_understand_attr) {
-        unsupported.push("mc:MustUnderstand".to_string());
+    if let Some(root_tag) = workbook_root_start_tag(workbook_xml) {
+        if contains_mce_attribute(root_tag, b"MustUnderstand") {
+            unsupported.push("mc:MustUnderstand".to_string());
+        }
+        if contains_mce_attribute(root_tag, b"ProcessContent") {
+            unsupported.push("mc:ProcessContent".to_string());
+        }
     }
 
     if let Some((body_start, body_end)) = workbook_body_bounds(workbook_xml) {
@@ -111,7 +127,51 @@ fn local_name(name: &[u8]) -> &[u8] {
         .map_or(name, |idx| &name[idx + 1..])
 }
 
-fn contains_must_understand_attr(tag: &[u8]) -> bool {
-    tag.windows(b"MustUnderstand".len())
-        .any(|window| window == b"MustUnderstand")
+fn contains_mce_attribute(tag: &[u8], expected_local_name: &[u8]) -> bool {
+    let Ok(tag) = std::str::from_utf8(tag) else {
+        return false;
+    };
+    let mut reader = NsReader::from_str(tag);
+    let Ok(event) = reader.read_event() else {
+        return false;
+    };
+    let element = match event {
+        Event::Start(element) | Event::Empty(element) => element,
+        _ => return false,
+    };
+
+    element
+        .attributes()
+        .with_checks(false)
+        .filter_map(Result::ok)
+        .any(|attribute| {
+            let (namespace, local_name) = reader.resolve_attribute(attribute.key);
+            matches!(namespace, ResolveResult::Bound(namespace) if namespace.as_ref() == NS_MC.as_bytes())
+                && local_name.as_ref() == expected_local_name
+        })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::unsupported_workbook_mce;
+
+    #[test]
+    fn mce_diagnostics_require_markup_compatibility_namespace() {
+        let xml = r#"<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:compat="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:other="urn:example" compat:ProcessContent="xr" other:MustUnderstand="other" ProcessContent="literal" note="value ProcessContent=not-an-attribute"><sheets/></workbook>"#;
+
+        assert_eq!(
+            unsupported_workbook_mce(xml.as_bytes()),
+            vec!["mc:ProcessContent".to_string()]
+        );
+    }
+
+    #[test]
+    fn mce_diagnostics_accept_an_alternate_markup_compatibility_prefix() {
+        let xml = r#"<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:compat="http://schemas.openxmlformats.org/markup-compatibility/2006" compat:MustUnderstand="x15"><sheets/></workbook>"#;
+
+        assert_eq!(
+            unsupported_workbook_mce(xml.as_bytes()),
+            vec!["mc:MustUnderstand".to_string()]
+        );
+    }
 }

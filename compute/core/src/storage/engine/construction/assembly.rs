@@ -105,7 +105,7 @@ pub(in crate::storage::engine) fn assemble_engine_with_layout_metrics(
 }
 
 fn assemble_engine_inner(
-    storage: WorkbookStorage,
+    mut storage: WorkbookStorage,
     mut mirror: CellMirror,
     compute: ComputeCore,
     snapshot: &WorkbookSnapshot,
@@ -113,6 +113,20 @@ fn assemble_engine_inner(
     id_alloc: std::sync::Arc<cell_types::IdAllocator>,
     layout_metrics: domain_types::units::LayoutMetrics,
 ) -> Result<ComputeEngine, ComputeError> {
+    // A caller may provide a mirror that has already evaluated imported
+    // arrays. Propagate those publication invalidations before copying the
+    // durable sidecar into the assembled mirror, or a rebuild would restore
+    // stale package values over the live projection.
+    let invalidated = mirror.take_imported_array_cache_invalidations();
+    storage.invalidate_imported_array_caches_at(invalidated);
+
+    // `from_evaluated_snapshot_for_export` supplies a live mirror whose
+    // imported caches are already attached, while its snapshot-derived
+    // storage intentionally has no import sidecar. Do not erase that state;
+    // ordinary snapshot assembly installs the storage-owned caches.
+    if !storage.imported_array_caches.is_empty() {
+        mirror.install_imported_array_caches(&storage.imported_array_caches);
+    }
     crate::storage::engine::cell_metadata::refresh(&storage, &mut mirror, layout_metrics);
     mirror.date1904 = crate::storage::workbook::settings::get_settings(&storage.metadata).date1904;
     let grid_indexes = build_grid_indexes(&mirror, snapshot, grid_id_alloc.clone())?;
@@ -235,6 +249,13 @@ pub(in crate::storage::engine) fn rebuild_engine_from_snapshot(
                 engine.stores.layout_metrics,
             ),
         );
+        if do_recalc {
+            engine.sync_imported_array_cache_invalidations();
+        } else {
+            engine
+                .mirror
+                .install_imported_array_caches(&engine.stores.storage.imported_array_caches);
+        }
         profile.counter("sheets", workbook_snap.sheets.len() as u64);
         profile.counter(
             "snapshot_cells",

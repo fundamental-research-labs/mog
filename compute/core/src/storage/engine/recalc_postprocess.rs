@@ -15,6 +15,21 @@ impl ComputeEngine {
         &mut self,
         recalc: &mut RecalcResult,
     ) {
+        // Imported spill members are package caches. Invalidate only the
+        // declared source/range touched by this mutation so unrelated arrays
+        // remain available when calculation is deferred or manual.
+        let changed = recalc.changed_cells.iter().filter_map(|cell| {
+            let sheet = SheetId::from_uuid_str(&cell.sheet_id).ok()?;
+            let position = cell.position.as_ref()?;
+            Some((sheet, cell_types::SheetPos::new(position.row, position.col)))
+        });
+        let changed: Vec<_> = changed.collect();
+        self.mirror
+            .invalidate_imported_array_caches_at(changed.iter().copied());
+        let invalidated = self.mirror.take_imported_array_cache_invalidations();
+        self.stores
+            .storage
+            .invalidate_imported_array_caches_at(invalidated);
         self.prepare_recalc_for_flush_inner(recalc, true);
     }
 
@@ -84,6 +99,10 @@ impl ComputeEngine {
         // changed cells must not invalidate the imported chart package before
         // the first export has a chance to replay it authoritatively.
         self.prepare_recalc_for_flush_inner(recalc, false);
+        // Deferred import may have performed a full calculation before this
+        // post-process hook. Propagate publication-time cache invalidations to
+        // storage before a later rebuild can reinstall stale package values.
+        self.sync_imported_array_cache_invalidations();
         self.enrich_metadata_flags(recalc);
         if !pending_calculation {
             self.stores.compute.clear_dirty();

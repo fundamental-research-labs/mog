@@ -158,6 +158,19 @@ pub(in crate::storage::engine) fn apply_structure_change(
         }
     }
 
+    // Keep the durable imported-array sidecar aligned with the mirror's
+    // identity-rebased positions before recalculation begins. Otherwise an
+    // eager rebuild after this operation can reinstall the pre-edit cache
+    // coordinates (and stale values) over the moved projection.
+    if let Some(sheet) = mirror.get_sheet(sheet_id) {
+        let caches = sheet.imported_array_caches().to_vec();
+        if caches.is_empty() {
+            stores.storage.imported_array_caches.remove(sheet_id);
+        } else {
+            stores.storage.imported_array_caches.insert(*sheet_id, caches);
+        }
+    }
+
     crate::storage::sheet::floating_objects::sync_after_structure(
         &mut stores.storage,
         grid,

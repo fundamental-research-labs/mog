@@ -15,8 +15,10 @@ use domain_types::{
 };
 use value_types::{CellError, CellValue, FiniteF64};
 use xlsx_parser::infra::package_integrity::validate_archive_package_integrity;
+use xlsx_parser::parse_xlsx_to_output;
 use xlsx_parser::write::{
-    ExportDiagnosticCode, write_xlsx_from_parse_output, write_xlsx_from_parse_output_with_report,
+    CompressionMethod, ExportDiagnosticCode, ZipWriter, write_xlsx_from_parse_output,
+    write_xlsx_from_parse_output_with_report,
 };
 use xlsx_parser::zip::XlsxArchive;
 
@@ -196,6 +198,113 @@ fn calculation_properties_do_not_force_recalc_flags_when_clean() {
     assert!(!workbook_xml.contains(r#"calcCompleted="0""#));
     assert!(!workbook_xml.contains(r#"forceFullCalc="1""#));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn workbook_xml_fidelity_preserves_safe_children_and_reports_unsupported_metadata() {
+    let source = write_xlsx_from_parse_output(&make_single_sheet("Sheet1", Vec::new()))
+        .expect("base workbook should export");
+    let imported = inject_workbook_metadata(&source);
+
+    let (parsed, diagnostics) =
+        parse_xlsx_to_output(&imported).expect("synthetic workbook should parse");
+    let namespaces = &parsed.workbook_root_namespaces;
+    assert_eq!(namespaces.mce.ignorable.as_deref(), Some("x15 xr"));
+    assert_eq!(namespaces.mce.process_content.as_deref(), Some("xr"));
+    assert_eq!(namespaces.mce.must_understand.as_deref(), Some("x15"));
+    assert!(
+        namespaces
+            .declarations
+            .iter()
+            .any(|declaration| declaration.prefix.as_deref() == Some("x15ac"))
+    );
+
+    let fidelity = &parsed
+        .package_fidelity
+        .as_ref()
+        .expect("package fidelity should be available")
+        .workbook_xml_fidelity;
+    assert!(fidelity.raw_children.iter().any(|child| {
+        child.kind == domain_types::WorkbookXmlChildKind::FunctionGroups
+            && child.xml == br#"<functionGroups builtInGroupCount="16"/>"#
+    }));
+    assert!(fidelity.raw_children.iter().any(|child| {
+        child.kind == domain_types::WorkbookXmlChildKind::ExtLst
+            && child.xml == br#"<extLst><ext uri="{safe}"/></extLst>"#
+    }));
+    assert!(fidelity.diagnostics.iter().any(|diagnostic| {
+        diagnostic.artifact.ends_with("/AlternateContent")
+            && diagnostic.action == domain_types::WorkbookXmlFallbackAction::Omit
+    }));
+    assert!(fidelity.diagnostics.iter().any(|diagnostic| {
+        diagnostic.artifact.ends_with("/revisionPtr")
+            && diagnostic.action == domain_types::WorkbookXmlFallbackAction::Omit
+    }));
+
+    let dropped_message = diagnostics
+        .errors
+        .iter()
+        .find(|error| error.code == 9001)
+        .map(|error| error.message.as_str())
+        .expect("unsupported workbook metadata should be diagnosed");
+    assert!(dropped_message.contains("unsupported workbook MCE `mc:AlternateContent`"));
+    assert!(dropped_message.contains("unsupported workbook MCE `mc:MustUnderstand`"));
+    assert!(dropped_message.contains("unsupported workbook MCE `mc:ProcessContent`"));
+    assert!(dropped_message.contains("workbook-level `revisionPtr` XML"));
+    assert!(!dropped_message.contains("workbook-level `functionGroups` XML"));
+    assert!(!dropped_message.contains("workbook-level `extLst` XML"));
+
+    let exported = write_xlsx_from_parse_output(&parsed).expect("parsed workbook should export");
+    let archive = XlsxArchive::new(&exported).expect("exported workbook should be readable");
+    let workbook_xml = String::from_utf8(archive.read_file("xl/workbook.xml").unwrap()).unwrap();
+
+    assert!(workbook_xml.contains("<functionGroups builtInGroupCount=\"16\"/>"));
+    assert!(workbook_xml.contains("<extLst><ext uri=\"{safe}\"/></extLst>"));
+    assert!(!workbook_xml.contains("AlternateContent"));
+    assert!(!workbook_xml.contains("revisionPtr"));
+    assert!(
+        workbook_xml
+            .contains("xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\"")
+    );
+    assert!(workbook_xml.contains("mc:Ignorable=\"x15 xr\""));
+    assert!(
+        workbook_xml
+            .contains("xmlns:x15ac=\"http://schemas.microsoft.com/office/spreadsheetml/2010/11/ac\"")
+    );
+    assert!(!workbook_xml.contains("mc:ProcessContent"));
+    assert!(!workbook_xml.contains("mc:MustUnderstand"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+fn inject_workbook_metadata(bytes: &[u8]) -> Vec<u8> {
+    let archive = XlsxArchive::new(bytes).expect("source workbook should be readable");
+    let mut zip = ZipWriter::with_compression(CompressionMethod::Deflate(1));
+
+    for entry in archive.entries() {
+        let data = if entry.name == "xl/workbook.xml" {
+            let xml = String::from_utf8(archive.read_file(&entry.name).unwrap()).unwrap();
+            let root_start = xml.find("<workbook").expect("workbook root start");
+            let root_end = root_start + xml[root_start..].find('>').expect("workbook root end");
+            let root = &xml[root_start..root_end];
+            let root_with_metadata = format!(
+                "{root} xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\" xmlns:x15=\"http://schemas.microsoft.com/office/spreadsheetml/2010/11/main\" xmlns:x15ac=\"http://schemas.microsoft.com/office/spreadsheetml/2010/11/ac\" xmlns:xr=\"http://schemas.microsoft.com/office/spreadsheetml/2014/revision\" mc:Ignorable=\"x15 xr\" mc:ProcessContent=\"xr\" mc:MustUnderstand=\"x15\">"
+            );
+            let xml = format!(
+                "{}{}{}",
+                &xml[..root_start],
+                root_with_metadata,
+                &xml[root_end + 1..]
+            );
+            let children = r#"<functionGroups builtInGroupCount="16"/><mc:AlternateContent><mc:Choice Requires="x15"><x15ac:absPath url="/Users/example/workbook/"/></mc:Choice></mc:AlternateContent><xr:revisionPtr revIDLastSave="0" documentId="coauthoring-session"/><extLst><ext uri="{safe}"/></extLst>"#;
+            xml.replacen("</sheets>", &format!("</sheets>{children}"), 1)
+                .into_bytes()
+        } else {
+            archive.read_file(&entry.name).unwrap()
+        };
+        zip.add_file(&entry.name, data);
+    }
+
+    zip.finish().expect("metadata fixture archive")
 }
 
 #[test]

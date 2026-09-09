@@ -3,12 +3,13 @@
 use cell_types::interval_tree::{IntervalTree, RectLike};
 use cell_types::{CellId, ColId, PayloadEncoding, RangeId, RowId, SheetId, SheetPos};
 use domain_types::CellFormat;
-use formula_types::IdentityFormula;
+use formula_types::{IdentityFormula, StructureChange};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::hash_map;
 use value_types::CellValue;
 
 use super::range_view::{RangeExtent, RangeView};
+use crate::imported_array_cache::ImportedArrayCache;
 
 // =============================================================================
 // Format Range types
@@ -181,6 +182,15 @@ pub struct SheetMirror {
     /// Array columns borrow the same Arc payload as their source cell.
     pub(crate) projected_columns: FxHashMap<u32, Vec<ProjectionColumn>>,
     pub(crate) range_columns: FxHashMap<u32, Vec<RangeId>>,
+    /// Imported dynamic-array spill members are cached package values, not
+    /// authored cells. They remain outside `cells`/`pos_to_id` so they cannot
+    /// block a live projection, but are available while loading without recalc.
+    pub(crate) imported_array_caches: Vec<ImportedArrayCache>,
+    /// Position index into `imported_array_caches` for O(1) cache reads.
+    imported_array_cache_positions: FxHashMap<SheetPos, (usize, usize)>,
+    /// Source-position index into `imported_array_caches` for O(1) owner
+    /// invalidation when a live array publishes a result.
+    imported_array_cache_sources: FxHashMap<SheetPos, usize>,
     /// Native axis identities shared with the grid index.
     pub(crate) row_axis: std::sync::Arc<compute_document::identity::AxisIndex<RowId>>,
     pub(crate) col_axis: std::sync::Arc<compute_document::identity::AxisIndex<ColId>>,
@@ -250,6 +260,9 @@ impl SheetMirror {
             generated_values: FxHashMap::default(),
             projected_columns: FxHashMap::default(),
             range_columns: FxHashMap::default(),
+            imported_array_caches: Vec::new(),
+            imported_array_cache_positions: FxHashMap::default(),
+            imported_array_cache_sources: FxHashMap::default(),
             row_axis: std::sync::Arc::new(compute_document::identity::AxisIndex::new(
                 cell_types::AxisIdentityStore::Explicit(Vec::new()),
             )),
@@ -308,6 +321,9 @@ impl SheetMirror {
             generated_values: FxHashMap::default(),
             projected_columns: FxHashMap::default(),
             range_columns: FxHashMap::default(),
+            imported_array_caches: Vec::new(),
+            imported_array_cache_positions: FxHashMap::default(),
+            imported_array_cache_sources: FxHashMap::default(),
             row_axis: std::sync::Arc::new(compute_document::identity::AxisIndex::new(
                 cell_types::AxisIdentityStore::Explicit(Vec::new()),
             )),
@@ -465,7 +481,162 @@ impl SheetMirror {
                 }
             }
         }
+        if let Some(&(cache_index, cell_index)) = self.imported_array_cache_positions.get(&pos)
+            // Formula dependency resolution may register a ghost CellId at a
+            // cached spill position. Such an identity is bookkeeping, not an
+            // authored value, so it must not hide the package cache. A real
+            // entry (including a formula) and virtual range identities remain
+            // authoritative.
+            && entry.is_none_or(CellEntry::is_ghost)
+            && cell.is_none_or(|id| !id.is_virtual())
+            && let Some(cache) = self.imported_array_caches.get(cache_index)
+            && cache.values_current
+            && let Some(cell) = cache.cells.get(cell_index)
+        {
+            return Some(&cell.value);
+        }
         entry.map(|entry| &entry.value)
+    }
+
+    /// Install package-cached values for imported dynamic-array spill members.
+    /// Metadata-only identities may exist for these positions, but the cached
+    /// values remain outside authored storage slots and are a read/export
+    /// fallback until a live recalc supersedes them.
+    pub(crate) fn install_imported_array_cache(
+        &mut self,
+        caches: impl IntoIterator<Item = ImportedArrayCache>,
+    ) {
+        self.imported_array_caches.clear();
+        self.imported_array_cache_positions.clear();
+        self.imported_array_cache_sources.clear();
+        for cache in caches {
+            let mut cache = cache;
+            if cache.rebind_positions(|cell_id| self.id_to_pos.get(cell_id).copied()) {
+                self.imported_array_caches.push(cache);
+            }
+        }
+        self.rebuild_imported_array_cache_index();
+        self.rebuild_column_index();
+    }
+
+    /// Rebind imported cache positions after native identities have moved.
+    /// Missing source identities retire their cache; missing child identities
+    /// are pruned so deleted spill members cannot resurrect stale values.
+    pub(crate) fn rebind_imported_array_caches(&mut self) {
+        if self.imported_array_caches.is_empty() {
+            return;
+        }
+        let caches = std::mem::take(&mut self.imported_array_caches);
+        let mut rebound = Vec::with_capacity(caches.len());
+        for mut cache in caches {
+            if cache.rebind_positions(|cell_id| self.id_to_pos.get(cell_id).copied())
+                && !cache.cells.is_empty()
+            {
+                rebound.push(cache);
+            }
+        }
+        self.imported_array_caches = rebound;
+        self.rebuild_imported_array_cache_index();
+        self.rebuild_column_index();
+    }
+
+    /// Apply the positional part of a structural change before native cell
+    /// identities are shifted, then rebind every surviving cache member to its
+    /// post-operation identity.
+    pub(crate) fn apply_structure_change_to_imported_array_caches(
+        &mut self,
+        change: &StructureChange,
+    ) {
+        if self.imported_array_caches.is_empty() {
+            return;
+        }
+        let caches = std::mem::take(&mut self.imported_array_caches);
+        self.imported_array_caches = caches
+            .into_iter()
+            .filter_map(|mut cache| {
+                cache
+                    .remap_for_structure_change(change)
+                    .then_some(cache)
+            })
+            .collect();
+        self.rebuild_imported_array_cache_index();
+        self.rebuild_column_index();
+    }
+
+    fn rebuild_imported_array_cache_index(&mut self) {
+        self.imported_array_cache_positions.clear();
+        self.imported_array_cache_sources.clear();
+        for (cache_index, cache) in self.imported_array_caches.iter().enumerate() {
+            self.imported_array_cache_sources
+                .insert(cache.source, cache_index);
+            for (cell_index, cell) in cache.cells.iter().enumerate() {
+                self.imported_array_cache_positions
+                    .entry(SheetPos::new(cell.row, cell.col))
+                    .or_insert((cache_index, cell_index));
+            }
+        }
+    }
+
+    /// Drop imported package caches and restore column indexes to live values.
+    pub(crate) fn clear_imported_array_cache(&mut self) {
+        if self.imported_array_caches.is_empty() {
+            return;
+        }
+        self.imported_array_caches.clear();
+        self.imported_array_cache_positions.clear();
+        self.imported_array_cache_sources.clear();
+        self.rebuild_column_index();
+    }
+
+    pub(crate) fn imported_array_caches(&self) -> &[ImportedArrayCache] {
+        &self.imported_array_caches
+    }
+
+    pub(crate) fn imported_array_cache_value_at(&self, pos: SheetPos) -> Option<&CellValue> {
+        let (cache_index, cell_index) = *self.imported_array_cache_positions.get(&pos)?;
+        let cache = self.imported_array_caches.get(cache_index)?;
+        if !cache.values_current {
+            return None;
+        }
+        Some(&cache.cells.get(cell_index)?.value)
+    }
+
+    /// Stream live materialized projection values as sheet coordinates.
+    pub(crate) fn visit_projected_values_for_export(
+        &self,
+        mut visit: impl FnMut(u32, u32, CellValue),
+    ) {
+        for (&col, projections) in &self.projected_columns {
+            for projection in projections {
+                for row in 0..projection.array.rows() {
+                    let Some(value) = projection.array.get(row, projection.array_col) else {
+                        continue;
+                    };
+                    visit(projection.origin_row + row as u32, col, value.clone());
+                }
+            }
+        }
+    }
+
+    /// Mark only caches whose declared source/range intersects a live change.
+    pub(crate) fn invalidate_imported_array_caches_at(
+        &mut self,
+        positions: impl IntoIterator<Item = SheetPos>,
+    ) {
+        let mut cache_indices = FxHashSet::default();
+        for position in positions {
+            if let Some(&cache_index) = self.imported_array_cache_sources.get(&position) {
+                cache_indices.insert(cache_index);
+            }
+            if let Some(&(cache_index, _)) = self.imported_array_cache_positions.get(&position) {
+                cache_indices.insert(cache_index);
+            }
+        }
+        for cache_index in cache_indices {
+            if let Some(cache) = self.imported_array_caches.get_mut(cache_index) {
+                cache.invalidate_values();
+            }
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -718,6 +889,20 @@ impl SheetMirror {
         }
         for ranges in self.range_columns.values_mut() {
             ranges.sort_by_key(|id| id.as_u128());
+        }
+        let imported_cache_positions: Vec<_> = self
+            .imported_array_caches
+            .iter()
+            .filter(|cache| cache.values_current)
+            .flat_map(|cache| {
+                cache
+                    .cells
+                    .iter()
+                    .map(|cell| SheetPos::new(cell.row, cell.col))
+            })
+            .collect();
+        for pos in imported_cache_positions {
+            self.note_column_position(pos);
         }
         let authored_positions: Vec<_> = self
             .pos_to_id

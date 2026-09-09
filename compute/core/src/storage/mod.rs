@@ -74,6 +74,16 @@ pub struct WorkbookStorage {
     pub(crate) cell_metadata: CellMetadataMap,
     pub(crate) metadata: Box<workbook::WorkbookMetadata>,
     pub(crate) sheet_metadata: std::collections::HashMap<cell_types::SheetId, sheet::SheetMetadata>,
+    /// Cached values for imported dynamic-array spill members.
+    ///
+    /// Spill members are package caches, rather than authored cells. They are
+    /// deliberately omitted from the sparse snapshot/grid so they cannot act
+    /// as blockers during projection registration. The cache is retained here
+    /// until a live mutation or recalculation makes the mirror authoritative.
+    pub(crate) imported_array_caches: std::collections::HashMap<
+        cell_types::SheetId,
+        Vec<crate::imported_array_cache::ImportedArrayCache>,
+    >,
 }
 
 impl WorkbookStorage {
@@ -89,6 +99,21 @@ impl WorkbookStorage {
 
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub(crate) fn invalidate_imported_array_caches_at(
+        &mut self,
+        changes: impl IntoIterator<Item = (cell_types::SheetId, cell_types::SheetPos)>,
+    ) {
+        for (sheet_id, position) in changes {
+            if let Some(caches) = self.imported_array_caches.get_mut(&sheet_id) {
+                for cache in caches {
+                    if cache.source == position || cache.contains(position) {
+                        cache.invalidate_values();
+                    }
+                }
+            }
+        }
     }
 
     pub fn from_snapshot(snapshot: WorkbookSnapshot) -> Result<Self, ComputeError> {

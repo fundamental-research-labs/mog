@@ -19,11 +19,22 @@ pub(crate) fn collect_identity_cells(
         })
         .map(|(_, cid)| id_to_hex(cid.as_u128()))
         .collect();
+    let projection_identity_hexes: HashSet<SmallHex> = cells
+        .iter()
+        .zip(data_cell_ids)
+        .filter(|(cell, _)| {
+            cell.projection_role
+                == domain_types::ImportedCellProjectionRole::DynamicArraySpillTarget
+        })
+        .map(|(_, cid)| id_to_hex(cid.as_u128()))
+        .collect();
 
     pos_map
         .iter()
         .filter(|(pos, cell_hex)| {
-            ranged_positions.contains(pos) || !data_cell_hexes.contains(cell_hex.as_str())
+            ranged_positions.contains(pos)
+                || projection_identity_hexes.contains(cell_hex.as_str())
+                || !data_cell_hexes.contains(cell_hex.as_str())
         })
         .filter_map(|(&(row, col), cell_hex)| {
             let raw_id = compute_document::hex::hex_to_id(cell_hex)?;

@@ -164,18 +164,237 @@ fn append_quarantined_active_content_diagnostics(
 }
 
 fn append_workbook_disposition_diagnostics(result: &FullParseResult, dropped: &mut Vec<String>) {
-    dropped.extend(
-        result
-            .unsupported_workbook_elements
-            .iter()
-            .map(|name| format!("workbook-level `{name}` XML")),
-    );
-    dropped.extend(
-        result
-            .unsupported_workbook_mce
-            .iter()
-            .map(|name| format!("unsupported workbook MCE `{name}`")),
-    );
+    // `unsupported_workbook_elements` predates WorkbookXmlFidelity and lists
+    // every schema-known child without a typed parser. Fidelity now preserves
+    // relationship-free inert children, so consult its slots before reporting
+    // a legacy inventory entry; otherwise a valid preserved or regenerated
+    // `<extLst>`/`<functionGroups>` is incorrectly reported as dropped.
+    for name in &result.unsupported_workbook_elements {
+        let kind = workbook_xml_child_kind(name);
+        let covered_by_fidelity = kind.is_some_and(|kind| {
+            fidelity_handles_child(&result.workbook_xml_fidelity, kind)
+                || fidelity_reports_omission(&result.workbook_xml_fidelity, kind)
+        });
+        if !covered_by_fidelity {
+            dropped.push(format!("workbook-level `{name}` XML"));
+        }
+    }
+
+    for name in &result.unsupported_workbook_mce {
+        let kind = workbook_xml_child_kind(name);
+        let covered_by_fidelity = kind.is_some_and(|kind| {
+            fidelity_handles_child(&result.workbook_xml_fidelity, kind)
+                || fidelity_reports_omission(&result.workbook_xml_fidelity, kind)
+        });
+        if !covered_by_fidelity {
+            dropped.push(format!("unsupported workbook MCE `{name}`"));
+        }
+    }
+
+    append_workbook_xml_fidelity_diagnostics(&result.workbook_xml_fidelity, dropped);
+}
+
+fn workbook_xml_child_kind(name: &str) -> Option<domain_types::WorkbookXmlChildKind> {
+    use domain_types::WorkbookXmlChildKind;
+
+    Some(match name {
+        "functionGroups" => WorkbookXmlChildKind::FunctionGroups,
+        "oleSize" => WorkbookXmlChildKind::OleSize,
+        "smartTagPr" => WorkbookXmlChildKind::SmartTagPr,
+        "smartTagTypes" => WorkbookXmlChildKind::SmartTagTypes,
+        "fileRecoveryPr" => WorkbookXmlChildKind::FileRecoveryPr,
+        "webPublishObjects" => WorkbookXmlChildKind::WebPublishObjects,
+        "extLst" => WorkbookXmlChildKind::ExtLst,
+        "mc:AlternateContent" => WorkbookXmlChildKind::AlternateContent,
+        // `mc:MustUnderstand` is a root attribute, not a child slot.
+        "mc:MustUnderstand" => return None,
+        _ => return None,
+    })
+}
+
+fn fidelity_handles_child(
+    fidelity: &domain_types::WorkbookXmlFidelity,
+    kind: domain_types::WorkbookXmlChildKind,
+) -> bool {
+    fidelity.slots.iter().any(|slot| {
+        slot.kind == kind
+            && matches!(
+                slot.fallback_action,
+                domain_types::WorkbookXmlFallbackAction::Regenerate
+                    | domain_types::WorkbookXmlFallbackAction::Preserve
+            )
+    })
+}
+
+fn fidelity_reports_omission(
+    fidelity: &domain_types::WorkbookXmlFidelity,
+    kind: domain_types::WorkbookXmlChildKind,
+) -> bool {
+    let Some(expected_local_name) = workbook_xml_local_name(kind) else {
+        return false;
+    };
+
+    fidelity.diagnostics.iter().any(|diagnostic| {
+        if !matches!(
+            diagnostic.action,
+            domain_types::WorkbookXmlFallbackAction::Omit
+                | domain_types::WorkbookXmlFallbackAction::Block
+        ) {
+            return false;
+        }
+        let local_name = diagnostic
+            .artifact
+            .rsplit('/')
+            .next()
+            .unwrap_or(diagnostic.artifact.as_str());
+        local_name == expected_local_name
+    })
+}
+
+fn workbook_xml_local_name(kind: domain_types::WorkbookXmlChildKind) -> Option<&'static str> {
+    Some(match kind {
+        domain_types::WorkbookXmlChildKind::FunctionGroups => "functionGroups",
+        domain_types::WorkbookXmlChildKind::OleSize => "oleSize",
+        domain_types::WorkbookXmlChildKind::SmartTagPr => "smartTagPr",
+        domain_types::WorkbookXmlChildKind::SmartTagTypes => "smartTagTypes",
+        domain_types::WorkbookXmlChildKind::FileRecoveryPr => "fileRecoveryPr",
+        domain_types::WorkbookXmlChildKind::WebPublishObjects => "webPublishObjects",
+        domain_types::WorkbookXmlChildKind::ExtLst => "extLst",
+        domain_types::WorkbookXmlChildKind::AlternateContent => "AlternateContent",
+        _ => return None,
+    })
+}
+
+fn append_workbook_xml_fidelity_diagnostics(
+    fidelity: &domain_types::WorkbookXmlFidelity,
+    dropped: &mut Vec<String>,
+) {
+    for diagnostic in &fidelity.diagnostics {
+        if !matches!(
+            diagnostic.action,
+            domain_types::WorkbookXmlFallbackAction::Omit
+                | domain_types::WorkbookXmlFallbackAction::Block
+        ) {
+            continue;
+        }
+        let local_name = diagnostic
+            .artifact
+            .rsplit('/')
+            .next()
+            .unwrap_or(diagnostic.artifact.as_str());
+        if local_name == "AlternateContent" {
+            dropped.push("unsupported workbook MCE `mc:AlternateContent`".to_string());
+        } else {
+            dropped.push(format!("workbook-level `{local_name}` XML"));
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fidelity_diagnostics_report_only_omitted_children() {
+        let fidelity = domain_types::WorkbookXmlFidelity {
+            slots: vec![domain_types::WorkbookXmlChildSlot {
+                kind: domain_types::WorkbookXmlChildKind::ExtLst,
+                owner_policy: domain_types::WorkbookXmlOwnerPolicy::ExtensionOwnerRegistry,
+                provenance_status: domain_types::WorkbookXmlProvenanceStatus::SafeInert,
+                fallback_action: domain_types::WorkbookXmlFallbackAction::Preserve,
+                payload_id: Some("workbook-child-1".to_string()),
+                reason: None,
+            }],
+            raw_children: vec![domain_types::WorkbookXmlRawChild {
+                payload_id: "workbook-child-1".to_string(),
+                kind: domain_types::WorkbookXmlChildKind::ExtLst,
+                q_name: "extLst".to_string(),
+                local_name: "extLst".to_string(),
+                xml: b"<extLst/>".to_vec(),
+                relationship_ids: Vec::new(),
+            }],
+            diagnostics: Vec::new(),
+        };
+        let mut dropped = Vec::new();
+
+        append_workbook_xml_fidelity_diagnostics(&fidelity, &mut dropped);
+
+        assert!(dropped.is_empty());
+    }
+
+    #[test]
+    fn fidelity_diagnostics_name_alternate_content_and_unknown_children() {
+        let fidelity = domain_types::WorkbookXmlFidelity {
+            diagnostics: vec![
+                domain_types::WorkbookXmlFidelityDiagnostic {
+                    artifact: "xl/workbook.xml/AlternateContent".to_string(),
+                    owner_policy: domain_types::WorkbookXmlOwnerPolicy::MceFailClosed,
+                    provenance_status: domain_types::WorkbookXmlProvenanceStatus::Unsupported,
+                    action: domain_types::WorkbookXmlFallbackAction::Omit,
+                    reason: "branch selection is not modeled".to_string(),
+                    relationship_ids: Vec::new(),
+                    semantics_changed: true,
+                },
+                domain_types::WorkbookXmlFidelityDiagnostic {
+                    artifact: "xl/workbook.xml/revisionPtr".to_string(),
+                    owner_policy: domain_types::WorkbookXmlOwnerPolicy::Unsupported,
+                    provenance_status: domain_types::WorkbookXmlProvenanceStatus::Unsupported,
+                    action: domain_types::WorkbookXmlFallbackAction::Omit,
+                    reason: "no owner".to_string(),
+                    relationship_ids: Vec::new(),
+                    semantics_changed: true,
+                },
+            ],
+            ..Default::default()
+        };
+        let mut dropped = Vec::new();
+
+        append_workbook_xml_fidelity_diagnostics(&fidelity, &mut dropped);
+
+        assert_eq!(
+            dropped,
+            vec![
+                "unsupported workbook MCE `mc:AlternateContent`".to_string(),
+                "workbook-level `revisionPtr` XML".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn non_omission_fidelity_diagnostics_are_not_reported_as_dropped() {
+        let fidelity = domain_types::WorkbookXmlFidelity {
+            slots: vec![domain_types::WorkbookXmlChildSlot {
+                kind: domain_types::WorkbookXmlChildKind::ExtLst,
+                owner_policy: domain_types::WorkbookXmlOwnerPolicy::ExtensionOwnerRegistry,
+                provenance_status: domain_types::WorkbookXmlProvenanceStatus::Current,
+                fallback_action: domain_types::WorkbookXmlFallbackAction::Regenerate,
+                payload_id: None,
+                reason: None,
+            }],
+            diagnostics: vec![domain_types::WorkbookXmlFidelityDiagnostic {
+                artifact: "xl/workbook.xml/extLst".to_string(),
+                owner_policy: domain_types::WorkbookXmlOwnerPolicy::ExtensionOwnerRegistry,
+                provenance_status: domain_types::WorkbookXmlProvenanceStatus::SafeInert,
+                action: domain_types::WorkbookXmlFallbackAction::Preserve,
+                reason: "raw payload retained".to_string(),
+                relationship_ids: Vec::new(),
+                semantics_changed: false,
+            }],
+            ..Default::default()
+        };
+        let mut dropped = Vec::new();
+
+        append_workbook_xml_fidelity_diagnostics(&fidelity, &mut dropped);
+        assert!(fidelity_handles_child(
+            &fidelity,
+            domain_types::WorkbookXmlChildKind::ExtLst
+        ));
+        assert!(!fidelity_reports_omission(
+            &fidelity,
+            domain_types::WorkbookXmlChildKind::ExtLst
+        ));
+        assert!(dropped.is_empty());
+    }
 }
 
 fn append_legacy_vml_diagnostics(result: &FullParseResult, dropped: &mut Vec<String>) {

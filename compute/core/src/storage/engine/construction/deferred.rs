@@ -199,6 +199,9 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
             .stores
             .compute
             .init_from_snapshot_viewport_only(&mut engine.mirror, workbook_snap.clone())?;
+        engine
+            .mirror
+            .install_imported_array_caches(&engine.stores.storage.imported_array_caches);
         profile.counter("sheets", workbook_snap.sheets.len() as u64);
         profile.counter(
             "snapshot_cells",
@@ -470,6 +473,7 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
     for region in &snapshot.data_table_regions {
         mirror.upsert_data_table_region(region.clone());
     }
+    mirror.install_imported_array_caches(&storage.imported_array_caches);
 
     let mut grid_indexes = build_grid_indexes(&mirror, &snapshot, shared_alloc.clone())?;
     let merge_indexes = build_merge_indexes(&storage, &snapshot, &grid_indexes)?;

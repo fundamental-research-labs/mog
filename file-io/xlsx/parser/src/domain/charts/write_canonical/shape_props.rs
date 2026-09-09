@@ -160,17 +160,10 @@ pub(super) fn emit_fill(w: &mut XmlWriter, fill: &DrawingFill) {
 }
 
 fn emit_blip_fill(w: &mut XmlWriter, blip: &ooxml_types::drawings::BlipFill) {
-    let has_blip = blip.embed_id.is_some()
-        || blip.link_id.is_some()
-        || blip.compression.is_some()
-        || !blip.effects.is_empty()
-        || blip.ext_lst.is_some();
-    if !has_blip {
-        // CT_BlipFill requires a CT_Blip child. Do not manufacture an empty
-        // complex fill when programmatic data has no source image or effect.
-        return;
-    }
-
+    // A typed BlipFill is an explicit shape-fill owner, including when the
+    // imported `<a:blip/>` carried no relationship or effect attributes. Keep
+    // that presence through reconstruction so a no-edit round trip does not
+    // silently change the shape's fill kind.
     let mut fill = w.start_element("a:blipFill");
     if let Some(dpi) = blip.dpi {
         fill = fill.attr_num("dpi", dpi);

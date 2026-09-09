@@ -82,6 +82,12 @@ pub struct CellMirror {
     /// degenerate case and lives here too — populated via XLSX hydration
     /// and via `set_array_formula` for in-app entries.
     pub(crate) cse_anchors: FxHashSet<CellId>,
+    /// Imported-array cache positions invalidated while evaluating this mirror.
+    ///
+    /// The storage sidecar owns the durable cache metadata.  The mirror keeps
+    /// this small write-through set so callers can update that sidecar exactly
+    /// when a live array owner publishes a result, before dependents evaluate.
+    pub(crate) imported_array_cache_invalidations: FxHashSet<(SheetId, cell_types::SheetPos)>,
 }
 
 impl Default for CellMirror {
@@ -130,7 +136,62 @@ impl CellMirror {
             col_versions: FxHashMap::default(),
             cse_single_cell: FxHashSet::default(),
             cse_anchors: FxHashSet::default(),
+            imported_array_cache_invalidations: FxHashSet::default(),
         }
+    }
+
+    /// Install package-cached values for imported dynamic-array spill members.
+    /// The cache is kept separate from authored identities so a declared spill
+    /// range cannot be mistaken for a set of blockers during recalc.
+    pub(crate) fn install_imported_array_caches(
+        &mut self,
+        caches: &std::collections::HashMap<
+            SheetId,
+            Vec<crate::imported_array_cache::ImportedArrayCache>,
+        >,
+    ) {
+        self.imported_array_cache_invalidations.clear();
+        for sheet in self.sheets.values_mut() {
+            sheet.clear_imported_array_cache();
+        }
+        for (sheet_id, cells) in caches {
+            if let Some(sheet) = self.sheets.get_mut(sheet_id) {
+                sheet.install_imported_array_cache(cells.iter().cloned());
+            }
+        }
+    }
+
+    /// Clear imported package caches after a live edit or successful recalc.
+    pub(crate) fn clear_imported_array_caches(&mut self) {
+        self.imported_array_cache_invalidations.clear();
+        for sheet in self.sheets.values_mut() {
+            sheet.clear_imported_array_cache();
+        }
+    }
+
+    /// Invalidate only imported spill caches touched by the supplied changes.
+    pub(crate) fn invalidate_imported_array_caches_at(
+        &mut self,
+        changes: impl IntoIterator<Item = (SheetId, SheetPos)>,
+    ) {
+        let mut by_sheet: std::collections::HashMap<SheetId, Vec<SheetPos>> =
+            std::collections::HashMap::new();
+        for (sheet_id, position) in changes {
+            by_sheet.entry(sheet_id).or_default().push(position);
+        }
+        for (sheet_id, positions) in by_sheet {
+            for position in &positions {
+                self.imported_array_cache_invalidations
+                    .insert((sheet_id, *position));
+            }
+            if let Some(sheet) = self.sheets.get_mut(&sheet_id) {
+                sheet.invalidate_imported_array_caches_at(positions.iter().copied());
+            }
+        }
+    }
+
+    pub(crate) fn take_imported_array_cache_invalidations(&mut self) -> Vec<(SheetId, SheetPos)> {
+        self.imported_array_cache_invalidations.drain().collect()
     }
 
     /// Mark `cell_id` as the anchor of a CSE array formula. Idempotent.
@@ -281,6 +342,14 @@ impl CellMirror {
                     .unwrap_or(&CellValue::Null),
                 scalar if elem_row == 0 && elem_col == 0 => scalar,
                 _ => &CellValue::Null,
+            };
+            let value = if value.is_null() {
+                self.sheets
+                    .get(sheet)
+                    .and_then(|sheet| sheet.imported_array_cache_value_at(SheetPos::new(row, col)))
+                    .unwrap_or(value)
+            } else {
+                value
             };
 
             return CellRender::Projection(ProjectionView {

@@ -582,8 +582,14 @@ pub(super) fn write_zip_package(
         for (sheet_idx, chart_entries) in all_chart_entries.iter().enumerate() {
             for entry in chart_entries {
                 let chart_path = format!("xl/charts/chart{}.xml", entry.global_idx);
-                add_registered_part(package_graph, &mut zip, &chart_path, entry.xml.clone())?;
                 let chart_spec = &output.sheets[sheet_idx].charts[entry.source_idx];
+                let chart_xml = chart_replay::remap_standard_chart_relationship_ids(
+                    package_graph,
+                    chart_spec,
+                    &chart_path,
+                    entry.xml.clone(),
+                );
+                add_registered_part(package_graph, &mut zip, &chart_path, chart_xml)?;
                 let typed_user_shapes =
                     chart_auxiliary::chart_user_shapes_data(chart_spec, &chart_path);
                 let mut written_auxiliary_paths = std::collections::BTreeSet::new();
@@ -613,6 +619,7 @@ pub(super) fn write_zip_package(
                         chart_spec,
                         &chart_path,
                         allows_current_auxiliary_replay,
+                        Some(entry.xml.as_slice()),
                     );
                     // Write auxiliary files (style, colors XML) preserving their original paths.
                     for (path, data) in aux.auxiliary_files {
@@ -700,6 +707,7 @@ pub(super) fn write_zip_package(
                         chart_spec,
                         &chart_path,
                         allows_current_auxiliary_replay,
+                        Some(entry.xml.as_slice()),
                     );
                     for (path, data) in aux.auxiliary_files {
                         if !auxiliary_paths.contains(path.trim_start_matches('/')) {

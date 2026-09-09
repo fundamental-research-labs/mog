@@ -68,6 +68,8 @@ pub use compute_document as document;
 #[doc(hidden)]
 pub mod projection;
 
+pub(crate) mod imported_array_cache;
+
 // Pivot Table Engine (extracted to compute-pivot crate)
 pub use compute_pivot as pivot;
 

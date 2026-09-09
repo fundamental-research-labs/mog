@@ -1,9 +1,9 @@
 use domain_types::{
+    ChartDefinition,
     chart::{
         ChartLineSettingsData, ChartSeriesData, ChartSeriesStockRoleData, ChartSpec, ChartSubType,
         ChartType as DomainChartType, DataLabelData, UpDownBarsData,
     },
-    ChartDefinition,
 };
 use ooxml_types::charts::{
     self, BarDirection, ChartGroup, ChartType as OoxmlChartType, ChartTypeConfig, ExtensionEntry,
@@ -17,6 +17,7 @@ use super::{
         build_full_data_label_contract_extension, is_data_label_contract_extension,
     },
     axes::chart_type_supports_series_axis,
+    chart_space::merge_imported_shape_properties,
     elements::build_data_labels,
     formatting::{build_outline, build_shape_properties},
     ranges::series_for_export,
@@ -53,6 +54,7 @@ pub(super) fn build_chart_groups(spec: &ChartSpec) -> Vec<ChartGroup> {
                             preserve_imported_series_text_body_properties(
                                 &mut series,
                                 imported_series,
+                                sd,
                             );
                             series
                         })
@@ -695,7 +697,7 @@ pub(super) fn inject_series_into_config(
             ser_lines: spec
                 .series_lines
                 .as_ref()
-                .map(build_chart_lines_vec)
+                .map(|settings| build_chart_lines_vec_with_imported(settings, &c.ser_lines))
                 .unwrap_or_else(|| c.ser_lines.clone()),
             ..c.clone()
         }),
@@ -713,29 +715,20 @@ pub(super) fn inject_series_into_config(
             marker: line_marker_for_sub_type(spec.sub_type.as_ref())
                 .or_else(|| line_marker_for_series(series))
                 .or(c.marker),
-            drop_lines: spec
-                .drop_lines
-                .as_ref()
-                .map(build_chart_lines)
-                .or_else(|| c.drop_lines.clone()),
-            hi_low_lines: spec
-                .high_low_lines
-                .as_ref()
-                .map(build_chart_lines)
-                .or_else(|| c.hi_low_lines.clone()),
+            drop_lines: chart_lines_for_spec(spec.drop_lines.as_ref(), c.drop_lines.as_ref()),
+            hi_low_lines: chart_lines_for_spec(
+                spec.high_low_lines.as_ref(),
+                c.hi_low_lines.as_ref(),
+            ),
             up_down_bars: spec
                 .up_down_bars
                 .as_ref()
-                .map(build_up_down_bars)
+                .map(|settings| build_up_down_bars_with_imported(settings, c.up_down_bars.as_ref()))
                 .or_else(|| c.up_down_bars.clone()),
             ..c.clone()
         }),
         ChartTypeConfig::Line3D(c) => ChartTypeConfig::Line3D(charts::Line3DChartConfig {
-            drop_lines: spec
-                .drop_lines
-                .as_ref()
-                .map(build_chart_lines)
-                .or_else(|| c.drop_lines.clone()),
+            drop_lines: chart_lines_for_spec(spec.drop_lines.as_ref(), c.drop_lines.as_ref()),
             gap_depth: spec.gap_depth.or(c.gap_depth),
             ..c.clone()
         }),
@@ -750,19 +743,11 @@ pub(super) fn inject_series_into_config(
             ..c.clone()
         }),
         ChartTypeConfig::Area(c) => ChartTypeConfig::Area(charts::AreaChartConfig {
-            drop_lines: spec
-                .drop_lines
-                .as_ref()
-                .map(build_chart_lines)
-                .or_else(|| c.drop_lines.clone()),
+            drop_lines: chart_lines_for_spec(spec.drop_lines.as_ref(), c.drop_lines.as_ref()),
             ..c.clone()
         }),
         ChartTypeConfig::Area3D(c) => ChartTypeConfig::Area3D(charts::Area3DChartConfig {
-            drop_lines: spec
-                .drop_lines
-                .as_ref()
-                .map(build_chart_lines)
-                .or_else(|| c.drop_lines.clone()),
+            drop_lines: chart_lines_for_spec(spec.drop_lines.as_ref(), c.drop_lines.as_ref()),
             gap_depth: spec.gap_depth.or(c.gap_depth),
             ..c.clone()
         }),
@@ -796,20 +781,15 @@ pub(super) fn inject_series_into_config(
             ..c.clone()
         }),
         ChartTypeConfig::Stock(c) => ChartTypeConfig::Stock(charts::StockChartConfig {
-            drop_lines: spec
-                .drop_lines
-                .as_ref()
-                .map(build_chart_lines)
-                .or_else(|| c.drop_lines.clone()),
-            hi_low_lines: spec
-                .high_low_lines
-                .as_ref()
-                .map(build_chart_lines)
-                .or_else(|| c.hi_low_lines.clone()),
+            drop_lines: chart_lines_for_spec(spec.drop_lines.as_ref(), c.drop_lines.as_ref()),
+            hi_low_lines: chart_lines_for_spec(
+                spec.high_low_lines.as_ref(),
+                c.hi_low_lines.as_ref(),
+            ),
             up_down_bars: spec
                 .up_down_bars
                 .as_ref()
-                .map(build_up_down_bars)
+                .map(|settings| build_up_down_bars_with_imported(settings, c.up_down_bars.as_ref()))
                 .or_else(|| c.up_down_bars.clone()),
             ..c.clone()
         }),
@@ -825,7 +805,7 @@ pub(super) fn inject_series_into_config(
             ser_lines: spec
                 .series_lines
                 .as_ref()
-                .map(build_chart_lines_vec)
+                .map(|settings| build_chart_lines_vec_with_imported(settings, &c.ser_lines))
                 .unwrap_or_else(|| c.ser_lines.clone()),
             ..c.clone()
         }),
@@ -843,6 +823,43 @@ fn build_chart_lines(settings: &ChartLineSettingsData) -> charts::ChartLines {
                 ..Default::default()
             }),
     }
+}
+
+fn chart_lines_for_spec(
+    settings: Option<&ChartLineSettingsData>,
+    imported: Option<&charts::ChartLines>,
+) -> Option<charts::ChartLines> {
+    let Some(settings) = settings else {
+        return imported.cloned();
+    };
+    if settings.visible == Some(false) {
+        return None;
+    }
+
+    let mut lines = build_chart_lines(settings);
+    if let Some(imported) = imported {
+        merge_imported_shape_properties(&mut lines.sp_pr, imported.sp_pr.as_ref());
+    }
+    Some(lines)
+}
+
+fn build_chart_lines_vec_with_imported(
+    settings: &ChartLineSettingsData,
+    imported: &[charts::ChartLines],
+) -> Vec<charts::ChartLines> {
+    if settings.visible == Some(false) {
+        return Vec::new();
+    }
+
+    let mut lines = build_chart_lines(settings);
+    if let Some(imported_first) = imported.first() {
+        merge_imported_shape_properties(&mut lines.sp_pr, imported_first.sp_pr.as_ref());
+    }
+    let mut result = vec![lines];
+    // The public projection represents one line owner. Preserve additional
+    // imported entries when a producer supplied more than one.
+    result.extend(imported.iter().skip(1).cloned());
+    result
 }
 
 fn build_chart_lines_vec(settings: &ChartLineSettingsData) -> Vec<charts::ChartLines> {
@@ -863,4 +880,31 @@ fn build_up_down_bars(settings: &UpDownBarsData) -> charts::UpDownBars {
             .and_then(build_shape_properties),
         ..Default::default()
     }
+}
+
+fn build_up_down_bars_with_imported(
+    settings: &UpDownBarsData,
+    imported: Option<&charts::UpDownBars>,
+) -> charts::UpDownBars {
+    let mut bars = build_up_down_bars(settings);
+    // An empty public object is the explicit owner-clear used by the chart API
+    // and by import/edit callers. It must not resurrect imported picture fills.
+    if settings.gap_width.is_none()
+        && settings.up_format.is_none()
+        && settings.down_format.is_none()
+    {
+        return bars;
+    }
+    let Some(imported) = imported else {
+        return bars;
+    };
+    if bars.gap_width.is_none() {
+        bars.gap_width = imported.gap_width;
+    }
+    merge_imported_shape_properties(&mut bars.up_bars, imported.up_bars.as_ref());
+    merge_imported_shape_properties(&mut bars.down_bars, imported.down_bars.as_ref());
+    if bars.extensions.is_empty() {
+        bars.extensions = imported.extensions.clone();
+    }
+    bars
 }

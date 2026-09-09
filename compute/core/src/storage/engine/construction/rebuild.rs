@@ -15,6 +15,7 @@ pub(in crate::storage::engine) fn build_finalized_mirror_from_snapshot(
     layout_metrics: domain_types::units::LayoutMetrics,
 ) -> Result<CellMirror, ComputeError> {
     let mut mirror = CellMirror::from_snapshot(snapshot.clone())?;
+    mirror.install_imported_array_caches(&storage.imported_array_caches);
     mirror.install_cell_metadata_provider(crate::storage::engine::cell_metadata::provider(
         storage,
         layout_metrics,
@@ -55,6 +56,7 @@ pub(in crate::storage::engine) fn build_initial_mirror(
     layout_metrics: domain_types::units::LayoutMetrics,
 ) -> Result<CellMirror, ComputeError> {
     let mut mirror = CellMirror::from_snapshot(snapshot.clone())?;
+    mirror.install_imported_array_caches(&storage.imported_array_caches);
     let indexes = super::indexes::build_grid_indexes(
         &mirror,
         snapshot,

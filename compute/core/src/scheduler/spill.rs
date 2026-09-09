@@ -346,6 +346,13 @@ impl ComputeCore {
         projection_changes: &mut Vec<ProjectionChange>,
         projection_deltas: &mut Vec<ProjectionDelta>,
     ) {
+        // A source is about to publish a new scalar/array result. Invalidate
+        // its imported package cache before dependents run so a shrink,
+        // growth, or #SPILL! result cannot expose old child values during the
+        // same recalc pass.
+        if let Some(source_pos) = mirror.resolve_position(&cell_id) {
+            mirror.invalidate_imported_array_caches_at(std::iter::once((sheet_id, source_pos)));
+        }
         // Snapshot old projection state for delta tracking
         let old_proj = mirror.projection_registry.get(&cell_id).cloned();
 

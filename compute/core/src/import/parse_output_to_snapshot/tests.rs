@@ -417,7 +417,14 @@ fn phantom_cells_filtered_from_snapshot() {
         2,
         "retain the authored source and ordinary value"
     );
-    assert!(sheet.identities.is_empty());
+    let mut metadata_positions: Vec<_> = sheet
+        .identities
+        .iter()
+        .map(|identity| (identity.row, identity.col))
+        .collect();
+    metadata_positions.sort_unstable();
+    assert_eq!(metadata_positions, vec![(1, 0), (2, 0)]);
+    assert!(sheet.cells.iter().all(|cell| cell.row == 0));
     let origin = sheet
         .cells
         .iter()

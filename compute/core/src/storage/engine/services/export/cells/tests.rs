@@ -661,7 +661,7 @@ fn cached_shared_string_metadata_survives_hydration_export() {
 }
 
 #[test]
-fn skipped_spill_target_is_not_replayed_from_modeled_export() {
+fn spill_target_metadata_identity_does_not_author_cached_value() {
     let source = domain_types::CellData {
         row: 0,
         col: 0,
@@ -697,19 +697,27 @@ fn skipped_spill_target_is_not_replayed_from_modeled_export() {
         .grid_indexes
         .get(&sheet_id)
         .expect("grid index");
+    let (spill_id, _, _) = grid
+        .cells()
+        .find(|(_, row, col)| *row == 0 && *col == 1)
+        .expect("spill metadata retains a positional identity");
+    let sheet = engine.mirror.get_sheet(&sheet_id).expect("sheet mirror");
     assert!(
-        !grid
-            .cells()
-            .any(|(_cell_id, row, col)| row == 0 && col == 1),
-        "spill target must not materialize as editable storage"
+        sheet
+            .get_cell(&spill_id)
+            .is_none_or(|entry| entry.is_ghost()),
+        "metadata identity must not become an authored spill blocker"
     );
 
     let exported = engine.build_parse_output().expect("export projection");
     let cells = &exported.sheets[0].cells;
     assert!(cells.iter().any(|cell| (cell.row, cell.col) == (0, 0)));
     assert!(
-        !cells.iter().any(|cell| (cell.row, cell.col) == (0, 1)),
-        "spill target sidecars are no longer replayed into modeled export"
+        cells
+            .iter()
+            .filter(|cell| (cell.row, cell.col) == (0, 1))
+            .all(|cell| cell.value.is_null() && cell.formula.is_none()),
+        "an unowned spill cache must not become an authored value or formula"
     );
 }
 

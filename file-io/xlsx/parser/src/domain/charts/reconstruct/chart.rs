@@ -1,6 +1,6 @@
 use domain_types::{
-    chart::{normalize_explicit_display_blanks_as, ChartSpec},
     ChartDefinition,
+    chart::{ChartSpec, normalize_explicit_display_blanks_as},
 };
 use ooxml_types::charts::{self, ChartText, DisplayBlanksAs};
 use ooxml_types::drawings::TextRunContent;
@@ -11,7 +11,7 @@ use super::{
     chart_space::clean_chart_extensions,
     chart_space::merge_imported_shape_properties,
     elements::{
-        build_data_table, build_legend, build_surface, build_title, build_view_3d, TitleTextSource,
+        TitleTextSource, build_data_table, build_legend, build_surface, build_title, build_view_3d,
     },
     formatting::build_shape_properties,
     text_body_fidelity::{
@@ -34,6 +34,10 @@ pub(super) fn build_chart(spec: &ChartSpec) -> charts::Chart {
         .as_ref()
         .or(imported_title_layout.as_ref());
     let imported_title = imported_chart.and_then(|chart| chart.title.as_ref());
+    let imported_title_text =
+        imported_title.and_then(crate::domain::charts::axes::extract_title_text);
+    let title_was_cleared =
+        imported_title_text.is_some() && spec.title.is_none() && spec.title_formula.is_none();
     let mut title = build_title(
         TitleTextSource {
             text: spec.title.as_deref(),
@@ -46,6 +50,13 @@ pub(super) fn build_chart(spec: &ChartSpec) -> charts::Chart {
         spec.title_v_align.as_deref(),
         spec.title_show_shadow,
     );
+    if title_was_cleared {
+        // Formatting and rich-text snapshots remain populated after a caller
+        // clears only the public title text. Treat that transition as an
+        // owner clear before importing the old title ShapeProperties, which
+        // may contain a relationship-backed picture fill.
+        title = None;
+    }
     if title.is_none()
         && spec.title.is_none()
         && spec.title_formula.is_none()
@@ -72,6 +83,7 @@ pub(super) fn build_chart(spec: &ChartSpec) -> charts::Chart {
         legend.as_mut(),
         imported_chart.and_then(|chart| chart.legend.as_ref()),
     ) {
+        merge_imported_shape_properties(&mut legend.sp_pr, imported_legend.sp_pr.as_ref());
         preserve_imported_text_body_properties(&mut legend.tx_pr, imported_legend.tx_pr.as_ref());
         for entry in &mut legend.legend_entry {
             let imported_entry = imported_legend
@@ -87,13 +99,29 @@ pub(super) fn build_chart(spec: &ChartSpec) -> charts::Chart {
         }
     }
 
+    let mut floor = build_surface(spec.floor_format.as_ref());
+    preserve_imported_surface(
+        &mut floor,
+        imported_chart.and_then(|chart| chart.floor.as_ref()),
+    );
+    let mut side_wall = build_surface(spec.side_wall_format.as_ref());
+    preserve_imported_surface(
+        &mut side_wall,
+        imported_chart.and_then(|chart| chart.side_wall.as_ref()),
+    );
+    let mut back_wall = build_surface(spec.back_wall_format.as_ref());
+    preserve_imported_surface(
+        &mut back_wall,
+        imported_chart.and_then(|chart| chart.back_wall.as_ref()),
+    );
+
     charts::Chart {
         title,
         auto_title_deleted: spec.auto_title_deleted,
         view_3d: spec.view_3d.as_ref().map(build_view_3d),
-        floor: build_surface(spec.floor_format.as_ref()),
-        side_wall: build_surface(spec.side_wall_format.as_ref()),
-        back_wall: build_surface(spec.back_wall_format.as_ref()),
+        floor,
+        side_wall,
+        back_wall,
         plot_area: build_plot_area(spec),
         legend,
         plot_vis_only: spec.plot_visible_only,
@@ -135,6 +163,29 @@ pub(super) fn build_chart(spec: &ChartSpec) -> charts::Chart {
     }
 }
 
+fn preserve_imported_surface(
+    target: &mut Option<charts::ChartSurface>,
+    imported: Option<&charts::ChartSurface>,
+) {
+    let Some(imported) = imported else {
+        return;
+    };
+    let Some(target) = target.as_mut() else {
+        *target = Some(imported.clone());
+        return;
+    };
+    if target.thickness.is_none() {
+        target.thickness = imported.thickness.clone();
+    }
+    if target.picture_options.is_none() {
+        target.picture_options = imported.picture_options.clone();
+    }
+    if target.extensions.is_empty() {
+        target.extensions = imported.extensions.clone();
+    }
+    merge_imported_shape_properties(&mut target.sp_pr, imported.sp_pr.as_ref());
+}
+
 fn title_has_visible_text(title: &charts::Title) -> bool {
     match title.tx.as_ref() {
         Some(ChartText::Rich(body)) => body.paragraphs.iter().any(|paragraph| {
@@ -167,6 +218,38 @@ pub(super) fn build_plot_area(spec: &ChartSpec) -> charts::PlotArea {
     let mut chart_groups = build_chart_groups(spec);
     reconcile_chart_group_axis_ids(&mut chart_groups, &axes, spec);
 
+    let mut d_table = spec
+        .data_table
+        .as_ref()
+        .filter(|data_table| data_table.visible != Some(false))
+        .map(build_data_table);
+    if let Some(imported_data_table) =
+        imported_plot_area.and_then(|plot_area| plot_area.d_table.as_ref())
+    {
+        if let Some(d_table) = d_table.as_mut() {
+            merge_imported_shape_properties(&mut d_table.sp_pr, imported_data_table.sp_pr.as_ref());
+            preserve_imported_text_body_properties(
+                &mut d_table.tx_pr,
+                imported_data_table.tx_pr.as_ref(),
+            );
+            if d_table.extensions.is_empty() {
+                d_table.extensions = imported_data_table.extensions.clone();
+            }
+        } else if !spec
+            .data_table
+            .as_ref()
+            .is_some_and(|data_table| data_table.visible == Some(false))
+        {
+            d_table = Some(imported_data_table.clone());
+        }
+    }
+
+    let mut sp_pr = spec.plot_format.as_ref().and_then(build_shape_properties);
+    merge_imported_shape_properties(
+        &mut sp_pr,
+        imported_plot_area.and_then(|plot_area| plot_area.sp_pr.as_ref()),
+    );
+
     charts::PlotArea {
         layout: spec
             .plot_layout
@@ -175,12 +258,8 @@ pub(super) fn build_plot_area(spec: &ChartSpec) -> charts::PlotArea {
             .or_else(|| imported_plot_area.and_then(|plot_area| plot_area.layout.clone())),
         chart_groups,
         axes,
-        d_table: spec
-            .data_table
-            .as_ref()
-            .filter(|data_table| data_table.visible != Some(false))
-            .map(build_data_table),
-        sp_pr: spec.plot_format.as_ref().and_then(build_shape_properties),
+        d_table,
+        sp_pr,
         extensions: imported_plot_area
             .map(|plot_area| clean_chart_extensions(&plot_area.extensions))
             .unwrap_or_default(),

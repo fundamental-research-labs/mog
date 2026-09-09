@@ -6,21 +6,31 @@ range addresses once at the scripting boundary.
 
 ## Results
 
-The original seven workloads use their original entry points. Memory is live RSS in MiB; wall time is milliseconds. Before is the original baseline, rerun under the same conditions. After includes the typed internal calls and both SUM changes.
+Memory is live RSS in MiB; wall time is milliseconds. Before is the original
+baseline, rerun under the same conditions. After includes the typed internal
+calls and both SUM changes. The Properties row compares the original string-ID
+path with the native-ID path now used by engine callers, using the same metadata
+writes, owned reads, and assertions. The unchanged string-ID benchmark remains
+a separate control below. The other six workloads retain their original entry
+points.
 
 | Workload | Memory before | Memory after | Change | Wall before | Wall after | Change |
 |---|---:|---:|---:|---:|---:|---:|
 | Blank + one write | 21.11 | 6.70 | -68.3% | 2.07 | 1.16 | -43.9% |
 | Numeric 100k | 65.12 | 62.25 | -4.4% | 45.24 | 44.47 | -1.7% |
 | XLSX 100k | 56.78 | 49.69 | -12.5% | 148.44 | 125.71 | -15.3% |
-| Properties 100k (string adapter) | 29.44 | 21.87 | -25.7% | 32.67 | 37.39 | +14.4% |
+| Properties 100k (native engine path) | 29.44 | 21.88 | -25.7% | 32.67 | 29.35 | -10.2% |
 | Formula chain 10k | 53.62 | 32.23 | -39.9% | 521.47 | 278.72 | -46.6% |
 | SUM 100k | 66.62 | 63.44 | -4.8% | 232.90 | 66.93 | -71.3% |
 | History 1k | 30.58 | 16.01 | -47.6% | 41.17 | 30.01 | -27.1% |
 
 ### Property access paths
 
-The typed path changes only the ID representation passed into the property API. It still creates and checks the same strings and returns owned property objects. Its results are reported separately because the original binaries expose only the string-ID entry point.
+The typed path changes only the ID representation passed into the property API.
+It still creates and checks the same property-value strings and returns owned
+property objects. The original binaries expose only the string-ID entry point.
+This breakdown includes the compatibility string-ID control so its measured
+slowdown remains visible alongside the migrated engine path.
 
 | Version / access | Write ms | Read ms | Wall ms | CPU ms | Live MiB | Peak MiB |
 |---|---:|---:|---:|---:|---:|---:|

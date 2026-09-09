@@ -1,0 +1,48 @@
+{
+  "schemaVersion": "semantic-merge-policy-manifest.v1",
+  "policyId": "semantic-merge-first-slice.v1",
+  "materializer": "semantic-cell-merge-commit-materializer.v1",
+  "failClosed": true,
+  "supportedDomains": [
+    {
+      "matrixRowId": "sheets",
+      "domainId": "sheets",
+      "domainClass": "authored",
+      "mergeCapabilityState": "supported",
+      "acceptedDomainIds": ["sheet", "sheets"],
+      "objectKinds": ["sheet"]
+    },
+    {
+      "matrixRowId": "cells.values",
+      "domainId": "cells.values",
+      "domainClass": "authored",
+      "mergeCapabilityState": "supported",
+      "acceptedDomainIds": ["cell", "cells.values"],
+      "objectKinds": ["cell", "cell-value"]
+    },
+    {
+      "matrixRowId": "cells.formulas",
+      "domainId": "cells.formulas",
+      "domainClass": "authored",
+      "mergeCapabilityState": "supported",
+      "acceptedDomainIds": ["cell", "cells.values", "cells.formulas"],
+      "objectKinds": ["cell", "cell-formula"]
+    },
+    {
+      "matrixRowId": "cells.formats.direct",
+      "domainId": "cells.formats.direct",
+      "domainClass": "authored",
+      "mergeCapabilityState": "supported",
+      "acceptedDomainIds": ["cells.formats", "cells.formats.direct"],
+      "objectKinds": ["direct-format"]
+    },
+    {
+      "matrixRowId": "rows-columns",
+      "domainId": "rows-columns",
+      "domainClass": "authored",
+      "mergeCapabilityState": "supported",
+      "acceptedDomainIds": ["rows-columns"],
+      "objectKinds": ["row", "column"]
+    }
+  ]
+}

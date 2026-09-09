@@ -733,13 +733,12 @@ fn evaluate_runtime_filter(
             let cell_id_opt = cell_store.resolve_cell_id(&sid, SheetPos::new(row, col));
             match cell_id_opt {
                 Some(cid) => {
-                    let cell_hex = id_to_hex(cid.as_u128());
                     let table_fmt =
                         super::resolve_structured_format_at_cell(cell_store, &sid, row, col);
-                    crate::storage::properties::get_effective_format(
+                    crate::storage::properties::get_effective_format_by_id(
                         &stores.storage,
                         &sid,
-                        &cell_hex,
+                        Some(&cid),
                         row,
                         col,
                         table_fmt.as_ref(),

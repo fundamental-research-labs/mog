@@ -6,15 +6,15 @@ use cell_types::{CellId, RangePos, SheetId};
 
 /// Clear properties for resolved cell identities. Values and formulas are cleared
 /// by the compute mutation that calls this helper.
-pub fn clear_cells_by_hex(
+pub fn clear_cells_by_id(
     storage: &mut WorkbookStorage,
     sheet_id: SheetId,
-    cell_hexes: &[String],
+    cell_ids: &[CellId],
     clear_properties: bool,
 ) {
     if clear_properties {
-        for hex in cell_hexes {
-            crate::storage::properties::clear_properties(storage, &sheet_id, hex);
+        for id in cell_ids {
+            crate::storage::properties::clear_properties_by_id(storage, &sheet_id, id);
         }
     }
 }

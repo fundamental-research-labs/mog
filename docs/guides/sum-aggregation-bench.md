@@ -4,6 +4,9 @@ This follows the [storage memory and speed comparison](storage-model-bench.md).
 It tests two changes independently and together, while retaining the storage
 model introduced by `b3ffbd7215d8eea8006ee58f4291bd5f620fa96d`.
 
+The [typed property access follow-up](typed-property-access-bench.md) examines
+removing internal ID conversions while preserving these aggregate changes.
+
 The original reference remains `2a2f34cf48d99570c517b56033322692268586f6`, the
 same baseline used in the earlier report. The original release binary is run
 again alongside the candidates so timings share the same measurement conditions.

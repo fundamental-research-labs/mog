@@ -1,5 +1,4 @@
 use cell_types::SheetId;
-use compute_document::hex::id_to_hex;
 use value_types::CellValue;
 
 use crate::cells::CellStore;
@@ -74,7 +73,6 @@ pub(in crate::storage::engine::viewport) fn get_active_cell(
         });
 
     // Resolve format and metadata from properties.
-    let cell_id_hex = id_to_hex(cell_id.as_u128());
     let pos = cell_store.resolve_position(cell_id);
     let table_fmt = pos.and_then(|p| {
         crate::storage::engine::services::resolve_structured_format_at_cell(
@@ -86,10 +84,10 @@ pub(in crate::storage::engine::viewport) fn get_active_cell(
     });
 
     let format = pos.and_then(|p| {
-        let mut effective = properties::get_effective_format(
+        let mut effective = properties::get_effective_format_by_id(
             &stores.storage,
             sheet_id,
-            &cell_id_hex,
+            Some(&cell_id),
             p.row(),
             p.col(),
             table_fmt.as_ref(),
@@ -177,7 +175,7 @@ pub(in crate::storage::engine::viewport) fn get_active_cell(
     );
     let is_array_member = matches!(&region_meta, Some(r) if !r.is_anchor);
 
-    let metadata = properties::get_properties(&stores.storage, sheet_id, &cell_id_hex)
+    let metadata = properties::get_properties_by_id(&stores.storage, sheet_id, &cell_id)
         .map(|props| crate::storage::properties::CellMetadata {
             provenance: props.provenance,
             validation: props.validation,
@@ -231,10 +229,10 @@ pub(in crate::storage::engine::viewport) fn get_active_cell(
 
     // Edit text for date/time cells.
     let edit_text = pos.and_then(|p| {
-        let effective = properties::get_effective_format(
+        let effective = properties::get_effective_format_by_id(
             &stores.storage,
             sheet_id,
-            &cell_id_hex,
+            Some(&cell_id),
             p.row(),
             p.col(),
             table_fmt.as_ref(),
@@ -271,7 +269,7 @@ pub(in crate::storage::engine::viewport) fn get_active_cell(
 
     // Is formula hidden (sheet protected AND cell format has hidden flag).
     let is_formula_hidden = if is_sheet_protected {
-        properties::is_formula_hidden(&stores.storage, sheet_id, &cell_id_hex)
+        properties::is_formula_hidden_by_id(&stores.storage, sheet_id, &cell_id)
     } else {
         false
     };
@@ -289,10 +287,10 @@ pub(in crate::storage::engine::viewport) fn get_active_cell(
 
     // Number format from effective format.
     let number_format = pos.and_then(|p| {
-        let effective = properties::get_effective_format(
+        let effective = properties::get_effective_format_by_id(
             &stores.storage,
             sheet_id,
-            &cell_id_hex,
+            Some(&cell_id),
             p.row(),
             p.col(),
             table_fmt.as_ref(),

@@ -6,7 +6,6 @@ use value_types::{CellValue, ComputeError};
 use crate::cells::CellStore;
 use crate::snapshot::{CellChange, CellPosition, RecalcResult};
 use crate::storage::engine::stores::EngineStores;
-use compute_document::hex::id_to_hex;
 
 use super::AdjustedFormulaResult;
 use super::cell_mutations::mutation_set_cells_by_position_raw;
@@ -92,11 +91,10 @@ fn source_format_at(
     let table_fmt = super::super::resolve_structured_format_at_cell(cell_store, sheet_id, row, col);
 
     if let Some(cell_id) = cell_id {
-        let cell_hex = id_to_hex(cell_id.as_u128());
-        properties::get_effective_format(
+        properties::get_effective_format_by_id(
             &stores.storage,
             sheet_id,
-            &cell_hex,
+            Some(&cell_id),
             row,
             col,
             table_fmt.as_ref(),
@@ -326,11 +324,10 @@ pub(in crate::storage::engine) fn mutation_auto_fill(
         else {
             continue;
         };
-        let cell_hex = id_to_hex(cell_id.as_u128());
-        crate::storage::properties::replace_cell_format(
+        crate::storage::properties::replace_cell_format_by_id(
             &mut stores.storage,
             sheet_id,
-            &cell_hex,
+            &cell_id,
             format,
         );
         let value = cell_store

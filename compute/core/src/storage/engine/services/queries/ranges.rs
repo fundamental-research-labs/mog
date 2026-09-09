@@ -292,12 +292,13 @@ pub(in crate::storage::engine) fn for_each_cell_in_range(
                             )
                         });
 
-                    let cell_id_hex = id_to_hex(cell_id.as_u128());
-
                     // Pre-fetch cell properties once for both the skip check
                     // and effective format build.
-                    let cell_props =
-                        properties::get_properties(&engine.stores.storage, sheet_id, &cell_id_hex);
+                    let cell_props = properties::get_properties_by_id(
+                        &engine.stores.storage,
+                        sheet_id,
+                        &cell_id,
+                    );
                     let has_cell_format = cell_props
                         .as_ref()
                         .map(|props| props.format.is_some() || props.style_id.is_some())
@@ -359,11 +360,10 @@ pub(in crate::storage::engine) fn for_each_cell_in_range(
                             crate::storage::engine::services::resolve_structured_format_at_cell(
                                 cell_store, sheet_id, row, col,
                             );
-                        let empty_cell_id_hex = String::new();
-                        let mut effective = properties::get_effective_format(
+                        let mut effective = properties::get_effective_format_by_id(
                             &engine.stores.storage,
                             sheet_id,
-                            &empty_cell_id_hex,
+                            None,
                             row,
                             col,
                             table_fmt.as_ref(),
@@ -401,11 +401,10 @@ pub(in crate::storage::engine) fn for_each_cell_in_range(
                         crate::storage::engine::services::resolve_structured_format_at_cell(
                             cell_store, sheet_id, row, col,
                         );
-                    let empty_cell_id_hex = String::new();
-                    let mut effective = properties::get_effective_format(
+                    let mut effective = properties::get_effective_format_by_id(
                         &engine.stores.storage,
                         sheet_id,
-                        &empty_cell_id_hex,
+                        None,
                         row,
                         col,
                         table_fmt.as_ref(),

@@ -16,7 +16,7 @@ pub(in crate::storage::engine) use self::dimensions::{
 };
 pub(in crate::storage::engine) use self::floating_bounds::recompute_floating_object_bounds;
 pub(in crate::storage::engine) use self::identity::{
-    collect_relocate_values, get_or_create_cell_id, update_cell_position,
+    collect_relocate_values, ensure_cell_id_at, get_or_create_cell_id, update_cell_position,
 };
 pub(in crate::storage::engine) use self::merges::{
     check_merge_data_loss, clear_all_merges, is_merge_origin, merge_across, merge_and_center,

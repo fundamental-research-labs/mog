@@ -304,6 +304,17 @@ impl ComputeEngine {
         document_sheets::get_all_merges_in_sheet(self, sheet_id)
     }
 
+    /// Look up a native cell identity without serializing it or allocating a cell.
+    pub fn resolve_cell_id_at(
+        &self,
+        sheet_id: &SheetId,
+        row: u32,
+        col: u32,
+    ) -> Option<cell_types::CellId> {
+        self.cell_store
+            .resolve_cell_id(sheet_id, cell_types::SheetPos::new(row, col))
+    }
+
     #[bridge::read(scope = "cell")]
     pub fn get_cell_id_at(&self, sheet_id: &SheetId, row: u32, col: u32) -> Option<String> {
         document_sheets::get_cell_id_at(self, sheet_id, row, col)

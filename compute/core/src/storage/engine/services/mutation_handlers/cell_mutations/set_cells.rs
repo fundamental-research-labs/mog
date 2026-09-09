@@ -159,19 +159,16 @@ pub(in crate::storage::engine) fn mutation_set_cells(
             use crate::storage::properties;
             let format =
                 match cell_store.resolve_cell_id(sheet_id, cell_types::SheetPos::new(*row, *col)) {
-                    Some(cid) => {
-                        let cell_hex = compute_document::hex::id_to_hex(cid.as_u128());
-                        properties::get_effective_format(
-                            &stores.storage,
-                            sheet_id,
-                            &cell_hex,
-                            *row,
-                            *col,
-                            None,
-                            Some(grid),
-                            cell_store.get_sheet(sheet_id),
-                        )
-                    }
+                    Some(cid) => properties::get_effective_format_by_id(
+                        &stores.storage,
+                        sheet_id,
+                        Some(&cid),
+                        *row,
+                        *col,
+                        None,
+                        Some(grid),
+                        cell_store.get_sheet(sheet_id),
+                    ),
                     None => properties::get_positional_format(
                         &stores.storage,
                         sheet_id,

@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 
 use cell_types::{CellId, SheetId, SheetPos};
-use compute_document::hex::id_to_hex;
 use domain_types::CellFormat;
 use formula_types::IdentityFormulaRef;
 use snapshot_types::MutationResult;
@@ -69,13 +68,12 @@ impl ComputeEngine {
                 Some(id) => id,
                 None => continue,
             };
-            let cell_hex = id_to_hex(cell_id.as_u128());
             let table_fmt =
                 services::resolve_structured_format_at_cell(&self.cell_store, sheet_id, *row, *col);
-            let effective = crate::storage::properties::get_effective_format(
+            let effective = crate::storage::properties::get_effective_format_by_id(
                 &self.stores.storage,
                 sheet_id,
-                &cell_hex,
+                Some(&cell_id),
                 *row,
                 *col,
                 table_fmt.as_ref(),
@@ -160,13 +158,12 @@ impl ComputeEngine {
                 Some(id) => id,
                 None => continue,
             };
-            let cell_hex = id_to_hex(cell_id.as_u128());
             let table_fmt =
                 services::resolve_structured_format_at_cell(&self.cell_store, sheet_id, *row, *col);
-            let effective = crate::storage::properties::get_effective_format(
+            let effective = crate::storage::properties::get_effective_format_by_id(
                 &self.stores.storage,
                 sheet_id,
-                &cell_hex,
+                Some(&cell_id),
                 *row,
                 *col,
                 table_fmt.as_ref(),
@@ -237,13 +234,12 @@ impl ComputeEngine {
                 Some(id) => id,
                 None => continue,
             };
-            let cell_hex = id_to_hex(cell_id.as_u128());
             let table_fmt =
                 services::resolve_structured_format_at_cell(&self.cell_store, sheet_id, *row, *col);
-            let effective = crate::storage::properties::get_effective_format(
+            let effective = crate::storage::properties::get_effective_format_by_id(
                 &self.stores.storage,
                 sheet_id,
-                &cell_hex,
+                Some(&cell_id),
                 *row,
                 *col,
                 table_fmt.as_ref(),
@@ -314,13 +310,12 @@ impl ComputeEngine {
                 Some(id) => id,
                 None => continue,
             };
-            let cell_hex = id_to_hex(cell_id.as_u128());
             let table_fmt =
                 services::resolve_structured_format_at_cell(&self.cell_store, sheet_id, *row, *col);
-            let effective = crate::storage::properties::get_effective_format(
+            let effective = crate::storage::properties::get_effective_format_by_id(
                 &self.stores.storage,
                 sheet_id,
-                &cell_hex,
+                Some(&cell_id),
                 *row,
                 *col,
                 table_fmt.as_ref(),
@@ -446,13 +441,12 @@ impl ComputeEngine {
         row: u32,
         col: u32,
     ) -> bool {
-        let cell_hex = id_to_hex(cell_id.as_u128());
         let table_fmt =
             services::resolve_structured_format_at_cell(&self.cell_store, sheet_id, row, col);
-        let effective = crate::storage::properties::get_effective_format(
+        let effective = crate::storage::properties::get_effective_format_by_id(
             &self.stores.storage,
             sheet_id,
-            &cell_hex,
+            Some(&cell_id),
             row,
             col,
             table_fmt.as_ref(),
@@ -477,17 +471,16 @@ impl ComputeEngine {
     fn effective_number_format_for_cell(&self, cell_id: &CellId) -> Option<String> {
         let sheet_id = self.cell_store.sheet_for_cell(cell_id)?;
         let pos = self.cell_store.resolve_position(cell_id)?;
-        let cell_hex = id_to_hex(cell_id.as_u128());
         let table_fmt = services::resolve_structured_format_at_cell(
             &self.cell_store,
             &sheet_id,
             pos.row(),
             pos.col(),
         );
-        let effective = crate::storage::properties::get_effective_format(
+        let effective = crate::storage::properties::get_effective_format_by_id(
             &self.stores.storage,
             &sheet_id,
-            &cell_hex,
+            Some(&cell_id),
             pos.row(),
             pos.col(),
             table_fmt.as_ref(),

@@ -26,3 +26,5 @@ pub use queries::{
     get_all_comments, get_all_notes, get_cell_ids_with_comments, get_comment, get_comment_count,
     get_comment_thread, get_comments_for_cell, get_note_count, has_comments,
 };
+
+pub(crate) use queries::cell_ids_with_comments;

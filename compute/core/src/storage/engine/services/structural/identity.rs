@@ -18,6 +18,18 @@ pub(in crate::storage::engine) fn get_or_create_cell_id(
     row: u32,
     col: u32,
 ) -> Result<MutationResult, ComputeError> {
+    let id = ensure_cell_id_at(stores, cell_store, sheet_id, row, col)?;
+    Ok(MutationResult::empty().with_data(&id_to_hex(id.as_u128()))?)
+}
+
+/// Native identity result for internal callers; serialization stays at the boundary.
+pub(in crate::storage::engine) fn ensure_cell_id_at(
+    stores: &mut EngineStores,
+    cell_store: &mut CellStore,
+    sheet_id: &SheetId,
+    row: u32,
+    col: u32,
+) -> Result<CellId, ComputeError> {
     let cell_id =
         super::super::cell_editing::ensure_cell_id(stores, cell_store, sheet_id, row, col)
             .ok_or_else(|| ComputeError::SheetNotFound {
@@ -28,8 +40,7 @@ pub(in crate::storage::engine) fn get_or_create_cell_id(
         .storage
         .history
         .retain_untracked_identity(*sheet_id, cell_id);
-    let cell_id_hex = id_to_hex(cell_id.as_u128());
-    Ok(MutationResult::empty().with_data(&cell_id_hex)?)
+    Ok(cell_id)
 }
 
 /// Move a cell within the native cell store.

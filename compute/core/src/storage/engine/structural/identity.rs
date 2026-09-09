@@ -2,10 +2,29 @@ use super::super::ComputeEngine;
 use super::super::mutation::{EngineMutation, MutationOutput};
 use super::super::services;
 use crate::snapshot::MutationResult;
-use cell_types::SheetId;
+use cell_types::{CellId, SheetId};
 use value_types::ComputeError;
 
 impl ComputeEngine {
+    /// Resolve or allocate a native cell identity without a string/JSON round trip.
+    /// Uses the same untracked identity lifetime as `get_or_create_cell_id`.
+    pub fn ensure_cell_id_at(
+        &mut self,
+        sheet_id: &SheetId,
+        row: u32,
+        col: u32,
+    ) -> Result<CellId, ComputeError> {
+        self.without_history(|engine| {
+            services::structural::ensure_cell_id_at(
+                &mut engine.stores,
+                &mut engine.cell_store,
+                sheet_id,
+                row,
+                col,
+            )
+        })
+    }
+
     pub(super) fn apply_get_or_create_cell_id(
         &mut self,
         sheet_id: &SheetId,

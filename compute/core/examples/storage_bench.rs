@@ -1,6 +1,6 @@
 //! End-to-end storage comparison. See scripts/bench/storage_bench.py.
 
-use cell_types::SheetId;
+use cell_types::{CellId, SheetId};
 use compute_core::storage::engine::ComputeEngine as Engine;
 use compute_core::storage::{WorkbookStorage, properties};
 use compute_document::hex::id_to_hex;
@@ -64,30 +64,47 @@ fn live_rss() {
     }
 }
 
-fn properties_100k(sid: &SheetId) {
+fn properties_100k<const TYPED_IDS: bool>(sid: &SheetId) {
     let mut storage = WorkbookStorage::from_snapshot(snapshot(100_000, 1, vec![])).unwrap();
     // Imported shared strings preserve their source index and lexical value.
     // Exercise the real metadata store without retaining an input DTO collection.
     measured("write_properties", || {
         for row in 0..100_000 {
-            properties::set_properties(
-                &mut storage,
-                sid,
-                &id_to_hex(u128::from(row) + 1),
-                &CellProperties {
-                    original_sst_index: Some(row + 1),
-                    original_value: Some(format!("shared string {row}")),
-                    ..Default::default()
-                },
-            );
+            let props = CellProperties {
+                original_sst_index: Some(row + 1),
+                original_value: Some(format!("shared string {row}")),
+                ..Default::default()
+            };
+            if TYPED_IDS {
+                properties::set_properties_by_id(
+                    &mut storage,
+                    sid,
+                    &CellId::from_raw(u128::from(row) + 1),
+                    &props,
+                );
+            } else {
+                properties::set_properties(
+                    &mut storage,
+                    sid,
+                    &id_to_hex(u128::from(row) + 1),
+                    &props,
+                );
+            }
         }
     });
     let checksum = measured("read_properties", || {
         (0..100_000)
             .map(|row| {
-                let props =
+                let props = if TYPED_IDS {
+                    properties::get_properties_by_id(
+                        &storage,
+                        sid,
+                        &CellId::from_raw(u128::from(row) + 1),
+                    )
+                } else {
                     properties::get_properties(&storage, sid, &id_to_hex(u128::from(row) + 1))
-                        .expect("stored properties");
+                }
+                .expect("stored properties");
                 assert_eq!(props.original_value, Some(format!("shared string {row}")));
                 assert_eq!(props.original_sst_index, Some(row + 1));
                 u64::from(props.original_sst_index.unwrap())
@@ -104,7 +121,11 @@ fn main() {
     let workload = std::env::args().nth(1).expect("workload argument");
     let sid = SheetId::from_uuid_str(SHEET_ID).unwrap();
     if workload == "properties_100k" {
-        properties_100k(&sid);
+        properties_100k::<false>(&sid);
+        return;
+    }
+    if workload == "properties_typed_100k" {
+        properties_100k::<true>(&sid);
         return;
     }
     let engine = match workload.as_str() {

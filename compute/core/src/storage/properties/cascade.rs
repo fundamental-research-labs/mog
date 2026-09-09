@@ -1,4 +1,4 @@
-use super::cell::get_properties;
+use super::cell::get_properties_by_id;
 use super::defaults::default_format;
 use super::merge::merge_formats;
 use super::row_col::{get_col_format, get_row_format};
@@ -6,7 +6,7 @@ use crate::cells::SheetStore;
 use crate::identity::GridIndex;
 use crate::storage::WorkbookStorage;
 use crate::storage::properties::CellProperties;
-use cell_types::SheetId;
+use cell_types::{CellId, SheetId};
 use domain_types::{CellFormat, CellVerticalAlign};
 use ooxml_types::styles::{HorizontalAlign, PatternType};
 
@@ -31,10 +31,34 @@ pub fn get_effective_format(
     grid_index: Option<&GridIndex>,
     sheet_store: Option<&SheetStore>,
 ) -> CellFormat {
+    let id = compute_document::hex::parse_cell_id(cell_id);
+    get_effective_format_by_id(
+        storage,
+        sheet_id,
+        id.as_ref(),
+        row,
+        col,
+        table_format,
+        grid_index,
+        sheet_store,
+    )
+}
+
+/// Resolve the format cascade using an already-resolved cell identity.
+pub fn get_effective_format_by_id(
+    storage: &WorkbookStorage,
+    sheet_id: &SheetId,
+    cell_id: Option<&CellId>,
+    row: u32,
+    col: u32,
+    table_format: Option<&CellFormat>,
+    grid_index: Option<&GridIndex>,
+    sheet_store: Option<&SheetStore>,
+) -> CellFormat {
     let base = get_workbook_base_format(storage);
     let col_format = get_col_format(storage, sheet_id, col, grid_index);
     let row_format = get_row_format(storage, sheet_id, row, grid_index);
-    let cell_props = get_properties(storage, sheet_id, cell_id);
+    let cell_props = cell_id.and_then(|id| get_properties_by_id(storage, sheet_id, id));
     let cell_format = materialize_cell_layer_format(cell_props.as_ref());
     get_effective_format_from_preloaded_layers(
         &base,

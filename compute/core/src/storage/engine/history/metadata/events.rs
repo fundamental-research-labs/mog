@@ -173,7 +173,7 @@ pub(crate) fn emit_events(
     for (key, before) in events {
         match key {
             MetadataKey::CellProperties(sid, id) => {
-                let format = properties::get_cell_format(storage, &sid, &id.to_uuid_string());
+                let format = properties::get_cell_format_by_id(storage, &sid, &id);
                 effects.result.property_changes.push(PropertyChange {
                     sheet_id: sid.to_uuid_string(),
                     cell_id: id.to_uuid_string(),

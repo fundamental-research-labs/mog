@@ -305,13 +305,12 @@ pub(super) fn get_displayed_cell_properties(
     let cell_id = engine.cell_store.resolve_cell_id(sheet_id, pos);
 
     let format = if let Some(cell_id) = cell_id {
-        let cell_hex = id_to_hex(cell_id.as_u128());
         let structured_format =
             services::resolve_structured_format_at_cell(&engine.cell_store, sheet_id, row, col);
-        properties::get_effective_format(
+        properties::get_effective_format_by_id(
             &engine.stores.storage,
             sheet_id,
-            &cell_hex,
+            Some(&cell_id),
             row,
             col,
             structured_format.as_ref(),

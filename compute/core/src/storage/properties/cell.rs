@@ -3,7 +3,7 @@ use crate::border_patch::BorderPatchField;
 use crate::engine_types::formatting::CellProperties;
 use crate::storage::WorkbookStorage;
 use cell_types::{CellId, SheetId};
-use compute_document::hex::{id_to_hex, parse_cell_id};
+use compute_document::hex::id_to_hex;
 use domain_types::{CellBorders, CellFormat};
 use rustc_hash::FxHashMap;
 
@@ -89,17 +89,17 @@ impl StoredCellProperties {
     }
 }
 
-pub fn get_properties(
+pub fn get_properties_by_id(
     storage: &WorkbookStorage,
     sheet_id: &SheetId,
-    cell_id: &str,
+    cell_id: &CellId,
 ) -> Option<CellProperties> {
     Some(
         storage
             .sheet_metadata
             .get(sheet_id)?
             .cell_properties
-            .get(&parse_cell_id(cell_id)?)?
+            .get(cell_id)?
             .properties(&storage.metadata.style_palette),
     )
 }
@@ -173,15 +173,13 @@ pub(crate) fn get_cell_format_layers_for_ids(
     result
 }
 
-pub fn set_properties(
+pub fn set_properties_by_id(
     storage: &mut WorkbookStorage,
     sheet_id: &SheetId,
-    cell_id: &str,
+    cell_id: &CellId,
     props: &CellProperties,
 ) {
-    let Some(id) = parse_cell_id(cell_id) else {
-        return;
-    };
+    let id = *cell_id;
     crate::storage::engine::history::metadata::capture_cell_properties(storage, *sheet_id, id);
     let Some(sheet) = storage.sheet_metadata.get_mut(sheet_id) else {
         return;
@@ -198,10 +196,8 @@ pub fn set_properties(
     }
 }
 
-pub fn clear_properties(storage: &mut WorkbookStorage, sheet_id: &SheetId, cell_id: &str) {
-    let Some(id) = parse_cell_id(cell_id) else {
-        return;
-    };
+pub fn clear_properties_by_id(storage: &mut WorkbookStorage, sheet_id: &SheetId, cell_id: &CellId) {
+    let id = *cell_id;
     if !storage
         .sheet_metadata
         .get(sheet_id)
@@ -215,14 +211,12 @@ pub fn clear_properties(storage: &mut WorkbookStorage, sheet_id: &SheetId, cell_
     }
 }
 
-pub fn clear_formula_cache_metadata(
+pub fn clear_formula_cache_metadata_by_id(
     storage: &mut WorkbookStorage,
     sheet_id: &SheetId,
-    cell_id: &str,
+    cell_id: &CellId,
 ) {
-    let Some(id) = parse_cell_id(cell_id) else {
-        return;
-    };
+    let id = *cell_id;
     clear_formula_cache_metadata_for_cell_ids(storage, sheet_id, &[id]);
 }
 
@@ -288,74 +282,78 @@ pub fn iter_formatted_property_cell_ids(
         .collect()
 }
 
-pub fn get_cell_format(
+pub fn get_cell_format_by_id(
     storage: &WorkbookStorage,
     sheet_id: &SheetId,
-    cell_id: &str,
+    cell_id: &CellId,
 ) -> Option<CellFormat> {
-    get_properties(storage, sheet_id, cell_id)?.format
+    get_properties_by_id(storage, sheet_id, cell_id)?.format
 }
 
-pub fn set_cell_format(
+pub fn set_cell_format_by_id(
     storage: &mut WorkbookStorage,
     sheet_id: &SheetId,
-    cell_id: &str,
+    cell_id: &CellId,
     format: &CellFormat,
 ) {
-    let mut props = get_properties(storage, sheet_id, cell_id).unwrap_or_default();
+    let mut props = get_properties_by_id(storage, sheet_id, cell_id).unwrap_or_default();
     props.format = Some(props.format.as_ref().map_or_else(
         || normalize_format_patch(format),
         |existing| merge_formats(existing, format),
     ));
     props.style_id = None;
-    set_properties(storage, sheet_id, cell_id, &props);
+    set_properties_by_id(storage, sheet_id, cell_id, &props);
 }
 
-pub fn patch_cell_format(
+pub fn patch_cell_format_by_id(
     storage: &mut WorkbookStorage,
     sheet_id: &SheetId,
-    cell_id: &str,
+    cell_id: &CellId,
     format: &CellFormat,
     clear_fields: &[String],
 ) -> Result<(), value_types::ComputeError> {
-    patch_cell_formats(storage, sheet_id, &[cell_id], format, clear_fields)
+    patch_cell_formats_by_id(storage, sheet_id, &[*cell_id], format, clear_fields)
 }
 
-pub fn replace_cell_format(
+pub fn replace_cell_format_by_id(
     storage: &mut WorkbookStorage,
     sheet_id: &SheetId,
-    cell_id: &str,
+    cell_id: &CellId,
     format: &CellFormat,
 ) {
-    let mut props = get_properties(storage, sheet_id, cell_id).unwrap_or_default();
+    let mut props = get_properties_by_id(storage, sheet_id, cell_id).unwrap_or_default();
     props.format = Some(normalize_format_patch(format));
     props.style_id = None;
-    set_properties(storage, sheet_id, cell_id, &props);
+    set_properties_by_id(storage, sheet_id, cell_id, &props);
 }
 
-pub fn clear_cell_format(storage: &mut WorkbookStorage, sheet_id: &SheetId, cell_id: &str) {
-    if let Some(mut props) = get_properties(storage, sheet_id, cell_id) {
+pub fn clear_cell_format_by_id(
+    storage: &mut WorkbookStorage,
+    sheet_id: &SheetId,
+    cell_id: &CellId,
+) {
+    if let Some(mut props) = get_properties_by_id(storage, sheet_id, cell_id) {
         props.format = None;
         props.style_id = None;
-        set_properties(storage, sheet_id, cell_id, &props);
+        set_properties_by_id(storage, sheet_id, cell_id, &props);
     }
 }
 
-pub fn set_cell_formats(
+pub fn set_cell_formats_by_id(
     storage: &mut WorkbookStorage,
     sheet_id: &SheetId,
-    cell_ids: &[&str],
+    cell_ids: &[CellId],
     format: &CellFormat,
 ) {
     for id in cell_ids {
-        set_cell_format(storage, sheet_id, id, format);
+        set_cell_format_by_id(storage, sheet_id, id, format);
     }
 }
 
-pub fn patch_cell_formats(
+pub fn patch_cell_formats_by_id(
     storage: &mut WorkbookStorage,
     sheet_id: &SheetId,
-    cell_ids: &[&str],
+    cell_ids: &[CellId],
     format: &CellFormat,
     clear_fields: &[String],
 ) -> Result<(), value_types::ComputeError> {
@@ -363,7 +361,7 @@ pub fn patch_cell_formats(
     let patched: Vec<_> = cell_ids
         .iter()
         .map(|id| {
-            let mut props = get_properties(storage, sheet_id, id).unwrap_or_default();
+            let mut props = get_properties_by_id(storage, sheet_id, id).unwrap_or_default();
             let patched = super::apply_format_patch(
                 &props.format.clone().unwrap_or_default(),
                 format,
@@ -375,31 +373,35 @@ pub fn patch_cell_formats(
         })
         .collect::<Result<_, value_types::ComputeError>>()?;
     for (id, props) in cell_ids.iter().zip(patched) {
-        set_properties(storage, sheet_id, id, &props);
+        set_properties_by_id(storage, sheet_id, id, &props);
     }
     Ok(())
 }
 
-pub fn patch_cell_borders(
+pub fn patch_cell_borders_by_id(
     storage: &mut WorkbookStorage,
     sheet_id: &SheetId,
-    cell_ids: &[&str],
+    cell_ids: &[CellId],
     borders: &CellBorders,
     clear_fields: &[BorderPatchField],
 ) -> Result<(), value_types::ComputeError> {
     for id in cell_ids {
-        let mut props = get_properties(storage, sheet_id, id).unwrap_or_default();
+        let mut props = get_properties_by_id(storage, sheet_id, id).unwrap_or_default();
         let mut format = props.format.take().unwrap_or_default();
         format.borders = super::apply_borders_patch(format.borders.as_ref(), borders, clear_fields);
         props.format = (format != CellFormat::default()).then_some(format);
         props.style_id = None;
-        set_properties(storage, sheet_id, id, &props);
+        set_properties_by_id(storage, sheet_id, id, &props);
     }
     Ok(())
 }
 
-pub fn clear_cell_formats(storage: &mut WorkbookStorage, sheet_id: &SheetId, cell_ids: &[&str]) {
+pub fn clear_cell_formats_by_id(
+    storage: &mut WorkbookStorage,
+    sheet_id: &SheetId,
+    cell_ids: &[CellId],
+) {
     for id in cell_ids {
-        clear_cell_format(storage, sheet_id, id);
+        clear_cell_format_by_id(storage, sheet_id, id);
     }
 }

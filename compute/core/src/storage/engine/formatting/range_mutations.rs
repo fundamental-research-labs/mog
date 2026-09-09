@@ -242,8 +242,7 @@ pub(super) fn set_cell_properties_batch(
         .ok_or_else(|| ComputeError::SheetNotFound {
             sheet_id: sheet_id.to_uuid_string(),
         })?;
-        let cell_hex = id_to_hex(cell_id.as_u128());
-        services::formatting::set_cell_format(&mut engine.stores, sheet_id, &cell_hex, format);
+        services::formatting::set_cell_format(&mut engine.stores, sheet_id, &cell_id, format);
     }
 
     Ok(MutationResult::empty())
@@ -275,11 +274,10 @@ pub(super) fn patch_cell_properties_batch(
         .ok_or_else(|| ComputeError::SheetNotFound {
             sheet_id: sheet_id.to_uuid_string(),
         })?;
-        let cell_hex = id_to_hex(cell_id.as_u128());
         services::formatting::patch_cell_format(
             &mut engine.stores,
             sheet_id,
-            &cell_hex,
+            &cell_id,
             format,
             clear_fields,
         )?;

@@ -1,5 +1,4 @@
 use cell_types::{SheetId, SheetPos};
-use compute_document::hex::id_to_hex;
 use value_types::{CellValue, ComputeError};
 
 use crate::cells::CellStore;
@@ -31,11 +30,10 @@ fn source_format_at(
     );
 
     if let Some(cell_id) = cell_id {
-        let cell_hex = id_to_hex(cell_id.as_u128());
-        properties::get_effective_format(
+        properties::get_effective_format_by_id(
             &stores.storage,
             source_sheet_id,
-            &cell_hex,
+            Some(&cell_id),
             row,
             col,
             table_fmt.as_ref(),
@@ -334,8 +332,7 @@ pub(in crate::storage::engine) fn mutation_copy_range(
         ) else {
             continue;
         };
-        let cell_hex = id_to_hex(cell_id.as_u128());
-        properties::replace_cell_format(&mut stores.storage, sheet_id, &cell_hex, format);
+        properties::replace_cell_format_by_id(&mut stores.storage, sheet_id, &cell_id, format);
         let value = cell_store
             .get_cell_value_at(sheet_id, SheetPos::new(*row, *col))
             .cloned()

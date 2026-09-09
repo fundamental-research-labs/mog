@@ -338,7 +338,7 @@ fn test_update_cell_position() {
 }
 
 // -------------------------------------------------------------------
-// clear_cells_by_hex: works on XLSX-hydrated sheets
+// clear_cells_by_id: works on XLSX-hydrated sheets
 // -------------------------------------------------------------------
 
 #[test]
@@ -348,10 +348,9 @@ fn clear_preserves_or_removes_properties_as_requested() {
         .ensure_identity_at(&sid, SheetPos::new(0, 0))
         .unwrap();
     set_cell_property(&mut storage, sid, cid, "{\"s\":1}");
-    let hex = id_to_hex(cid.as_u128()).to_string();
-    clear_cells_by_hex(&mut storage, sid, &[hex.clone()], false);
+    clear_cells_by_id(&mut storage, sid, &[cid], false);
     assert!(cell_property_exists(&storage, sid, cid));
-    clear_cells_by_hex(&mut storage, sid, &[hex], true);
+    clear_cells_by_id(&mut storage, sid, &[cid], true);
     assert!(!cell_property_exists(&storage, sid, cid));
     assert_eq!(
         cell_store.resolve_cell_id(&sid, SheetPos::new(0, 0)),

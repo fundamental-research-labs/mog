@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use cell_types::SheetId;
-use compute_document::hex::{hex_to_id, id_to_hex};
 use compute_wire::flags as render_flags;
 use value_types::CellValue;
 
@@ -25,10 +24,9 @@ pub(super) struct RenderCellMaterial {
 
 fn read_cell_rich_string(
     stores: &EngineStores,
-    cell_id_hex: &str,
+    cell_id: &cell_types::CellId,
 ) -> Option<domain_types::RichSharedString> {
-    let cell_id = cell_types::CellId::from_uuid_str(cell_id_hex).ok()?;
-    stores.storage.cell_metadata(&cell_id)?.rich_string.clone()
+    stores.storage.cell_metadata(cell_id)?.rich_string.clone()
 }
 
 fn workbook_theme_colors(theme_palette: &HashMap<String, String>) -> Vec<String> {
@@ -235,7 +233,7 @@ fn apply_rich_text_aggregate_font(
 
 fn apply_cell_rich_text_aggregate_font(
     stores: &EngineStores,
-    cell_id_hex: &str,
+    cell_id: &cell_types::CellId,
     value: &CellValue,
     format: &mut domain_types::CellFormat,
     theme_palette: &HashMap<String, String>,
@@ -243,7 +241,7 @@ fn apply_cell_rich_text_aggregate_font(
     let CellValue::Text(text) = value else {
         return;
     };
-    let Some(rich_string) = read_cell_rich_string(stores, cell_id_hex) else {
+    let Some(rich_string) = read_cell_rich_string(stores, cell_id) else {
         return;
     };
     if rich_string.plain_text != text.as_ref() {
@@ -293,10 +291,9 @@ pub(super) fn build_render_cell_materials(
     // Build a set of cell IDs that have comments in the viewport,
     // so we can check per-cell without repeated full scans.
     let comment_cell_ids: std::collections::HashSet<u128> = {
-        let cell_id_hexes = comments::get_cell_ids_with_comments(&stores.storage, sheet_id);
-        cell_id_hexes
-            .iter()
-            .filter_map(|hex| hex_to_id(hex))
+        comments::cell_ids_with_comments(&stores.storage, sheet_id)
+            .into_iter()
+            .map(|id| id.as_u128())
             .collect()
     };
 
@@ -354,16 +351,14 @@ pub(super) fn build_render_cell_materials(
                         // worksheet cells with their own XFs. Use that member
                         // identity when present; purely generated spill cells
                         // fall back to the formula anchor's format.
-                        let anchor_id_hex = id_to_hex(proj.anchor_id.as_u128());
-                        let format_cell_id_hex = cell_store
+                        let format_cell_id = cell_store
                             .resolve_cell_id(sheet_id, cell_types::SheetPos::new(eff_row, eff_col))
-                            .map(|cell_id| id_to_hex(cell_id.as_u128()))
-                            .unwrap_or_else(|| anchor_id_hex.clone());
+                            .unwrap_or(proj.anchor_id);
                         let table_fmt = resolve_table_format(sheet_id, row, col);
-                        let mut effective = properties::get_effective_format(
+                        let mut effective = properties::get_effective_format_by_id(
                             &stores.storage,
                             sheet_id,
-                            &format_cell_id_hex,
+                            Some(&format_cell_id),
                             row,
                             col,
                             table_fmt.as_ref(),
@@ -376,7 +371,7 @@ pub(super) fn build_render_cell_materials(
                         );
                         apply_cell_rich_text_aggregate_font(
                             stores,
-                            &format_cell_id_hex,
+                            &format_cell_id,
                             proj.value,
                             &mut effective,
                             &settings.theme_palette,
@@ -481,12 +476,11 @@ pub(super) fn build_render_cell_materials(
                             || cell_store.get_formula(&cell_id).is_some()
                             || region.is_some();
 
-                        let cell_id_hex = id_to_hex(cell_id.as_u128());
                         let table_fmt = resolve_table_format(sheet_id, row, col);
-                        let mut effective = properties::get_effective_format(
+                        let mut effective = properties::get_effective_format_by_id(
                             &stores.storage,
                             sheet_id,
-                            &cell_id_hex,
+                            Some(&cell_id),
                             row,
                             col,
                             table_fmt.as_ref(),
@@ -507,7 +501,7 @@ pub(super) fn build_render_cell_materials(
                         );
                         apply_cell_rich_text_aggregate_font(
                             stores,
-                            &cell_id_hex,
+                            &cell_id,
                             value,
                             &mut effective,
                             &settings.theme_palette,
@@ -612,12 +606,11 @@ pub(super) fn build_render_cell_materials(
                         let mut positional_fmt = if let Some(cell_id) = cell_store
                             .resolve_cell_id(sheet_id, cell_types::SheetPos::new(row, col))
                         {
-                            let cell_id_hex = id_to_hex(cell_id.as_u128());
                             let table_fmt = resolve_table_format(sheet_id, row, col);
-                            properties::get_effective_format(
+                            properties::get_effective_format_by_id(
                                 &stores.storage,
                                 sheet_id,
-                                &cell_id_hex,
+                                Some(&cell_id),
                                 row,
                                 col,
                                 table_fmt.as_ref(),

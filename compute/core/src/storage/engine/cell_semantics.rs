@@ -128,13 +128,13 @@ impl ComputeEngine {
         };
 
         // Get effective format
-        let cell_id_hex = self.format_lookup_cell_id_hex(sheet_id, row, col);
+        let cell_id = self.format_lookup_cell_id(sheet_id, row, col);
         let table_fmt =
             services::resolve_structured_format_at_cell(&self.cell_store, sheet_id, row, col);
-        let effective = properties::get_effective_format(
+        let effective = properties::get_effective_format_by_id(
             &self.stores.storage,
             sheet_id,
-            &cell_id_hex,
+            cell_id.as_ref(),
             row,
             col,
             table_fmt.as_ref(),

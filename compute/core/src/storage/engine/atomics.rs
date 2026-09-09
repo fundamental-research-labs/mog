@@ -230,11 +230,12 @@ impl ComputeEngine {
 
         // Sheet is protected — check if cell is locked.
         // A cell with no format defaults to locked = true (Excel spec).
-        let cell_hex =
-            super::services::queries::get_cell_id_at(&self.cell_store, sheet_id, row, col);
-        match cell_hex {
-            Some(hex) => {
-                let locked = properties::is_cell_locked(&self.stores.storage, sheet_id, &hex);
+        let cell_id = self
+            .cell_store
+            .resolve_cell_id(sheet_id, cell_types::SheetPos::new(row, col));
+        match cell_id {
+            Some(id) => {
+                let locked = properties::is_cell_locked_by_id(&self.stores.storage, sheet_id, &id);
                 !locked
             }
             // No cell at position — defaults to locked

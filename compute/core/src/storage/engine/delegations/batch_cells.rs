@@ -3,7 +3,6 @@ use crate::storage::engine::ComputeEngine;
 use crate::storage::engine::mutation::{EngineMutation, MutationOutput};
 use crate::storage::engine::{mutation, services};
 use cell_types::{CellId, SheetId};
-use compute_document::hex::id_to_hex;
 use compute_formats;
 use value_types::ComputeError;
 
@@ -127,13 +126,12 @@ pub(in crate::storage::engine) fn set_date_value(
         let cell_id =
             services::cell_editing::find_cell_id_at(&engine.cell_store, sheet_id, row, col);
         cell_id.and_then(|cid| {
-            let cell_hex = id_to_hex(cid.as_u128());
             let table_fmt =
                 services::resolve_structured_format_at_cell(&engine.cell_store, sheet_id, row, col);
-            let fmt = crate::storage::properties::get_effective_format(
+            let fmt = crate::storage::properties::get_effective_format_by_id(
                 &engine.stores.storage,
                 sheet_id,
-                &cell_hex,
+                Some(&cid),
                 row,
                 col,
                 table_fmt.as_ref(),
@@ -197,13 +195,12 @@ pub(in crate::storage::engine) fn set_time_value(
         let cell_id =
             services::cell_editing::find_cell_id_at(&engine.cell_store, sheet_id, row, col);
         cell_id.and_then(|cid| {
-            let cell_hex = id_to_hex(cid.as_u128());
             let table_fmt =
                 services::resolve_structured_format_at_cell(&engine.cell_store, sheet_id, row, col);
-            let fmt = crate::storage::properties::get_effective_format(
+            let fmt = crate::storage::properties::get_effective_format_by_id(
                 &engine.stores.storage,
                 sheet_id,
-                &cell_hex,
+                Some(&cid),
                 row,
                 col,
                 table_fmt.as_ref(),

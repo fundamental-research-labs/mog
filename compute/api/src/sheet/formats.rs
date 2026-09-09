@@ -15,11 +15,6 @@ pub struct SheetFormats {
     sheet_id: SheetId,
 }
 
-/// Parse a hex-encoded u128 string (from `id_to_hex`) back to a `CellId`.
-fn cell_id_from_hex(hex: &str) -> Option<CellId> {
-    u128::from_str_radix(hex, 16).ok().map(CellId::from_raw)
-}
-
 impl SheetFormats {
     pub(crate) fn new(dispatch: Dispatch, sheet_id: SheetId) -> Self {
         Self { dispatch, sheet_id }
@@ -37,10 +32,9 @@ impl SheetFormats {
     pub fn get_cell_format(&self, row: u32, col: u32) -> Result<CellFormat, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch.query_engine(move |e| {
-            // Look up the CellId via the engine's public query method.
+            // Keep the resolved native identity through the engine call.
             let cell_id = e
-                .get_cell_id_at(&sid, row, col)
-                .and_then(|hex| cell_id_from_hex(&hex))
+                .resolve_cell_id_at(&sid, row, col)
                 .unwrap_or_else(|| CellId::from_raw(0));
             e.get_cell_format(&sid, &cell_id, row, col)
         })
@@ -60,7 +54,7 @@ impl SheetFormats {
 
     /// Set the format for a cell at a position.
     ///
-    /// If no cell exists at the position yet, one is created via `get_or_create_cell_id`.
+    /// If no cell exists at the position yet, one is created via the native identity allocator.
     pub fn set_cell_format(
         &self,
         row: u32,
@@ -71,16 +65,7 @@ impl SheetFormats {
         self.dispatch
             .call_engine(move |e| {
                 // Ensure the cell exists (creates a marker cell if needed).
-                let mr = e.get_or_create_cell_id(&sid, row, col)?;
-                // The CellId hex is stored in mr.data; parse it back.
-                let cell_id = mr
-                    .data
-                    .as_ref()
-                    .and_then(|d| d.as_str())
-                    .and_then(cell_id_from_hex)
-                    .ok_or_else(|| value_types::ComputeError::Eval {
-                        message: "Failed to parse CellId from get_or_create_cell_id".to_string(),
-                    })?;
+                let cell_id = e.ensure_cell_id_at(&sid, row, col)?;
                 e.set_cell_format(&sid, &cell_id, &format)
             })
             .and_then(|r| r.map_err(ComputeApiError::from))
@@ -91,15 +76,7 @@ impl SheetFormats {
         let sid = self.sheet_id;
         self.dispatch
             .call_engine(move |e| {
-                let mr = e.get_or_create_cell_id(&sid, row, col)?;
-                let cell_id = mr
-                    .data
-                    .as_ref()
-                    .and_then(|d| d.as_str())
-                    .and_then(cell_id_from_hex)
-                    .ok_or_else(|| value_types::ComputeError::Eval {
-                        message: "Failed to parse CellId from get_or_create_cell_id".to_string(),
-                    })?;
+                let cell_id = e.ensure_cell_id_at(&sid, row, col)?;
                 e.clear_cell_format(&sid, &cell_id)
             })
             .and_then(|r| r.map_err(ComputeApiError::from))

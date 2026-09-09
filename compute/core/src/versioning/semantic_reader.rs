@@ -127,7 +127,7 @@ pub fn read_engine_semantic_workbook_state(
             let cell_hex = id_to_hex(cell_id.as_u128());
             let authored_formula = engine.compute().get_formula(cell_id);
             let cell_properties =
-                properties::get_properties(engine.storage(), &sheet_id, &cell_hex);
+                properties::get_properties_by_id(engine.storage(), &sheet_id, &cell_id);
             let value_provenance =
                 cell_value_provenance(engine, &sheet_id, &cell_hex, cell_properties.as_ref());
             let direct_format = cell_properties

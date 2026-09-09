@@ -1,16 +1,14 @@
 use super::*;
 
 impl ComputeEngine {
-    pub(crate) fn format_lookup_cell_id_hex(
+    pub(crate) fn format_lookup_cell_id(
         &self,
         sheet_id: &SheetId,
         row: u32,
         col: u32,
-    ) -> String {
+    ) -> Option<CellId> {
         self.cell_store
             .resolve_cell_id(sheet_id, SheetPos::new(row, col))
-            .map(|cid| id_to_hex(cid.as_u128()).to_string())
-            .unwrap_or_default()
     }
 
     /// Inner workhorse: format a known CellValue using the effective format at
@@ -22,14 +20,14 @@ impl ComputeEngine {
         row: u32,
         col: u32,
     ) -> String {
-        let cell_id_hex = self.format_lookup_cell_id_hex(sheet_id, row, col);
+        let cell_id = self.format_lookup_cell_id(sheet_id, row, col);
 
         let table_fmt =
             services::resolve_structured_format_at_cell(&self.cell_store, sheet_id, row, col);
-        let mut effective = properties::get_effective_format(
+        let mut effective = properties::get_effective_format_by_id(
             &self.stores.storage,
             sheet_id,
-            &cell_id_hex,
+            cell_id.as_ref(),
             row,
             col,
             table_fmt.as_ref(),

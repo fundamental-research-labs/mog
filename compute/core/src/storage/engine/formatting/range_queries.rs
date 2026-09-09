@@ -38,17 +38,16 @@ pub(super) fn query_range_properties(
                 .resolve_cell_id(sheet_id, SheetPos::new(row, col));
 
             let fmt = if let Some(cid) = cell_id {
-                let cell_hex = id_to_hex(cid.as_u128());
                 let table_fmt = services::resolve_structured_format_at_cell(
                     &engine.cell_store,
                     sheet_id,
                     row,
                     col,
                 );
-                Some(properties::get_effective_format(
+                Some(properties::get_effective_format_by_id(
                     &engine.stores.storage,
                     sheet_id,
-                    &cell_hex,
+                    Some(&cid),
                     row,
                     col,
                     table_fmt.as_ref(),

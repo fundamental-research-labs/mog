@@ -10,7 +10,6 @@ use crate::storage::sheet::cf_store::{CFCellRange, CFIconSetPreset, CFPresetCate
 use crate::storage::sheet::schemas::{CellValidationResult, ColumnSchema, RangeSchema};
 use bridge_core as bridge;
 use cell_types::{CellId, SheetId, SheetPos};
-use compute_document::hex::id_to_hex;
 use domain_types::CellFormat;
 use domain_types::ResolvedCellFormat;
 use domain_types::domain::conditional_format::{CFRule, ConditionalFormat};

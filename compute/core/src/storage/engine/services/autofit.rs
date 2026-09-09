@@ -20,8 +20,6 @@ use crate::storage::engine::stores::EngineStores;
 use crate::storage::properties;
 use crate::storage::sheet::{dimensions, merges};
 
-use compute_document::hex::id_to_hex;
-
 /// Maximum autofit column width in pixels.
 const MAX_AUTOFIT_WIDTH: Pixels = Pixels(500.0);
 /// Maximum autofit row height in pixels (Excel max).
@@ -462,12 +460,11 @@ fn get_effective_format(
     row: u32,
     col: u32,
 ) -> domain_types::CellFormat {
-    let cell_id_hex = id_to_hex(cell_id.as_u128());
     let table_fmt = super::resolve_structured_format_at_cell(cell_store, sheet_id, row, col);
-    let mut effective = properties::get_effective_format(
+    let mut effective = properties::get_effective_format_by_id(
         &stores.storage,
         sheet_id,
-        &cell_id_hex,
+        Some(&cell_id),
         row,
         col,
         table_fmt.as_ref(),

@@ -23,7 +23,6 @@ pub(in crate::storage::engine) fn mutation_clear_range_by_position(
     end_col: u32,
 ) -> Result<RecalcResult, ComputeError> {
     use crate::storage::infra::cell_iter;
-    use compute_document::hex::id_to_hex;
 
     // 0. Resolve all (row, col, CellId) tuples via the authoritative
     //    sparse in-memory grid index. Empty positions have no CellId, so
@@ -56,14 +55,11 @@ pub(in crate::storage::engine) fn mutation_clear_range_by_position(
     }
 
     // Clear cell properties for the resolved identities.
-    let cell_hexes: Vec<String> = resolved
-        .iter()
-        .map(|(_, _, cid)| id_to_hex(cid.as_u128()).to_string())
-        .collect();
-    cell_iter::clear_cells_by_hex(
+    let cell_ids: Vec<CellId> = resolved.iter().map(|(_, _, cid)| *cid).collect();
+    cell_iter::clear_cells_by_id(
         &mut stores.storage,
         sheet_id,
-        &cell_hexes,
+        &cell_ids,
         /* clear_properties = */ true,
     );
 

@@ -24,22 +24,21 @@ pub(in crate::storage::engine) fn materialize_table_visible_formats(
                 col,
             )
             .map(|format| crate::storage::table_format::table_cell_format_to_cell_format(&format));
-            let cell_hex = existing_cell_hex(cell_store, &sheet_id, row, col);
-            let cell_hex = cell_hex.as_ref().map(|hex| hex.as_str()).unwrap_or("");
-            let without_table = crate::storage::properties::get_effective_format(
+            let cell_id = cell_store.resolve_cell_id(&sheet_id, SheetPos::new(row, col));
+            let without_table = crate::storage::properties::get_effective_format_by_id(
                 &stores.storage,
                 &sheet_id,
-                cell_hex,
+                cell_id.as_ref(),
                 row,
                 col,
                 None,
                 stores.grid_indexes.get(&sheet_id),
                 cell_store.get_sheet(&sheet_id),
             );
-            let with_table = crate::storage::properties::get_effective_format(
+            let with_table = crate::storage::properties::get_effective_format_by_id(
                 &stores.storage,
                 &sheet_id,
-                cell_hex,
+                cell_id.as_ref(),
                 row,
                 col,
                 table_format.as_ref(),
@@ -96,17 +95,6 @@ pub(in crate::storage::engine) fn materialize_table_visible_formats(
     }
 
     Ok(result)
-}
-
-fn existing_cell_hex(
-    cell_store: &CellStore,
-    sheet_id: &SheetId,
-    row: u32,
-    col: u32,
-) -> Option<compute_document::hex::SmallHex> {
-    cell_store
-        .resolve_cell_id(sheet_id, SheetPos::new(row, col))
-        .map(|cell_id| id_to_hex(cell_id.as_u128()))
 }
 
 fn push_grouped_format_range(

@@ -3,7 +3,6 @@ use crate::storage::engine::settings::EngineSettings;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::engine::viewport;
 use cell_types::{SheetId, SheetPos};
-use compute_document::hex::id_to_hex;
 use domain_types::CellFormat;
 
 pub(in crate::storage::engine) fn get_resolved_cell_format(
@@ -18,12 +17,11 @@ pub(in crate::storage::engine) fn get_resolved_cell_format(
     let cell_id = cell_store.resolve_cell_id(sheet_id, SheetPos::new(row, col));
 
     let mut format = if let Some(cell_id) = cell_id {
-        let cell_hex = id_to_hex(cell_id.as_u128());
         let table_format = super::resolve_structured_format_at_cell(cell_store, sheet_id, row, col);
-        crate::storage::properties::get_effective_format(
+        crate::storage::properties::get_effective_format_by_id(
             &stores.storage,
             sheet_id,
-            &cell_hex,
+            Some(&cell_id),
             row,
             col,
             table_format.as_ref(),

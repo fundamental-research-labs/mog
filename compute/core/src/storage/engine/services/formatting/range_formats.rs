@@ -3,8 +3,8 @@ use crate::cells::CellStore;
 use crate::snapshot::{CellPosition, ChangeKind, MutationResult, PropertyChange};
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::properties;
-use cell_types::SheetId;
-use compute_document::hex::{SmallHex, id_to_hex};
+use cell_types::{CellId, SheetId};
+use compute_document::hex::id_to_hex;
 use domain_types::{CellBorders, CellFormat};
 use value_types::ComputeError;
 
@@ -28,13 +28,13 @@ impl RangeFormatPatch<'_> {
         &self,
         stores: &mut EngineStores,
         sheet_id: &SheetId,
-        cell_ids: &[&str],
+        cell_ids: &[CellId],
     ) -> Result<(), ComputeError> {
         match self {
             Self::Format {
                 format,
                 clear_fields,
-            } => properties::patch_cell_formats(
+            } => properties::patch_cell_formats_by_id(
                 &mut stores.storage,
                 sheet_id,
                 cell_ids,
@@ -44,7 +44,7 @@ impl RangeFormatPatch<'_> {
             Self::Borders {
                 borders,
                 clear_fields,
-            } => properties::patch_cell_borders(
+            } => properties::patch_cell_borders_by_id(
                 &mut stores.storage,
                 sheet_id,
                 cell_ids,
@@ -132,9 +132,8 @@ pub(in crate::storage::engine) fn toggle_format_property(
         })?;
     let active_id =
         cell_store.resolve_cell_id(sheet_id, cell_types::SheetPos::new(active_row, active_col));
-    let active_props = active_id.and_then(|id| {
-        properties::get_properties(&stores.storage, sheet_id, &id_to_hex(id.as_u128()))
-    });
+    let active_props =
+        active_id.and_then(|id| properties::get_properties_by_id(&stores.storage, sheet_id, &id));
     let table_fmt = resolve_structured_format_at_cell(cell_store, sheet_id, active_row, active_col);
     let effective = properties::get_effective_format_preloaded(
         &stores.storage,
@@ -306,12 +305,8 @@ fn patch_ranges(
                 cell_types::SheetRange::new(start_row, start_col, end_row, end_col),
             );
 
-            let cell_hexes: Vec<SmallHex> = existing
-                .iter()
-                .map(|(cell_id, _, _)| id_to_hex(cell_id.as_u128()))
-                .collect();
-            let cell_hex_refs: Vec<&str> = cell_hexes.iter().map(|s| s.as_str()).collect();
-            patch.apply(stores, sheet_id, &cell_hex_refs)?;
+            let cell_ids: Vec<CellId> = existing.iter().map(|(id, _, _)| *id).collect();
+            patch.apply(stores, sheet_id, &cell_ids)?;
 
             result.property_changes.push(PropertyChange {
                 sheet_id: sheet_id_str.clone(),
@@ -324,7 +319,7 @@ fn patch_ranges(
                 format: format_json.clone(),
             });
         } else {
-            let mut cell_data: Vec<(SmallHex, u32, u32)> = Vec::new();
+            let mut cell_data: Vec<(CellId, u32, u32)> = Vec::new();
             for row in start_row..=end_row {
                 for col in start_col..=end_col {
                     let Some(cell_id) = super::super::cell_editing::ensure_cell_id(
@@ -332,19 +327,17 @@ fn patch_ranges(
                     ) else {
                         continue;
                     };
-                    let cell_hex = id_to_hex(cell_id.as_u128());
-                    cell_data.push((cell_hex, row, col));
+                    cell_data.push((cell_id, row, col));
                 }
             }
 
-            let cell_hex_refs: Vec<&str> =
-                cell_data.iter().map(|(hex, _, _)| hex.as_str()).collect();
-            patch.apply(stores, sheet_id, &cell_hex_refs)?;
+            let cell_ids: Vec<CellId> = cell_data.iter().map(|(id, _, _)| *id).collect();
+            patch.apply(stores, sheet_id, &cell_ids)?;
 
-            for (cell_hex, row, col) in &cell_data {
+            for (cell_id, row, col) in &cell_data {
                 result.property_changes.push(PropertyChange {
                     sheet_id: sheet_id_str.clone(),
-                    cell_id: (*cell_hex).into(),
+                    cell_id: id_to_hex(cell_id.as_u128()).into(),
                     position: Some(CellPosition {
                         row: *row,
                         col: *col,
@@ -408,12 +401,8 @@ pub(in crate::storage::engine) fn clear_format_for_ranges(
                 cell_types::SheetRange::new(start_row, start_col, end_row, end_col),
             );
 
-            let cell_hexes: Vec<SmallHex> = existing
-                .iter()
-                .map(|(cell_id, _, _)| id_to_hex(cell_id.as_u128()))
-                .collect();
-            let cell_hex_refs: Vec<&str> = cell_hexes.iter().map(|s| s.as_str()).collect();
-            properties::clear_cell_formats(&mut stores.storage, sheet_id, &cell_hex_refs);
+            let cell_ids: Vec<CellId> = existing.iter().map(|(id, _, _)| *id).collect();
+            properties::clear_cell_formats_by_id(&mut stores.storage, sheet_id, &cell_ids);
 
             result.property_changes.push(PropertyChange {
                 sheet_id: sheet_id_str.clone(),
@@ -426,7 +415,7 @@ pub(in crate::storage::engine) fn clear_format_for_ranges(
                 format: None,
             });
         } else {
-            let mut cell_data: Vec<(SmallHex, u32, u32)> = Vec::new();
+            let mut cell_data: Vec<(CellId, u32, u32)> = Vec::new();
             for row in start_row..=end_row {
                 for col in start_col..=end_col {
                     let Some(cell_id) =
@@ -434,19 +423,17 @@ pub(in crate::storage::engine) fn clear_format_for_ranges(
                     else {
                         continue;
                     };
-                    let cell_hex = id_to_hex(cell_id.as_u128());
-                    cell_data.push((cell_hex, row, col));
+                    cell_data.push((cell_id, row, col));
                 }
             }
 
-            let cell_hex_refs: Vec<&str> =
-                cell_data.iter().map(|(hex, _, _)| hex.as_str()).collect();
-            properties::clear_cell_formats(&mut stores.storage, sheet_id, &cell_hex_refs);
+            let cell_ids: Vec<CellId> = cell_data.iter().map(|(id, _, _)| *id).collect();
+            properties::clear_cell_formats_by_id(&mut stores.storage, sheet_id, &cell_ids);
 
-            for (cell_hex, row, col) in &cell_data {
+            for (cell_id, row, col) in &cell_data {
                 result.property_changes.push(PropertyChange {
                     sheet_id: sheet_id_str.clone(),
-                    cell_id: (*cell_hex).into(),
+                    cell_id: id_to_hex(cell_id.as_u128()).into(),
                     position: Some(CellPosition {
                         row: *row,
                         col: *col,

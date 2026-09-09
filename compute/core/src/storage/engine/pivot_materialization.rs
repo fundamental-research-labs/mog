@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 
 use cell_types::{SheetId, SheetPos};
-use compute_document::hex::{SmallHex, id_to_hex};
 use domain_types::CellFormat;
 use domain_types::domain::pivot::{PivotTableConfig, ShowValuesAs, ShowValuesAsConfig};
 use value_types::ComputeError;
@@ -61,7 +60,7 @@ pub(in crate::storage::engine) fn apply_pivot_value_number_formats(
         return;
     }
 
-    let mut cells_by_format: BTreeMap<String, Vec<SmallHex>> = BTreeMap::new();
+    let mut cells_by_format: BTreeMap<String, Vec<cell_types::CellId>> = BTreeMap::new();
     let mut record_cell = |row: u32, col: u32, value_index: usize| {
         let Some(format) = value_formats
             .get(value_index % value_formats.len())
@@ -76,7 +75,7 @@ pub(in crate::storage::engine) fn apply_pivot_value_number_formats(
         cells_by_format
             .entry(format.clone())
             .or_default()
-            .push(id_to_hex(cell_id.as_u128()));
+            .push(cell_id);
     };
 
     let first_data_row = anchor_row + bounds.first_data_row;
@@ -122,16 +121,15 @@ pub(in crate::storage::engine) fn apply_pivot_value_number_formats(
         }
     }
 
-    for (number_format, cell_hexes) in cells_by_format {
-        let cell_hex_refs: Vec<&str> = cell_hexes.iter().map(|hex| hex.as_str()).collect();
+    for (number_format, cell_ids) in cells_by_format {
         let format = CellFormat {
             number_format: Some(number_format),
             ..Default::default()
         };
-        properties::set_cell_formats(
+        properties::set_cell_formats_by_id(
             &mut stores.storage,
             output_sheet_id,
-            &cell_hex_refs,
+            &cell_ids,
             &format,
         );
     }

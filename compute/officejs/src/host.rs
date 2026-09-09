@@ -46,7 +46,7 @@ struct BatchResult {
 
 struct RangeRef {
     sheet: Sheet,
-    address: String,
+    bounds: (u32, u32, u32, u32),
 }
 
 pub(crate) struct Host {
@@ -164,8 +164,9 @@ impl Host {
                             code: "InvalidObjectPath",
                             message: "The worksheet object is not available.".to_string(),
                         })?;
-                    // Validate the address now so sync fails in Office.js style.
-                    let _: (u32, u32, u32, u32) = compute_api::CellRange::from(address.as_str())
+                    // Resolve A1 at the scripting boundary. Keep compact bounds for all
+                    // subsequent operations; empty ranges need no allocated cell IDs.
+                    let bounds = compute_api::CellRange::from(address.as_str())
                         .resolve()
                         .map_err(|e| BatchError {
                             code: "InvalidArgument",
@@ -174,7 +175,7 @@ impl Host {
                     self.ranges
                         .lock()
                         .expect("ranges lock")
-                        .insert(id, RangeRef { sheet, address });
+                        .insert(id, RangeRef { sheet, bounds });
                 }
                 Op::Set {
                     id,
@@ -191,7 +192,7 @@ impl Host {
                         "values" | "formulas" => {
                             range
                                 .sheet
-                                .set_range(range.address.as_str(), &grid)
+                                .set_range(range.bounds, &grid)
                                 .map_err(engine_error)?;
                         }
                         other => {
@@ -220,13 +221,13 @@ impl Host {
                                 "values" => {
                                     props.insert(
                                         "values".to_string(),
-                                        range_values_json(&range.sheet, &range.address)?,
+                                        range_values_json(&range.sheet, range.bounds)?,
                                     );
                                 }
                                 "formulas" => {
                                     props.insert(
                                         "formulas".to_string(),
-                                        range_formulas_json(&range.sheet, &range.address)?,
+                                        range_formulas_json(&range.sheet, range.bounds)?,
                                     );
                                 }
                                 _ => {}
@@ -301,10 +302,8 @@ fn js_cell_to_write(value: &Value) -> String {
     }
 }
 
-fn range_values_json(sheet: &Sheet, address: &str) -> Result<Value, BatchError> {
-    let (sr, sc, er, ec) = compute_api::CellRange::from(address)
-        .resolve()
-        .map_err(engine_error)?;
+fn range_values_json(sheet: &Sheet, bounds: (u32, u32, u32, u32)) -> Result<Value, BatchError> {
+    let (sr, sc, er, ec) = bounds;
     let values = sheet
         .get_range_values_2d(compute_api::CellRange::Bounds(sr, sc, er, ec))
         .map_err(engine_error)?;
@@ -316,10 +315,8 @@ fn range_values_json(sheet: &Sheet, address: &str) -> Result<Value, BatchError> 
     ))
 }
 
-fn range_formulas_json(sheet: &Sheet, address: &str) -> Result<Value, BatchError> {
-    let (sr, sc, er, ec) = compute_api::CellRange::from(address)
-        .resolve()
-        .map_err(engine_error)?;
+fn range_formulas_json(sheet: &Sheet, bounds: (u32, u32, u32, u32)) -> Result<Value, BatchError> {
+    let (sr, sc, er, ec) = bounds;
     let mut rows = Vec::new();
     for row in sr..=er {
         let mut cells = Vec::new();

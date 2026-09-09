@@ -12,13 +12,15 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
 use super::compare::{build_value_key_set, compare_values, type_rank, value_in_key_set};
-use super::filter_resolve::{evaluate_top_bottom_direct, resolve_dynamic_filter};
+use super::filter_resolve::{
+    evaluate_top_bottom_direct, resolve_dynamic_filter, resolve_dynamic_filter_with_date_system,
+};
 use super::types::{
     ConditionFilter, FilterCriteria, FilterLogic, FilterOperator, TableColorFilter,
     TableFilterCondition, TableFilterState, ValueFilter,
 };
 use domain_types::CellFormat;
-use value_types::{CellValue, Color};
+use value_types::{CellValue, Color, DateSystem};
 
 // =============================================================================
 // TableFilterState CRUD (all return new TableFilterState)
@@ -104,6 +106,28 @@ pub fn evaluate_column_filter(
     )
 }
 
+/// Evaluate a filter using the workbook's date serial system for dynamic
+/// calendar rules.  Other criteria retain the same behavior as
+/// `evaluate_column_filter`.
+pub fn evaluate_column_filter_with_date_system(
+    criteria: &FilterCriteria,
+    column_data: &[CellValue],
+    column_formats: Option<&[CellFormat]>,
+    now: Option<chrono::NaiveDate>,
+    week_start_day: Option<chrono::Weekday>,
+    date_system: DateSystem,
+) -> Vec<u8> {
+    evaluate_column_filter_with_icons_and_date_system(
+        criteria,
+        column_data,
+        column_formats,
+        None,
+        now,
+        week_start_day,
+        date_system,
+    )
+}
+
 /// Evaluate with one fresh, canonical CF icon identity per row. Missing context
 /// cannot prove any row matches an icon criterion; it never means all-pass.
 pub fn evaluate_column_filter_with_icons(
@@ -113,6 +137,47 @@ pub fn evaluate_column_filter_with_icons(
     column_icons: Option<&[Option<domain_types::FilterIconIdentity>]>,
     now: Option<chrono::NaiveDate>,
     week_start_day: Option<chrono::Weekday>,
+) -> Vec<u8> {
+    evaluate_column_filter_with_icons_internal(
+        criteria,
+        column_data,
+        column_formats,
+        column_icons,
+        now,
+        week_start_day,
+        None,
+    )
+}
+
+/// Evaluate with icon context and an explicit workbook date serial system.
+pub fn evaluate_column_filter_with_icons_and_date_system(
+    criteria: &FilterCriteria,
+    column_data: &[CellValue],
+    column_formats: Option<&[CellFormat]>,
+    column_icons: Option<&[Option<domain_types::FilterIconIdentity>]>,
+    now: Option<chrono::NaiveDate>,
+    week_start_day: Option<chrono::Weekday>,
+    date_system: DateSystem,
+) -> Vec<u8> {
+    evaluate_column_filter_with_icons_internal(
+        criteria,
+        column_data,
+        column_formats,
+        column_icons,
+        now,
+        week_start_day,
+        Some(date_system),
+    )
+}
+
+fn evaluate_column_filter_with_icons_internal(
+    criteria: &FilterCriteria,
+    column_data: &[CellValue],
+    column_formats: Option<&[CellFormat]>,
+    column_icons: Option<&[Option<domain_types::FilterIconIdentity>]>,
+    now: Option<chrono::NaiveDate>,
+    week_start_day: Option<chrono::Weekday>,
+    date_system: Option<DateSystem>,
 ) -> Vec<u8> {
     let len = column_data.len();
 
@@ -163,7 +228,16 @@ pub fn evaluate_column_filter_with_icons(
     let resolved: FilterCriteria;
     let criteria_ref = if let FilterCriteria::Dynamic(dyn_filter) = criteria {
         let wsd = week_start_day.unwrap_or(chrono::Weekday::Sun);
-        resolved = resolve_dynamic_filter(dyn_filter, column_data, now, wsd);
+        resolved = match date_system {
+            Some(date_system) => resolve_dynamic_filter_with_date_system(
+                dyn_filter,
+                column_data,
+                now,
+                wsd,
+                date_system,
+            ),
+            None => resolve_dynamic_filter(dyn_filter, column_data, now, wsd),
+        };
         &resolved
     } else {
         criteria

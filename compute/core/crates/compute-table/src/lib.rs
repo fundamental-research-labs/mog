@@ -24,8 +24,8 @@ pub mod filter_resolve; // Dynamic/top-bottom → concrete filter resolution; da
 
 // Re-export filter_resolve functions needed by WASM bindings
 pub use filter_resolve::{
-    compute_date_range, compute_date_range_serial, evaluate_top_bottom_direct,
-    resolve_dynamic_filter,
+    compute_date_range, compute_date_range_serial, compute_date_range_serial_with_date_system,
+    evaluate_top_bottom_direct, resolve_dynamic_filter, resolve_dynamic_filter_with_date_system,
 };
 
 // -- Sort --

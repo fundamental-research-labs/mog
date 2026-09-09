@@ -1,35 +1,16 @@
-#![allow(unused_imports, unused_variables)]
 use crate::identity::GridIndex;
-use crate::snapshot::{
-    CellEdit, ChangeKind, MutationResult, NamedRangeChange, PageBreakChange, PrintAreaChange,
-    PrintSettingsChange, PrintTitlesChange, RecalcResult, Scenario, ScenarioCreateInput,
-    ScenarioUpdateInput, ScrollPositionChange, SheetChange, SheetChangeField,
-    SheetLifecycleRuntimeHint, SheetSettingsChange, SheetSnapshot,
-};
-use crate::storage::engine::YrsComputeEngine;
-use crate::storage::engine::mutation::{EngineMutation, MutationOutput};
-use crate::storage::engine::mutation_coordinator::SheetLifecycleHistoryHint;
-use crate::storage::engine::{mutation, services};
-use crate::storage::sheet::bindings;
-use crate::storage::sheet::{
-    order, print, properties, protection, settings, split_view, view, visibility,
-};
+use crate::snapshot::{ChangeKind, MutationResult, NamedRangeChange, RecalcResult, SheetSnapshot};
+use crate::storage::engine::ComputeEngine;
+use crate::storage::engine::history::metadata::{MetadataImpact, capture_workbook_entry};
+use crate::storage::engine::mutation;
 use crate::storage::workbook::named_ranges;
-use crate::what_if::scenarios;
 use cell_types::{CellId, SheetId};
-use compute_collab as sync;
-use compute_document::hex::id_to_hex;
-use compute_formats;
 use compute_wire::mutation::serialize_multi_viewport_patches;
-use domain_types::domain::print::PageBreaks;
-use domain_types::domain::sheet::{
-    PrintRange, PrintTitles, SheetProtectionOptions, SheetSettings, SplitViewConfig,
-};
 use formula_types::{IdentityFormula, NamedRangeDef};
 use value_types::ComputeError;
 
 pub(in crate::storage::engine) fn add_compute_sheet(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     snapshot: SheetSnapshot,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
     let sheet_id = SheetId::from_uuid_str(&snapshot.id)?;
@@ -56,7 +37,7 @@ pub(in crate::storage::engine) fn add_compute_sheet(
 }
 
 pub(in crate::storage::engine) fn remove_compute_sheet(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
     engine.stores.grid_indexes.remove(sheet_id);
@@ -71,7 +52,7 @@ pub(in crate::storage::engine) fn remove_compute_sheet(
 }
 
 pub(in crate::storage::engine) fn rename_compute_sheet(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     name: &str,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
@@ -90,7 +71,7 @@ pub(in crate::storage::engine) fn rename_compute_sheet(
 }
 
 pub(in crate::storage::engine) fn set_named_range(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     name: String,
     def: NamedRangeDef,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
@@ -111,11 +92,11 @@ pub(in crate::storage::engine) fn set_named_range(
             } else {
                 format!("={}", expr)
             };
-            match engine
-                .stores
-                .compute
-                .to_identity_formula(&mut engine.mirror, &ctx, &a1)
-            {
+            match engine.stores.compute.to_identity_formula_with_rect_ranges(
+                &mut engine.mirror,
+                &ctx,
+                &a1,
+            ) {
                 Ok(id) => id,
                 Err(_) => {
                     let template = expr.strip_prefix('=').unwrap_or(expr).to_string();
@@ -132,51 +113,56 @@ pub(in crate::storage::engine) fn set_named_range(
         _ => def.refers_to.clone(),
     };
 
-    services::cell_editing::persist_identity_formula_cell_identities(
-        &mut engine.stores,
-        &engine.mirror,
-        &identity,
-    );
-
-    let refers_to_json =
-        serde_json::to_string(&identity).expect("IdentityFormula serialization should not fail");
-
     let scope_for_seed = def.scope.clone();
     let key_for_seed = name.to_ascii_lowercase();
 
+    let linked_range_id = def.linked_range_id;
     engine
         .stores
         .compute
         .set_named_range(&mut engine.mirror, name.clone(), def);
 
-    engine.mutation.observer.set_suppressed(true);
-    let defined_name = named_ranges::DefinedName {
-        id: engine.stores.next_id_simple(),
-        name: name.clone(),
-        refers_to: refers_to_json,
-        raw_refers_to: None,
-        scope: scope_str,
-        comment: None,
-        custom_menu: None,
-        description: None,
-        help: None,
-        status_bar: None,
-        visible: true,
-        xlm: false,
-        function: false,
-        vb_procedure: false,
-        publish_to_server: false,
-        workbook_parameter: false,
-        xml_space_preserve: false,
-        order: None,
-        linked_range_id: None,
+    let defined_name = if let Some(existing) = named_ranges::get_named_range_by_name(
+        &engine.stores.storage.metadata,
+        &name,
+        scope_str.as_deref(),
+    ) {
+        named_ranges::StoredDefinedName {
+            refers_to: identity,
+            raw_refers_to: None,
+            linked_range_id,
+            ..existing
+        }
+    } else {
+        named_ranges::StoredDefinedName {
+            id: engine.stores.next_id_simple(),
+            name: name.clone(),
+            refers_to: identity,
+            raw_refers_to: None,
+            scope: scope_str,
+            comment: None,
+            custom_menu: None,
+            description: None,
+            help: None,
+            status_bar: None,
+            visible: true,
+            xlm: false,
+            function: false,
+            vb_procedure: false,
+            publish_to_server: false,
+            workbook_parameter: false,
+            xml_space_preserve: false,
+            order: None,
+            linked_range_id,
+        }
     };
-    named_ranges::upsert_named_range(
-        engine.stores.storage.doc(),
-        engine.stores.storage.workbook_map(),
-        &defined_name,
+    capture_workbook_entry!(
+        engine.stores.storage,
+        named_ranges,
+        named_ranges::get_defined_name_key(&defined_name.name, defined_name.scope.as_deref()),
+        MetadataImpact::Names
     );
-    engine.mutation.observer.set_suppressed(false);
+    named_ranges::upsert_named_range(&mut engine.stores.storage.metadata, &defined_name);
 
     let seed_id = engine
         .mirror
@@ -201,7 +187,7 @@ pub(in crate::storage::engine) fn set_named_range(
 }
 
 pub(in crate::storage::engine) fn remove_named_range(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     name: &str,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
     let key = name.to_ascii_lowercase();
@@ -218,17 +204,23 @@ pub(in crate::storage::engine) fn remove_named_range(
         .compute
         .remove_named_range(&mut engine.mirror, name);
 
-    named_ranges::remove_named_range_by_name(
-        engine.stores.storage.doc(),
-        engine.stores.storage.workbook_map(),
-        name,
-        None,
+    capture_workbook_entry!(
+        engine.stores.storage,
+        named_ranges,
+        named_ranges::get_defined_name_key(name, None),
+        MetadataImpact::Names
     );
+    named_ranges::remove_named_range_by_name(&mut engine.stores.storage.metadata, name, None);
     let sheet_ids: Vec<_> = engine.mirror.sheet_ids().copied().collect();
     for sheet_id in &sheet_ids {
+        capture_workbook_entry!(
+            engine.stores.storage,
+            named_ranges,
+            named_ranges::get_defined_name_key(name, Some(&sheet_id.to_uuid_string())),
+            MetadataImpact::Names
+        );
         named_ranges::remove_named_range_by_name(
-            engine.stores.storage.doc(),
-            engine.stores.storage.workbook_map(),
+            &mut engine.stores.storage.metadata,
             name,
             Some(&sheet_id.to_uuid_string()),
         );
@@ -254,7 +246,7 @@ pub(in crate::storage::engine) fn remove_named_range(
 }
 
 pub(in crate::storage::engine) fn eval_cf(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     rules: Vec<crate::cf::types::CFRuleWire>,
 ) -> Vec<crate::cf::types::CellCFResult> {
@@ -269,7 +261,7 @@ pub(in crate::storage::engine) fn eval_cf(
 }
 
 pub(in crate::storage::engine) fn to_identity_formula(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     formula_a1: &str,
 ) -> Result<IdentityFormula, ComputeError> {
@@ -280,7 +272,7 @@ pub(in crate::storage::engine) fn to_identity_formula(
 }
 
 pub(in crate::storage::engine) fn to_a1_display(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     formula: &IdentityFormula,
 ) -> String {
@@ -291,7 +283,7 @@ pub(in crate::storage::engine) fn to_a1_display(
 }
 
 pub(in crate::storage::engine) fn to_a1_display_qualified(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     formula: &IdentityFormula,
 ) -> String {

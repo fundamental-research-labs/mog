@@ -29,7 +29,7 @@ pub struct Scenario {
     pub changing_cells: Vec<String>,
     /// Values for each changing cell, in same order as `changing_cells`.
     pub values: Vec<CellValue>,
-    /// User who created the scenario (optional for collaboration).
+    /// User who created the scenario, when recorded.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_by: Option<String>,
     /// Timestamp when the scenario was created (epoch millis).
@@ -61,7 +61,7 @@ pub struct ScenarioCreateInput {
     pub changing_cells: Vec<String>,
     /// Values for each changing cell, in same order as `changing_cells`.
     pub values: Vec<CellValue>,
-    /// User who created the scenario (optional for collaboration).
+    /// User who created the scenario, when recorded.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_by: Option<String>,
 }

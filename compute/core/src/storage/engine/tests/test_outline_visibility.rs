@@ -40,7 +40,7 @@ fn assert_empty_viewport_patches(patches: &[u8]) {
 #[test]
 fn collapsed_outline_group_returns_zero_row_height() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // Group rows 2..=4 (inclusive). Three rows, default height before collapse.
@@ -92,7 +92,7 @@ fn collapsed_outline_group_returns_zero_row_height() {
 #[test]
 fn collapsed_outline_column_group_returns_zero_col_width() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // Group columns 3..=6 (inclusive).
@@ -351,7 +351,7 @@ fn explicit_hide_still_works_alongside_outline_groups() {
     // Sanity: the new check is OR-ed with the existing hide check. An
     // explicitly hidden row outside any group must still report height 0.
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     let _ = engine.hide_rows(&sid, &[10]).expect("hide_rows");
@@ -365,7 +365,7 @@ fn expanded_outline_group_does_not_zero_height() {
     // the row heights — it's just an outline marker until a user clicks
     // the collapse arrow.
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine.group_rows(&sid, 2, 4).expect("group_rows");
@@ -382,7 +382,7 @@ fn expanded_outline_group_does_not_zero_height() {
 #[test]
 fn collapsed_outline_group_updates_layout_index_and_defers_viewport_refresh_rows() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -452,7 +452,7 @@ fn collapsed_outline_group_updates_layout_index_and_defers_viewport_refresh_rows
 #[test]
 fn collapsed_outline_group_updates_layout_index_and_defers_viewport_refresh_columns() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine

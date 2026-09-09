@@ -1,6 +1,5 @@
 mod cell_properties;
 mod cf_geometry;
-mod cf_identity;
 mod conditional_formats;
 mod range_formats;
 mod row_col_formats;
@@ -14,7 +13,6 @@ pub(in crate::storage::engine) use cf_geometry::{
     cf_intersect_ranges, cf_is_valid_range, cf_range_contains, cf_ranges_overlap,
     cf_subtract_range, get_cf_preset_by_id, get_icon_set_presets,
 };
-pub(in crate::storage::engine) use cf_identity::resolve_cf_ranges_to_identities;
 pub(in crate::storage::engine) use conditional_formats::{
     add_cf_rule, add_rule_to_cf, bump_cf_priorities, clear_cf_formats_for_sheet, delete_cf_rule,
     delete_rule_from_cf, get_all_cf_rules, get_cf_rules_for_cell, get_conditional_format,
@@ -22,7 +20,7 @@ pub(in crate::storage::engine) use conditional_formats::{
 };
 pub(in crate::storage::engine) use range_formats::{
     clear_format_for_ranges, patch_borders_for_ranges, patch_format_for_ranges,
-    set_format_for_ranges, set_format_for_ranges_with_origin, toggle_format_property,
+    set_format_for_ranges, toggle_format_property,
 };
 pub(in crate::storage::engine) use row_col_formats::{
     clear_col_format, patch_col_borders, patch_col_format, patch_row_borders, patch_row_format,

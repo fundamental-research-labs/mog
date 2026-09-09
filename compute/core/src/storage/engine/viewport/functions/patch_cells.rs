@@ -83,8 +83,7 @@ pub(in crate::storage::engine::viewport) fn build_sparkline_changed_cells(
                 .unwrap_or_default();
 
             let extra_flags = if crate::storage::sheet::sparklines::has_sparkline(
-                stores.storage.doc(),
-                &stores.storage.sheets_ref(),
+                &stores.storage,
                 sheet_id,
                 row,
                 col,

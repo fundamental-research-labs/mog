@@ -5,26 +5,23 @@ use value_types::{CellValue, ComputeError};
 
 use crate::mirror::CellMirror;
 use crate::snapshot::RecalcResult;
-use crate::storage::engine::mutation_coordinator::MutationCoordinator;
 use crate::storage::engine::services::cell_editing::{
-    NO_OLD_FORMULA_SENTINEL, persist_cell_formula_identity,
+    NO_OLD_FORMULA_SENTINEL, register_formula_cell_identities,
 };
 use crate::storage::engine::stores::EngineStores;
 
 use super::edits::{canonicalize_resolved_raw_edits, validate_edit_bounds};
-use super::yrs_writes::write_raw_cell_edits_to_yrs;
+use super::identity_registration::register_cell_positions;
 
 pub(in crate::storage::engine) fn mutation_set_cells_raw(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
-    mutation: &mut MutationCoordinator,
     edits: Vec<(SheetId, CellId, u32, u32, CellValue, Option<String>)>,
     skip_cycle_check: bool,
 ) -> Result<RecalcResult, ComputeError> {
     mutation_set_cells_raw_with_trust(
         stores,
         mirror,
-        mutation,
         edits,
         skip_cycle_check,
         crate::scheduler::WriteTrust::UserEdit,
@@ -34,7 +31,6 @@ pub(in crate::storage::engine) fn mutation_set_cells_raw(
 pub(in crate::storage::engine) fn mutation_set_cells_raw_with_trust(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
-    mutation: &mut MutationCoordinator,
     edits: Vec<(SheetId, CellId, u32, u32, CellValue, Option<String>)>,
     skip_cycle_check: bool,
     trust: crate::scheduler::WriteTrust,
@@ -51,15 +47,24 @@ pub(in crate::storage::engine) fn mutation_set_cells_raw_with_trust(
             .validate_raw_user_edit_region_writes(mirror, &edits)?;
     }
 
-    let _suppress = mutation.suppress_guard();
+    for (sheet, cell, row, col, _, _) in &edits {
+        crate::storage::engine::history::cells::capture_cell(stores, mirror, *sheet, *cell, *row, *col);
+    }
 
     let mut direct_edit_old_values: HashMap<CellId, CellValue> =
         HashMap::with_capacity(edits.len());
     let mut direct_edit_old_formulas: HashMap<CellId, String> = HashMap::with_capacity(edits.len());
 
-    write_raw_cell_edits_to_yrs(stores, &edits)?;
+    register_cell_positions(
+        stores,
+        mirror,
+        edits
+            .iter()
+            .map(|(sheet_id, cell_id, row, col, _, _)| (*sheet_id, *cell_id, *row, *col)),
+    )?;
     let mut cache_metadata_cells: HashMap<SheetId, Vec<CellId>> = HashMap::new();
     for (sheet_id, cell_id, _, _, _, _) in &edits {
+        stores.storage.clear_cell_metadata(*cell_id);
         cache_metadata_cells
             .entry(*sheet_id)
             .or_default()
@@ -67,40 +72,22 @@ pub(in crate::storage::engine) fn mutation_set_cells_raw_with_trust(
     }
     for (sheet_id, cell_ids) in cache_metadata_cells {
         crate::storage::properties::clear_formula_cache_metadata_for_cell_ids(
-            stores.storage.doc(),
-            stores.storage.workbook_map(),
-            stores.storage.sheets(),
+            &mut stores.storage,
             &sheet_id,
             &cell_ids,
         );
     }
 
-    for (sheet_id, cell_id, row, col, value, formula) in &edits {
+    for (sheet_id, cell_id, row, col, _, _) in &edits {
         // Snapshot old value from mirror BEFORE anything overwrites it.
         let old_val = mirror
             .get_cell_value(cell_id)
+            .or_else(|| mirror.get_cell_value_at(sheet_id, SheetPos::new(*row, *col)))
             .cloned()
             .unwrap_or(CellValue::Null);
         direct_edit_old_values.insert(*cell_id, old_val);
         if let Some(old_formula) = stores.compute.get_formula(cell_id) {
             direct_edit_old_formulas.insert(*cell_id, old_formula.to_string());
-        }
-
-        // 4. Update mirror with the typed value — ONLY for plain-value edits.
-        //    For formula edits, we must NOT pre-write the mirror here:
-        //    `process_value_input` needs to see the prior cell value to
-        //    detect "same formula re-entered" and preserve the converged
-        //    iterative-calc seed. Pre-writing with the caller's `value`
-        //    (typically `CellValue::Null` for formula edits) destroys the
-        //    seed before the scheduler can rescue it.
-        if formula.is_none() {
-            mirror.apply_edit(
-                sheet_id,
-                *cell_id,
-                SheetPos::new(*row, *col),
-                value.clone(),
-                None,
-            );
         }
     }
 
@@ -109,7 +96,7 @@ pub(in crate::storage::engine) fn mutation_set_cells_raw_with_trust(
     //    will preserve the prior value as a seed when the formula matches.
     //
     //    Stream A′ trust marker: user-driven callers (fill, paste, move,
-    //    import, collab sync) pass `WriteTrust::UserEdit`, so partial writes
+    //    import) pass `WriteTrust::UserEdit`, so partial writes
     //    into a CSE / Data Table region still reject. Engine-owned region
     //    materialization can pass `TrustedReplay` after validating the parent
     //    operation atomically.
@@ -117,8 +104,8 @@ pub(in crate::storage::engine) fn mutation_set_cells_raw_with_trust(
         stores
             .compute
             .set_cells_raw_with_trust(mirror, &edits, skip_cycle_check, trust)?;
-    for (sheet_id, cell_id, _, _, _, _) in &edits {
-        persist_cell_formula_identity(stores, mirror, sheet_id, *cell_id)?;
+    for (_, cell_id, _, _, _, _) in &edits {
+        register_formula_cell_identities(stores, mirror, *cell_id);
     }
 
     // Patch before-side fields onto seed changes. Direct formula edits can

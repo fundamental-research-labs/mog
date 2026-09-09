@@ -19,14 +19,13 @@ use crate::snapshot::{
     WorkbookSettings, WorkbookSettingsChange,
 };
 use crate::storage::cells::values as cell_values;
-use crate::storage::engine::YrsComputeEngine;
+use crate::storage::engine::ComputeEngine;
 use crate::storage::engine::query_serialization::{cell_value_to_json, region_json};
 use crate::storage::engine::{data_table_formula, services};
 use crate::storage::sheet::{hyperlinks, merges, properties as sheets};
 use crate::storage::workbook::settings as workbook;
 use cell_types::{CellId, SheetId, SheetPos};
 use compute_document::hex::{hex_to_id, id_to_hex};
-use compute_document::undo::{ORIGIN_UI_STATE, ORIGIN_USER_EDIT};
 use compute_wire::mutation::serialize_multi_viewport_patches;
 use domain_types::domain::merge::{CellMergeInfo, MergeRegion, ResolvedMergedRegion};
 use domain_types::domain::sheet::{FrozenPanes, SheetMeta, SheetScrollPosition, SheetViewOptions};
@@ -37,7 +36,7 @@ use value_types::CellValue;
 use value_types::ComputeError;
 
 pub(in crate::storage::engine) fn query_range(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,
@@ -73,11 +72,10 @@ pub(in crate::storage::engine) fn query_range(
 
             let hyperlink_url = if visit.cell_id.is_some() {
                 grid_index.and_then(|grid| {
-                    hyperlinks::get_hyperlink(
-                        engine.stores.storage.doc(),
-                        engine.stores.storage.sheets(),
+                    crate::storage::engine::services::objects::get_hyperlink(
+                        &engine.stores,
+                        &engine.mirror,
                         sheet_id,
-                        grid,
                         visit.row,
                         visit.col,
                     )
@@ -104,9 +102,8 @@ pub(in crate::storage::engine) fn query_range(
     );
 
     let merges_result: Vec<ViewportMerge> = match grid_index {
-        Some(grid) => merges::get_merges_in_viewport(
-            engine.stores.storage.doc(),
-            engine.stores.storage.sheets(),
+        Some(grid) => merges::get_merges_in_range(
+            &engine.stores.storage,
             *sheet_id,
             grid,
             start_row,
@@ -132,7 +129,7 @@ pub(in crate::storage::engine) fn query_range(
 }
 
 pub(in crate::storage::engine) fn get_range_with_identity(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,
@@ -204,7 +201,7 @@ pub(in crate::storage::engine) fn get_range_with_identity(
 }
 
 pub(in crate::storage::engine) fn query_ranges(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     requests: Vec<BatchRangeRequest>,
 ) -> BatchRangeResponse {
     let entries = requests
@@ -273,7 +270,7 @@ pub(in crate::storage::engine) fn query_ranges(
 }
 
 pub(in crate::storage::engine) fn regex_search(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     options: RegexSearchOptions,
 ) -> RegexSearchResult {
@@ -281,7 +278,7 @@ pub(in crate::storage::engine) fn regex_search(
 }
 
 pub(in crate::storage::engine) fn find_in_range(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,
@@ -295,7 +292,7 @@ pub(in crate::storage::engine) fn find_in_range(
 }
 
 pub(in crate::storage::engine) fn find_all_in_range(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,
@@ -309,14 +306,14 @@ pub(in crate::storage::engine) fn find_all_in_range(
 }
 
 pub(in crate::storage::engine) fn regex_search_all_sheets(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     options: RegexSearchOptions,
 ) -> WorkbookSearchResult {
     services::queries::regex_search_all_sheets(engine, options)
 }
 
 pub(in crate::storage::engine) fn sign_check(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,
@@ -330,7 +327,7 @@ pub(in crate::storage::engine) fn sign_check(
 }
 
 pub(in crate::storage::engine) fn validate_formula_syntax(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     _sheet_id: &SheetId,
     formula: &str,
 ) -> Option<(String, Option<u32>)> {
@@ -340,7 +337,7 @@ pub(in crate::storage::engine) fn validate_formula_syntax(
 }
 
 pub(in crate::storage::engine) fn validate_formula_circular_reference(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -356,7 +353,7 @@ pub(in crate::storage::engine) fn validate_formula_circular_reference(
 }
 
 pub(in crate::storage::engine) fn evaluate_expression(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     expression: &str,
 ) -> Result<CellValue, ComputeError> {

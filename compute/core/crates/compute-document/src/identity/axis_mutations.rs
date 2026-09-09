@@ -1,6 +1,7 @@
 use cell_types::{AxisIdentityId, AxisIdentityStore, CellId, ColId, RowId, SheetId};
 
 use super::GridIndex;
+use std::sync::Arc;
 
 impl GridIndex {
     /// Insert rows at the given index. Generates new RowIds.
@@ -9,18 +10,17 @@ impl GridIndex {
     pub fn insert_rows(&mut self, at: u32, count: u32) -> Vec<RowId> {
         let at = at.min(self.row_count());
 
-        // Generate new RowIds for inserted rows
-        let mut new_row_ids = Vec::with_capacity(count as usize);
-        for _ in 0..count {
-            new_row_ids.push(self.id_alloc.next_row_id());
-        }
-
-        axis_insert_explicit(
-            &mut self.row_axis,
+        grow_axis(
+            Arc::make_mut(&mut self.row_axis),
             self.sheet_id,
             at,
-            new_row_ids.iter().copied(),
+            count,
+            &self.id_alloc,
         );
+        let new_row_ids = self
+            .row_axis
+            .identities_in(self.sheet_id, at, count)
+            .collect();
 
         // Shift cell positions: cells at row >= at move down by count
         let cells_to_shift: Vec<((u32, u32), CellId)> = self
@@ -90,7 +90,7 @@ impl GridIndex {
         }
 
         // Remove deleted RowIds from the active axis store.
-        self.row_axis.delete_range(at, count);
+        Arc::make_mut(&mut self.row_axis).delete_range(at, count);
 
         deleted_cells
     }
@@ -101,18 +101,17 @@ impl GridIndex {
     pub fn insert_cols(&mut self, at: u32, count: u32) -> Vec<ColId> {
         let at = at.min(self.col_count());
 
-        // Generate new ColIds for inserted columns
-        let mut new_col_ids = Vec::with_capacity(count as usize);
-        for _ in 0..count {
-            new_col_ids.push(self.id_alloc.next_col_id());
-        }
-
-        axis_insert_explicit(
-            &mut self.col_axis,
+        grow_axis(
+            Arc::make_mut(&mut self.col_axis),
             self.sheet_id,
             at,
-            new_col_ids.iter().copied(),
+            count,
+            &self.id_alloc,
         );
+        let new_col_ids = self
+            .col_axis
+            .identities_in(self.sheet_id, at, count)
+            .collect();
 
         // Shift cell positions: cells at col >= at move right by count
         let cells_to_shift: Vec<((u32, u32), CellId)> = self
@@ -182,7 +181,7 @@ impl GridIndex {
         }
 
         // Remove deleted ColIds from the active axis store.
-        self.col_axis.delete_range(at, count);
+        Arc::make_mut(&mut self.col_axis).delete_range(at, count);
 
         deleted_cells
     }
@@ -191,65 +190,64 @@ impl GridIndex {
     /// Generates new RowIds/ColIds for any rows/cols beyond the current bounds.
     /// No-op if the position is already within bounds.
     pub fn ensure_capacity(&mut self, row: u32, col: u32) {
-        let _ = self.ensure_capacity_returning(row, col);
+        self.ensure_row_capacity(row);
+        self.ensure_col_capacity(col);
+    }
+
+    /// Grow the row axis without materializing generated identities.
+    pub fn ensure_row_capacity(&mut self, row: u32) {
+        let needed = row.saturating_add(1);
+        let current = self.row_count();
+        if needed > current {
+            grow_axis(
+                Arc::make_mut(&mut self.row_axis),
+                self.sheet_id,
+                current,
+                needed - current,
+                &self.id_alloc,
+            );
+        }
+    }
+
+    /// Grow the column axis without materializing generated identities.
+    pub fn ensure_col_capacity(&mut self, col: u32) {
+        let needed = col.saturating_add(1);
+        let current = self.col_count();
+        if needed > current {
+            grow_axis(
+                Arc::make_mut(&mut self.col_axis),
+                self.sheet_id,
+                current,
+                needed - current,
+                &self.id_alloc,
+            );
+        }
     }
 
     /// Expand the row axis to accommodate `row`, returning the newly appended
     /// RowIds in insertion order.
     pub fn ensure_row_capacity_returning(&mut self, row: u32) -> Vec<RowId> {
-        let mut new_row_ids = Vec::new();
-        let needed_rows = row.saturating_add(1);
-        if needed_rows > self.row_count() {
-            let current = self.row_count();
-            let delta = (needed_rows - current) as usize;
-            new_row_ids.reserve(delta);
-            for i in current..needed_rows {
-                let rid = self.id_alloc.next_row_id();
-                new_row_ids.push(rid);
-                debug_assert_eq!(i, self.row_count() + new_row_ids.len() as u32 - 1);
-            }
-            axis_insert_explicit(
-                &mut self.row_axis,
-                self.sheet_id,
-                current,
-                new_row_ids.iter().copied(),
-            );
-        }
-        new_row_ids
+        let old = self.row_count();
+        self.ensure_row_capacity(row);
+        self.row_axis
+            .identities_in(self.sheet_id, old, self.row_count() - old)
+            .collect()
     }
 
     /// Expand the column axis to accommodate `col`, returning the newly
     /// appended ColIds in insertion order.
     pub fn ensure_col_capacity_returning(&mut self, col: u32) -> Vec<ColId> {
-        let mut new_col_ids = Vec::new();
-        let needed_cols = col.saturating_add(1);
-        if needed_cols > self.col_count() {
-            let current = self.col_count();
-            let delta = (needed_cols - current) as usize;
-            new_col_ids.reserve(delta);
-            for i in current..needed_cols {
-                let cid = self.id_alloc.next_col_id();
-                new_col_ids.push(cid);
-                debug_assert_eq!(i, self.col_count() + new_col_ids.len() as u32 - 1);
-            }
-            axis_insert_explicit(
-                &mut self.col_axis,
-                self.sheet_id,
-                current,
-                new_col_ids.iter().copied(),
-            );
-        }
-        new_col_ids
+        let old = self.col_count();
+        self.ensure_col_capacity(col);
+        self.col_axis
+            .identities_in(self.sheet_id, old, self.col_count() - old)
+            .collect()
     }
 
     /// Expand the grid to accommodate the given (row, col) position, returning
     /// the newly appended RowIds and ColIds in insertion order.
     ///
-    /// Unlike [`Self::ensure_capacity`], this variant exposes the generated
-    /// identities so that callers (e.g. `SheetDimensionsMut`) can mirror the
-    /// same hexes into the yrs `rowOrder` / `colOrder` YArrays without
-    /// allocating a second set of IDs that would drift from the in-memory
-    /// index.
+    /// Materializes only the newly added identities when a caller needs them.
     ///
     /// Returns `(new_row_ids, new_col_ids)`. Either may be empty if the
     /// corresponding axis was already large enough.
@@ -259,42 +257,13 @@ impl GridIndex {
         (new_row_ids, new_col_ids)
     }
 
-    /// Append pre-existing row identities replayed from the authoritative
-    /// `rowOrder` array. This is for undo/redo/sync of implicit capacity
-    /// grows, where the CRDT already owns the exact identities.
-    pub fn append_row_ids(&mut self, ids: impl IntoIterator<Item = RowId>) {
-        let ids: Vec<RowId> = ids.into_iter().collect();
-        if ids.is_empty() {
-            return;
-        }
-        for id in &ids {
-            self.id_alloc.ensure_past(id.as_raw());
-        }
-        let start = self.row_count();
-        axis_insert_explicit(&mut self.row_axis, self.sheet_id, start, ids);
-    }
-
-    /// Append pre-existing column identities replayed from the authoritative
-    /// `colOrder` array. See [`Self::append_row_ids`].
-    pub fn append_col_ids(&mut self, ids: impl IntoIterator<Item = ColId>) {
-        let ids: Vec<ColId> = ids.into_iter().collect();
-        if ids.is_empty() {
-            return;
-        }
-        for id in &ids {
-            self.id_alloc.ensure_past(id.as_raw());
-        }
-        let start = self.col_count();
-        axis_insert_explicit(&mut self.col_axis, self.sheet_id, start, ids);
-    }
-
     /// Truncate rows from the tail without shifting surviving cell positions.
     pub fn truncate_rows(&mut self, new_len: u32) {
         let current = self.row_count();
         if new_len >= current {
             return;
         }
-        self.row_axis.delete_range(new_len, current - new_len);
+        Arc::make_mut(&mut self.row_axis).delete_range(new_len, current - new_len);
         let removed: Vec<CellId> = self
             .cell_to_pos
             .iter()
@@ -311,7 +280,7 @@ impl GridIndex {
         if new_len >= current {
             return;
         }
-        self.col_axis.delete_range(new_len, current - new_len);
+        Arc::make_mut(&mut self.col_axis).delete_range(new_len, current - new_len);
         let removed: Vec<CellId> = self
             .cell_to_pos
             .iter()
@@ -323,20 +292,24 @@ impl GridIndex {
     }
 }
 
-fn axis_insert_explicit<Id>(
-    store: &mut AxisIdentityStore<Id>,
-    sheet_id: SheetId,
+fn grow_axis<Id: AxisIdentityId + std::hash::Hash>(
+    axis: &mut super::AxisIndex<Id>,
+    sheet: SheetId,
     at: u32,
-    ids: impl IntoIterator<Item = Id>,
-) where
-    Id: AxisIdentityId,
-{
-    let insert_at = at.min(store.len()) as usize;
-    if let AxisIdentityStore::Explicit(existing) = store {
-        existing.splice(insert_at..insert_at, ids);
+    count: u32,
+    alloc: &cell_types::IdAllocator,
+) {
+    if count == 0 {
+        return;
+    }
+    if matches!(axis.store(), AxisIdentityStore::Runs(_)) {
+        let run = alloc.next_axis_run(count);
+        axis.insert_run(sheet, at, run);
     } else {
-        let mut materialized: Vec<Id> = store.identities_in(sheet_id, 0, store.len()).collect();
-        materialized.splice(insert_at..insert_at, ids);
-        *store = AxisIdentityStore::Explicit(materialized);
+        axis.insert_explicit(
+            sheet,
+            at,
+            (0..count).map(|_| Id::from_compact_raw(alloc.next_u128())),
+        );
     }
 }

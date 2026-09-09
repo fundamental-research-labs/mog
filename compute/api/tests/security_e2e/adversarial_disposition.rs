@@ -67,10 +67,8 @@
 //     See BYPASS-AUDIT.md "gaps discovered".
 //
 //   - `bypass-via-undo-reveal` ->
-//     `adversarial_undo_does_not_reveal_redacted_cell` (R10.5). The
-//     previous rationale (covered by `composition_policy_change_*`)
-//     is withdrawn — that test exercises policy-version swap, not
-//     undo.
+//     `adversarial_undo_does_not_reveal_redacted_cell` verifies owner
+//     undo/redo retains current policy and agent reads remain redacted.
 //
 //   - `bypass-via-hyperlink-read` ->
 //     `adversarial_hyperlink_redacts_under_none` (R10.4).

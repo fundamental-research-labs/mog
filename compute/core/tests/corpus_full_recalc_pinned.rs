@@ -3,7 +3,7 @@
 //! §"Class V".
 //!
 //! **Invariant.** On pinned synthetic fixtures, a fresh
-//! `YrsComputeEngine::from_snapshot` produces values equal to a
+//! `ComputeEngine::from_snapshot` produces values equal to a
 //! hand-computed oracle. This catches **full-recalc drift** rather than
 //! iterative-recalc identity issues.
 //!
@@ -21,7 +21,7 @@
 //! Run:
 //!   cargo test -p compute-core --test corpus_full_recalc_pinned -- --nocapture
 
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use std::time::Instant;
 use value_types::CellValue;
 
@@ -111,7 +111,7 @@ fn describe(v: &CellValue) -> String {
 /// Look up a cell value at `(sheet_name, row, col)` by walking the
 /// engine's mirror. Returns `None` if either the sheet name or the cell
 /// position is absent — both conditions should be treated as drift.
-fn read_value(engine: &YrsComputeEngine, entry: &OracleEntry) -> Option<CellValue> {
+fn read_value(engine: &ComputeEngine, entry: &OracleEntry) -> Option<CellValue> {
     let mirror = engine.mirror();
     let sheet_id = mirror
         .sheet_ids()
@@ -145,7 +145,7 @@ struct DriftRecord {
 
 fn run_fixture(fixture: Fixture) -> FixtureReport {
     let t0 = Instant::now();
-    let (engine, _recalc) = YrsComputeEngine::from_snapshot(fixture.snapshot).unwrap_or_else(|e| {
+    let (engine, _recalc) = ComputeEngine::from_snapshot(fixture.snapshot).unwrap_or_else(|e| {
         panic!("[Class V · {}] from_snapshot failed: {:?}", fixture.name, e);
     });
 

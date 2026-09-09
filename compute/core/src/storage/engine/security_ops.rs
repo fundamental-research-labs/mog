@@ -1,40 +1,23 @@
-//! Bridged security operations — R5.1.
-//!
-//! Flat `wb_security_*` methods that SDKs bind directly; the TS and Python
-//! `wb.security` facades forward to these one-for-one. Writes go through
-//! `SecurityStore` so the Yrs observer fires, rebuilds the live
-//! `PolicyEngine`, and flips `active` — the `#[bridge::write(needs_principal)]`
-//! contract bypasses the delegate fast path so attenuation runs on the
-//! very first policy-add (bootstrap case, ARCHITECTURE.md §8.1).
-//!
-//! Reads take `scope = "workbook"` because policy metadata is workbook-
-//! scoped (not per-cell); the delegate's workbook-scope read path does a
-//! single `check_write` at Read level and returns the payload without
-//! matrix-level redaction.
-
-use std::sync::Arc;
+//! Security operations with direct native policy mutation and access checks.
 
 use bridge_core as bridge;
-use compute_document::SecurityStore;
-use compute_document::schema::KEY_SECURITY;
 use compute_security::{
     AccessExplanation, AccessLevel, AccessPolicy, AccessPolicyPatch, AccessTarget, PolicyId,
     Principal, SecurityError, SecurityEvent, Template,
 };
 use value_types::ComputeError;
-use yrs::{MapRef, ReadTxn, Transact};
 
-use super::YrsComputeEngine;
+use super::ComputeEngine;
 use super::security_events::push_event;
 
 #[bridge::api(
-    service = "YrsComputeEngine",
+    service = "ComputeEngine",
     key = "doc_id",
     group = "security_ops",
     fn_prefix = "compute",
     crate_path = "compute_core"
 )]
-impl YrsComputeEngine {
+impl ComputeEngine {
     // -------------------------------------------------------------------
     // Mutations — all `#[bridge::write(needs_principal)]`
     // -------------------------------------------------------------------
@@ -51,13 +34,13 @@ impl YrsComputeEngine {
         policy: AccessPolicy,
         caller: &Principal,
     ) -> Result<PolicyId, ComputeError> {
-        check_attenuation(self, caller, policy.level)?;
-        let policy_id = policy.id;
-        with_security_store_mut(self, |store, txn| {
-            store.add_policy(txn, &policy);
-        })?;
-        push_event(self, SecurityEvent::PolicyAdded { policy });
-        Ok(policy_id)
+        self.without_history(|engine| {
+            check_attenuation(engine, caller, policy.level)?;
+            let policy_id = policy.id;
+            engine.security.add_policy(policy.clone());
+            push_event(engine, SecurityEvent::PolicyAdded { policy });
+            Ok(policy_id)
+        })
     }
 
     /// Remove a policy by ID. Idempotent at the store layer; we still
@@ -70,11 +53,11 @@ impl YrsComputeEngine {
         id: PolicyId,
         _caller: &Principal,
     ) -> Result<(), ComputeError> {
-        with_security_store_mut(self, |store, txn| {
-            store.remove_policy(txn, id);
-        })?;
-        push_event(self, SecurityEvent::PolicyRemoved { id });
-        Ok(())
+        self.without_history(|engine| {
+            engine.security.remove_policy(id);
+            push_event(engine, SecurityEvent::PolicyRemoved { id });
+            Ok(())
+        })
     }
 
     /// Apply a partial update to an existing policy. Re-runs the
@@ -89,80 +72,63 @@ impl YrsComputeEngine {
         patch: AccessPolicyPatch,
         caller: &Principal,
     ) -> Result<(), ComputeError> {
-        if let Some(level) = patch.level {
-            check_attenuation(self, caller, level)?;
-        }
-        with_security_store_mut(self, |store, txn| {
-            store.update_policy(txn, id, |p| patch.apply(p));
-        })?;
-        push_event(self, SecurityEvent::PolicyUpdated { id });
-        Ok(())
+        self.without_history(|engine| {
+            if let Some(level) = patch.level {
+                check_attenuation(engine, caller, level)?;
+            }
+            engine.security.update_policy(id, &patch);
+            push_event(engine, SecurityEvent::PolicyUpdated { id });
+            Ok(())
+        })
     }
 
-    /// Apply a template — generate its policy list, run each through
-    /// the attenuation gate, write to Yrs, and register the template
-    /// record so `remove_template` can tear them down. Failure in the
-    /// middle of the loop is not atomic: Yrs is single-writer on the
-    /// engine thread, so partial state is bounded by the first failing
-    /// policy and the caller can retry after fixing attenuation.
+    /// Validate every generated policy before applying the template atomically.
     #[bridge::write(scope = "workbook", needs_principal)]
     pub fn wb_security_apply_template(
         &mut self,
         template: Template,
         caller: &Principal,
     ) -> Result<Vec<PolicyId>, ComputeError> {
-        let template_id = template.id().to_string();
-        let policies = template.generate();
-        let mut created: Vec<PolicyId> = Vec::with_capacity(policies.len());
-        for policy in &policies {
-            check_attenuation(self, caller, policy.level)?;
-            created.push(policy.id);
-        }
-        with_security_store_mut(self, |store, txn| {
+        self.without_history(|engine| {
+            let template_id = template.id().to_string();
+            let policies = template.generate();
+            let mut created: Vec<PolicyId> = Vec::with_capacity(policies.len());
             for policy in &policies {
-                store.add_policy(txn, policy);
+                check_attenuation(engine, caller, policy.level)?;
+                created.push(policy.id);
             }
-            store.register_template(txn, &template_id, &created);
-        })?;
-        for policy in policies {
-            push_event(self, SecurityEvent::PolicyAdded { policy });
-        }
-        Ok(created)
+            engine.security.apply_template(template_id, &policies);
+            for policy in policies {
+                push_event(engine, SecurityEvent::PolicyAdded { policy });
+            }
+            Ok(created)
+        })
     }
 
-    /// Remove every policy that was emitted by a prior
-    /// `apply_template` under the same `template_id`. The Yrs store
-    /// owns the template → policy-id mapping; we read it back,
-    /// iterate, and issue per-policy removes.
+    /// Remove all policies generated by applications of this template.
     #[bridge::write(scope = "workbook", needs_principal)]
     pub fn wb_security_remove_template(
         &mut self,
         template_id: String,
         _caller: &Principal,
     ) -> Result<(), ComputeError> {
-        let ids = with_security_store_mut(self, |store, txn| {
-            let removed = store.unregister_template(txn, &template_id);
-            for id in &removed {
-                store.remove_policy(txn, *id);
+        self.without_history(|engine| {
+            let ids = engine.security.remove_template(&template_id);
+            for id in ids {
+                push_event(engine, SecurityEvent::PolicyRemoved { id });
             }
-            removed
-        })?;
-        for id in ids {
-            push_event(self, SecurityEvent::PolicyRemoved { id });
-        }
-        Ok(())
+            Ok(())
+        })
     }
 
     // -------------------------------------------------------------------
     // Reads — workbook-scoped
     // -------------------------------------------------------------------
 
-    /// List every policy currently in the doc, in stable (id-sorted)
-    /// order. The `SecurityStore::read_all` contract guarantees
-    /// determinism across process runs so SDK-side diffing works.
+    /// List all policies in stable UUID order.
     #[bridge::read(scope = "workbook")]
     pub fn wb_security_list_policies(&self) -> Vec<AccessPolicy> {
-        with_security_store_read(self, |store, txn| store.read_all(txn)).unwrap_or_default()
+        self.security.policies().to_vec()
     }
 
     /// Resolve the caller's effective access for `target`. The delegate
@@ -237,9 +203,9 @@ impl YrsComputeEngine {
 ///
 /// Kept as a free function rather than an `&self` method so it's reusable
 /// from both `&mut self` methods and would-be test helpers without the
-/// re-borrow dance through `&self`-only methods on `YrsComputeEngine`.
+/// re-borrow dance through `&self`-only methods on `ComputeEngine`.
 fn check_attenuation(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     caller: &Principal,
     requested: AccessLevel,
 ) -> Result<(), ComputeError> {
@@ -252,77 +218,4 @@ fn check_attenuation(
         return Err(err.into());
     }
     Ok(())
-}
-
-/// Open the `security` Yrs map for a read-only transaction and hand the
-/// borrowed `SecurityStore` to `f`. Returns `None` when the security map
-/// doesn't exist (test fixtures sometimes bypass the canonical schema
-/// init) — the bridged reads treat that as "no policies" rather than
-/// panic.
-fn with_security_store_read<R>(
-    engine: &YrsComputeEngine,
-    f: impl for<'a, 'b> FnOnce(SecurityStore<'a>, &yrs::Transaction<'b>) -> R,
-) -> Option<R> {
-    let doc = engine.stores.storage.doc();
-    let txn = doc.transact();
-    let sec_map: MapRef = txn.get_map(KEY_SECURITY)?;
-    let store = SecurityStore::new(&sec_map, doc, &txn);
-    Some(f(store, &txn))
-}
-
-/// Open the `security` Yrs map for a mutating transaction. `f` returns
-/// `R`; we re-hydrate the policy engine by nudging
-/// `reload_policies_from_yrs` after the transaction drops so the
-/// observer-side publish fires on the refreshed snapshot. The observer
-/// already runs inside the `TransactionMut` commit — this is belt-and-
-/// suspenders for the in-process path where the observer subscription
-/// may not have fired yet (notably for tests running against a doc
-/// whose observer was never attached, e.g. custom fixture setups).
-fn with_security_store_mut<R>(
-    engine: &mut YrsComputeEngine,
-    f: impl for<'a> FnOnce(SecurityStore<'a>, &mut yrs::TransactionMut<'a>) -> R,
-) -> Result<R, ComputeError> {
-    let result = {
-        let doc = engine.stores.storage.doc();
-        let sec_map: MapRef = {
-            let read_txn = doc.transact();
-            match read_txn.get_map(KEY_SECURITY) {
-                Some(m) => m,
-                None => {
-                    drop(read_txn);
-                    return Err(ComputeError::Eval {
-                        message: "security map not initialised on doc".to_string(),
-                    });
-                }
-            }
-        };
-        let mut txn = doc.transact_mut();
-        let store = SecurityStore::new(&sec_map, doc, &txn);
-        f(store, &mut txn)
-    };
-    // The deep-observer on the security map fires during commit (inside
-    // the TransactionMut drop) and rebuilds the live PolicyEngine — but
-    // we still call reload here as a safety net for tests that construct
-    // a doc without going through `SecurityState::new`. In production
-    // paths this is a redundant rebuild against identical state; the
-    // cost is one policy-list read and one ArcSwap store, well under
-    // the §12 budget for this rare path.
-    let doc = engine.stores.storage.doc();
-    let doc_cloned: yrs::Doc = doc.clone();
-    engine.security.reload_policies_from_yrs(&doc_cloned);
-    Ok(result)
-}
-
-// Shared one-shot accessor for tests and the events module below — a
-// convenience for binding `Arc<AccessPolicy>` in event payloads without
-// repeating the borrow dance. Currently unused outside this module but
-// retained for symmetry with the TS security-store API.
-#[allow(dead_code)]
-pub(crate) fn read_policy_arc(
-    engine: &YrsComputeEngine,
-    id: PolicyId,
-) -> Option<Arc<AccessPolicy>> {
-    with_security_store_read(engine, |store, txn| store.read_policy(txn, id))
-        .flatten()
-        .map(Arc::new)
 }

@@ -10,7 +10,7 @@ use snapshot_types::versioning::{
 use value_types::{CellValue, FiniteF64};
 
 use crate::storage::{
-    engine::YrsComputeEngine,
+    engine::ComputeEngine,
     properties,
     sheet::{dimensions, floating_objects},
     workbook::named_ranges,
@@ -18,13 +18,12 @@ use crate::storage::{
 
 use super::coverage::{
     CONDITIONAL_FORMATTING_DOMAIN, DATA_VALIDATION_DOMAIN, SCHEMA_COVERAGE_DOMAIN,
-    UNCLASSIFIED_SCHEMA_KEYS_DOMAIN, record_conditional_formatting_presence,
-    record_data_validation_presence, semantic_coverage_record_objects,
-    unclassified_schema_key_objects,
+    record_conditional_formatting_presence, record_data_validation_presence,
+    semantic_coverage_record_objects,
 };
 use super::formula_reader::{
     UNSUPPORTED_CELL_FORMULAS_DOMAIN, canonical_formula, canonical_formula_ref,
-    canonical_formula_ref_object_ids, record_unrepresented_persisted_formula,
+    canonical_formula_ref_object_ids, record_unresolved_formula,
 };
 use super::semantic_ids::{
     canonical_cell_key, canonical_column_key, canonical_row_key, canonical_sheet_key,
@@ -43,7 +42,7 @@ mod value_provenance;
 
 const UNSUPPORTED_CELL_VALUES_DOMAIN: &str = "unsupported-cell-values";
 
-impl SemanticWorkbookStateReader for YrsComputeEngine {
+impl SemanticWorkbookStateReader for ComputeEngine {
     fn read_semantic_workbook_state(
         &self,
     ) -> Result<SemanticWorkbookState, SemanticStateReadError> {
@@ -52,7 +51,7 @@ impl SemanticWorkbookStateReader for YrsComputeEngine {
 }
 
 pub fn read_engine_semantic_workbook_state(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
 ) -> Result<SemanticWorkbookState, SemanticStateReadError> {
     let mut state = SemanticWorkbookState::default();
     for domain_id in [
@@ -80,13 +79,12 @@ pub fn read_engine_semantic_workbook_state(
             domain_id: SCHEMA_COVERAGE_DOMAIN.to_string(),
             domain_class: VersionDomainClass::Derived,
             capability_state: VersionDomainCapabilityState::Supported,
-            objects: semantic_coverage_record_objects()?,
+            objects: semantic_coverage_record_objects(engine)?,
         },
     );
 
     let mut unsupported_values = BTreeMap::new();
     let mut unsupported_formulas = BTreeMap::new();
-    let unclassified_schema_keys = unclassified_schema_key_objects(engine)?;
     let mut data_validation_presence = BTreeMap::new();
     let mut conditional_formatting_presence = BTreeMap::new();
     let sheet_order = engine.storage().sheet_order();
@@ -127,19 +125,9 @@ pub fn read_engine_semantic_workbook_state(
 
         for (cell_id, entry) in cells {
             let cell_hex = id_to_hex(cell_id.as_u128());
-            let has_persisted_formula = engine
-                .storage()
-                .read_cell_from_yrs(&sheet_id, cell_id)
-                .is_some_and(|(_, legacy_formula, identity_formula)| {
-                    legacy_formula.is_some() || identity_formula.is_some()
-                });
-            let cell_properties = properties::get_properties(
-                engine.storage().doc(),
-                engine.storage().workbook_map(),
-                engine.storage().sheets(),
-                &sheet_id,
-                &cell_hex,
-            );
+            let authored_formula = engine.compute().get_formula(cell_id);
+            let cell_properties =
+                properties::get_properties(engine.storage(), &sheet_id, &cell_hex);
             let value_provenance =
                 cell_value_provenance(engine, &sheet_id, &cell_hex, cell_properties.as_ref());
             let direct_format = cell_properties
@@ -149,7 +137,7 @@ pub fn read_engine_semantic_workbook_state(
                 .transpose()?;
             if entry.is_ghost()
                 && direct_format.is_none()
-                && !has_persisted_formula
+                && authored_formula.is_none()
                 && value_provenance.is_empty()
             {
                 continue;
@@ -170,9 +158,7 @@ pub fn read_engine_semantic_workbook_state(
                     canonical_formula(
                         engine,
                         &sheet_keys,
-                        &sheet_id,
                         &cell_key,
-                        cell_id,
                         formula,
                         &mut unsupported_formulas,
                     )
@@ -189,14 +175,10 @@ pub fn read_engine_semantic_workbook_state(
                 &value_provenance,
                 &mut unsupported_values,
             )?;
-            if formula.is_none() && has_persisted_formula {
-                record_unrepresented_persisted_formula(
-                    engine,
-                    &sheet_id,
-                    &cell_key,
-                    cell_id,
-                    &mut unsupported_formulas,
-                )?;
+            if formula.is_none()
+                && let Some(source) = authored_formula
+            {
+                record_unresolved_formula(&cell_key, source, &mut unsupported_formulas)?;
             }
 
             sheet_state.cells.insert(
@@ -214,12 +196,7 @@ pub fn read_engine_semantic_workbook_state(
             );
         }
 
-        for (cell_hex, props) in properties::iter_all_properties(
-            engine.storage().doc(),
-            engine.storage().workbook_map(),
-            engine.storage().sheets(),
-            &sheet_id,
-        ) {
+        for (cell_hex, props) in properties::iter_all_properties(engine.storage(), &sheet_id) {
             let value_provenance =
                 cell_value_provenance(engine, &sheet_id, &cell_hex, Some(&props));
             let Some(format) = props.format.clone() else {
@@ -369,11 +346,6 @@ pub fn read_engine_semantic_workbook_state(
         CONDITIONAL_FORMATTING_DOMAIN,
         conditional_formatting_presence,
     );
-    insert_authored_opaque_blocking_domain(
-        &mut state,
-        UNCLASSIFIED_SCHEMA_KEYS_DOMAIN,
-        unclassified_schema_keys,
-    );
     if let Some((domain_id, domain_class, objects)) = unsupported_floating_objects.charts_domain() {
         state.domains.insert(
             domain_id.to_string(),
@@ -464,7 +436,7 @@ impl UnsupportedFloatingObjects {
 }
 
 fn canonical_floating_objects(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_keys: &[(cell_types::SheetId, String)],
 ) -> Result<UnsupportedFloatingObjects, SemanticStateReadError> {
     let mut unsupported = UnsupportedFloatingObjects {
@@ -473,11 +445,9 @@ fn canonical_floating_objects(
     };
 
     for (sheet_id, sheet_key) in sheet_keys {
-        for (raw_object_id, object) in floating_objects::get_all_floating_objects(
-            engine.storage().doc(),
-            engine.storage().sheets(),
-            sheet_id,
-        ) {
+        for (raw_object_id, object) in
+            floating_objects::get_all_floating_objects(engine.storage(), sheet_id)
+        {
             let object_type = object.get("type").and_then(Value::as_str);
             let (domain_id, object_id, objects) = if object_type == Some("chart") {
                 (
@@ -513,13 +483,11 @@ fn canonical_floating_objects(
 }
 
 fn canonical_named_ranges(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_keys: &[(cell_types::SheetId, String)],
 ) -> Result<BTreeMap<String, SemanticObjectDigest>, SemanticStateReadError> {
     let mut objects = BTreeMap::new();
-    for defined_name in
-        named_ranges::get_all_named_ranges(engine.storage().doc(), engine.storage().workbook_map())
-    {
+    for defined_name in named_ranges::get_all_named_ranges(&engine.storage().metadata) {
         let object_id = canonical_named_range_key(&defined_name, sheet_keys);
         let payload = canonical_named_range_payload(engine, sheet_keys, &defined_name);
         objects.insert(
@@ -536,7 +504,7 @@ fn canonical_named_ranges(
 }
 
 fn canonical_named_range_key(
-    defined_name: &domain_types::DefinedName,
+    defined_name: &named_ranges::StoredDefinedName,
     sheet_keys: &[(cell_types::SheetId, String)],
 ) -> String {
     format!(
@@ -568,9 +536,9 @@ fn canonical_named_range_scope(
 }
 
 fn canonical_named_range_payload(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_keys: &[(cell_types::SheetId, String)],
-    defined_name: &domain_types::DefinedName,
+    defined_name: &named_ranges::StoredDefinedName,
 ) -> Value {
     let mut payload = serde_json::Map::new();
     payload.insert("name".to_string(), Value::String(defined_name.name.clone()));
@@ -622,18 +590,11 @@ fn canonical_named_range_payload(
 }
 
 fn canonical_named_range_refers_to(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_keys: &[(cell_types::SheetId, String)],
-    defined_name: &domain_types::DefinedName,
+    defined_name: &named_ranges::StoredDefinedName,
 ) -> Value {
-    let Ok(identity_formula) =
-        serde_json::from_str::<formula_types::IdentityFormula>(&defined_name.refers_to)
-    else {
-        return canonicalize_json_value(serde_json::json!({
-            "kind": "raw",
-            "formula": defined_name.refers_to,
-        }));
-    };
+    let identity_formula = &defined_name.refers_to;
 
     let mut refs = Vec::with_capacity(identity_formula.refs.len());
     let mut dependency_object_ids = BTreeSet::new();
@@ -658,7 +619,7 @@ fn canonical_named_range_refers_to(
     );
     refers_to.insert(
         "normalizedFormula".to_string(),
-        Value::String(identity_formula.template),
+        Value::String(identity_formula.template.clone()),
     );
     refers_to.insert(
         "dependencyObjectIds".to_string(),
@@ -706,7 +667,7 @@ fn insert_optional_string(
 }
 
 fn canonical_rows(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &cell_types::SheetId,
     sheet_key: &str,
     row_count: u32,
@@ -715,21 +676,11 @@ fn canonical_rows(
     let grid = engine.grid_index(sheet_id);
 
     for row in 0..row_count {
-        let explicit_height_points = dimensions::get_row_height_explicit(
-            engine.storage().doc(),
-            engine.storage().sheets(),
-            sheet_id,
-            row,
-            grid,
-        )
-        .and_then(|height| FiniteF64::new(height.0));
-        let visibility = dimensions::get_row_visibility_ownership(
-            engine.storage().doc(),
-            engine.storage().sheets(),
-            sheet_id,
-            row,
-            grid,
-        );
+        let explicit_height_points =
+            dimensions::get_row_height_explicit(engine.storage(), sheet_id, row, grid)
+                .and_then(|height| FiniteF64::new(height.0));
+        let visibility =
+            dimensions::get_row_visibility_ownership(engine.storage(), sheet_id, row, grid);
         let filter_hidden = !visibility.filter_owner_ids.is_empty();
 
         if explicit_height_points.is_none()
@@ -737,7 +688,6 @@ fn canonical_rows(
             && !visibility.manual
             && !visibility.structural
             && !filter_hidden
-            && !visibility.cache_hidden_without_owner
         {
             continue;
         }
@@ -755,7 +705,6 @@ fn canonical_rows(
                 manual_hidden: visibility.manual,
                 structural_hidden: visibility.structural,
                 filter_hidden,
-                cache_hidden_without_owner: visibility.cache_hidden_without_owner,
                 digest: None,
             },
         );
@@ -765,7 +714,7 @@ fn canonical_rows(
 }
 
 fn canonical_columns(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &cell_types::SheetId,
     sheet_key: &str,
     column_count: u32,
@@ -774,20 +723,10 @@ fn canonical_columns(
     let grid = engine.grid_index(sheet_id);
 
     for column in 0..column_count {
-        let explicit_width_chars = dimensions::get_col_width_explicit(
-            engine.storage().doc(),
-            engine.storage().sheets(),
-            sheet_id,
-            column,
-            grid,
-        )
-        .and_then(|width| FiniteF64::new(width.0));
-        let hidden = dimensions::is_column_hidden(
-            engine.storage().doc(),
-            engine.storage().sheets(),
-            sheet_id,
-            column,
-        );
+        let explicit_width_chars =
+            dimensions::get_col_width_explicit(engine.storage(), sheet_id, column, grid)
+                .and_then(|width| FiniteF64::new(width.0));
+        let hidden = dimensions::is_column_hidden(engine.storage(), sheet_id, column, grid);
 
         if explicit_width_chars.is_none() && !hidden {
             continue;

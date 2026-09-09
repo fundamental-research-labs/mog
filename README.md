@@ -59,6 +59,11 @@ The engine exposes the Office.js Excel application-specific API:
 
 Unloaded proxy properties throw; they are not live values.
 
+Each mutating `context.sync()` is one native undo action. Rust callers use
+`workbook.history().undo()` / `redo()` and can group multiple operations with
+`begin_undo_group()` / `end_undo_group()`. See [undo and redo](docs/guides/undo-redo.md)
+for grouping, error handling, and redo behavior.
+
 This is not a Microsoft Office compatibility layer beyond the Excel JS mechanics
 above. Charts, pivots, tables, Word, PowerPoint, and Office dialogs are out of
 scope.

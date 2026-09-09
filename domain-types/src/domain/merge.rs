@@ -4,7 +4,7 @@
 //! lifecycle stage:
 //!
 //! - `MergeRegion`           — position-keyed (XLSX import, parse output)
-//! - `IdentityMergedRegion`  — CellId-keyed (CRDT storage, stable under edits)
+//! - `IdentityMergedRegion`  — CellId-keyed (native storage, stable under edits)
 //! - `ResolvedMergedRegion`  — resolved (identity + positions, query result)
 //! - `CellMergeInfo`         — per-cell wrapper (query result with is_origin flag)
 
@@ -48,7 +48,7 @@ impl MergeRegion {
     }
 }
 
-// ── Identity-based merge (CRDT storage, stable under structure changes) ─────
+// ── Identity-based merge (native storage, stable under structure changes) ─────
 
 /// Identity-based merged region using CellId hex references.
 /// Stable under row/col insert/delete because CellIds don't move.

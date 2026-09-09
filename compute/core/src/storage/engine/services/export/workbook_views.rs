@@ -1,34 +1,17 @@
 use cell_types::SheetId;
-use compute_document::schema::KEY_WORKBOOK_SETTINGS;
 use domain_types::{SheetData, domain::workbook::WorkbookView};
-use yrs::{Any, Map, Out, Transact};
 
 use crate::storage::engine::stores::EngineStores;
 
 fn export_workbook_views(stores: &EngineStores) -> Vec<WorkbookView> {
-    let doc = stores.storage.doc();
-    let txn = doc.transact();
-    let workbook = stores.storage.workbook_map();
-
-    let settings_map = match workbook.get(&txn, KEY_WORKBOOK_SETTINGS) {
-        Some(Out::YMap(m)) => m,
-        _ => return Vec::new(),
-    };
-
-    let Some(Out::Any(Any::String(json))) = settings_map.get(&txn, "workbookViews") else {
-        return Vec::new();
-    };
-
-    serde_json::from_str::<Vec<WorkbookView>>(&json).unwrap_or_default()
+    stores.storage.metadata.views.clone()
 }
 
 fn selected_sheet_indices_for_export(stores: &EngineStores, sheet_ids: &[SheetId]) -> Vec<usize> {
-    let selected_sheet_ids = crate::storage::workbook::settings::get_settings(
-        stores.storage.doc(),
-        stores.storage.workbook_map(),
-    )
-    .selected_sheet_ids
-    .unwrap_or_default();
+    let selected_sheet_ids =
+        crate::storage::workbook::settings::get_settings(&stores.storage.metadata)
+            .selected_sheet_ids
+            .unwrap_or_default();
 
     selected_sheet_ids
         .iter()

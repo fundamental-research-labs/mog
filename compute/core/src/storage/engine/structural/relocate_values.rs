@@ -1,11 +1,11 @@
-use super::super::YrsComputeEngine;
+use super::super::ComputeEngine;
 use super::super::services;
 use crate::snapshot::{MutationResult, RecalcResult};
 use cell_types::SheetId;
 use compute_wire::mutation::serialize_multi_viewport_patches;
 use value_types::{CellValue, ComputeError};
 
-impl YrsComputeEngine {
+impl ComputeEngine {
     pub(super) fn apply_relocate_cells_values(
         &mut self,
         sheet_id: &SheetId,

@@ -1,6 +1,6 @@
 //! Custom cell style definition.
 //!
-//! Persisted in the Yrs CRDT document under `workbook.custom_cell_styles`.
+//! Stored in the native workbook style catalog.
 
 use crate::CellFormat;
 use serde::{Deserialize, Serialize};

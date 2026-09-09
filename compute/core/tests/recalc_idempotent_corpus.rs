@@ -10,7 +10,7 @@
 
 #![cfg(feature = "corpus-tests")]
 
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use snapshot_types::RecalcOptions;
 use std::path::PathBuf;
 
@@ -36,7 +36,7 @@ fn idempotent_recalc_on_external_xlsx_fixture() {
     // what surfaces the iterative-recalc behavior that synthetic workbooks
     // miss.
     let (mut engine, _init_recalc) =
-        YrsComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes should succeed");
+        ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes should succeed");
 
     let opts = RecalcOptions::default();
 

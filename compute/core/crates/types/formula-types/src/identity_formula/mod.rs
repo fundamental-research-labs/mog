@@ -1,7 +1,7 @@
 //! Identity-based formula storage and reference-target contracts.
 //!
 //! Formulas are stored as a template with numbered placeholders and a list of
-//! identity-based references. This is CRDT-safe and survives structural changes
+//! identity-based references. This survives structural changes
 //! (insert/delete rows/cols) without formula rewriting.
 //!
 //! Every reference variant implements [`ReferenceTarget`], which answers:

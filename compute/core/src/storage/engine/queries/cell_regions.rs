@@ -19,7 +19,7 @@ use crate::snapshot::{
     WorkbookSettings, WorkbookSettingsChange,
 };
 use crate::storage::cells::values as cell_values;
-use crate::storage::engine::YrsComputeEngine;
+use crate::storage::engine::ComputeEngine;
 use crate::storage::engine::formula_read;
 use crate::storage::engine::query_serialization::{cell_value_to_json, region_json};
 use crate::storage::engine::{data_table_formula, services};
@@ -27,7 +27,6 @@ use crate::storage::sheet::{hyperlinks, merges, properties as sheets};
 use crate::storage::workbook::settings as workbook;
 use cell_types::{CellId, SheetId, SheetPos};
 use compute_document::hex::{hex_to_id, id_to_hex};
-use compute_document::undo::{ORIGIN_UI_STATE, ORIGIN_USER_EDIT};
 use compute_wire::mutation::serialize_multi_viewport_patches;
 use domain_types::domain::merge::{CellMergeInfo, MergeRegion, ResolvedMergedRegion};
 use domain_types::domain::sheet::{FrozenPanes, SheetMeta, SheetScrollPosition, SheetViewOptions};
@@ -38,12 +37,14 @@ use value_types::CellValue;
 use value_types::ComputeError;
 
 pub(in crate::storage::engine) fn get_cell_data(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
 ) -> Option<serde_json::Value> {
-    if let Some(mut data) = services::queries::get_cell_data(&engine.stores, sheet_id, row, col) {
+    if let Some(mut data) =
+        services::queries::get_cell_data(&engine.stores, &engine.mirror, sheet_id, row, col)
+    {
         let cell_id = if let Some(cell_id_hex) = data.get("cell_id").and_then(|v| v.as_str())
             && let Some(id_u128) = compute_document::hex::hex_to_id(cell_id_hex)
         {
@@ -92,15 +93,20 @@ pub(in crate::storage::engine) fn get_cell_data(
 }
 
 pub(in crate::storage::engine) fn get_cell_data_by_id_hex(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     cell_id_hex: &str,
 ) -> Option<serde_json::Value> {
-    services::queries::get_cell_data_by_id_hex(&engine.stores, sheet_id, cell_id_hex)
+    services::queries::get_cell_data_by_id_hex(
+        &engine.stores,
+        &engine.mirror,
+        sheet_id,
+        cell_id_hex,
+    )
 }
 
 pub(in crate::storage::engine) fn get_display_value(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -109,7 +115,7 @@ pub(in crate::storage::engine) fn get_display_value(
 }
 
 pub(in crate::storage::engine) fn get_raw_value(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -132,7 +138,7 @@ pub(in crate::storage::engine) fn get_raw_value(
 }
 
 pub(in crate::storage::engine) fn get_effective_value(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -141,14 +147,14 @@ pub(in crate::storage::engine) fn get_effective_value(
 }
 
 pub(in crate::storage::engine) fn get_cell_count(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> usize {
-    services::queries::get_cell_count(&engine.stores, sheet_id)
+    services::queries::get_cell_count(&engine.mirror, sheet_id)
 }
 
 pub(in crate::storage::engine) fn get_current_region(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,
@@ -163,7 +169,7 @@ pub(in crate::storage::engine) fn get_current_region(
 }
 
 pub(in crate::storage::engine) fn find_data_edge(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -180,7 +186,7 @@ pub(in crate::storage::engine) fn find_data_edge(
 }
 
 pub(in crate::storage::engine) fn find_last_row(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     col: u32,
 ) -> ColumnEdge {
@@ -188,7 +194,7 @@ pub(in crate::storage::engine) fn find_last_row(
 }
 
 pub(in crate::storage::engine) fn find_last_column(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
 ) -> RowEdge {

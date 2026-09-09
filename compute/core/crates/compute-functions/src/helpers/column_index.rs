@@ -143,7 +143,7 @@ pub fn get_or_build_for_slice(
     col: u32,
     start_row: u32,
     end_row: u32,
-    values: &[CellValue],
+    values: value_types::ColumnView<'_>,
 ) -> Arc<ColumnIndex> {
     let key = (*sheet, col, start_row, end_row);
 
@@ -421,8 +421,20 @@ mod tests {
         let values = vec![num(1.0), num(2.0), num(3.0)];
         let sheet = test_sheet_id();
 
-        let idx1 = get_or_build_for_slice(&sheet, 0, 0, 2, &values);
-        let idx2 = get_or_build_for_slice(&sheet, 0, 0, 2, &values);
+        let idx1 = get_or_build_for_slice(
+            &sheet,
+            0,
+            0,
+            2,
+            value_types::ColumnView::from_slice(&values),
+        );
+        let idx2 = get_or_build_for_slice(
+            &sheet,
+            0,
+            0,
+            2,
+            value_types::ColumnView::from_slice(&values),
+        );
 
         // Same logical key => same Arc
         assert!(Arc::ptr_eq(&idx1, &idx2));
@@ -434,8 +446,20 @@ mod tests {
         let values = vec![num(1.0), num(2.0), num(3.0)];
         let sheet = test_sheet_id();
 
-        let idx1 = get_or_build_for_slice(&sheet, 0, 0, 2, &values);
-        let idx2 = get_or_build_for_slice(&sheet, 1, 0, 2, &values);
+        let idx1 = get_or_build_for_slice(
+            &sheet,
+            0,
+            0,
+            2,
+            value_types::ColumnView::from_slice(&values),
+        );
+        let idx2 = get_or_build_for_slice(
+            &sheet,
+            1,
+            0,
+            2,
+            value_types::ColumnView::from_slice(&values),
+        );
 
         // Different col => different Arc
         assert!(!Arc::ptr_eq(&idx1, &idx2));
@@ -447,8 +471,20 @@ mod tests {
         let values = vec![num(1.0), num(2.0), num(3.0)];
         let sheet = test_sheet_id();
 
-        let idx1 = get_or_build_for_slice(&sheet, 0, 0, 2, &values);
-        let idx2 = get_or_build_for_slice(&sheet, 0, 0, 5, &values);
+        let idx1 = get_or_build_for_slice(
+            &sheet,
+            0,
+            0,
+            2,
+            value_types::ColumnView::from_slice(&values),
+        );
+        let idx2 = get_or_build_for_slice(
+            &sheet,
+            0,
+            0,
+            5,
+            value_types::ColumnView::from_slice(&values),
+        );
 
         assert!(!Arc::ptr_eq(&idx1, &idx2));
     }
@@ -459,9 +495,21 @@ mod tests {
         let values = vec![num(1.0), num(2.0), num(3.0)];
         let sheet = test_sheet_id();
 
-        let idx1 = get_or_build_for_slice(&sheet, 0, 0, 2, &values);
+        let idx1 = get_or_build_for_slice(
+            &sheet,
+            0,
+            0,
+            2,
+            value_types::ColumnView::from_slice(&values),
+        );
         clear();
-        let idx2 = get_or_build_for_slice(&sheet, 0, 0, 2, &values);
+        let idx2 = get_or_build_for_slice(
+            &sheet,
+            0,
+            0,
+            2,
+            value_types::ColumnView::from_slice(&values),
+        );
 
         // After clear, a new index is built
         assert!(!Arc::ptr_eq(&idx1, &idx2));
@@ -477,7 +525,13 @@ mod tests {
         let values = vec![text("Alice"), text("Bob"), text("Alice")];
         let sheet = test_sheet_id();
 
-        let index = get_or_build_for_slice(&sheet, 3, 10, 12, &values);
+        let index = get_or_build_for_slice(
+            &sheet,
+            3,
+            10,
+            12,
+            value_types::ColumnView::from_slice(&values),
+        );
         let bm = index.query_exact(&text("Alice"));
         assert_bitset_eq(&bm, &[true, false, true]);
     }

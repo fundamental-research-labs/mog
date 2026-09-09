@@ -41,7 +41,13 @@ fn test_no_recalc_init_does_not_apply_user_entry_rewrites_to_imported_formulas()
     let cached_value = CellValue::Text("cached".into());
 
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sid(1).to_uuid_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -121,8 +127,14 @@ fn test_init_identity_formulas_dedupe_ghost_cells_by_sheet_and_position() {
     let s2_explicit_sheet1_and_unqualified_sheet2 = cid(0x301);
 
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: sheet1.to_uuid_string(),
                 name: "Sheet1".to_string(),
                 rows: 100,
@@ -186,6 +198,9 @@ fn test_init_identity_formulas_dedupe_ghost_cells_by_sheet_and_position() {
                 ranges: vec![],
             },
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: sheet2.to_uuid_string(),
                 name: "Sheet2".to_string(),
                 rows: 100,
@@ -293,7 +308,13 @@ fn test_minimal_init_first_formula_edit_survives_deferred_graph_build() {
     let sheet_id = sid(1);
     let target = cid(0x50);
     let snapshot = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_id.to_uuid_string(),
             name: "Data".to_string(),
             rows: 100,
@@ -411,6 +432,9 @@ fn test_init_empty_snapshot() {
     let mut core = ComputeCore::new();
     let mut mirror = CellMirror::new();
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![],
         named_ranges: vec![],
         tables: vec![],

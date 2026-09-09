@@ -30,8 +30,8 @@
 //!
 //! `WorkbookSnapshot` carries no `data_validation*` fields — see
 //! `compute/core/crates/types/snapshot-types/src/init.rs`. Hydration into
-//! Yrs / engine state happens via `storage::infra::hydration::features::
-//! hydrate_data_validations`, reading directly from
+//! native engine state happens via `storage::sheet::schemas::ValidationState`,
+//! reading directly from
 //! `domain_types::ParseOutput.sheets[].data_validations`. No
 //! `WorkbookSnapshot` lowering step is needed, so this module exposes no
 //! converter function — the W3.0 split allocated a per-boundary file for

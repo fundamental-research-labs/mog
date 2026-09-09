@@ -1,7 +1,7 @@
 use super::*;
 
 pub(super) fn query_range_properties(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,

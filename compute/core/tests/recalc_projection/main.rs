@@ -47,6 +47,9 @@ pub fn build_snapshot(
                 })
                 .collect();
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: sheet_uuid(si),
                 name: name.to_string(),
                 rows,
@@ -58,6 +61,9 @@ pub fn build_snapshot(
         .collect();
 
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: sheet_snapshots,
         named_ranges: vec![],
         tables: vec![],
@@ -98,6 +104,9 @@ pub fn build_snapshot_with_array_ref(
                 })
                 .collect();
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: sheet_uuid(si),
                 name: name.to_string(),
                 rows,
@@ -109,6 +118,9 @@ pub fn build_snapshot_with_array_ref(
         .collect();
 
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: sheet_snapshots,
         named_ranges: vec![],
         tables: vec![],
@@ -153,7 +165,7 @@ pub fn assert_col_data_number(
         .get_sheet(sheet_id)
         .unwrap_or_else(|| panic!("{}: sheet not found", label));
     let col_slice = sheet_mirror
-        .get_column_slice(col)
+        .get_column_view(col)
         .unwrap_or_else(|| panic!("{}: col_data for column {} not found", label, col));
     match &col_slice[row as usize] {
         CellValue::Number(n) => {
@@ -183,7 +195,7 @@ pub fn assert_col_data_null_or_zero(
     let sheet_mirror = mirror
         .get_sheet(sheet_id)
         .unwrap_or_else(|| panic!("{}: sheet not found", label));
-    if let Some(col_slice) = sheet_mirror.get_column_slice(col) {
+    if let Some(col_slice) = sheet_mirror.get_column_view(col) {
         // If row is beyond the col_data extent, it's implicitly Null — OK
         if (row as usize) >= col_slice.len() {
             return;

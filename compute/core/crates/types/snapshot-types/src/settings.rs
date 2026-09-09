@@ -363,7 +363,7 @@ fn default_culture() -> String {
     "en-US".to_string()
 }
 
-/// Workbook-level settings (persisted in Yrs workbook metadata).
+/// Workbook-level settings (stored in native workbook metadata).
 ///
 /// These apply globally to the entire workbook, not per-sheet.
 /// Matches the TypeScript `WorkbookSettings` interface from `@mog-sdk/spreadsheet-contracts/core`.

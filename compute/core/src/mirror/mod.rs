@@ -1,6 +1,6 @@
 //! Cell Mirror — identity-indexed, in-process cell store.
 //!
-//! Read cache over the Yrs CRDT document, keyed by CellId.
+//! Native value authority, keyed by CellId, with compact identity-addressed import ranges.
 //! Maintains a bidirectional position<->identity index so A1-notation references resolve to CellIds.
 //!
 //! # Design
@@ -30,6 +30,7 @@ pub mod range_view;
 pub mod variable_store;
 
 mod cell_mirror;
+mod history;
 mod metadata;
 mod read;
 mod sheet;
@@ -48,8 +49,9 @@ mod tests;
 
 // Re-export the public API.
 pub use cell_mirror::CellMirror;
+#[cfg(test)]
 pub(crate) use cell_types::RangeId;
 pub use read::MirrorPositionLookup;
 pub use sheet_key::{clear_caches, sheet_name_cache_entry_count};
 pub use types::{CellEdit, CellEntry, MergeRegion, SheetMirror};
-pub(crate) use types::{ColumnFormatRange, FormatRange};
+pub(crate) use types::{ColumnFormatRange, FormatRange, FormatRangeLayer};

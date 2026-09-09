@@ -9,7 +9,7 @@ use value_types::CellValue;
 #[test]
 fn bulk_set_cells_by_position_undoes_atomically() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -56,7 +56,7 @@ fn bulk_set_cells_by_position_undoes_atomically() {
 #[test]
 fn nested_grouped_bulk_set_cells_by_position_redoes_atomically() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine.begin_undo_group().unwrap();
@@ -108,7 +108,7 @@ fn nested_grouped_bulk_set_cells_by_position_redoes_atomically() {
 #[test]
 fn grouped_single_text_paste_after_preformat_undoes_atomically() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine.begin_undo_group().unwrap();
@@ -157,7 +157,7 @@ fn grouped_single_text_paste_after_preformat_undoes_atomically() {
 #[test]
 fn ui_state_format_write_after_undo_preserves_redo_stack() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -205,7 +205,7 @@ fn ui_state_format_write_after_undo_preserves_redo_stack() {
 #[test]
 fn set_time_value_undoes_value_and_inferred_format_atomically() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine.set_time_value(&sid, 5, 5, 12, 0, 0).unwrap();
@@ -246,7 +246,13 @@ fn set_time_value_undoes_value_and_inferred_format_atomically() {
 fn text_to_columns_undoes_atomically_and_reports_stats() {
     let sid = sheet_id();
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sid.to_uuid_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -291,7 +297,7 @@ fn text_to_columns_undoes_atomically_and_reports_stats() {
         max_change: value_types::FiniteF64::must(0.001),
         calculation_settings: None,
     };
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let result = engine
         .text_to_columns(
@@ -373,7 +379,13 @@ fn text_to_columns_undoes_atomically_and_reports_stats() {
 fn autofill_undoes_atomically() {
     let sid = sheet_id();
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sid.to_uuid_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -409,7 +421,7 @@ fn autofill_undoes_atomically() {
         max_change: value_types::FiniteF64::must(0.001),
         calculation_settings: None,
     };
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let request = crate::engine_types::fill::BridgeAutoFillRequest {
         source_range: crate::engine_types::fill::BridgeFillRangeSpec {

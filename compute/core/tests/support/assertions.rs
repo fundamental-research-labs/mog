@@ -13,7 +13,7 @@
 //!   the engine API pieces (`cell_id` lookup, targeted read) harden.
 
 use cell_types::{CellId, SheetId};
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use value_types::CellValue;
 
 /// Compare two `f64` values for bitwise identity.
@@ -43,7 +43,7 @@ pub fn assert_bit_identity_f64(before: f64, after: f64) -> Result<(), String> {
 ///
 /// # Arguments
 /// * `engine` — mutable engine, typically freshly hydrated via
-///   `YrsComputeEngine::from_snapshot`.
+///   `ComputeEngine::from_snapshot`.
 /// * `sheet_id` — sheet containing the edited cell.
 /// * `target_cell` — cell we're editing (the "dependency source").
 /// * `target_row`, `target_col` — the cell's grid position. We need
@@ -56,7 +56,7 @@ pub fn assert_bit_identity_f64(before: f64, after: f64) -> Result<(), String> {
 ///   load-bearing check: a dependent formula's value must return to
 ///   exactly what it was pre-op.
 pub fn assert_identity_after_op_inverse(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     target_cell: &CellId,
     target_row: u32,

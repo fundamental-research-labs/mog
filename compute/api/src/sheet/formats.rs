@@ -159,7 +159,7 @@ impl SheetFormats {
             .and_then(|r| r.map(|(_vp, m)| m).map_err(ComputeApiError::from))
     }
 
-    /// Apply an ordered batch of nested border patches as one undoable command.
+    /// Apply an ordered batch of nested border patches as one command.
     pub fn patch_borders(
         &self,
         operations: Vec<BorderPatchOperation>,

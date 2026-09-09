@@ -184,7 +184,6 @@ impl VariableStore {
 mod tests {
     use super::*;
     use cell_types::{CellId, SheetId};
-    use value_types::CellError;
 
     fn make_def(name: &str, scope: Scope) -> NamedRangeDef {
         NamedRangeDef::from_positions(

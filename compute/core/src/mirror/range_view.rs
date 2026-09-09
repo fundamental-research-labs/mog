@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use cell_types::{CellId, ColId, RowId};
+use cell_types::{ColId, RowId, SheetId};
 use cell_types::{PayloadEncoding, RangeAnchor, RangeId, RangeKind, RectLike};
 use rustc_hash::{FxHashMap, FxHashSet};
 use value_types::{CellError, CellValue};
@@ -11,12 +11,44 @@ pub struct RangeView {
     pub kind: RangeKind,
     pub anchor: RangeAnchor,
     pub encoding: PayloadEncoding,
-    pub payload: Arc<[u8]>,
+    pub values: Arc<[CellValue]>,
+    pub payload_cols: u32,
     pub row_offset_by_id: FxHashMap<RowId, u32>,
     pub col_offset_by_id: FxHashMap<ColId, u32>,
-    pub overrides: FxHashMap<(RowId, ColId), CellId>,
-    pub override_count: u32,
-    pub folded_up_to: Option<usize>,
+}
+
+/// Read-only identity order used by compact ranges.
+pub trait RangeAxis<Id> {
+    /// Resolve an axis identity to its current physical index.
+    fn position_of(&self, id: Id) -> Option<u32>;
+}
+
+impl<Id: Copy + PartialEq> RangeAxis<Id> for [Id] {
+    fn position_of(&self, id: Id) -> Option<u32> {
+        self.iter()
+            .position(|candidate| *candidate == id)
+            .map(|pos| pos as u32)
+    }
+}
+impl<Id: Copy + PartialEq> RangeAxis<Id> for Vec<Id> {
+    fn position_of(&self, id: Id) -> Option<u32> {
+        self.as_slice().position_of(id)
+    }
+}
+impl<Id: Copy + PartialEq, const N: usize> RangeAxis<Id> for [Id; N] {
+    fn position_of(&self, id: Id) -> Option<u32> {
+        self.as_slice().position_of(id)
+    }
+}
+impl<Id: cell_types::AxisIdentityId + std::hash::Hash> RangeAxis<Id>
+    for (
+        SheetId,
+        std::sync::Arc<compute_document::identity::AxisIndex<Id>>,
+    )
+{
+    fn position_of(&self, id: Id) -> Option<u32> {
+        self.1.position_of(self.0, id)
+    }
 }
 
 impl RangeView {
@@ -28,185 +60,114 @@ impl RangeView {
         self.row_offset_by_id.len() as u32
     }
 
-    /// Decode a single logical cell. This is suitable for sparse point reads.
-    /// Bulk MixedCbor materialization must use the streaming APIs below.
-    pub fn decode_value(&self, row_offset: u32, col_offset: u32) -> CellValue {
-        let num_cols = self.num_cols();
-        let index = (row_offset as usize) * (num_cols as usize) + (col_offset as usize);
-        match self.encoding {
-            PayloadEncoding::None => CellValue::Null,
-            PayloadEncoding::F64Le => {
-                let byte_offset = index * 8;
-                if byte_offset + 8 > self.payload.len() {
-                    return CellValue::Null;
-                }
-                let bytes: [u8; 8] = self.payload[byte_offset..byte_offset + 8]
-                    .try_into()
-                    .unwrap();
-                let val = f64::from_le_bytes(bytes);
-                if val.is_nan() {
-                    CellValue::Null
-                } else {
-                    CellValue::from(val)
-                }
-            }
-            PayloadEncoding::I64Le => {
-                let byte_offset = index * 8;
-                if byte_offset + 8 > self.payload.len() {
-                    return CellValue::Null;
-                }
-                let bytes: [u8; 8] = self.payload[byte_offset..byte_offset + 8]
-                    .try_into()
-                    .unwrap();
-                let val = i64::from_le_bytes(bytes);
-                CellValue::from(val)
-            }
-            PayloadEncoding::MixedCbor => decode_mixed_value_at(&self.payload, index),
+    /// Serialize active axes in payload order, compacting removed rows and columns.
+    pub(crate) fn to_snapshot(&self) -> crate::snapshot::RangeData {
+        let mut rows: Vec<_> = self
+            .row_offset_by_id
+            .iter()
+            .map(|(&id, &offset)| (offset, id))
+            .collect();
+        let mut cols: Vec<_> = self
+            .col_offset_by_id
+            .iter()
+            .map(|(&id, &offset)| (offset, id))
+            .collect();
+        rows.sort_unstable_by_key(|&(offset, _)| offset);
+        cols.sort_unstable_by_key(|&(offset, _)| offset);
+        let row_ids: Vec<_> = rows.into_iter().map(|(_, id)| id).collect();
+        let col_ids: Vec<_> = cols.into_iter().map(|(_, id)| id).collect();
+        crate::snapshot::RangeData {
+            range_id: self.range_id,
+            kind: self.kind,
+            anchor: self.anchor.clone(),
+            encoding: self.encoding,
+            payload: encode_values(
+                self.encoding,
+                row_ids.iter().flat_map(|row| {
+                    col_ids
+                        .iter()
+                        .map(move |col| self.value_at(row, col).unwrap_or(&CellValue::Null))
+                }),
+            ),
+            row_axis: None,
+            col_axis: None,
+            row_ids,
+            col_ids,
         }
+    }
+
+    /// Decode an imported payload once, then release its encoded bytes.
+    pub fn decode_payload(
+        encoding: PayloadEncoding,
+        payload: &[u8],
+        len: usize,
+    ) -> Arc<[CellValue]> {
+        if encoding == PayloadEncoding::None {
+            return Arc::from([]);
+        }
+        let mut values = vec![CellValue::Null; len];
+        match encoding {
+            PayloadEncoding::None => unreachable!(),
+            PayloadEncoding::MixedCbor => {
+                visit_mixed_values(payload, len, |index, value| values[index] = value)
+            }
+            PayloadEncoding::F64Le | PayloadEncoding::I64Le => {
+                for (value, bytes) in values.iter_mut().zip(payload.chunks_exact(8)) {
+                    let bytes: [u8; 8] = bytes.try_into().unwrap();
+                    *value = if encoding == PayloadEncoding::F64Le {
+                        let n = f64::from_le_bytes(bytes);
+                        if n.is_nan() {
+                            CellValue::Null
+                        } else {
+                            CellValue::from(n)
+                        }
+                    } else {
+                        CellValue::from(i64::from_le_bytes(bytes))
+                    };
+                }
+            }
+        }
+        values.into()
+    }
+
+    /// Borrow a value from the one native range payload.
+    pub fn value_at(&self, row_id: &RowId, col_id: &ColId) -> Option<&CellValue> {
+        let row = *self.row_offset_by_id.get(row_id)? as usize;
+        let col = *self.col_offset_by_id.get(col_id)? as usize;
+        self.values.get(row * self.payload_cols as usize + col)
+    }
+
+    /// Release an imported value once an authored entry takes its place.
+    pub(crate) fn consume_value(&mut self, row_id: &RowId, col_id: &ColId) {
+        let Some(&row) = self.row_offset_by_id.get(row_id) else {
+            return;
+        };
+        let Some(&col) = self.col_offset_by_id.get(col_id) else {
+            return;
+        };
+        let index = row as usize * self.payload_cols as usize + col as usize;
+        if self.values.get(index).is_some_and(|value| !value.is_null()) {
+            Arc::make_mut(&mut self.values)[index] = CellValue::Null;
+            // I64 has no null sentinel. F64 serializes a consumed slot as NaN.
+            if self.encoding == PayloadEncoding::I64Le {
+                self.encoding = PayloadEncoding::F64Le;
+            }
+        }
+    }
+
+    pub fn decode_value(&self, row_offset: u32, col_offset: u32) -> CellValue {
+        self.values
+            .get(row_offset as usize * self.payload_cols as usize + col_offset as usize)
+            .cloned()
+            .unwrap_or(CellValue::Null)
     }
 
     pub fn decode_at(&self, row_id: &RowId, col_id: &ColId) -> Option<CellValue> {
-        let row_offset = self.row_offset_by_id.get(row_id)?;
-        let col_offset = self.col_offset_by_id.get(col_id)?;
-        Some(self.decode_value(*row_offset, *col_offset))
-    }
-
-    /// Decode one range-backed column into an already-sized destination vector.
-    ///
-    /// This is for isolated single-column rebuilds. Callers that know they need
-    /// multiple columns must use `decode_range_into_columns` so MixedCbor payloads
-    /// are streamed once per range instead of once per column.
-    pub(crate) fn decode_column_into(
-        &self,
-        col_offset: u32,
-        row_to_index: &FxHashMap<RowId, u32>,
-        out: &mut [CellValue],
-    ) {
-        if self.encoding == PayloadEncoding::None {
-            return;
-        }
-
-        let rows = self.rows_by_offset();
-        match self.encoding {
-            PayloadEncoding::None => {}
-            PayloadEncoding::F64Le | PayloadEncoding::I64Le => {
-                for (&row_id, &row_offset) in &self.row_offset_by_id {
-                    let Some(&row_idx) = row_to_index.get(&row_id) else {
-                        continue;
-                    };
-                    let row_idx = row_idx as usize;
-                    if row_idx < out.len() {
-                        out[row_idx] = self.decode_value(row_offset, col_offset);
-                    }
-                }
-            }
-            PayloadEncoding::MixedCbor => {
-                let num_cols = self.num_cols() as usize;
-                if num_cols == 0 {
-                    return;
-                }
-                let expected_cells = rows.len().saturating_mul(num_cols);
-                visit_mixed_values(&self.payload, expected_cells, |flat_index, value| {
-                    if flat_index % num_cols != col_offset as usize {
-                        return;
-                    }
-                    let row_offset = flat_index / num_cols;
-                    let Some(Some(row_id)) = rows.get(row_offset) else {
-                        return;
-                    };
-                    let Some(&row_idx) = row_to_index.get(row_id) else {
-                        return;
-                    };
-                    let row_idx = row_idx as usize;
-                    if row_idx < out.len() {
-                        out[row_idx] = value;
-                    }
-                });
-            }
-        }
-    }
-
-    /// Decode the full range into dense sheet columns.
-    ///
-    /// Destination vectors are grown as needed and are otherwise left unchanged.
-    /// MixedCbor payloads are row-major with exactly `num_rows * num_cols`
-    /// logical entries; malformed/truncated entries leave the corresponding
-    /// destination cells as their prefilled values, and trailing extra payload
-    /// entries are ignored by the canonical streaming visitor.
-    pub(crate) fn decode_range_into_columns(
-        &self,
-        row_to_index: &FxHashMap<RowId, u32>,
-        col_to_index: &FxHashMap<ColId, u32>,
-        columns: &mut FxHashMap<u32, Vec<CellValue>>,
-    ) {
-        if self.encoding == PayloadEncoding::None {
-            return;
-        }
-
-        let rows = self.rows_by_offset();
-        let cols = self.cols_by_offset();
-        let num_cols = cols.len();
-        if rows.is_empty() || cols.is_empty() {
-            return;
-        }
-
-        match self.encoding {
-            PayloadEncoding::None => {}
-            PayloadEncoding::F64Le | PayloadEncoding::I64Le => {
-                for (row_offset, row_id) in rows.iter().enumerate() {
-                    let Some(row_id) = row_id else {
-                        continue;
-                    };
-                    let Some(&row_idx) = row_to_index.get(row_id) else {
-                        continue;
-                    };
-                    for (col_offset, col_id) in cols.iter().enumerate() {
-                        let Some(col_id) = col_id else {
-                            continue;
-                        };
-                        let Some(&col_idx) = col_to_index.get(col_id) else {
-                            continue;
-                        };
-                        let column = columns.entry(col_idx).or_default();
-                        let row_idx = row_idx as usize;
-                        if row_idx >= column.len() {
-                            column.resize(row_idx + 1, CellValue::Null);
-                        }
-                        column[row_idx] = self.decode_value(row_offset as u32, col_offset as u32);
-                    }
-                }
-            }
-            PayloadEncoding::MixedCbor => {
-                let expected_cells = rows.len().saturating_mul(num_cols);
-                visit_mixed_values(&self.payload, expected_cells, |flat_index, value| {
-                    let row_offset = flat_index / num_cols;
-                    let col_offset = flat_index % num_cols;
-                    let Some(Some(row_id)) = rows.get(row_offset) else {
-                        return;
-                    };
-                    let Some(Some(col_id)) = cols.get(col_offset) else {
-                        return;
-                    };
-                    let Some(&row_idx) = row_to_index.get(row_id) else {
-                        return;
-                    };
-                    let Some(&col_idx) = col_to_index.get(col_id) else {
-                        return;
-                    };
-                    let column = columns.entry(col_idx).or_default();
-                    let row_idx = row_idx as usize;
-                    if row_idx >= column.len() {
-                        column.resize(row_idx + 1, CellValue::Null);
-                    }
-                    column[row_idx] = value;
-                });
-            }
-        }
+        self.value_at(row_id, col_id).cloned()
     }
 
     pub(crate) fn visit_values(&self, mut visit: impl FnMut(RowId, ColId, CellValue)) {
-        let row_count = self.rows_by_offset().len();
-        self.visit_row_offset_range_values(0, row_count, &mut visit);
+        self.visit_row_offset_range_values(0, self.rows_by_offset().len(), &mut visit);
     }
 
     pub(crate) fn visit_row_offset_range_values(
@@ -218,50 +179,26 @@ impl RangeView {
         if self.encoding == PayloadEncoding::None {
             return;
         }
-
         let rows = self.rows_by_offset();
         let cols = self.cols_by_offset();
-        let num_cols = cols.len();
-        if rows.is_empty() || cols.is_empty() || start_row_offset >= end_row_offset {
-            return;
-        }
-
-        let end_row_offset = end_row_offset.min(rows.len());
-        match self.encoding {
-            PayloadEncoding::None => {}
-            PayloadEncoding::F64Le | PayloadEncoding::I64Le => {
-                for row_offset in start_row_offset..end_row_offset {
-                    let Some(Some(row_id)) = rows.get(row_offset) else {
-                        continue;
-                    };
-                    for (col_offset, col_id) in cols.iter().enumerate() {
-                        let Some(col_id) = col_id else {
-                            continue;
-                        };
-                        visit(
-                            *row_id,
-                            *col_id,
-                            self.decode_value(row_offset as u32, col_offset as u32),
-                        );
-                    }
-                }
-            }
-            PayloadEncoding::MixedCbor => {
-                let expected_cells = rows.len().saturating_mul(num_cols);
-                visit_mixed_values(&self.payload, expected_cells, |flat_index, value| {
-                    let row_offset = flat_index / num_cols;
-                    if row_offset < start_row_offset || row_offset >= end_row_offset {
-                        return;
-                    }
-                    let col_offset = flat_index % num_cols;
-                    let Some(Some(row_id)) = rows.get(row_offset) else {
-                        return;
-                    };
-                    let Some(Some(col_id)) = cols.get(col_offset) else {
-                        return;
-                    };
-                    visit(*row_id, *col_id, value);
-                });
+        for (row_offset, row_id) in rows
+            .iter()
+            .enumerate()
+            .take(end_row_offset)
+            .skip(start_row_offset)
+        {
+            let Some(row_id) = row_id else {
+                continue;
+            };
+            for (col_offset, col_id) in cols.iter().enumerate() {
+                let Some(col_id) = col_id else {
+                    continue;
+                };
+                visit(
+                    *row_id,
+                    *col_id,
+                    self.decode_value(row_offset as u32, col_offset as u32),
+                );
             }
         }
     }
@@ -303,8 +240,8 @@ impl RangeView {
     pub fn on_rows_inserted(
         &mut self,
         _new_row_ids: &[RowId],
-        row_order: &[RowId],
-        col_order: &[ColId],
+        row_order: &(impl RangeAxis<RowId> + ?Sized),
+        col_order: &(impl RangeAxis<ColId> + ?Sized),
     ) -> RangeExtentDelta {
         match &self.anchor {
             RangeAnchor::Elastic { .. } => match self.compute_extent(row_order, col_order) {
@@ -318,9 +255,29 @@ impl RangeView {
     pub fn on_rows_deleted(
         &mut self,
         deleted_row_ids: &[RowId],
-        row_order: &[RowId],
-        col_order: &[ColId],
+        row_order: &(impl RangeAxis<RowId> + ?Sized),
+        col_order: &(impl RangeAxis<ColId> + ?Sized),
     ) -> RangeExtentDelta {
+        let deleted_offsets: Vec<_> = deleted_row_ids
+            .iter()
+            .filter_map(|id| self.row_offset_by_id.get(id).copied())
+            .collect();
+        if !deleted_offsets.is_empty()
+            && deleted_offsets.len() < self.row_offset_by_id.len()
+            && self.payload_cols != 0
+        {
+            let values = Arc::make_mut(&mut self.values);
+            for row in deleted_offsets {
+                let start = row as usize * self.payload_cols as usize;
+                let end = (start + self.payload_cols as usize).min(values.len());
+                if start < end {
+                    values[start..end].fill(CellValue::Null);
+                }
+            }
+            if self.encoding == PayloadEncoding::I64Le {
+                self.encoding = PayloadEncoding::F64Le;
+            }
+        }
         let deleted: FxHashSet<RowId> = deleted_row_ids.iter().copied().collect();
 
         match &self.anchor {
@@ -344,11 +301,12 @@ impl RangeView {
                     self.row_offset_by_id.remove(&rid);
                 }
 
-                let surviving: Vec<RowId> = row_order
-                    .iter()
-                    .copied()
-                    .filter(|rid| extent_rows.contains(rid))
+                let mut survivors: Vec<_> = extent_rows
+                    .into_iter()
+                    .filter_map(|id| row_order.position_of(id).map(|pos| (pos, id)))
                     .collect();
+                survivors.sort_unstable_by_key(|(pos, _)| *pos);
+                let surviving: Vec<RowId> = survivors.into_iter().map(|(_, id)| id).collect();
 
                 if surviving.is_empty() {
                     return RangeExtentDelta::Removed;
@@ -410,8 +368,8 @@ impl RangeView {
     pub fn on_cols_inserted(
         &mut self,
         _new_col_ids: &[ColId],
-        row_order: &[RowId],
-        col_order: &[ColId],
+        row_order: &(impl RangeAxis<RowId> + ?Sized),
+        col_order: &(impl RangeAxis<ColId> + ?Sized),
     ) -> RangeExtentDelta {
         match &self.anchor {
             RangeAnchor::Elastic { .. } => match self.compute_extent(row_order, col_order) {
@@ -425,9 +383,29 @@ impl RangeView {
     pub fn on_cols_deleted(
         &mut self,
         deleted_col_ids: &[ColId],
-        row_order: &[RowId],
-        col_order: &[ColId],
+        row_order: &(impl RangeAxis<RowId> + ?Sized),
+        col_order: &(impl RangeAxis<ColId> + ?Sized),
     ) -> RangeExtentDelta {
+        let deleted_offsets: Vec<_> = deleted_col_ids
+            .iter()
+            .filter_map(|id| self.col_offset_by_id.get(id).copied())
+            .collect();
+        if !deleted_offsets.is_empty()
+            && deleted_offsets.len() < self.col_offset_by_id.len()
+            && self.payload_cols != 0
+        {
+            let values = Arc::make_mut(&mut self.values);
+            for row in values.chunks_mut(self.payload_cols as usize) {
+                for &col in &deleted_offsets {
+                    if let Some(value) = row.get_mut(col as usize) {
+                        *value = CellValue::Null;
+                    }
+                }
+            }
+            if self.encoding == PayloadEncoding::I64Le {
+                self.encoding = PayloadEncoding::F64Le;
+            }
+        }
         let deleted: FxHashSet<ColId> = deleted_col_ids.iter().copied().collect();
 
         match &self.anchor {
@@ -451,11 +429,12 @@ impl RangeView {
                     self.col_offset_by_id.remove(&cid);
                 }
 
-                let surviving: Vec<ColId> = col_order
-                    .iter()
-                    .copied()
-                    .filter(|cid| extent_cols.contains(cid))
+                let mut survivors: Vec<_> = extent_cols
+                    .into_iter()
+                    .filter_map(|id| col_order.position_of(id).map(|pos| (pos, id)))
                     .collect();
+                survivors.sort_unstable_by_key(|(pos, _)| *pos);
+                let surviving: Vec<ColId> = survivors.into_iter().map(|(_, id)| id).collect();
 
                 if surviving.is_empty() {
                     return RangeExtentDelta::Removed;
@@ -516,8 +495,8 @@ impl RangeView {
 
     pub fn on_rows_reordered(
         &mut self,
-        row_order: &[RowId],
-        col_order: &[ColId],
+        row_order: &(impl RangeAxis<RowId> + ?Sized),
+        col_order: &(impl RangeAxis<ColId> + ?Sized),
     ) -> RangeExtentDelta {
         match self.compute_extent(row_order, col_order) {
             Some(extent) => RangeExtentDelta::Updated(extent),
@@ -527,8 +506,8 @@ impl RangeView {
 
     pub fn on_cols_reordered(
         &mut self,
-        row_order: &[RowId],
-        col_order: &[ColId],
+        row_order: &(impl RangeAxis<RowId> + ?Sized),
+        col_order: &(impl RangeAxis<ColId> + ?Sized),
     ) -> RangeExtentDelta {
         match self.compute_extent(row_order, col_order) {
             Some(extent) => RangeExtentDelta::Updated(extent),
@@ -540,8 +519,8 @@ impl RangeView {
 
     pub(crate) fn compute_extent(
         &self,
-        row_order: &[RowId],
-        col_order: &[ColId],
+        row_order: &(impl RangeAxis<RowId> + ?Sized),
+        col_order: &(impl RangeAxis<ColId> + ?Sized),
     ) -> Option<RangeExtent> {
         let (row_start_id, row_end_id, col_start_id, col_end_id) = match &self.anchor {
             RangeAnchor::Elastic {
@@ -557,11 +536,11 @@ impl RangeView {
 
                 let row_positions: Vec<u32> = row_ids
                     .iter()
-                    .filter_map(|rid| row_order.iter().position(|r| r == rid).map(|p| p as u32))
+                    .filter_map(|rid| row_order.position_of(*rid))
                     .collect();
                 let col_positions: Vec<u32> = col_ids
                     .iter()
-                    .filter_map(|cid| col_order.iter().position(|c| c == cid).map(|p| p as u32))
+                    .filter_map(|cid| col_order.position_of(*cid))
                     .collect();
 
                 if row_positions.is_empty() || col_positions.is_empty() {
@@ -584,10 +563,10 @@ impl RangeView {
             }
         };
 
-        let start_row = row_order.iter().position(|r| *r == row_start_id)? as u32;
-        let end_row = row_order.iter().position(|r| *r == row_end_id)? as u32;
-        let start_col = col_order.iter().position(|c| *c == col_start_id)? as u32;
-        let end_col = col_order.iter().position(|c| *c == col_end_id)? as u32;
+        let start_row = row_order.position_of(row_start_id)?;
+        let end_row = row_order.position_of(row_end_id)?;
+        let start_col = col_order.position_of(col_start_id)?;
+        let end_col = col_order.position_of(col_end_id)?;
 
         Some(RangeExtent {
             range_id: self.range_id,
@@ -623,16 +602,6 @@ impl RectLike for RangeExtent {
     fn end_col(&self) -> u32 {
         self.end_col
     }
-}
-
-fn decode_mixed_value_at(payload: &[u8], target_index: usize) -> CellValue {
-    let mut result = CellValue::Null;
-    visit_mixed_values(payload, target_index + 1, |index, value| {
-        if index == target_index {
-            result = value;
-        }
-    });
-    result
 }
 
 pub(crate) fn visit_mixed_values(
@@ -708,10 +677,152 @@ pub(crate) fn visit_mixed_values(
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum ColDataState {
-    Complete,
-    Partial,
+/// Encode native values only when crossing the snapshot/file boundary.
+pub(crate) fn encode_values<'a>(
+    encoding: PayloadEncoding,
+    values: impl IntoIterator<Item = &'a CellValue>,
+) -> Vec<u8> {
+    let mut payload = Vec::new();
+    if encoding == PayloadEncoding::None {
+        return payload;
+    }
+    for value in values {
+        match encoding {
+            PayloadEncoding::None => unreachable!(),
+            PayloadEncoding::F64Le => {
+                payload.extend_from_slice(&value.as_number().unwrap_or(f64::NAN).to_le_bytes())
+            }
+            PayloadEncoding::I64Le => {
+                payload.extend_from_slice(&(value.as_number().unwrap_or(0.0) as i64).to_le_bytes())
+            }
+            PayloadEncoding::MixedCbor => match value {
+                CellValue::Number(n) => {
+                    payload.push(1);
+                    payload.extend_from_slice(&n.get().to_le_bytes());
+                }
+                CellValue::Text(text) => {
+                    payload.push(2);
+                    payload.extend_from_slice(&(text.len() as u32).to_le_bytes());
+                    payload.extend_from_slice(text.as_bytes());
+                }
+                CellValue::Boolean(b) => {
+                    payload.push(3);
+                    payload.push(u8::from(*b));
+                }
+                CellValue::Error(error, _) => {
+                    payload.push(4);
+                    payload.push(match error {
+                        CellError::Div0 => 0,
+                        CellError::Na => 1,
+                        CellError::Name => 2,
+                        CellError::Null => 3,
+                        CellError::Num => 4,
+                        CellError::Ref => 5,
+                        CellError::Value => 6,
+                        CellError::Spill => 7,
+                        CellError::Calc => 8,
+                        CellError::GettingData => 9,
+                        CellError::Circ => 10,
+                    });
+                }
+                _ => payload.push(0),
+            },
+        }
+    }
+    payload
+}
+
+#[cfg(test)]
+mod native_payload_tests {
+    use super::*;
+
+    #[test]
+    fn consumed_integer_slot_roundtrips_as_null() {
+        let row = RowId::from_raw(1);
+        let col = ColId::from_raw(1);
+        let mut range = RangeView {
+            range_id: RangeId::from_raw(1),
+            kind: RangeKind::Data,
+            anchor: RangeAnchor::Strict {
+                row_ids: vec![row],
+                col_ids: vec![col],
+            },
+            encoding: PayloadEncoding::I64Le,
+            values: Arc::from([CellValue::from(42.0)]),
+            payload_cols: 1,
+            row_offset_by_id: [(row, 0)].into_iter().collect(),
+            col_offset_by_id: [(col, 0)].into_iter().collect(),
+        };
+        range.consume_value(&row, &col);
+        let payload = encode_values(range.encoding, range.values.iter());
+        assert_eq!(
+            &*RangeView::decode_payload(range.encoding, &payload, 1),
+            &[CellValue::Null]
+        );
+    }
+
+    #[test]
+    fn removing_axes_preserves_payload_stride_and_roundtrips_active_values() {
+        let row_ids: Vec<_> = (1..=3).map(RowId::from_raw).collect();
+        let col_ids: Vec<_> = (1..=3).map(ColId::from_raw).collect();
+        let values: Vec<_> = (1..=9).map(|n| CellValue::from(n as f64)).collect();
+        let encoded = encode_values(PayloadEncoding::F64Le, &values);
+        let mut range = RangeView {
+            range_id: RangeId::from_raw(1),
+            kind: RangeKind::Data,
+            anchor: RangeAnchor::Strict {
+                row_ids: row_ids.clone(),
+                col_ids: col_ids.clone(),
+            },
+            encoding: PayloadEncoding::F64Le,
+            values: RangeView::decode_payload(PayloadEncoding::F64Le, &encoded, 9),
+            payload_cols: 3,
+            row_offset_by_id: row_ids
+                .iter()
+                .enumerate()
+                .map(|(n, id)| (*id, n as u32))
+                .collect(),
+            col_offset_by_id: col_ids
+                .iter()
+                .enumerate()
+                .map(|(n, id)| (*id, n as u32))
+                .collect(),
+        };
+        let text: Arc<str> = Arc::from("deleted imported text");
+        let text_owner = Arc::downgrade(&text);
+        Arc::make_mut(&mut range.values)[4] = CellValue::Text(text);
+        range.on_rows_deleted(&[row_ids[1]], &[row_ids[0], row_ids[2]], &col_ids);
+        assert!(
+            text_owner.upgrade().is_none(),
+            "deleted text must be released"
+        );
+        range.on_cols_deleted(
+            &[col_ids[1]],
+            &[row_ids[0], row_ids[2]],
+            &[col_ids[0], col_ids[2]],
+        );
+        assert!(range.values[1].is_null());
+        assert!(range.values[4].is_null());
+        assert_eq!(
+            range.value_at(&row_ids[2], &col_ids[2]),
+            Some(&CellValue::from(9.0))
+        );
+        let active: Vec<_> = [0, 2]
+            .into_iter()
+            .flat_map(|row| [0, 2].into_iter().map(move |col| (row, col)))
+            .map(|(row, col)| range.value_at(&row_ids[row], &col_ids[col]).unwrap())
+            .collect();
+        let encoded = encode_values(range.encoding, active);
+        assert_eq!(
+            &*RangeView::decode_payload(range.encoding, &encoded, 4),
+            &[
+                CellValue::from(1.0),
+                CellValue::from(3.0),
+                CellValue::from(7.0),
+                CellValue::from(9.0)
+            ]
+        );
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

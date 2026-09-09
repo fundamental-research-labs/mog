@@ -3,7 +3,7 @@ use super::*;
 
 #[test]
 fn test_named_ranges() {
-    let _storage = YrsStorage::new();
+    let _storage = WorkbookStorage::new();
     let mut mirror = CellMirror::new();
     let def = NamedRangeDef::from_positions(
         "Revenue".to_string(),
@@ -30,7 +30,7 @@ fn test_named_ranges() {
 
 #[test]
 fn test_tables() {
-    let _storage = YrsStorage::new();
+    let _storage = WorkbookStorage::new();
     let mut mirror = CellMirror::new();
     let table = domain_types::domain::table::Table {
         id: "Sales".to_string(),

@@ -73,9 +73,7 @@ impl Template {
         }
     }
 
-    /// Generate the fixed policy list. Fresh UUIDs on every call —
-    /// callers typically hand the result to `SecurityStore::add_policy`
-    /// which re-uses the IDs as Yrs map keys.
+    /// Generate the fixed policy list with fresh UUIDs.
     #[must_use]
     pub fn generate(&self) -> Vec<AccessPolicy> {
         self.generate_with_context(PolicyTemplateContext {

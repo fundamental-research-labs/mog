@@ -255,11 +255,40 @@ impl<'a> MirrorAccess<'a> {
     }
 
     pub fn get_dense_column(&self, sheet: &SheetId, col: u32) -> Option<&DenseColumn> {
+        if self.pending_override.is_some() {
+            return None;
+        }
         self.mirror.dense_cache().get(sheet, col)
     }
 
-    pub fn get_column_values(&self, sheet: &SheetId, col: u32) -> Option<&[CellValue]> {
-        self.mirror.get_sheet(sheet)?.get_column_slice(col)
+    pub fn get_dense_column_for_range(
+        &self,
+        sheet: &SheetId,
+        col: u32,
+        start_row: u32,
+        end_row: u32,
+    ) -> Option<&DenseColumn> {
+        if self.pending_override.is_some() {
+            return None;
+        }
+        self.mirror.dense_cache().get_numeric_for_range(
+            *sheet,
+            col,
+            start_row,
+            end_row,
+            self.mirror.get_sheet(sheet)?,
+        )
+    }
+
+    pub fn get_column_values(
+        &self,
+        sheet: &SheetId,
+        col: u32,
+    ) -> Option<value_types::ColumnView<'_>> {
+        if self.pending_override.is_some() {
+            return None;
+        }
+        self.mirror.get_sheet(sheet)?.get_column_view(col)
     }
 
     pub fn col_version(&self, sheet: &SheetId, col: u32) -> u64 {
@@ -302,6 +331,19 @@ impl<'a> MirrorAccess<'a> {
     /// `resolve_defined_name_for_sheet`.
     fn resolve_named_range_def(&self, nr: &NamedRangeDef) -> Option<ResolvedName> {
         let formula = &nr.refers_to;
+
+        // Identity references can occur inside an expression such as SUM({0}).
+        // Only a bare placeholder denotes a named range; resolving the first
+        // reference of an expression would discard its operators/functions.
+        if !formula.refs.is_empty()
+            && (formula.refs.len() != 1 || formula.template.trim().trim_start_matches('=') != "{0}")
+        {
+            let lookup =
+                crate::mirror::MirrorPositionLookup::new(self.mirror, SheetId::from_raw(0));
+            return Some(ResolvedName::Formula {
+                raw_expression: compute_parser::to_a1_string(formula, &lookup),
+            });
+        }
 
         // If no refs, dispatch on the typed [`ParsedExpr`] shape of
         // `raw_expression` (constant / formula / broken-ref / empty).
@@ -642,7 +684,22 @@ impl<'a> MirrorAccess<'a> {
         .entered();
 
         let key = RangeKey::new(s_sheet, min_row, min_col, max_row, max_col);
-        Ok(materialize_range(&key, self.mirror, None))
+        let values = materialize_range(&key, self.mirror, None);
+        if let Some(pending) = &self.pending_override
+            && pending.sheet == s_sheet
+            && (min_row..=max_row).contains(&pending.pos.row())
+            && (min_col..=max_col).contains(&pending.pos.col())
+        {
+            let cols = values.cols();
+            let mut data = Arc::unwrap_or_clone(values).into_data();
+            let offset = (pending.pos.row() - min_row) as usize * cols
+                + (pending.pos.col() - min_col) as usize;
+            if let Some(value) = data.get_mut(offset) {
+                *value = pending.value.clone();
+            }
+            return Ok(Arc::new(CellArray::new(data, cols)));
+        }
+        Ok(values)
     }
 
     /// Fetch cell values for resolved structured reference ranges from the mirror.
@@ -673,7 +730,7 @@ impl<'a> MirrorAccess<'a> {
                 let mut row = Vec::new();
                 for &c in &range.columns {
                     let val = sheet
-                        .and_then(|s| s.get_column_slice(c))
+                        .and_then(|s| s.get_column_view(c))
                         .and_then(|col| col.get(r as usize))
                         .cloned()
                         .unwrap_or_else(|| {

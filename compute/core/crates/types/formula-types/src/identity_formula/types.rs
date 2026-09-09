@@ -138,7 +138,7 @@ pub enum IdentityFormulaRef {
 /// Example: the formula `=SUM(A1:B10)+C1*2` is stored as
 /// `template = "SUM({0})+{1}*2"` with `refs = [Range(A1:B10), Cell(C1)]`.
 ///
-/// This representation is CRDT-safe — structural operations (insert/delete
+/// Structural operations (insert/delete
 /// rows/cols) never need to rewrite the template string. Only the identity →
 /// position mapping changes.
 ///
@@ -162,7 +162,6 @@ pub enum IdentityFormulaRef {
 /// assert_eq!(formula.template, "{0}+1");
 /// assert_eq!(formula.refs.len(), 1);
 /// ```
-#[doc(alias = "CRDT")]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IdentityFormula {
     /// Template with numbered placeholders: `"SUM({0})+{1}*2"`.
@@ -182,7 +181,7 @@ pub struct IdentityFormula {
     /// re-parsing the template string. See `cell_has_subtotal_formula` in
     /// `compute-core/src/eval_bridge/mirror_access.rs`.
     ///
-    /// `#[serde(default)]` so Yrs / snapshot documents authored before this
+    /// `#[serde(default)]` so snapshot documents authored before this
     /// field existed deserialize to `false` (correct — no aggregate inference
     /// without the flag would report a false positive).
     #[serde(default)]

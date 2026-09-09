@@ -9,8 +9,8 @@
 /// # Serde
 ///
 /// Serializes to the OOXML attribute token (e.g. `"lessThan"`, `"containsText"`),
-/// matching what `from_ooxml` / `to_ooxml` produce. This keeps JSON wire and
-/// Yrs storage byte-compatible with the pre-Round-D `String` field shape.
+/// matching what `from_ooxml` / `to_ooxml` produce. This keeps JSON payloads
+/// byte-compatible with the previous `String` field shape.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum CfOperator {
     /// Less than comparison

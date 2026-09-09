@@ -2,8 +2,8 @@
 //!
 //! This module defines the `EngineMutation` enum that represents all possible
 //! state-changing operations on the engine. The `apply_mutation()` method on
-//! `YrsComputeEngine` is the single dispatch point that guarantees all five
-//! stores (yrs Doc, mirror, grid_indexes, compute, undo_manager) stay in sync.
+//! `ComputeEngine` is the single dispatch point that guarantees all
+//! stores (document, mirror, grid indexes, compute) stay in sync.
 
 use crate::snapshot::MutationResult;
 use cell_types::{CellId, SheetId};
@@ -18,8 +18,7 @@ use value_types::CellValue;
 /// empty text" vs "clear the cell" through a primitive `String`.
 ///
 /// Pipeline position: entry point on every FFI-crossing cell-write path.
-/// Dispatched by `storage::cells::values::set_cell_value` → resolves into
-/// `scheduler::input::CellWrite` (for the `Parse` arm) → leaf write helpers.
+/// User input is classified at the mutation boundary; the scheduler writes native cells.
 ///
 /// The variants encode the write intents the SDK expresses today:
 /// - `Clear`: remove the cell. `setCell(A1, '')` or `setCell(A1, null)`.
@@ -214,8 +213,8 @@ pub struct BridgeSortOptions {
 
 /// Internal mutation descriptor.
 ///
-/// Every public mutation method on `YrsComputeEngine` constructs one of these
-/// and passes it to `apply_mutation()`, which ensures all five stores are
+/// Every public mutation method on `ComputeEngine` constructs one of these
+/// and passes it to `apply_mutation()`, which ensures all stores are
 /// updated consistently.
 #[allow(dead_code)] // Variants are available for future callers to use
 pub(crate) enum EngineMutation {
@@ -275,9 +274,7 @@ pub(crate) enum EngineMutation {
 
     /// Create the implicit default sheet on a freshly-started blank workbook.
     ///
-    /// Identical in effect to `CreateSheet`, except the underlying Yrs
-    /// transaction is tagged with `ORIGIN_BOOTSTRAP` so it never enters the
-    /// undo stack. A fresh workbook must report `canUndo == false`.
+    /// Includes full hydration metadata for the initial empty view.
     CreateDefaultSheet {
         name: String,
         default_col_width_px: Option<f64>,
@@ -295,7 +292,7 @@ pub(crate) enum EngineMutation {
     /// Rename a sheet in all stores.
     RenameSheet { sheet_id: SheetId, name: String },
 
-    /// Sort a range of cells. Updates yrs doc, grid_indexes, and compute.
+    /// Sort a range of cells. Updates native identities, metadata, and dependencies.
     SortRange {
         sheet_id: SheetId,
         start_row: u32,
@@ -317,7 +314,7 @@ pub(crate) enum EngineMutation {
     },
 
     /// Fully delete cells in a range and return their CellIds.
-    /// Unlike ClearRange, this removes cells from all maps (Yrs, grid, mirror).
+    /// Unlike ClearRange, this removes values, metadata, and registered identities.
     /// Returns cleared CellIds via MutationResult.data.
     ClearRangeAndReturnIds {
         sheet_id: SheetId,
@@ -407,36 +404,6 @@ pub(crate) enum EngineMutation {
         skip_blanks: bool,
         transpose: bool,
     },
-}
-
-impl EngineMutation {
-    /// Whether this high-level mutation should be forced into one undo step.
-    ///
-    /// The undo manager normally separates every user-origin Yrs transaction.
-    /// Bulk cell operations may legitimately emit multiple transactions while
-    /// resolving identities, writing values, formats, and derived metadata; the
-    /// product contract is still one Cmd+Z per public mutation.
-    pub(crate) fn should_auto_group_undo(&self) -> bool {
-        match self {
-            EngineMutation::SetCells { edits, .. } => !edits.is_empty(),
-            EngineMutation::SetCellsByPosition { edits, .. } => !edits.is_empty(),
-            EngineMutation::ClearCells { cell_ids } => !cell_ids.is_empty(),
-            EngineMutation::ClearRangeByPosition { .. }
-            | EngineMutation::CreateDataTable { .. }
-            | EngineMutation::ApplyScenario { .. }
-            | EngineMutation::RestoreScenario { .. }
-            | EngineMutation::SortRange { .. }
-            | EngineMutation::ClearRange { .. }
-            | EngineMutation::ClearRangeAndReturnIds { .. }
-            | EngineMutation::CreateSubtotals { .. }
-            | EngineMutation::AutoFill { .. }
-            | EngineMutation::FlashFill { .. }
-            | EngineMutation::RemoveDuplicates { .. }
-            | EngineMutation::RelocateCells { .. }
-            | EngineMutation::CopyRange { .. } => true,
-            _ => false,
-        }
-    }
 }
 
 /// Result of applying a mutation. Some mutations produce recalc results,

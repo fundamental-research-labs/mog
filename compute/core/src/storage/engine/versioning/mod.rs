@@ -1,8 +1,8 @@
 //! Engine-local version-control admission plumbing.
 //!
 //! This module owns runtime-only admission state for version-aware mutation
-//! boundaries. It intentionally does not persist anything into Yrs; the state
-//! is scoped to one engine instance and one admitted operation at a time.
+//! boundaries. This ephemeral state is scoped to one engine instance and
+//! one admitted operation at a time.
 
 pub mod diagnostics;
 pub mod redaction;
@@ -10,12 +10,12 @@ mod runtime_operation_context;
 
 use value_types::ComputeError;
 
-use super::YrsComputeEngine;
+use super::ComputeEngine;
 pub(in crate::storage::engine) use runtime_operation_context::{
     VersionRuntimeAdmissionLocation, VersionRuntimeOperationContext,
 };
 
-impl YrsComputeEngine {
+impl ComputeEngine {
     pub(in crate::storage::engine) fn admit_version_runtime_operation(
         &mut self,
         command: &'static str,

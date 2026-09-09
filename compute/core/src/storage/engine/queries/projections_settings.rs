@@ -20,14 +20,16 @@ use crate::snapshot::{
     WorkbookSettings, WorkbookSettingsChange,
 };
 use crate::storage::cells::values as cell_values;
-use crate::storage::engine::YrsComputeEngine;
+use crate::storage::engine::ComputeEngine;
+use crate::storage::engine::history::metadata::{
+    capture_workbook_field, capture_workbook_settings,
+};
 use crate::storage::engine::query_serialization::{cell_value_to_json, region_json};
 use crate::storage::engine::{data_table_formula, services};
 use crate::storage::sheet::{hyperlinks, merges, properties as sheets};
 use crate::storage::workbook::settings as workbook;
 use cell_types::{CellId, SheetId, SheetPos};
 use compute_document::hex::{hex_to_id, id_to_hex};
-use compute_document::undo::{ORIGIN_UI_STATE, ORIGIN_USER_EDIT};
 use compute_wire::mutation::serialize_multi_viewport_patches;
 use domain_types::domain::merge::{CellMergeInfo, MergeRegion, ResolvedMergedRegion};
 use domain_types::domain::sheet::{FrozenPanes, SheetMeta, SheetScrollPosition, SheetViewOptions};
@@ -38,7 +40,7 @@ use value_types::CellValue;
 use value_types::ComputeError;
 
 pub(in crate::storage::engine) fn get_projection_range(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -47,7 +49,7 @@ pub(in crate::storage::engine) fn get_projection_range(
 }
 
 pub(in crate::storage::engine) fn get_projection_source(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -56,7 +58,7 @@ pub(in crate::storage::engine) fn get_projection_source(
 }
 
 pub(in crate::storage::engine) fn get_viewport_projection_data(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,
@@ -73,45 +75,33 @@ pub(in crate::storage::engine) fn get_viewport_projection_data(
     )
 }
 
-pub(in crate::storage::engine) fn get_calc_mode(engine: &YrsComputeEngine) -> String {
+pub(in crate::storage::engine) fn get_calc_mode(engine: &ComputeEngine) -> String {
     services::queries::get_calc_mode(&engine.stores)
 }
 
-pub(in crate::storage::engine) fn get_default_font(engine: &YrsComputeEngine) -> DefaultFont {
+pub(in crate::storage::engine) fn get_default_font(engine: &ComputeEngine) -> DefaultFont {
     services::queries::get_default_font()
 }
 
 pub(in crate::storage::engine) fn get_workbook_setting(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     key: &str,
 ) -> Option<serde_json::Value> {
     services::queries::get_workbook_setting(&engine.stores, key)
 }
 
 pub(in crate::storage::engine) fn set_workbook_setting(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     key: &str,
     value: serde_json::Value,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    let pre_calc = (key == "calculationSettings").then(|| {
-        workbook::get_calculation_settings(
-            engine.stores.storage.doc(),
-            engine.stores.storage.workbook_map(),
-        )
-    });
-    workbook::set_setting(
-        engine.stores.storage.doc(),
-        engine.stores.storage.workbook_map(),
-        key,
-        value,
-    );
-    if let Some(pre_calc) = pre_calc {
-        let post_calc = workbook::get_calculation_settings(
-            engine.stores.storage.doc(),
-            engine.stores.storage.workbook_map(),
-        );
-        engine.sync_runtime_calculation_settings(&pre_calc, &post_calc);
-    }
+    let pre = workbook::get_settings(&engine.stores.storage.metadata);
+    capture_workbook_settings(&engine.stores.storage);
+    capture_workbook_field!(engine.stores.storage, default_slicer_style);
+    capture_workbook_field!(engine.stores.storage, default_pivot_table_style);
+    workbook::set_setting(&mut engine.stores.storage.metadata, key, value)?;
+    let post = workbook::get_settings(&engine.stores.storage.metadata);
+    engine.sync_runtime_workbook_settings(&pre, &post);
     Ok((
         serialize_multi_viewport_patches(&[]),
         MutationResult::empty(),
@@ -119,23 +109,13 @@ pub(in crate::storage::engine) fn set_workbook_setting(
 }
 
 pub(in crate::storage::engine) fn reset_workbook_settings(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    let pre = workbook::get_settings(
-        engine.stores.storage.doc(),
-        engine.stores.storage.workbook_map(),
-    );
-    workbook::reset_settings(
-        engine.stores.storage.doc(),
-        engine.stores.storage.workbook_map(),
-    );
-    let post = workbook::get_settings(
-        engine.stores.storage.doc(),
-        engine.stores.storage.workbook_map(),
-    );
-    let pre_calc = pre.calculation_settings.clone().unwrap_or_default();
-    let post_calc = post.calculation_settings.clone().unwrap_or_default();
-    engine.sync_runtime_calculation_settings(&pre_calc, &post_calc);
+    let pre = workbook::get_settings(&engine.stores.storage.metadata);
+    capture_workbook_settings(&engine.stores.storage);
+    workbook::reset_settings(&mut engine.stores.storage.metadata);
+    let post = workbook::get_settings(&engine.stores.storage.metadata);
+    engine.sync_runtime_workbook_settings(&pre, &post);
 
     let pre_json = serde_json::to_value(&pre).expect("WorkbookSettings must serialize");
     let post_json = serde_json::to_value(&post).expect("WorkbookSettings must serialize");
@@ -152,28 +132,19 @@ pub(in crate::storage::engine) fn reset_workbook_settings(
 }
 
 pub(in crate::storage::engine) fn get_calculation_settings(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
 ) -> CalculationSettings {
     services::queries::get_calculation_settings(&engine.stores)
 }
 
 pub(in crate::storage::engine) fn set_calculation_settings(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     settings: CalculationSettings,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    let pre_calc = workbook::get_calculation_settings(
-        engine.stores.storage.doc(),
-        engine.stores.storage.workbook_map(),
-    );
-    workbook::set_calculation_settings(
-        engine.stores.storage.doc(),
-        engine.stores.storage.workbook_map(),
-        &settings,
-    );
-    let post_calc = workbook::get_calculation_settings(
-        engine.stores.storage.doc(),
-        engine.stores.storage.workbook_map(),
-    );
+    let pre_calc = workbook::get_calculation_settings(&engine.stores.storage.metadata);
+    capture_workbook_field!(engine.stores.storage, settings.calculation_settings);
+    workbook::set_calculation_settings(&mut engine.stores.storage.metadata, &settings);
+    let post_calc = workbook::get_calculation_settings(&engine.stores.storage.metadata);
     engine.sync_runtime_calculation_settings(&pre_calc, &post_calc);
 
     Ok((
@@ -182,29 +153,18 @@ pub(in crate::storage::engine) fn set_calculation_settings(
     ))
 }
 
-pub(in crate::storage::engine) fn is_iterative_calculation_enabled(
-    engine: &YrsComputeEngine,
-) -> bool {
+pub(in crate::storage::engine) fn is_iterative_calculation_enabled(engine: &ComputeEngine) -> bool {
     services::queries::is_iterative_calculation_enabled(&engine.stores)
 }
 
 pub(in crate::storage::engine) fn set_iterative_calculation_enabled(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     enabled: bool,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    let pre_calc = workbook::get_calculation_settings(
-        engine.stores.storage.doc(),
-        engine.stores.storage.workbook_map(),
-    );
-    workbook::set_iterative_calculation_enabled(
-        engine.stores.storage.doc(),
-        engine.stores.storage.workbook_map(),
-        enabled,
-    );
-    let post_calc = workbook::get_calculation_settings(
-        engine.stores.storage.doc(),
-        engine.stores.storage.workbook_map(),
-    );
+    let pre_calc = workbook::get_calculation_settings(&engine.stores.storage.metadata);
+    capture_workbook_field!(engine.stores.storage, settings.calculation_settings);
+    workbook::set_iterative_calculation_enabled(&mut engine.stores.storage.metadata, enabled);
+    let post_calc = workbook::get_calculation_settings(&engine.stores.storage.metadata);
     engine.sync_runtime_calculation_settings(&pre_calc, &post_calc);
 
     Ok((
@@ -214,20 +174,18 @@ pub(in crate::storage::engine) fn set_iterative_calculation_enabled(
 }
 
 pub(in crate::storage::engine) fn protect_workbook(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     password_hash: Option<String>,
     options: Option<WorkbookProtectionOptions>,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    capture_workbook_field!(engine.stores.storage, settings.is_workbook_protected);
+    capture_workbook_field!(engine.stores.storage, protection);
     workbook::protect_workbook(
-        engine.stores.storage.doc(),
-        engine.stores.storage.workbook_map(),
+        &mut engine.stores.storage.metadata,
         password_hash.as_deref(),
         options.as_ref(),
     );
-    let post = workbook::get_settings(
-        engine.stores.storage.doc(),
-        engine.stores.storage.workbook_map(),
-    );
+    let post = workbook::get_settings(&engine.stores.storage.metadata);
     let post_json = serde_json::to_value(&post).expect("WorkbookSettings must serialize");
     let changed_keys = match &post_json {
         serde_json::Value::Object(map) => map.keys().cloned().collect::<Vec<_>>(),
@@ -245,18 +203,16 @@ pub(in crate::storage::engine) fn protect_workbook(
 }
 
 pub(in crate::storage::engine) fn unprotect_workbook(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     password_hash: Option<String>,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    capture_workbook_field!(engine.stores.storage, settings.is_workbook_protected);
+    capture_workbook_field!(engine.stores.storage, protection);
     let success = workbook::unprotect_workbook(
-        engine.stores.storage.doc(),
-        engine.stores.storage.workbook_map(),
+        &mut engine.stores.storage.metadata,
         password_hash.as_deref(),
     );
-    let post = workbook::get_settings(
-        engine.stores.storage.doc(),
-        engine.stores.storage.workbook_map(),
-    );
+    let post = workbook::get_settings(&engine.stores.storage.metadata);
     let post_json = serde_json::to_value(&post).expect("WorkbookSettings must serialize");
     let changed_keys = match &post_json {
         serde_json::Value::Object(map) => map.keys().cloned().collect::<Vec<_>>(),
@@ -274,37 +230,32 @@ pub(in crate::storage::engine) fn unprotect_workbook(
 }
 
 pub(in crate::storage::engine) fn get_workbook_protection_options(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
 ) -> WorkbookProtectionOptions {
     services::queries::get_workbook_protection_options(&engine.stores)
 }
 
-pub(in crate::storage::engine) fn has_workbook_protection_password(
-    engine: &YrsComputeEngine,
-) -> bool {
+pub(in crate::storage::engine) fn has_workbook_protection_password(engine: &ComputeEngine) -> bool {
     services::queries::has_workbook_protection_password(&engine.stores)
 }
 
-pub(in crate::storage::engine) fn is_workbook_protected(engine: &YrsComputeEngine) -> bool {
+pub(in crate::storage::engine) fn is_workbook_protected(engine: &ComputeEngine) -> bool {
     services::queries::is_workbook_protected(&engine.stores)
 }
 
 pub(in crate::storage::engine) fn is_workbook_operation_allowed(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     operation: ProtectedWorkbookOperation,
 ) -> Result<bool, ComputeError> {
     services::queries::is_workbook_operation_allowed(&engine.stores, operation)
 }
 
 pub(in crate::storage::engine) fn set_default_table_style_id(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     style_id: Option<String>,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    workbook::set_default_table_style_id(
-        engine.stores.storage.doc(),
-        engine.stores.storage.workbook_map(),
-        style_id.as_deref(),
-    );
+    capture_workbook_field!(engine.stores.storage, settings.default_table_style_id);
+    workbook::set_default_table_style_id(&mut engine.stores.storage.metadata, style_id.as_deref());
     Ok((
         serialize_multi_viewport_patches(&[]),
         MutationResult::empty(),
@@ -312,20 +263,17 @@ pub(in crate::storage::engine) fn set_default_table_style_id(
 }
 
 pub(in crate::storage::engine) fn get_default_table_style_id(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
 ) -> Option<String> {
     services::queries::get_default_table_style_id(&engine.stores)
 }
 
 pub(in crate::storage::engine) fn set_default_slicer_style(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     style_id: Option<String>,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    workbook::set_default_slicer_style(
-        engine.stores.storage.doc(),
-        engine.stores.storage.workbook_map(),
-        style_id.as_deref(),
-    );
+    capture_workbook_field!(engine.stores.storage, default_slicer_style);
+    workbook::set_default_slicer_style(&mut engine.stores.storage.metadata, style_id.as_deref());
     Ok((
         serialize_multi_viewport_patches(&[]),
         MutationResult::empty(),
@@ -333,7 +281,7 @@ pub(in crate::storage::engine) fn set_default_slicer_style(
 }
 
 pub(in crate::storage::engine) fn get_default_slicer_style(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
 ) -> Option<String> {
     services::queries::get_default_slicer_style(&engine.stores)
 }

@@ -19,15 +19,7 @@ pub(super) fn truncate_chars(s: &str, max_chars: usize) -> &str {
 
 #[cfg(test)]
 pub(super) fn parse_plain_value(input: &str) -> CellValue {
-    match crate::storage::cells::values::parse_input_value(input, None) {
-        ParsedValue::Empty => CellValue::Null,
-        ParsedValue::Number(n) => CellValue::number(n),
-        ParsedValue::Boolean(b) => CellValue::Boolean(b),
-        ParsedValue::Error(e) => CellValue::Error(e, None),
-        // Preserve the original (non-trimmed) input for text — the caller
-        // relies on this to round-trip trailing whitespace in literal text.
-        ParsedValue::Text(_) => CellValue::Text(input.to_string().into()),
-    }
+    parse_plain_value_with_context(input, &InputParseContext::default_for_target(None)).0
 }
 
 pub(super) fn parse_plain_value_with_context(

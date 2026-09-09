@@ -398,9 +398,9 @@ fn same_row_formula_delete_fixture_xlsx() -> Vec<u8> {
         .expect("same-row formula fixture should be writable")
 }
 
-fn import_deferred() -> (YrsComputeEngine, SheetId) {
+fn import_deferred() -> (ComputeEngine, SheetId) {
     let bytes = shared_formula_delete_fixture_xlsx();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     engine
         .import_from_xlsx_bytes_deferred(&bytes)
         .expect("deferred XLSX import should succeed");
@@ -414,7 +414,7 @@ fn import_deferred() -> (YrsComputeEngine, SheetId) {
     (engine, sheet_id)
 }
 
-fn import_deferred_then_complete() -> (YrsComputeEngine, SheetId) {
+fn import_deferred_then_complete() -> (ComputeEngine, SheetId) {
     let (mut engine, sheet_id) = import_deferred();
     engine
         .complete_deferred_hydration()
@@ -422,9 +422,9 @@ fn import_deferred_then_complete() -> (YrsComputeEngine, SheetId) {
     (engine, sheet_id)
 }
 
-fn import_same_row_shared_deferred() -> (YrsComputeEngine, SheetId) {
+fn import_same_row_shared_deferred() -> (ComputeEngine, SheetId) {
     let bytes = same_row_shared_formula_delete_fixture_xlsx();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     engine
         .import_from_xlsx_bytes_deferred(&bytes)
         .expect("deferred XLSX import should succeed");
@@ -438,7 +438,7 @@ fn import_same_row_shared_deferred() -> (YrsComputeEngine, SheetId) {
     (engine, sheet_id)
 }
 
-fn import_same_row_shared_deferred_then_complete() -> (YrsComputeEngine, SheetId) {
+fn import_same_row_shared_deferred_then_complete() -> (ComputeEngine, SheetId) {
     let (mut engine, sheet_id) = import_same_row_shared_deferred();
     engine
         .complete_deferred_hydration()
@@ -446,9 +446,9 @@ fn import_same_row_shared_deferred_then_complete() -> (YrsComputeEngine, SheetId
     (engine, sheet_id)
 }
 
-fn import_same_column_input_shared_deferred_then_complete() -> (YrsComputeEngine, SheetId) {
+fn import_same_column_input_shared_deferred_then_complete() -> (ComputeEngine, SheetId) {
     let bytes = same_column_input_shared_formula_delete_fixture_xlsx();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     engine
         .import_from_xlsx_bytes_deferred(&bytes)
         .expect("deferred XLSX import should succeed");
@@ -465,9 +465,9 @@ fn import_same_column_input_shared_deferred_then_complete() -> (YrsComputeEngine
     (engine, sheet_id)
 }
 
-fn import_same_row_formula_deferred() -> (YrsComputeEngine, SheetId) {
+fn import_same_row_formula_deferred() -> (ComputeEngine, SheetId) {
     let bytes = same_row_formula_delete_fixture_xlsx();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     engine
         .import_from_xlsx_bytes_deferred(&bytes)
         .expect("deferred XLSX import should succeed");
@@ -481,7 +481,7 @@ fn import_same_row_formula_deferred() -> (YrsComputeEngine, SheetId) {
     (engine, sheet_id)
 }
 
-fn assert_ref_error(engine: &YrsComputeEngine, sheet_id: &SheetId, row: u32, col: u32) {
+fn assert_ref_error(engine: &ComputeEngine, sheet_id: &SheetId, row: u32, col: u32) {
     assert!(
         matches!(
             engine.get_cell_value(sheet_id, row, col),
@@ -508,7 +508,7 @@ fn assert_ref_error(engine: &YrsComputeEngine, sheet_id: &SheetId, row: u32, col
     );
 }
 
-fn assert_direct_ref_error(engine: &YrsComputeEngine, sheet_id: &SheetId, row: u32, col: u32) {
+fn assert_direct_ref_error(engine: &ComputeEngine, sheet_id: &SheetId, row: u32, col: u32) {
     assert_ref_error(engine, sheet_id, row, col);
     let cell_id = CellId::from_uuid_str(
         &engine
@@ -525,7 +525,7 @@ fn assert_direct_ref_error(engine: &YrsComputeEngine, sheet_id: &SheetId, row: u
     );
 }
 
-fn assert_not_ref_error(engine: &YrsComputeEngine, sheet_id: &SheetId, row: u32, col: u32) {
+fn assert_not_ref_error(engine: &ComputeEngine, sheet_id: &SheetId, row: u32, col: u32) {
     assert!(
         !matches!(
             engine.get_cell_value(sheet_id, row, col),

@@ -1,4 +1,4 @@
-//! Construction, import, and rebuild helpers for `YrsComputeEngine`.
+//! Construction, import, and rebuild helpers for `ComputeEngine`.
 //!
 //! Keep this file as a facade. Implementation belongs in focused private
 //! modules under `construction/`.
@@ -10,7 +10,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
-use yrs::{Any, Array, Map, Out, Transact};
 
 use cell_types::{AxisIdentityStore, CellId, ColId, IdAllocator, RowId, SheetId};
 use compute_layout_index::LayoutIndex;
@@ -21,25 +20,22 @@ use crate::mirror::CellMirror;
 use crate::range_manager::RangeSpatialIndex;
 use crate::scheduler::ComputeCore;
 use crate::snapshot::{RecalcResult, SheetSnapshot, WorkbookSnapshot};
-use crate::storage::YrsStorage;
+use crate::storage::WorkbookStorage;
 use crate::storage::sheet::{dimensions, grouping, merges};
 use crate::storage::workbook::{
     named_ranges as workbook_named_ranges, settings as workbook_settings,
 };
 use domain_types::{self, ImportedCellProjectionRole};
-use formula_types::{NamedRangeDef, Scope, WorkbookLookup};
+use formula_types::{NamedRangeDef, Scope};
 
 use super::merge_index::{MergeRangeRef, MergeSpatialItem};
 use super::settings::EngineSettings;
 use super::stores::EngineStores;
 use super::viewport::service::ViewportService;
-use super::{MutationCoordinator, YrsComputeEngine};
+use super::{ComputeEngine, MutationCoordinator};
 use compute_document::hex::hex_to_id;
-use compute_document::observe::DocumentObserver;
-use compute_document::undo::UndoRedoManager;
 
 mod assembly;
-mod axis_resolver;
 mod csv;
 mod deferred;
 mod indexes;
@@ -54,61 +50,33 @@ mod types;
 mod xlsx;
 
 pub(super) use assembly::{
-    assemble_engine, from_snapshot, from_snapshot_with_layout_metrics, from_yrs_state,
-    from_yrs_state_with_layout_metrics, rebuild_engine_from_snapshot, snapshot_id_high_water_mark,
-};
-pub(in crate::storage::engine) use axis_resolver::{
-    register_pos_to_id_entries, resolve_sheet_axes_from_yrs,
+    assemble_engine, from_snapshot, from_snapshot_with_layout_metrics,
+    rebuild_engine_from_snapshot, snapshot_id_high_water_mark,
 };
 pub(super) use csv::{from_csv_bytes, import_from_csv_bytes};
 pub(super) use deferred::{
     commit_deferred_hydration, import_from_xlsx_bytes_deferred, stage_deferred_hydration,
 };
 pub(super) use indexes::{
-    build_grid_indexes_from_allocations_range, build_grid_indexes_from_yrs,
-    build_layout_index_for_sheet, build_layout_indexes,
-    build_layout_indexes_from_parse_output_range, build_merge_indexes,
+    build_grid_indexes, build_grid_indexes_from_allocations_range, build_layout_index_for_sheet,
+    build_layout_indexes, build_layout_indexes_from_parse_output_range, build_merge_indexes,
     build_merge_indexes_from_parse_output_range,
 };
-pub(super) use named_ranges::{
-    YrsIdentityFormulaLookup, defined_names_to_named_range_defs, normalize_named_range_refs,
-};
+pub(super) use named_ranges::{defined_names_to_named_range_defs, normalize_named_range_refs};
 pub(super) use range_styles::{build_imported_range_style_plan, range_style_formats_enabled};
-pub(in crate::storage::engine) use rebuild::{
-    build_finalized_mirror_from_snapshot, finalize_rebuilt_sheet_runtimes,
-    rebuild_sheet_runtime_from_yrs,
-};
+pub(in crate::storage::engine) use rebuild::build_finalized_mirror_from_snapshot;
 pub(super) use runtime::{
-    create_observer_and_undo, derive_settings, hydrate_mirror_format_ranges,
-    load_custom_cell_styles, load_custom_table_styles, load_theme_palette,
+    collect_imported_formats, derive_settings, install_imported_formats, load_theme_palette,
     sync_enable_calculation_flags,
 };
 pub(super) use sheet_import::import_sheets_from_xlsx;
-pub use snapshots::build_workbook_snapshot_from_yrs;
-pub(super) use snapshots::{build_sheet_snapshot_from_yrs, build_workbook_snapshot};
-pub(in crate::storage::engine) use table_auto_filter_projection::materialize_table_auto_filters_from_preserved_specs;
+pub(super) use snapshots::build_workbook_snapshot;
+pub(in crate::storage::engine) use table_auto_filter_projection::table_filter_binding_fingerprint;
+pub(in crate::storage::engine) use table_auto_filter_projection::{
+    materialize_table_auto_filters_for_sheets, materialize_table_auto_filters_from_preserved_specs,
+};
 pub(super) use types::{DeferredHydrationCompletion, DeferredHydrationData, XlsxHydrateResult};
 pub(super) use xlsx::{from_xlsx_bytes, import_from_xlsx_bytes};
-
-pub(super) fn sync_table_catalog_from_yrs_if_present(
-    stores: &mut EngineStores,
-    mirror: &mut CellMirror,
-) {
-    let has_table_catalog = {
-        let txn = stores.storage.doc().transact();
-        matches!(
-            stores
-                .storage
-                .workbook_map()
-                .get(&txn, compute_document::schema::KEY_TABLES),
-            Some(Out::YMap(_))
-        )
-    };
-
-    if has_table_catalog {
-        super::services::tables::sync_tables_from_yrs(stores, mirror);
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -185,17 +153,47 @@ mod tests {
             range_id: RangeId::from_raw(123),
             kind: RangeKind::Data,
             anchor: RangeAnchor::Elastic {
-                start_row: alloc.row_ids[0],
-                end_row: alloc.row_ids[3],
-                start_col: alloc.col_ids[3],
-                end_col: alloc.col_ids[3],
+                start_row: alloc
+                    .row_axis
+                    .identity_at(alloc.sheet_id, (0) as u32)
+                    .unwrap(),
+                end_row: alloc
+                    .row_axis
+                    .identity_at(alloc.sheet_id, (3) as u32)
+                    .unwrap(),
+                start_col: alloc
+                    .col_axis
+                    .identity_at(alloc.sheet_id, (3) as u32)
+                    .unwrap(),
+                end_col: alloc
+                    .col_axis
+                    .identity_at(alloc.sheet_id, (3) as u32)
+                    .unwrap(),
             },
             encoding: PayloadEncoding::MixedCbor,
             payload: Vec::new(),
             row_axis: None,
             col_axis: None,
-            row_ids: vec![alloc.row_ids[0], alloc.row_ids[1], alloc.row_ids[3]],
-            col_ids: vec![alloc.col_ids[3]],
+            row_ids: vec![
+                alloc
+                    .row_axis
+                    .identity_at(alloc.sheet_id, (0) as u32)
+                    .unwrap(),
+                alloc
+                    .row_axis
+                    .identity_at(alloc.sheet_id, (1) as u32)
+                    .unwrap(),
+                alloc
+                    .row_axis
+                    .identity_at(alloc.sheet_id, (3) as u32)
+                    .unwrap(),
+            ],
+            col_ids: vec![
+                alloc
+                    .col_axis
+                    .identity_at(alloc.sheet_id, (3) as u32)
+                    .unwrap(),
+            ],
         };
 
         let (_positions, styles) =
@@ -274,17 +272,51 @@ mod tests {
             range_id: RangeId::from_raw(456),
             kind: RangeKind::Data,
             anchor: RangeAnchor::Elastic {
-                start_row: alloc.row_ids[0],
-                end_row: alloc.row_ids[2],
-                start_col: alloc.col_ids[0],
-                end_col: alloc.col_ids[1],
+                start_row: alloc
+                    .row_axis
+                    .identity_at(alloc.sheet_id, (0) as u32)
+                    .unwrap(),
+                end_row: alloc
+                    .row_axis
+                    .identity_at(alloc.sheet_id, (2) as u32)
+                    .unwrap(),
+                start_col: alloc
+                    .col_axis
+                    .identity_at(alloc.sheet_id, (0) as u32)
+                    .unwrap(),
+                end_col: alloc
+                    .col_axis
+                    .identity_at(alloc.sheet_id, (1) as u32)
+                    .unwrap(),
             },
             encoding: PayloadEncoding::MixedCbor,
             payload: Vec::new(),
             row_axis: None,
             col_axis: None,
-            row_ids: vec![alloc.row_ids[0], alloc.row_ids[1], alloc.row_ids[2]],
-            col_ids: vec![alloc.col_ids[0], alloc.col_ids[1]],
+            row_ids: vec![
+                alloc
+                    .row_axis
+                    .identity_at(alloc.sheet_id, (0) as u32)
+                    .unwrap(),
+                alloc
+                    .row_axis
+                    .identity_at(alloc.sheet_id, (1) as u32)
+                    .unwrap(),
+                alloc
+                    .row_axis
+                    .identity_at(alloc.sheet_id, (2) as u32)
+                    .unwrap(),
+            ],
+            col_ids: vec![
+                alloc
+                    .col_axis
+                    .identity_at(alloc.sheet_id, (0) as u32)
+                    .unwrap(),
+                alloc
+                    .col_axis
+                    .identity_at(alloc.sheet_id, (1) as u32)
+                    .unwrap(),
+            ],
         };
 
         let (positions, styles) =

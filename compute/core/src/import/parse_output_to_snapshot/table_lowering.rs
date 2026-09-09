@@ -10,10 +10,7 @@
 //!
 //! # Typed range refs: — typed pass
 //!
-//! `TableSpec.range_ref` is still a `String` at the `domain_types` layer
-//! (that field doubles as the on-disk Yrs form — see
-//! [`domain_types::yrs_schema::table`] — and the plan's "external-format
-//! boundary" carve-out keeps it stringly at the persistence edge). Inside
+//! `TableSpec.range_ref` is an OOXML boundary string. Inside
 //! the lowering step we route *once* through
 //! [`compute_parser::parse_a1_range`] to obtain a typed
 //! [`compute_parser::RangeRef`], then pattern-match the positional corners

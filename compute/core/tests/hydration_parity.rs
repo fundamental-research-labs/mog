@@ -1,36 +1,7 @@
-//! Assert that `from_snapshot` and `from_xlsx_bytes` produce yrs state
-//! that is equivalent (modulo yrs client-id metadata, row/col ID hex, and
-//! CellId allocation differences) for equivalent input. Definitive
-//! close-out for the silent-no-op class (R51 Turn N+6 / Step D.5).
-//!
-//! ## Fixture
-//!
-//! Three sheets built via `from_snapshot`, then mutated on the engine
-//! instance to exercise features that only the engine API (not the
-//! snapshot struct) can produce:
-//!
-//! * Sheet1 (20×10): A1=1, B1=2 (values); A2="hello" (text); A3=`=A1+B1`
-//!   and A4=`=Sheet2!A1*2` (formulas, including a cross-sheet ref). A
-//!   merge covers A6:C6.
-//! * Sheet2 (10×5): A1=10, B2=5 (values). A hyperlink at A4.
-//! * Sheet3 (10×5): A1=100, B1=200, C1=300 (values). A1 is formatted
-//!   bold.
-//!
-//! ## Canonicalization
-//!
-//! Both engines are fed through
-//! [`compute_core::test_support::yrs_canonical::canonicalize`], which produces a
-//! `BTreeMap<sheet_name, CanonValue>` recursive tree covering every
-//! per-sheet sub-map (cells, properties, rowOrder, colOrder,
-//! gridIndex, meta, merges, etc.). Unstable identifiers (row/col ID
-//! hex, cell_hex, `rowHex:colHex` composite keys) are rewritten to
-//! position-based synthetic markers so the two paths are comparable.
-//!
-//! The entire trees are then asserted equal with `assert_eq!` — any
-//! divergence anywhere in the per-sheet yrs state fails the test.
+//! Native values, formulas, merges, hyperlinks and formatting survive an XLSX roundtrip.
 
-use compute_core::storage::engine::YrsComputeEngine;
-use compute_core::test_support::yrs_canonical::{CanonValue, canonicalize};
+use compute_core::storage::engine::ComputeEngine;
+use compute_core::test_support::native_canonical::canonicalize;
 use domain_types::CellFormat;
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
@@ -83,6 +54,9 @@ fn rich_fixture() -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: SHEET1_ID.to_string(),
                 name: "Sheet1".to_string(),
                 rows: 20,
@@ -97,6 +71,9 @@ fn rich_fixture() -> WorkbookSnapshot {
                 ranges: vec![],
             },
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: SHEET2_ID.to_string(),
                 name: "Sheet2".to_string(),
                 rows: 10,
@@ -108,6 +85,9 @@ fn rich_fixture() -> WorkbookSnapshot {
                 ranges: vec![],
             },
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: SHEET3_ID.to_string(),
                 name: "Sheet3".to_string(),
                 rows: 10,
@@ -129,15 +109,14 @@ fn rich_fixture() -> WorkbookSnapshot {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn snapshot_and_xlsx_paths_produce_identical_yrs_state() {
+fn snapshot_and_xlsx_paths_preserve_native_authored_state() {
     use cell_types::{CellId, SheetId};
 
     // -----------------------------------------------------------------
     // Path 1: from_snapshot hydration + engine-API mutations (merge,
     // hyperlink, cell format) that the snapshot struct can't express.
     // -----------------------------------------------------------------
-    let (mut engine_snap, _) =
-        YrsComputeEngine::from_snapshot(rich_fixture()).expect("from_snapshot");
+    let (mut engine_snap, _) = ComputeEngine::from_snapshot(rich_fixture()).expect("from_snapshot");
 
     let sheet1 = SheetId::from_uuid_str(SHEET1_ID).expect("sheet1 id");
     let sheet2 = SheetId::from_uuid_str(SHEET2_ID).expect("sheet2 id");
@@ -173,7 +152,7 @@ fn snapshot_and_xlsx_paths_produce_identical_yrs_state() {
     let bytes = engine_snap
         .export_to_xlsx_bytes()
         .expect("export_to_xlsx_bytes");
-    let (engine_xlsx, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
+    let (engine_xlsx, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
 
     // -----------------------------------------------------------------
     // Canonicalize both engines and compare the full recursive trees.
@@ -196,39 +175,28 @@ fn snapshot_and_xlsx_paths_produce_identical_yrs_state() {
         let x = canon_xlsx.get(name).unwrap();
         assert_eq!(
             s, x,
-            "sheet '{}' canonical yrs state differs between from_snapshot and from_xlsx_bytes paths",
+            "sheet '{}' canonical native state differs between from_snapshot and from_xlsx_bytes paths",
             name
         );
     }
 
-    // Belt-and-braces: the whole workbook tree as one structure. If the
-    // per-sheet loop passed, this is a tautology; if it didn't we never
-    // reach here. This assertion is the one cited in the test header as
-    // the definitive hydration-parity gate.
-    assert_eq!(
-        canon_snap, canon_xlsx,
-        "hydration paths produced divergent yrs state"
-    );
-
-    // Sanity: the canonical form is non-empty and captures mutations.
-    // (If canonicalize ever regresses into a no-op, the above assertions
-    // trivially pass — so at minimum require that the top-level keys
-    // exist and each sheet has a non-empty Map.)
-    assert_eq!(
-        canon_snap.len(),
-        3,
-        "expected three sheets in canonical form"
-    );
-    for (name, tree) in &canon_snap {
-        match tree {
-            CanonValue::Map(m) => {
-                assert!(
-                    !m.is_empty(),
-                    "sheet '{}' canonical tree is empty — canonicalize broken?",
-                    name
-                )
-            }
-            other => panic!("sheet '{}' canonical tree is not a Map: {:?}", name, other),
-        }
+    assert_eq!(canon_snap.len(), 3);
+    for sheet in canon_snap.values() {
+        assert!(!sheet.cells.is_empty());
     }
+    assert_eq!(canon_snap["Sheet1"].merges.len(), 1);
+    assert_eq!(canon_snap["Sheet2"].hyperlinks.len(), 1);
+    let reloaded_sheet3 = *engine_xlsx
+        .mirror()
+        .sheet_ids()
+        .find(|id| engine_xlsx.mirror().get_sheet(id).unwrap().name == "Sheet3")
+        .unwrap();
+    let id = engine_xlsx.get_cell_id_at(&reloaded_sheet3, 0, 0).unwrap();
+    let id = CellId::from_uuid_str(&id).unwrap();
+    assert_eq!(
+        engine_xlsx
+            .get_cell_format(&reloaded_sheet3, &id, 0, 0)
+            .bold,
+        Some(true)
+    );
 }

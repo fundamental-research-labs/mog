@@ -1,7 +1,7 @@
 use super::*;
 
 pub(super) fn set_schema_map(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     entries: Vec<crate::bridge_types::SchemaMapEntryWire>,
     version: f64,
 ) {
@@ -9,7 +9,7 @@ pub(super) fn set_schema_map(
 }
 
 pub(super) fn update_schema(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: String,
     column: u32,
     schema: crate::schema::types::ColumnSchema,
@@ -19,7 +19,7 @@ pub(super) fn update_schema(
 }
 
 pub(super) fn remove_schema(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: String,
     column: u32,
     version: f64,
@@ -28,7 +28,7 @@ pub(super) fn remove_schema(
 }
 
 pub(super) fn clear_schemas(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
     let result = services::formatting::clear_schemas(&mut engine.stores)?;
     Ok((serialize_multi_viewport_patches(&[]), result))

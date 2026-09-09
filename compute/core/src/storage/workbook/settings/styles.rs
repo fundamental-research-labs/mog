@@ -1,379 +1,136 @@
-use std::sync::Arc;
-
-use compute_document::undo::ORIGIN_USER_EDIT;
+use crate::storage::workbook::WorkbookMetadata;
 use domain_types::domain::slicer::{NamedSlicerStyle, SlicerCustomStyle};
 use value_types::ComputeError;
-use yrs::{Any, Doc, Map, MapPrelim, MapRef, Origin, Out, Transact};
 
-use crate::storage::infra::yrs_helpers::read_string;
+pub fn set_default_table_style_id(metadata: &mut WorkbookMetadata, style_id: Option<&str>) {
+    metadata.settings.default_table_style_id = style_id.map(str::to_owned);
+}
+pub fn get_default_table_style_id(metadata: &WorkbookMetadata) -> Option<String> {
+    metadata.settings.default_table_style_id.clone()
+}
 
-use super::map::{ensure_settings_map, get_settings_map};
+pub fn set_default_slicer_style(metadata: &mut WorkbookMetadata, style_id: Option<&str>) {
+    metadata.default_slicer_style = style_id.map(str::to_owned);
+}
+pub fn get_default_slicer_style(metadata: &WorkbookMetadata) -> Option<String> {
+    metadata.default_slicer_style.clone()
+}
 
-pub fn set_default_table_style_id(doc: &Doc, workbook: &MapRef, style_id: Option<&str>) {
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let settings_map = ensure_settings_map(workbook, &mut txn);
+pub fn set_default_pivot_table_style(metadata: &mut WorkbookMetadata, style_id: Option<&str>) {
+    metadata.default_pivot_table_style = style_id.map(str::to_owned);
+}
+pub fn get_default_pivot_table_style(metadata: &WorkbookMetadata) -> Option<String> {
+    metadata.default_pivot_table_style.clone()
+}
 
-    match style_id {
-        Some(id) => {
-            settings_map.insert(&mut txn, "defaultTableStyleId", Any::String(Arc::from(id)));
-        }
-        None => {
-            settings_map.remove(&mut txn, "defaultTableStyleId");
+pub(crate) fn unique_style_name(metadata: &WorkbookMetadata, base: &str) -> String {
+    if !metadata.named_slicer_styles.contains_key(base) {
+        return base.to_owned();
+    }
+    for suffix in 1u64.. {
+        let name = format!("{base}{suffix}");
+        if !metadata.named_slicer_styles.contains_key(&name) {
+            return name;
         }
     }
+    unreachable!("style registry exhausted")
 }
 
-/// Get the default table style ID for new tables.
-pub fn get_default_table_style_id(doc: &Doc, workbook: &MapRef) -> Option<String> {
-    let txn = doc.transact();
-    let settings_map = get_settings_map(workbook, &txn)?;
-    read_string(&settings_map, &txn, "defaultTableStyleId")
-}
-
-/// Set the default slicer style for new slicers.
-/// Pass `None` to clear the default (will use 'light1').
-pub fn set_default_slicer_style(doc: &Doc, workbook: &MapRef, style_id: Option<&str>) {
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let settings_map = ensure_settings_map(workbook, &mut txn);
-
-    match style_id {
-        Some(id) => {
-            settings_map.insert(&mut txn, "defaultSlicerStyle", Any::String(Arc::from(id)));
-        }
-        None => {
-            settings_map.remove(&mut txn, "defaultSlicerStyle");
-        }
-    }
-}
-
-/// Get the default slicer style for new slicers.
-pub fn get_default_slicer_style(doc: &Doc, workbook: &MapRef) -> Option<String> {
-    let txn = doc.transact();
-    let settings_map = get_settings_map(workbook, &txn)?;
-    read_string(&settings_map, &txn, "defaultSlicerStyle")
-}
-
-/// Set the default pivot table style for new pivot tables.
-/// Pass `None` to clear the default (will use 'PivotStyleLight16').
-pub fn set_default_pivot_table_style(doc: &Doc, workbook: &MapRef, style_id: Option<&str>) {
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let settings_map = ensure_settings_map(workbook, &mut txn);
-
-    match style_id {
-        Some(id) => {
-            settings_map.insert(
-                &mut txn,
-                "defaultPivotTableStyle",
-                Any::String(Arc::from(id)),
-            );
-        }
-        None => {
-            settings_map.remove(&mut txn, "defaultPivotTableStyle");
-        }
-    }
-}
-
-/// Get the default pivot table style for new pivot tables.
-pub fn get_default_pivot_table_style(doc: &Doc, workbook: &MapRef) -> Option<String> {
-    let txn = doc.transact();
-    let settings_map = get_settings_map(workbook, &txn)?;
-    read_string(&settings_map, &txn, "defaultPivotTableStyle")
-}
-
-// ---------------------------------------------------------------------------
-// Named Slicer Style Registry
-// ---------------------------------------------------------------------------
-
-/// Key within the settings map that holds the named slicer styles sub-map.
-const KEY_NAMED_SLICER_STYLES: &str = "namedSlicerStyles";
-
-/// Ensure the named slicer styles sub-map exists, creating it if necessary.
-fn ensure_named_slicer_styles_map(
-    settings_map: &MapRef,
-    txn: &mut yrs::TransactionMut<'_>,
-) -> MapRef {
-    match settings_map.get(txn, KEY_NAMED_SLICER_STYLES) {
-        Some(Out::YMap(m)) => m,
-        _ => {
-            let empty = MapPrelim::from([] as [(&str, Any); 0]);
-            settings_map.insert(txn, KEY_NAMED_SLICER_STYLES, empty)
-        }
-    }
-}
-
-/// Get the named slicer styles sub-map (read-only).
-fn get_named_slicer_styles_map<T: yrs::ReadTxn>(settings_map: &MapRef, txn: &T) -> Option<MapRef> {
-    match settings_map.get(txn, KEY_NAMED_SLICER_STYLES) {
-        Some(Out::YMap(m)) => Some(m),
-        _ => None,
-    }
-}
-
-/// Generate a unique name by appending a numeric suffix if needed.
-fn make_unique_style_name<T: yrs::ReadTxn>(
-    styles_map: &MapRef,
-    txn: &T,
-    base_name: &str,
-) -> String {
-    if styles_map.get(txn, base_name).is_none() {
-        return base_name.to_string();
-    }
-    let mut suffix = 1u32;
-    loop {
-        let candidate = format!("{base_name}{suffix}");
-        if styles_map.get(txn, candidate.as_str()).is_none() {
-            return candidate;
-        }
-        suffix += 1;
-    }
-}
-
-/// Add a named slicer style to the workbook registry.
-///
-/// If `make_unique` is `true` and a style with the given name already exists,
-/// a numeric suffix is appended to make the name unique. When `make_unique` is
-/// `false`, an error is returned if a style with the given name already exists.
-/// Returns the final name used.
 pub fn add_named_slicer_style(
-    doc: &Doc,
-    workbook: &MapRef,
+    metadata: &mut WorkbookMetadata,
     name: &str,
     style: SlicerCustomStyle,
     make_unique: bool,
 ) -> Result<String, ComputeError> {
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let settings_map = ensure_settings_map(workbook, &mut txn);
-    let styles_map = ensure_named_slicer_styles_map(&settings_map, &mut txn);
-
-    let final_name = if make_unique {
-        make_unique_style_name(&styles_map, &txn, name)
+    let name = if make_unique {
+        unique_style_name(metadata, name)
     } else {
-        // Reject if a style with this name already exists.
-        if styles_map.get(&txn, name).is_some() {
+        if metadata.named_slicer_styles.contains_key(name) {
             return Err(ComputeError::InvalidInput {
                 message: format!("Slicer style '{name}' already exists"),
             });
         }
-        name.to_string()
+        name.to_owned()
     };
-
-    let named_style = NamedSlicerStyle {
-        name: final_name.clone(),
-        read_only: false,
-        style,
-    };
-    let json_str = serde_json::to_string(&named_style).map_err(|e| ComputeError::InvalidInput {
-        message: format!("Failed to serialize slicer style: {e}"),
-    })?;
-    styles_map.insert(
-        &mut txn,
-        final_name.as_str(),
-        Any::String(Arc::from(json_str.as_str())),
-    );
-    Ok(final_name)
-}
-
-/// Get a named slicer style by name.
-///
-/// Returns `Ok(Some(style))` if found, `Ok(None)` if no entry exists for that
-/// name, or `Err` if the stored data is corrupted and cannot be deserialized.
-pub fn get_named_slicer_style(
-    doc: &Doc,
-    workbook: &MapRef,
-    name: &str,
-) -> Result<Option<NamedSlicerStyle>, ComputeError> {
-    let txn = doc.transact();
-    let settings_map = match get_settings_map(workbook, &txn) {
-        Some(m) => m,
-        None => return Ok(None),
-    };
-    let styles_map = match get_named_slicer_styles_map(&settings_map, &txn) {
-        Some(m) => m,
-        None => return Ok(None),
-    };
-    match styles_map.get(&txn, name) {
-        Some(Out::Any(Any::String(s))) => match serde_json::from_str::<NamedSlicerStyle>(&s) {
-            Ok(style) => Ok(Some(style)),
-            Err(e) => {
-                tracing::warn!("Failed to deserialize named slicer style '{name}': {e}");
-                Err(ComputeError::InvalidInput {
-                    message: format!("Corrupted slicer style data for '{name}': {e}"),
-                })
-            }
+    metadata.named_slicer_styles.insert(
+        name.clone(),
+        NamedSlicerStyle {
+            name: name.clone(),
+            read_only: false,
+            style,
         },
-        _ => Ok(None),
-    }
+    );
+    Ok(name)
 }
 
-/// Delete a named slicer style. Fails if the style is read-only or not found.
-///
-/// All checks and the removal are performed within a single mutable
-/// transaction to avoid TOCTOU races.
+pub fn get_named_slicer_style(metadata: &WorkbookMetadata, name: &str) -> Option<NamedSlicerStyle> {
+    metadata.named_slicer_styles.get(name).cloned()
+}
+
 pub fn delete_named_slicer_style(
-    doc: &Doc,
-    workbook: &MapRef,
+    metadata: &mut WorkbookMetadata,
     name: &str,
 ) -> Result<(), ComputeError> {
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-
-    // Navigate to the styles map. A TransactionMut implements ReadTxn, so we
-    // can use `get_settings_map` (read-only lookup) within the mutable txn.
-    let settings_map =
-        get_settings_map(workbook, &txn).ok_or_else(|| ComputeError::InvalidInput {
-            message: format!("Named slicer style not found: {name}"),
-        })?;
-    let styles_map = get_named_slicer_styles_map(&settings_map, &txn).ok_or_else(|| {
-        ComputeError::InvalidInput {
-            message: format!("Named slicer style not found: {name}"),
-        }
-    })?;
-
-    // Check existence and read_only status.
-    let existing = match styles_map.get(&txn, name) {
-        Some(Out::Any(Any::String(s))) => match serde_json::from_str::<NamedSlicerStyle>(&s) {
-            Ok(style) => Some(style),
-            Err(e) => {
-                tracing::warn!("Failed to deserialize named slicer style '{name}': {e}");
-                return Err(ComputeError::InvalidInput {
-                    message: format!("Corrupted slicer style data for '{name}': {e}"),
-                });
-            }
-        },
-        _ => None,
-    };
-
-    match existing {
-        None => {
-            return Err(ComputeError::InvalidInput {
+    let style =
+        metadata
+            .named_slicer_styles
+            .get(name)
+            .ok_or_else(|| ComputeError::InvalidInput {
                 message: format!("Named slicer style not found: {name}"),
-            });
-        }
-        Some(style) if style.read_only => {
-            return Err(ComputeError::InvalidInput {
-                message: format!("Cannot delete read-only slicer style: {name}"),
-            });
-        }
-        _ => {}
+            })?;
+    if style.read_only {
+        return Err(ComputeError::InvalidInput {
+            message: format!("Cannot delete read-only slicer style: {name}"),
+        });
     }
-
-    // Perform the deletion within the same transaction.
-    styles_map.remove(&mut txn, name);
+    metadata.named_slicer_styles.remove(name);
     Ok(())
 }
 
-/// Duplicate a named slicer style, creating a copy with a unique name.
-///
-/// The new name is formed as "{original} Copy", with a numeric suffix if that
-/// name is already taken. The read + write are performed in a single mutable
-/// transaction to avoid TOCTOU races. Returns the new style's name.
 pub fn duplicate_named_slicer_style(
-    doc: &Doc,
-    workbook: &MapRef,
+    metadata: &mut WorkbookMetadata,
     name: &str,
 ) -> Result<String, ComputeError> {
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let settings_map = ensure_settings_map(workbook, &mut txn);
-    let styles_map = ensure_named_slicer_styles_map(&settings_map, &mut txn);
-
-    // Read the original style within this transaction.
-    let original = match styles_map.get(&txn, name) {
-        Some(Out::Any(Any::String(s))) => {
-            serde_json::from_str::<NamedSlicerStyle>(&s).map_err(|e| {
-                tracing::warn!("Failed to deserialize named slicer style '{name}': {e}");
-                ComputeError::InvalidInput {
-                    message: format!("Corrupted slicer style data for '{name}': {e}"),
-                }
-            })?
-        }
-        _ => {
-            return Err(ComputeError::InvalidInput {
-                message: format!("Named slicer style not found: {name}"),
-            });
-        }
-    };
-
-    // Generate unique name and insert, all within the same transaction.
-    let base_copy_name = format!("{name} Copy");
-    let final_name = make_unique_style_name(&styles_map, &txn, &base_copy_name);
-
-    let new_style = NamedSlicerStyle {
-        name: final_name.clone(),
-        read_only: false,
-        style: original.style,
-    };
-    let json_str = serde_json::to_string(&new_style).map_err(|e| ComputeError::InvalidInput {
-        message: format!("Failed to serialize slicer style: {e}"),
-    })?;
-    styles_map.insert(
-        &mut txn,
-        final_name.as_str(),
-        Any::String(Arc::from(json_str.as_str())),
-    );
-    Ok(final_name)
+    let style = metadata
+        .named_slicer_styles
+        .get(name)
+        .ok_or_else(|| ComputeError::InvalidInput {
+            message: format!("Named slicer style not found: {name}"),
+        })?
+        .style
+        .clone();
+    add_named_slicer_style(metadata, &format!("{name} Copy"), style, true)
 }
 
-/// Get the count of named slicer styles in the registry.
-pub fn get_named_slicer_style_count(doc: &Doc, workbook: &MapRef) -> u32 {
-    let txn = doc.transact();
-    let settings_map = match get_settings_map(workbook, &txn) {
-        Some(m) => m,
-        None => return 0,
-    };
-    let styles_map = match get_named_slicer_styles_map(&settings_map, &txn) {
-        Some(m) => m,
-        None => return 0,
-    };
-    styles_map.len(&txn)
+pub fn get_named_slicer_style_count(metadata: &WorkbookMetadata) -> u32 {
+    metadata.named_slicer_styles.len() as u32
 }
 
-/// List all named slicer styles in the registry.
-pub fn list_named_slicer_styles(doc: &Doc, workbook: &MapRef) -> Vec<NamedSlicerStyle> {
-    let txn = doc.transact();
-    let settings_map = match get_settings_map(workbook, &txn) {
-        Some(m) => m,
-        None => return Vec::new(),
-    };
-    let styles_map = match get_named_slicer_styles_map(&settings_map, &txn) {
-        Some(m) => m,
-        None => return Vec::new(),
-    };
-
-    let mut result = Vec::new();
-    for (key, value) in styles_map.iter(&txn) {
-        if let Out::Any(Any::String(s)) = value {
-            match serde_json::from_str::<NamedSlicerStyle>(&s) {
-                Ok(style) => result.push(style),
-                Err(e) => {
-                    tracing::warn!("Skipping corrupted named slicer style '{key}': {e}");
-                }
-            }
-        }
-    }
-    result
+pub fn list_named_slicer_styles(metadata: &WorkbookMetadata) -> Vec<NamedSlicerStyle> {
+    metadata.named_slicer_styles.values().cloned().collect()
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::YrsStorage;
+    use crate::storage::workbook::WorkbookMetadata;
 
     #[test]
     fn test_default_table_style_id() {
-        let storage = YrsStorage::new();
+        let mut metadata = WorkbookMetadata::default();
 
         // Default: none
-        assert!(get_default_table_style_id(storage.doc(), storage.workbook_map()).is_none());
+        assert!(get_default_table_style_id(&metadata).is_none());
 
         // Set a style
-        set_default_table_style_id(storage.doc(), storage.workbook_map(), Some("dark1"));
+        set_default_table_style_id(&mut metadata, Some("dark1"));
         assert_eq!(
-            get_default_table_style_id(storage.doc(), storage.workbook_map()),
+            get_default_table_style_id(&metadata),
             Some("dark1".to_string())
         );
 
         // Clear the style
-        set_default_table_style_id(storage.doc(), storage.workbook_map(), None);
-        assert!(get_default_table_style_id(storage.doc(), storage.workbook_map()).is_none());
+        set_default_table_style_id(&mut metadata, None);
+        assert!(get_default_table_style_id(&metadata).is_none());
     }
 
     // -------------------------------------------------------------------
@@ -402,22 +159,15 @@ mod tests {
 
     #[test]
     fn test_named_slicer_style_add_and_get() {
-        let storage = YrsStorage::new();
+        let mut metadata = WorkbookMetadata::default();
         let style = make_slicer_style("#FF0000");
 
-        let name = add_named_slicer_style(
-            storage.doc(),
-            storage.workbook_map(),
-            "MyRedStyle",
-            style.clone(),
-            false,
-        )
-        .unwrap();
+        let name =
+            add_named_slicer_style(&mut metadata, "MyRedStyle", style.clone(), false).unwrap();
         assert_eq!(name, "MyRedStyle");
 
-        let retrieved = get_named_slicer_style(storage.doc(), storage.workbook_map(), "MyRedStyle")
-            .unwrap()
-            .expect("style should exist");
+        let retrieved =
+            get_named_slicer_style(&metadata, "MyRedStyle").expect("style should exist");
         assert_eq!(retrieved.name, "MyRedStyle");
         assert!(!retrieved.read_only);
         assert_eq!(
@@ -444,11 +194,10 @@ mod tests {
 
     #[test]
     fn test_named_slicer_style_make_unique_name() {
-        let storage = YrsStorage::new();
+        let mut metadata = WorkbookMetadata::default();
 
         let name1 = add_named_slicer_style(
-            storage.doc(),
-            storage.workbook_map(),
+            &mut metadata,
             "Corporate",
             make_slicer_style("#111111"),
             true,
@@ -457,8 +206,7 @@ mod tests {
         assert_eq!(name1, "Corporate", "first add should use the name as-is");
 
         let name2 = add_named_slicer_style(
-            storage.doc(),
-            storage.workbook_map(),
+            &mut metadata,
             "Corporate",
             make_slicer_style("#222222"),
             true,
@@ -467,8 +215,7 @@ mod tests {
         assert_eq!(name2, "Corporate1", "second add should get suffix 1");
 
         let name3 = add_named_slicer_style(
-            storage.doc(),
-            storage.workbook_map(),
+            &mut metadata,
             "Corporate",
             make_slicer_style("#333333"),
             true,
@@ -477,21 +224,9 @@ mod tests {
         assert_eq!(name3, "Corporate2", "third add should get suffix 2");
 
         // All three should be independently retrievable.
-        assert!(
-            get_named_slicer_style(storage.doc(), storage.workbook_map(), "Corporate")
-                .unwrap()
-                .is_some()
-        );
-        assert!(
-            get_named_slicer_style(storage.doc(), storage.workbook_map(), "Corporate1")
-                .unwrap()
-                .is_some()
-        );
-        assert!(
-            get_named_slicer_style(storage.doc(), storage.workbook_map(), "Corporate2")
-                .unwrap()
-                .is_some()
-        );
+        assert!(get_named_slicer_style(&metadata, "Corporate").is_some());
+        assert!(get_named_slicer_style(&metadata, "Corporate1").is_some());
+        assert!(get_named_slicer_style(&metadata, "Corporate2").is_some());
     }
 
     // -------------------------------------------------------------------
@@ -500,29 +235,22 @@ mod tests {
 
     #[test]
     fn test_named_slicer_style_delete_non_readonly() {
-        let storage = YrsStorage::new();
+        let mut metadata = WorkbookMetadata::default();
 
         add_named_slicer_style(
-            storage.doc(),
-            storage.workbook_map(),
+            &mut metadata,
             "Deletable",
             make_slicer_style("#AABBCC"),
             false,
         )
         .unwrap();
-        assert!(
-            get_named_slicer_style(storage.doc(), storage.workbook_map(), "Deletable")
-                .unwrap()
-                .is_some()
-        );
+        assert!(get_named_slicer_style(&metadata, "Deletable").is_some());
 
-        delete_named_slicer_style(storage.doc(), storage.workbook_map(), "Deletable")
+        delete_named_slicer_style(&mut metadata, "Deletable")
             .expect("delete should succeed for non-read-only style");
 
         assert!(
-            get_named_slicer_style(storage.doc(), storage.workbook_map(), "Deletable")
-                .unwrap()
-                .is_none(),
+            get_named_slicer_style(&metadata, "Deletable").is_none(),
             "style should be gone after deletion"
         );
     }
@@ -533,36 +261,24 @@ mod tests {
 
     #[test]
     fn test_named_slicer_style_delete_readonly_fails() {
-        let storage = YrsStorage::new();
+        let mut metadata = WorkbookMetadata::default();
 
-        // Manually insert a read-only style by writing directly to the Yrs map.
+        // Seed a read-only built-in style in the native registry.
         let read_only_style = NamedSlicerStyle {
             name: "BuiltIn".to_string(),
             read_only: true,
             style: make_slicer_style("#000000"),
         };
-        {
-            let mut txn = storage
-                .doc()
-                .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-            let settings_map = ensure_settings_map(storage.workbook_map(), &mut txn);
-            let styles_map = ensure_named_slicer_styles_map(&settings_map, &mut txn);
-            let json_str = serde_json::to_string(&read_only_style).unwrap();
-            styles_map.insert(
-                &mut txn,
-                "BuiltIn",
-                Any::String(Arc::from(json_str.as_str())),
-            );
-        }
+        metadata
+            .named_slicer_styles
+            .insert("BuiltIn".to_owned(), read_only_style);
 
         // Verify it exists and is read-only.
-        let retrieved = get_named_slicer_style(storage.doc(), storage.workbook_map(), "BuiltIn")
-            .unwrap()
-            .unwrap();
+        let retrieved = get_named_slicer_style(&metadata, "BuiltIn").unwrap();
         assert!(retrieved.read_only);
 
         // Attempt to delete should fail.
-        let result = delete_named_slicer_style(storage.doc(), storage.workbook_map(), "BuiltIn");
+        let result = delete_named_slicer_style(&mut metadata, "BuiltIn");
         assert!(result.is_err(), "deleting a read-only style should fail");
         let err_msg = format!("{}", result.unwrap_err());
         assert!(
@@ -571,11 +287,7 @@ mod tests {
         );
 
         // Style should still exist.
-        assert!(
-            get_named_slicer_style(storage.doc(), storage.workbook_map(), "BuiltIn")
-                .unwrap()
-                .is_some()
-        );
+        assert!(get_named_slicer_style(&metadata, "BuiltIn").is_some());
     }
 
     // -------------------------------------------------------------------
@@ -584,10 +296,9 @@ mod tests {
 
     #[test]
     fn test_named_slicer_style_delete_nonexistent_fails() {
-        let storage = YrsStorage::new();
+        let mut metadata = WorkbookMetadata::default();
 
-        let result =
-            delete_named_slicer_style(storage.doc(), storage.workbook_map(), "DoesNotExist");
+        let result = delete_named_slicer_style(&mut metadata, "DoesNotExist");
         assert!(result.is_err(), "deleting non-existent style should fail");
     }
 
@@ -597,26 +308,16 @@ mod tests {
 
     #[test]
     fn test_named_slicer_style_duplicate() {
-        let storage = YrsStorage::new();
+        let mut metadata = WorkbookMetadata::default();
         let original_style = make_slicer_style("#ABCDEF");
 
-        add_named_slicer_style(
-            storage.doc(),
-            storage.workbook_map(),
-            "Original",
-            original_style.clone(),
-            false,
-        )
-        .unwrap();
+        add_named_slicer_style(&mut metadata, "Original", original_style.clone(), false).unwrap();
 
-        let copy_name =
-            duplicate_named_slicer_style(storage.doc(), storage.workbook_map(), "Original")
-                .expect("duplicate should succeed");
+        let copy_name = duplicate_named_slicer_style(&mut metadata, "Original")
+            .expect("duplicate should succeed");
         assert_eq!(copy_name, "Original Copy");
 
-        let copy = get_named_slicer_style(storage.doc(), storage.workbook_map(), &copy_name)
-            .unwrap()
-            .unwrap();
+        let copy = get_named_slicer_style(&metadata, &copy_name).unwrap();
         assert_eq!(copy.name, "Original Copy");
         assert!(!copy.read_only);
         assert_eq!(
@@ -625,9 +326,7 @@ mod tests {
         );
 
         // Original should still exist and be unchanged.
-        let original = get_named_slicer_style(storage.doc(), storage.workbook_map(), "Original")
-            .unwrap()
-            .unwrap();
+        let original = get_named_slicer_style(&metadata, "Original").unwrap();
         assert_eq!(original.style, original_style);
     }
 
@@ -637,29 +336,20 @@ mod tests {
 
     #[test]
     fn test_named_slicer_style_duplicate_name_conflict() {
-        let storage = YrsStorage::new();
+        let mut metadata = WorkbookMetadata::default();
 
-        add_named_slicer_style(
-            storage.doc(),
-            storage.workbook_map(),
-            "Base",
-            make_slicer_style("#111111"),
-            false,
-        )
-        .unwrap();
+        add_named_slicer_style(&mut metadata, "Base", make_slicer_style("#111111"), false).unwrap();
 
         // Pre-create "Base Copy" to force a conflict.
         add_named_slicer_style(
-            storage.doc(),
-            storage.workbook_map(),
+            &mut metadata,
             "Base Copy",
             make_slicer_style("#222222"),
             false,
         )
         .unwrap();
 
-        let dup_name =
-            duplicate_named_slicer_style(storage.doc(), storage.workbook_map(), "Base").unwrap();
+        let dup_name = duplicate_named_slicer_style(&mut metadata, "Base").unwrap();
         assert_eq!(
             dup_name, "Base Copy1",
             "duplicate should append suffix when 'Base Copy' already exists"
@@ -672,54 +362,21 @@ mod tests {
 
     #[test]
     fn test_named_slicer_style_count() {
-        let storage = YrsStorage::new();
+        let mut metadata = WorkbookMetadata::default();
 
         // Initially zero.
-        assert_eq!(
-            get_named_slicer_style_count(storage.doc(), storage.workbook_map()),
-            0
-        );
+        assert_eq!(get_named_slicer_style_count(&metadata), 0);
 
-        add_named_slicer_style(
-            storage.doc(),
-            storage.workbook_map(),
-            "S1",
-            make_slicer_style("#AA0000"),
-            false,
-        )
-        .unwrap();
-        assert_eq!(
-            get_named_slicer_style_count(storage.doc(), storage.workbook_map()),
-            1
-        );
+        add_named_slicer_style(&mut metadata, "S1", make_slicer_style("#AA0000"), false).unwrap();
+        assert_eq!(get_named_slicer_style_count(&metadata), 1);
 
-        add_named_slicer_style(
-            storage.doc(),
-            storage.workbook_map(),
-            "S2",
-            make_slicer_style("#00AA00"),
-            false,
-        )
-        .unwrap();
-        add_named_slicer_style(
-            storage.doc(),
-            storage.workbook_map(),
-            "S3",
-            make_slicer_style("#0000AA"),
-            false,
-        )
-        .unwrap();
-        assert_eq!(
-            get_named_slicer_style_count(storage.doc(), storage.workbook_map()),
-            3
-        );
+        add_named_slicer_style(&mut metadata, "S2", make_slicer_style("#00AA00"), false).unwrap();
+        add_named_slicer_style(&mut metadata, "S3", make_slicer_style("#0000AA"), false).unwrap();
+        assert_eq!(get_named_slicer_style_count(&metadata), 3);
 
         // Delete one, count should decrease.
-        delete_named_slicer_style(storage.doc(), storage.workbook_map(), "S2").unwrap();
-        assert_eq!(
-            get_named_slicer_style_count(storage.doc(), storage.workbook_map()),
-            2
-        );
+        delete_named_slicer_style(&mut metadata, "S2").unwrap();
+        assert_eq!(get_named_slicer_style_count(&metadata), 2);
     }
 
     // -------------------------------------------------------------------
@@ -728,38 +385,19 @@ mod tests {
 
     #[test]
     fn test_named_slicer_style_list_all() {
-        let storage = YrsStorage::new();
+        let mut metadata = WorkbookMetadata::default();
 
         // Initially empty.
-        let styles = list_named_slicer_styles(storage.doc(), storage.workbook_map());
+        let styles = list_named_slicer_styles(&metadata);
         assert!(styles.is_empty());
 
-        add_named_slicer_style(
-            storage.doc(),
-            storage.workbook_map(),
-            "Alpha",
-            make_slicer_style("#A00000"),
-            false,
-        )
-        .unwrap();
-        add_named_slicer_style(
-            storage.doc(),
-            storage.workbook_map(),
-            "Beta",
-            make_slicer_style("#00B000"),
-            false,
-        )
-        .unwrap();
-        add_named_slicer_style(
-            storage.doc(),
-            storage.workbook_map(),
-            "Gamma",
-            make_slicer_style("#0000C0"),
-            false,
-        )
-        .unwrap();
+        add_named_slicer_style(&mut metadata, "Alpha", make_slicer_style("#A00000"), false)
+            .unwrap();
+        add_named_slicer_style(&mut metadata, "Beta", make_slicer_style("#00B000"), false).unwrap();
+        add_named_slicer_style(&mut metadata, "Gamma", make_slicer_style("#0000C0"), false)
+            .unwrap();
 
-        let styles = list_named_slicer_styles(storage.doc(), storage.workbook_map());
+        let styles = list_named_slicer_styles(&metadata);
         assert_eq!(styles.len(), 3);
 
         let mut names: Vec<String> = styles.iter().map(|s| s.name.clone()).collect();
@@ -790,12 +428,8 @@ mod tests {
 
     #[test]
     fn test_named_slicer_style_get_nonexistent() {
-        let storage = YrsStorage::new();
-        assert!(
-            get_named_slicer_style(storage.doc(), storage.workbook_map(), "NoSuchStyle")
-                .unwrap()
-                .is_none()
-        );
+        let metadata = WorkbookMetadata::default();
+        assert!(get_named_slicer_style(&metadata, "NoSuchStyle").is_none());
     }
 
     // -------------------------------------------------------------------
@@ -804,11 +438,10 @@ mod tests {
 
     #[test]
     fn test_named_slicer_style_add_duplicate_without_make_unique_fails() {
-        let storage = YrsStorage::new();
+        let mut metadata = WorkbookMetadata::default();
 
         add_named_slicer_style(
-            storage.doc(),
-            storage.workbook_map(),
+            &mut metadata,
             "Existing",
             make_slicer_style("#FF0000"),
             false,
@@ -817,8 +450,7 @@ mod tests {
 
         // Second add with same name and make_unique=false should error.
         let result = add_named_slicer_style(
-            storage.doc(),
-            storage.workbook_map(),
+            &mut metadata,
             "Existing",
             make_slicer_style("#00FF00"),
             false,
@@ -834,9 +466,7 @@ mod tests {
         );
 
         // Original style should be unchanged.
-        let retrieved = get_named_slicer_style(storage.doc(), storage.workbook_map(), "Existing")
-            .unwrap()
-            .unwrap();
+        let retrieved = get_named_slicer_style(&metadata, "Existing").unwrap();
         assert_eq!(
             retrieved.style.header_background_color,
             Some("#FF0000".to_string()),

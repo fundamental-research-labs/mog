@@ -115,7 +115,7 @@ fn test_transpose_source_col_data_is_scalar() {
 
     // col_data[B1] should be scalar Number(10), NOT CellValue::Array
     let sheet_mirror = &mirror.get_sheet(&sid).expect("sheet");
-    let col_b = sheet_mirror.get_column_slice(1).expect("col_data for B");
+    let col_b = sheet_mirror.get_column_view(1).expect("col_data for B");
     match &col_b[0] {
         CellValue::Number(n) => assert!(
             (n.get() - 10.0).abs() < 1e-6,
@@ -428,7 +428,7 @@ fn test_transpose_spill_with_array_ref_preregistration() {
 
     // col_data[B1] should be scalar 10, NOT the full Array
     let sheet_mirror = &mirror.get_sheet(&sid).expect("sheet");
-    let col_b = sheet_mirror.get_column_slice(1).expect("col_data for B");
+    let col_b = sheet_mirror.get_column_view(1).expect("col_data for B");
     match &col_b[0] {
         CellValue::Number(n) => assert!(
             (n.get() - 10.0).abs() < 1e-6,

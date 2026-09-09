@@ -5,7 +5,7 @@ use super::helpers::*;
 
 #[test]
 fn runtime_created_sheet_protection_exports_to_xlsx_package() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
 
     engine

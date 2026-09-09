@@ -14,7 +14,7 @@
 //! `#[ignore = "fix target: storage/sheet/sorting.rs"]`.
 
 use compute_core::bridge_types::{BridgeSortCriterion, BridgeSortMode, BridgeSortOptions};
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use domain_types::domain::filter::SortOrder;
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
@@ -22,6 +22,9 @@ use value_types::{CellValue, FiniteF64};
 fn one_sheet_snapshot(name: &str, rows: u32, cols: u32, cells: Vec<CellData>) -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: name.to_string(),
             rows,
@@ -70,7 +73,7 @@ fn formula_cell(uuid_suffix: u32, row: u32, col: u32, formula: &str, cached: f64
 }
 
 fn xlsx_bytes_for(snapshot: WorkbookSnapshot) -> Vec<u8> {
-    let (engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (engine, _) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
     engine.export_to_xlsx_bytes().expect("export_to_xlsx_bytes")
 }
 
@@ -119,7 +122,7 @@ fn sort_options_single(col: u32, order: SortOrder) -> BridgeSortOptions {
 #[test]
 fn xlsx_sort_range_ascending_shifts_formula_refs() {
     let bytes = xlsx_bytes_for(mixed_10x4_fixture());
-    let (mut engine, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
     let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
 
     // Sort rows 0..=9 by column A ascending. Col-A values go 10..1; ascending
@@ -155,7 +158,7 @@ fn xlsx_sort_range_ascending_shifts_formula_refs() {
 #[test]
 fn xlsx_sort_range_descending_shifts_formula_refs() {
     let bytes = xlsx_bytes_for(mixed_10x4_fixture());
-    let (mut engine, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
     let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
 
     // Col A values start already descending (10..1) — descending sort is a no-op

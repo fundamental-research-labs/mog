@@ -395,7 +395,7 @@ impl PivotCacheWorkbookRefScope {
 
 /// A parsed pivot table: unified compute + OOXML config.
 ///
-/// This is the unit stored in `ParseOutput.pivot_tables` and Yrs sheet-level storage.
+/// This is the unit stored in `ParseOutput.pivot_tables` and native sheet metadata.
 /// The compute engine reads only compute-relevant fields of `config`; the XLSX
 /// writer reads both compute and OOXML fields off the same config.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

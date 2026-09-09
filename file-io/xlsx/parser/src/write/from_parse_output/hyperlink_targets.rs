@@ -13,6 +13,31 @@ mod tests {
     use super::needs_relationship;
 
     #[test]
+    fn parsed_relationship_location_is_written_once() {
+        use super::relationship_target;
+        assert_eq!(
+            relationship_target("https://example.com#Sheet2!A1", Some("Sheet2!A1")),
+            "https://example.com"
+        );
+        assert_eq!(
+            relationship_target("https://example.com#Section", Some("#Section")),
+            "https://example.com"
+        );
+        assert_eq!(
+            relationship_target("https://example.com", Some("Section")),
+            "https://example.com"
+        );
+        assert_eq!(
+            relationship_target("#Sheet2!A1", Some("Sheet2!A1")),
+            "#Sheet2!A1"
+        );
+        assert_eq!(
+            relationship_target("https://example.com#Other", Some("Section")),
+            "https://example.com#Other"
+        );
+    }
+
+    #[test]
     fn external_uri_schemes_need_relationships() {
         assert!(needs_relationship("https://example.com"));
         assert!(needs_relationship("mailto:test@example.com"));
@@ -31,4 +56,20 @@ mod tests {
         assert!(needs_relationship("../other.xlsx"));
         assert!(needs_relationship(r"C:\Docs\book.xlsx"));
     }
+}
+
+/// Parser targets include the location fragment; OPC stores that location on
+/// the worksheet separately. Split it back out when serializing a parsed link.
+pub(super) fn relationship_target<'a>(target: &'a str, location: Option<&str>) -> &'a str {
+    if target.starts_with('#') {
+        return target;
+    }
+    let Some(location) = location.filter(|value| !value.is_empty()) else {
+        return target;
+    };
+    let fragment = location.strip_prefix('#').unwrap_or(location);
+    target
+        .strip_suffix(fragment)
+        .and_then(|base| base.strip_suffix('#'))
+        .unwrap_or(target)
 }

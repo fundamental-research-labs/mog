@@ -1,5 +1,5 @@
 use cell_types::CellId;
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use compute_wire::constants::{MUTATION_HEADER_SIZE, PATCH_STRIDE};
 use compute_wire::flags::{VALUE_TYPE_MASK, VALUE_TYPE_NUMBER};
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
@@ -144,6 +144,9 @@ fn viewport_bytes<'a>(packed: &'a [u8], vp_id: &str) -> Option<&'a [u8]> {
 fn insert_cut_cells_right_preserves_formula_ref_to_moved_precedent() {
     let snapshot = WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_id_str(1),
             name: "S1".to_string(),
             rows: 50,
@@ -159,7 +162,7 @@ fn insert_cut_cells_right_preserves_formula_ref_to_moved_precedent() {
         }],
         ..Default::default()
     };
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("S1").expect("S1");
 
     engine
@@ -182,7 +185,7 @@ fn insert_cut_cells_right_preserves_formula_ref_to_moved_precedent() {
     );
 
     let (patches, _result) = engine
-        .relocate_cells_yrs(&sid, 20, 29, 20, 30, &sid, 20, 15)
+        .relocate_cells(&sid, 20, 29, 20, 30, &sid, 20, 15)
         .expect("relocate shifted AD21:AE21 to P21:Q21");
     let patch = viewport_bytes(&patches, "vp").expect("vp patch");
     assert_eq!(
@@ -230,6 +233,9 @@ fn insert_cut_cells_right_preserves_formula_ref_to_moved_precedent() {
 fn insert_cut_cells_down_preserves_formula_refs_to_moved_row_precedents() {
     let snapshot = WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_id_str(1),
             name: "S1".to_string(),
             rows: 50,
@@ -239,7 +245,7 @@ fn insert_cut_cells_down_preserves_formula_refs_to_moved_row_precedents() {
         }],
         ..Default::default()
     };
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("S1").expect("S1");
 
     engine
@@ -262,7 +268,7 @@ fn insert_cut_cells_down_preserves_formula_refs_to_moved_row_precedents() {
         .insert_cells_with_shift(&sid, 20, 14, 1, 14, false)
         .expect("insert O21:AB21 shift down");
     engine
-        .relocate_cells_yrs(&sid, 16, 14, 16, 27, &sid, 20, 14)
+        .relocate_cells(&sid, 16, 14, 16, 27, &sid, 20, 14)
         .expect("relocate O17:AB17 to O21:AB21");
 
     let q_id = engine.get_cell_id_at(&sid, 20, 16).expect("Q21 id");

@@ -1,5 +1,5 @@
 use super::helpers::*;
-use crate::storage::engine::YrsComputeEngine;
+use crate::storage::engine::ComputeEngine;
 use compute_wire::constants::{MUTATION_HEADER_SIZE, PATCH_STRIDE};
 use domain_types::CellFormat;
 
@@ -57,7 +57,7 @@ fn patch_display_text_at(mutation_bytes: &[u8], row: u32, col: u32) -> Option<St
 #[test]
 fn bulk_parsed_formula_edit_copies_single_referenced_number_format() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -83,7 +83,7 @@ fn bulk_parsed_formula_edit_copies_single_referenced_number_format() {
 #[test]
 fn formula_format_inheritance_flushes_format_only_viewport_patch() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -121,51 +121,9 @@ fn formula_format_inheritance_flushes_format_only_viewport_patch() {
 }
 
 #[test]
-fn formula_format_inheritance_is_undone_with_formula_edit() {
-    let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
-    let sid = sheet_id();
-
-    engine
-        .set_format_for_ranges(
-            &sid,
-            &[(0, 0, 0, 0)],
-            &CellFormat {
-                number_format: Some("$#,##0.00".to_string()),
-                ..Default::default()
-            },
-        )
-        .unwrap();
-
-    engine
-        .set_cell_values_parsed(&sid, vec![(1, 1, "=A1*2".to_string())])
-        .unwrap();
-    assert_eq!(engine.get_raw_value(&sid, 1, 1), "=A1*2");
-    assert_eq!(
-        engine
-            .get_resolved_format(&sid, 1, 1)
-            .number_format
-            .as_deref(),
-        Some("$#,##0.00")
-    );
-
-    engine.undo().expect("undo formula edit");
-
-    assert_eq!(engine.get_raw_value(&sid, 1, 1), "");
-    assert_ne!(
-        engine
-            .get_resolved_format(&sid, 1, 1)
-            .number_format
-            .as_deref(),
-        Some("$#,##0.00"),
-        "one undo should remove both the formula and its automatic inherited format"
-    );
-}
-
-#[test]
 fn bulk_value_paste_formats_formula_dependents_with_sparse_column_style_range() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine

@@ -3,12 +3,12 @@
 //! This module provides `build_viewport_render_data`, which produces lean, binary-friendly output
 //! with format deduplication via [`FormatPalette`].
 //!
-//! Reads from `grid_indexes` + ComputeCore (authoritative), NOT the CRDT mirror.
+//! Reads native cell values, identity indexes, and computed projections.
 
 use cell_types::SheetId;
 use value_types::Color;
 
-use crate::storage::engine::YrsComputeEngine;
+use crate::storage::engine::ComputeEngine;
 use compute_wire::ViewportRenderData;
 
 // =============================================================================
@@ -24,7 +24,7 @@ pub(crate) fn color_to_u32(color: &Color) -> u32 {
         | (color.a() as u32)
 }
 
-impl YrsComputeEngine {
+impl ComputeEngine {
     /// Build lean viewport render data for the binary transfer protocol.
     pub fn build_viewport_render_data(
         &self,
@@ -135,7 +135,7 @@ mod tests {
     use value_types::FiniteF64;
 
     /// Helper: create a minimal engine from a snapshot with one sheet.
-    fn make_test_engine() -> (YrsComputeEngine, SheetId) {
+    fn make_test_engine() -> (ComputeEngine, SheetId) {
         use crate::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
         use value_types::CellValue;
 
@@ -143,7 +143,13 @@ mod tests {
         let cell_id_str = "00000000-0000-0000-0000-000000000010";
 
         let snapshot = WorkbookSnapshot {
+            axis_run_high_water_mark: None,
+            identity_high_water_mark: None,
+            canonical_tables: Vec::new(),
             sheets: vec![SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: sheet_id_str.to_string(),
                 name: "Sheet1".to_string(),
                 rows: 100,
@@ -169,7 +175,7 @@ mod tests {
             calculation_settings: None,
         };
 
-        let (engine, _recalc) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+        let (engine, _recalc) = ComputeEngine::from_snapshot(snapshot).unwrap();
         let sheet_id = SheetId::from_uuid_str(sheet_id_str).unwrap();
         (engine, sheet_id)
     }
@@ -235,7 +241,13 @@ mod tests {
 
         let sheet_id_str = "00000000-0000-0000-0000-000000000002";
         let snapshot = WorkbookSnapshot {
+            axis_run_high_water_mark: None,
+            identity_high_water_mark: None,
+            canonical_tables: Vec::new(),
             sheets: vec![SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: sheet_id_str.to_string(),
                 name: "Empty".to_string(),
                 rows: 100,
@@ -253,7 +265,7 @@ mod tests {
             calculation_settings: None,
         };
 
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+        let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
         let sheet_id = SheetId::from_uuid_str(sheet_id_str).unwrap();
 
         let data = engine.build_viewport_render_data(&sheet_id, 0, 0, 5, 5);
@@ -270,12 +282,18 @@ mod tests {
     }
 
     /// Helper: create an empty engine + sheet for projection-flag tests.
-    fn make_empty_engine() -> (YrsComputeEngine, SheetId) {
+    fn make_empty_engine() -> (ComputeEngine, SheetId) {
         use crate::snapshot::{SheetSnapshot, WorkbookSnapshot};
 
         let sheet_id_str = "00000000-0000-0000-0000-000000000001";
         let snapshot = WorkbookSnapshot {
+            axis_run_high_water_mark: None,
+            identity_high_water_mark: None,
+            canonical_tables: Vec::new(),
             sheets: vec![SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: sheet_id_str.to_string(),
                 name: "Sheet1".to_string(),
                 rows: 100,
@@ -293,7 +311,7 @@ mod tests {
             calculation_settings: None,
         };
 
-        let (engine, _recalc) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+        let (engine, _recalc) = ComputeEngine::from_snapshot(snapshot).unwrap();
         let sheet_id = SheetId::from_uuid_str(sheet_id_str).unwrap();
         (engine, sheet_id)
     }

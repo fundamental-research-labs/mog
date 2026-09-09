@@ -1,24 +1,24 @@
-//! Viewport registration API for YrsComputeEngine.
+//! Viewport registration API for ComputeEngine.
 //!
 //! Viewports are first-class registered entities. Registration is decoupled
 //! from data fetching — bounds are set explicitly, and binary viewport methods
 //! read from the registry.
 
 use crate::snapshot::MutationResult;
-use crate::storage::engine::YrsComputeEngine;
+use crate::storage::engine::ComputeEngine;
 use bridge_core as bridge;
 use cell_types::SheetId;
 use compute_wire::mutation::serialize_multi_viewport_patches;
 use value_types::ComputeError;
 
 #[bridge::api(
-    service = "YrsComputeEngine",
+    service = "ComputeEngine",
     key = "doc_id",
     group = "viewport_registry",
     fn_prefix = "compute",
     crate_path = "compute_core"
 )]
-impl YrsComputeEngine {
+impl ComputeEngine {
     /// Register a named viewport with explicit bounds.
     ///
     /// If a viewport with this ID already exists, it is replaced.
@@ -37,16 +37,18 @@ impl YrsComputeEngine {
         end_row: u32,
         end_col: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let result = super::functions::register_viewport(
-            &self.viewport,
-            viewport_id,
-            sheet_id,
-            start_row,
-            start_col,
-            end_row,
-            end_col,
-        )?;
-        Ok((serialize_multi_viewport_patches(&[]), result))
+        self.without_history(|engine| {
+            let result = super::functions::register_viewport(
+                &engine.viewport,
+                viewport_id,
+                sheet_id,
+                start_row,
+                start_col,
+                end_row,
+                end_col,
+            )?;
+            Ok((serialize_multi_viewport_patches(&[]), result))
+        })
     }
 
     /// Update the bounds of an already-registered viewport.
@@ -65,15 +67,17 @@ impl YrsComputeEngine {
         end_row: u32,
         end_col: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let result = super::functions::update_viewport_bounds(
-            &self.viewport,
-            viewport_id,
-            start_row,
-            start_col,
-            end_row,
-            end_col,
-        )?;
-        Ok((serialize_multi_viewport_patches(&[]), result))
+        self.without_history(|engine| {
+            let result = super::functions::update_viewport_bounds(
+                &engine.viewport,
+                viewport_id,
+                start_row,
+                start_col,
+                end_row,
+                end_col,
+            )?;
+            Ok((serialize_multi_viewport_patches(&[]), result))
+        })
     }
 
     /// Unregister a viewport by ID.
@@ -86,8 +90,10 @@ impl YrsComputeEngine {
         &mut self,
         viewport_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let result = super::functions::unregister_viewport(&self.viewport, viewport_id)?;
-        Ok((serialize_multi_viewport_patches(&[]), result))
+        self.without_history(|engine| {
+            let result = super::functions::unregister_viewport(&engine.viewport, viewport_id)?;
+            Ok((serialize_multi_viewport_patches(&[]), result))
+        })
     }
 
     /// Get all registered viewports.
@@ -107,7 +113,9 @@ impl YrsComputeEngine {
         &mut self,
         sheet_id: &SheetId,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let result = super::functions::reset_sheet_viewports(&self.viewport, sheet_id)?;
-        Ok((serialize_multi_viewport_patches(&[]), result))
+        self.without_history(|engine| {
+            let result = super::functions::reset_sheet_viewports(&engine.viewport, sheet_id)?;
+            Ok((serialize_multi_viewport_patches(&[]), result))
+        })
     }
 }

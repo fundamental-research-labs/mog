@@ -1,24 +1,21 @@
 use std::collections::{HashMap, HashSet};
 
-use cell_types::{CellId, SheetId, SheetPos};
-use compute_document::undo::ORIGIN_USER_EDIT;
+use cell_types::{CellId, SheetId};
 use value_types::{CellValue, ComputeError};
 
 use crate::mirror::CellMirror;
 use crate::snapshot::RecalcResult;
 use crate::storage::engine::mutation::CellInput;
-use crate::storage::engine::mutation_coordinator::MutationCoordinator;
 use crate::storage::engine::stores::EngineStores;
 
 use super::cse_clear::{
-    collect_materialized_cells_in_range, projection_anchor_clear_targets_for_range,
+    collect_authored_cells_in_range, projection_anchor_clear_targets_for_range,
     push_resolved_clear_target,
 };
 
 pub(in crate::storage::engine) fn mutation_clear_range_by_position(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
-    mutation: &mut MutationCoordinator,
     sheet_id: SheetId,
     start_row: u32,
     start_col: u32,
@@ -36,8 +33,8 @@ pub(in crate::storage::engine) fn mutation_clear_range_by_position(
         mirror, sheet_id, start_row, start_col, end_row, end_col,
     )?;
     let mut seen_cell_ids: HashSet<CellId> = resolved.iter().map(|(_, _, id)| *id).collect();
-    for (row, col, cell_id) in collect_materialized_cells_in_range(
-        stores, &sheet_id, start_row, start_col, end_row, end_col,
+    for (row, col, cell_id) in collect_authored_cells_in_range(
+        stores, mirror, &sheet_id, start_row, start_col, end_row, end_col,
     ) {
         if let Some((anchor_id, _)) = mirror.dynamic_spill_member_covering(&sheet_id, row, col)
             && seen_cell_ids.contains(&anchor_id)
@@ -58,33 +55,21 @@ pub(in crate::storage::engine) fn mutation_clear_range_by_position(
         direct_edit_old_values.insert(*cell_id, old_val);
     }
 
-    // 1. Write marker cells to yrs Doc (clear value AND properties/formatting).
-    //    Routed through clear_cells_by_hex so it iterates via `grid_indexes`
-    //    (the authoritative identity store post-R51).
+    // Clear cell properties for the resolved identities.
     let cell_hexes: Vec<String> = resolved
         .iter()
         .map(|(_, _, cid)| id_to_hex(cid.as_u128()).to_string())
         .collect();
-    mutation.observer.set_suppressed(true);
     cell_iter::clear_cells_by_hex(
-        stores.storage.doc(),
-        stores.storage.sheets(),
+        &mut stores.storage,
         sheet_id,
         &cell_hexes,
         /* clear_properties = */ true,
     );
-    mutation.observer.set_suppressed(false);
 
     // 2. Update mirror and build empty edits for compute recalc.
     let mut edits: Vec<(SheetId, CellId, u32, u32, CellInput)> = Vec::with_capacity(resolved.len());
     for (row, col, cell_id) in resolved {
-        mirror.apply_edit(
-            &sheet_id,
-            cell_id,
-            SheetPos::new(row, col),
-            CellValue::Null,
-            None,
-        );
         edits.push((sheet_id, cell_id, row, col, CellInput::Clear));
     }
 
@@ -92,7 +77,7 @@ pub(in crate::storage::engine) fn mutation_clear_range_by_position(
         return Ok(RecalcResult::empty());
     }
 
-    let mut result = stores.compute.set_cells(mirror, &edits, true)?;
+    let mut result = super::set_cells::mutation_set_cells(stores, mirror, edits, true)?;
 
     // Patch old_value onto changed_cells that don't already have one.
     for change in &mut result.changed_cells {
@@ -111,19 +96,17 @@ pub(in crate::storage::engine) fn mutation_clear_range_by_position(
 // mutation_clear_cells
 // ---------------------------------------------------------------------------
 
-/// Clear cells with full store synchronization.
-///
-/// Order matters: `clear_cells` must run BEFORE `remove_cell_with_origin`
-/// because `clear_cells` sets the mirror value to Null and then `recalc`
-/// produces `changed_cells` by reading the cell from the mirror. If we
-/// removed from the mirror first (via `remove_cell_with_origin`), recalc
-/// would see no cell and generate no viewport patches.
+/// Clear native contents while retaining identities used by formulas and metadata.
 pub(in crate::storage::engine) fn mutation_clear_cells(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
-    mutation: &mut MutationCoordinator,
     cell_ids: Vec<CellId>,
 ) -> Result<RecalcResult, ComputeError> {
+    for cell in &cell_ids {
+        if let Some(sheet) = mirror.sheet_for_cell(cell) && let Some(pos) = mirror.resolve_position(cell) {
+            crate::storage::engine::history::cells::capture_cell(stores,mirror,sheet,*cell,pos.row(),pos.col());
+        }
+    }
     // Snapshot old values from mirror BEFORE clear_cells overwrites them.
     let mut direct_edit_old_values: HashMap<CellId, CellValue> =
         HashMap::with_capacity(cell_ids.len());
@@ -149,40 +132,16 @@ pub(in crate::storage::engine) fn mutation_clear_cells(
         }
     }
 
-    // 2. Remove from yrs storage and grid index (suppressed — no observer).
-    mutation.observer.set_suppressed(true);
-
-    for &cell_id in &cell_ids {
-        let sheet_id = stores
-            .grid_indexes
-            .iter()
-            .find_map(|(sid, grid)| grid.cell_position(&cell_id).map(|_| *sid));
-
-        if let Some(sheet_id) = sheet_id {
-            let preserve_identity = stores
-                .storage
-                .remove_cell_value_with_origin_preserving_metadata(
-                    &sheet_id,
-                    &cell_id,
-                    Some(ORIGIN_USER_EDIT),
-                );
-
-            if preserve_identity {
-                if let Some(pos) = mirror.resolve_position(&cell_id)
-                    && let Some(grid) = stores.grid_indexes.get_mut(&sheet_id)
-                {
-                    grid.register_cell(cell_id, pos.row(), pos.col());
-                }
-            } else {
-                mirror.remove_cell(&cell_id);
-                if let Some(grid) = stores.grid_indexes.get_mut(&sheet_id) {
-                    grid.remove_cell(&cell_id);
-                }
-            }
+    for cell_id in cell_ids {
+        stores.storage.clear_cell_metadata(cell_id);
+        if let Some(sheet_id) = mirror.sheet_for_cell(&cell_id) {
+            crate::storage::properties::clear_formula_cache_metadata_for_cell_ids(
+                &mut stores.storage,
+                &sheet_id,
+                &[cell_id],
+            );
         }
     }
-
-    mutation.observer.set_suppressed(false);
 
     Ok(result)
 }
@@ -198,20 +157,16 @@ pub(in crate::storage::engine) fn mutation_clear_cells(
 pub(in crate::storage::engine) fn mutation_clear_range(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
-    mutation: &mut MutationCoordinator,
     sheet_id: SheetId,
     start_row: u32,
     start_col: u32,
     end_row: u32,
     end_col: u32,
 ) -> Result<RecalcResult, ComputeError> {
-    use crate::storage::infra::cell_iter;
-    use compute_document::hex::id_to_hex;
-
     // 0. Resolve (row, col, CellId) tuples via the authoritative in-memory
     //    grid index. CSE arrays are atomic: a range clear may tear down the
     //    array only when the selected range fully covers the CSE rectangle.
-    //    Partial overlap rejects before any Yrs or mirror mutation.
+    //    Partial overlap rejects before any mutation.
     let mut resolved: Vec<(u32, u32, CellId)> = Vec::new();
     let mut direct_edit_old_values: HashMap<CellId, CellValue> = HashMap::new();
     let mut seen_cell_ids: HashSet<CellId> = HashSet::new();
@@ -231,8 +186,8 @@ pub(in crate::storage::engine) fn mutation_clear_range(
         );
     }
 
-    for (row, col, cell_id) in collect_materialized_cells_in_range(
-        stores, &sheet_id, start_row, start_col, end_row, end_col,
+    for (row, col, cell_id) in collect_authored_cells_in_range(
+        stores, mirror, &sheet_id, start_row, start_col, end_row, end_col,
     ) {
         push_resolved_clear_target(
             mirror,
@@ -246,33 +201,9 @@ pub(in crate::storage::engine) fn mutation_clear_range(
         );
     }
 
-    // 1. Write marker cells to yrs Doc (preserve CellId + properties, clear
-    //    value only). Routed through clear_cells_by_hex so it works on
-    //    XLSX-hydrated sheets.
-    let cell_hexes: Vec<String> = resolved
-        .iter()
-        .map(|(_, _, cid)| id_to_hex(cid.as_u128()).to_string())
-        .collect();
-    mutation.observer.set_suppressed(true);
-    cell_iter::clear_cells_by_hex(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        &cell_hexes,
-        /* clear_properties = */ false,
-    );
-    mutation.observer.set_suppressed(false);
-
     // 2. Update mirror and build empty edits for compute recalc.
     let mut edits: Vec<(SheetId, CellId, u32, u32, CellInput)> = Vec::with_capacity(resolved.len());
     for (row, col, cell_id) in resolved {
-        mirror.apply_edit(
-            &sheet_id,
-            cell_id,
-            SheetPos::new(row, col),
-            CellValue::Null,
-            None,
-        );
         edits.push((sheet_id, cell_id, row, col, CellInput::Clear));
     }
 
@@ -280,7 +211,7 @@ pub(in crate::storage::engine) fn mutation_clear_range(
         return Ok(RecalcResult::empty());
     }
 
-    let mut result = stores.compute.set_cells(mirror, &edits, true)?;
+    let mut result = super::set_cells::mutation_set_cells(stores, mirror, edits, true)?;
 
     // Patch old_value onto seed changes that don't already have one.
     for change in &mut result.changed_cells {

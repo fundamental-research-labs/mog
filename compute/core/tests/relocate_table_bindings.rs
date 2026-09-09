@@ -1,15 +1,14 @@
-//! Regression tests for table metadata attached to `relocate_cells_yrs`.
+//! Regression tests for table metadata attached to `relocate_cells`.
 //!
 //! The production cut-paste primitive must move table bindings with any
 //! relocated range that fully contains the table. The table keeps its id and is
 //! persisted under the id-keyed workbook catalog entry; it must not be
 //! synthesized by a later TypeScript resize/create fallback.
 
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use domain_types::domain::table::Table;
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
-use yrs::{Map, Out, Transact};
 
 fn sheet_id_str(suffix: u32) -> String {
     format!("00000000-0000-0000-0000-{:012x}", suffix)
@@ -34,6 +33,9 @@ fn number_cell(id_suffix: u32, row: u32, col: u32, n: f64) -> CellData {
 fn snapshot_single_sheet() -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_id_str(1),
             name: "S1".to_string(),
             rows: 50,
@@ -54,6 +56,9 @@ fn snapshot_two_sheets() -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: sheet_id_str(1),
                 name: "S1".to_string(),
                 rows: 50,
@@ -67,6 +72,9 @@ fn snapshot_two_sheets() -> WorkbookSnapshot {
                 ranges: vec![],
             },
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: sheet_id_str(2),
                 name: "S2".to_string(),
                 rows: 50,
@@ -79,27 +87,14 @@ fn snapshot_two_sheets() -> WorkbookSnapshot {
     }
 }
 
-fn table_catalog_table_by_key(engine: &YrsComputeEngine, key: &str) -> Option<Table> {
-    let txn = engine.storage().doc().transact();
-    match engine
-        .storage()
-        .workbook_map()
-        .get(&txn, compute_document::schema::KEY_TABLES)
-    {
-        Some(Out::YMap(tables_map)) => match tables_map.get(&txn, key) {
-            Some(Out::YMap(table_map)) => {
-                domain_types::yrs_schema::table::from_yrs_map_to_table(&table_map, &txn)
-            }
-            _ => None,
-        },
-        _ => None,
-    }
+fn table_catalog_table_by_key(engine: &ComputeEngine, key: &str) -> Option<Table> {
+    engine.mirror().get_table_by_id(key).cloned()
 }
 
 #[test]
 fn relocate_whole_table_moves_table_binding() {
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_single_sheet()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(snapshot_single_sheet()).expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("S1").expect("S1");
 
     engine
@@ -121,8 +116,8 @@ fn relocate_whole_table_moves_table_binding() {
         .id;
 
     let (_patches, result) = engine
-        .relocate_cells_yrs(&sid, 0, 0, 2, 1, &sid, 0, 3)
-        .expect("relocate_cells_yrs");
+        .relocate_cells(&sid, 0, 0, 2, 1, &sid, 0, 3)
+        .expect("relocate_cells");
 
     let table = engine
         .get_table_by_name("Table1")
@@ -147,24 +142,12 @@ fn relocate_whole_table_moves_table_binding() {
             .any(|change| change.name == "Table1" && change.sheet_id == sid.to_uuid_string()),
         "relocate should report a table change for viewport/object refresh"
     );
-
-    engine.undo().expect("undo relocate");
-    let undone = engine
-        .get_table_by_name("Table1")
-        .expect("table should still exist after undoing relocate");
-    assert_eq!(undone.id, table_id);
-    assert_eq!(undone.range.start_col(), 0);
-    assert_eq!(undone.range.end_col(), 1);
-    let undone_catalog = table_catalog_table_by_key(&engine, &table_id)
-        .expect("id-keyed catalog table should undo with whole-table relocate");
-    assert_eq!(undone_catalog.range.start_col(), 0);
-    assert_eq!(undone_catalog.range.end_col(), 1);
 }
 
 #[test]
 fn relocate_containing_range_moves_embedded_table_binding() {
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_single_sheet()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(snapshot_single_sheet()).expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("S1").expect("S1");
 
     engine
@@ -182,8 +165,8 @@ fn relocate_containing_range_moves_embedded_table_binding() {
         .expect("create table");
 
     let (_patches, result) = engine
-        .relocate_cells_yrs(&sid, 0, 0, 4, 3, &sid, 0, 5)
-        .expect("relocate_cells_yrs");
+        .relocate_cells(&sid, 0, 0, 4, 3, &sid, 0, 5)
+        .expect("relocate_cells");
 
     let table = engine
         .get_table_by_name("Table1")
@@ -204,7 +187,7 @@ fn relocate_containing_range_moves_embedded_table_binding() {
 #[test]
 fn relocate_cross_sheet_containing_range_moves_embedded_table_binding() {
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_two_sheets()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(snapshot_two_sheets()).expect("from_snapshot");
     let s1 = engine.mirror().sheet_by_name("S1").expect("S1");
     let s2 = engine.mirror().sheet_by_name("S2").expect("S2");
 
@@ -227,8 +210,8 @@ fn relocate_cross_sheet_containing_range_moves_embedded_table_binding() {
         .id;
 
     let (_patches, result) = engine
-        .relocate_cells_yrs(&s1, 0, 0, 4, 3, &s2, 0, 5)
-        .expect("relocate_cells_yrs");
+        .relocate_cells(&s1, 0, 0, 4, 3, &s2, 0, 5)
+        .expect("relocate_cells");
 
     assert!(
         engine.get_all_tables_in_sheet(&s1).is_empty(),
@@ -256,15 +239,4 @@ fn relocate_cross_sheet_containing_range_moves_embedded_table_binding() {
             .any(|change| change.name == "Table1" && change.sheet_id == s2.to_uuid_string()),
         "cross-sheet containing-range relocate should report target-sheet table change"
     );
-
-    engine.undo().expect("undo cross-sheet relocate");
-    let undone = engine
-        .get_table_by_name("Table1")
-        .expect("table should still exist after undoing cross-sheet relocate");
-    assert_eq!(undone.id, table_id);
-    assert_eq!(undone.sheet_id, s1.to_uuid_string());
-    assert_eq!(undone.range.start_col(), 1);
-    assert_eq!(undone.range.end_col(), 2);
-    assert_eq!(engine.get_all_tables_in_sheet(&s1).len(), 1);
-    assert!(engine.get_all_tables_in_sheet(&s2).is_empty());
 }

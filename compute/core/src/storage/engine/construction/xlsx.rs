@@ -1,14 +1,15 @@
 use super::*;
 
-/// Construct a `YrsComputeEngine` from raw XLSX bytes without recalculation.
+/// Construct a `ComputeEngine` from raw XLSX bytes without recalculation.
 pub(in crate::storage::engine) fn from_xlsx_bytes(
     xlsx_data: &[u8],
-) -> Result<(YrsComputeEngine, RecalcResult), ComputeError> {
-    let (storage, workbook_snap, phantom_cells, import_report) = parse_and_hydrate_xlsx(xlsx_data)?;
+) -> Result<(ComputeEngine, RecalcResult), ComputeError> {
+    let (storage, workbook_snap, import_report, imported_formats) =
+        parse_and_hydrate_xlsx(xlsx_data)?;
 
     let (mirror, compute, recalc_result) = {
         let mut profile = crate::xlsx_profile::PhaseTimer::new("import", "mirror_compute_rebuild");
-        let mut mirror = CellMirror::from_snapshot(workbook_snap.clone())?;
+        let mut mirror = CellMirror::new();
         let mut compute = ComputeCore::new();
         let recalc_result =
             compute.init_from_snapshot_no_recalc(&mut mirror, workbook_snap.clone())?;
@@ -25,6 +26,11 @@ pub(in crate::storage::engine) fn from_xlsx_bytes(
     };
 
     let mut engine = assemble_engine(storage, mirror, compute, &workbook_snap)?;
+    install_imported_formats(
+        &mut engine.mirror,
+        &engine.stores.storage.metadata.style_palette,
+        &imported_formats,
+    );
     engine.import_report = import_report;
     crate::storage::engine::services::imported_filters::normalize_imported_auto_filter_visibility(
         &mut engine.stores,
@@ -33,31 +39,25 @@ pub(in crate::storage::engine) fn from_xlsx_bytes(
         domain_types::ImportPhase::FullHydration,
     );
 
-    // Register physical phantom cells (created during hydration for merges and
-    // hyperlinks on cells with no data) in the GridIndex so position-based
-    // lookups can find them.
-    for (sheet_id, cell_id, row, col) in phantom_cells {
-        if let Some(grid) = engine.stores.grid_indexes.get_mut(&sheet_id) {
-            grid.register_cell(cell_id, row, col);
-        }
-    }
-
     Ok((engine, recalc_result))
 }
 
 /// Import from raw XLSX bytes into an existing engine, with or without recalc.
 ///
-/// Uses the Range-optimized hydration pipeline: the classifier runs BEFORE
-/// Yrs cell writes, so ranged cells are written as compact Range entries
-/// instead of individual per-cell entries. This keeps the Yrs document small
-/// enough for WASM's 4GB memory ceiling.
+/// Classify homogeneous values into compact native ranges before assembly.
 pub(in crate::storage::engine) fn import_from_xlsx_bytes(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     xlsx_data: &[u8],
     do_recalc: bool,
 ) -> Result<RecalcResult, ComputeError> {
-    let (storage, workbook_snap, phantom_cells, import_report) = parse_and_hydrate_xlsx(xlsx_data)?;
+    let (storage, workbook_snap, import_report, imported_formats) =
+        parse_and_hydrate_xlsx(xlsx_data)?;
     let result = rebuild_engine_from_snapshot(engine, storage, workbook_snap, do_recalc)?;
+    install_imported_formats(
+        &mut engine.mirror,
+        &engine.stores.storage.metadata.style_palette,
+        &imported_formats,
+    );
     engine.import_report = import_report;
     engine.clear_runtime_diagnostics();
     crate::storage::engine::services::imported_filters::normalize_imported_auto_filter_visibility(
@@ -66,20 +66,12 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes(
         Some(&mut engine.import_report),
         domain_types::ImportPhase::FullHydration,
     );
-    for (sheet_id, cell_id, row, col) in phantom_cells {
-        if let Some(grid) = engine.stores.grid_indexes.get_mut(&sheet_id) {
-            grid.register_cell(cell_id, row, col);
-        }
-    }
+
     Ok(result)
 }
 
-/// Fast-path XLSX import: parses XLSX, builds snapshot and indexes from
-/// parse_output (NO Yrs CRDT hydration). Stores data for deferred hydration.
-///
-/// This is ~2x faster than `import_from_xlsx_bytes` because it skips the
-/// 2-second Yrs hydration step. The engine can display viewport data
-/// immediately. Call `complete_deferred_hydration()` after first paint
+/// Parse the workbook once and hydrate native metadata with the identities
+/// used by the snapshot's sparse cells and compact ranges.
 pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
     xlsx_data: &[u8],
 ) -> Result<XlsxHydrateResult, ComputeError> {
@@ -119,7 +111,7 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
         );
     }
 
-    // ── Pass 1: Allocate IDs (no Yrs writes) ──────────────────────────
+    // ── Pass 1: Allocate native identities ──────────────────────────
     let mut allocator = DefaultIdAllocator::new();
     let allocations: Vec<_> = {
         let mut profile = crate::xlsx_profile::PhaseTimer::new("import", "id_allocation");
@@ -147,22 +139,18 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
         for alloc in &allocations {
             m.sheet_ids.push(alloc.sheet_id);
             m.cell_ids.push(alloc.cell_ids.clone());
-            m.row_ids.push(alloc.row_ids.clone());
-            m.col_ids.push(alloc.col_ids.clone());
+            m.row_axes.push(alloc.row_axis.clone());
+            m.col_axes.push(alloc.col_axis.clone());
             for identity in &alloc.identity_only_cells {
-                m.identity_only_cells.push((
-                    alloc.sheet_id,
-                    identity.cell_id,
-                    identity.row,
-                    identity.col,
-                ));
+                m.identities
+                    .push((alloc.sheet_id, identity.cell_id, identity.row, identity.col));
             }
         }
         m
     };
 
     // ── Pass 2: Build snapshot + run classifier ───────────────────────
-    let workbook_snap = {
+    let mut workbook_snap = {
         let mut profile =
             crate::xlsx_profile::PhaseTimer::new("import", "parse_output_to_workbook_snapshot");
         let snap = import::parse_output_to_snapshot::parse_output_to_workbook_snapshot(
@@ -190,14 +178,12 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
     // ── Pass 3: Collect ranged positions per sheet ────────────────────
     // After the classifier runs, `workbook_snap.sheets[i].ranges` contains
     // the promoted RangeData entries. We need to identify which (row, col)
-    // positions were ranged so we can skip them during Yrs cell writes.
+    // positions were ranged so metadata hydration does not create value overlays.
     //
     // Only non-empty cells can be ranged (the classifier ignores Null cells).
     // Empty styled cells are already skipped by hydrate_cells_with_ids, so
     // we exclude them from the diff to keep the HashSet small.
     let mut ranged_positions: Vec<std::collections::HashSet<(u32, u32)>> =
-        Vec::with_capacity(parse_output.sheets.len());
-    let mut range_data_per_sheet: Vec<Vec<snapshot_types::RangeData>> =
         Vec::with_capacity(parse_output.sheets.len());
     let mut range_style_positions: Vec<std::collections::HashSet<(u32, u32)>> =
         Vec::with_capacity(parse_output.sheets.len());
@@ -224,12 +210,11 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
                 .collect();
 
             ranged_positions.push(ranged);
-            let ranges = snap_sheet.ranges.clone();
             if range_style_formats_enabled {
                 let (style_positions, range_styles) = build_imported_range_style_plan(
                     sheet_data,
                     &allocations[sheet_idx],
-                    &ranges,
+                    &snap_sheet.ranges,
                     &mut allocator,
                 );
                 range_style_positions.push(style_positions);
@@ -238,7 +223,6 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
                 range_style_positions.push(std::collections::HashSet::new());
                 range_styles_per_sheet.push(Vec::new());
             }
-            range_data_per_sheet.push(ranges);
         }
         profile.counter("sheets", ranged_positions.len() as u64);
         profile.counter(
@@ -296,21 +280,22 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
         );
     }
 
-    // ── Pass 4: Hydrate Yrs (skipping ranged cells) ───────────────────
+    // ── Pass 4: Hydrate native metadata ───────────────────
     let (storage, id_map) = {
         let mut profile =
             crate::xlsx_profile::PhaseTimer::new("import", "hydrate_from_parse_output_with_ranges");
-        let mut storage = YrsStorage::new();
+        let mut storage = WorkbookStorage::new();
         let id_map = storage.hydrate_from_parse_output_with_ranges(
             &parse_output,
             &allocations,
             &ranged_positions,
             &range_style_positions,
-            &range_data_per_sheet,
-            &range_styles_per_sheet,
             &mut allocator,
         )?;
-        storage.hydrate_imported_external_links(&parse_output.external_links)?;
+        storage
+            .metadata
+            .external_links
+            .import(&parse_output.external_links);
         profile.counter("sheets", parse_output.sheets.len() as u64);
         profile.counter(
             "ranged_positions",
@@ -322,5 +307,12 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
         (storage, id_map)
     };
 
-    Ok((storage, workbook_snap, id_map.phantom_cells, import_report))
+    id_map.install_snapshot_identities(&mut workbook_snap);
+    workbook_snap.canonical_tables = id_map.canonical_tables;
+    workbook_snap.tables.clear();
+
+    let imported_formats =
+        collect_imported_formats(&parse_output, &id_map.sheet_ids, &range_styles_per_sheet);
+    allocator.stamp_snapshot_counters(&mut workbook_snap);
+    Ok((storage, workbook_snap, import_report, imported_formats))
 }

@@ -25,7 +25,7 @@ pub struct CFStyle {
     pub underline_type: Option<UnderlineStyle>,
     /// Legacy boolean underline — accepted on read (alias), but we always
     /// write `underlineType` for new data. Kept for backward compat with
-    /// existing Yrs documents that stored `"underline": true`.
+    /// existing JSON payloads that stored `"underline": true`.
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "underline")]
     pub underline_legacy: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

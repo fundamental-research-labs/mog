@@ -3,7 +3,7 @@
 use std::time::Instant;
 
 use cell_types::SheetPos;
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use value_types::{CellValue, FiniteF64};
 
 use super::cases::{
@@ -27,7 +27,7 @@ pub(crate) fn run_case(case: &Class1Case) -> TestOutcome {
             Err(reason) => return TestOutcome::Skipped(reason),
         };
 
-    let (mut engine, _init) = match YrsComputeEngine::from_snapshot(snapshot) {
+    let (mut engine, _init) = match ComputeEngine::from_snapshot(snapshot) {
         Ok(pair) => pair,
         Err(e) => {
             return TestOutcome::Failed(format!(
@@ -229,7 +229,7 @@ fn run_case_v2(case: &Class1CaseV2) -> TestOutcome {
             Err(reason) => return TestOutcome::Skipped(reason),
         };
 
-    let (mut engine, _init) = match YrsComputeEngine::from_snapshot(snapshot) {
+    let (mut engine, _init) = match ComputeEngine::from_snapshot(snapshot) {
         Ok(pair) => pair,
         Err(e) => {
             return TestOutcome::Failed(format!(

@@ -48,7 +48,7 @@ fn test_projection_materialize_col_data() {
     // Verify col_data has the materialized projected values
     let sheet_mirror = mirror.get_sheet(&sheet_id).unwrap();
     let col_slice = sheet_mirror
-        .get_column_slice(0)
+        .get_column_view(0)
         .expect("col_data for column 0 should exist");
 
     // Row 0 is the source cell (should be 1.0 from the top-left of the array)
@@ -105,7 +105,7 @@ fn test_clear_materialization_zeros_col_data() {
 
     // Verify values are materialized (row 0 skipped by materialize_projection)
     let sheet = mirror.get_sheet(&sheet_id).unwrap();
-    let col = sheet.get_column_slice(0).unwrap();
+    let col = sheet.get_column_view(0).unwrap();
     assert_eq!(col[1], CellValue::number(2.0));
     assert_eq!(col[2], CellValue::number(3.0));
 
@@ -114,7 +114,7 @@ fn test_clear_materialization_zeros_col_data() {
 
     // Verify values are cleared (row 0 origin is NOT cleared)
     let sheet = mirror.get_sheet(&sheet_id).unwrap();
-    let col = sheet.get_column_slice(0).unwrap();
+    let col = sheet.get_column_view(0).unwrap();
     assert_eq!(col[1], CellValue::Null, "row 1 should be cleared");
     assert_eq!(col[2], CellValue::Null, "row 2 should be cleared");
 }

@@ -22,7 +22,7 @@
 //! Some local checkouts omit those files, so XLSX-specific tests skip when the
 //! fixture path is absent while still failing on non-NotFound read errors.
 
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use snapshot_types::{ChangeKind, FloatingObjectChangeKind};
 
 const CHART_FIXTURE_ENV: &str = "MOG_IMPORT_MUTATION_CHART_XLSX";
@@ -68,9 +68,8 @@ fn import_from_xlsx_bytes_returns_mutation_result_with_floating_objects() {
     // Build an empty engine via from_snapshot, then import into it. This
     // matches the production lifecycle: createEngine() → start() →
     // importFromXlsxBytes(bytes).
-    let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_types::WorkbookSnapshot::default())
-            .expect("from_snapshot(empty) should succeed");
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot_types::WorkbookSnapshot::default())
+        .expect("from_snapshot(empty) should succeed");
 
     let (patches, result) = engine
         .import_from_xlsx_bytes(&bytes, true)
@@ -125,9 +124,8 @@ fn import_from_xlsx_bytes_populates_table_and_filter_changes_when_present() {
         return;
     };
 
-    let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_types::WorkbookSnapshot::default())
-            .expect("from_snapshot(empty) should succeed");
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot_types::WorkbookSnapshot::default())
+        .expect("from_snapshot(empty) should succeed");
 
     let (_patches, result) = engine
         .import_from_xlsx_bytes(&bytes, true)
@@ -167,9 +165,8 @@ fn import_from_xlsx_bytes_floating_object_bounds_are_computed() {
         return;
     };
 
-    let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_types::WorkbookSnapshot::default())
-            .expect("from_snapshot(empty) should succeed");
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot_types::WorkbookSnapshot::default())
+        .expect("from_snapshot(empty) should succeed");
 
     let (_patches, result) = engine
         .import_from_xlsx_bytes(&bytes, true)
@@ -226,9 +223,8 @@ fn import_from_csv_bytes_returns_mutation_result() {
 
     let csv: &[u8] = b"a,b,c\n1,2,3\n4,5,6\n";
 
-    let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_types::WorkbookSnapshot::default())
-            .expect("from_snapshot(empty) should succeed");
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot_types::WorkbookSnapshot::default())
+        .expect("from_snapshot(empty) should succeed");
 
     let (_patches, result) = engine
         .import_from_csv_bytes(csv, CsvImportOptions::default())

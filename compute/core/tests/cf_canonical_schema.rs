@@ -14,7 +14,7 @@ use stress_engine_common::*;
 
 use cell_types::{SheetId, SheetPos};
 use compute_core::bridge_types::{BridgeSortCriterion, BridgeSortMode, BridgeSortOptions};
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use domain_types::domain::filter::SortOrder;
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, ComputeError};
@@ -42,7 +42,7 @@ fn cf_payload(
 }
 
 fn add_cf(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     payload: serde_json::Value,
 ) -> Result<(), ComputeError> {
@@ -50,7 +50,7 @@ fn add_cf(
 }
 
 fn first_format(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> domain_types::domain::conditional_format::ConditionalFormat {
     let formats = engine.get_all_cf_rules(sheet_id);
@@ -67,7 +67,7 @@ fn first_format(
 #[test]
 fn add_cf_rule_accepts_contains_blanks_default_blanks_true() {
     let snapshot = make_snapshot(vec![]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     let payload = cf_payload(
@@ -94,7 +94,7 @@ fn add_cf_rule_accepts_contains_blanks_default_blanks_true() {
 #[test]
 fn add_cf_rule_promotes_not_contains_blanks_to_contains_blanks_false() {
     let snapshot = make_snapshot(vec![]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     let payload = cf_payload(
@@ -123,7 +123,7 @@ fn add_cf_rule_promotes_not_contains_blanks_to_contains_blanks_false() {
 #[test]
 fn add_cf_rule_accepts_top10_with_value1_and_operator() {
     let snapshot = make_snapshot(vec![]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     let payload = cf_payload(
@@ -155,7 +155,7 @@ fn add_cf_rule_accepts_top10_with_value1_and_operator() {
 #[test]
 fn add_cf_rule_promotes_cell_value_with_text_op_to_contains_text() {
     let snapshot = make_snapshot(vec![]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     let payload = cf_payload(
@@ -188,7 +188,7 @@ fn add_cf_rule_promotes_cell_value_with_text_op_to_contains_text() {
 #[test]
 fn add_cf_rule_accepts_expression_alias_for_formula() {
     let snapshot = make_snapshot(vec![]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     let payload = cf_payload(
@@ -220,7 +220,7 @@ fn add_cf_rule_accepts_expression_alias_for_formula() {
 #[test]
 fn add_cf_rule_puts_new_format_at_priority_one() {
     let snapshot = make_snapshot(vec![]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     add_cf(
@@ -254,7 +254,7 @@ fn add_cf_rule_puts_new_format_at_priority_one() {
 #[test]
 fn add_cf_rule_bumps_existing_format_priorities_so_new_is_first() {
     let snapshot = make_snapshot(vec![]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     // Add two formats. Each has one rule.
@@ -317,7 +317,7 @@ fn sort_range_with_overlapping_cf_format_re_evaluates_cf_cache() {
         make_cell(4, 0, num(60.0), None),
         make_cell(5, 0, num(75.0), None),
     ]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     add_cf(

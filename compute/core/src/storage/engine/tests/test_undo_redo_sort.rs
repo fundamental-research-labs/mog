@@ -16,7 +16,13 @@ fn test_undo_reverts_per_cell_sort_positions() {
         ("550e8400-e29b-41d4-a716-446655440015", 4.0),
     ];
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sid.to_uuid_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -45,7 +51,7 @@ fn test_undo_reverts_per_cell_sort_positions() {
         max_change: value_types::FiniteF64::must(0.001),
         calculation_settings: None,
     };
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let options = crate::storage::engine::mutation::BridgeSortOptions {
         criteria: vec![crate::storage::engine::mutation::BridgeSortCriterion {

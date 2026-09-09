@@ -280,7 +280,7 @@ pub enum VerticalAlign {
 }
 
 impl VerticalAlign {
-    /// Return the camelCase string representation (for Yrs storage).
+    /// Return the camelCase string representation (for wire serialization).
     pub fn as_str(&self) -> &'static str {
         match self {
             VerticalAlign::Top => "top",

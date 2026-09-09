@@ -34,14 +34,13 @@ fn operation_context(
         },
         write_admission_mode,
         client_request_id: None,
-        collaboration: None,
     }
 }
 
 #[test]
 fn set_cells_by_position_records_missing_context_diagnostic_in_observe_mode() {
     let snap = simple_snapshot();
-    let (mut engine, _) = crate::storage::engine::YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = crate::storage::engine::ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -73,7 +72,7 @@ fn set_cells_by_position_records_missing_context_diagnostic_in_observe_mode() {
 #[test]
 fn set_cells_by_position_fails_closed_without_context_when_required() {
     let snap = simple_snapshot();
-    let (mut engine, _) = crate::storage::engine::YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = crate::storage::engine::ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
     engine.require_version_runtime_operation_context_for_tests(true);
 
@@ -108,7 +107,7 @@ fn set_cells_by_position_fails_closed_without_context_when_required() {
 #[test]
 fn set_cells_by_position_consumes_admitted_context_once() {
     let snap = simple_snapshot();
-    let (mut engine, _) = crate::storage::engine::YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = crate::storage::engine::ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
     engine.require_version_runtime_operation_context_for_tests(true);
     engine.set_version_runtime_operation_context(operation_context(
@@ -154,7 +153,7 @@ fn set_cells_by_position_consumes_admitted_context_once() {
 #[test]
 fn set_cells_by_position_rejects_blocked_context() {
     let snap = simple_snapshot();
-    let (mut engine, _) = crate::storage::engine::YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = crate::storage::engine::ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
     engine.set_version_runtime_operation_context(operation_context(
         "operation:test:block",

@@ -10,10 +10,12 @@ pub(in crate::storage::engine) fn is_row_hidden_query(
     sheet_id: &SheetId,
     row: u32,
 ) -> bool {
-    let doc = stores.storage.doc();
-    let sheets = stores.storage.sheets();
-    sheet_dimensions::is_row_hidden(doc, sheets, sheet_id, row)
-        || !sheet_grouping::is_row_visible_by_groups(doc, sheets, sheet_id, row)
+    sheet_dimensions::is_row_hidden(
+        &stores.storage,
+        sheet_id,
+        row,
+        stores.grid_indexes.get(sheet_id),
+    ) || !sheet_grouping::is_row_visible_by_groups(&stores.storage, sheet_id, row)
 }
 
 pub(in crate::storage::engine) fn is_col_hidden_query(
@@ -21,21 +23,26 @@ pub(in crate::storage::engine) fn is_col_hidden_query(
     sheet_id: &SheetId,
     col: u32,
 ) -> bool {
-    let doc = stores.storage.doc();
-    let sheets = stores.storage.sheets();
-    sheet_dimensions::is_column_hidden(doc, sheets, sheet_id, col)
-        || !sheet_grouping::is_column_visible_by_groups(doc, sheets, sheet_id, col)
+    sheet_dimensions::is_column_hidden(
+        &stores.storage,
+        sheet_id,
+        col,
+        stores.grid_indexes.get(sheet_id),
+    ) || !sheet_grouping::is_column_visible_by_groups(&stores.storage, sheet_id, col)
 }
 
 pub(in crate::storage::engine) fn get_hidden_rows(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> Vec<u32> {
-    let doc = stores.storage.doc();
-    let sheets = stores.storage.sheets();
-    let mut hidden = sheet_dimensions::get_hidden_rows(doc, sheets, sheet_id);
+    let mut hidden = sheet_dimensions::get_hidden_rows(
+        &stores.storage,
+        sheet_id,
+        stores.grid_indexes.get(sheet_id),
+    );
     hidden.extend(sheet_grouping::get_rows_hidden_by_structural_groups(
-        doc, sheets, sheet_id,
+        &stores.storage,
+        sheet_id,
     ));
     hidden.sort_unstable();
     hidden.dedup();
@@ -46,15 +53,17 @@ pub(in crate::storage::engine) fn get_filter_hidden_rows(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> Vec<u32> {
-    let doc = stores.storage.doc();
-    let sheets = stores.storage.sheets();
     let grid = stores.grid_indexes.get(sheet_id);
-    let mut hidden: Vec<u32> = sheet_dimensions::get_hidden_rows(doc, sheets, sheet_id)
-        .into_iter()
-        .filter(|row| {
-            sheet_dimensions::is_row_hidden_by_any_filter(doc, sheets, sheet_id, *row, grid)
-        })
-        .collect();
+    let mut hidden: Vec<u32> = sheet_dimensions::get_hidden_rows(
+        &stores.storage,
+        sheet_id,
+        stores.grid_indexes.get(sheet_id),
+    )
+    .into_iter()
+    .filter(|row| {
+        sheet_dimensions::is_row_hidden_by_any_filter(&stores.storage, sheet_id, *row, grid)
+    })
+    .collect();
     hidden.sort_unstable();
     hidden.dedup();
     hidden
@@ -64,11 +73,14 @@ pub(in crate::storage::engine) fn get_hidden_columns(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> Vec<u32> {
-    let doc = stores.storage.doc();
-    let sheets = stores.storage.sheets();
-    let mut hidden = sheet_dimensions::get_hidden_columns(doc, sheets, sheet_id);
+    let mut hidden = sheet_dimensions::get_hidden_columns(
+        &stores.storage,
+        sheet_id,
+        stores.grid_indexes.get(sheet_id),
+    );
     hidden.extend(sheet_grouping::get_columns_hidden_by_structural_groups(
-        doc, sheets, sheet_id,
+        &stores.storage,
+        sheet_id,
     ));
     hidden.sort_unstable();
     hidden.dedup();
@@ -115,29 +127,16 @@ pub(in crate::storage::engine) fn get_data_bounds(
         max_col = max_col.max(dense_max_col);
     }
 
-    // 3. Expand bounds with merge-region footprints.
-    //    A merged region is sheet structure (not just a view hint), so its
-    //    bounding box must be part of the used range — matches Excel's
-    //    `UsedRange` semantics. Walking merges here makes `get_data_bounds`
-    //    a pure function of CRDT state: originator and receiver agree even
-    //    though the receiver never runs `expand_extent` on merge-apply (the
-    //    nulled non-origin corner cells look like ghosts to step 1).
-    //
-    //    Uses `merges::iter_merge_bounds`, which reads the inline
-    //    `sr/sc/er/ec` fields from each merge entry. Crucially this is
-    //    independent of the in-memory `GridIndex`: on a merge receiver the
-    //    local `GridIndex` may not yet have the merge-origin cell IDs
-    //    registered (hydration gap fixed in a separate round), but the
-    //    Yrs merges map carries the rectangle directly.
-    let doc = stores.storage.doc();
-    let sheets_map = stores.storage.sheets();
-
-    for (sr, sc, er, ec) in merges::iter_merge_bounds(doc, sheets_map, *sheet_id) {
-        found = true;
-        min_row = min_row.min(sr);
-        max_row = max_row.max(er);
-        min_col = min_col.min(sc);
-        max_col = max_col.max(ec);
+    // Merge rectangles contribute to the used range even when their interior
+    // cells are blank. Resolve native merge anchors through the sheet axes.
+    if let Some(grid) = stores.grid_indexes.get(sheet_id) {
+        for (sr, sc, er, ec) in merges::iter_merge_bounds(&stores.storage, *sheet_id, grid) {
+            found = true;
+            min_row = min_row.min(sr);
+            max_row = max_row.max(er);
+            min_col = min_col.min(sc);
+            max_col = max_col.max(ec);
+        }
     }
 
     if !found {
@@ -157,15 +156,14 @@ pub(in crate::storage::engine) fn get_data_bounds(
 // -------------------------------------------------------------------
 
 /// Returns row height in **pixels** (for TypeScript bridge).
-/// Reads canonical (points) from Yrs and converts.
+/// Reads native point heights and converts.
 pub(in crate::storage::engine) fn get_row_height_query(
     stores: &EngineStores,
     sheet_id: &SheetId,
     row: u32,
 ) -> Pixels {
     let height_pt = sheet_dimensions::get_row_height(
-        stores.storage.doc(),
-        stores.storage.sheets(),
+        &stores.storage,
         sheet_id,
         row,
         stores.grid_indexes.get(sheet_id),
@@ -178,15 +176,14 @@ pub(in crate::storage::engine) fn get_row_height_query(
 }
 
 /// Returns column width in **pixels** (for TypeScript bridge).
-/// Reads canonical (char-width) from Yrs and converts.
+/// Reads native character widths and converts.
 pub(in crate::storage::engine) fn get_col_width_query(
     stores: &EngineStores,
     sheet_id: &SheetId,
     col: u32,
 ) -> Pixels {
     let width_cw = sheet_dimensions::get_col_width(
-        stores.storage.doc(),
-        stores.storage.sheets(),
+        &stores.storage,
         sheet_id,
         col,
         stores.grid_indexes.get(sheet_id),
@@ -203,7 +200,7 @@ pub(in crate::storage::engine) fn get_default_row_height(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> Points {
-    properties::get_sheet_meta(stores.storage.doc(), stores.storage.sheets(), sheet_id)
+    properties::get_sheet_meta(&stores.storage, sheet_id)
         .map(|m| Points(m.default_row_height))
         .unwrap_or(sheet_dimensions::DEFAULT_ROW_HEIGHT)
 }
@@ -213,7 +210,7 @@ pub(in crate::storage::engine) fn get_default_col_width(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> CharWidth {
-    properties::get_sheet_meta(stores.storage.doc(), stores.storage.sheets(), sheet_id)
+    properties::get_sheet_meta(&stores.storage, sheet_id)
         .map(|m| CharWidth(m.default_col_width))
         .unwrap_or(sheet_dimensions::DEFAULT_COL_WIDTH)
 }
@@ -228,8 +225,7 @@ pub(in crate::storage::engine) fn get_row_heights_batch(
     (start_row..=end_row)
         .map(|row| {
             let pt = sheet_dimensions::get_row_height(
-                stores.storage.doc(),
-                stores.storage.sheets(),
+                &stores.storage,
                 sheet_id,
                 row,
                 stores.grid_indexes.get(sheet_id),
@@ -247,15 +243,14 @@ pub(in crate::storage::engine) fn get_row_heights_batch(
 }
 
 /// Returns column width in **character-width units** (for TypeScript bridge).
-/// Reads canonical (char-width) from Yrs directly — no pixel conversion.
+/// Reads native character widths directly.
 pub(in crate::storage::engine) fn get_col_width_chars_query(
     stores: &EngineStores,
     sheet_id: &SheetId,
     col: u32,
 ) -> CharWidth {
     sheet_dimensions::get_col_width(
-        stores.storage.doc(),
-        stores.storage.sheets(),
+        &stores.storage,
         sheet_id,
         col,
         stores.grid_indexes.get(sheet_id),
@@ -272,8 +267,7 @@ pub(in crate::storage::engine) fn get_col_widths_batch_chars(
     (start_col..=end_col)
         .map(|col| {
             let cw = sheet_dimensions::get_col_width(
-                stores.storage.doc(),
-                stores.storage.sheets(),
+                &stores.storage,
                 sheet_id,
                 col,
                 stores.grid_indexes.get(sheet_id),
@@ -294,8 +288,7 @@ pub(in crate::storage::engine) fn get_col_widths_batch(
     (start_col..=end_col)
         .map(|col| {
             let cw = sheet_dimensions::get_col_width(
-                stores.storage.doc(),
-                stores.storage.sheets(),
+                &stores.storage,
                 sheet_id,
                 col,
                 stores.grid_indexes.get(sheet_id),
@@ -323,7 +316,7 @@ pub(in crate::storage::engine) fn get_current_region(
     start_row: u32,
     start_col: u32,
 ) -> RectBounds {
-    let Some(grid) = stores.grid_indexes.get(sheet_id) else {
+    if mirror.get_sheet(sheet_id).is_none() {
         return RectBounds {
             start_row,
             start_col,
@@ -331,15 +324,9 @@ pub(in crate::storage::engine) fn get_current_region(
             end_col: start_col,
         };
     };
-    let region = cell_iter::get_current_region_with_extra_data(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        *sheet_id,
-        grid,
-        start_row,
-        start_col,
-        |r, c| mirror_render_has_data(stores, mirror, sheet_id, r, c),
-    );
+    let region = cell_iter::get_current_region(*sheet_id, start_row, start_col, |r, c| {
+        mirror_render_has_data(stores, mirror, sheet_id, r, c)
+    });
     RectBounds {
         start_row: region.start_row(),
         start_col: region.start_col(),
@@ -359,9 +346,8 @@ pub(in crate::storage::engine) fn find_data_edge(
     let Some(grid) = stores.grid_indexes.get(sheet_id) else {
         return CellPosition { row, col };
     };
-    cell_iter::find_data_edge_with_extra_data(
-        stores.storage.doc(),
-        stores.storage.sheets(),
+    cell_iter::find_data_edge(
+        &stores.storage,
         *sheet_id,
         grid,
         row,
@@ -460,7 +446,7 @@ pub(in crate::storage::engine) fn find_last_row(
         }
 
         // 2. Scan col_data (spill arrays, pivot output, etc.) for this column.
-        if let Some(col_slice) = sheet.get_column_slice(col) {
+        if let Some(col_slice) = sheet.get_column_view(col) {
             for (row, val) in col_slice.iter().enumerate() {
                 if !val.is_null() {
                     last_data_row =
@@ -470,16 +456,14 @@ pub(in crate::storage::engine) fn find_last_row(
         }
     }
 
-    // 3. Scan CRDT format properties for this column.
+    // 3. Scan native format properties for this column.
     let mut last_format_row: Option<u32> = None;
     {
         use crate::storage::properties;
 
-        let doc = stores.storage.doc();
-        let sheets_map = stores.storage.sheets();
         let grid = stores.grid_indexes.get(sheet_id);
 
-        for cell_id_hex in properties::iter_formatted_property_cell_ids(doc, sheets_map, sheet_id) {
+        for cell_id_hex in properties::iter_formatted_property_cell_ids(&stores.storage, sheet_id) {
             if let Some((row, c)) = resolve_pos_from_grid(grid, cell_id_hex.as_str())
                 && c == col
             {
@@ -517,9 +501,9 @@ pub(in crate::storage::engine) fn find_last_column(
         }
 
         // 2. Scan col_data for all columns at this row.
-        if !sheet.col_data_is_empty() && sheet.rows > row {
+        if !sheet.column_values_are_empty() && sheet.rows > row {
             for c in 0..sheet.cols {
-                if let Some(col_slice) = sheet.get_column_slice(c)
+                if let Some(col_slice) = sheet.get_column_view(c)
                     && let Some(val) = col_slice.get(row as usize)
                     && !val.is_null()
                 {
@@ -529,16 +513,14 @@ pub(in crate::storage::engine) fn find_last_column(
         }
     }
 
-    // 3. Scan CRDT format properties for this row.
+    // 3. Scan native format properties for this row.
     let mut last_format_col: Option<u32> = None;
     {
         use crate::storage::properties;
 
-        let doc = stores.storage.doc();
-        let sheets_map = stores.storage.sheets();
         let grid = stores.grid_indexes.get(sheet_id);
 
-        for cell_id_hex in properties::iter_formatted_property_cell_ids(doc, sheets_map, sheet_id) {
+        for cell_id_hex in properties::iter_formatted_property_cell_ids(&stores.storage, sheet_id) {
             if let Some((r, c)) = resolve_pos_from_grid(grid, cell_id_hex.as_str())
                 && r == row
             {

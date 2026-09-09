@@ -8,27 +8,17 @@ use domain_types::domain::conditional_format::ConditionalFormat;
 
 /// Convert domain `ConditionalFormat` list to compute-cf `CFRule` list.
 ///
-/// For each `ConditionalFormat`:
-///   - Primary: tries `range_identities` via the `resolve_cell_id` closure
-///   - Fallback: converts position-based `ranges` field to `RangePos`
-///   - For each rule in `format.rules`:
-///     - Converts `domain::CFRule` -> `CFRuleWire` -> `CFRule`
-///     - Attaches the resolved ranges
-///   - Filters out conversion failures with warnings
-///
-/// The `resolve_cell_id` closure maps `(sheet_id_str, cell_id_str)` -> `(row, col)`.
-/// Pass `|_, _| None` in contexts where CellMirror is unavailable.
+/// Attaches each format's native sheet ranges to its evaluation rules.
+/// Conversion failures are reported and omitted from the cache.
 pub(crate) fn convert_cf_formats_to_rules(
     formats: &[ConditionalFormat],
-    resolve_cell_id: impl Fn(&str, &str) -> Option<(u32, u32)>,
     fallback_sheet_id: Option<SheetId>,
     theme_palette: &HashMap<String, String>,
 ) -> Vec<CFRule> {
     let mut result = Vec::new();
 
     for format in formats {
-        let Some(ranges) = resolve_format_ranges(format, &resolve_cell_id, fallback_sheet_id)
-        else {
+        let Some(ranges) = resolve_format_ranges(format, fallback_sheet_id) else {
             continue;
         };
 

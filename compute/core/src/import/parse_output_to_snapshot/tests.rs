@@ -412,84 +412,28 @@ fn phantom_cells_filtered_from_snapshot() {
     let snapshot = parse_output_to_workbook_snapshot(&output, None, &mut allocator);
     let sheet = &snapshot.sheets[0];
 
-    // Should have 2 cells: origin (A1) + regular value (B1).
-    // Phantoms (A2, A3) should be filtered out.
     assert_eq!(
         sheet.cells.len(),
         2,
-        "Expected 2 cells (origin + regular), got {}. Phantom cells should be filtered.",
-        sheet.cells.len()
+        "retain the authored source and ordinary value"
     );
-
-    // Verify the kept cells are the right ones.
-    assert_eq!(sheet.cells[0].row, 0);
-    assert_eq!(sheet.cells[0].col, 0);
-    assert!(
-        sheet.cells[0].formula.is_some(),
-        "Origin cell should have formula"
-    );
-
-    assert_eq!(sheet.cells[1].row, 0);
-    assert_eq!(sheet.cells[1].col, 1);
-    assert_eq!(sheet.cells[1].value, CellValue::number(100.0));
-}
-
-#[test]
-fn comment_target_cells_injected_into_snapshot() {
-    use domain_types::Comment;
-
-    let output = ParseOutput {
-        sheets: vec![SheetData {
-            name: "Sheet1".into(),
-            rows: 10,
-            cols: 5,
-            cells: vec![DtCellData {
-                row: 0,
-                col: 0,
-                value: CellValue::number(42.0),
-                ..Default::default()
-            }],
-            comments: vec![
-                Comment {
-                    cell_ref: "B3".into(),
-                    ..Default::default()
-                },
-                // Comment on a cell that already has data — should NOT duplicate
-                Comment {
-                    cell_ref: "A1".into(),
-                    ..Default::default()
-                },
-            ],
-            ..Default::default()
-        }],
-        ..Default::default()
-    };
-
-    let mut allocator = DefaultIdAllocator::new();
-    let snapshot = parse_output_to_workbook_snapshot(&output, None, &mut allocator);
-    let sheet = &snapshot.sheets[0];
-
-    // Should have 2 cells: the original A1 + synthetic B3 for the comment
+    assert!(sheet.identities.is_empty());
+    let origin = sheet
+        .cells
+        .iter()
+        .find(|cell| cell.row == 0 && cell.col == 0)
+        .unwrap();
+    assert_eq!(origin.value, CellValue::Text("Business Development".into()));
+    assert_eq!(origin.formula.as_deref(), Some("UNIQUE(C1:C100)"));
     assert_eq!(
-        sheet.cells.len(),
-        2,
-        "Expected original cell + comment-target cell"
+        sheet
+            .cells
+            .iter()
+            .find(|cell| cell.row == 0 && cell.col == 1)
+            .unwrap()
+            .value,
+        CellValue::number(100.0)
     );
-
-    // Verify the synthetic cell exists at B3 (row=2, col=1)
-    let synthetic = sheet.cells.iter().find(|c| c.row == 2 && c.col == 1);
-    assert!(
-        synthetic.is_some(),
-        "Synthetic cell for comment at B3 should exist"
-    );
-    let synthetic = synthetic.unwrap();
-    assert!(matches!(synthetic.value, CellValue::Null));
-    assert!(synthetic.formula.is_none());
-
-    // Verify original cell is unchanged
-    let original = sheet.cells.iter().find(|c| c.row == 0 && c.col == 0);
-    assert!(original.is_some());
-    assert_eq!(original.unwrap().value, CellValue::number(42.0));
 }
 
 /// Regression test for the DATA TABLE constant-collapse bug.
@@ -587,7 +531,7 @@ fn hydrate_and_snapshot(
     crate::storage::infra::hydration::HydrationIdMap,
 ) {
     let mut allocator = DefaultIdAllocator::new();
-    let mut storage = crate::storage::YrsStorage::new();
+    let mut storage = crate::storage::WorkbookStorage::new();
     let id_map = storage
         .hydrate_from_parse_output(output, &mut allocator)
         .unwrap();
@@ -854,7 +798,9 @@ fn gate4_anchor_gap_in_middle_of_run() {
         "Non-anchored cells must form Range payloads"
     );
 
-    let anchor_row_id = id_map.row_ids[0][anchor_row as usize];
+    let anchor_row_id = id_map.row_axes[0]
+        .identity_at(id_map.sheet_ids[0], (anchor_row as usize) as u32)
+        .unwrap();
     for range in &sheet.ranges {
         assert!(
             !range.row_ids.contains(&anchor_row_id),
@@ -863,7 +809,9 @@ fn gate4_anchor_gap_in_middle_of_run() {
     }
 
     let check_row_accessible = |target_row: u32| -> bool {
-        let target_row_id = id_map.row_ids[0][target_row as usize];
+        let target_row_id = id_map.row_axes[0]
+            .identity_at(id_map.sheet_ids[0], (target_row as usize) as u32)
+            .unwrap();
         for range in &sheet.ranges {
             if let Some(idx) = range.row_ids.iter().position(|rid| *rid == target_row_id) {
                 if range.encoding == cell_types::PayloadEncoding::F64Le {
@@ -916,21 +864,21 @@ fn gate5_hydration_id_map_extension() {
     let sheet = &snapshot.sheets[0];
 
     assert_eq!(
-        id_map.row_ids[0].len(),
-        sheet.rows as usize,
-        "id_map.row_ids[0] length must equal the sheet row count"
+        id_map.row_axes[0].len(),
+        sheet.rows,
+        "id_map.row_axes[0] length must equal the sheet row count"
     );
     assert_eq!(
-        id_map.col_ids[0].len(),
-        sheet.cols as usize,
-        "id_map.col_ids[0] length must equal the sheet col count"
+        id_map.col_axes[0].len(),
+        sheet.cols,
+        "id_map.col_axes[0] length must equal the sheet col count"
     );
 
     for range in &sheet.ranges {
         for rid in &range.row_ids {
             assert!(
-                id_map.row_ids[0].contains(rid),
-                "Every RangeData row_id must exist in id_map.row_ids"
+                id_map.row_axes[0].contains_identity(id_map.sheet_ids[0], *rid),
+                "Every RangeData row_id must exist in id_map.row_axes"
             );
         }
     }

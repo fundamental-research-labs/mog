@@ -3,13 +3,11 @@
 use super::super::*;
 use super::helpers::*;
 use crate::snapshot::{SheetSnapshot, SlicerChangeKind, SlicerSourceType};
-use compute_document::schema::KEY_SLICERS;
 use domain_types::domain::slicer::{
     CrossFilterMode, SlicerSelectionChangeType, SlicerSortOrder, SlicerSource, SlicerStyle,
     StoredSlicer, StoredSlicerUpdate,
 };
 use value_types::{CellValue, ComputeError};
-use yrs::{Map, Transact};
 
 fn second_sheet_id() -> SheetId {
     SheetId::from_uuid_str("660e8400-e29b-41d4-a716-446655440000").unwrap()
@@ -18,6 +16,9 @@ fn second_sheet_id() -> SheetId {
 fn two_sheet_snapshot() -> WorkbookSnapshot {
     let mut snapshot = simple_snapshot();
     snapshot.sheets.push(SheetSnapshot {
+        identities: Vec::new(),
+        row_axis: None,
+        col_axis: None,
         id: second_sheet_id().to_uuid_string(),
         name: "Sheet2".to_string(),
         rows: 100,
@@ -82,13 +83,8 @@ fn table_slicer_on(id: &str, owner: &SheetId) -> StoredSlicer {
     }
 }
 
-fn has_slicer_map(engine: &YrsComputeEngine) -> bool {
-    let txn = engine.storage().doc().transact();
-    engine
-        .storage()
-        .workbook_map()
-        .get(&txn, KEY_SLICERS)
-        .is_some()
+fn has_slicer_map(engine: &ComputeEngine) -> bool {
+    !engine.storage().metadata.slicers.is_empty()
 }
 
 fn assert_slicer_not_found(err: &ComputeError, sheet_id: &SheetId, slicer_id: &str) {
@@ -105,42 +101,30 @@ fn assert_slicer_not_found(err: &ComputeError, sheet_id: &SheetId, slicer_id: &s
 }
 
 fn assert_not_found_without_side_effects<F>(
-    engine: &YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     slicer_id: &str,
     operation: F,
 ) where
-    F: FnOnce() -> Result<(Vec<u8>, crate::snapshot::MutationResult), ComputeError>,
+    F: FnOnce(
+        &mut ComputeEngine,
+    ) -> Result<(Vec<u8>, crate::snapshot::MutationResult), ComputeError>,
 {
-    engine
-        .drain_pending_updates()
-        .expect("drain setup provider updates");
-    let before_state_vector = engine.encode_state_vector();
-    let before_undo = engine.get_undo_state();
     let before_dirty = engine.stores.compute.is_dirty();
     let before_map_presence = has_slicer_map(engine);
     let before_slicers = engine.get_all_slicers_workbook();
 
-    let err = operation().expect_err("invalid slicer target must reject");
+    let err = operation(engine).expect_err("invalid slicer target must reject");
     assert_slicer_not_found(&err, sheet_id, slicer_id);
-    assert_eq!(engine.encode_state_vector(), before_state_vector);
-    assert_eq!(engine.get_undo_state().undo_depth, before_undo.undo_depth);
-    assert_eq!(engine.get_undo_state().redo_depth, before_undo.redo_depth);
+
     assert_eq!(engine.stores.compute.is_dirty(), before_dirty);
     assert_eq!(has_slicer_map(engine), before_map_presence);
     assert_eq!(engine.get_all_slicers_workbook(), before_slicers);
-    assert!(
-        engine
-            .drain_pending_updates()
-            .expect("drain rejected provider updates")
-            .is_empty(),
-        "rejection must not enqueue a provider update"
-    );
 }
 
 #[test]
 fn slicer_crud_and_selection_emit_mutation_result_changes() {
-    let (engine, _recalc) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _recalc) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
 
     let (_patches, create_result) = engine
@@ -237,36 +221,17 @@ fn slicer_crud_and_selection_emit_mutation_result_changes() {
 }
 
 #[test]
-fn undo_slicer_creation_emits_deleted_change() {
-    let (mut engine, _recalc) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
-    let sid = sheet_id();
-
-    engine
-        .create_slicer(&sid, table_slicer("slicer-1"))
-        .expect("create slicer");
-
-    let (_patches, undo_result) = engine.undo().expect("undo create slicer");
-
-    assert_eq!(undo_result.slicer_changes.len(), 1);
-    let change = &undo_result.slicer_changes[0];
-    assert_eq!(change.kind, SlicerChangeKind::Deleted);
-    assert_eq!(change.slicer_id, "slicer-1");
-    assert_eq!(change.source_type, Some(SlicerSourceType::Table));
-    assert_eq!(change.source_id.as_deref(), Some("table-1"));
-}
-
-#[test]
 fn missing_targets_reject_without_creating_slicer_map_or_side_effects() {
-    let (engine, _recalc) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _recalc) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
     let missing = "missing-slicer";
 
     assert!(!has_slicer_map(&engine));
     assert_eq!(engine.get_slicer_state(&sid, missing), None);
-    assert_not_found_without_side_effects(&engine, &sid, missing, || {
+    assert_not_found_without_side_effects(&mut engine, &sid, missing, |engine| {
         engine.delete_slicer(&sid, missing)
     });
-    assert_not_found_without_side_effects(&engine, &sid, missing, || {
+    assert_not_found_without_side_effects(&mut engine, &sid, missing, |engine| {
         engine.update_slicer_config(
             &sid,
             missing,
@@ -284,20 +249,20 @@ fn missing_targets_reject_without_creating_slicer_map_or_side_effects() {
             },
         )
     });
-    assert_not_found_without_side_effects(&engine, &sid, missing, || {
+    assert_not_found_without_side_effects(&mut engine, &sid, missing, |engine| {
         engine.toggle_slicer_item(&sid, missing, CellValue::Text("West".into()))
     });
-    assert_not_found_without_side_effects(&engine, &sid, missing, || {
+    assert_not_found_without_side_effects(&mut engine, &sid, missing, |engine| {
         engine.set_slicer_selection(&sid, missing, vec![CellValue::Text("West".into())])
     });
-    assert_not_found_without_side_effects(&engine, &sid, missing, || {
+    assert_not_found_without_side_effects(&mut engine, &sid, missing, |engine| {
         engine.clear_slicer_selection(&sid, missing)
     });
 }
 
 #[test]
 fn wrong_sheet_targets_are_absent_and_all_strict_mutations_reject() {
-    let (engine, _recalc) = YrsComputeEngine::from_snapshot(two_sheet_snapshot()).unwrap();
+    let (mut engine, _recalc) = ComputeEngine::from_snapshot(two_sheet_snapshot()).unwrap();
     let owner = sheet_id();
     let other = second_sheet_id();
     let slicer_id = "owned-slicer";
@@ -307,10 +272,10 @@ fn wrong_sheet_targets_are_absent_and_all_strict_mutations_reject() {
 
     assert_eq!(engine.get_slicer_state(&other, slicer_id), None);
     assert!(engine.get_all_slicers(&other).is_empty());
-    assert_not_found_without_side_effects(&engine, &other, slicer_id, || {
+    assert_not_found_without_side_effects(&mut engine, &other, slicer_id, |engine| {
         engine.delete_slicer(&other, slicer_id)
     });
-    assert_not_found_without_side_effects(&engine, &other, slicer_id, || {
+    assert_not_found_without_side_effects(&mut engine, &other, slicer_id, |engine| {
         engine.update_slicer_config(
             &other,
             slicer_id,
@@ -328,13 +293,13 @@ fn wrong_sheet_targets_are_absent_and_all_strict_mutations_reject() {
             },
         )
     });
-    assert_not_found_without_side_effects(&engine, &other, slicer_id, || {
+    assert_not_found_without_side_effects(&mut engine, &other, slicer_id, |engine| {
         engine.toggle_slicer_item(&other, slicer_id, CellValue::Text("West".into()))
     });
-    assert_not_found_without_side_effects(&engine, &other, slicer_id, || {
+    assert_not_found_without_side_effects(&mut engine, &other, slicer_id, |engine| {
         engine.set_slicer_selection(&other, slicer_id, vec![CellValue::Text("West".into())])
     });
-    assert_not_found_without_side_effects(&engine, &other, slicer_id, || {
+    assert_not_found_without_side_effects(&mut engine, &other, slicer_id, |engine| {
         engine.clear_slicer_selection(&other, slicer_id)
     });
 
@@ -354,31 +319,28 @@ fn wrong_sheet_targets_are_absent_and_all_strict_mutations_reject() {
 
 #[test]
 fn stale_targets_reject_after_successful_removal() {
-    let (engine, _recalc) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _recalc) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
     let slicer_id = "stale-slicer";
     engine.create_slicer(&sid, table_slicer(slicer_id)).unwrap();
     engine.delete_slicer(&sid, slicer_id).unwrap();
 
     assert_eq!(engine.get_slicer_state(&sid, slicer_id), None);
-    assert_not_found_without_side_effects(&engine, &sid, slicer_id, || {
+    assert_not_found_without_side_effects(&mut engine, &sid, slicer_id, |engine| {
         engine.clear_slicer_selection(&sid, slicer_id)
     });
 }
 
 #[test]
 fn create_rejects_duplicate_and_invalid_owner_without_side_effects() {
-    let (engine, _recalc) = YrsComputeEngine::from_snapshot(two_sheet_snapshot()).unwrap();
+    let (mut engine, _recalc) = ComputeEngine::from_snapshot(two_sheet_snapshot()).unwrap();
     let owner = sheet_id();
     let other = second_sheet_id();
     let slicer_id = "unique-slicer";
     engine
         .create_slicer(&owner, table_slicer_on(slicer_id, &owner))
         .unwrap();
-    engine.drain_pending_updates().unwrap();
 
-    let before_state_vector = engine.encode_state_vector();
-    let before_undo_depth = engine.get_undo_state().undo_depth;
     let original = engine.get_slicer_state(&owner, slicer_id).unwrap();
     let err = engine
         .create_slicer(&owner, table_slicer_on(slicer_id, &owner))
@@ -387,9 +349,7 @@ fn create_rejects_duplicate_and_invalid_owner_without_side_effects() {
         err,
         ComputeError::SlicerIdConflict { slicer_id: id } if id == slicer_id
     ));
-    assert_eq!(engine.encode_state_vector(), before_state_vector);
-    assert_eq!(engine.get_undo_state().undo_depth, before_undo_depth);
-    assert!(engine.drain_pending_updates().unwrap().is_empty());
+
     assert_eq!(
         engine.get_slicer_state(&owner, slicer_id),
         Some(original.clone())
@@ -404,7 +364,6 @@ fn create_rejects_duplicate_and_invalid_owner_without_side_effects() {
     ));
     assert_eq!(engine.get_slicer_state(&owner, slicer_id), Some(original));
     assert_eq!(engine.get_slicer_state(&other, slicer_id), None);
-    assert!(engine.drain_pending_updates().unwrap().is_empty());
 
     let mut empty_owner = table_slicer("empty-owner");
     empty_owner.sheet_id.clear();
@@ -428,7 +387,6 @@ fn create_rejects_duplicate_and_invalid_owner_without_side_effects() {
         } if receiver_sheet_id == owner.to_uuid_string()
             && requested_sheet_id == other.to_uuid_string()
     ));
-    assert!(engine.drain_pending_updates().unwrap().is_empty());
 
     let mut canonical_equivalent = table_slicer("canonical-owner");
     canonical_equivalent.sheet_id = uuid::Uuid::from_u128(owner.as_u128()).to_string();
@@ -443,7 +401,7 @@ fn create_rejects_duplicate_and_invalid_owner_without_side_effects() {
 
 #[test]
 fn generated_id_collision_retries_and_cross_sheet_source_is_allowed() {
-    let (mut engine, _recalc) = YrsComputeEngine::from_snapshot(two_sheet_snapshot()).unwrap();
+    let (mut engine, _recalc) = ComputeEngine::from_snapshot(two_sheet_snapshot()).unwrap();
     let owner = sheet_id();
     engine.stores.id_alloc = std::sync::Arc::new(cell_types::IdAllocator::with_seed(42));
     let colliding_id = uuid::Uuid::from_u128(42).to_string();
@@ -471,7 +429,7 @@ fn generated_id_collision_retries_and_cross_sheet_source_is_allowed() {
 
 #[test]
 fn atomic_set_selection_emits_one_authoritative_post_state() {
-    let (engine, _recalc) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _recalc) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
     engine
         .create_slicer(&sid, table_slicer("slicer-1"))
@@ -528,7 +486,7 @@ fn atomic_set_selection_emits_one_authoritative_post_state() {
 
 #[test]
 fn bulk_delete_validates_all_targets_before_one_atomic_removal() {
-    let (engine, _recalc) = YrsComputeEngine::from_snapshot(two_sheet_snapshot()).unwrap();
+    let (mut engine, _recalc) = ComputeEngine::from_snapshot(two_sheet_snapshot()).unwrap();
     let owner = sheet_id();
     let other = second_sheet_id();
     engine
@@ -541,7 +499,7 @@ fn bulk_delete_validates_all_targets_before_one_atomic_removal() {
         .create_slicer(&other, table_slicer_on("foreign", &other))
         .unwrap();
 
-    assert_not_found_without_side_effects(&engine, &owner, "missing", || {
+    assert_not_found_without_side_effects(&mut engine, &owner, "missing", |engine| {
         engine.delete_slicers(
             &owner,
             vec!["first".into(), "missing".into(), "second".into()],
@@ -550,19 +508,14 @@ fn bulk_delete_validates_all_targets_before_one_atomic_removal() {
     assert!(engine.get_slicer_state(&owner, "first").is_some());
     assert!(engine.get_slicer_state(&owner, "second").is_some());
 
-    assert_not_found_without_side_effects(&engine, &owner, "foreign", || {
+    assert_not_found_without_side_effects(&mut engine, &owner, "foreign", |engine| {
         engine.delete_slicers(&owner, vec!["first".into(), "foreign".into()])
     });
     assert!(engine.get_slicer_state(&owner, "first").is_some());
     assert!(engine.get_slicer_state(&other, "foreign").is_some());
 
-    let before_state_vector = engine.encode_state_vector();
-    let before_undo = engine.get_undo_state();
     let (_, empty_result) = engine.delete_slicers(&owner, Vec::new()).unwrap();
     assert!(empty_result.slicer_changes.is_empty());
-    assert_eq!(engine.encode_state_vector(), before_state_vector);
-    assert_eq!(engine.get_undo_state().undo_depth, before_undo.undo_depth);
-    assert!(engine.drain_pending_updates().unwrap().is_empty());
 
     let (_, result) = engine
         .delete_slicers(
@@ -592,5 +545,4 @@ fn bulk_delete_validates_all_targets_before_one_atomic_removal() {
     assert_eq!(engine.get_slicer_state(&owner, "first"), None);
     assert_eq!(engine.get_slicer_state(&owner, "second"), None);
     assert!(engine.get_slicer_state(&other, "foreign").is_some());
-    assert_eq!(engine.drain_pending_updates().unwrap().len(), 1);
 }

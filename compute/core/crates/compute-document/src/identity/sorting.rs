@@ -1,4 +1,4 @@
-use cell_types::{AxisIdentityStore, CellId, RowId};
+use cell_types::CellId;
 use rustc_hash::FxHashMap;
 
 use super::GridIndex;
@@ -42,8 +42,7 @@ impl GridIndex {
         }
 
         // NOTE: row_ids and row_to_index are NOT permuted here.
-        // Yrs rowOrder is the authoritative source for row ordering;
-        // row_ids must stay in sync with Yrs, so we leave them unchanged.
+        // Sorting cell positions does not reorder the identity axis.
 
         // Remap cell positions: collect cells in affected rows, remove old, insert new
         let affected_rows: rustc_hash::FxHashSet<u32> =
@@ -72,7 +71,7 @@ impl GridIndex {
 
     /// Permute `row_ids` (and `row_to_index`) to match a reordered `rowOrder`.
     ///
-    /// Called by the Range sort path after `rowOrder` has been reordered in Yrs.
+    /// Called by the range sort path after the native row axis is reordered.
     /// The per-cell sort path does NOT call this (it uses `sort_rows` which
     /// leaves `row_ids` unchanged because per-cell sort doesn't touch `rowOrder`).
     pub fn reorder_row_ids(&mut self, permutation: &[(u32, u32)]) {
@@ -100,14 +99,6 @@ impl GridIndex {
             );
         }
 
-        let old_row_ids: Vec<RowId> = self
-            .row_axis
-            .identities_in(self.sheet_id, 0, self.row_axis.len())
-            .collect();
-        let mut row_ids = old_row_ids.clone();
-        for &(old_idx, new_idx) in permutation {
-            row_ids[new_idx as usize] = old_row_ids[old_idx as usize];
-        }
-        self.row_axis = AxisIdentityStore::Explicit(row_ids);
+        std::sync::Arc::make_mut(&mut self.row_axis).reorder_positions(permutation);
     }
 }

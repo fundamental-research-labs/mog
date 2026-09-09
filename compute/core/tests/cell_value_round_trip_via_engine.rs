@@ -32,7 +32,7 @@
 //!   cargo test -p compute-core --test cell_value_round_trip_via_engine -- --nocapture
 
 use cell_types::{CellId, SheetId};
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use compute_core::test_support::cell_value_to_input_string;
 use compute_core::test_support::class_iv::{Expectation, cases, describe_value};
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
@@ -75,6 +75,9 @@ fn empty_target_snapshot() -> WorkbookSnapshot {
     // self-referencing the target.
     WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET_UUID.to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -114,9 +117,9 @@ fn target_cell_id() -> CellId {
 }
 
 /// Build a fresh engine and return it with the target cell's id.
-fn fresh_engine() -> (YrsComputeEngine, SheetId, CellId) {
+fn fresh_engine() -> (ComputeEngine, SheetId, CellId) {
     let (engine, _init) =
-        YrsComputeEngine::from_snapshot(empty_target_snapshot()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(empty_target_snapshot()).expect("from_snapshot");
     (engine, sheet_id(), target_cell_id())
 }
 

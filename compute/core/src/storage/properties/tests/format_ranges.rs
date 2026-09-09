@@ -35,8 +35,6 @@ fn test_format_cascade_all_layers() {
     let range_id = crate::mirror::RangeId::from_raw(1000);
     let sheet_mirror = mirror.get_sheet_mut(&sid).unwrap();
     add_format_range(
-        &mut storage,
-        &sid,
         sheet_mirror,
         range_id,
         0,
@@ -58,11 +56,9 @@ fn test_format_cascade_all_layers() {
 
     // Cell format: wrap_text
     set_cell_format(
-        storage.doc(),
-        storage.workbook_map(),
-        storage.sheets(),
+        &mut storage,
         &sid,
-        "cell-cascade",
+        "00000000000000000000000000000022",
         &CellFormat {
             wrap_text: Some(true),
             ..Default::default()
@@ -74,7 +70,7 @@ fn test_format_cascade_all_layers() {
     let eff = get_effective_format(
         &storage,
         &sid,
-        "cell-cascade",
+        "00000000000000000000000000000022",
         2,
         1,
         Some(&table_fmt),
@@ -101,14 +97,12 @@ fn test_format_cascade_all_layers() {
 
 #[test]
 fn updating_imported_format_range_clears_xlsx_style_lineage() {
-    let (mut storage, sid, _gi, mut mirror) = storage_with_sheet_and_mirror();
+    let (_storage, sid, _gi, mut mirror) = storage_with_sheet_and_mirror();
     let range_id = crate::mirror::RangeId::from_raw(1_001);
     let sheet_mirror = mirror.get_sheet_mut(&sid).unwrap();
     sheet_mirror.range_xlsx_style_id_cache.insert(range_id, 17);
 
     add_format_range(
-        &mut storage,
-        &sid,
         sheet_mirror,
         range_id,
         0,
@@ -133,8 +127,7 @@ fn col_format_ranges_are_column_defaults_below_explicit_col_and_row_formats() {
     let (mut storage, sid, gi, mut mirror) = storage_with_sheet_and_mirror();
 
     insert_col_format_range(
-        &storage,
-        &sid,
+        mirror.get_sheet_mut(&sid).unwrap(),
         crate::mirror::RangeId::from_raw(500),
         1,
         200,
@@ -146,8 +139,6 @@ fn col_format_ranges_are_column_defaults_below_explicit_col_and_row_formats() {
         },
         Some(9),
     );
-    let sheet_mirror = mirror.get_sheet_mut(&sid).unwrap();
-    hydrate_col_format_ranges(&storage, &sid, sheet_mirror);
 
     set_col_format(
         &mut storage,
@@ -188,11 +179,10 @@ fn col_format_ranges_are_column_defaults_below_explicit_col_and_row_formats() {
 
 #[test]
 fn imported_col_style_ranges_only_apply_to_positional_cells() {
-    let (storage, sid, gi, mut mirror) = storage_with_sheet_and_mirror();
+    let (mut storage, sid, gi, mut mirror) = storage_with_sheet_and_mirror();
 
     insert_style_palette_entry(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage,
         0,
         &CellFormat {
             font_size: Some(domain_types::FontSize::from_millipoints(12000)),
@@ -200,8 +190,7 @@ fn imported_col_style_ranges_only_apply_to_positional_cells() {
         },
     );
     insert_col_format_range(
-        &storage,
-        &sid,
+        mirror.get_sheet_mut(&sid).unwrap(),
         crate::mirror::RangeId::from_raw(700),
         1,
         1,
@@ -213,8 +202,7 @@ fn imported_col_style_ranges_only_apply_to_positional_cells() {
         Some(50),
     );
     insert_col_format_range(
-        &storage,
-        &sid,
+        mirror.get_sheet_mut(&sid).unwrap(),
         crate::mirror::RangeId::from_raw(701),
         2,
         2,
@@ -225,14 +213,12 @@ fn imported_col_style_ranges_only_apply_to_positional_cells() {
         },
         None,
     );
-    let sheet_mirror = mirror.get_sheet_mut(&sid).unwrap();
-    hydrate_col_format_ranges(&storage, &sid, sheet_mirror);
 
     let sheet_mirror = mirror.get_sheet(&sid).unwrap();
     let populated_imported_col = get_effective_format(
         &storage,
         &sid,
-        "allocated-b5",
+        "00000000000000000000000000000020",
         4,
         1,
         None,
@@ -262,7 +248,7 @@ fn imported_col_style_ranges_only_apply_to_positional_cells() {
     let populated_user_sparse_col = get_effective_format(
         &storage,
         &sid,
-        "allocated-c5",
+        "00000000000000000000000000000021",
         4,
         2,
         None,
@@ -282,14 +268,12 @@ fn imported_col_style_ranges_only_apply_to_positional_cells() {
 
 #[test]
 fn test_overlapping_format_ranges() {
-    let (mut storage, sid, _gi, mut mirror) = storage_with_sheet_and_mirror();
+    let (_storage, sid, _gi, mut mirror) = storage_with_sheet_and_mirror();
 
     // Range 1 (lower RangeId): background_color + italic
     let range_id_low = crate::mirror::RangeId::from_raw(100);
     let sheet_mirror = mirror.get_sheet_mut(&sid).unwrap();
     add_format_range(
-        &mut storage,
-        &sid,
         sheet_mirror,
         range_id_low,
         0,
@@ -307,8 +291,6 @@ fn test_overlapping_format_ranges() {
     let range_id_high = crate::mirror::RangeId::from_raw(200);
     let sheet_mirror = mirror.get_sheet_mut(&sid).unwrap();
     add_format_range(
-        &mut storage,
-        &sid,
         sheet_mirror,
         range_id_high,
         0,
@@ -347,13 +329,11 @@ fn test_overlapping_format_ranges() {
 
 #[test]
 fn test_format_range_deletion_lifecycle() {
-    let (mut storage, sid, gi, mut mirror) = storage_with_sheet_and_mirror();
+    let (_storage, sid, _gi, mut mirror) = storage_with_sheet_and_mirror();
 
     let range_id = crate::mirror::RangeId::from_raw(500);
     let sheet_mirror = mirror.get_sheet_mut(&sid).unwrap();
     add_format_range(
-        &mut storage,
-        &sid,
         sheet_mirror,
         range_id,
         0,
@@ -374,7 +354,7 @@ fn test_format_range_deletion_lifecycle() {
 
     // Delete the Format Range
     let sheet_mirror = mirror.get_sheet_mut(&sid).unwrap();
-    remove_format_range(&mut storage, &sid, sheet_mirror, range_id);
+    remove_format_range(sheet_mirror, range_id);
 
     // After deletion, cascade falls back to base (no background_color)
     let sheet_mirror = mirror.get_sheet(&sid).unwrap();
@@ -387,15 +367,13 @@ fn test_format_range_deletion_lifecycle() {
 }
 
 #[test]
-fn test_format_range_cold_load() {
-    let (mut storage, sid, _gi, mut mirror) = storage_with_sheet_and_mirror();
+fn test_format_range_copy_preserves_sparse_user_format() {
+    let (_storage, sid, _gi, mut mirror) = storage_with_sheet_and_mirror();
 
     // Add a Format Range
     let range_id = crate::mirror::RangeId::from_raw(777);
     let sheet_mirror = mirror.get_sheet_mut(&sid).unwrap();
     add_format_range(
-        &mut storage,
-        &sid,
         sheet_mirror,
         range_id,
         2,
@@ -409,25 +387,33 @@ fn test_format_range_cold_load() {
         },
     );
 
-    // Create a fresh SheetMirror (simulating cold-load) and hydrate
+    // Copy into a fresh native sheet with independent range identities.
     let mut fresh_mirror = crate::mirror::SheetMirror::new(sid, "Sheet1".to_string(), 100, 26);
     assert!(fresh_mirror.format_ranges().is_empty());
     assert!(fresh_mirror.range_format_cache().is_empty());
 
-    hydrate_format_ranges(&storage, &sid, &mut fresh_mirror);
+    CopiedFormats::from_sheet(
+        mirror.get_sheet(&sid).unwrap(),
+        &cell_types::IdAllocator::with_seed(10_000),
+    )
+    .install(&mut fresh_mirror);
 
-    // Verify hydration populated the mirror
+    // Verify the copy populated the native sheet.
     assert_eq!(fresh_mirror.format_ranges().len(), 1);
     assert_eq!(fresh_mirror.range_format_cache().len(), 1);
 
     let fr = &fresh_mirror.format_ranges()[0];
-    assert_eq!(fr.id, range_id);
+    assert_ne!(fr.id, range_id);
+    let copied_range_id = fr.id;
     assert_eq!(fr.start_row, 2);
     assert_eq!(fr.start_col, 3);
     assert_eq!(fr.end_row, 8);
     assert_eq!(fr.end_col, 7);
 
-    let fmt = fresh_mirror.range_format_cache().get(&range_id).unwrap();
+    let fmt = fresh_mirror
+        .range_format_cache()
+        .get(&copied_range_id)
+        .unwrap();
     assert_eq!(fmt.bold, Some(true));
     assert_eq!(fmt.font_color, Some("#0000FF".to_string()));
     assert!(
@@ -459,12 +445,12 @@ fn test_format_range_cold_load() {
 }
 
 #[test]
-fn test_hydrate_empty_range_formats() {
-    let (storage, sid, _gi, _mirror) = storage_with_sheet_and_mirror();
+fn test_import_empty_range_formats() {
+    let (_storage, sid, _gi, _mirror) = storage_with_sheet_and_mirror();
 
-    // Fresh mirror + hydrate from a sheet with empty rangeFormats
+    // Importing a sheet without authored style ranges keeps the store empty.
     let mut fresh_mirror = crate::mirror::SheetMirror::new(sid, "Sheet1".to_string(), 100, 26);
-    hydrate_format_ranges(&storage, &sid, &mut fresh_mirror);
+    ImportedFormats::default().install(&mut fresh_mirror, &[]);
 
     assert!(fresh_mirror.format_ranges().is_empty());
     assert!(fresh_mirror.range_format_cache().is_empty());
@@ -472,13 +458,11 @@ fn test_hydrate_empty_range_formats() {
 
 #[test]
 fn test_positional_format_with_ranges() {
-    let (mut storage, sid, gi, mut mirror) = storage_with_sheet_and_mirror();
+    let (storage, sid, gi, mut mirror) = storage_with_sheet_and_mirror();
 
     let range_id = crate::mirror::RangeId::from_raw(300);
     let sheet_mirror = mirror.get_sheet_mut(&sid).unwrap();
     add_format_range(
-        &mut storage,
-        &sid,
         sheet_mirror,
         range_id,
         0,
@@ -500,15 +484,13 @@ fn test_positional_format_with_ranges() {
 
 #[test]
 fn test_format_range_update() {
-    let (mut storage, sid, _gi, mut mirror) = storage_with_sheet_and_mirror();
+    let (_storage, sid, _gi, mut mirror) = storage_with_sheet_and_mirror();
 
     let range_id = crate::mirror::RangeId::from_raw(400);
     let sheet_mirror = mirror.get_sheet_mut(&sid).unwrap();
 
     // Initial format: bold
     add_format_range(
-        &mut storage,
-        &sid,
         sheet_mirror,
         range_id,
         0,
@@ -524,8 +506,6 @@ fn test_format_range_update() {
     // Update: change to italic (same RangeId)
     let sheet_mirror = mirror.get_sheet_mut(&sid).unwrap();
     add_format_range(
-        &mut storage,
-        &sid,
         sheet_mirror,
         range_id,
         0,
@@ -552,14 +532,12 @@ fn test_format_range_update() {
 
 #[test]
 fn test_format_range_update_rebuilds_lookup_index_for_new_bounds() {
-    let (mut storage, sid, _gi, mut mirror) = storage_with_sheet_and_mirror();
+    let (_storage, sid, _gi, mut mirror) = storage_with_sheet_and_mirror();
 
     let range_id = crate::mirror::RangeId::from_raw(401);
     let sheet_mirror = mirror.get_sheet_mut(&sid).unwrap();
 
     add_format_range(
-        &mut storage,
-        &sid,
         sheet_mirror,
         range_id,
         0,
@@ -574,8 +552,6 @@ fn test_format_range_update_rebuilds_lookup_index_for_new_bounds() {
 
     let sheet_mirror = mirror.get_sheet_mut(&sid).unwrap();
     add_format_range(
-        &mut storage,
-        &sid,
         sheet_mirror,
         range_id,
         20,
@@ -606,6 +582,8 @@ fn test_format_range_lookup_with_many_ranges_preserves_range_id_order() {
         let range_id = crate::mirror::RangeId::from_raw(10_000 + idx as u128);
         sheet_mirror.format_ranges.push(crate::mirror::FormatRange {
             id: range_id,
+            precedence: range_id.as_u128(),
+            layer: crate::mirror::FormatRangeLayer::Inherited,
             start_row: idx + 100,
             start_col: 0,
             end_row: idx + 100,
@@ -624,6 +602,8 @@ fn test_format_range_lookup_with_many_ranges_preserves_range_id_order() {
     let high_id = crate::mirror::RangeId::from_raw(20);
     sheet_mirror.format_ranges.push(crate::mirror::FormatRange {
         id: high_id,
+        precedence: high_id.as_u128(),
+        layer: crate::mirror::FormatRangeLayer::Inherited,
         start_row: 5,
         start_col: 5,
         end_row: 5,
@@ -631,6 +611,8 @@ fn test_format_range_lookup_with_many_ranges_preserves_range_id_order() {
     });
     sheet_mirror.format_ranges.push(crate::mirror::FormatRange {
         id: low_id,
+        precedence: low_id.as_u128(),
+        layer: crate::mirror::FormatRangeLayer::Inherited,
         start_row: 5,
         start_col: 5,
         end_row: 5,
@@ -668,13 +650,11 @@ fn test_format_range_lookup_with_many_ranges_preserves_range_id_order() {
 
 #[test]
 fn test_effective_format_preloaded_with_ranges() {
-    let (mut storage, sid, gi, mut mirror) = storage_with_sheet_and_mirror();
+    let (storage, sid, gi, mut mirror) = storage_with_sheet_and_mirror();
 
     let range_id = crate::mirror::RangeId::from_raw(600);
     let sheet_mirror = mirror.get_sheet_mut(&sid).unwrap();
     add_format_range(
-        &mut storage,
-        &sid,
         sheet_mirror,
         range_id,
         0,
@@ -713,42 +693,25 @@ fn test_effective_format_preloaded_with_ranges() {
 }
 
 #[test]
-fn test_format_range_cold_load_hydrates_imported_style_only_range() {
-    let (storage, sid, _gi, _mirror) = storage_with_sheet_and_mirror();
+fn test_imported_style_only_range_preserves_xf_lineage() {
+    let (_storage, sid, _gi, _mirror) = storage_with_sheet_and_mirror();
     let range_id = crate::mirror::RangeId::from_raw(900);
-    {
-        let sheets = storage.sheets();
-        let mut txn = storage.doc().transact_mut();
-        let sheet_hex = id_to_hex(sid.as_u128());
-        let sheet_map = match sheets.get(&txn, &sheet_hex) {
-            Some(Out::YMap(map)) => map,
-            _ => panic!("sheet map not found"),
-        };
-        let range_formats = match sheet_map.get(&txn, compute_document::schema::KEY_RANGE_FORMATS) {
-            Some(Out::YMap(map)) => map,
-            _ => {
-                let empty: MapPrelim = Vec::<(&str, Any)>::new().into_iter().collect();
-                sheet_map.insert(&mut txn, compute_document::schema::KEY_RANGE_FORMATS, empty)
-            }
-        };
-        let entries: MapPrelim = vec![
-            (
-                domain_types::yrs_schema::cell_format::KEY_XLSX_STYLE_ID,
-                Any::Number(44.0),
-            ),
-            ("_sr", Any::Number(1.0)),
-            ("_sc", Any::Number(2.0)),
-            ("_er", Any::Number(3.0)),
-            ("_ec", Any::Number(4.0)),
-        ]
-        .into_iter()
-        .collect();
-        let range_hex = id_to_hex(range_id.as_u128());
-        range_formats.insert(&mut txn, &*range_hex, entries);
-    }
-
+    let imported = [crate::storage::infra::hydration::ImportedRangeStyle {
+        range_id,
+        start_row: 1,
+        start_col: 2,
+        end_row: 3,
+        end_col: 4,
+        style_id: 44,
+    }];
+    let sheet = domain_types::SheetData::default();
+    let formats = ImportedFormats::from_sheet(
+        &sheet,
+        &imported,
+        &cell_types::IdAllocator::with_seed(20_000),
+    );
     let mut fresh_mirror = crate::mirror::SheetMirror::new(sid, "Sheet1".to_string(), 100, 26);
-    hydrate_format_ranges(&storage, &sid, &mut fresh_mirror);
+    formats.install(&mut fresh_mirror, &[]);
 
     assert_eq!(fresh_mirror.format_ranges().len(), 1);
     let range = &fresh_mirror.format_ranges()[0];

@@ -4,7 +4,8 @@ use super::*;
 #[test]
 fn test_populate_from_snapshot() {
     let snap = simple_snapshot();
-    let storage = YrsStorage::from_snapshot(snap.clone()).expect("from_snapshot should succeed");
+    let storage =
+        WorkbookStorage::from_snapshot(snap.clone()).expect("from_snapshot should succeed");
     let mirror = CellMirror::from_snapshot(snap).unwrap();
 
     let order = storage.sheet_order();
@@ -30,11 +31,10 @@ fn test_populate_from_snapshot() {
     let cell3 = CellId::from_uuid_str("550e8400-e29b-41d4-a716-446655440003").unwrap();
     assert!(mirror.get_formula(&cell3).is_none());
 
-    let (yrs_val, yrs_formula, _) = storage
-        .read_cell_from_yrs(&sheet_id, &cell3)
-        .expect("cell3 should be in yrs");
-    assert_eq!(yrs_val, CellValue::Number(FiniteF64::must(100.0)));
-    assert_eq!(yrs_formula, Some("=A1*2+16".to_string()));
+    assert_eq!(
+        mirror.get_cell_value(&cell3),
+        Some(&CellValue::number(100.0))
+    );
 }
 
 #[test]

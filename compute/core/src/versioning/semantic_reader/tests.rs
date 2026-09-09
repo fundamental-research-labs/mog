@@ -12,7 +12,7 @@ use snapshot_types::versioning::{
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
 
-use crate::storage::engine::YrsComputeEngine;
+use crate::storage::engine::ComputeEngine;
 use crate::storage::sheet::floating_objects::set_floating_object;
 use crate::versioning::{
     CELL_FORMULAS_DOMAIN, CELL_VALUES_DOMAIN, CHARTS_DOMAIN, FLOATING_OBJECTS_DOMAIN,
@@ -28,7 +28,13 @@ mod value_provenance;
 
 fn workbook(cells: Vec<CellData>) -> WorkbookSnapshot {
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: "Sheet1".to_string(),
             rows: 10,
@@ -101,7 +107,7 @@ fn identity_formula(template: &str, refs: Vec<IdentityFormulaRef>) -> IdentityFo
 
 #[test]
 fn engine_semantic_reader_reads_ordered_cell_values() {
-    let (engine, _) = YrsComputeEngine::from_snapshot(workbook(vec![
+    let (engine, _) = ComputeEngine::from_snapshot(workbook(vec![
         cell(2, 1, 1, CellValue::from("beta")),
         cell(1, 0, 0, CellValue::number(42.0)),
     ]))
@@ -131,7 +137,7 @@ fn engine_semantic_reader_reads_ordered_cell_values() {
 #[test]
 fn engine_semantic_reader_returns_digest_envelope() {
     let (engine, _) =
-        YrsComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::from("alpha"))]))
+        ComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::from("alpha"))]))
             .expect("engine");
 
     let envelope = engine
@@ -151,7 +157,7 @@ fn engine_semantic_reader_returns_digest_envelope() {
 #[test]
 fn engine_semantic_reader_registers_public_first_slice_domain_rows_for_supported_semantics() {
     let (engine, _) =
-        YrsComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::from("alpha"))]))
+        ComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::from("alpha"))]))
             .expect("engine");
 
     let state = engine.read_semantic_workbook_state().expect("state");
@@ -178,9 +184,9 @@ fn engine_semantic_reader_registers_public_first_slice_domain_rows_for_supported
 #[test]
 fn engine_semantic_reader_reads_formula_domain_objects_and_refs() {
     let (before, _) =
-        YrsComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::number(2.0))]))
+        ComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::number(2.0))]))
             .expect("before");
-    let (mut after, _) = YrsComputeEngine::from_snapshot(workbook(vec![
+    let (mut after, _) = ComputeEngine::from_snapshot(workbook(vec![
         cell(1, 0, 0, CellValue::number(2.0)),
         cell(2, 1, 1, CellValue::number(3.0)),
         cell(3, 2, 2, CellValue::number(5.0)),
@@ -247,15 +253,12 @@ fn engine_semantic_reader_reads_formula_domain_objects_and_refs() {
             }),
         ],
     );
-    after.with_storage_and_mirror_for_test(|storage, mirror| {
-        storage.set_cell(
-            mirror,
+    after.with_storage_and_mirror_for_test(|_storage, mirror| {
+        mirror.apply_edit(
             &sheet_id,
             formula_cell,
-            2,
-            2,
+            cell_types::SheetPos::new(2, 2),
             CellValue::number(5.0),
-            Some("=A1+SUM(A1:B2)+SUM(A1:C3)+SUM(1:1)+SUM(1:3)+SUM(B:B)+SUM(A:C)".to_string()),
             Some(formula_identity),
         );
     });
@@ -362,7 +365,7 @@ fn engine_semantic_reader_reads_formula_domain_objects_and_refs() {
 }
 
 #[test]
-fn engine_semantic_reader_marks_legacy_formula_without_identity_opaque_blocking() {
+fn engine_semantic_reader_uses_native_formula_identity() {
     let formula_cell_id =
         CellId::from_uuid_str("550e8400-e29b-41d4-a716-446655440002").expect("formula id");
     let referenced_cell_id =
@@ -375,7 +378,7 @@ fn engine_semantic_reader_marks_legacy_formula_without_identity_opaque_blocking(
             col_absolute: false,
         })],
     );
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(workbook(vec![
+    let (mut engine, _) = ComputeEngine::from_snapshot(workbook(vec![
         cell(1, 0, 0, CellValue::number(2.0)),
         formula_cell_with_identity(
             2,
@@ -389,49 +392,33 @@ fn engine_semantic_reader_marks_legacy_formula_without_identity_opaque_blocking(
     .expect("engine");
     let sheet_id = engine.storage().sheet_order()[0];
 
-    engine.with_storage_and_mirror_for_test(|storage, mirror| {
-        storage.set_cell(
-            mirror,
+    engine.with_storage_and_mirror_for_test(|_storage, mirror| {
+        mirror.apply_edit(
             &sheet_id,
             formula_cell_id,
-            0,
-            1,
+            cell_types::SheetPos::new(0, 1),
             CellValue::number(3.0),
-            Some("=A1+1".to_string()),
             None,
         );
         assert!(mirror.set_formula(&formula_cell_id, Some(formula_identity)));
     });
 
     let state = engine.read_semantic_workbook_state().expect("state");
-    let unsupported = state
-        .domains
-        .get(super::UNSUPPORTED_CELL_FORMULAS_DOMAIN)
-        .expect("unsupported formulas");
-
-    assert_eq!(
-        unsupported.capability_state,
-        VersionDomainCapabilityState::OpaqueBlocking
+    assert!(
+        state.sheets["sheet#0"].cells["cell:sheet#0:r0:c1"]
+            .formula
+            .is_some()
     );
     assert!(
-        unsupported
-            .objects
-            .keys()
-            .any(|object_id| object_id.ends_with(":legacy-without-identity"))
-    );
-    assert_eq!(
-        coverage_for_states(&state, &state)
-            .iter()
-            .find(|entry| entry.domain_id == super::UNSUPPORTED_CELL_FORMULAS_DOMAIN)
-            .expect("formula coverage")
-            .status,
-        SemanticDomainCoverageStatus::OpaqueBlocking
+        !state
+            .domains
+            .contains_key(super::UNSUPPORTED_CELL_FORMULAS_DOMAIN)
     );
 }
 
 #[test]
 fn engine_semantic_reader_accepts_formula_identity_from_public_position_write() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(workbook(vec![])).expect("engine");
+    let (mut engine, _) = ComputeEngine::from_snapshot(workbook(vec![])).expect("engine");
     let sheet_id = engine.storage().sheet_order()[0];
 
     engine
@@ -467,20 +454,19 @@ fn engine_semantic_reader_accepts_formula_identity_from_public_position_write() 
         .expect("public formula write");
 
     let formula_cell_id = engine
-        .storage()
-        .read_cell_id_at_pos(&sheet_id, 0, 1)
+        .grid_index(&sheet_id)
+        .unwrap()
+        .cell_id_at(0, 1)
         .expect("formula cell id");
-    let (_value, legacy_formula, persisted_identity) = engine
-        .storage()
-        .read_cell_from_yrs(&sheet_id, &formula_cell_id)
-        .expect("formula cell");
+    let formula_text = engine.compute().get_formula(&formula_cell_id);
+    let identity = engine.mirror().get_formula(&formula_cell_id);
     let state = engine.read_semantic_workbook_state().expect("state");
     let formula_cell = &state.sheets["sheet#0"].cells["cell:sheet#0:r0:c1"];
 
-    assert_eq!(legacy_formula.as_deref(), Some("=A1+A2"));
+    assert_eq!(formula_text, Some("=A1+A2"));
     assert!(
-        persisted_identity.is_some(),
-        "public formula writes must persist identity metadata"
+        identity.is_some(),
+        "public formula writes must retain native identity metadata"
     );
     assert!(formula_cell.formula.is_some());
     assert!(
@@ -492,28 +478,19 @@ fn engine_semantic_reader_accepts_formula_identity_from_public_position_write() 
 }
 
 #[test]
-fn engine_semantic_reader_marks_unrepresented_persisted_formula_opaque_blocking() {
+fn engine_semantic_reader_marks_unresolved_formula_opaque_blocking() {
     let formula_cell_id =
         CellId::from_uuid_str("550e8400-e29b-41d4-a716-446655440002").expect("formula id");
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(workbook(vec![
+    let (mut engine, _) = ComputeEngine::from_snapshot(workbook(vec![
         cell(1, 0, 0, CellValue::number(2.0)),
         cell(2, 0, 1, CellValue::Null),
     ]))
     .expect("engine");
     let sheet_id = engine.storage().sheet_order()[0];
 
-    engine.with_storage_and_mirror_for_test(|storage, mirror| {
-        storage.set_cell(
-            mirror,
-            &sheet_id,
-            formula_cell_id,
-            0,
-            1,
-            CellValue::Null,
-            Some("=SUM(".to_string()),
-            None,
-        );
-    });
+    engine
+        .set_cell(&sheet_id, formula_cell_id, 0, 1, "=1+*2".into())
+        .expect("malformed formula retained for diagnostics");
 
     let state = engine.read_semantic_workbook_state().expect("state");
     let formula_cell = &state.sheets["sheet#0"].cells["cell:sheet#0:r0:c1"];
@@ -531,13 +508,13 @@ fn engine_semantic_reader_marks_unrepresented_persisted_formula_opaque_blocking(
         unsupported
             .objects
             .keys()
-            .any(|object_id| object_id.ends_with(":legacy-without-identity"))
+            .any(|object_id| object_id.ends_with(":unresolved-formula"))
     );
 }
 
 #[test]
 fn engine_semantic_reader_digest_changes_for_formula_edit() {
-    let (before, _) = YrsComputeEngine::from_snapshot(workbook(vec![formula_cell(
+    let (before, _) = ComputeEngine::from_snapshot(workbook(vec![formula_cell(
         1,
         0,
         0,
@@ -545,7 +522,7 @@ fn engine_semantic_reader_digest_changes_for_formula_edit() {
         "1+1",
     )]))
     .expect("before");
-    let (after, _) = YrsComputeEngine::from_snapshot(workbook(vec![formula_cell(
+    let (after, _) = ComputeEngine::from_snapshot(workbook(vec![formula_cell(
         1,
         0,
         0,
@@ -572,7 +549,7 @@ fn engine_semantic_reader_digest_changes_for_formula_edit() {
 
 #[test]
 fn engine_semantic_reader_reads_row_column_axis_counts() {
-    let (engine, _) = YrsComputeEngine::from_snapshot(workbook(vec![])).expect("engine");
+    let (engine, _) = ComputeEngine::from_snapshot(workbook(vec![])).expect("engine");
 
     let state = engine.read_semantic_workbook_state().expect("state");
     let sheet = state.sheets.get("sheet#0").expect("sheet");
@@ -585,8 +562,8 @@ fn engine_semantic_reader_reads_row_column_axis_counts() {
 
 #[test]
 fn engine_semantic_reader_reads_axis_dimensions_and_hidden_state() {
-    let (before, _) = YrsComputeEngine::from_snapshot(workbook(vec![])).expect("before");
-    let (mut after, _) = YrsComputeEngine::from_snapshot(workbook(vec![])).expect("after");
+    let (before, _) = ComputeEngine::from_snapshot(workbook(vec![])).expect("before");
+    let (mut after, _) = ComputeEngine::from_snapshot(workbook(vec![])).expect("after");
 
     let sheet_id = after.storage().sheet_order()[0];
     after
@@ -611,7 +588,6 @@ fn engine_semantic_reader_reads_axis_dimensions_and_hidden_state() {
     assert!(row.manual_hidden);
     assert!(!row.structural_hidden);
     assert!(!row.filter_hidden);
-    assert!(!row.cache_hidden_without_owner);
     assert_eq!(column.index, 3);
     assert_eq!(column.ordinal, 3);
     assert_eq!(
@@ -637,8 +613,8 @@ fn engine_semantic_reader_reads_axis_dimensions_and_hidden_state() {
 
 #[test]
 fn engine_semantic_reader_digest_changes_for_row_insert() {
-    let (before, _) = YrsComputeEngine::from_snapshot(workbook(vec![])).expect("before");
-    let (mut after, _) = YrsComputeEngine::from_snapshot(workbook(vec![])).expect("after");
+    let (before, _) = ComputeEngine::from_snapshot(workbook(vec![])).expect("before");
+    let (mut after, _) = ComputeEngine::from_snapshot(workbook(vec![])).expect("after");
 
     let sheet_id = after.storage().sheet_order()[0];
     after
@@ -674,10 +650,10 @@ fn engine_semantic_reader_digest_changes_for_row_insert() {
 #[test]
 fn engine_semantic_reader_digest_changes_for_cell_value_edit() {
     let (before, _) =
-        YrsComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::from("alpha"))]))
+        ComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::from("alpha"))]))
             .expect("before");
     let (after, _) =
-        YrsComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::from("beta"))]))
+        ComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::from("beta"))]))
             .expect("after");
     let before_state = before.read_semantic_workbook_state().expect("before state");
     let after_state = after.read_semantic_workbook_state().expect("after state");
@@ -702,13 +678,19 @@ fn engine_semantic_reader_digest_changes_for_cell_value_edit() {
 
 #[test]
 fn engine_semantic_reader_digest_ignores_durable_id_allocation() {
-    let (left, _) = YrsComputeEngine::from_snapshot(workbook(vec![
+    let (left, _) = ComputeEngine::from_snapshot(workbook(vec![
         cell(1, 0, 0, CellValue::from("alpha")),
         cell(2, 2, 1, CellValue::number(7.0)),
     ]))
     .expect("left");
-    let (right, _) = YrsComputeEngine::from_snapshot(WorkbookSnapshot {
+    let (right, _) = ComputeEngine::from_snapshot(WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "660e8400-e29b-41d4-a716-446655440000".to_string(),
             name: "Sheet1".to_string(),
             rows: 10,
@@ -762,7 +744,7 @@ fn engine_semantic_reader_digest_ignores_durable_id_allocation() {
 
 #[test]
 fn engine_semantic_reader_marks_unsupported_arrays_opaque_blocking() {
-    let (engine, _) = YrsComputeEngine::from_snapshot(workbook(vec![cell(
+    let (engine, _) = ComputeEngine::from_snapshot(workbook(vec![cell(
         1,
         0,
         0,
@@ -796,11 +778,10 @@ fn engine_semantic_reader_marks_unsupported_arrays_opaque_blocking() {
 
 #[test]
 fn engine_semantic_reader_marks_present_charts_opaque_blocking() {
-    let (engine, _) = YrsComputeEngine::from_snapshot(workbook(vec![])).expect("engine");
+    let (mut engine, _) = ComputeEngine::from_snapshot(workbook(vec![])).expect("engine");
     let sheet_id = engine.storage().sheet_order()[0];
     set_floating_object(
-        engine.storage().doc(),
-        engine.storage().sheets(),
+        engine.storage_mut(),
         &sheet_id,
         "chart-sales",
         &serde_json::json!({
@@ -847,11 +828,10 @@ fn engine_semantic_reader_marks_present_charts_opaque_blocking() {
 
 #[test]
 fn engine_semantic_reader_marks_present_floating_objects_opaque_blocking() {
-    let (engine, _) = YrsComputeEngine::from_snapshot(workbook(vec![])).expect("engine");
+    let (mut engine, _) = ComputeEngine::from_snapshot(workbook(vec![])).expect("engine");
     let sheet_id = engine.storage().sheet_order()[0];
     set_floating_object(
-        engine.storage().doc(),
-        engine.storage().sheets(),
+        engine.storage_mut(),
         &sheet_id,
         "shape-logo",
         &serde_json::json!({

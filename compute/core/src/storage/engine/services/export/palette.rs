@@ -3,7 +3,7 @@ use domain_types::DocumentFormat;
 /// Restore the exact import-time semantic snapshot for the immutable cell-XF
 /// prefix before export.
 ///
-/// Runtime Yrs stores palette entries as flat `CellFormat` values. Converting
+/// Native storage keeps palette entries as flat `CellFormat` values. Converting
 /// those values back to `DocumentFormat` is intentionally semantic, not
 /// lexically lossless (for example, baseline/default tokens can normalize
 /// away). Those normalization differences are not edits. Imported style IDs

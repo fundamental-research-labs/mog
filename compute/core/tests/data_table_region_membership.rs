@@ -16,7 +16,7 @@
 //!   cargo test -p compute-core --test data_table_region_membership
 
 use compute_core::projection::{CellRender, RegionKind};
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use snapshot_types::{CellData, DataTableRegionDef, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
 
@@ -83,6 +83,9 @@ fn data_table_workbook() -> WorkbookSnapshot {
     ];
 
     let sheet = SheetSnapshot {
+        identities: Vec::new(),
+        row_axis: None,
+        col_axis: None,
         id: SHEET_UUID.to_string(),
         name: "Sheet1".to_string(),
         rows: 50,
@@ -116,7 +119,7 @@ fn data_table_workbook() -> WorkbookSnapshot {
 #[test]
 fn data_table_master_reports_anchor_region() {
     let snap = data_table_workbook();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).expect("engine");
+    let (engine, _) = ComputeEngine::from_snapshot(snap).expect("engine");
 
     let sheet_id = cell_types::SheetId::from_uuid_str(SHEET_UUID).unwrap();
     let mirror = engine.mirror();
@@ -152,7 +155,7 @@ fn data_table_master_reports_anchor_region() {
 #[test]
 fn data_table_body_reports_member_region() {
     let snap = data_table_workbook();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).expect("engine");
+    let (engine, _) = ComputeEngine::from_snapshot(snap).expect("engine");
 
     let sheet_id = cell_types::SheetId::from_uuid_str(SHEET_UUID).unwrap();
     let mirror = engine.mirror();
@@ -193,7 +196,7 @@ fn data_table_body_reports_member_region() {
 #[test]
 fn data_table_outside_returns_no_region() {
     let snap = data_table_workbook();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).expect("engine");
+    let (engine, _) = ComputeEngine::from_snapshot(snap).expect("engine");
 
     let sheet_id = cell_types::SheetId::from_uuid_str(SHEET_UUID).unwrap();
     let mirror = engine.mirror();

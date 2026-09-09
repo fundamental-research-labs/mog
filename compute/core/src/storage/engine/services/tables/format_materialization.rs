@@ -3,7 +3,7 @@ use crate::storage::engine::table_result_merge::merge_mutation_result;
 
 pub(in crate::storage::engine) fn materialize_table_visible_formats(
     stores: &mut EngineStores,
-    mirror: &CellMirror,
+    mirror: &mut CellMirror,
     table: &CanonicalTable,
 ) -> Result<MutationResult, ComputeError> {
     let Some(sheet_id) = SheetId::from_uuid_str(&table.sheet_id).ok() else {

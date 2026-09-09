@@ -28,7 +28,13 @@ pub(crate) fn build_snapshot(
         .collect();
 
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![compute_core::snapshot::SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_uuid(),
             name: "Sheet1".to_string(),
             rows,

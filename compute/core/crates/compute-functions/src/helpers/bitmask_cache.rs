@@ -34,6 +34,7 @@ use value_types::{CellArray, CellValue};
 
 use super::coercion::flatten_values_ref;
 use super::column_bitset::ColumnBitset;
+use super::conditional_aggregate::ValueSlice;
 use super::criteria::parse_criteria;
 use super::hashing;
 
@@ -98,9 +99,23 @@ pub fn extract_arc(v: &CellValue) -> Option<Arc<CellArray>> {
 /// a per-row bitmask. This is the pure computation extracted from
 /// `apply_criterion` so that `WorkbookCache` can call it on a cache miss
 /// without going through the thread-local cache.
-pub fn build_bitmask(range_values: &[CellValue], criteria: &CellValue) -> ColumnBitset {
+pub fn build_bitmask<V: ValueSlice + ?Sized>(
+    range_values: &V,
+    criteria: &CellValue,
+) -> ColumnBitset {
+    let len = u32::try_from(range_values.len()).expect("criteria bitmask exceeds u32::MAX rows");
     let parsed = parse_criteria(criteria);
-    ColumnBitset::from_predicate(range_values, &parsed)
+    let mut mask = ColumnBitset::new_all_false(len);
+    for row in 0..len {
+        if parsed(
+            range_values
+                .get_value(row as usize)
+                .unwrap_or(&CellValue::Null),
+        ) {
+            mask.set(row, true);
+        }
+    }
+    mask
 }
 
 // ---------------------------------------------------------------------------
@@ -559,6 +574,55 @@ mod tests {
     }
 
     // -- build_bitmask: standalone builder function --
+
+    #[test]
+    fn borrowed_bitmask_builder_uses_actual_predicate_and_null_holes() {
+        struct Sparse<'a>(&'a [Option<CellValue>]);
+        impl ValueSlice for Sparse<'_> {
+            fn get_value(&self, row: usize) -> Option<&CellValue> {
+                self.0.get(row).and_then(Option::as_ref)
+            }
+            fn len(&self) -> usize {
+                self.0.len()
+            }
+        }
+        let values = [
+            Some(num(0.0)),
+            Some(num(0.5e-10)),
+            Some(num(1e-10)),
+            Some(text("0")),
+            Some(CellValue::Boolean(false)),
+            None,
+            Some(CellValue::Error(value_types::CellError::Div0, None)),
+            Some(text("Alpha")),
+            Some(text("ALPHA")),
+            Some(text(" 1 ")),
+        ];
+        let slice = Sparse(&values);
+        for criterion in [
+            num(0.0),
+            num(0.5e-10),
+            num(1e-10),
+            text("alpha"),
+            text("<>Alpha"),
+            text("10%"),
+            CellValue::Null,
+            CellValue::Boolean(false),
+        ] {
+            let mask = build_bitmask(&slice, &criterion);
+            let predicate = parse_criteria(&criterion);
+            for (row, value) in values.iter().enumerate() {
+                assert_eq!(
+                    mask.get(row as u32),
+                    predicate(value.as_ref().unwrap_or(&CellValue::Null))
+                );
+            }
+        }
+        assert_eq!(
+            build_bitmask(&slice, &num(0.0)).ones().collect::<Vec<_>>(),
+            vec![0, 1, 3]
+        );
+    }
 
     #[test]
     fn test_build_bitmask_basic() {

@@ -22,13 +22,13 @@ use crate::error::ComputeApiError;
 #[cfg(feature = "native")]
 mod native {
     use super::*;
-    use compute_core::storage::engine::YrsComputeEngine;
+    use compute_core::storage::engine::ComputeEngine;
     use crossbeam_channel::{Sender, bounded};
     use std::any::Any;
     use std::thread;
 
     /// An erased command — a boxed closure that runs on the engine thread.
-    struct ErasedCmd(Box<dyn FnOnce(&mut YrsComputeEngine) + Send>);
+    struct ErasedCmd(Box<dyn FnOnce(&mut ComputeEngine) + Send>);
 
     enum Cmd {
         Execute(ErasedCmd),
@@ -50,7 +50,7 @@ mod native {
 
     impl Dispatch {
         /// Spawn the engine on a dedicated thread and return a `Dispatch` handle.
-        pub fn spawn(engine: YrsComputeEngine) -> Result<Self, ComputeApiError> {
+        pub fn spawn(engine: ComputeEngine) -> Result<Self, ComputeApiError> {
             let (tx, rx) = crossbeam_channel::unbounded();
             thread::Builder::new()
                 .name("compute-engine".into())
@@ -65,7 +65,7 @@ mod native {
         /// to call engine methods without needing per-method Cmd variants.
         pub fn call_engine<T: Send + 'static>(
             &self,
-            f: impl FnOnce(&mut YrsComputeEngine) -> T + Send + 'static,
+            f: impl FnOnce(&mut ComputeEngine) -> T + Send + 'static,
         ) -> Result<T, ComputeApiError> {
             let (reply_tx, reply_rx) = bounded::<Box<dyn Any + Send>>(1);
             let cmd = Cmd::Execute(ErasedCmd(Box::new(move |engine| {
@@ -88,7 +88,7 @@ mod native {
         /// makes call-site intent clearer.
         pub fn query_engine<T: Send + 'static>(
             &self,
-            f: impl FnOnce(&YrsComputeEngine) -> T + Send + 'static,
+            f: impl FnOnce(&ComputeEngine) -> T + Send + 'static,
         ) -> Result<T, ComputeApiError> {
             self.call_engine(move |engine| f(engine))
         }
@@ -99,7 +99,7 @@ mod native {
     /// Exits when every [`Dispatch`] handle has been dropped (channel
     /// disconnect). Do not send shutdown from `Drop` of a cloned handle:
     /// `Workbook::sheets()` clones `Dispatch` for a temporary sub-API.
-    fn engine_loop(mut engine: YrsComputeEngine, rx: crossbeam_channel::Receiver<Cmd>) {
+    fn engine_loop(mut engine: ComputeEngine, rx: crossbeam_channel::Receiver<Cmd>) {
         for cmd in rx {
             match cmd {
                 Cmd::Execute(ErasedCmd(f)) => f(&mut engine),
@@ -115,14 +115,14 @@ mod native {
 #[cfg(not(feature = "native"))]
 mod wasm {
     use super::*;
-    use compute_core::storage::engine::YrsComputeEngine;
+    use compute_core::storage::engine::ComputeEngine;
     use std::cell::RefCell;
     use std::rc::Rc;
 
     /// Direct dispatch — no thread, no channel. Calls into the engine
     /// synchronously through `Rc<RefCell<...>>`.
     pub struct Dispatch {
-        engine: Rc<RefCell<YrsComputeEngine>>,
+        engine: Rc<RefCell<ComputeEngine>>,
     }
 
     impl Clone for Dispatch {
@@ -135,7 +135,7 @@ mod wasm {
 
     impl Dispatch {
         /// Wrap an engine for direct single-threaded access.
-        pub fn new(engine: YrsComputeEngine) -> Self {
+        pub fn new(engine: ComputeEngine) -> Self {
             Dispatch {
                 engine: Rc::new(RefCell::new(engine)),
             }
@@ -144,7 +144,7 @@ mod wasm {
         /// Execute a closure with mutable engine access.
         pub fn call_engine<T: 'static>(
             &self,
-            f: impl FnOnce(&mut YrsComputeEngine) -> T,
+            f: impl FnOnce(&mut ComputeEngine) -> T,
         ) -> Result<T, ComputeApiError> {
             Ok(f(&mut self.engine.borrow_mut()))
         }
@@ -152,7 +152,7 @@ mod wasm {
         /// Execute a closure with shared engine access.
         pub fn query_engine<T: 'static>(
             &self,
-            f: impl FnOnce(&YrsComputeEngine) -> T,
+            f: impl FnOnce(&ComputeEngine) -> T,
         ) -> Result<T, ComputeApiError> {
             Ok(f(&*self.engine.borrow()))
         }
@@ -179,7 +179,7 @@ impl Dispatch {
     /// On native: spawns a dedicated engine thread.
     /// On WASM: wraps in Rc<RefCell> for synchronous access.
     pub fn from_engine(
-        engine: compute_core::storage::engine::YrsComputeEngine,
+        engine: compute_core::storage::engine::ComputeEngine,
     ) -> Result<Self, ComputeApiError> {
         #[cfg(feature = "native")]
         {

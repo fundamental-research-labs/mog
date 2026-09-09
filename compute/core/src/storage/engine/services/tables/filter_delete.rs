@@ -103,18 +103,8 @@ pub(in crate::storage::engine) fn prepare_table_filter_delete(
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> PreparedTableFilterDelete {
-    let existing = filters::get_filter(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        filter_id,
-    );
-    let binding = filters::get_filter_metadata_binding(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        filter_id,
-    );
+    let existing = filters::get_filter(&stores.storage, sheet_id, filter_id);
+    let binding = filters::get_filter_metadata_binding(&stores.storage, sheet_id, filter_id);
     let metadata = table_filter_delete_metadata(existing.as_ref(), binding.as_ref());
     PreparedTableFilterDelete {
         filter_id: filter_id.to_string(),

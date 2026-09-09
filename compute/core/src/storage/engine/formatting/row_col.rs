@@ -1,7 +1,7 @@
 use super::*;
 
 pub(super) fn set_row_format(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
     format: CellFormat,
@@ -12,7 +12,7 @@ pub(super) fn set_row_format(
 }
 
 pub(super) fn patch_row_format(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
     format: CellFormat,
@@ -32,7 +32,7 @@ pub(super) fn patch_row_format(
 }
 
 pub(super) fn set_col_format(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     col: u32,
     format: CellFormat,
@@ -43,7 +43,7 @@ pub(super) fn set_col_format(
 }
 
 pub(super) fn patch_col_format(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     col: u32,
     format: CellFormat,
@@ -63,7 +63,7 @@ pub(super) fn patch_col_format(
 }
 
 pub(super) fn clear_col_format(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     col: u32,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
@@ -78,7 +78,7 @@ pub(super) fn clear_col_format(
 }
 
 pub(super) fn set_col_format_range(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     start_col: u32,
     end_col: u32,
@@ -109,7 +109,7 @@ pub(super) fn set_col_format_range(
 }
 
 pub(super) fn get_row_formats(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     rows: Vec<u32>,
 ) -> Vec<(u32, Option<CellFormat>)> {
@@ -123,7 +123,7 @@ pub(super) fn get_row_formats(
 }
 
 pub(super) fn set_row_formats(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     updates: Vec<(u32, CellFormat)>,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
@@ -139,7 +139,7 @@ pub(super) fn set_row_formats(
 }
 
 pub(super) fn patch_row_formats(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     updates: Vec<(u32, CellFormat, Vec<String>)>,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
@@ -162,7 +162,7 @@ pub(super) fn patch_row_formats(
 }
 
 pub(super) fn get_col_formats(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     cols: Vec<u32>,
 ) -> Vec<(u32, Option<CellFormat>)> {
@@ -176,7 +176,7 @@ pub(super) fn get_col_formats(
 }
 
 pub(super) fn set_col_formats(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     updates: Vec<(u32, CellFormat)>,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
@@ -192,7 +192,7 @@ pub(super) fn set_col_formats(
 }
 
 pub(super) fn patch_col_formats(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     updates: Vec<(u32, CellFormat, Vec<String>)>,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {

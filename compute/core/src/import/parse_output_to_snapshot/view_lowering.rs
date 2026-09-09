@@ -1,19 +1,8 @@
 //! Sheet-view / SheetPane lowering — boundary 1.15.
 //!
-//! **W4.d migration.** The XLSX `<pane topLeftCell="…">` attribute carries a
-//! single cell reference — the top-left cell of the unfrozen / split pane.
-//! It flows from the parser as [`SheetPane.topLeftCell: Option<String>`] (at
-//! `file-io/xlsx/parser/src/output/results.rs:1499`, and downstream through
-//! [`domain_types::FrozenPane.top_left_cell`]) and is ultimately written to
-//! Yrs in [`crate::storage::infra::hydration::view::hydrate_frozen_pane`].
-//!
-//! This module owns the typed classification step. The hydrator calls
-//! [`classify_top_left_cell`] before writing to Yrs so that malformed or
-//! non-cell-shaped inputs are rejected uniformly; the raw bytes continue to
-//! be stored verbatim on the valid path to preserve writer round-trip
-//! fidelity (per the typed formula boundary rule: ref-shaped fields do not carry
-//! `original: String`, but container-level byte preservation at an external-
-//! format edge — Yrs here — is explicitly legitimate).
+//! The XLSX `pane.topLeftCell` attribute identifies the top-left cell of an
+//! unfrozen or split pane. This classifier validates its cell-reference shape;
+//! native sheet metadata retains the OOXML text for lossless export.
 //!
 //! # Type choice — narrow `CellRefNode`
 //!
@@ -99,7 +88,7 @@ mod tests {
     #[test]
     fn range_rejected() {
         // A range is not a valid TLC. The hydrator must drop this rather
-        // than writing malformed data to Yrs.
+        // than accepting malformed pane metadata.
         assert!(classify_top_left_cell("A1:B2").is_none());
     }
 

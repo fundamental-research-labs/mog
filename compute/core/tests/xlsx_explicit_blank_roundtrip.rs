@@ -1,11 +1,11 @@
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use xlsx_parser::write::{ZipWriter, to_a1};
 
 #[test]
 fn l2_roundtrip_preserves_explicit_styleless_blank_cells() {
     let blank_cols = 110..=164;
     let original = explicit_blank_fixture_xlsx(blank_cols.clone());
-    let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&original).expect("import xlsx");
+    let (engine, _) = ComputeEngine::from_xlsx_bytes(&original).expect("import xlsx");
     let exported_parse = engine
         .export_to_parse_output()
         .expect("export parse output");

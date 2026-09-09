@@ -54,7 +54,7 @@ const KNOWN_REDACT_MAYBE_GAPS: &[&str] = &[
 ];
 
 /// Return-type fragments that unambiguously carry cell-scope data.
-/// Any `#[bridge::api]` method on `YrsComputeEngine` that returns one
+/// Any `#[bridge::api]` method on `ComputeEngine` that returns one
 /// of these MUST be gated (i.e. carry a `#[bridge::read|write|
 /// structural]` annotation with an explicit `scope = "..."`). A
 /// method classified as `#[bridge::pure]` or `#[bridge::lifecycle]`
@@ -98,9 +98,6 @@ const CELL_DATA_GATE_EXEMPTIONS: &[&str] = &[
     // summary that is already whole-workbook by definition. The
     // engine's own cells aren't addressable at that call boundary.
     "from_snapshot",
-    // `from_yrs_state` — same: lifecycle constructor; returns the
-    // engine + an initial recalc summary.
-    "from_yrs_state",
     // `import_from_xlsx_bytes` returns a `RecalcResult`; the bytes
     // flow in, not out. The method itself is gated via
     // `#[bridge::write(scope = "workbook")]`.
@@ -447,13 +444,9 @@ fn viewport_filter_is_wired_to_get_viewport_binary() {
     //
     // This test asserts the wiring invariant for **sheet-scoped
     // viewport reads**: every `Vec<u8>`-returning `bridge::read(scope
-    // = "sheet")` method gets the filter. Workbook-scope sync methods
-    // (`encode_state_vector`, `sync_full_state`) and range-scope
-    // screenshot methods return `Vec<u8>` but are not viewport payloads
-    // — they're deliberately not in scope for the sheet-matrix filter
-    // (Yrs sync blobs and PNG bytes have no cell-level redaction
-    // model). The explicit `SHEET_SCOPED_VIEWPORT_CANDIDATES` check
-    // ensures the R4 wiring doesn't silently regress.
+    // = "sheet")` method gets the filter. Range-scoped screenshot bytes
+    // have their own rendering and authorization path. The explicit
+    // `SHEET_SCOPED_VIEWPORT_CANDIDATES` check pins this wiring.
     let methods = all_bridged_methods();
 
     // Find methods that SHOULD be filter-wired (by function name — the
@@ -547,7 +540,7 @@ fn summary_of_bridged_methods_by_kind_and_scope() {
 
 /// R7.3 hard-fail check — the audit's stated goal.
 ///
-/// Walks every bridged method on `YrsComputeEngine` (every method
+/// Walks every bridged method on `ComputeEngine` (every method
 /// inside a `#[bridge::api]` impl carrying a `#[bridge::read|write|
 /// structural|pure|lifecycle]` annotation). For each method whose
 /// return type contains any `CELL_DATA_RETURN_FRAGMENTS` substring,

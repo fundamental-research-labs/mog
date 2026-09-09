@@ -1,5 +1,5 @@
 use cell_types::SheetId;
-use domain_types::{AuthoredStyleRun, CellFormat, DocumentFormat};
+use domain_types::{CellFormat, DocumentFormat};
 
 use crate::mirror::CellMirror;
 use crate::storage::engine::stores::EngineStores;
@@ -18,17 +18,44 @@ pub(super) fn style_id_for_cell_format(
     Some(palette.get_or_insert(doc_fmt))
 }
 
-pub(super) fn format_range_style_id_at(
-    sheet: &crate::mirror::SheetMirror,
+pub(super) fn positional_style_id_at(
+    stores: &EngineStores,
+    mirror: &CellMirror,
+    sheet_id: &SheetId,
     row: u32,
     col: u32,
     palette: &impl PaletteOps,
 ) -> Option<u32> {
+    let sheet = mirror.get_sheet(sheet_id)?;
     let matching = sheet.format_ranges_at(row, col);
     if matching.is_empty() {
-        return None;
+        let grid = stores.grid_indexes.get(sheet_id);
+        let metadata = stores.storage.sheet_metadata.get(sheet_id);
+        let native_axis_format = metadata.is_some_and(|metadata| {
+            grid.and_then(|grid| grid.row_id(row))
+                .and_then(|id| metadata.dimensions.rows.get(&id))
+                .is_some_and(|record| record.format.is_some())
+                || grid
+                    .and_then(|grid| grid.col_id(col))
+                    .and_then(|id| metadata.dimensions.columns.get(&id))
+                    .is_some_and(|record| record.format.is_some())
+        });
+        let native_column_range = sheet
+            .col_format_ranges_at(col)
+            .iter()
+            .any(|(id, _)| !sheet.col_range_xlsx_style_id_cache().contains_key(id));
+        if !native_axis_format && !native_column_range {
+            return None;
+        }
+        return resolved_range_style_id(stores, mirror, sheet_id, row, col, false, palette);
     }
 
+    if matching
+        .iter()
+        .any(|(id, _)| !sheet.range_xlsx_style_id_cache().contains_key(id))
+    {
+        return resolved_range_style_id(stores, mirror, sheet_id, row, col, false, palette);
+    }
     let (range_id, format) = matching.last()?;
     sheet
         .range_xlsx_style_id_cache()
@@ -36,41 +63,31 @@ pub(super) fn format_range_style_id_at(
         .copied()
         .or_else(|| style_id_for_cell_format(format, palette))
 }
-pub(in crate::storage::engine) fn export_authored_style_runs_for_sheet(
-    _stores: &EngineStores,
+pub(super) fn resolved_range_style_id(
+    stores: &EngineStores,
     mirror: &CellMirror,
     sheet_id: &SheetId,
+    row: u32,
+    col: u32,
+    include_imported_column_ranges: bool,
     palette: &impl PaletteOps,
-) -> Vec<AuthoredStyleRun> {
-    let Some(sheet) = mirror.get_sheet(sheet_id) else {
-        return Vec::new();
-    };
-
-    let mut runs = Vec::new();
-    for range in sheet.format_ranges() {
-        let style_id = sheet
-            .range_xlsx_style_id_cache()
-            .get(&range.id)
-            .copied()
-            .or_else(|| {
-                sheet
-                    .range_format_cache()
-                    .get(&range.id)
-                    .and_then(|format| style_id_for_cell_format(format, palette))
-            });
-        let Some(style_id) = style_id else {
-            continue;
-        };
-        runs.push(AuthoredStyleRun {
-            start_row: range.start_row,
-            start_col: range.start_col,
-            end_row: range.end_row,
-            end_col: range.end_col,
-            style_id,
-        });
-    }
-
-    runs.sort_by_key(|r| (r.start_row, r.start_col, r.end_row, r.end_col, r.style_id));
-    runs.dedup();
-    runs
+) -> Option<u32> {
+    use crate::storage::properties;
+    let grid = stores.grid_indexes.get(sheet_id);
+    let base = properties::get_workbook_base_format(&stores.storage);
+    let column = properties::get_col_format(&stores.storage, sheet_id, col, grid);
+    let row_format = properties::get_row_format(&stores.storage, sheet_id, row, grid);
+    let table = super::super::super::resolve_structured_format_at_cell(mirror, sheet_id, row, col);
+    let format = properties::get_effective_format_from_preloaded_layers(
+        &base,
+        column.as_ref(),
+        row_format.as_ref(),
+        row,
+        col,
+        table.as_ref(),
+        None,
+        mirror.get_sheet(sheet_id),
+        include_imported_column_ranges,
+    );
+    style_id_for_cell_format(&format, palette)
 }

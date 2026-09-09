@@ -5,43 +5,33 @@ use super::*;
 // -------------------------------------------------------------------
 
 pub(in crate::storage::engine) fn get_all_sheet_ids(stores: &EngineStores) -> Vec<String> {
-    let yrs_sheets: Vec<String> = stores
+    stores
         .storage
         .sheet_order()
         .iter()
         .map(|sid| id_to_hex(sid.as_u128()).into())
-        .collect();
-    // Deferred hydration: Yrs is empty but ComputeCore has sheet order from snapshot
-    if yrs_sheets.is_empty() {
-        return stores
-            .compute
-            .ordered_sheets()
-            .iter()
-            .map(|sid| id_to_hex(sid.as_u128()).into())
-            .collect();
-    }
-    yrs_sheets
+        .collect()
 }
 
 pub(in crate::storage::engine) fn get_sheet_name(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> Option<String> {
-    properties::get_sheet_name(stores.storage.doc(), stores.storage.sheets(), sheet_id)
+    properties::get_sheet_name(&stores.storage, sheet_id)
 }
 
 pub(in crate::storage::engine) fn is_sheet_hidden(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> bool {
-    visibility::is_sheet_hidden(stores.storage.doc(), stores.storage.sheets(), sheet_id)
+    visibility::is_sheet_hidden(&stores.storage, sheet_id)
 }
 
 pub(in crate::storage::engine) fn is_sheet_protected(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> bool {
-    protection::is_sheet_protected(stores.storage.doc(), stores.storage.sheets(), sheet_id)
+    protection::is_sheet_protected(&stores.storage, sheet_id)
 }
 
 // -------------------------------------------------------------------
@@ -63,28 +53,28 @@ pub(in crate::storage::engine) fn get_frozen_panes_query(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> FrozenPanes {
-    view::get_frozen_panes(stores.storage.doc(), stores.storage.sheets(), sheet_id)
+    view::get_frozen_panes(&stores.storage, sheet_id)
 }
 
 pub(in crate::storage::engine) fn get_view_options_query(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> SheetViewOptions {
-    view::get_view_options(stores.storage.doc(), stores.storage.sheets(), sheet_id)
+    view::get_view_options(&stores.storage, sheet_id)
 }
 
 pub(in crate::storage::engine) fn get_scroll_position_query(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> SheetScrollPosition {
-    view::get_scroll_position(stores.storage.doc(), stores.storage.sheets(), sheet_id)
+    view::get_scroll_position(&stores.storage, sheet_id)
 }
 
 pub(in crate::storage::engine) fn get_tab_color_query(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> Option<String> {
-    properties::get_sheet_meta(stores.storage.doc(), stores.storage.sheets(), sheet_id)?.tab_color
+    properties::get_sheet_meta(&stores.storage, sheet_id)?.tab_color
 }
 
 pub(in crate::storage::engine) fn get_sheet_protection_config(
@@ -92,8 +82,7 @@ pub(in crate::storage::engine) fn get_sheet_protection_config(
     sheet_id: &SheetId,
 ) -> SheetProtectionConfig {
     let settings = settings::get_sheet_settings_with_layout_metrics(
-        stores.storage.doc(),
-        stores.storage.sheets(),
+        &stores.storage,
         sheet_id,
         stores.layout_metrics,
     );
@@ -108,44 +97,32 @@ pub(in crate::storage::engine) fn get_sheet_protection_config(
 // -------------------------------------------------------------------
 
 pub(in crate::storage::engine) fn get_visible_sheet_ids(stores: &EngineStores) -> Vec<String> {
-    visibility::get_visible_sheets(
-        stores.storage.doc(),
-        stores.storage.workbook_map(),
-        stores.storage.sheets(),
-    )
-    .iter()
-    .map(|sid| id_to_hex(sid.as_u128()).into())
-    .collect()
+    visibility::get_visible_sheets(&stores.storage)
+        .iter()
+        .map(|sid| id_to_hex(sid.as_u128()).into())
+        .collect()
 }
 
 pub(in crate::storage::engine) fn get_hidden_sheet_ids(stores: &EngineStores) -> Vec<String> {
-    visibility::get_hidden_sheets(
-        stores.storage.doc(),
-        stores.storage.workbook_map(),
-        stores.storage.sheets(),
-    )
-    .iter()
-    .map(|sid| id_to_hex(sid.as_u128()).into())
-    .collect()
+    visibility::get_hidden_sheets(&stores.storage)
+        .iter()
+        .map(|sid| id_to_hex(sid.as_u128()).into())
+        .collect()
 }
 
 pub(in crate::storage::engine) fn count_visible_sheets(stores: &EngineStores) -> u32 {
-    visibility::count_visible_sheets(
-        stores.storage.doc(),
-        stores.storage.workbook_map(),
-        stores.storage.sheets(),
-    )
+    visibility::count_visible_sheets(&stores.storage)
 }
 
 pub(in crate::storage::engine) fn get_sheet_order(stores: &EngineStores) -> Vec<String> {
-    order::get_sheet_order(stores.storage.doc(), stores.storage.workbook_map())
+    order::get_sheet_order(&stores.storage)
         .iter()
         .map(|sid| id_to_hex(sid.as_u128()).into())
         .collect()
 }
 
 pub(in crate::storage::engine) fn get_first_sheet_id(stores: &EngineStores) -> Option<String> {
-    properties::get_first_sheet_id(stores.storage.doc(), stores.storage.workbook_map())
+    properties::get_first_sheet_id(&stores.storage)
         .map(|sid| String::from(id_to_hex(sid.as_u128())))
 }
 
@@ -153,21 +130,21 @@ pub(in crate::storage::engine) fn get_print_settings(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> domain_types::domain::print::PrintSettings {
-    print::get_print_settings(stores.storage.doc(), stores.storage.sheets(), sheet_id)
+    print::get_print_settings(&stores.storage, sheet_id)
 }
 
 pub(in crate::storage::engine) fn get_hf_images(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> Vec<domain_types::domain::print::HeaderFooterImageInfo> {
-    print::get_hf_images(stores.storage.doc(), stores.storage.sheets(), sheet_id)
+    print::get_hf_images(&stores.storage, sheet_id)
 }
 
 pub(in crate::storage::engine) fn get_sheet_meta(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> Option<SheetMeta> {
-    properties::get_sheet_meta(stores.storage.doc(), stores.storage.sheets(), sheet_id)
+    properties::get_sheet_meta(&stores.storage, sheet_id)
 }
 
 pub(in crate::storage::engine) fn has_sheet_protection_password(
@@ -175,8 +152,7 @@ pub(in crate::storage::engine) fn has_sheet_protection_password(
     sheet_id: &SheetId,
 ) -> bool {
     let settings = settings::get_sheet_settings_with_layout_metrics(
-        stores.storage.doc(),
-        stores.storage.sheets(),
+        &stores.storage,
         sheet_id,
         stores.layout_metrics,
     );

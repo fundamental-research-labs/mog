@@ -191,7 +191,7 @@ impl<'de> Deserialize<'de> for ChartType {
 }
 
 impl ChartType {
-    /// Return the string representation (for Yrs storage and other non-serde contexts).
+    /// Return the string representation (for OOXML tokens and other non-serde contexts).
     pub fn as_str(&self) -> &str {
         match self {
             ChartType::Bar => "bar",
@@ -393,7 +393,7 @@ impl<'de> Deserialize<'de> for ChartSubType {
 }
 
 impl ChartSubType {
-    /// Return the string representation (for Yrs storage and other non-serde contexts).
+    /// Return the string representation (for OOXML tokens and other non-serde contexts).
     pub fn as_str(&self) -> &str {
         match self {
             ChartSubType::Clustered => "clustered",
@@ -444,7 +444,7 @@ pub enum SeriesOrientation {
 }
 
 impl SeriesOrientation {
-    /// Return the string representation (for Yrs storage and other non-serde contexts).
+    /// Return the string representation (for OOXML tokens and other non-serde contexts).
     pub fn as_str(&self) -> &str {
         match self {
             SeriesOrientation::Rows => "rows",

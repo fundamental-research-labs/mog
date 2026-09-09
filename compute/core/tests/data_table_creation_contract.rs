@@ -1,6 +1,6 @@
 use cell_types::{SheetId, SheetPos};
 use compute_core::data_table::CreateDataTableInput;
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use formula_types::CellRef;
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, ComputeError, FiniteF64};
@@ -37,7 +37,13 @@ fn formula_cell(id_suffix: u32, row: u32, col: u32, formula: &str) -> CellData {
 
 fn workbook(cells: Vec<CellData>) -> WorkbookSnapshot {
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET_UUID.to_string(),
             name: "Sheet1".to_string(),
             rows: 20,
@@ -68,7 +74,7 @@ fn two_variable_workbook() -> WorkbookSnapshot {
     ])
 }
 
-fn create_two_variable(engine: &mut YrsComputeEngine) -> Result<(), ComputeError> {
+fn create_two_variable(engine: &mut ComputeEngine) -> Result<(), ComputeError> {
     let sheet_id = cell_types::SheetId::from_uuid_str(SHEET_UUID).unwrap();
     let input = CreateDataTableInput {
         sheet_id,
@@ -92,7 +98,7 @@ fn expect_invalid_code(err: ComputeError, code: &str) {
     );
 }
 
-fn assert_number_at(engine: &YrsComputeEngine, row: u32, col: u32, expected: f64) {
+fn assert_number_at(engine: &ComputeEngine, row: u32, col: u32, expected: f64) {
     let sheet_id = SheetId::from_uuid_str(SHEET_UUID).unwrap();
     assert_eq!(
         engine
@@ -103,8 +109,8 @@ fn assert_number_at(engine: &YrsComputeEngine, row: u32, col: u32, expected: f64
 }
 
 #[test]
-fn create_data_table_persists_region_to_yrs_and_hydrates_from_state() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(two_variable_workbook()).unwrap();
+fn create_data_table_preserves_regions_and_evaluation_across_xlsx_roundtrips() {
+    let (mut engine, _) = ComputeEngine::from_snapshot(two_variable_workbook()).unwrap();
 
     create_two_variable(&mut engine).unwrap();
 
@@ -122,17 +128,48 @@ fn create_data_table_persists_region_to_yrs_and_hydrates_from_state() {
         Some(CellRef::Positional { row: 1, col: 0, .. })
     ));
 
-    let state = engine.sync_full_state();
-    let (hydrated, _) = YrsComputeEngine::from_yrs_state(&state).unwrap();
-    let hydrated_regions = hydrated.mirror().all_data_table_regions();
-    assert_eq!(hydrated_regions.len(), 1);
-    assert_eq!(hydrated_regions[0].start_row, 2);
-    assert_eq!(hydrated_regions[0].start_col, 2);
+    for _ in 0..2 {
+        let bytes = engine.export_to_xlsx_bytes().expect("export data table");
+        let (mut hydrated, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("import data table");
+        let hydrated_regions = hydrated.mirror().all_data_table_regions();
+        assert_eq!(hydrated_regions.len(), 1);
+        let region = &hydrated_regions[0];
+        assert_eq!(
+            (
+                region.start_row,
+                region.start_col,
+                region.end_row,
+                region.end_col
+            ),
+            (2, 2, 3, 3)
+        );
+        assert!(matches!(
+            region.col_input_ref,
+            Some(CellRef::Positional { row: 0, col: 0, .. })
+        ));
+        assert!(matches!(
+            region.row_input_ref,
+            Some(CellRef::Positional { row: 1, col: 0, .. })
+        ));
+        let sheet = hydrated.storage().sheet_order()[0];
+        hydrated
+            .recalculate()
+            .expect("recalculate imported data table");
+        for (row, col, expected) in [(2, 2, 300.0), (2, 3, 600.0), (3, 2, 400.0), (3, 3, 800.0)] {
+            assert_eq!(
+                hydrated
+                    .mirror()
+                    .get_cell_value_at(&sheet, SheetPos::new(row, col)),
+                Some(&CellValue::Number(FiniteF64::must(expected)))
+            );
+        }
+        engine = hydrated;
+    }
 }
 
 #[test]
 fn create_data_table_materializes_two_variable_body_formulas_and_values() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(two_variable_workbook()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(two_variable_workbook()).unwrap();
     let sheet_id = SheetId::from_uuid_str(SHEET_UUID).unwrap();
 
     create_two_variable(&mut engine).unwrap();
@@ -153,7 +190,7 @@ fn create_data_table_materializes_one_variable_column_layout() {
         number_cell(3, 1, 1, 3.0),       // B2 left-column value
         number_cell(4, 2, 1, 4.0),       // B3 left-column value
     ]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = SheetId::from_uuid_str(SHEET_UUID).unwrap();
     let input = CreateDataTableInput {
         sheet_id,
@@ -176,7 +213,7 @@ fn create_data_table_materializes_one_variable_column_layout() {
 
 #[test]
 fn create_data_table_rejects_overlap_atomically() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(two_variable_workbook()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(two_variable_workbook()).unwrap();
     create_two_variable(&mut engine).unwrap();
 
     let sheet_id = cell_types::SheetId::from_uuid_str(SHEET_UUID).unwrap();
@@ -197,7 +234,7 @@ fn create_data_table_rejects_overlap_atomically() {
 fn create_data_table_rejects_non_empty_body_atomically() {
     let mut snapshot = two_variable_workbook();
     snapshot.sheets[0].cells.push(number_cell(8, 2, 2, 99.0)); // C3 body
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
 
     let sheet_id = cell_types::SheetId::from_uuid_str(SHEET_UUID).unwrap();
     let input = CreateDataTableInput {
@@ -215,7 +252,7 @@ fn create_data_table_rejects_non_empty_body_atomically() {
 
 #[test]
 fn create_data_table_rejects_input_refs_inside_table_range() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(two_variable_workbook()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(two_variable_workbook()).unwrap();
 
     let sheet_id = cell_types::SheetId::from_uuid_str(SHEET_UUID).unwrap();
     let input = CreateDataTableInput {
@@ -233,7 +270,7 @@ fn create_data_table_rejects_input_refs_inside_table_range() {
 
 #[test]
 fn create_data_table_requires_at_least_one_input_ref() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(two_variable_workbook()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(two_variable_workbook()).unwrap();
 
     let sheet_id = cell_types::SheetId::from_uuid_str(SHEET_UUID).unwrap();
     let input = CreateDataTableInput {
@@ -251,7 +288,7 @@ fn create_data_table_requires_at_least_one_input_ref() {
 
 #[test]
 fn create_data_table_rejects_selection_without_body() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(two_variable_workbook()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(two_variable_workbook()).unwrap();
 
     let sheet_id = cell_types::SheetId::from_uuid_str(SHEET_UUID).unwrap();
     let input = CreateDataTableInput {
@@ -269,7 +306,7 @@ fn create_data_table_rejects_selection_without_body() {
 
 #[test]
 fn create_data_table_rejects_duplicate_input_refs() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(two_variable_workbook()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(two_variable_workbook()).unwrap();
 
     let sheet_id = cell_types::SheetId::from_uuid_str(SHEET_UUID).unwrap();
     let input = CreateDataTableInput {
@@ -287,7 +324,7 @@ fn create_data_table_rejects_duplicate_input_refs() {
 
 #[test]
 fn create_data_table_requires_layout_specific_formula_sources() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(two_variable_workbook()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(two_variable_workbook()).unwrap();
 
     let sheet_id = cell_types::SheetId::from_uuid_str(SHEET_UUID).unwrap();
     let input = CreateDataTableInput {

@@ -156,7 +156,7 @@ pub struct FormControlData {
 /// Slicer marker payload on a floating object.
 ///
 /// Slicers are persisted as canonical `StoredSlicer` entries in the
-/// workbook-level slicers Y.Map. The `FloatingObjectData::Slicer` variant
+/// workbook-level slicer collection. The `FloatingObjectData::Slicer` variant
 /// only exists as the tag/discriminant for slicer-kind floating objects;
 /// it carries no per-slicer state and (historically) held a
 /// `serde_json::Value` bag with no writer — that bag is now removed per

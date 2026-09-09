@@ -86,6 +86,9 @@ fn build_single_sheet_snapshot(
     }
 
     let sheet = SheetSnapshot {
+        identities: Vec::new(),
+        row_axis: None,
+        col_axis: None,
         id: sheet_uuid(0),
         name: name.to_string(),
         rows,
@@ -95,6 +98,9 @@ fn build_single_sheet_snapshot(
     };
 
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![sheet],
         named_ranges: vec![],
         tables: vec![],

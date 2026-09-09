@@ -42,6 +42,22 @@ impl DenseColumn {
         &self.values
     }
 
+    /// Replace one numeric or blank slot without rebuilding the derived column.
+    /// Returns false when the row lies outside this column's existing extent.
+    pub fn set_numeric_at(&mut self, row: u32, value: Option<f64>) -> bool {
+        let Some(offset) = row.checked_sub(self.start_row) else {
+            return false;
+        };
+        let Some(slot) = self.values.get_mut(offset as usize) else {
+            return false;
+        };
+        let next = value.unwrap_or(f64::NAN);
+        self.numeric_count =
+            self.numeric_count - usize::from(!slot.is_nan()) + usize::from(!next.is_nan());
+        *slot = next;
+        true
+    }
+
     /// Number of actual numeric values (non-NAN entries).
     #[must_use]
     pub fn numeric_count(&self) -> usize {

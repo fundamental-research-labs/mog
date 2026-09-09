@@ -26,6 +26,9 @@ fn cell(suffix: u32, row: u32, col: u32, value: impl Into<CellValue>) -> CellDat
 fn advanced_filter_snapshot() -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET_UUID.to_string(),
             name: "Sheet1".to_string(),
             rows: 20,
@@ -63,7 +66,7 @@ fn advanced_filter_request(mode: filters::AdvancedFilterMode) -> filters::Advanc
 
 #[test]
 fn advanced_filter_in_place_tracks_filter_owned_hidden_rows() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(advanced_filter_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(advanced_filter_snapshot()).unwrap();
     let sid = test_sheet_id();
 
     engine.hide_rows(&sid, &[1]).unwrap();
@@ -95,7 +98,7 @@ fn advanced_filter_in_place_tracks_filter_owned_hidden_rows() {
 
 #[test]
 fn manual_unhide_keeps_rows_hidden_by_advanced_filter() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(advanced_filter_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(advanced_filter_snapshot()).unwrap();
     let sid = test_sheet_id();
 
     engine.hide_rows(&sid, &[2]).unwrap();
@@ -119,7 +122,7 @@ fn manual_unhide_keeps_rows_hidden_by_advanced_filter() {
 
 #[test]
 fn clear_all_column_filters_clears_advanced_filter_activity() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(advanced_filter_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(advanced_filter_snapshot()).unwrap();
     let sid = test_sheet_id();
 
     engine.hide_rows(&sid, &[1]).unwrap();
@@ -160,7 +163,7 @@ fn clear_all_column_filters_clears_advanced_filter_activity() {
 
 #[test]
 fn advanced_filter_copy_to_writes_matching_rows_without_hiding_source() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(advanced_filter_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(advanced_filter_snapshot()).unwrap();
     let sid = test_sheet_id();
     let mut request = advanced_filter_request(filters::AdvancedFilterMode::CopyTo);
     request.copy_to_range = Some("F1".to_string());

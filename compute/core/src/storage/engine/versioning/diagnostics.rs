@@ -78,13 +78,13 @@ mod tests {
 
     use super::*;
     use crate::storage::engine::versioning::redaction::{
-        author_id_redaction_key, provider_id_redaction_key,
+        author_id_redaction_key, debug_field_redaction_key,
     };
 
     #[test]
     fn sink_records_admission_failures_with_redaction_keys() {
         let mut debug = BTreeMap::new();
-        debug.insert("boundary".to_string(), json!("sync-admission"));
+        debug.insert("boundary".to_string(), json!("capture-admission"));
         let record = capture_failure_sink_record(VersionCaptureFailureSinkRecordInput {
             diagnostic_id: "diagnostic:vc02-admission".to_string(),
             observed_at: "2026-06-22T00:00:00.000Z".to_string(),
@@ -94,13 +94,13 @@ mod tests {
             message: "capture admission requires redaction keys for sensitive provenance"
                 .to_string(),
             operation_id: Some("operation:vc02-admission".to_string()),
-            domain_ids: vec!["runtime-diagnostics.sync-provider-admission".to_string()],
+            domain_ids: vec!["runtime-diagnostics.capture-admission".to_string()],
             capture_policy: CapturePolicyWire::ShadowOnly,
             write_admission_mode: VersionWriteAdmissionModeWire::ShadowOnly,
             redaction_policy: VersionRedactionPolicyWire::MetadataOnly,
             redaction_keys: vec![
                 author_id_redaction_key("ada@example.com"),
-                provider_id_redaction_key("indexeddb-primary"),
+                debug_field_redaction_key("boundary", "capture-admission"),
             ],
             missing_redaction_fields: vec!["operation.author.sessionId".to_string()],
             debug,

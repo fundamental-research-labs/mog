@@ -1,7 +1,7 @@
 #![cfg(feature = "audit-tests")]
 
 use cell_types::SheetPos;
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use snapshot_types::WorkbookSnapshot;
 use std::time::Instant;
 
@@ -30,7 +30,7 @@ fn class_iii_total() {
         for seed in seeds() {
             let (snapshot, dependent) = build(seed.value);
             let (mut engine, _init) =
-                YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+                ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
             let outcome = op_inverse_pair(
                 &mut engine,
                 &sid,
@@ -55,7 +55,7 @@ fn class_iii_total() {
         let mut fam = FamilyResult::new("mmult");
         let seed = 0.4_f64;
         let (snapshot, dependent) = mmult_like_snapshot(seed);
-        let (mut engine, _init) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+        let (mut engine, _init) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
         let outcome = op_inverse_pair(&mut engine, &sid, 0, 0, seed, EDIT_DELTA, dependent);
         fam.record("mmult_like_3x3_at_0_4".to_string(), outcome);
         total_passed += fam.passed;
@@ -81,14 +81,14 @@ fn class_iii_total() {
         for (f_seed, f_slug) in float_seeds {
             let (snapshot, dependent) = mixed_type_snapshot(1.0, *f_seed);
             let (mut engine, _init) =
-                YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+                ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
             let outcome = op_inverse_pair(&mut engine, &sid, 0, 0, 1.0, 1.0, dependent);
             fam.record(format!("edit_int_with_float_{}", f_slug), outcome);
         }
         for (i_seed, i_slug) in int_seeds {
             let (snapshot, dependent) = mixed_type_snapshot(*i_seed, 0.4);
             let (mut engine, _init) =
-                YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+                ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
             let outcome = op_inverse_pair(&mut engine, &sid, 1, 0, 0.4, EDIT_DELTA, dependent);
             fam.record(format!("edit_float_with_int_{}", i_slug), outcome);
         }
@@ -100,7 +100,7 @@ fn class_iii_total() {
         let mut fam = FamilyResult::new("rapid_reverts");
         let seed = 0.4_f64;
         let (snapshot, dependent) = chain_snapshot(seed);
-        let (mut engine, _init) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+        let (mut engine, _init) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
         if let Some(initial) = read_number_at(&engine, &sid, dependent) {
             let initial_bits = initial.to_bits();
             for iter in 0..100 {
@@ -133,7 +133,7 @@ fn class_iii_total() {
         {
             let (snapshot, dependent) = fanin_snapshot(seed);
             let (mut engine, _init) =
-                YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+                ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
             let before = read_number_at(&engine, &sid, dependent);
             let outcome = match before {
                 Some(b) => {
@@ -163,7 +163,7 @@ fn class_iii_total() {
         {
             let (snapshot, dependent) = chain_snapshot(seed);
             let (mut engine, _init) =
-                YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+                ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
             let before = read_number_at(&engine, &sid, dependent);
             let outcome = match before {
                 Some(b) => {

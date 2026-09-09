@@ -21,7 +21,7 @@
 
 use cell_types::SheetId;
 use compute_core::snapshot::ChangeKind;
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use serde_json::json;
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
@@ -52,6 +52,9 @@ fn snapshot_with_numbers(values: &[f64]) -> WorkbookSnapshot {
         .collect();
     WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_id_str(1),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -63,7 +66,7 @@ fn snapshot_with_numbers(values: &[f64]) -> WorkbookSnapshot {
     }
 }
 
-fn register_viewport(engine: &mut YrsComputeEngine, sheet_id: &SheetId) -> String {
+fn register_viewport(engine: &mut ComputeEngine, sheet_id: &SheetId) -> String {
     let viewport_id = "viewport-1".to_string();
     engine
         .register_viewport(&viewport_id, sheet_id, 0, 0, 9, 5)
@@ -116,7 +119,7 @@ fn red_above_100_rule(rule_id: &str, sheet_id: &SheetId) -> serde_json::Value {
 #[test]
 fn add_cf_rule_emits_full_viewport_patches() {
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_with_numbers(&[10.0, 500.0, 20.0, 30.0, 40.0]))
+        ComputeEngine::from_snapshot(snapshot_with_numbers(&[10.0, 500.0, 20.0, 30.0, 40.0]))
             .expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
     let _vp = register_viewport(&mut engine, &sid);
@@ -133,45 +136,9 @@ fn add_cf_rule_emits_full_viewport_patches() {
 }
 
 #[test]
-fn undo_cf_rule_emits_full_viewport_patches() {
-    let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_with_numbers(&[10.0, 500.0, 20.0, 30.0, 40.0]))
-            .expect("from_snapshot");
-    let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
-    let _vp = register_viewport(&mut engine, &sid);
-
-    engine
-        .add_cf_rule(&sid, red_above_100_rule("a", &sid))
-        .expect("add_cf_rule");
-    assert_eq!(engine.get_all_cf_rules(&sid).len(), 1);
-    assert!(engine.can_undo());
-
-    let (patches, result) = engine.undo().expect("undo add_cf_rule");
-
-    assert!(
-        engine.get_all_cf_rules(&sid).is_empty(),
-        "undo must remove the CF rule from storage"
-    );
-    assert_eq!(viewport_count(&patches), 1);
-    assert!(
-        first_viewport_payload_size(&patches) > 32,
-        "undo add_cf_rule must rebuild CF-affected viewports"
-    );
-    assert!(
-        result
-            .cf_changes
-            .iter()
-            .any(|change| change.sheet_id == sid.to_uuid_string()
-                && change.kind == ChangeKind::Removed),
-        "undo add_cf_rule must surface a removed CfChange, got: {:?}",
-        result.cf_changes
-    );
-}
-
-#[test]
 fn update_cf_rule_emits_full_viewport_patches() {
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_with_numbers(&[10.0, 500.0, 20.0, 30.0, 40.0]))
+        ComputeEngine::from_snapshot(snapshot_with_numbers(&[10.0, 500.0, 20.0, 30.0, 40.0]))
             .expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
     let _vp = register_viewport(&mut engine, &sid);
@@ -206,7 +173,7 @@ fn update_cf_rule_emits_full_viewport_patches() {
 #[test]
 fn delete_cf_rule_emits_full_viewport_patches() {
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_with_numbers(&[10.0, 500.0, 20.0, 30.0, 40.0]))
+        ComputeEngine::from_snapshot(snapshot_with_numbers(&[10.0, 500.0, 20.0, 30.0, 40.0]))
             .expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
     let _vp = register_viewport(&mut engine, &sid);
@@ -230,7 +197,7 @@ fn delete_cf_rule_emits_full_viewport_patches() {
 #[test]
 fn reorder_cf_rules_emits_full_viewport_patches() {
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_with_numbers(&[10.0, 500.0, 20.0, 30.0, 40.0]))
+        ComputeEngine::from_snapshot(snapshot_with_numbers(&[10.0, 500.0, 20.0, 30.0, 40.0]))
             .expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
     let _vp = register_viewport(&mut engine, &sid);
@@ -270,7 +237,7 @@ fn insert_rows_with_cf_emits_full_viewport_patches() {
     use formula_types::StructureChange;
 
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_with_numbers(&[10.0, 500.0, 20.0, 30.0, 40.0]))
+        ComputeEngine::from_snapshot(snapshot_with_numbers(&[10.0, 500.0, 20.0, 30.0, 40.0]))
             .expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
     let _vp = register_viewport(&mut engine, &sid);
@@ -300,7 +267,7 @@ fn insert_cols_with_cf_emits_full_viewport_patches() {
     use formula_types::StructureChange;
 
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_with_numbers(&[10.0, 500.0, 20.0, 30.0, 40.0]))
+        ComputeEngine::from_snapshot(snapshot_with_numbers(&[10.0, 500.0, 20.0, 30.0, 40.0]))
             .expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
     let _vp = register_viewport(&mut engine, &sid);
@@ -334,7 +301,7 @@ fn insert_rows_without_cf_falls_back_to_incremental_patches() {
     use formula_types::StructureChange;
 
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_with_numbers(&[10.0, 500.0, 20.0, 30.0, 40.0]))
+        ComputeEngine::from_snapshot(snapshot_with_numbers(&[10.0, 500.0, 20.0, 30.0, 40.0]))
             .expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
     let _vp = register_viewport(&mut engine, &sid);
@@ -358,8 +325,8 @@ fn insert_rows_without_cf_falls_back_to_incremental_patches() {
 /// rule and the renumbered existing ones.
 #[test]
 fn add_cf_rule_typed_priority_bump_renumbers_existing_formats() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot_with_numbers(&[10.0, 200.0]))
-        .expect("from_snapshot");
+    let (mut engine, _) =
+        ComputeEngine::from_snapshot(snapshot_with_numbers(&[10.0, 200.0])).expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
     let _vp = register_viewport(&mut engine, &sid);
 

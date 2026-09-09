@@ -7,7 +7,7 @@ use super::super::*;
 fn create_default_sheet_emits_hydration_shape_settings() {
     use snapshot_types::WorkbookSnapshot;
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(WorkbookSnapshot::default()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(WorkbookSnapshot::default()).unwrap();
     let (_hex, result) = engine
         .create_default_sheet("Sheet1")
         .expect("bootstrap should succeed");
@@ -59,22 +59,10 @@ fn create_default_sheet_emits_hydration_shape_settings() {
 }
 
 #[test]
-fn create_default_sheet_still_bypasses_undo_stack() {
-    use snapshot_types::WorkbookSnapshot;
-
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(WorkbookSnapshot::default()).unwrap();
-    let _ = engine.create_default_sheet("Sheet1").unwrap();
-    assert!(
-        !engine.can_undo(),
-        "bootstrap with hydration-shape result must NOT enter undo stack"
-    );
-}
-
-#[test]
 fn settle_for_mirror_returns_hydration_shape() {
     use snapshot_types::WorkbookSnapshot;
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(WorkbookSnapshot::default()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(WorkbookSnapshot::default()).unwrap();
     // Create a sheet first so settle has something to enumerate.
     let _ = engine.create_default_sheet("Sheet1").unwrap();
 

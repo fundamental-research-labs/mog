@@ -7,13 +7,10 @@
 //! apply movement through `GridIndex::sort_rows`.
 
 mod compare;
-mod mutations;
 mod planner;
 mod types;
 mod validation;
 
-#[cfg(test)]
-mod mutations_tests;
 #[cfg(test)]
 mod planner_tests;
 #[cfg(test)]
@@ -26,13 +23,9 @@ pub(crate) use compare::{
     compare_by_color, compare_by_custom_list, compare_cell_values, get_type_priority,
     natural_compare,
 };
-#[allow(unused_imports)]
-pub use mutations::{reorder_rows_in_range, sort_by_column, sort_range};
 pub use planner::compute_sorted_row_order_by_columns_with_scope;
-#[cfg(test)]
-pub use planner::{compute_sorted_row_order, compute_sorted_row_order_with_scope};
 #[allow(unused_imports)]
 pub(crate) use types::{
-    CellRange, SortColumnCriterion, SortConfig, SortCriterion, SortMode, SortOptions, SortResult,
+    CellRange, SortColumnCriterion, SortConfig, SortCriterion, SortMode, SortResult,
 };
 pub use validation::check_sort_range_merges;

@@ -91,18 +91,11 @@ fn subtotal_options(function: SubtotalFunction) -> SubtotalOptions {
 
 #[test]
 fn test_create_subtotals_summary_below_layout_and_grand_total() {
-    let (s, sid) = storage_with_sheet();
+    let (_, sid) = storage_with_sheet();
     let mut a = region_sales_accessor();
     let r = CellRange::new(0, 0, 4, 1);
 
-    let result = create_subtotals(
-        s.doc(),
-        &s.sheets_ref(),
-        &mut a,
-        &sid,
-        &r,
-        &subtotal_options(SubtotalFunction::Sum),
-    );
+    let result = create_subtotals(&mut a, &sid, &r, &subtotal_options(SubtotalFunction::Sum));
 
     assert_eq!(result.groups_created, 2);
     assert_eq!(result.subtotal_rows_inserted, 3);
@@ -127,28 +120,19 @@ fn test_create_subtotals_summary_below_layout_and_grand_total() {
         Some("=SUBTOTAL(109,B2:B7)")
     );
 
-    let groups = get_groups(s.doc(), &s.sheets_ref(), &sid, GroupAxis::Row);
+    let groups = get_groups(&a.storage, &sid, GroupAxis::Row);
     let ranges: Vec<(u32, u32)> = groups.iter().map(|g| (g.start, g.end)).collect();
     assert_eq!(ranges, vec![(1, 2), (4, 5)]);
 }
 
 #[test]
 fn test_create_subtotals_replaces_existing_layout() {
-    let (s, sid) = storage_with_sheet();
+    let (_, sid) = storage_with_sheet();
     let mut a = region_sales_accessor();
     let r = CellRange::new(0, 0, 4, 1);
 
-    create_subtotals(
-        s.doc(),
-        &s.sheets_ref(),
-        &mut a,
-        &sid,
-        &r,
-        &subtotal_options(SubtotalFunction::Sum),
-    );
+    create_subtotals(&mut a, &sid, &r, &subtotal_options(SubtotalFunction::Sum));
     let result = create_subtotals(
-        s.doc(),
-        &s.sheets_ref(),
         &mut a,
         &sid,
         &r,

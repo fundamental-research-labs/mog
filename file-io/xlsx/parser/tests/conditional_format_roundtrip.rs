@@ -42,7 +42,7 @@ fn cf_cell_value_rule_round_trips() {
         sheet_id: String::new(),
         pivot: None,
         ranges: vec![CFCellRange::new(0, 0, 9, 0)], // A1:A10
-        range_identities: None,
+
         rules: vec![CFRule::CellValue {
             id: "rule-1".to_string(),
             priority: 1,
@@ -80,7 +80,7 @@ fn cf_formula_dxf_fill_round_trips() {
         sheet_id: String::new(),
         pivot: None,
         ranges: vec![CFCellRange::new(0, 0, 9, 0)], // A1:A10
-        range_identities: None,
+
         rules: vec![CFRule::Formula {
             id: "rule-formula".to_string(),
             priority: 1,
@@ -118,7 +118,7 @@ fn cf_color_scale_rule_round_trips_with_typed_value_refs() {
         sheet_id: String::new(),
         pivot: None,
         ranges: vec![CFCellRange::new(0, 1, 9, 1)], // B1:B10
-        range_identities: None,
+
         rules: vec![CFRule::ColorScale {
             id: "rule-cs".to_string(),
             priority: 1,
@@ -179,7 +179,7 @@ fn cf_icon_set_rule_round_trips() {
         sheet_id: String::new(),
         pivot: None,
         ranges: vec![CFCellRange::new(0, 2, 9, 2)], // C1:C10
-        range_identities: None,
+
         rules: vec![CFRule::IconSet {
             id: "rule-is".to_string(),
             priority: 1,
@@ -230,7 +230,7 @@ fn cf_classic_rule_variants_round_trip_as_typed_subset() {
         sheet_id: String::new(),
         pivot: None,
         ranges: vec![CFCellRange::new(0, 0, 9, 0)], // A1:A10
-        range_identities: None,
+
         rules: vec![
             CFRule::Top10 {
                 id: "rule-top10".to_string(),
@@ -369,7 +369,7 @@ fn cf_data_bar_rule_round_trips_with_typed_value_refs() {
         sheet_id: String::new(),
         pivot: None,
         ranges: vec![CFCellRange::new(0, 3, 9, 3)], // D1:D10
-        range_identities: None,
+
         rules: vec![CFRule::DataBar {
             id: "rule-db".to_string(),
             priority: 1,

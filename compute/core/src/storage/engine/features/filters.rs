@@ -1,4 +1,4 @@
-use super::super::YrsComputeEngine;
+use super::super::ComputeEngine;
 use super::super::services::advanced_filter as advanced_filter_svc;
 use super::super::services::filters as filter_svc;
 use crate::snapshot::MutationResult;
@@ -7,7 +7,7 @@ use cell_types::SheetId;
 use value_types::{CellValue, ComputeError};
 
 fn finish_filter_mutation(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     patches: Vec<u8>,
     mut result: MutationResult,
 ) -> (Vec<u8>, MutationResult) {
@@ -15,12 +15,12 @@ fn finish_filter_mutation(
     (patches, result)
 }
 
-fn ensure_filter_full_recalc_ready(engine: &YrsComputeEngine) -> Result<(), ComputeError> {
+fn ensure_filter_full_recalc_ready(engine: &ComputeEngine) -> Result<(), ComputeError> {
     engine.stores.compute.ensure_graph_construction_ready()
 }
 
 pub(super) fn create_filter(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     config: serde_json::Value,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
@@ -37,7 +37,7 @@ pub(super) fn create_filter(
 }
 
 pub(super) fn delete_filter(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
@@ -53,7 +53,7 @@ pub(super) fn delete_filter(
 }
 
 pub(super) fn set_column_filter(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     filter_id: &str,
     header_col: u32,
@@ -79,7 +79,7 @@ pub(super) fn set_column_filter(
 }
 
 pub(super) fn clear_column_filter(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     filter_id: &str,
     header_col: u32,
@@ -103,7 +103,7 @@ pub(super) fn clear_column_filter(
 }
 
 pub(super) fn clear_all_column_filters(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
@@ -125,21 +125,21 @@ pub(super) fn clear_all_column_filters(
 }
 
 pub(super) fn get_filters_in_sheet(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> Vec<filters::FilterState> {
     filter_svc::get_filters_in_sheet(&engine.stores, &engine.mirror, sheet_id)
 }
 
 pub(super) fn get_filter_header_info(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> Vec<filters::FilterHeaderInfo> {
     filter_svc::get_filter_header_info(&engine.stores, &engine.mirror, sheet_id)
 }
 
 pub(super) fn apply_advanced_filter(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     request: filters::AdvancedFilterRequest,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
@@ -150,7 +150,6 @@ pub(super) fn apply_advanced_filter(
     let mut result = advanced_filter_svc::apply_advanced_filter(
         &mut engine.stores,
         &mut engine.mirror,
-        &mut engine.mutation,
         sheet_id,
         request,
     )?;
@@ -172,7 +171,7 @@ pub(super) fn apply_advanced_filter(
 }
 
 pub(super) fn apply_filter(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
@@ -188,7 +187,7 @@ pub(super) fn apply_filter(
 }
 
 pub(super) fn reapply_filter(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
@@ -204,7 +203,7 @@ pub(super) fn reapply_filter(
 }
 
 fn finish_filter_apply(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     mut result: MutationResult,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
@@ -224,7 +223,7 @@ fn finish_filter_apply(
 }
 
 pub(super) fn get_unique_column_values(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     filter_id: &str,
     header_col: u32,
@@ -239,7 +238,7 @@ pub(super) fn get_unique_column_values(
 }
 
 pub(super) fn compute_dynamic_filter_serial_range(
-    _engine: &YrsComputeEngine,
+    _engine: &ComputeEngine,
     rule: filters::DynamicFilterRule,
 ) -> Option<(f64, f64)> {
     let now_serial = crate::eval::clock::get_current_serial_timestamp();
@@ -249,19 +248,19 @@ pub(super) fn compute_dynamic_filter_serial_range(
 }
 
 pub(super) fn get_filter(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> Option<filters::FilterState> {
     filter_svc::get_filter(&engine.stores, sheet_id, filter_id)
 }
 
-pub(super) fn get_filter_count(engine: &YrsComputeEngine, sheet_id: &SheetId) -> usize {
+pub(super) fn get_filter_count(engine: &ComputeEngine, sheet_id: &SheetId) -> usize {
     filter_svc::get_filter_count(&engine.stores, sheet_id)
 }
 
 pub(super) fn get_table_filter(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     table_id: &str,
 ) -> Option<filters::FilterState> {
@@ -269,18 +268,18 @@ pub(super) fn get_table_filter(
 }
 
 pub(super) fn get_active_filters(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> Vec<filters::FilterState> {
     filter_svc::get_active_filters(&engine.stores, sheet_id)
 }
 
-pub(super) fn get_active_filter_count(engine: &YrsComputeEngine, sheet_id: &SheetId) -> usize {
+pub(super) fn get_active_filter_count(engine: &ComputeEngine, sheet_id: &SheetId) -> usize {
     filter_svc::get_active_filter_count(&engine.stores, sheet_id)
 }
 
 pub(super) fn set_filter_sort_state(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     filter_id: &str,
     sort_state: Option<filters::FilterSortState>,
@@ -295,7 +294,7 @@ pub(super) fn set_filter_sort_state(
 }
 
 pub(super) fn get_filter_sort_state(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> Option<filters::FilterSortState> {
@@ -303,7 +302,7 @@ pub(super) fn get_filter_sort_state(
 }
 
 pub(super) fn clear_all_filters(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
     ensure_filter_full_recalc_ready(engine)?;
@@ -318,7 +317,7 @@ pub(super) fn clear_all_filters(
 }
 
 pub(super) fn get_filtered_record_count(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> Option<filters::FilterRecordCount> {

@@ -1,22 +1,30 @@
-use std::sync::Arc;
-
 use domain_types::domain::custom_table_style::CustomTableStyleConfig;
 use ooxml_types::styles::TableStyleDef;
-use yrs::{Any, Map, MapRef};
-
-use compute_document::schema::KEY_CUSTOM_TABLE_STYLES;
 
 pub(super) fn hydrate_custom_table_styles_from_ooxml(
-    workbook: &MapRef,
+    metadata: &mut crate::storage::workbook::WorkbookMetadata,
     table_styles: &[TableStyleDef],
     workbook_stylesheet: &Option<domain_types::WorkbookStylesheet>,
     theme: &Option<domain_types::domain::theme::ThemeData>,
-    txn: &mut yrs::TransactionMut,
 ) {
-    if table_styles.is_empty() {
-        return;
-    }
+    metadata.custom_table_styles.clear();
+    merge_custom_table_styles_from_ooxml(metadata, table_styles, workbook_stylesheet, theme);
+}
 
+/// Merge imported custom styles, renaming conflicting definitions for sheet imports.
+pub(crate) fn merge_custom_table_styles_from_ooxml(
+    metadata: &mut crate::storage::workbook::WorkbookMetadata,
+    table_styles: &[TableStyleDef],
+    workbook_stylesheet: &Option<domain_types::WorkbookStylesheet>,
+    theme: &Option<domain_types::domain::theme::ThemeData>,
+) -> std::collections::HashMap<String, String> {
+    let mut renamed = std::collections::HashMap::new();
+    let mut reserved: std::collections::HashSet<String> = metadata
+        .custom_table_styles
+        .keys()
+        .chain(table_styles.iter().map(|style| &style.name))
+        .map(|name| name.to_ascii_lowercase())
+        .collect();
     let stylesheet = workbook_stylesheet
         .as_ref()
         .map(domain_types::WorkbookStylesheet::normalized)
@@ -33,26 +41,40 @@ pub(super) fn hydrate_custom_table_styles_from_ooxml(
         })
         .unwrap_or_default();
 
-    let styles_map =
-        crate::storage::ensure_workbook_child_map(workbook, txn, KEY_CUSTOM_TABLE_STYLES);
     for style in table_styles {
         if should_skip_public_custom_style(style) {
             continue;
         }
-        let public_style = CustomTableStyleConfig::from_ooxml_table_style(
+        let mut public_style = CustomTableStyleConfig::from_ooxml_table_style(
             style,
             &stylesheet.dxf_registry,
             &theme_colors,
         );
-        let Ok(json) = serde_json::to_string(&public_style) else {
-            continue;
-        };
-        styles_map.insert(
-            txn,
-            style.name.as_str(),
-            Any::String(Arc::from(json.as_str())),
-        );
+        if let Some(existing) = metadata
+            .custom_table_styles
+            .iter()
+            .find_map(|(name, existing)| name.eq_ignore_ascii_case(&style.name).then_some(existing))
+        {
+            if existing == &public_style {
+                continue;
+            }
+            let mut suffix = 2u32;
+            let unique_name = loop {
+                let candidate = format!("{}_{suffix}", style.name);
+                if reserved.insert(candidate.to_ascii_lowercase()) {
+                    break candidate;
+                }
+                suffix += 1;
+            };
+            renamed.insert(style.name.to_ascii_lowercase(), unique_name.clone());
+            public_style.name = unique_name.clone();
+            public_style.id = unique_name;
+        }
+        metadata
+            .custom_table_styles
+            .insert(public_style.name.clone(), public_style);
     }
+    renamed
 }
 
 fn should_skip_public_custom_style(style: &TableStyleDef) -> bool {
@@ -64,10 +86,9 @@ fn should_skip_public_custom_style(style: &TableStyleDef) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::YrsStorage;
+    use crate::storage::WorkbookStorage;
     use crate::storage::infra::hydration::DefaultIdAllocator;
     use ooxml_types::styles::{FillDef, PatternType, TableStyleElementDef, TableStyleType};
-    use yrs::{Out, Transact};
 
     #[test]
     fn imported_ooxml_table_styles_hydrate_only_canonical_custom_styles() {
@@ -105,34 +126,18 @@ mod tests {
             ..Default::default()
         };
 
-        let mut storage = YrsStorage::new();
+        let mut storage = WorkbookStorage::new();
         let mut allocator = DefaultIdAllocator::new();
         storage
             .hydrate_from_parse_output(&output, &mut allocator)
             .expect("hydrate_from_parse_output");
 
-        let txn = storage.doc().transact();
-        let workbook = storage.workbook_map();
-        let styles_map = match workbook.get(&txn, KEY_CUSTOM_TABLE_STYLES) {
-            Some(Out::YMap(map)) => map,
-            _ => panic!("canonical custom table style map should exist"),
-        };
-        let style_json = match styles_map.get(&txn, "MogBrandExportStyle") {
-            Some(Out::Any(Any::String(json))) => json,
-            _ => panic!("canonical custom table style should be persisted"),
-        };
-        let style: CustomTableStyleConfig =
-            serde_json::from_str(&style_json).expect("canonical style json");
+        let style = storage
+            .metadata
+            .custom_table_styles
+            .get("MogBrandExportStyle")
+            .expect("native custom style");
         assert_eq!(style.header_row.fill.as_deref(), Some("#1F4E78"));
-
-        if let Some(Out::YMap(raw_table_styles)) =
-            workbook.get(&txn, compute_document::schema::KEY_XLSX_TABLE_STYLES)
-        {
-            assert!(
-                raw_table_styles.get(&txn, "styles").is_none(),
-                "import must not persist raw OOXML table styles as a second export path"
-            );
-        }
     }
 
     #[test]
@@ -151,24 +156,17 @@ mod tests {
             ..Default::default()
         };
 
-        let mut storage = YrsStorage::new();
+        let mut storage = WorkbookStorage::new();
         let mut allocator = DefaultIdAllocator::new();
         storage
             .hydrate_from_parse_output(&output, &mut allocator)
             .expect("hydrate_from_parse_output");
 
-        let txn = storage.doc().transact();
-        let workbook = storage.workbook_map();
-        let styles_map = match workbook.get(&txn, KEY_CUSTOM_TABLE_STYLES) {
-            Some(Out::YMap(map)) => map,
-            _ => panic!("canonical custom table style map should exist"),
-        };
-        let style_json = match styles_map.get(&txn, "MogEmptyCustomStyle") {
-            Some(Out::Any(Any::String(json))) => json,
-            _ => panic!("canonical custom table style should be persisted"),
-        };
-        let style: CustomTableStyleConfig =
-            serde_json::from_str(&style_json).expect("canonical style json");
+        let style = storage
+            .metadata
+            .custom_table_styles
+            .get("MogEmptyCustomStyle")
+            .expect("native custom style");
         assert_eq!(style.name, "MogEmptyCustomStyle");
         assert_eq!(style.whole_table, Default::default());
     }

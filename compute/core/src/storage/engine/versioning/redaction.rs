@@ -6,7 +6,6 @@ use snapshot_types::versioning::{
 const REDACTION_KEY_DOMAIN: &str = "mog.versioning.redaction-key.v1";
 const AUTHOR_ID_FIELD: &str = "operation.author.authorId";
 const SESSION_ID_FIELD: &str = "operation.author.sessionId";
-const PROVIDER_ID_FIELD: &str = "operation.collaboration.providerId";
 
 pub fn deterministic_redaction_key(
     subject: VersionRedactionKeySubjectWire,
@@ -48,15 +47,6 @@ pub fn session_id_redaction_key(session_id: impl AsRef<str>) -> VersionRedaction
     )
 }
 
-pub fn provider_id_redaction_key(provider_id: impl AsRef<str>) -> VersionRedactionKeyWire {
-    deterministic_redaction_key(
-        VersionRedactionKeySubjectWire::Provider,
-        PROVIDER_ID_FIELD,
-        provider_id,
-        VersionRedactionPolicyWire::MetadataOnly,
-    )
-}
-
 pub fn debug_field_redaction_key(
     field_name: impl AsRef<str>,
     value: impl AsRef<str>,
@@ -93,7 +83,6 @@ fn subject_label(subject: &VersionRedactionKeySubjectWire) -> &'static str {
     match subject {
         VersionRedactionKeySubjectWire::Author => "author",
         VersionRedactionKeySubjectWire::Session => "session",
-        VersionRedactionKeySubjectWire::Provider => "provider",
         VersionRedactionKeySubjectWire::Debug => "debug",
     }
 }
@@ -107,25 +96,17 @@ mod tests {
         let author = author_id_redaction_key("ada@example.com");
         let author_again = author_id_redaction_key("ada@example.com");
         let session = session_id_redaction_key("session-123");
-        let provider = provider_id_redaction_key("indexeddb-primary");
         let debug = debug_field_redaction_key("payloadPreview", "debug payload");
 
         assert_eq!(author, author_again);
         assert_eq!(author.source_field, AUTHOR_ID_FIELD);
         assert_eq!(session.source_field, SESSION_ID_FIELD);
-        assert_eq!(provider.source_field, PROVIDER_ID_FIELD);
         assert_eq!(debug.source_field, "debug.payloadPreview");
 
         assert_ne!(author.key_id, session.key_id);
-        assert_ne!(author.key_id, provider.key_id);
         assert_ne!(author.key_id, debug.key_id);
         assert!(author.key_id.starts_with("redaction-key:author:sha256:"));
         assert!(session.key_id.starts_with("redaction-key:session:sha256:"));
-        assert!(
-            provider
-                .key_id
-                .starts_with("redaction-key:provider:sha256:")
-        );
         assert!(debug.key_id.starts_with("redaction-key:debug:sha256:"));
 
         assert_eq!(
@@ -135,10 +116,6 @@ mod tests {
         assert_eq!(
             session.digest.value,
             "2cf105a1106c9dc2828142ed9ee7d193b08b5ead230c7f55e80b658ef80f6f17"
-        );
-        assert_eq!(
-            provider.digest.value,
-            "f0c6c79faa0a54ba26570b435394585491e3979640ef0f9e1ff584792ddc6798"
         );
         assert_eq!(
             debug.digest.value,
@@ -161,34 +138,19 @@ mod tests {
             raw_value,
             VersionRedactionPolicyWire::MetadataOnly,
         );
-        let provider = deterministic_redaction_key(
-            VersionRedactionKeySubjectWire::Provider,
-            PROVIDER_ID_FIELD,
-            raw_value,
-            VersionRedactionPolicyWire::MetadataOnly,
-        );
         let debug = debug_field_redaction_key("sameSensitiveValue", raw_value);
 
         assert_ne!(author.digest, session.digest);
-        assert_ne!(author.digest, provider.digest);
         assert_ne!(author.digest, debug.digest);
-        assert_ne!(session.digest, provider.digest);
-        assert_ne!(provider.digest, debug.digest);
     }
 
     #[test]
     fn serialized_redaction_key_omits_raw_sensitive_values() {
-        let raw_values = [
-            "ada@example.com",
-            "session-123",
-            "indexeddb-primary",
-            "debug payload",
-        ];
+        let raw_values = ["ada@example.com", "session-123", "debug payload"];
         let keys = vec![
             author_id_redaction_key(raw_values[0]),
             session_id_redaction_key(raw_values[1]),
-            provider_id_redaction_key(raw_values[2]),
-            debug_field_redaction_key("payloadPreview", raw_values[3]),
+            debug_field_redaction_key("payloadPreview", raw_values[2]),
         ];
 
         let json = serde_json::to_string(&keys).expect("redaction keys serialize");
@@ -201,7 +163,6 @@ mod tests {
         }
         assert!(json.contains("\"sourceField\":\"operation.author.authorId\""));
         assert!(json.contains("\"sourceField\":\"operation.author.sessionId\""));
-        assert!(json.contains("\"sourceField\":\"operation.collaboration.providerId\""));
         assert!(json.contains("\"sourceField\":\"debug.payloadPreview\""));
     }
 }

@@ -11,7 +11,7 @@
 
 use std::sync::Arc;
 
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use domain_types::{CellData, DocumentFormat, FontFormat, MergeRegion, ParseOutput, SheetData};
 use value_types::{CellValue, FiniteF64};
 use xlsx_parser::write::write_xlsx_from_parse_output;
@@ -81,7 +81,7 @@ fn styled_num_cell(row: u32, col: u32, n: f64, style_id: u32) -> CellData {
 /// Returns the re-parsed `ParseOutput`.
 fn roundtrip(po: &ParseOutput) -> ParseOutput {
     let xlsx_bytes = write_xlsx_from_parse_output(po).expect("write_xlsx_from_parse_output");
-    let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
+    let (engine, _) = ComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
     let exported = engine.export_to_xlsx_bytes().expect("export_to_xlsx_bytes");
     let (reparsed, _ctx, _diags) =
         xlsx_parser::parse_xlsx_to_output(&exported).expect("parse_xlsx_to_output");
@@ -233,7 +233,7 @@ fn xlsx_import_wall_clock_100k() {
     let xlsx_bytes = write_xlsx_from_parse_output(&po).expect("write_xlsx_from_parse_output");
 
     let start = std::time::Instant::now();
-    let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
+    let (engine, _) = ComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
     let import_elapsed = start.elapsed();
 
     // Print timing (not gated — just recording baseline).
@@ -274,7 +274,7 @@ fn xlsx_import_wall_clock_500k() {
     let xlsx_bytes = write_xlsx_from_parse_output(&po).expect("write_xlsx_from_parse_output");
 
     let start = std::time::Instant::now();
-    let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
+    let (engine, _) = ComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
     let import_elapsed = start.elapsed();
 
     eprintln!(
@@ -308,7 +308,7 @@ fn xlsx_import_wall_clock_1m() {
     let xlsx_bytes = write_xlsx_from_parse_output(&po).expect("write_xlsx_from_parse_output");
 
     let start = std::time::Instant::now();
-    let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
+    let (engine, _) = ComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
     let import_elapsed = start.elapsed();
 
     eprintln!(

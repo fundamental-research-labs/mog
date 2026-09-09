@@ -65,7 +65,7 @@ impl LookupIndexCache {
         &self,
         sheet: SheetId,
         col: u32,
-        col_values: &[CellValue],
+        col_values: value_types::ColumnView<'_>,
     ) -> dashmap::mapref::one::Ref<'_, (SheetId, u32), LookupIndex> {
         self.get_or_build(sheet, col, || {
             LookupIndex::build(

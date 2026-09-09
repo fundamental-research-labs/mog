@@ -48,6 +48,36 @@ pub fn collect_reference_tokens(formula: &str) -> Vec<ReferenceToken> {
     out
 }
 
+/// Rewrite reference tokens without touching string literals or surrounding syntax.
+/// The scanner uses byte offsets internally, so non-ASCII text cannot skew edits.
+pub fn rewrite_reference_tokens(
+    formula: &str,
+    mut rewrite: impl FnMut(ReferenceTokenClass, &str) -> Option<String>,
+) -> String {
+    let bytes = formula.as_bytes();
+    let mut result = String::new();
+    let mut copied = 0;
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'"' {
+            i = skip_string_literal(bytes, i);
+            continue;
+        }
+        if let Some((end, class)) = scan_reference_token(formula, i) {
+            if let Some(replacement) = rewrite(class, slice_range(formula, i, end)) {
+                result.push_str(slice_range(formula, copied, i));
+                result.push_str(&replacement);
+                copied = end;
+            }
+            i = end;
+        } else {
+            i += 1;
+        }
+    }
+    result.push_str(slice_range(formula, copied, formula.len()));
+    result
+}
+
 fn skip_string_literal(bytes: &[u8], start: usize) -> usize {
     let mut i = start + 1;
     while i < bytes.len() {
@@ -77,7 +107,7 @@ fn scan_reference_token(formula: &str, start: usize) -> Option<(usize, Reference
         b'$' => scan_cell_or_range(formula, start)
             .or_else(|| scan_col_range(formula, start))
             .map(|end| (end, reference_class_for_span(formula, start, end))),
-        b'A'..=b'Z' | b'a'..=b'z' | b'_' => scan_alpha_reference(formula, start),
+        b'A'..=b'Z' | b'a'..=b'z' | b'_' | b'\\' => scan_alpha_reference(formula, start),
         b'0'..=b'9' => {
             scan_row_range(formula, start).map(|end| (end, ReferenceTokenClass::CellOrRange))
         }
@@ -212,7 +242,7 @@ fn scan_alpha_reference(formula: &str, start: usize) -> Option<(usize, Reference
 fn scan_identifier(formula: &str, start: usize) -> Option<usize> {
     let bytes = formula.as_bytes();
     let first = *bytes.get(start)?;
-    if !(first == b'_' || first.is_ascii_alphabetic()) {
+    if !(first == b'_' || first == b'\\' || first.is_ascii_alphabetic()) {
         return None;
     }
     let mut i = start + 1;
@@ -344,23 +374,7 @@ fn scan_broken_ref_construct(formula: &str, start: usize) -> usize {
 }
 
 fn find_matching_bracket(formula: &str, start: usize) -> Option<usize> {
-    let bytes = formula.as_bytes();
-    let mut depth = 0u32;
-    let mut i = start;
-    while i < bytes.len() {
-        match bytes[i] {
-            b'[' => depth += 1,
-            b']' => {
-                depth = depth.checked_sub(1)?;
-                if depth == 0 {
-                    return Some(i);
-                }
-            }
-            _ => {}
-        }
-        i += 1;
-    }
-    None
+    crate::structured_ref_parsing::find_outer_matching_bracket(formula, start)
 }
 
 fn matches_ignore_ascii_case(value: &str, candidates: &[&str]) -> bool {

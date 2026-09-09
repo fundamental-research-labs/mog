@@ -35,6 +35,9 @@ fn agg_cross_sheet_snapshot() -> WorkbookSnapshot {
 
     workbook_snapshot(vec![
         SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: cell_id(1),
             name: "Data".to_string(),
             rows: 20,
@@ -43,6 +46,9 @@ fn agg_cross_sheet_snapshot() -> WorkbookSnapshot {
             ranges: vec![],
         },
         SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: cell_id(2),
             name: "Report".to_string(),
             rows: 10,

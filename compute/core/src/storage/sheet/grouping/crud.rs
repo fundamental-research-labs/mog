@@ -1,14 +1,13 @@
+use crate::storage::WorkbookStorage;
 use cell_types::SheetId;
-use yrs::{Doc, MapRef};
 
 use super::hierarchy::{calculate_group_level, find_parent_group};
 use super::ids::{generate_unique_group_id, sheet_id_to_hex};
+use super::store::{get_sheet_grouping_config, set_sheet_grouping_config};
 use super::types::{GroupAxis, GroupDefinition, SheetGroupingConfig};
-use super::yrs_io::{get_sheet_grouping_config, set_sheet_grouping_config};
 
 pub fn group_rows(
-    doc: &Doc,
-    sheets: &MapRef,
+    storage: &mut WorkbookStorage,
     sheet_id: &SheetId,
     start_row: u32,
     end_row: u32,
@@ -18,7 +17,7 @@ pub fn group_rows(
     } else {
         (start_row, end_row)
     };
-    let mut config = get_sheet_grouping_config(doc, sheets, sheet_id);
+    let mut config = get_sheet_grouping_config(storage, sheet_id);
     let level = calculate_group_level(&config.row_groups, start, end)?;
     let parent_id = find_parent_group(&config.row_groups, start, end, level);
     let group = GroupDefinition {
@@ -34,17 +33,22 @@ pub fn group_rows(
         collapsed_on_member: false,
     };
     config.row_groups.push(group.clone());
-    set_sheet_grouping_config(doc, sheets, sheet_id, &config);
+    set_sheet_grouping_config(storage, sheet_id, &config);
     Ok(group)
 }
 
-pub fn ungroup_rows(doc: &Doc, sheets: &MapRef, sheet_id: &SheetId, start_row: u32, end_row: u32) {
+pub fn ungroup_rows(
+    storage: &mut WorkbookStorage,
+    sheet_id: &SheetId,
+    start_row: u32,
+    end_row: u32,
+) {
     let (start, end) = if start_row > end_row {
         (end_row, start_row)
     } else {
         (start_row, end_row)
     };
-    let mut config = get_sheet_grouping_config(doc, sheets, sheet_id);
+    let mut config = get_sheet_grouping_config(storage, sheet_id);
     let mut containing: Vec<(usize, &GroupDefinition)> = config
         .row_groups
         .iter()
@@ -94,13 +98,12 @@ pub fn ungroup_rows(doc: &Doc, sheets: &MapRef, sheet_id: &SheetId, start_row: u
             config.row_groups.push(left);
             config.row_groups.push(right);
         }
-        set_sheet_grouping_config(doc, sheets, sheet_id, &config);
+        set_sheet_grouping_config(storage, sheet_id, &config);
     }
 }
 
 pub fn clear_row_grouping(
-    doc: &Doc,
-    sheets: &MapRef,
+    storage: &mut WorkbookStorage,
     sheet_id: &SheetId,
     start_row: u32,
     end_row: u32,
@@ -110,9 +113,9 @@ pub fn clear_row_grouping(
     } else {
         (start_row, end_row)
     };
-    let mut config = get_sheet_grouping_config(doc, sheets, sheet_id);
+    let mut config = get_sheet_grouping_config(storage, sheet_id);
     config.row_groups.retain(|g| g.end < start || g.start > end);
-    set_sheet_grouping_config(doc, sheets, sheet_id, &config);
+    set_sheet_grouping_config(storage, sheet_id, &config);
 }
 
 // =============================================================================
@@ -120,8 +123,7 @@ pub fn clear_row_grouping(
 // =============================================================================
 
 pub fn group_columns(
-    doc: &Doc,
-    sheets: &MapRef,
+    storage: &mut WorkbookStorage,
     sheet_id: &SheetId,
     start_col: u32,
     end_col: u32,
@@ -131,7 +133,7 @@ pub fn group_columns(
     } else {
         (start_col, end_col)
     };
-    let mut config = get_sheet_grouping_config(doc, sheets, sheet_id);
+    let mut config = get_sheet_grouping_config(storage, sheet_id);
     let level = calculate_group_level(&config.column_groups, start, end)?;
     let parent_id = find_parent_group(&config.column_groups, start, end, level);
     let group = GroupDefinition {
@@ -147,13 +149,12 @@ pub fn group_columns(
         collapsed_on_member: false,
     };
     config.column_groups.push(group.clone());
-    set_sheet_grouping_config(doc, sheets, sheet_id, &config);
+    set_sheet_grouping_config(storage, sheet_id, &config);
     Ok(group)
 }
 
 pub fn ungroup_columns(
-    doc: &Doc,
-    sheets: &MapRef,
+    storage: &mut WorkbookStorage,
     sheet_id: &SheetId,
     start_col: u32,
     end_col: u32,
@@ -163,7 +164,7 @@ pub fn ungroup_columns(
     } else {
         (start_col, end_col)
     };
-    let mut config = get_sheet_grouping_config(doc, sheets, sheet_id);
+    let mut config = get_sheet_grouping_config(storage, sheet_id);
     let mut containing: Vec<(usize, &GroupDefinition)> = config
         .column_groups
         .iter()
@@ -213,13 +214,12 @@ pub fn ungroup_columns(
             config.column_groups.push(left);
             config.column_groups.push(right);
         }
-        set_sheet_grouping_config(doc, sheets, sheet_id, &config);
+        set_sheet_grouping_config(storage, sheet_id, &config);
     }
 }
 
 pub fn clear_column_grouping(
-    doc: &Doc,
-    sheets: &MapRef,
+    storage: &mut WorkbookStorage,
     sheet_id: &SheetId,
     start_col: u32,
     end_col: u32,
@@ -229,17 +229,17 @@ pub fn clear_column_grouping(
     } else {
         (start_col, end_col)
     };
-    let mut config = get_sheet_grouping_config(doc, sheets, sheet_id);
+    let mut config = get_sheet_grouping_config(storage, sheet_id);
     config
         .column_groups
         .retain(|g| g.end < start || g.start > end);
-    set_sheet_grouping_config(doc, sheets, sheet_id, &config);
+    set_sheet_grouping_config(storage, sheet_id, &config);
 }
 
 // =============================================================================
 // Queries
 // =============================================================================
 
-pub fn clear_all_grouping(doc: &Doc, sheets: &MapRef, sheet_id: &SheetId) {
-    set_sheet_grouping_config(doc, sheets, sheet_id, &SheetGroupingConfig::default());
+pub fn clear_all_grouping(storage: &mut WorkbookStorage, sheet_id: &SheetId) {
+    set_sheet_grouping_config(storage, sheet_id, &SheetGroupingConfig::default());
 }

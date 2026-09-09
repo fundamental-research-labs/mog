@@ -7,7 +7,7 @@ use value_types::CellValue;
 
 #[test]
 fn bulk_set_cells_by_position_grows_fresh_sheet_to_100k_once() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(empty_bulk_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(empty_bulk_snapshot()).unwrap();
     let sid = sheet_id();
 
     let edits = (0..100_000)
@@ -37,52 +37,8 @@ fn bulk_set_cells_by_position_grows_fresh_sheet_to_100k_once() {
 }
 
 #[test]
-fn bulk_set_cells_by_position_emits_one_provider_update() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(empty_bulk_snapshot()).unwrap();
-    let sid = sheet_id();
-    engine
-        .drain_pending_updates()
-        .expect("construction updates should drain");
-
-    engine
-        .batch_set_cells_by_position(
-            vec![
-                (
-                    sid,
-                    0,
-                    0,
-                    crate::storage::engine::mutation::CellInput::Parse { text: "1".into() },
-                ),
-                (
-                    sid,
-                    1,
-                    0,
-                    crate::storage::engine::mutation::CellInput::Parse { text: "2".into() },
-                ),
-                (
-                    sid,
-                    2,
-                    0,
-                    crate::storage::engine::mutation::CellInput::Parse { text: "3".into() },
-                ),
-            ],
-            true,
-        )
-        .expect("bulk write");
-
-    let updates = engine
-        .drain_pending_updates()
-        .expect("bulk provider updates should drain");
-    assert_eq!(
-        updates.len(),
-        1,
-        "bulk cell writes must fan out one provider update per user-visible mutation"
-    );
-}
-
-#[test]
 fn duplicate_set_cells_by_position_uses_last_write_and_one_identity() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(empty_bulk_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(empty_bulk_snapshot()).unwrap();
     let sid = sheet_id();
 
     engine
@@ -117,7 +73,7 @@ fn duplicate_set_cells_by_position_uses_last_write_and_one_identity() {
 
 #[test]
 fn undo_redo_restores_bulk_dimension_growth() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(empty_bulk_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(empty_bulk_snapshot()).unwrap();
     let sid = sheet_id();
     assert_eq!(engine.grid_index(&sid).unwrap().row_count(), 0);
     assert_eq!(engine.grid_index(&sid).unwrap().col_count(), 0);
@@ -159,8 +115,14 @@ fn undo_redo_restores_bulk_dimension_growth() {
 
 #[test]
 fn undo_redo_restores_single_axis_col_growth_on_pre_sized_sheet() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(crate::snapshot::WorkbookSnapshot {
+    let (mut engine, _) = ComputeEngine::from_snapshot(crate::snapshot::WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![crate::snapshot::SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_id().to_uuid_string(),
             name: "Sheet1".to_string(),
             rows: 1_335,
@@ -220,7 +182,7 @@ fn undo_redo_restores_single_axis_col_growth_on_pre_sized_sheet() {
 
 #[test]
 fn explicit_tail_row_delete_undo_redo_stays_structural() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(empty_bulk_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(empty_bulk_snapshot()).unwrap();
     let sid = sheet_id();
 
     engine

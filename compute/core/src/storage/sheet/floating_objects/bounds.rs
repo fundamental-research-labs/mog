@@ -107,8 +107,14 @@ pub fn compute_object_pixel_bounds(
     match anchor_mode {
         "absolute" => {
             // Absolute anchors: x/y are already pixel coordinates
-            let x = obj_json.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0);
-            let y = obj_json.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let x = anchor_field_aliased("absoluteXEmu", "absoluteX")
+                .map(emu_to_px)
+                .or_else(|| obj_json.get("x").and_then(|v| v.as_f64()))
+                .unwrap_or(0.0);
+            let y = anchor_field_aliased("absoluteYEmu", "absoluteY")
+                .map(emu_to_px)
+                .or_else(|| obj_json.get("y").and_then(|v| v.as_f64()))
+                .unwrap_or(0.0);
             let width = obj_json
                 .get("width")
                 .and_then(|v| v.as_f64())
@@ -117,7 +123,7 @@ pub fn compute_object_pixel_bounds(
                 .get("height")
                 .and_then(|v| v.as_f64())
                 .unwrap_or(0.0);
-            // All coordinates derive from layout/yrs storage which uses
+            // All coordinates derive from native layout storage which uses
             // pixel/CharWidth values that stay finite by construction.
             // `FiniteF64::must` documents the storage invariant.
             Some(FloatingObjectBounds {

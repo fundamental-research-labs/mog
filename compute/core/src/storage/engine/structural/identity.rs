@@ -1,4 +1,4 @@
-use super::super::YrsComputeEngine;
+use super::super::ComputeEngine;
 use super::super::mutation::{EngineMutation, MutationOutput};
 use super::super::services;
 use crate::snapshot::MutationResult;
@@ -6,15 +6,21 @@ use cell_types::SheetId;
 use compute_wire::mutation::{concat_multi_viewport_patches, serialize_multi_viewport_patches};
 use value_types::ComputeError;
 
-impl YrsComputeEngine {
+impl ComputeEngine {
     pub(super) fn apply_get_or_create_cell_id(
         &mut self,
         sheet_id: &SheetId,
         row: u32,
         col: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::structural::get_or_create_cell_id(&mut self.stores, sheet_id, row, col)
-            .map(|r| (serialize_multi_viewport_patches(&[]), r))
+        services::structural::get_or_create_cell_id(
+            &mut self.stores,
+            &mut self.mirror,
+            sheet_id,
+            row,
+            col,
+        )
+        .map(|r| (serialize_multi_viewport_patches(&[]), r))
     }
 
     pub(super) fn apply_update_cell_position(
@@ -35,7 +41,7 @@ impl YrsComputeEngine {
         .map(|r| (serialize_multi_viewport_patches(&[]), r))
     }
 
-    pub(super) fn apply_relocate_cells_yrs(
+    pub(super) fn apply_relocate_cells(
         &mut self,
         source_sheet_id: &SheetId,
         src_start_row: u32,

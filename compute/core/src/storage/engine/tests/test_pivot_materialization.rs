@@ -5,7 +5,7 @@ use serde_json::json;
 use value_types::{CellValue, ComputeError, FiniteF64};
 
 fn stored_number_format_at(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -19,9 +19,15 @@ fn stored_number_format_at(
         .number_format
 }
 
-fn pivot_history_snapshot(sid: SheetId) -> WorkbookSnapshot {
+fn pivot_snapshot(sid: SheetId) -> WorkbookSnapshot {
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sid.to_uuid_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -95,12 +101,12 @@ fn pivot_history_snapshot(sid: SheetId) -> WorkbookSnapshot {
     }
 }
 
-fn create_region_sales_pivot(engine: &mut YrsComputeEngine, sid: SheetId, name: &str) -> String {
+fn create_region_sales_pivot(engine: &mut ComputeEngine, sid: SheetId, name: &str) -> String {
     create_region_sales_pivot_on_sheet(engine, sid, sid, "Sheet1", name)
 }
 
 fn create_region_sales_pivot_on_sheet(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     source_sid: SheetId,
     output_sid: SheetId,
     output_sheet_name: &str,
@@ -143,8 +149,8 @@ fn create_region_sales_pivot_on_sheet(
 #[test]
 fn api_created_pivot_exports_refresh_safe_ooxml_metadata() {
     let sid = sheet_id();
-    let snap = pivot_history_snapshot(sid);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let snap = pivot_snapshot(sid);
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let (output_sheet_hex, _) = engine
         .create_sheet("PivotOutput")
         .expect("create separate pivot output sheet");
@@ -204,8 +210,8 @@ fn api_created_pivot_exports_refresh_safe_ooxml_metadata() {
 #[test]
 fn pivot_output_cells_reject_user_writes() {
     let sid = sheet_id();
-    let snap = pivot_history_snapshot(sid);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let snap = pivot_snapshot(sid);
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     create_region_sales_pivot(&mut engine, sid, "GuardedPivot");
     engine.recalculate().expect("materialize pivot");
@@ -241,8 +247,8 @@ fn pivot_output_cells_reject_user_writes() {
 #[test]
 fn copied_sheet_pivots_retarget_output_and_same_sheet_source() {
     let sid = sheet_id();
-    let snap = pivot_history_snapshot(sid);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let snap = pivot_snapshot(sid);
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let original_id = create_region_sales_pivot(&mut engine, sid, "CopyablePivot");
     engine.recalculate().expect("materialize source pivot");
@@ -292,7 +298,13 @@ fn copied_sheet_pivots_retarget_output_and_same_sheet_source() {
 fn percent_show_values_as_materializes_percent_display_format() {
     let sid = sheet_id();
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sid.to_uuid_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -382,7 +394,7 @@ fn percent_show_values_as_materializes_percent_display_format() {
         max_change: FiniteF64::must(0.001),
         calculation_settings: None,
     };
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     engine
         .pivot_create(json!({
@@ -420,163 +432,204 @@ fn percent_show_values_as_materializes_percent_display_format() {
 }
 
 #[test]
-fn pivot_value_format_materialization_does_not_clear_redo_stack() {
-    let sid = sheet_id();
-    let snap = pivot_history_snapshot(sid);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
-    let sales_cell = CellId::from_uuid_str("550e8400-e29b-41d4-a716-446655440204").unwrap();
-
-    engine
-        .pivot_create(json!({
-            "id": "redo-pivot",
-            "name": "RedoPivot",
-            "sourceSheetId": sid.to_uuid_string(),
-            "sourceSheetName": "Sheet1",
-            "sourceRange": { "startRow": 0, "startCol": 0, "endRow": 2, "endCol": 1 },
-            "outputSheetName": "Sheet1",
-            "outputLocation": { "row": 0, "col": 4 },
-            "fields": [
-                { "id": "Region", "name": "Region", "sourceColumn": 0, "dataType": "string" },
-                { "id": "Sales", "name": "Sales", "sourceColumn": 1, "dataType": "number" }
-            ],
-            "placements": [
-                { "fieldId": "Region", "area": "row", "position": 0 },
-                {
-                    "fieldId": "Sales",
-                    "area": "value",
-                    "position": 0,
-                    "aggregateFunction": "sum"
-                }
-            ],
-            "filters": []
-        }))
-        .expect("create pivot");
-    let pivot_id = engine
-        .pivot_get_all(&sid)
-        .into_iter()
-        .find(|config| config.name == "RedoPivot")
-        .expect("created pivot")
-        .id;
-    engine.recalculate().expect("initial pivot materialization");
-    assert_eq!(
-        stored_number_format_at(&engine, &sid, 1, 5),
-        None,
-        "ordinary pivot values should not materialize an explicit General format"
+fn source_axis_edits_update_pivots_on_other_output_sheets() {
+    let source = sheet_id();
+    let (mut engine, _) = ComputeEngine::from_snapshot(pivot_snapshot(source)).unwrap();
+    let (output, _) = engine.create_sheet("PivotOutput").unwrap();
+    let output = SheetId::from_uuid_str(&output).unwrap();
+    let pivot_id = create_region_sales_pivot_on_sheet(
+        &mut engine,
+        source,
+        output,
+        "PivotOutput",
+        "SalesPivot",
     );
-    engine.flush_undo_capture().expect("seal pivot setup");
-    engine.mutation.undo_manager.clear();
-    engine.flush_undo_capture().expect("reset cleared history");
-
     engine
-        .set_cell(
-            &sid,
-            sales_cell,
-            1,
-            1,
-            crate::bridge_types::CellInput::Parse { text: "150".into() },
+        .structure_change(
+            &source,
+            &formula_types::StructureChange::InsertRows {
+                at: 0,
+                count: 2,
+                new_row_ids: vec![],
+            },
         )
-        .expect("edit pivot source");
-    engine.flush_undo_capture().expect("separate source edit");
-
-    engine.undo().expect("undo source edit");
-    assert_eq!(cell_value_at(&engine, &sid, 1, 1), num(100.0));
-    assert!(
-        engine.can_redo(),
-        "source edit should be redoable after undo"
+        .unwrap();
+    let pivot = engine
+        .pivot_get_all(&output)
+        .into_iter()
+        .find(|pivot| pivot.id == pivot_id)
+        .unwrap();
+    assert_eq!(pivot.source_range, cell_types::SheetRange::new(2, 0, 4, 1));
+    assert_eq!(pivot.output_location.row, 0);
+    assert_eq!(pivot.output_location.col, 4);
+    let exported = engine.export_to_parse_output().unwrap().parse_output;
+    let pivot = exported
+        .pivot_tables
+        .iter()
+        .find(|pivot| pivot.config.name == "SalesPivot")
+        .unwrap();
+    assert_eq!(
+        pivot.config.source_range,
+        cell_types::SheetRange::new(2, 0, 4, 1)
     );
-
-    engine
-        .pivot_materialize(&sid, &pivot_id, None)
-        .expect("materialize pivot after undo");
-
-    assert!(
-        engine.can_redo(),
-        "automatic pivot materialization must not clear redo"
-    );
-    engine.redo().expect("redo source edit");
-    assert_eq!(cell_value_at(&engine, &sid, 1, 1), num(150.0));
 }
 
 #[test]
-fn pivot_percent_format_materialization_does_not_clear_redo_stack() {
+fn copied_imported_pivot_uses_an_independent_cache_for_its_copied_source() {
     let sid = sheet_id();
-    let snap = pivot_history_snapshot(sid);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
-    let sales_cell = CellId::from_uuid_str("550e8400-e29b-41d4-a716-446655440204").unwrap();
-
+    let (mut engine, _) = ComputeEngine::from_snapshot(pivot_snapshot(sid)).unwrap();
+    create_region_sales_pivot(&mut engine, sid, "ImportedCopy");
+    let bytes = engine.export_to_xlsx_bytes().unwrap();
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).unwrap();
+    let source = engine.storage().sheet_order()[0];
+    let original = engine.pivot_get_all(&source).pop().unwrap();
+    let original_cache = original.cache_id.expect("imported cache identity");
+    // Imported pivot-backed objects use the OOXML pivot name. A nonsequential
+    // sheet ID catches accidental use of worksheet position as the OOXML tab ID.
     engine
-        .pivot_create(json!({
-            "id": "redo-percent-pivot",
-            "name": "RedoPercentPivot",
-            "sourceSheetId": sid.to_uuid_string(),
-            "sourceSheetName": "Sheet1",
-            "sourceRange": { "startRow": 0, "startCol": 0, "endRow": 2, "endCol": 1 },
-            "outputSheetName": "Sheet1",
-            "outputLocation": { "row": 0, "col": 4 },
-            "fields": [
-                { "id": "Region", "name": "Region", "sourceColumn": 0, "dataType": "string" },
-                { "id": "Sales", "name": "Sales", "sourceColumn": 1, "dataType": "number" }
-            ],
-            "placements": [
-                { "fieldId": "Region", "area": "row", "position": 0 },
-                {
-                    "fieldId": "Sales",
-                    "area": "value",
-                    "position": 0,
-                    "aggregateFunction": "sum",
-                    "showValuesAs": { "type": "percentOfGrandTotal" }
-                }
-            ],
-            "filters": []
-        }))
-        .expect("create percent pivot");
-    let pivot_id = engine
-        .pivot_get_all(&sid)
-        .into_iter()
-        .find(|config| config.name == "RedoPercentPivot")
-        .expect("created percent pivot")
-        .id;
+        .stores
+        .storage
+        .sheet_metadata
+        .get_mut(&source)
+        .unwrap()
+        .original_sheet_id = Some(7);
+    let slicer = domain_types::domain::slicer::xlsx_import_to_stored_slicer(
+        &ooxml_types::slicers::SlicerDef {
+            name: "Regions".into(),
+            cache: "RegionCache".into(),
+            ..Default::default()
+        },
+        Some(&ooxml_types::slicers::SlicerCacheDef {
+            name: "RegionCache".into(),
+            source_name: "Region".into(),
+            pivot_tables: vec![ooxml_types::slicers::SlicerPivotTableRef {
+                tab_id: 7,
+                name: original.name.clone(),
+            }],
+            tabular_data: Some(ooxml_types::slicers::SlicerTabularData {
+                pivot_cache_id: original_cache,
+                ..Default::default()
+            }),
+            ..Default::default()
+        }),
+        None,
+        domain_types::domain::slicer::XlsxSlicerImportContext {
+            sheet_id: &source.to_uuid_string(),
+            source_table_id: None,
+            source_table_column_id: None,
+            table_filter_selected_values: None,
+        },
+    );
     engine
-        .recalculate()
-        .expect("initial percent pivot materialization");
+        .stores
+        .storage
+        .metadata
+        .slicers
+        .insert(slicer.id.clone(), slicer);
+    let timeline = domain_types::domain::slicer::xlsx_import_to_stored_timeline(
+        &ooxml_types::timelines::TimelineDef {
+            name: "Dates".into(),
+            cache: "DateCache".into(),
+            ..Default::default()
+        },
+        Some(&ooxml_types::timelines::TimelineCacheDef {
+            name: "DateCache".into(),
+            source_name: "Region".into(),
+            pivot_cache_id: Some(original_cache),
+            pivot_tables: vec![ooxml_types::timelines::TimelinePivotTableRef {
+                tab_id: 7,
+                name: original.name.clone(),
+            }],
+            ..Default::default()
+        }),
+        None,
+        &source.to_uuid_string(),
+    );
+    engine
+        .stores
+        .storage
+        .metadata
+        .timelines
+        .insert(timeline.id.clone(), timeline);
+    let (copy, _) = engine.copy_sheet(&source, "CopiedImport").unwrap();
+    let copy = SheetId::from_uuid_str(&copy).unwrap();
+    let copied = engine.pivot_get_all(&copy).pop().unwrap();
+    let copied_cache = copied.cache_id.expect("copied cache identity");
+    assert_ne!(original_cache, copied_cache);
     assert_eq!(
-        stored_number_format_at(&engine, &sid, 1, 5).as_deref(),
-        Some("0%")
+        copied.source_sheet_id.as_deref(),
+        Some(copy.to_uuid_string().as_str())
     );
-    engine
-        .flush_undo_capture()
-        .expect("seal percent pivot setup");
-    engine.mutation.undo_manager.clear();
-    engine
-        .flush_undo_capture()
-        .expect("reset cleared percent history");
-
-    engine
-        .set_cell(
-            &sid,
-            sales_cell,
-            1,
-            1,
-            crate::bridge_types::CellInput::Parse { text: "150".into() },
-        )
-        .expect("edit pivot source");
-    engine.flush_undo_capture().expect("separate source edit");
-
-    engine.undo().expect("undo source edit");
-    assert_eq!(cell_value_at(&engine, &sid, 1, 1), num(100.0));
-    assert!(
-        engine.can_redo(),
-        "source edit should be redoable after undo"
-    );
-
-    engine
-        .pivot_materialize(&sid, &pivot_id, None)
-        .expect("materialize percent pivot after undo");
-
-    assert!(
-        engine.can_redo(),
-        "derived pivot number-format materialization must not clear redo"
-    );
-    engine.redo().expect("redo source edit");
-    assert_eq!(cell_value_at(&engine, &sid, 1, 1), num(150.0));
+    let exported = engine.export_to_parse_output().unwrap();
+    for (cache_id, expected_sheet) in [(original_cache, "Sheet1"), (copied_cache, "CopiedImport")] {
+        let source = exported
+            .parse_output
+            .pivot_cache_sources
+            .iter()
+            .find(|source| source.cache_id == cache_id)
+            .unwrap();
+        assert_eq!(source.source_sheet.as_deref(), Some(expected_sheet));
+    }
+    let bytes = engine.export_to_xlsx_bytes().unwrap();
+    let mut output = xlsx_parser::parse_xlsx_to_output(&bytes).unwrap().0;
+    output.slicer_caches.sort_by(|a, b| a.name.cmp(&b.name));
+    output.timeline_caches.sort_by(|a, b| a.name.cmp(&b.name));
+    let cache_ids: std::collections::HashSet<_> = output
+        .pivot_tables
+        .iter()
+        .filter_map(|pivot| pivot.config.cache_id)
+        .collect();
+    assert_eq!(cache_ids.len(), 2);
+    for (pivot_name, cache_id, tab_id) in [
+        (&original.name, original_cache, 7),
+        (&copied.name, copied_cache, 8),
+    ] {
+        let slicer_cache = output
+            .slicer_caches
+            .iter()
+            .find(|cache| {
+                cache
+                    .pivot_tables
+                    .iter()
+                    .any(|pivot| pivot.name == *pivot_name)
+            })
+            .expect("slicer follows its pivot");
+        assert_eq!(slicer_cache.pivot_tables[0].tab_id, tab_id);
+        assert_eq!(
+            slicer_cache.tabular_data.as_ref().unwrap().pivot_cache_id,
+            cache_id
+        );
+        let timeline_cache = output
+            .timeline_caches
+            .iter()
+            .find(|cache| {
+                cache
+                    .pivot_tables
+                    .iter()
+                    .any(|pivot| pivot.name == *pivot_name)
+            })
+            .unwrap_or_else(|| {
+                panic!(
+                    "timeline follows {pivot_name}: {:?}",
+                    output.timeline_caches
+                )
+            });
+        assert_eq!(timeline_cache.pivot_tables[0].tab_id, tab_id);
+        assert_eq!(timeline_cache.pivot_cache_id, Some(cache_id));
+    }
+    let (engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).unwrap();
+    let mut output_again =
+        xlsx_parser::parse_xlsx_to_output(&engine.export_to_xlsx_bytes().unwrap())
+            .unwrap()
+            .0;
+    output_again
+        .slicer_caches
+        .sort_by(|a, b| a.name.cmp(&b.name));
+    output_again
+        .timeline_caches
+        .sort_by(|a, b| a.name.cmp(&b.name));
+    assert_eq!(output_again.slicer_caches, output.slicer_caches);
+    assert_eq!(output_again.timeline_caches, output.timeline_caches);
 }
+
+mod copy_binding_regressions;

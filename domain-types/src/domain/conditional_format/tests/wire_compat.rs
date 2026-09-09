@@ -79,7 +79,7 @@ fn tag_discriminator_is_type() {
 
 #[test]
 fn cf_style_legacy_underline_bool_deserializes() {
-    // Old Yrs documents store `"underline": true` — must still parse.
+    // Old JSON payloads store `"underline": true` — must still parse.
     let json = r#"{"underline":true,"bold":true}"#;
     let style: CFStyle = serde_json::from_str(json).unwrap();
     assert_eq!(style.underline_legacy, Some(true));
@@ -90,7 +90,7 @@ fn cf_style_legacy_underline_bool_deserializes() {
 fn cf_style_typed_enum_wire_is_ooxml_token() {
     // CFStyle.underline_type / .border_style are typed ooxml enums; the
     // serde wire format must still be OOXML token strings byte-for-byte so
-    // legacy Yrs/JSON docs continue to deserialize correctly.
+    // legacy JSON payloads continue to deserialize correctly.
     let style = CFStyle {
         underline_type: Some(UnderlineStyle::DoubleAccounting),
         border_style: Some(BorderStyle::MediumDashDotDot),

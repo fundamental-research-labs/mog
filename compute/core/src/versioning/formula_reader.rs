@@ -6,7 +6,7 @@ use snapshot_types::versioning::{
     canonical_digest,
 };
 
-use crate::storage::engine::YrsComputeEngine;
+use crate::storage::engine::ComputeEngine;
 
 use super::SemanticStateReadError;
 use super::semantic_ids::{canonical_cell_key, canonical_column_key, canonical_row_key};
@@ -14,56 +14,12 @@ use super::semantic_ids::{canonical_cell_key, canonical_column_key, canonical_ro
 pub(super) const UNSUPPORTED_CELL_FORMULAS_DOMAIN: &str = "unsupported-cell-formulas";
 
 pub(super) fn canonical_formula(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_keys: &[(cell_types::SheetId, String)],
-    sheet_id: &cell_types::SheetId,
     cell_key: &str,
-    cell_id: &cell_types::CellId,
     formula: &formula_types::IdentityFormula,
     unsupported_formulas: &mut BTreeMap<String, SemanticObjectDigest>,
 ) -> Result<CanonicalFormula, SemanticStateReadError> {
-    match engine.storage().read_cell_from_yrs(sheet_id, cell_id) {
-        Some((_value, legacy_formula, Some(persisted_identity))) => {
-            if persisted_identity != *formula {
-                let object_id =
-                    format!("{cell_key}:formula:unsupported:persisted-identity-mismatch");
-                unsupported_formulas.insert(
-                    object_id.clone(),
-                    opaque_formula_digest(
-                        object_id,
-                        "persisted-identity-mismatch",
-                        &(legacy_formula, persisted_identity, formula),
-                    )?,
-                );
-            }
-        }
-        Some((_value, legacy_formula @ Some(_), None)) => {
-            let object_id = format!("{cell_key}:formula:unsupported:legacy-without-identity");
-            unsupported_formulas.insert(
-                object_id.clone(),
-                opaque_formula_digest(
-                    object_id,
-                    "legacy-without-identity",
-                    &(legacy_formula, formula),
-                )?,
-            );
-        }
-        Some((_value, None, None)) => {
-            let object_id = format!("{cell_key}:formula:unsupported:missing-persisted-formula");
-            unsupported_formulas.insert(
-                object_id.clone(),
-                opaque_formula_digest(object_id, "missing-persisted-formula", formula)?,
-            );
-        }
-        None => {
-            let object_id = format!("{cell_key}:formula:unsupported:missing-persisted-cell");
-            unsupported_formulas.insert(
-                object_id.clone(),
-                opaque_formula_digest(object_id, "missing-persisted-cell", formula)?,
-            );
-        }
-    }
-
     let mut refs = Vec::with_capacity(formula.refs.len());
     let mut dependency_object_ids = BTreeSet::new();
     for (index, formula_ref) in formula.refs.iter().enumerate() {
@@ -94,36 +50,17 @@ pub(super) fn canonical_formula(
     })
 }
 
-pub(super) fn record_unrepresented_persisted_formula(
-    engine: &YrsComputeEngine,
-    sheet_id: &cell_types::SheetId,
+/// Retain source text for formulas that could not be compiled into identity refs.
+pub(super) fn record_unresolved_formula(
     cell_key: &str,
-    cell_id: &cell_types::CellId,
+    formula: &str,
     unsupported_formulas: &mut BTreeMap<String, SemanticObjectDigest>,
 ) -> Result<(), SemanticStateReadError> {
-    match engine.storage().read_cell_from_yrs(sheet_id, cell_id) {
-        Some((_value, legacy_formula @ Some(_), None)) => {
-            let object_id = format!("{cell_key}:formula:unsupported:legacy-without-identity");
-            unsupported_formulas.insert(
-                object_id.clone(),
-                opaque_formula_digest(object_id, "legacy-without-identity", &legacy_formula)?,
-            );
-        }
-        Some((_value, legacy_formula, Some(persisted_identity))) => {
-            let object_id =
-                format!("{cell_key}:formula:unsupported:persisted-identity-without-mirror-formula");
-            unsupported_formulas.insert(
-                object_id.clone(),
-                opaque_formula_digest(
-                    object_id,
-                    "persisted-identity-without-mirror-formula",
-                    &(legacy_formula, persisted_identity),
-                )?,
-            );
-        }
-        Some((_, None, None)) | None => {}
-    }
-
+    let object_id = format!("{cell_key}:formula:unsupported:unresolved-formula");
+    unsupported_formulas.insert(
+        object_id.clone(),
+        opaque_formula_digest(object_id, "unresolved-formula", &formula)?,
+    );
     Ok(())
 }
 
@@ -132,7 +69,7 @@ pub(super) struct FormulaRefUnsupported {
 }
 
 pub(super) fn canonical_formula_ref(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_keys: &[(cell_types::SheetId, String)],
     formula_ref: &IdentityFormulaRef,
 ) -> Result<CanonicalFormulaRef, FormulaRefUnsupported> {
@@ -326,7 +263,7 @@ pub(super) fn canonical_formula_ref(
 }
 
 fn canonical_cell_ref_position(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_keys: &[(cell_types::SheetId, String)],
     cell_id: &cell_types::CellId,
 ) -> Result<(String, u32, u32), FormulaRefUnsupported> {

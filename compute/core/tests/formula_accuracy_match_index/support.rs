@@ -48,6 +48,9 @@ pub fn sheet_snapshot(
     cells: Vec<CellData>,
 ) -> SheetSnapshot {
     SheetSnapshot {
+        identities: Vec::new(),
+        row_axis: None,
+        col_axis: None,
         id: id.to_string(),
         name: name.to_string(),
         rows,
@@ -68,6 +71,7 @@ pub fn workbook_snapshot(sheets: Vec<SheetSnapshot>) -> WorkbookSnapshot {
         max_iterations: 100,
         max_change: value_types::FiniteF64::must(0.001),
         calculation_settings: None,
+        ..Default::default()
     }
 }
 

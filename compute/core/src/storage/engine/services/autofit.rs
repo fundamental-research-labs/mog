@@ -55,12 +55,7 @@ pub(in crate::storage::engine) fn auto_fit_column(
         .cells_in_range(0, col, max_row.saturating_sub(1), col)
         .collect();
 
-    let all_merges = merges::get_all_merges(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        *sheet_id,
-        grid,
-    );
+    let all_merges = merges::get_all_merges(&stores.storage, *sheet_id, grid);
 
     // Build merge lookup: (row, col) → index into all_merges. O(total merge area).
     let merge_at = build_merge_lookup(&all_merges);
@@ -68,7 +63,12 @@ pub(in crate::storage::engine) fn auto_fit_column(
     let mut max_width: Pixels = Pixels(0.0);
 
     for (cell_id, row, cell_col) in cells_to_measure {
-        if dimensions::is_row_hidden(stores.storage.doc(), stores.storage.sheets(), sheet_id, row) {
+        if dimensions::is_row_hidden(
+            &stores.storage,
+            sheet_id,
+            row,
+            stores.grid_indexes.get(sheet_id),
+        ) {
             continue;
         }
 
@@ -131,12 +131,7 @@ pub(in crate::storage::engine) fn auto_fit_row(
         .cells_in_range(row, 0, row, max_col.saturating_sub(1))
         .collect();
 
-    let all_merges = merges::get_all_merges(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        *sheet_id,
-        grid,
-    );
+    let all_merges = merges::get_all_merges(&stores.storage, *sheet_id, grid);
 
     // Build merge lookup: (row, col) → index into all_merges. O(total merge area).
     let merge_at = build_merge_lookup(&all_merges);
@@ -145,10 +140,10 @@ pub(in crate::storage::engine) fn auto_fit_row(
 
     for (cell_id, cell_row, col) in cells_to_measure {
         if dimensions::is_column_hidden(
-            stores.storage.doc(),
-            stores.storage.sheets(),
+            &stores.storage,
             sheet_id,
             col,
+            stores.grid_indexes.get(sheet_id),
         ) {
             continue;
         }
@@ -204,19 +199,19 @@ pub(in crate::storage::engine) fn auto_fit_rows(
 /// Compute and set optimal widths for a single column.
 pub(in crate::storage::engine) fn auto_fit_column_and_set(
     stores: &mut EngineStores,
-    mirror: &CellMirror,
+    mirror: &mut CellMirror,
     settings: &EngineSettings,
     sheet_id: &SheetId,
     col: u32,
 ) -> Result<MutationResult, ComputeError> {
     let width = auto_fit_column(stores, mirror, settings, sheet_id, col)?;
-    super::structural::set_col_width(stores, sheet_id, col, width)
+    super::structural::set_col_width(stores, mirror, sheet_id, col, width)
 }
 
 /// Compute and set optimal widths for multiple columns.
 pub(in crate::storage::engine) fn auto_fit_columns_and_set(
     stores: &mut EngineStores,
-    mirror: &CellMirror,
+    mirror: &mut CellMirror,
     settings: &EngineSettings,
     sheet_id: &SheetId,
     cols: &[u32],
@@ -224,7 +219,7 @@ pub(in crate::storage::engine) fn auto_fit_columns_and_set(
     let widths = auto_fit_columns(stores, mirror, settings, sheet_id, cols)?;
     let mut combined = MutationResult::empty();
     for (col, width) in widths {
-        let result = super::structural::set_col_width(stores, sheet_id, col, width)?;
+        let result = super::structural::set_col_width(stores, mirror, sheet_id, col, width)?;
         merge_mutation_results(&mut combined, result);
     }
     Ok(combined)
@@ -233,7 +228,7 @@ pub(in crate::storage::engine) fn auto_fit_columns_and_set(
 /// Compute and set optimal heights for multiple rows.
 pub(in crate::storage::engine) fn auto_fit_rows_and_set(
     stores: &mut EngineStores,
-    mirror: &CellMirror,
+    mirror: &mut CellMirror,
     settings: &EngineSettings,
     sheet_id: &SheetId,
     rows: &[u32],
@@ -241,7 +236,7 @@ pub(in crate::storage::engine) fn auto_fit_rows_and_set(
     let heights = auto_fit_rows(stores, mirror, settings, sheet_id, rows)?;
     let mut combined = MutationResult::empty();
     for (row, height) in heights {
-        let result = super::structural::set_row_height(stores, sheet_id, row, height)?;
+        let result = super::structural::set_row_height(stores, mirror, sheet_id, row, height)?;
         merge_mutation_results(&mut combined, result);
     }
     Ok(combined)

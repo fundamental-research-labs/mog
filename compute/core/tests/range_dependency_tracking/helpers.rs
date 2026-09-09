@@ -1,5 +1,5 @@
 use cell_types::{CellId, SheetId};
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use snapshot_types::{CellData, SheetSnapshot};
 use value_types::{CellValue, FiniteF64};
 
@@ -67,6 +67,9 @@ pub(crate) fn formula_cell(sheet_idx: u32, row: u32, col: u32, formula: &str) ->
 
 pub(crate) fn sheet_snap(idx: u32, name: &str, cells: Vec<CellData>) -> SheetSnapshot {
     SheetSnapshot {
+        identities: Vec::new(),
+        row_axis: None,
+        col_axis: None,
         id: sheet_uuid(idx),
         name: name.to_string(),
         // Plenty of room for row 50_000 writes without off-by-ones.
@@ -78,7 +81,7 @@ pub(crate) fn sheet_snap(idx: u32, name: &str, cells: Vec<CellData>) -> SheetSna
 }
 
 /// Read the (cloned) value at a specific cell directly from the mirror.
-pub(crate) fn read_value(engine: &YrsComputeEngine, cell: &CellId) -> CellValue {
+pub(crate) fn read_value(engine: &ComputeEngine, cell: &CellId) -> CellValue {
     engine
         .mirror()
         .get_cell_value(cell)
@@ -94,7 +97,7 @@ pub(crate) fn read_value(engine: &YrsComputeEngine, cell: &CellId) -> CellValue 
 /// Returns `Err` if either the forward or the inverse failed — those
 /// are always real failures, distinct from "dependent drifted."
 pub(crate) fn op_then_inverse(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet: &SheetId,
     target: &CellId,
     row: u32,

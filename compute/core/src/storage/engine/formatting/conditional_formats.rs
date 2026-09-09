@@ -1,7 +1,7 @@
 use super::*;
 
 pub(super) fn add_cf_rule(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     rule: serde_json::Value,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
@@ -13,20 +13,9 @@ pub(super) fn add_cf_rule(
             message: format!("invalid conditional format payload: {e}"),
         })?;
 
-    // 2. Populate range_identities from position-based ranges for CRDT safety.
-    if rule.range_identities.as_ref().is_none_or(|r| r.is_empty()) && !rule.ranges.is_empty() {
-        let identities = services::formatting::resolve_cf_ranges_to_identities(
-            &mut engine.mirror,
-            &engine.stores.grid_id_alloc,
-            sheet_id,
-            &rule.ranges,
-        );
-        if !identities.is_empty() {
-            rule.range_identities = Some(identities);
-        }
-    }
+    rule.sheet_id = sheet_id.to_uuid_string();
 
-    // 3. Excel semantics: newly-added formats get the highest priority
+    // Excel semantics: newly-added formats get the highest priority
     //    (priority value 1; lower number = higher precedence). All
     //    existing formats are renumbered upward so the new format sits
     //    at the front of the sort order produced by
@@ -55,7 +44,7 @@ pub(super) fn add_cf_rule(
 }
 
 pub(super) fn update_cf_rule(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     rule_id: &str,
     updates: serde_json::Value,
@@ -69,7 +58,7 @@ pub(super) fn update_cf_rule(
 }
 
 pub(super) fn delete_cf_rule(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     rule_id: &str,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
@@ -81,7 +70,7 @@ pub(super) fn delete_cf_rule(
 }
 
 pub(super) fn reorder_cf_rules(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     rule_ids: Vec<String>,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
@@ -93,14 +82,14 @@ pub(super) fn reorder_cf_rules(
 }
 
 pub(super) fn get_all_cf_rules(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> Vec<ConditionalFormat> {
     services::formatting::get_all_cf_rules(&engine.stores, sheet_id)
 }
 
 pub(super) fn get_cf_rules_for_cell(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -109,7 +98,7 @@ pub(super) fn get_cf_rules_for_cell(
 }
 
 pub(super) fn get_conditional_format(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     format_id: &str,
 ) -> Option<ConditionalFormat> {
@@ -117,7 +106,7 @@ pub(super) fn get_conditional_format(
 }
 
 pub(super) fn has_cf_for_cell(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -126,7 +115,7 @@ pub(super) fn has_cf_for_cell(
 }
 
 pub(super) fn update_cf_ranges(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     format_id: &str,
     new_ranges: &[CFCellRange],
@@ -144,7 +133,7 @@ pub(super) fn update_cf_ranges(
 }
 
 pub(super) fn clear_cf_formats_for_sheet(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
     let result = services::formatting::clear_cf_formats_for_sheet(&mut engine.stores, sheet_id)?;
@@ -152,7 +141,7 @@ pub(super) fn clear_cf_formats_for_sheet(
 }
 
 pub(super) fn add_rule_to_cf(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     format_id: &str,
     rule: &CFRule,
@@ -166,7 +155,7 @@ pub(super) fn add_rule_to_cf(
 }
 
 pub(super) fn update_rule_in_cf(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     format_id: &str,
     rule_id: &str,
@@ -186,7 +175,7 @@ pub(super) fn update_rule_in_cf(
 }
 
 pub(super) fn delete_rule_from_cf(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     format_id: &str,
     rule_id: &str,

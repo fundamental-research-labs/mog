@@ -13,7 +13,7 @@
 //! "SheetNotFoundColumnResizeIssue"): viewport/read calls on the sheet all
 //! succeed, only the resize write throws.
 
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
 
@@ -24,6 +24,9 @@ const SHEET_ID: &str = "550e8400-e29b-41d4-a716-446655440000";
 fn small_snapshot() -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET_ID.to_string(),
             name: "Resize".to_string(),
             rows: 3,
@@ -43,13 +46,13 @@ fn small_snapshot() -> WorkbookSnapshot {
     }
 }
 
-fn sheet_id(engine: &YrsComputeEngine) -> cell_types::SheetId {
+fn sheet_id(engine: &ComputeEngine) -> cell_types::SheetId {
     *engine.mirror().sheet_ids().next().expect("sheet present")
 }
 
 #[test]
 fn set_col_width_beyond_materialized_extent_succeeds() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(small_snapshot()).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(small_snapshot()).expect("from_snapshot");
     let sid = sheet_id(&engine);
 
     // Column 8 is well past the 3-column materialized extent.
@@ -73,7 +76,7 @@ fn set_col_width_beyond_materialized_extent_succeeds() {
 
 #[test]
 fn set_row_height_beyond_materialized_extent_succeeds() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(small_snapshot()).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(small_snapshot()).expect("from_snapshot");
     let sid = sheet_id(&engine);
 
     let target_row = 8u32;
@@ -89,7 +92,7 @@ fn set_row_height_beyond_materialized_extent_succeeds() {
 
 #[test]
 fn set_col_widths_batch_beyond_extent_succeeds() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(small_snapshot()).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(small_snapshot()).expect("from_snapshot");
     let sid = sheet_id(&engine);
 
     // Mix in-extent (col 1) and out-of-extent (col 7) targets in one batch.
@@ -109,10 +112,10 @@ fn set_col_widths_batch_beyond_extent_succeeds() {
 }
 
 /// The auto-grown width must survive a serialize → reload round-trip, i.e. the
-/// axis identity is persisted in Yrs (not just in the in-memory GridIndex).
+/// native axis identity and dimension metadata survive workbook export.
 #[test]
 fn auto_grown_col_width_persists_across_reload() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(small_snapshot()).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(small_snapshot()).expect("from_snapshot");
     let sid = sheet_id(&engine);
 
     engine
@@ -120,7 +123,7 @@ fn auto_grown_col_width_persists_across_reload() {
         .expect("resize must succeed");
 
     let bytes = engine.export_to_xlsx_bytes().expect("export xlsx");
-    let (reloaded, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).expect("reload xlsx");
+    let (reloaded, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("reload xlsx");
     let rsid = sheet_id(&reloaded);
 
     let got = reloaded.get_col_width_query(&rsid, 8);

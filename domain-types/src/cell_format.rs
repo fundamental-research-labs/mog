@@ -1,7 +1,7 @@
 //! Canonical cell formatting types.
 //!
 //! `CellFormat` is the single source of truth for cell visual formatting
-//! across the entire Rust layer stack (XLSX parse, Yrs storage, runtime,
+//! across the entire Rust layer stack (XLSX parse, native storage, runtime,
 //! export). All fields are `Option<T>` for sparse representation and
 //! format-inheritance merging.
 

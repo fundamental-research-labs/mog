@@ -203,7 +203,7 @@ impl SheetWriter {
     /// If the new col is adjacent to (and has identical properties as) the last
     /// added col, the two are merged into a single range. This ensures trailing
     /// column ranges (e.g., `<col max="16384">`) rejoin cleanly with the
-    /// preceding data-region range after a Yrs round-trip.
+    /// preceding data-region range after a native storage round-trip.
     pub fn add_col(&mut self, col: ColWidth) -> &mut Self {
         if let Some(last) = self.cols.last_mut() {
             if last.max + 1 == col.min

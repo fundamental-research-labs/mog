@@ -1,20 +1,21 @@
 use std::collections::HashMap;
 
+use crate::storage::engine::history::metadata::capture_workbook_field;
 use bridge_core as bridge;
 
-use super::{YrsComputeEngine, construction};
+use super::{ComputeEngine, construction};
 use crate::snapshot::MutationResult;
-use crate::storage::YrsStorage;
+use crate::storage::WorkbookStorage;
 use value_types::ComputeError;
 
 #[bridge::api(
-    service = "YrsComputeEngine",
+    service = "ComputeEngine",
     key = "doc_id",
     group = "core_theme",
     fn_prefix = "compute",
     crate_path = "compute_core"
 )]
-impl YrsComputeEngine {
+impl ComputeEngine {
     // -------------------------------------------------------------------
     // Locale
     // -------------------------------------------------------------------
@@ -30,13 +31,17 @@ impl YrsComputeEngine {
         &mut self,
         culture: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        self.settings.locale = compute_formats::get_culture(culture);
-        // Locale affects date/number parsing — safest to require a fresh recalc.
-        self.stores.compute.mark_dirty();
-        Ok((
-            compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-            MutationResult::empty(),
-        ))
+        self.with_history(|engine| {
+            capture_workbook_field!(engine.stores.storage, settings.culture);
+            engine.stores.storage.metadata.settings.culture = culture.to_owned();
+            engine.settings.locale = compute_formats::get_culture(culture);
+            // Locale affects date/number parsing — safest to require a fresh recalc.
+            engine.stores.compute.mark_dirty();
+            Ok((
+                compute_wire::mutation::serialize_multi_viewport_patches(&[]),
+                MutationResult::empty(),
+            ))
+        })
     }
 
     // -------------------------------------------------------------------
@@ -48,14 +53,14 @@ impl YrsComputeEngine {
         &self.settings.theme_palette
     }
 
-    /// Load the theme palette from the workbook map in Yrs storage.
-    fn load_theme_palette(storage: &YrsStorage) -> HashMap<String, String> {
+    /// Build the cached palette from native metadata.
+    fn load_theme_palette(storage: &WorkbookStorage) -> HashMap<String, String> {
         construction::load_theme_palette(storage)
     }
 
     /// Set the workbook theme at runtime.
     ///
-    /// Writes the theme data to the Yrs CRDT document, rebuilds the
+    /// Updates native theme metadata, rebuilds the
     /// cached theme palette, and invalidates all viewport format palettes
     /// so that subsequent renders pick up the new theme colors.
     #[bridge::write(scope = "workbook")]
@@ -63,59 +68,40 @@ impl YrsComputeEngine {
         &mut self,
         theme: domain_types::domain::theme::ThemeData,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        // 1. Write to Yrs
-        {
-            use yrs::Transact;
-            let doc = self.stores.storage.doc();
-            let mut txn = doc.transact_mut();
-            let workbook = self.stores.storage.workbook_map();
-            crate::storage::infra::hydration::write_theme_data_to_yrs(workbook, &theme, &mut txn);
-            // txn commits on drop
-        }
+        self.with_history(|engine| {
+            capture_workbook_field!(engine.stores.storage, theme);
+            engine.stores.storage.metadata.theme = Some(theme);
 
-        // 2. Rebuild cached palette from Yrs
-        self.settings.theme_palette = Self::load_theme_palette(&self.stores.storage);
+            engine.settings.theme_palette = Self::load_theme_palette(&engine.stores.storage);
 
-        // 3. CF color scales are materialized to concrete colors in the cache,
-        // so a theme change must rebuild them before the next render.
-        let sheet_ids = self.stores.storage.sheet_order();
-        for sheet_id in &sheet_ids {
-            self.refresh_cf_cache(sheet_id);
-        }
+            // 3. CF color scales are materialized to concrete colors in the cache,
+            // so a theme change must rebuild them before the next render.
+            let sheet_ids = engine.stores.storage.sheet_order();
+            for sheet_id in &sheet_ids {
+                engine.refresh_cf_cache(sheet_id);
+            }
 
-        // 4. Invalidate viewport format palettes (stale theme-resolved colors)
-        self.viewport.clear_all_palettes();
+            // 4. Invalidate viewport format palettes (stale theme-resolved colors)
+            engine.viewport.clear_all_palettes();
 
-        Ok((
-            compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-            MutationResult::empty(),
-        ))
+            Ok((
+                compute_wire::mutation::serialize_multi_viewport_patches(&[]),
+                MutationResult::empty(),
+            ))
+        })
     }
 
-    /// Read the current workbook theme from the Yrs document.
+    /// Read the current workbook theme.
     #[bridge::read(scope = "workbook")]
     pub fn get_workbook_theme(
         &self,
     ) -> Result<domain_types::domain::theme::ThemeData, ComputeError> {
-        use domain_types::domain::theme::ThemeData;
-        use yrs::{Any, Map, Out, Transact};
-
-        let doc = self.stores.storage.doc();
-        let txn = doc.transact();
-        let workbook = self.stores.storage.workbook_map();
-
-        let theme_map = match workbook.get(&txn, "theme") {
-            Some(Out::YMap(m)) => m,
-            _ => return Ok(ThemeData::default()),
-        };
-
-        let json_str = match theme_map.get(&txn, "data") {
-            Some(Out::Any(Any::String(s))) => s,
-            _ => return Ok(ThemeData::default()),
-        };
-
-        serde_json::from_str::<ThemeData>(&json_str).map_err(|e| ComputeError::Eval {
-            message: format!("failed to deserialize theme data: {}", e),
-        })
+        Ok(self
+            .stores
+            .storage
+            .metadata
+            .theme
+            .clone()
+            .unwrap_or_default())
     }
 }

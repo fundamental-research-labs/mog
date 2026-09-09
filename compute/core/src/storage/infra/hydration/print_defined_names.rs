@@ -1,9 +1,8 @@
+use crate::storage::sheet::SheetMetadata;
 use cell_types::SheetId;
 use domain_types::NamedRange;
 use domain_types::domain::sheet::{PrintRange, PrintTitles};
-use yrs::MapRef;
-
-use crate::storage::sheet::print;
+use std::collections::HashMap;
 
 const PRINT_AREA_DEFINED_NAME: &str = "_xlnm.Print_Area";
 const PRINT_TITLES_DEFINED_NAME: &str = "_xlnm.Print_Titles";
@@ -15,10 +14,9 @@ const PRINT_TITLES_DEFINED_NAME: &str = "_xlnm.Print_Titles";
 /// worksheet print domain (`PrintRange`/`PrintTitles`) so imported workbooks and
 /// SDK-authored workbooks share the same mutation/export path.
 pub(super) fn hydrate_workbook_print_defined_names(
-    sheets: &MapRef,
+    sheet_metadata: &mut HashMap<SheetId, SheetMetadata>,
     named_ranges: &[NamedRange],
     sheet_ids: &[SheetId],
-    txn: &mut yrs::TransactionMut,
 ) {
     for nr in named_ranges {
         let Some((sheet_idx, parsed)) = parse_representable_print_defined_name(nr, sheet_ids.len())
@@ -29,12 +27,13 @@ pub(super) fn hydrate_workbook_print_defined_names(
             continue;
         };
 
+        let metadata = sheet_metadata.entry(sheet_id).or_default();
         match parsed {
             ParsedPrintDefinedName::Area(area) => {
-                print::set_print_area_in_txn(txn, sheets, &sheet_id, Some(&area));
+                metadata.print_areas = vec![area];
             }
             ParsedPrintDefinedName::Titles(titles) => {
-                print::set_print_titles_in_txn(txn, sheets, &sheet_id, &titles);
+                metadata.print_titles = titles;
             }
         }
     }

@@ -1,11 +1,6 @@
 //! Table Events — Event types for table lifecycle changes.
 //!
-//! Ported from `spreadsheet-model/src/tables/events.ts`.
-//!
-//! The TypeScript version used Y.js observers and EventBus for real-time
-//! change detection. In the Rust compute-core, we define the event types
-//! as pure data structures. The storage/bridge layer is responsible for
-//! detecting changes and emitting these events.
+//! The storage/bridge layer detects changes and emits these events.
 //!
 //! Every type is PURE data. No I/O, no observers.
 
@@ -28,8 +23,6 @@ pub enum StructureChangeSource {
     Import,
     /// Programmatic API call.
     Api,
-    /// Remote collaboration change.
-    Remote,
 }
 
 // ============================================================================

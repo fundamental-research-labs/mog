@@ -6,7 +6,7 @@ use crate::storage::engine::mutation::MutationOutput;
 use value_types::{CellValue, FiniteF64};
 
 fn stored_format_at(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -17,17 +17,11 @@ fn stored_format_at(
         .get(sheet_id)
         .and_then(|g| g.cell_id_at(row, col))?;
     let cell_hex = id_to_hex(cell_id.as_u128());
-    crate::storage::properties::get_cell_format(
-        engine.stores.storage.doc(),
-        engine.stores.storage.workbook_map(),
-        engine.stores.storage.sheets(),
-        sheet_id,
-        &cell_hex,
-    )
+    crate::storage::properties::get_cell_format(&engine.stores.storage, sheet_id, &cell_hex)
 }
 
 fn set_stored_format_at(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -42,9 +36,7 @@ fn set_stored_format_at(
         .expect("formatted target should have a cell id");
     let cell_hex = id_to_hex(cell_id.as_u128());
     crate::storage::properties::set_cell_format(
-        engine.stores.storage.doc(),
-        engine.stores.storage.workbook_map(),
-        engine.stores.storage.sheets(),
+        &mut engine.stores.storage,
         sheet_id,
         &cell_hex,
         format,
@@ -54,7 +46,7 @@ fn set_stored_format_at(
 #[test]
 fn test_copy_range_values_preserves_target_format() {
     let snap = copy_range_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
 
@@ -97,16 +89,14 @@ fn test_copy_range_values_preserves_target_format() {
 #[test]
 fn test_copy_range_formats_only() {
     let snap = copy_range_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
     let _ = engine.register_viewport("main", &sid, 0, 0, 10, 5);
 
     let cell_hex = id_to_hex(cell_id_a1().as_u128());
     crate::storage::properties::set_cell_format(
-        engine.stores.storage.doc(),
-        engine.stores.storage.workbook_map(),
-        engine.stores.storage.sheets(),
+        &mut engine.stores.storage,
         &sid,
         &cell_hex,
         &domain_types::CellFormat {
@@ -176,15 +166,13 @@ fn test_copy_range_formats_only() {
 #[test]
 fn test_copy_range_all() {
     let snap = copy_range_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
 
     let cell_hex = id_to_hex(cell_id_a1().as_u128());
     crate::storage::properties::set_cell_format(
-        engine.stores.storage.doc(),
-        engine.stores.storage.workbook_map(),
-        engine.stores.storage.sheets(),
+        &mut engine.stores.storage,
         &sid,
         &cell_hex,
         &domain_types::CellFormat {
@@ -230,7 +218,7 @@ fn test_copy_range_all() {
 #[test]
 fn test_copy_range_all_replaces_target_format_with_source_snapshot() {
     let snap = copy_range_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
 
@@ -310,7 +298,7 @@ fn transferable_format_read_patch_preserves_fidelity_clears_target_and_excludes_
         }
     }
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
     engine.set_workbook_theme(theme("#123456")).unwrap();
 

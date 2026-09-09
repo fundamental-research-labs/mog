@@ -51,6 +51,9 @@ fn text_only_cycle_iterative_max_delta_serialises_as_null() {
         },
     ];
     snapshot.sheets = vec![SheetSnapshot {
+        identities: Vec::new(),
+        row_axis: None,
+        col_axis: None,
         id: sid,
         name: "Sheet1".to_string(),
         rows: 100,

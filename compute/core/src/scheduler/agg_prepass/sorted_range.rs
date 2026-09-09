@@ -1,4 +1,5 @@
 use super::*;
+use value_types::ColumnView;
 
 // ---------------------------------------------------------------------------
 // Sorted-range prepass types
@@ -158,19 +159,19 @@ pub(super) fn build_sorted_range_index(
     // Read all criteria column slices.
     // Missing columns (not in col_data) are treated as empty — all rows read
     // as CellValue::Null via the `.get(row).unwrap_or(&CellValue::Null)` below.
-    let empty_col: &[CellValue] = &[];
-    let mut criteria_slices: SmallVec<[&[CellValue]; 4]> = SmallVec::new();
+    let empty_col = ColumnView::empty();
+    let mut criteria_slices: SmallVec<[ColumnView<'_>; 4]> = SmallVec::new();
     for pair in &pattern.pairs {
         let sheet = mirror.get_sheet(&pair.data_sheet)?;
-        let slice = sheet.get_column_slice(pair.data_col).unwrap_or(empty_col);
+        let slice = sheet.get_column_view(pair.data_col).unwrap_or(empty_col);
         criteria_slices.push(slice);
     }
 
     // Read value column slice (for SUMIFS etc.)
     // Missing column → empty slice (all values treated as 0.0 per Excel SUMIFS semantics).
-    let value_slice: Option<&[CellValue]> = if let Some((vs, vc, _, _)) = &pattern.value_range {
+    let value_slice: Option<ColumnView<'_>> = if let Some((vs, vc, _, _)) = &pattern.value_range {
         let sheet = mirror.get_sheet(vs)?;
-        Some(sheet.get_column_slice(*vc).unwrap_or(empty_col))
+        Some(sheet.get_column_view(*vc).unwrap_or(empty_col))
     } else {
         None
     };
@@ -180,7 +181,7 @@ pub(super) fn build_sorted_range_index(
     let (range_sheet, range_col, _range_start, _range_end) = plan.range_data_col;
     let range_sheet_data = mirror.get_sheet(&range_sheet)?;
     let range_slice = range_sheet_data
-        .get_column_slice(range_col)
+        .get_column_view(range_col)
         .unwrap_or(empty_col);
 
     // Determine actual row bounds (same logic as build_agg_map)
@@ -374,13 +375,13 @@ pub(super) fn execute_sorted_range_prepass(
     .entered();
 
     // Pre-load dynamic column slices for bound resolution
-    let lower_slice: Option<&[CellValue]> = plan.lower_bound.as_ref().and_then(|b| {
+    let lower_slice: Option<ColumnView<'_>> = plan.lower_bound.as_ref().and_then(|b| {
         let sh = mirror.get_sheet(&b.dynamic_sheet)?;
-        sh.get_column_slice(b.dynamic_col)
+        sh.get_column_view(b.dynamic_col)
     });
-    let upper_slice: Option<&[CellValue]> = plan.upper_bound.as_ref().and_then(|b| {
+    let upper_slice: Option<ColumnView<'_>> = plan.upper_bound.as_ref().and_then(|b| {
         let sh = mirror.get_sheet(&b.dynamic_sheet)?;
-        sh.get_column_slice(b.dynamic_col)
+        sh.get_column_view(b.dynamic_col)
     });
 
     let mut results = Vec::with_capacity(group.cell_ids.len());

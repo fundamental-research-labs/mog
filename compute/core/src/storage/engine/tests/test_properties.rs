@@ -11,7 +11,7 @@ use value_types::CellValue;
 #[test]
 fn test_get_row_formats_empty() {
     let snap = simple_snapshot();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // No row formats have been set, so all should be None
@@ -27,7 +27,7 @@ fn test_set_and_get_row_formats() {
     use domain_types::CellFormat;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     let bold_fmt = CellFormat {
@@ -62,7 +62,7 @@ fn test_set_and_get_row_formats() {
 #[test]
 fn test_get_col_formats_empty() {
     let snap = simple_snapshot();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     let result = engine.get_col_formats(&sid, vec![0, 1, 5]);
@@ -77,7 +77,7 @@ fn test_set_and_get_col_formats() {
     use domain_types::CellFormat;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     let bold_fmt = CellFormat {
@@ -106,7 +106,7 @@ fn test_query_range_properties_basic() {
     use domain_types::CellFormat;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // Set a format on cell A1 via set_format_for_ranges
@@ -133,7 +133,7 @@ fn test_query_range_properties_basic() {
 #[test]
 fn test_query_range_properties_too_large() {
     let snap = simple_snapshot();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // 101 x 100 = 10100 > 10000 limit
@@ -150,7 +150,7 @@ fn test_query_range_properties_too_large() {
 #[test]
 fn test_query_range_properties_within_limit() {
     let snap = simple_snapshot();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // 100 x 100 = 10000 exactly at the limit -- should succeed
@@ -166,7 +166,7 @@ fn test_set_cell_properties_batch() {
     use domain_types::CellFormat;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     let bold_fmt = CellFormat {
@@ -205,7 +205,7 @@ fn test_set_cell_properties_batch_sheet_not_found() {
     use domain_types::CellFormat;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let bad_sid = SheetId::from_uuid_str("00000000-0000-0000-0000-000000000099").unwrap();
 
     let fmt = CellFormat {
@@ -222,7 +222,7 @@ fn test_row_col_formats_interact_with_cell_effective_format() {
     use domain_types::CellFormat;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // Set row 0 to bold
@@ -269,7 +269,7 @@ fn test_get_displayed_cell_properties_basic() {
     use domain_types::CellFormat;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // Set bold on A1
@@ -294,7 +294,7 @@ fn test_get_displayed_cell_properties_with_cf() {
     use value_types::Color;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // Set bold on A1 (cell-level format)
@@ -356,7 +356,7 @@ fn test_get_displayed_cell_properties_cf_overrides_cell() {
     use value_types::Color;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // Set background_color on A1 (cell-level)
@@ -403,7 +403,7 @@ fn test_get_displayed_cell_properties_cf_overrides_cell() {
 #[test]
 fn test_get_displayed_cell_properties_empty_cell() {
     let snap = simple_snapshot();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // Query a cell with no data and no format (e.g., Z99)
@@ -435,7 +435,7 @@ fn test_get_displayed_cell_properties_with_cf_on_truly_blank_cell() {
     use value_types::Color;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // (5,5) has no value, no formula, no cell-level format -> no CellId.
@@ -478,7 +478,7 @@ fn test_get_displayed_range_properties_basic() {
     use domain_types::CellFormat;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // Set bold on A1
@@ -504,7 +504,7 @@ fn test_get_displayed_range_properties_basic() {
 #[test]
 fn test_get_displayed_range_properties_too_large() {
     let snap = simple_snapshot();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // 101 x 100 = 10100 > 10000 limit
@@ -526,7 +526,7 @@ fn test_get_displayed_range_properties_with_cf() {
     use value_types::Color;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // Set bold on A1
@@ -599,7 +599,7 @@ fn test_get_displayed_range_properties_with_cf_on_truly_blank_cells() {
     use value_types::Color;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // CF rule conceptually applied to A6:A10 (range with NO existing cells).
@@ -651,7 +651,7 @@ fn displayed_format_projection_preserves_order_duplicates_and_scalar_semantics()
     use domain_types::CellFormat;
     use value_types::Color;
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
 
     engine
@@ -692,8 +692,6 @@ fn displayed_format_projection_preserves_order_duplicates_and_scalar_semantics()
         let (stores, mirror) = (&mut engine.stores, &mut engine.mirror);
         let sheet_mirror = mirror.get_sheet_mut(&sid).unwrap();
         crate::storage::properties::add_format_range(
-            &mut stores.storage,
-            &sid,
             sheet_mirror,
             crate::mirror::RangeId::from_raw(100),
             0,
@@ -707,8 +705,6 @@ fn displayed_format_projection_preserves_order_duplicates_and_scalar_semantics()
             },
         );
         crate::storage::properties::add_format_range(
-            &mut stores.storage,
-            &sid,
             sheet_mirror,
             crate::mirror::RangeId::from_raw(200),
             0,
@@ -810,7 +806,7 @@ fn displayed_format_projection_preserves_order_duplicates_and_scalar_semantics()
 
 #[test]
 fn displayed_format_projection_empty_input_is_empty() {
-    let (engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let projection = engine.get_displayed_formats_for_cells(&sheet_id(), &[]);
     assert!(projection.palette.is_empty());
     assert!(projection.format_ids.is_empty());
@@ -820,9 +816,8 @@ fn displayed_format_projection_empty_input_is_empty() {
 fn displayed_format_projection_resolves_compact_imported_style_and_theme_color() {
     use domain_types::CellFormat;
     use domain_types::domain::theme::{ThemeColor, ThemeData};
-    use yrs::{Any, Map, MapPrelim, Out, Transact};
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
     engine
         .set_workbook_theme(ThemeData {
@@ -840,38 +835,22 @@ fn displayed_format_projection_resolves_compact_imported_style_and_theme_color()
         font_color: Some("theme:accent1:0".to_string()),
         ..Default::default()
     };
-    let imported_json = serde_json::to_string(&imported_format).unwrap();
-    {
-        let doc = engine.stores.storage.doc();
-        let workbook = engine.stores.storage.workbook_map();
-        let sheets = engine.stores.storage.sheets();
-        let mut txn = doc.transact_mut();
-        let palette: MapPrelim = vec![(
-            "9",
-            Any::String(std::sync::Arc::from(imported_json.as_str())),
-        )]
-        .into_iter()
-        .collect();
-        workbook.insert(
-            &mut txn,
-            compute_document::schema::KEY_STYLE_PALETTE,
-            palette,
-        );
-        let sheet_hex = id_to_hex(sid.as_u128());
-        let sheet_map = match sheets.get(&txn, &sheet_hex) {
-            Some(Out::YMap(map)) => map,
-            _ => panic!("sheet map not found"),
-        };
-        let props_map = match sheet_map.get(&txn, compute_document::schema::KEY_CELL_PROPERTIES) {
-            Some(Out::YMap(map)) => map,
-            _ => panic!("cell properties map not found"),
-        };
-        props_map.insert(
-            &mut txn,
-            id_to_hex(cell_id_a1().as_u128()),
-            Any::String(std::sync::Arc::from(r#"{"s":9}"#)),
-        );
-    }
+    engine
+        .stores
+        .storage
+        .metadata
+        .style_palette
+        .resize_with(10, Default::default);
+    engine.stores.storage.metadata.style_palette[9] = imported_format;
+    crate::storage::properties::set_properties(
+        &mut engine.stores.storage,
+        &sid,
+        &id_to_hex(cell_id_a1().as_u128()),
+        &crate::storage::properties::CellProperties {
+            style_id: Some(9),
+            ..Default::default()
+        },
+    );
 
     let projection = engine.get_displayed_formats_for_cells(&sid, &[(0, 0)]);
     let batch = &projection.palette[projection.format_ids[0] as usize];
@@ -888,7 +867,7 @@ fn displayed_format_projection_matches_scalar_for_table_and_pivot_layers() {
     use domain_types::domain::pivot::PivotTableStyle;
 
     let sid = sheet_id();
-    let (mut table_engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut table_engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     table_engine
         .create_table(
             &sid,
@@ -940,7 +919,7 @@ fn displayed_format_projection_matches_scalar_for_table_and_pivot_layers() {
         show_column_grand_totals: Some(true),
         ..Default::default()
     });
-    let (pivot_engine, _) = YrsComputeEngine::from_snapshot(pivot_snapshot).unwrap();
+    let (pivot_engine, _) = ComputeEngine::from_snapshot(pivot_snapshot).unwrap();
     let pivot_projection = pivot_engine.get_displayed_formats_for_cells(&sid, &[(0, 0)]);
     let pivot_batch = &pivot_projection.palette[pivot_projection.format_ids[0] as usize];
     assert_eq!(
@@ -956,13 +935,13 @@ fn displayed_format_projection_matches_scalar_for_table_and_pivot_layers() {
 // -------------------------------------------------------------------
 
 /// G1 end-to-end: pre-format A1 percent, then `set_cell_value_parsed("11")`.
-/// The mirror's value (and yrs storage) must hold `0.11`, not `11`.
+/// The native stored value must hold `0.11`, not `11`.
 #[test]
 fn format_aware_input_percent_e2e() {
     use domain_types::CellFormat;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     let percent_fmt = CellFormat {

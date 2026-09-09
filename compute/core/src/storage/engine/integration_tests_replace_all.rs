@@ -9,7 +9,13 @@ fn sheet_id() -> SheetId {
 
 fn literal_snapshot() -> WorkbookSnapshot {
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -64,7 +70,7 @@ fn cell_change_at(
 
 #[test]
 fn replace_all_existing_literals_returns_direct_changes_without_dependents() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(literal_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(literal_snapshot()).unwrap();
 
     let (_patches, mutation_result) = engine
         .replace_all_in_range(

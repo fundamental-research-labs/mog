@@ -73,7 +73,7 @@ fn get_column_slice_returns_col_data() {
     let sid = sheet_id();
     let sheet = mirror.get_sheet(&sid).expect("sheet must exist");
 
-    let col_slice = sheet.get_column_slice(0).expect("col 0 must have data");
+    let col_slice = sheet.get_column_view(0).expect("col 0 must have data");
 
     // Verify first, last, and a few middle values.
     assert!(col_slice.len() >= 100, "slice must cover all 100 rows");
@@ -104,7 +104,7 @@ fn get_column_slice_returns_none_for_empty() {
     let sheet = mirror.get_sheet(&sid).expect("sheet must exist");
 
     // Column 5 has no data in the snapshot.
-    let col_slice = sheet.get_column_slice(5);
+    let col_slice = sheet.get_column_view(5);
     assert!(
         col_slice.is_none(),
         "expected None for unpopulated col 5, got Some"

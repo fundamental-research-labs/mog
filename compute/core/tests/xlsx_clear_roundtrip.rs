@@ -1,24 +1,19 @@
-//! Regression tests for `ws.clear()` dropping formulas on the exported XLSX
-//! when the workbook was hydrated from an .xlsx file.
+//! Clearing XLSX-imported cells removes their formulas from native state
+//! and from subsequent XLSX exports.
 //!
-//! Bug: `cell_iter::clear_range` resolved cells via the legacy yrs `cellGrid`
-//! sub-map. The XLSX hydration path intentionally leaves that map unset
-//! (see `storage/infra/hydration/sheet.rs:148` — `grid_indexes` is the
-//! authority for XLSX-imported sheets). The early return meant the yrs
-//! `cells` map was never updated; the export path then re-read the untouched
-//! formula from `cells` and re-emitted it, so the saved .xlsx still carried
-//! every formula the user thought `ws.clear()` had removed.
-//!
-//! Each test round-trips through `from_xlsx_bytes` on purpose.
-//! `from_snapshot` populates `cellGrid` and masks the bug.
+//! Each test imports real XLSX bytes to exercise identities and sparse cell
+//! storage created by hydration, then checks the exported workbook.
 
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
 
 fn one_sheet_snapshot(name: &str, rows: u32, cols: u32, cells: Vec<CellData>) -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: name.to_string(),
             rows,
@@ -58,7 +53,7 @@ fn formula_cell(uuid_suffix: u32, row: u32, col: u32, formula: &str, cached: f64
 /// `from_snapshot` populates `cellGrid`, so we materialize to bytes first and
 /// re-parse via `from_xlsx_bytes` in the test body.
 fn xlsx_bytes_for(snapshot: WorkbookSnapshot) -> Vec<u8> {
-    let (engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (engine, _) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
     engine.export_to_xlsx_bytes().expect("export_to_xlsx_bytes")
 }
 
@@ -77,7 +72,7 @@ fn xlsx_clear_range_by_position_removes_formula_on_export() {
     ));
 
     // Reload via XLSX path — `cellGrid` sub-map is never created.
-    let (mut engine, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
     let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
 
     // Clear A2 (the formula cell) — the user-reported ws.clear() path.
@@ -121,7 +116,7 @@ fn xlsx_clear_range_bulk_removes_all_formulas() {
     }
     let bytes = xlsx_bytes_for(one_sheet_snapshot("BulkClear", N + 10, 5, cells));
 
-    let (mut engine, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
     let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
 
     // Single range clear over the whole column — the user-visible ws.clear() shape.
@@ -163,7 +158,7 @@ fn xlsx_clear_range_contents_only_removes_formula_on_export() {
         vec![value_cell(1, 0, 0, 7.0), formula_cell(2, 0, 1, "=A1", 7.0)],
     ));
 
-    let (mut engine, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
     let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
 
     engine.clear_range(&sid, 0, 1, 0, 1).expect("clear_range");

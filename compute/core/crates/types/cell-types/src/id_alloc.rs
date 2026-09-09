@@ -17,7 +17,7 @@ use crate::{CellId, ColId, RangeId, RowId, SheetId};
 /// Sentinel value for the upper 64 bits of virtual `CellId`s.
 ///
 /// Virtual `CellId`s are derived deterministically from `(SheetId, RowId, ColId)`
-/// for Range-resident cells that have no per-cell Yrs entry. The sentinel
+/// for Range-resident cells that have no individual value entry. The sentinel
 /// ensures disjointness from real `CellId`s by construction:
 /// * `with_seed`: uses `high_bits = 0` — always distinct from the sentinel.
 /// * `with_client_partition`: asserts `client_id != VIRTUAL_CELL_SENTINEL` at construction.
@@ -28,11 +28,12 @@ pub const VIRTUAL_CELL_SENTINEL: u64 = 0xFFFF_FFFF_FFFF_FFFE;
 /// Each call to `next_*` returns a value that has never been returned before
 /// (within this allocator instance). IDs start at 1 by default; use
 /// [`with_seed`](Self::with_seed) to resume from a persisted high-water mark,
-/// or [`with_client_partition`](Self::with_client_partition) for collaborative
-/// editing where multiple clients must never produce overlapping IDs.
+/// or [`with_client_partition`](Self::with_client_partition) for independent
+/// workbook instances that must never produce overlapping IDs.
 #[derive(Debug)]
 pub struct IdAllocator {
     next: AtomicU64,
+    next_axis_run: AtomicU64,
     /// Upper 64 bits OR'd into every generated `u128`.
     ///
     /// Zero for local-only allocators ([`new`](Self::new) / [`with_seed`](Self::with_seed)).
@@ -57,6 +58,7 @@ impl IdAllocator {
     pub fn new() -> Self {
         Self {
             next: AtomicU64::new(1),
+            next_axis_run: AtomicU64::new(1),
             high_bits: 0,
         }
     }
@@ -77,6 +79,7 @@ impl IdAllocator {
     pub fn with_seed(start: u64) -> Self {
         Self {
             next: AtomicU64::new(start),
+            next_axis_run: AtomicU64::new(1),
             high_bits: 0,
         }
     }
@@ -108,11 +111,10 @@ impl IdAllocator {
     /// |---|---|
     /// | [`new`](Self::new) | Single-client or offline — no collision risk |
     /// | [`with_seed`](Self::with_seed) | Single-client, resuming after restart |
-    /// | **`with_client_partition`** | Multi-client / collaborative editing |
+    /// | **`with_client_partition`** | Independent producers sharing an ID space |
     ///
-    /// In a collaborative session each participant is assigned a distinct
-    /// `client_id` (e.g. from the CRDT layer). Pass that value here so every
-    /// peer's allocator lives in its own non-overlapping slice of the ID space.
+    /// Assign each producer a distinct `client_id` so its allocator uses
+    /// a separate, non-overlapping slice of the ID space.
     ///
     /// # Panics
     ///
@@ -154,6 +156,7 @@ impl IdAllocator {
         );
         Self {
             next: AtomicU64::new(1),
+            next_axis_run: AtomicU64::new(1),
             high_bits: u128::from(client_id) << 64,
         }
     }
@@ -197,6 +200,9 @@ impl IdAllocator {
     /// Atomically advance the counter so future allocations never collide
     /// with `raw_id`. No-op if the counter is already past it.
     pub fn ensure_past(&self, raw_id: u128) {
+        if raw_id & (u128::MAX << 64) != self.high_bits {
+            return;
+        }
         let bytes = raw_id.to_le_bytes();
         let lower_bits = u64::from_le_bytes([
             bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
@@ -215,6 +221,34 @@ impl IdAllocator {
                 break;
             }
         }
+    }
+
+    /// Allocate a compact axis run independently of arbitrary cell UUIDs.
+    /// Panics if the 48-bit run domain is exhausted.
+    pub fn next_axis_run(&self, len: u32) -> crate::AxisIdentityRun {
+        let next = self
+            .next_axis_run
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |next| {
+                (next < (1_u64 << 48)).then_some(next + 1)
+            })
+            .expect("compact axis run domain exhausted");
+        crate::AxisIdentityRun::new(
+            crate::AxisRunId::from_raw(next),
+            crate::AxisIdentitySeed::from_raw((self.high_bits >> 64) as u64),
+            0,
+            len,
+        )
+    }
+
+    /// Reserve all run IDs up to an imported run identity.
+    pub fn ensure_axis_run_past(&self, run: crate::AxisRunId) {
+        self.next_axis_run
+            .fetch_max(run.as_u64().saturating_add(1), Ordering::Relaxed);
+    }
+
+    /// Next compact axis run counter for snapshot persistence.
+    pub fn axis_run_high_water_mark(&self) -> u64 {
+        self.next_axis_run.load(Ordering::Relaxed)
     }
 
     /// Current counter value — the next ID that *will* be allocated.
@@ -346,6 +380,19 @@ mod tests {
             assert!(all.insert(bob.next_u128()));
         }
         assert_eq!(all.len(), 2000);
+    }
+
+    #[test]
+    fn arbitrary_uuid_does_not_expand_local_or_compact_run_counters() {
+        let allocator = IdAllocator::new();
+        allocator.ensure_past(0xabcdef0123456789fedcba9876543210);
+        assert_eq!(allocator.next_cell_id(), CellId::from_raw(1));
+        let run = allocator.next_axis_run(1);
+        assert_eq!(run.run_id.as_u64(), 1);
+        let row = RowId::derive_compact(SheetId::from_raw(1), run.run_id, run.seed, 0);
+        assert!(row.is_compact_axis_identity());
+        let large = IdAllocator::with_seed(u64::MAX - 100);
+        assert_eq!(large.next_axis_run(1).run_id.as_u64(), 1);
     }
 
     #[test]

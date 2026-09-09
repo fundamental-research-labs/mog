@@ -1,14 +1,12 @@
-use super::storage::{KEY_ACTIVE_SCENARIO_ID, get_or_create_scenarios_map, get_scenarios_map};
 use super::*;
 use crate::snapshot::{Scenario, ScenarioCreateInput, ScenarioUpdateInput};
-use crate::storage::YrsStorage;
+use crate::storage::WorkbookStorage;
 use std::sync::Arc;
 use value_types::{CellValue, FiniteF64};
-use yrs::{Any, Map, Transact};
 
-/// Helper: create a fresh YrsStorage for testing.
-fn test_storage() -> YrsStorage {
-    YrsStorage::new()
+/// Helper: create a fresh WorkbookStorage for testing.
+fn test_storage() -> WorkbookStorage {
+    WorkbookStorage::new()
 }
 
 /// Helper: build a simple ScenarioCreateInput.
@@ -182,10 +180,10 @@ fn test_validate_scenario_input_duplicate_name_excluded_for_update() {
 
 #[test]
 fn test_create_scenario_success() {
-    let storage = test_storage();
+    let mut storage = test_storage();
     let input = simple_input("Best Case");
 
-    let result = create(&storage, input, &crate::storage::STORAGE_ID_ALLOC);
+    let result = create(&mut storage, input, &crate::storage::STORAGE_ID_ALLOC);
     assert!(result.success);
     assert!(result.scenario_id.is_some());
     assert!(result.errors.is_none());
@@ -204,7 +202,7 @@ fn test_create_scenario_success() {
 
 #[test]
 fn test_create_scenario_trims_name() {
-    let storage = test_storage();
+    let mut storage = test_storage();
     let input = ScenarioCreateInput {
         name: "  Trimmed Name  ".to_string(),
         comment: String::new(),
@@ -213,7 +211,7 @@ fn test_create_scenario_trims_name() {
         created_by: None,
     };
 
-    let result = create(&storage, input, &crate::storage::STORAGE_ID_ALLOC);
+    let result = create(&mut storage, input, &crate::storage::STORAGE_ID_ALLOC);
     assert!(result.success);
 
     let all = get_all(&storage);
@@ -222,7 +220,7 @@ fn test_create_scenario_trims_name() {
 
 #[test]
 fn test_create_scenario_validation_failure() {
-    let storage = test_storage();
+    let mut storage = test_storage();
     let input = ScenarioCreateInput {
         name: String::new(),
         comment: String::new(),
@@ -231,7 +229,7 @@ fn test_create_scenario_validation_failure() {
         created_by: None,
     };
 
-    let result = create(&storage, input, &crate::storage::STORAGE_ID_ALLOC);
+    let result = create(&mut storage, input, &crate::storage::STORAGE_ID_ALLOC);
     assert!(!result.success);
     assert!(result.scenario_id.is_none());
     assert!(result.errors.is_some());
@@ -242,20 +240,20 @@ fn test_create_scenario_validation_failure() {
 
 #[test]
 fn test_create_multiple_scenarios() {
-    let storage = test_storage();
+    let mut storage = test_storage();
 
     create(
-        &storage,
+        &mut storage,
         simple_input("Scenario A"),
         &crate::storage::STORAGE_ID_ALLOC,
     );
     create(
-        &storage,
+        &mut storage,
         simple_input("Scenario B"),
         &crate::storage::STORAGE_ID_ALLOC,
     );
     create(
-        &storage,
+        &mut storage,
         simple_input("Scenario C"),
         &crate::storage::STORAGE_ID_ALLOC,
     );
@@ -269,17 +267,17 @@ fn test_create_multiple_scenarios() {
 
 #[test]
 fn test_create_scenario_duplicate_name_rejected() {
-    let storage = test_storage();
+    let mut storage = test_storage();
 
     let result1 = create(
-        &storage,
+        &mut storage,
         simple_input("Same Name"),
         &crate::storage::STORAGE_ID_ALLOC,
     );
     assert!(result1.success);
 
     let result2 = create(
-        &storage,
+        &mut storage,
         simple_input("same name"),
         &crate::storage::STORAGE_ID_ALLOC,
     ); // case-insensitive
@@ -290,12 +288,12 @@ fn test_create_scenario_duplicate_name_rejected() {
 
 #[test]
 fn test_create_scenario_at_limit() {
-    let storage = test_storage();
+    let mut storage = test_storage();
 
     // Create MAX_SCENARIOS scenarios
     for i in 0..MAX_SCENARIOS {
         let result = create(
-            &storage,
+            &mut storage,
             simple_input(&format!("Scenario {}", i)),
             &crate::storage::STORAGE_ID_ALLOC,
         );
@@ -307,7 +305,7 @@ fn test_create_scenario_at_limit() {
 
     // One more should fail
     let result = create(
-        &storage,
+        &mut storage,
         simple_input("One Too Many"),
         &crate::storage::STORAGE_ID_ALLOC,
     );
@@ -318,10 +316,10 @@ fn test_create_scenario_at_limit() {
 
 #[test]
 fn test_get_by_id() {
-    let storage = test_storage();
+    let mut storage = test_storage();
 
     let result = create(
-        &storage,
+        &mut storage,
         simple_input("Find Me"),
         &crate::storage::STORAGE_ID_ALLOC,
     );
@@ -337,10 +335,10 @@ fn test_get_by_id() {
 
 #[test]
 fn test_find_by_name() {
-    let storage = test_storage();
+    let mut storage = test_storage();
 
     create(
-        &storage,
+        &mut storage,
         simple_input("My Scenario"),
         &crate::storage::STORAGE_ID_ALLOC,
     );
@@ -359,13 +357,13 @@ fn test_find_by_name() {
 
 #[test]
 fn test_get_count_empty() {
-    let storage = test_storage();
+    let mut storage = test_storage();
     assert_eq!(get_count(&storage), 0);
 }
 
 #[test]
 fn test_is_at_limit_empty() {
-    let storage = test_storage();
+    let mut storage = test_storage();
     assert!(!is_at_limit(&storage));
 }
 
@@ -375,17 +373,17 @@ fn test_is_at_limit_empty() {
 
 #[test]
 fn test_update_scenario_name() {
-    let storage = test_storage();
+    let mut storage = test_storage();
 
     let result = create(
-        &storage,
+        &mut storage,
         simple_input("Old Name"),
         &crate::storage::STORAGE_ID_ALLOC,
     );
     let scenario_id = result.scenario_id.unwrap();
 
     let update_result = update(
-        &storage,
+        &mut storage,
         &scenario_id,
         ScenarioUpdateInput {
             name: Some("New Name".to_string()),
@@ -400,17 +398,17 @@ fn test_update_scenario_name() {
 
 #[test]
 fn test_update_scenario_comment() {
-    let storage = test_storage();
+    let mut storage = test_storage();
 
     let result = create(
-        &storage,
+        &mut storage,
         simple_input("Scenario X"),
         &crate::storage::STORAGE_ID_ALLOC,
     );
     let scenario_id = result.scenario_id.unwrap();
 
     let update_result = update(
-        &storage,
+        &mut storage,
         &scenario_id,
         ScenarioUpdateInput {
             comment: Some("Updated comment".to_string()),
@@ -425,17 +423,17 @@ fn test_update_scenario_comment() {
 
 #[test]
 fn test_update_scenario_values() {
-    let storage = test_storage();
+    let mut storage = test_storage();
 
     let result = create(
-        &storage,
+        &mut storage,
         simple_input("Values Test"),
         &crate::storage::STORAGE_ID_ALLOC,
     );
     let scenario_id = result.scenario_id.unwrap();
 
     let update_result = update(
-        &storage,
+        &mut storage,
         &scenario_id,
         ScenarioUpdateInput {
             values: Some(vec![CellValue::Number(FiniteF64::must(999.0))]),
@@ -453,10 +451,10 @@ fn test_update_scenario_values() {
 
 #[test]
 fn test_update_scenario_not_found() {
-    let storage = test_storage();
+    let mut storage = test_storage();
 
     let result = update(
-        &storage,
+        &mut storage,
         "nonexistent",
         ScenarioUpdateInput {
             name: Some("New Name".to_string()),
@@ -470,15 +468,15 @@ fn test_update_scenario_not_found() {
 
 #[test]
 fn test_update_scenario_duplicate_name_rejected() {
-    let storage = test_storage();
+    let mut storage = test_storage();
 
     create(
-        &storage,
+        &mut storage,
         simple_input("Alpha"),
         &crate::storage::STORAGE_ID_ALLOC,
     );
     let result_b = create(
-        &storage,
+        &mut storage,
         simple_input("Beta"),
         &crate::storage::STORAGE_ID_ALLOC,
     );
@@ -486,7 +484,7 @@ fn test_update_scenario_duplicate_name_rejected() {
 
     // Try to rename Beta to "alpha" (case-insensitive duplicate)
     let update_result = update(
-        &storage,
+        &mut storage,
         &beta_id,
         ScenarioUpdateInput {
             name: Some("alpha".to_string()),
@@ -500,10 +498,10 @@ fn test_update_scenario_duplicate_name_rejected() {
 
 #[test]
 fn test_update_scenario_same_name_allowed() {
-    let storage = test_storage();
+    let mut storage = test_storage();
 
     let result = create(
-        &storage,
+        &mut storage,
         simple_input("Keep Name"),
         &crate::storage::STORAGE_ID_ALLOC,
     );
@@ -511,7 +509,7 @@ fn test_update_scenario_same_name_allowed() {
 
     // Updating with the same name should succeed
     let update_result = update(
-        &storage,
+        &mut storage,
         &scenario_id,
         ScenarioUpdateInput {
             name: Some("Keep Name".to_string()),
@@ -523,28 +521,28 @@ fn test_update_scenario_same_name_allowed() {
 
 #[test]
 fn test_update_preserves_order() {
-    let storage = test_storage();
+    let mut storage = test_storage();
 
     create(
-        &storage,
+        &mut storage,
         simple_input("First"),
         &crate::storage::STORAGE_ID_ALLOC,
     );
     let result_b = create(
-        &storage,
+        &mut storage,
         simple_input("Second"),
         &crate::storage::STORAGE_ID_ALLOC,
     );
     let second_id = result_b.scenario_id.unwrap();
     create(
-        &storage,
+        &mut storage,
         simple_input("Third"),
         &crate::storage::STORAGE_ID_ALLOC,
     );
 
     // Update the middle scenario
     update(
-        &storage,
+        &mut storage,
         &second_id,
         ScenarioUpdateInput {
             name: Some("Updated Second".to_string()),
@@ -565,10 +563,10 @@ fn test_update_preserves_order() {
 
 #[test]
 fn test_remove_scenario() {
-    let storage = test_storage();
+    let mut storage = test_storage();
 
     let result = create(
-        &storage,
+        &mut storage,
         simple_input("To Remove"),
         &crate::storage::STORAGE_ID_ALLOC,
     );
@@ -576,7 +574,7 @@ fn test_remove_scenario() {
 
     assert_eq!(get_count(&storage), 1);
 
-    let removed = remove(&storage, &scenario_id);
+    let removed = remove(&mut storage, &scenario_id);
     assert!(removed.success);
     assert_eq!(removed.scenario_id.as_deref(), Some(scenario_id.as_str()));
     assert_eq!(get_count(&storage), 0);
@@ -584,96 +582,38 @@ fn test_remove_scenario() {
 
 #[test]
 fn test_remove_scenario_not_found() {
-    let storage = test_storage();
-    let removed = remove(&storage, "nonexistent");
+    let mut storage = test_storage();
+    let removed = remove(&mut storage, "nonexistent");
     assert!(!removed.success);
     assert_eq!(removed.errors.as_ref().unwrap()[0].field, "scenarioId");
 }
 
 #[test]
-fn test_remove_scrubs_legacy_active_scenario_id() {
-    let storage = test_storage();
-
-    let result = create(
-        &storage,
-        simple_input("Active One"),
-        &crate::storage::STORAGE_ID_ALLOC,
-    );
-    let scenario_id = result.scenario_id.unwrap();
-
-    {
-        let workbook = storage.workbook_map();
-        let mut txn = storage.doc().transact_mut();
-        let scenarios_map = get_or_create_scenarios_map(workbook, &mut txn);
-        scenarios_map.insert(
-            &mut txn,
-            KEY_ACTIVE_SCENARIO_ID,
-            Any::String(Arc::from(scenario_id.as_str())),
-        );
-    }
-
-    let removed = remove(&storage, &scenario_id);
-    assert!(removed.success);
-
-    assert!(get_active_scenario_id(&storage).is_none());
-    let txn = storage.doc().transact();
-    let scenarios_map = get_scenarios_map(storage.workbook_map(), &txn).unwrap();
-    assert!(scenarios_map.get(&txn, KEY_ACTIVE_SCENARIO_ID).is_none());
-}
-
-#[test]
-fn test_create_scrubs_legacy_active_scenario_id() {
-    let storage = test_storage();
-
-    {
-        let workbook = storage.workbook_map();
-        let mut txn = storage.doc().transact_mut();
-        let scenarios_map = get_or_create_scenarios_map(workbook, &mut txn);
-        scenarios_map.insert(
-            &mut txn,
-            KEY_ACTIVE_SCENARIO_ID,
-            Any::String(Arc::from("legacy-active")),
-        );
-    }
-
-    let result = create(
-        &storage,
-        simple_input("A"),
-        &crate::storage::STORAGE_ID_ALLOC,
-    );
-    assert!(result.success);
-
-    let txn = storage.doc().transact();
-    let scenarios_map = get_scenarios_map(storage.workbook_map(), &txn).unwrap();
-    assert!(scenarios_map.get(&txn, KEY_ACTIVE_SCENARIO_ID).is_none());
-}
-
-#[test]
 fn test_remove_preserves_order_of_remaining() {
-    let storage = test_storage();
+    let mut storage = test_storage();
 
     let r1 = create(
-        &storage,
+        &mut storage,
         simple_input("First"),
         &crate::storage::STORAGE_ID_ALLOC,
     );
     let id_1 = r1.scenario_id.unwrap();
 
     create(
-        &storage,
+        &mut storage,
         simple_input("Second"),
         &crate::storage::STORAGE_ID_ALLOC,
     );
 
     let r3 = create(
-        &storage,
+        &mut storage,
         simple_input("Third"),
         &crate::storage::STORAGE_ID_ALLOC,
     );
     let _id_3 = r3.scenario_id.unwrap();
 
     // Remove the first one
-    remove(&storage, &id_1);
+    remove(&mut storage, &id_1);
 
     let all = get_all(&storage);
     assert_eq!(all.len(), 2);
@@ -685,83 +625,13 @@ fn test_remove_preserves_order_of_remaining() {
 // Active scenario tests
 // -------------------------------------------------------------------
 
-#[test]
-fn test_set_active_scenario_id_rejected() {
-    let storage = test_storage();
-
-    let result = create(
-        &storage,
-        simple_input("Test"),
-        &crate::storage::STORAGE_ID_ALLOC,
-    );
-    let scenario_id = result.scenario_id.unwrap();
-
-    assert!(get_active_scenario_id(&storage).is_none());
-
-    let err = set_active_scenario_id(&storage, Some(&scenario_id)).unwrap_err();
-    assert!(err.to_string().contains("SCENARIO_ACTIVE_STATE_READ_ONLY"));
-    assert!(get_active_scenario_id(&storage).is_none());
-}
-
-#[test]
-fn test_get_active_scenario() {
-    let storage = test_storage();
-
-    let result = create(
-        &storage,
-        simple_input("Active Test"),
-        &crate::storage::STORAGE_ID_ALLOC,
-    );
-    let scenario_id = result.scenario_id.unwrap();
-
-    // No active scenario
-    assert!(get_active_scenario(&storage).is_none());
-
-    let workbook = storage.workbook_map();
-    let mut txn = storage.doc().transact_mut();
-    let scenarios_map = get_or_create_scenarios_map(workbook, &mut txn);
-    scenarios_map.insert(
-        &mut txn,
-        KEY_ACTIVE_SCENARIO_ID,
-        Any::String(Arc::from(scenario_id.as_str())),
-    );
-    drop(txn);
-
-    assert!(get_active_scenario(&storage).is_none());
-}
-
-#[test]
-fn test_get_active_scenario_ignores_legacy_active_id() {
-    let storage = test_storage();
-
-    let result = create(
-        &storage,
-        simple_input("Test"),
-        &crate::storage::STORAGE_ID_ALLOC,
-    );
-    let scenario_id = result.scenario_id.unwrap();
-
-    let workbook = storage.workbook_map();
-    let mut txn = storage.doc().transact_mut();
-    let scenarios_map = get_or_create_scenarios_map(workbook, &mut txn);
-    scenarios_map.insert(
-        &mut txn,
-        KEY_ACTIVE_SCENARIO_ID,
-        Any::String(Arc::from(scenario_id.as_str())),
-    );
-    drop(txn);
-
-    assert!(get_active_scenario_id(&storage).is_none());
-    assert!(get_active_scenario(&storage).is_none());
-}
-
 // -------------------------------------------------------------------
 // Scenario data roundtrip tests
 // -------------------------------------------------------------------
 
 #[test]
 fn test_scenario_stores_all_cell_value_types() {
-    let storage = test_storage();
+    let mut storage = test_storage();
 
     let input = ScenarioCreateInput {
         name: "Value Types".to_string(),
@@ -781,7 +651,7 @@ fn test_scenario_stores_all_cell_value_types() {
         created_by: Some("user-1".to_string()),
     };
 
-    let result = create(&storage, input, &crate::storage::STORAGE_ID_ALLOC);
+    let result = create(&mut storage, input, &crate::storage::STORAGE_ID_ALLOC);
     assert!(result.success);
 
     let scenario = get_by_id(&storage, &result.scenario_id.unwrap()).unwrap();
@@ -794,10 +664,10 @@ fn test_scenario_stores_all_cell_value_types() {
 
 #[test]
 fn test_scenario_timestamps_set() {
-    let storage = test_storage();
+    let mut storage = test_storage();
 
     let result = create(
-        &storage,
+        &mut storage,
         simple_input("Timestamp Test"),
         &crate::storage::STORAGE_ID_ALLOC,
     );
@@ -810,10 +680,10 @@ fn test_scenario_timestamps_set() {
 
 #[test]
 fn test_scenario_update_changes_modified_at() {
-    let storage = test_storage();
+    let mut storage = test_storage();
 
     let result = create(
-        &storage,
+        &mut storage,
         simple_input("Time Test"),
         &crate::storage::STORAGE_ID_ALLOC,
     );
@@ -824,7 +694,7 @@ fn test_scenario_update_changes_modified_at() {
 
     // Small delay to ensure different timestamp (not strictly needed in practice)
     update(
-        &storage,
+        &mut storage,
         &scenario_id,
         ScenarioUpdateInput {
             comment: Some("updated".to_string()),
@@ -849,20 +719,19 @@ fn test_scenario_update_changes_modified_at() {
 
 #[test]
 fn test_empty_storage_getters() {
-    let storage = test_storage();
+    let mut storage = test_storage();
 
     assert_eq!(get_all(&storage).len(), 0);
     assert_eq!(get_count(&storage), 0);
     assert!(get_by_id(&storage, "any-id").is_none());
-    assert!(get_active_scenario_id(&storage).is_none());
-    assert!(get_active_scenario(&storage).is_none());
+
     assert!(find_by_name(&storage, "any").is_none());
     assert!(!is_at_limit(&storage));
 }
 
 #[test]
 fn test_scenario_with_max_changing_cells() {
-    let storage = test_storage();
+    let mut storage = test_storage();
 
     let cells: Vec<String> = (0..MAX_CHANGING_CELLS_PER_SCENARIO)
         .map(|i| format!("cell-{}", i))
@@ -879,7 +748,7 @@ fn test_scenario_with_max_changing_cells() {
         created_by: None,
     };
 
-    let result = create(&storage, input, &crate::storage::STORAGE_ID_ALLOC);
+    let result = create(&mut storage, input, &crate::storage::STORAGE_ID_ALLOC);
     assert!(result.success);
 
     let scenario = get_by_id(&storage, &result.scenario_id.unwrap()).unwrap();
@@ -891,17 +760,17 @@ fn test_scenario_with_max_changing_cells() {
 
 #[test]
 fn test_update_changing_cells_and_values() {
-    let storage = test_storage();
+    let mut storage = test_storage();
 
     let result = create(
-        &storage,
+        &mut storage,
         simple_input("Update Cells"),
         &crate::storage::STORAGE_ID_ALLOC,
     );
     let scenario_id = result.scenario_id.unwrap();
 
     let update_result = update(
-        &storage,
+        &mut storage,
         &scenario_id,
         ScenarioUpdateInput {
             changing_cells: Some(vec!["cell-a".to_string(), "cell-b".to_string()]),

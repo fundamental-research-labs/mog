@@ -12,7 +12,13 @@ fn test_circular_reference_detected() {
     let mut core = ComputeCore::new();
     let mut mirror = CellMirror::new();
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "00000000-0000-0000-0000-000000000001".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -76,7 +82,13 @@ fn test_self_referencing_formula() {
     let mut core = ComputeCore::new();
     let mut mirror = CellMirror::new();
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "00000000-0000-0000-0000-000000000001".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -123,7 +135,13 @@ fn blank_self_referencing_formula_materializes_circular_error() {
     let mut core = ComputeCore::new();
     let mut mirror = CellMirror::new();
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "00000000-0000-0000-0000-000000000001".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -163,7 +181,7 @@ fn blank_self_referencing_formula_materializes_circular_error() {
 // under non-iterative cycles.
 //
 // The guard deliberately exercises the engine-level entry point
-// `YrsComputeEngine::recalculate_with_options` (the Rust peer that
+// `ComputeEngine::recalculate_with_options` (the Rust peer that
 // `wb.calculate()` dispatches through the bridge: TS `wb.calculate()` →
 // `compute_full_recalc` → `BridgeService::full_recalc` →
 // `Engine::recalculate_with_options`) rather than `ComputeCore::full_recalc`.
@@ -185,11 +203,17 @@ fn blank_self_referencing_formula_materializes_circular_error() {
 // init would make the FIRST call a short-circuit, hiding the cycle path.
 #[test]
 fn test_calculate_idempotent_under_cycles() {
-    use crate::storage::engine::YrsComputeEngine;
+    use crate::storage::engine::ComputeEngine;
     use snapshot_types::RecalcOptions;
 
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "00000000-0000-0000-0000-000000000001".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -227,7 +251,7 @@ fn test_calculate_idempotent_under_cycles() {
     };
 
     let (mut engine, _init_recalc) =
-        YrsComputeEngine::from_snapshot(snap).expect("engine construction should succeed");
+        ComputeEngine::from_snapshot(snap).expect("engine construction should succeed");
 
     let sheet_id = sid(1);
     let a1_id = cid(0x10);
@@ -297,7 +321,13 @@ fn test_calculate_idempotent_under_cycles() {
 
 fn self_cycle_snapshot() -> WorkbookSnapshot {
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "00000000-0000-0000-0000-000000000001".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -573,7 +603,13 @@ fn iterative_calc_solves_chained_debt_schedule_cycles() {
     ];
 
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "00000000-0000-0000-0000-000000000001".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -638,7 +674,13 @@ fn iterative_calc_recovers_chained_debt_schedule_after_incremental_edits() {
 
     fn empty_snapshot() -> WorkbookSnapshot {
         WorkbookSnapshot {
+            axis_run_high_water_mark: None,
+            identity_high_water_mark: None,
+            canonical_tables: Vec::new(),
             sheets: vec![SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: "00000000-0000-0000-0000-000000000001".to_string(),
                 name: "Sheet1".to_string(),
                 rows: 100,

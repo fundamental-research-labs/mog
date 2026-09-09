@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
+use crate::storage::WorkbookStorage;
 use cell_types::{CellId, SheetId, SheetPos};
 use compute_parser::parse_formula;
 use value_types::CellValue;
-use yrs::{Doc, MapRef, Transact};
 
 use super::{
     CellValidationResult, ColumnSchema, EnforcementLevel, IdentityRangeSchemaRef, SchemaType,
-    columns, range_geometry, range_store, range_view,
+    columns, range_geometry, range_view,
 };
 use crate::eval::sync_block_on;
 use crate::eval_bridge::MirrorContext;
@@ -171,8 +171,7 @@ fn validate_with_resolved_constraints(
 }
 
 pub(crate) fn validate_cell_value(
-    doc: &Doc,
-    sheets: &MapRef,
+    storage: &WorkbookStorage,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -182,7 +181,7 @@ pub(crate) fn validate_cell_value(
 ) -> CellValidationResult {
     let cell_value = str_to_cell_value(value);
 
-    if let Some(cs) = columns::get_column_schema(doc, sheets, sheet_id, col, grid_index) {
+    if let Some(cs) = columns::get_column_schema(storage, sheet_id, col, grid_index) {
         let result = validate_with_resolved_constraints(
             &cell_value,
             &cs,
@@ -211,9 +210,7 @@ pub(crate) fn validate_cell_value(
         };
     }
 
-    let txn = doc.transact();
-    let specs = range_store::read_range_backed_validation_specs(&txn, sheets, sheet_id);
-    drop(txn);
+    let specs = super::get_validation_specs_for_sheet(storage, sheet_id);
 
     for (idx, spec) in specs.iter().enumerate() {
         let Some(rs) =
@@ -292,8 +289,7 @@ pub(crate) enum DataValidationOutcome {
 }
 
 pub(crate) fn validate_cell_value_against_data_validations(
-    doc: &Doc,
-    sheets: &MapRef,
+    storage: &WorkbookStorage,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -301,9 +297,7 @@ pub(crate) fn validate_cell_value_against_data_validations(
     grid_index: Option<&GridIndex>,
     mirror: &CellMirror,
 ) -> DataValidationOutcome {
-    let txn = doc.transact();
-    let specs = range_store::read_range_backed_validation_specs(&txn, sheets, sheet_id);
-    drop(txn);
+    let specs = super::get_validation_specs_for_sheet(storage, sheet_id);
 
     for (idx, spec) in specs.iter().enumerate() {
         let Some(rs) =

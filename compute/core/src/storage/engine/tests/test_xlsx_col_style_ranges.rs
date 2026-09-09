@@ -283,8 +283,9 @@ fn direct_cell_row_col_and_styled_blank_formats_export_through_xlsx() {
         .as_ref()
         .expect("styled blank run fill should round-trip");
     assert_eq!(fill.pattern_type.as_deref(), Some("solid"));
-    assert!(
-        fill.pattern_foreground_color.is_some() || fill.background_color.is_some(),
+    assert_eq!(
+        fill.background_color.as_deref().or(fill.pattern_foreground_color.as_deref()),
+        Some("#00CC99"),
         "styled blank fill color should survive XLSX export/import"
     );
     assert!(

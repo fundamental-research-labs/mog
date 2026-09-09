@@ -2,7 +2,7 @@ use crate::domain::styles::types::CellXfDef;
 use crate::domain::styles::write::StylesWriter;
 use domain_types::{ParseOutput, WorkbookStylesheet};
 
-use super::styles::{append_generated_cell_xf, build_styles, output_references_style_ids};
+use super::styles::{append_generated_cell_xf, build_styles};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct StyleExportRemapper {
@@ -34,11 +34,10 @@ pub(super) struct StyleExportPlan {
 
 #[must_use]
 pub(super) fn build_style_export_plan(output: &ParseOutput) -> StyleExportPlan {
-    let palette = if output_references_style_ids(output) {
-        output.style_palette.as_slice()
-    } else {
-        &[]
-    };
+    // Palette entry 0 is implicitly used by every unstyled cell, including
+    // future cells in an empty sheet. Deleting explicit style references does
+    // not delete the workbook's Normal style or its imported registry.
+    let palette = output.style_palette.as_slice();
 
     let Some(stylesheet) = output.workbook_stylesheet.as_ref() else {
         return generated_style_export_plan(palette);

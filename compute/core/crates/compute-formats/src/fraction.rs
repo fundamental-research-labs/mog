@@ -2,228 +2,186 @@
 
 use crate::types::{FormatSection, Token, is_digit_placeholder};
 
-/// Format a number as a fraction, e.g. `# ?/?` or `# ??/??`.
-#[allow(clippy::too_many_lines)] // fraction layout logic is inherently verbose
+fn literals(tokens: &[Token]) -> String {
+    tokens
+        .iter()
+        .map(|t| match t {
+            Token::Literal(s) | Token::FractionDenominatorLiteral(s) => s.clone(),
+            Token::SkipWidth(_) => " ".into(),
+            Token::Percent => "%".into(),
+            Token::FractionSlash => "/".into(),
+            _ => String::new(),
+        })
+        .collect()
+}
+
+/// Right-align a digit field while retaining literals between placeholders.
+/// Unlike padding one combined string, this preserves formats such as #-#-#.
+fn digit_field(tokens: &[Token], value: u64, suppress_zero: bool) -> String {
+    let digits = if value == 0 && suppress_zero {
+        String::new()
+    } else {
+        value.to_string()
+    };
+    let mut remaining = digits.len();
+    let first = tokens.iter().position(is_digit_placeholder);
+    let mut output = vec![String::new(); tokens.len()];
+    for (i, token) in tokens.iter().enumerate().rev() {
+        if is_digit_placeholder(token) {
+            if remaining > 0 {
+                remaining -= 1;
+                output[i].push(digits.as_bytes()[remaining] as char);
+            } else {
+                match token {
+                    Token::Zero => output[i].push('0'),
+                    Token::Question => output[i].push(' '),
+                    _ => {}
+                }
+            }
+            if Some(i) == first && remaining > 0 {
+                output[i].insert_str(0, &digits[..remaining]);
+            }
+        } else {
+            output[i] = literals(std::slice::from_ref(token));
+        }
+    }
+    output.concat()
+}
+
+/// Separate integer, numerator, separator and denominator fields before
+/// rendering. Literal characters may occur on either side of the slash.
+#[allow(clippy::too_many_lines)]
 pub(crate) fn format_fraction(value: f64, section: &FormatSection, section_count: usize) -> String {
-    let is_negative = value < 0.0;
-    let val = value.abs();
-
-    let integer_part = val.trunc() as u64;
-    let frac_part = val - val.trunc();
-
-    // Count integer placeholders before FractionSlash (before the digit placeholders that precede '/')
-    // and denominator placeholders after FractionSlash.
-    //
-    // Token structure: [int_placeholders] FractionSlash [denom_placeholders]
-    // But there may also be numerator placeholders between the integer part and the slash.
-    // Typical patterns:
-    //   # ?/?     -> int=# , num=?, denom=?
-    //   # ??/??   -> int=#, num=??, denom=??
-    //   ?/?       -> no int, num=?, denom=?
-    //   0 0/0     -> int=0, num=0, denom=0
-
-    // Find the FractionSlash position.
-    // Safety: callers in lib.rs gate on FractionSlash presence before calling this function,
-    // so the token is guaranteed to exist. We still handle the missing case defensively.
-    let Some(slash_pos) = section
-        .tokens
+    let tokens = &section.tokens;
+    let Some(slash) = tokens
         .iter()
         .position(|t| matches!(t, Token::FractionSlash))
     else {
         return String::new();
     };
-
-    // Count numerator placeholders: digit placeholders immediately before FractionSlash
-    let mut num_placeholders = 0usize;
-    for tok in section.tokens[..slash_pos].iter().rev() {
-        if is_digit_placeholder(tok) {
-            num_placeholders += 1;
-        } else {
-            break;
-        }
-    }
-
-    let fixed_denominator = section.tokens[slash_pos + 1..].first().and_then(|token| {
-        if let Token::FractionDenominatorLiteral(value) = token {
-            value
-                .parse::<u64>()
-                .ok()
-                .filter(|denominator| *denominator > 0)
-        } else {
-            None
-        }
-    });
-    let fixed_denominator_text = section.tokens[slash_pos + 1..].first().and_then(|token| {
-        if let Token::FractionDenominatorLiteral(value) = token {
-            Some(value.as_str())
-        } else {
-            None
-        }
-    });
-
-    // Count denominator placeholders: digit placeholders immediately after FractionSlash,
-    // or the literal width for fixed-denominator fraction formats.
-    let mut denom_placeholders = 0usize;
-    if let Some(denominator_text) = fixed_denominator_text {
-        denom_placeholders = denominator_text.len();
-    } else {
-        for tok in &section.tokens[slash_pos + 1..] {
-            if is_digit_placeholder(tok) {
-                denom_placeholders += 1;
-            } else {
-                break;
-            }
-        }
-    }
-
-    // Count integer placeholders: placeholders before the numerator group
-    let int_placeholder_end = slash_pos - num_placeholders;
-    let has_int_part = section.tokens[..int_placeholder_end]
-        .iter()
-        .any(is_digit_placeholder);
-
-    let (best_num, best_denom, carry_fraction) = if let Some(fixed_denominator) = fixed_denominator
-    {
-        if frac_part < 1e-12 {
-            (0u64, fixed_denominator, false)
-        } else {
-            let rounded_num = (frac_part * fixed_denominator as f64).round() as u64;
-            if rounded_num >= fixed_denominator {
-                (0, fixed_denominator, true)
-            } else {
-                (rounded_num, fixed_denominator, false)
-            }
-        }
-    } else {
-        // Max denominator based on placeholder count.
-        // Cap at 9 digits — the continued-fractions algorithm is O(log max_denom),
-        // so even 999_999_999 terminates in ~30 iterations.
-        let capped_denom_digits = denom_placeholders.min(9) as u32;
-        let max_denom = 10u64.pow(capped_denom_digits) - 1;
-        let max_denom = max_denom.max(1);
-
-        // Find best rational approximation via continued fractions (Stern-Brocot tree)
-        if frac_part < 1e-12 {
-            (0u64, 1u64, false)
-        } else {
-            let (n, d) = best_rational_approximation(frac_part, max_denom);
-            // If numerator equals denominator, add to integer and set fraction to 0
-            if n >= d { (0, 1, true) } else { (n, d, false) }
-        }
+    let Some(num_last) = tokens[..slash].iter().rposition(is_digit_placeholder) else {
+        return String::new();
     };
-
-    // Adjust integer if numerator rounded up to denominator
-    let display_int = integer_part + u64::from(carry_fraction);
-
-    let needs_minus = is_negative && (display_int > 0 || best_num > 0) && section_count <= 1;
-
-    let mut result = String::new();
-    if needs_minus {
-        result.push('-');
+    let mut num_start = num_last;
+    while num_start > 0 && is_digit_placeholder(&tokens[num_start - 1]) {
+        num_start -= 1;
+    }
+    let Some(denom_start) = (slash + 1..tokens.len()).find(|&i| {
+        is_digit_placeholder(&tokens[i])
+            || matches!(tokens[i], Token::FractionDenominatorLiteral(_))
+    }) else {
+        return String::new();
+    };
+    let mut denom_end = denom_start + 1;
+    while denom_end < tokens.len() && is_digit_placeholder(&tokens[denom_end]) {
+        denom_end += 1;
+    }
+    let int_last = tokens[..num_start].iter().rposition(is_digit_placeholder);
+    let int_end = int_last.map_or(num_start, |i| i + 1);
+    let numerator_tokens = &tokens[num_start..=num_last];
+    let denominator_tokens = &tokens[denom_start..denom_end];
+    let fixed_denominator = match &tokens[denom_start] {
+        Token::FractionDenominatorLiteral(s) => s.parse::<u64>().ok(),
+        _ => None,
+    };
+    let val = value.abs() * 100f64.powi(section.percent_count as i32)
+        / 1000f64.powi(section.scale_divisors as i32);
+    let mut whole = val.trunc() as u64;
+    let fractional = val.fract();
+    let (mut numerator, denominator) = if let Some(denominator) = fixed_denominator {
+        (
+            (fractional * denominator as f64).round() as u64,
+            denominator,
+        )
+    } else {
+        best_rational_approximation(
+            fractional,
+            (10u64.pow(denominator_tokens.len().min(9) as u32) - 1).max(1),
+        )
+    };
+    if numerator >= denominator {
+        whole += 1;
+        numerator = 0;
+    }
+    if int_last.is_none() {
+        numerator += whole * denominator;
     }
 
-    // Walk the tokens and emit
-    let num_str = format!("{best_num}");
-    let denom_str = format!("{best_denom}");
-
-    // Build integer display
-    let int_str = format!("{display_int}");
-
-    let mut in_denom_zone = false;
-    let mut int_emitted = false;
-    let mut num_emitted = false;
-    let mut denom_emitted = false;
-
-    // We need to identify zones: before numerator = integer, numerator, slash, denominator
-    let num_start = int_placeholder_end;
-
-    for (idx, tok) in section.tokens.iter().enumerate() {
-        if idx == slash_pos {
-            // Emit numerator if not yet
-            if !num_emitted {
-                // Excel parity (per the UI fraction-formatting fixture):
-                // when the numerator has actual digits we emit just those digits,
-                // letting the literal separator before the fraction zone (the
-                // space in `# ??/??`) and the slash itself provide visual
-                // alignment. Padding the numerator to `num_placeholders` chars
-                // here would compose with that literal space and produce
-                // doubled inter-column spaces (e.g. `1  5/8` instead of
-                // `1 5/8`). When the numerator is zero AND there is an integer
-                // part, we still emit blanks of the placeholder width so the
-                // fraction zone collapses to whitespace as Excel does for
-                // whole-number values.
-                let block = if best_num == 0 {
-                    if has_int_part {
-                        " ".repeat(num_placeholders)
-                    } else {
-                        "0".to_string()
-                    }
-                } else {
-                    num_str.clone()
-                };
-                result.push_str(&block);
-                num_emitted = true;
+    let force_fraction =
+        int_last.is_none() || numerator_tokens.iter().any(|t| matches!(t, Token::Zero));
+    let show_fraction = numerator != 0 || force_fraction;
+    let has_question = tokens[..denom_end]
+        .iter()
+        .any(|t| matches!(t, Token::Question));
+    let mut result = if value < 0.0 && (whole != 0 || numerator != 0) && section_count <= 1 {
+        "-".to_string()
+    } else {
+        String::new()
+    };
+    if int_last.is_some() {
+        if show_fraction {
+            let force_integer_zero = numerator == 0
+                && tokens[..int_end]
+                    .iter()
+                    .any(|t| matches!(t, Token::Zero | Token::Question));
+            let integer = digit_field(&tokens[..int_end], whole, whole == 0 && !force_integer_zero);
+            result.push_str(&integer);
+            if whole > 0
+                || force_integer_zero
+                || tokens[..int_end].iter().any(|t| matches!(t, Token::Zero))
+            {
+                result.push_str(&literals(&tokens[int_end..num_start]));
+            } else if tokens[..num_start]
+                .iter()
+                .any(|t| matches!(t, Token::Question))
+                || numerator_tokens
+                    .iter()
+                    .any(|t| matches!(t, Token::Question))
+            {
+                result.push_str(&" ".repeat(literals(&tokens[int_end..num_start]).chars().count()));
             }
-            result.push('/');
-            in_denom_zone = true;
-            continue;
-        }
-
-        if idx >= num_start && idx < slash_pos && is_digit_placeholder(tok) {
-            // Skip — we'll emit the numerator as a block at the slash
-            continue;
-        }
-
-        if in_denom_zone
-            && (is_digit_placeholder(tok) || matches!(tok, Token::FractionDenominatorLiteral(_)))
-        {
-            if !denom_emitted {
-                if best_num == 0 {
-                    if let Some(denominator_text) = fixed_denominator_text {
-                        result.push_str(denominator_text);
-                    } else {
-                        // No fraction — blank the denominator zone so a whole
-                        // number renders the trailing fraction columns as space.
-                        result.push_str(&" ".repeat(denom_placeholders));
-                    }
-                } else {
-                    // Emit denominator digits without right-padding for the
-                    // same Excel-parity reason as the numerator block above.
-                    result.push_str(&denom_str);
+        } else {
+            // A missing fractional part collapses the integer field to its
+            // significant digits, but ? retains the width of the whole fraction.
+            let mut int_tokens = tokens[..int_end].to_vec();
+            for t in &mut int_tokens {
+                if matches!(t, Token::Zero | Token::Question) {
+                    *t = Token::Hash;
                 }
-                denom_emitted = true;
             }
-            continue;
+            result.push_str(&digit_field(&int_tokens, whole, false));
         }
-
-        if !in_denom_zone && idx < num_start && is_digit_placeholder(tok) {
-            // Integer zone
-            if !int_emitted {
-                if has_int_part {
-                    if display_int == 0 && matches!(tok, Token::Hash) {
-                        // # suppresses zero integer
-                        let int_ph_count = section.tokens[..num_start]
-                            .iter()
-                            .filter(|t| is_digit_placeholder(t))
-                            .count();
-                        result.push_str(&" ".repeat(int_ph_count));
-                    } else {
-                        result.push_str(&int_str);
-                    }
-                }
-                int_emitted = true;
-            }
-            continue;
-        }
-
-        match tok {
-            Token::Literal(s) => result.push_str(s),
-            Token::SkipWidth(_) => result.push(' '),
-            Token::Percent => result.push('%'),
-            _ => {}
-        }
+    } else {
+        result.push_str(&literals(&tokens[..num_start]));
     }
 
+    if show_fraction {
+        result.push_str(&digit_field(numerator_tokens, numerator, false));
+        result.push_str(&literals(&tokens[num_last + 1..denom_start]));
+        if let Some(denominator) = fixed_denominator {
+            result.push_str(&denominator.to_string());
+        } else {
+            let field = digit_field(denominator_tokens, denominator, false);
+            // Fraction denominators align to the left of their ? padding;
+            // numerators align to the right so the slash remains aligned.
+            let padding = field.len() - field.trim_start_matches(' ').len();
+            result.push_str(field.trim_start_matches(' '));
+            result.push_str(&" ".repeat(padding));
+        }
+    } else if has_question {
+        let width = tokens[int_end..denom_end]
+            .iter()
+            .map(|t| {
+                if is_digit_placeholder(t) {
+                    1
+                } else {
+                    literals(std::slice::from_ref(t)).chars().count()
+                }
+            })
+            .sum();
+        result.push_str(&" ".repeat(width));
+    }
+    result.push_str(&literals(&tokens[denom_end..]));
     result
 }
 

@@ -34,20 +34,23 @@ pub(crate) enum Token {
     /// `[condition]` like `[>100]` -- conditional (parsed but advanced)
     Condition(String),
     // Date/time tokens
-    DateYear4,     // yyyy
-    DateYear2,     // yy
-    DateMonth2,    // mm (resolved later -- could be minute)
-    DateMonth1,    // m  (resolved later -- could be minute)
-    DateDay2,      // dd
-    DateDay1,      // d
-    DateHour2,     // hh
-    DateHour1,     // h
-    DateMinute2,   // mm (after resolution)
-    DateMinute1,   // m  (after resolution)
-    DateSecond2,   // ss
-    DateSecond1,   // s
-    AmPm(String),  // AM/PM, am/pm, A/P
-    FractionSlash, // fraction display ?/? or ?/N
+    DateYear4, // yyyy
+    DateYear2, // yy
+    /// Era year (e/ee); Gregorian until alternate-calendar support is available.
+    DateEraYear(String),
+    DateMonth2,              // mm (resolved later -- could be minute)
+    DateMonth1,              // m  (resolved later -- could be minute)
+    DateDay2,                // dd
+    DateDay1,                // d
+    DateHour2,               // hh
+    DateHour1,               // h
+    DateMinute2,             // mm (after resolution)
+    DateMinute1,             // m  (after resolution)
+    DateSecond2,             // ss
+    DateSecond1,             // s
+    FractionalSecond(usize), // .0, .00, ... after seconds
+    AmPm(String),            // AM/PM, am/pm, A/P
+    FractionSlash,           // fraction display ?/? or ?/N
     /// Literal denominator digits in fixed-denominator fraction formats, e.g. `4` in `# ?/4`.
     FractionDenominatorLiteral(String),
     ElapsedHours,   // [h] or [hh] -- total hours (no mod 24)
@@ -65,6 +68,7 @@ pub(crate) fn is_datetime_token(tok: &Token) -> bool {
         tok,
         Token::DateYear4
             | Token::DateYear2
+            | Token::DateEraYear(_)
             | Token::DateMonth2
             | Token::DateMonth1
             | Token::DateDay2
@@ -100,7 +104,7 @@ pub(crate) struct FormatSection {
     pub(crate) is_text_section: bool,
     /// Number of trailing commas (scale divisors: each divides by 1000).
     pub(crate) scale_divisors: u32,
-    pub(crate) has_percent: bool,
+    pub(crate) percent_count: usize,
     pub(crate) has_exponent: bool,
     /// Whether the section has a thousands separator comma.
     pub(crate) has_thousands: bool,

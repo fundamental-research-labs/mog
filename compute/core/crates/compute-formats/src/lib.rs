@@ -99,6 +99,8 @@
 
 mod api;
 mod convenience;
+mod cell_info;
+pub use cell_info::{cell_format_info, CellFormatInfo};
 mod datetime;
 mod fraction;
 mod general;
@@ -117,8 +119,8 @@ pub mod locale;
 pub mod normalize;
 
 pub use api::{
-    FormatEntry, format_number, format_number_result, format_number_with_locale, format_text,
-    format_value, format_values_batch,
+    FormatEntry, format_number, format_number_result, format_number_with_date_system,
+    format_number_with_locale, format_text, format_value, format_values_batch,
 };
 pub use builder::{FormatOptions, FractionType, NegativeFormat, build_format_code};
 pub use color::{EXCEL_COLOR_PALETTE, FormatColor, palette_color};

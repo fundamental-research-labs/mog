@@ -104,7 +104,7 @@ pub fn is_date_format(format_code: &str) -> bool {
     let cleaned = strip_escapes_quotes_brackets(format_code);
 
     // Check for date/time tokens
-    if cleaned.contains('y') || cleaned.contains('Y') {
+    if cleaned.contains('y') || cleaned.contains('Y') || has_era_year_token(format_code) {
         return true;
     }
     if cleaned.contains('d') || cleaned.contains('D') {
@@ -156,7 +156,7 @@ pub fn is_time_only_format(format_code: &str) -> bool {
 
     let cleaned = strip_escapes_quotes_brackets(format_code);
     let has_time = has_time_tokens_inner(&cleaned);
-    let has_date = has_date_only_tokens(&cleaned);
+    let has_date = has_date_only_tokens(&cleaned) || has_era_year_token(format_code);
 
     has_time && !has_date
 }
@@ -215,7 +215,7 @@ pub fn should_format_as_date(value: f64, format_code: &str) -> bool {
 #[must_use]
 pub fn has_date_tokens(format_code: &str) -> bool {
     let cleaned = strip_escapes_quotes_brackets(format_code);
-    has_date_only_tokens(&cleaned)
+    has_date_only_tokens(&cleaned) || has_era_year_token(format_code)
 }
 
 /// Check if a format code has time tokens (`h`, `s`, `AM/PM`) after removing brackets/quotes.
@@ -280,6 +280,17 @@ fn has_time_tokens_inner(cleaned: &str) -> bool {
         || cleaned.contains('S')
         || upper.contains("AM/PM")
         || upper.contains("A/P")
+}
+
+fn has_era_year_token(format_code: &str) -> bool {
+    if !format_code.contains(['e', 'E']) {
+        return false;
+    }
+    crate::parser::parse_format_code(format_code)
+        .sections
+        .iter()
+        .flat_map(|section| &section.tokens)
+        .any(|token| matches!(token, crate::types::Token::DateEraYear(_)))
 }
 
 fn has_date_only_tokens(cleaned: &str) -> bool {

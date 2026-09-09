@@ -1,5 +1,5 @@
 use cell_types::SheetPos;
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use snapshot_types::WorkbookSnapshot;
 
 use crate::edit::{op_inverse_pair, overwrite_number, read_number_at, sheet_id};
@@ -16,7 +16,7 @@ fn regression_single_pair(
     let sid = sheet_id();
     let seed = 0.4_f64;
     let (snapshot, dependent) = build(seed);
-    let (mut engine, _init) = YrsComputeEngine::from_snapshot(snapshot)
+    let (mut engine, _init) = ComputeEngine::from_snapshot(snapshot)
         .map_err(|e| format!("{}: from_snapshot failed: {:?}", topology, e))?;
     op_inverse_pair(
         &mut engine,
@@ -84,7 +84,7 @@ fn regression_float_cascade_rapid_revert() {
     let sid = sheet_id();
     let seed = 0.4_f64;
     let (snapshot, dependent) = chain_snapshot(seed);
-    let (mut engine, _init) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (mut engine, _init) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
     let initial =
         read_number_at(&engine, &sid, dependent).expect("dependent should be numeric at init");
     let initial_bits = initial.to_bits();

@@ -972,8 +972,7 @@ fn timeline_tokens_defaults_and_omissions_are_stable() {
         filter_type: None,
         start_date: None,
         end_date: None,
-        pivot_table_tab_id: None,
-        pivot_table_name: None,
+        pivot_tables: Vec::new(),
         ext_lst_xml: None,
     };
     let json = serde_json::to_value(cache).unwrap();

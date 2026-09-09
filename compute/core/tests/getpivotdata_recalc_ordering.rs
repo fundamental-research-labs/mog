@@ -1,12 +1,12 @@
 //! Behavioral regression tests for GETPIVOTDATA / pivot-materialization ordering.
 //!
-//! `YrsComputeEngine::recalculate*()` must materialize stored pivot output before
+//! `ComputeEngine::recalculate*()` must materialize stored pivot output before
 //! full formula recalculation. GETPIVOTDATA reads the rendered pivot region
 //! through the cell mirror, so stale or absent pivot output would make the
 //! formula evaluate to the wrong value.
 
 use cell_types::{SheetId, SheetPos};
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use serde_json::json;
 use snapshot_types::{CellData, RecalcOptions, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
@@ -58,6 +58,9 @@ fn workbook_with_getpivotdata_formula() -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: DATA_SHEET_ID.to_string(),
                 name: "Data".to_string(),
                 rows: 100,
@@ -75,6 +78,9 @@ fn workbook_with_getpivotdata_formula() -> WorkbookSnapshot {
                 ranges: vec![],
             },
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: PIVOT_SHEET_ID.to_string(),
                 name: "Pivot".to_string(),
                 rows: 100,
@@ -92,7 +98,7 @@ fn workbook_with_getpivotdata_formula() -> WorkbookSnapshot {
     }
 }
 
-fn create_pivot(engine: &mut YrsComputeEngine) {
+fn create_pivot(engine: &mut ComputeEngine) {
     let config = json!({
         "id": "pivot-getpivotdata-ordering",
         "name": "PivotForGetPivotData",
@@ -119,7 +125,7 @@ fn pivot_sheet_id() -> SheetId {
     SheetId::from_uuid_str(PIVOT_SHEET_ID).unwrap()
 }
 
-fn getpivotdata_value(engine: &YrsComputeEngine) -> f64 {
+fn getpivotdata_value(engine: &ComputeEngine) -> f64 {
     match engine
         .mirror()
         .get_cell_value_at(&pivot_sheet_id(), SheetPos::new(0, 6))
@@ -149,7 +155,7 @@ fn getpivotdata_value(engine: &YrsComputeEngine) -> f64 {
 #[test]
 fn recalculate_materializes_pivots_before_full_recalc() {
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(workbook_with_getpivotdata_formula()).unwrap();
+        ComputeEngine::from_snapshot(workbook_with_getpivotdata_formula()).unwrap();
     create_pivot(&mut engine);
 
     engine.recalculate().expect("recalculate");
@@ -160,7 +166,7 @@ fn recalculate_materializes_pivots_before_full_recalc() {
 #[test]
 fn recalculate_with_options_materializes_pivots_before_full_recalc() {
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(workbook_with_getpivotdata_formula()).unwrap();
+        ComputeEngine::from_snapshot(workbook_with_getpivotdata_formula()).unwrap();
     create_pivot(&mut engine);
 
     engine
@@ -186,7 +192,7 @@ fn native_overall_totals_follow_each_rendered_measure_for_every_axis_layout() {
                 formula_cell(1, 21, 0, r#"=GETPIVOTDATA("Count of Amount",$B$3)"#),
                 formula_cell(1, 22, 0, r#"=GETPIVOTDATA("Constant Two",$B$3)"#),
             ];
-            let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+            let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
             let mut placements = vec![
                 json!({"fieldId":"Amount","area":"value","position":0,"aggregateFunction":"sum"}),
                 json!({"fieldId":"Amount","area":"value","position":1,"aggregateFunction":"count"}),
@@ -309,7 +315,7 @@ fn imported_overall_totals_use_axis_measure_indices_on_either_axis() {
     for data_on_rows in [false, true] {
         for include_totals in [false, true] {
             let (mut engine, _) =
-                YrsComputeEngine::from_snapshot(WorkbookSnapshot::default()).unwrap();
+                ComputeEngine::from_snapshot(WorkbookSnapshot::default()).unwrap();
             engine
                 .import_from_xlsx_bytes_deferred(&imported_overall_fixture(
                     data_on_rows,
@@ -323,7 +329,7 @@ fn imported_overall_totals_use_axis_measure_indices_on_either_axis() {
                     // Pending first calculation is consumed only by recalculate.
                     let bytes = engine.export_to_xlsx_bytes().unwrap();
                     let (mut preserved, _) =
-                        YrsComputeEngine::from_snapshot(WorkbookSnapshot::default()).unwrap();
+                        ComputeEngine::from_snapshot(WorkbookSnapshot::default()).unwrap();
                     preserved.import_from_xlsx_bytes_deferred(&bytes).unwrap();
                     preserved.complete_deferred_hydration().unwrap();
                     let sheet = SheetId::from_uuid_str(&preserved.get_all_sheet_ids()[0]).unwrap();
@@ -402,7 +408,7 @@ fn overall_totals_require_one_in_bounds_cell_for_the_requested_measure() {
             grand_total_cells: cells,
             ..Default::default()
         }];
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+        let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
         engine.recalculate().unwrap();
         let expected = if valid {
             CellValue::Number(FiniteF64::must(57.0))

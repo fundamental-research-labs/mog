@@ -175,7 +175,7 @@ impl ComputeCore {
                     // For very large ranges, only evaluate cells that actually
                     // have data. Iterate column-by-column using dense storage.
                     for c in rp.start_col()..=eff_end_col {
-                        if let Some(col_slice) = sheet.get_column_slice(c) {
+                        if let Some(col_slice) = sheet.get_column_view(c) {
                             let row_end = (col_slice.len() as u32).min(eff_end_row + 1);
                             for r in rp.start_row()..row_end {
                                 if !matches!(
@@ -326,7 +326,7 @@ fn compute_range_stats_from_mirror(
     // iterating every cell in the range.
     let mut range_values: Vec<value_types::CellValue> = Vec::new();
     for c in rp.start_col()..=clamped_end_col {
-        if let Some(col_slice) = sheet.get_column_slice(c) {
+        if let Some(col_slice) = sheet.get_column_view(c) {
             let row_end = (col_slice.len() as u32).min(clamped_end_row + 1);
             for r in rp.start_row()..row_end {
                 if let Some(cv) = col_slice.get(r as usize)

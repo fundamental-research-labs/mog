@@ -275,10 +275,6 @@ fn conditional_format_roundtrip() {
         sheet_id: "s1".into(),
         pivot: Some(true),
         ranges: vec![CFCellRange::new(0, 0, 9, 3)],
-        range_identities: Some(vec![CellIdRange {
-            top_left_cell_id: "c1".into(),
-            bottom_right_cell_id: "c2".into(),
-        }]),
         rules: vec![CFRule::CellValue {
             id: "r1".into(),
             priority: 1,

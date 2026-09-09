@@ -1,6 +1,6 @@
 //! Execution boundary for native worksheet export.
 //!
-//! Export reconstructs typed DrawingML objects from their Yrs representation.
+//! Export projects typed DrawingML objects from native workbook storage.
 //! Deserializing the nested OOXML chart model needs more stack in debug builds
 //! than Rayon's default workers provide. The caller's stack size (including the
 //! compute API actor's stack) does not apply to parallel iterator workers.

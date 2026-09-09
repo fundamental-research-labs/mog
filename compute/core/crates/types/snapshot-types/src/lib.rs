@@ -9,6 +9,7 @@
 //! Incremental updates use [`CellEdit`] (TS to Rust) and [`RecalcResult`] (Rust to TS).
 
 mod error;
+mod history;
 mod init;
 mod mutation;
 mod recalc;
@@ -28,11 +29,13 @@ pub mod queries;
 mod test_helpers;
 
 pub use error::*;
+pub use history::UndoState;
 pub use init::{
-    CellData, CellDataBin, ColAxisIdentityRef, ColAxisIdentityRefBin, DataTableOoxmlFlags,
-    DataTableRegionDef, PivotGrandTotalCell, PivotTableDef, RangeData, RangeDataBin, RowAxisIdentityRef,
-    RowAxisIdentityRefBin, SheetSnapshot, SheetSnapshotBin, SnapshotAxisIdentityRun,
-    SnapshotAxisIdentityRunRef, WORKBOOK_SNAPSHOT_SCHEMA_VERSION_COMPACT_AXIS_IDENTITY,
+    CellData, CellDataBin, CellIdentityPosition, ColAxisIdentityRef, ColAxisIdentityRefBin,
+    DataTableOoxmlFlags, DataTableRegionDef, PivotGrandTotalCell, PivotTableDef, RangeData,
+    RangeDataBin, RowAxisIdentityRef, RowAxisIdentityRefBin, SheetSnapshot, SheetSnapshotBin,
+    SnapshotAxisIdentityRun, SnapshotAxisIdentityRunRef,
+    WORKBOOK_SNAPSHOT_SCHEMA_VERSION_COMPACT_AXIS_IDENTITY,
     WORKBOOK_SNAPSHOT_SCHEMA_VERSION_CURRENT, WORKBOOK_SNAPSHOT_SCHEMA_VERSION_DENSE_IDENTITY,
     WorkbookSnapshot, WorkbookSnapshotBin,
 };
@@ -46,7 +49,7 @@ pub use mutation::{
     ScrollPositionChange, SheetChange, SheetChangeField, SheetLifecycleRuntimeHint,
     SheetSettingsChange, SheetViewCell, SheetViewRange, SlicerChange, SlicerChangeKind,
     SlicerSourceType, SortingChange, SparklineChange, SplitConfigChange, StructureChangeResult,
-    StructureChangeType, TableChange, UndoState, ViewSelectionChange, VisibilityChange,
+    StructureChangeType, TableChange, ViewSelectionChange, VisibilityChange,
     WorkbookSettingsChange,
 };
 pub use recalc::{

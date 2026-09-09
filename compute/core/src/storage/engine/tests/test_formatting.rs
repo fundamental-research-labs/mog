@@ -6,7 +6,7 @@ use crate::snapshot::{CellData, SheetSnapshot};
 use value_types::{CellValue, FiniteF64};
 
 fn stored_number_format_at(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &cell_types::SheetId,
     row: u32,
     col: u32,
@@ -26,7 +26,7 @@ fn stored_number_format_at(
 #[test]
 fn test_format_cell_display_general_number() {
     let snap = simple_snapshot();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // A1 = 10 with General format -> "10"
     let display = engine.format_cell_display(&sheet_id(), 0, 0);
@@ -36,7 +36,7 @@ fn test_format_cell_display_general_number() {
 #[test]
 fn test_format_cell_display_formula_result() {
     let snap = simple_snapshot();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // A2 has formula =A1+B1; from_snapshot runs full_recalc so value is 30
     let display = engine.format_cell_display(&sheet_id(), 1, 0);
@@ -48,7 +48,7 @@ fn test_format_cell_display_with_number_format() {
     use domain_types::CellFormat;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // Set number format on A1 (value = 10)
@@ -68,7 +68,7 @@ fn test_format_cell_display_with_number_format() {
 #[test]
 fn test_format_cell_display_empty_cell() {
     let snap = simple_snapshot();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // Row 5, col 5 is empty -> ""
     let display = engine.format_cell_display(&sheet_id(), 5, 5);
@@ -80,7 +80,13 @@ fn test_format_cell_display_large_number_with_format() {
     use domain_types::CellFormat;
 
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -105,7 +111,7 @@ fn test_format_cell_display_large_number_with_format() {
         max_change: value_types::FiniteF64::must(0.001),
         calculation_settings: None,
     };
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // Apply #,##0.00 format
@@ -126,7 +132,7 @@ fn test_get_display_value_bridge_uses_format() {
     use domain_types::CellFormat;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // Set percentage format on B1 (value = 20)
@@ -160,7 +166,7 @@ fn formula_edit_copies_single_referenced_number_format() {
     use domain_types::CellFormat;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -186,7 +192,7 @@ fn formula_edit_does_not_override_existing_formula_cell_number_format() {
     use domain_types::CellFormat;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -222,7 +228,7 @@ fn formula_edit_skips_mixed_reference_number_formats() {
     use domain_types::CellFormat;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -261,7 +267,7 @@ fn formula_edit_copies_number_format_through_formula_chain() {
     use domain_types::CellFormat;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -288,7 +294,7 @@ fn test_set_cell_currency_string_applies_currency_format() {
     use crate::bridge_types::CellInput;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -326,7 +332,7 @@ fn test_set_cell_currency_string_preserves_explicit_destination_format() {
     use domain_types::CellFormat;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -366,7 +372,7 @@ fn test_set_cell_date_formula_applies_date_format() {
     use crate::bridge_types::CellInput;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -410,7 +416,7 @@ fn test_set_cell_datevalue_formula_keeps_general_serial_display() {
     use crate::bridge_types::CellInput;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -451,7 +457,7 @@ fn test_date_pair_formulas_inherit_shared_reference_date_format() {
     use domain_types::CellFormat;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -517,7 +523,7 @@ fn test_networkdays_expression_argument_keeps_numeric_format() {
     use domain_types::CellFormat;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -557,7 +563,7 @@ fn test_set_cell_date_formula_preserves_explicit_destination_format() {
     use domain_types::CellFormat;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -595,7 +601,7 @@ fn test_set_cell_date_formula_error_keeps_general_format() {
     use crate::bridge_types::CellInput;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -632,7 +638,7 @@ fn formula_display_does_not_inherit_referenced_cell_format() {
     use domain_types::CellFormat;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // Apply a EUR-currency format to A1 (value = 10).
@@ -661,7 +667,7 @@ fn formula_display_uses_explicit_general_when_set() {
     use domain_types::CellFormat;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // A1 -> percent. A2 has formula =A1+B1, set to explicit General.
@@ -695,7 +701,7 @@ fn formula_display_respects_cells_own_explicit_format() {
     use domain_types::CellFormat;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // The formula cell has its OWN currency format -> wins.
@@ -717,7 +723,7 @@ fn formula_display_respects_cells_own_explicit_format() {
 #[test]
 fn test_format_value_at_cell_directly() {
     let snap = simple_snapshot();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // Format a known value at a cell position (General format)
@@ -757,7 +763,7 @@ fn test_set_cell_date_string_applies_date_format_us() {
     use crate::bridge_types::CellInput;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // Write "3/15/2024" into D1 (row 0, col 3) — empty cell, default locale (US/MDY).
@@ -793,7 +799,7 @@ fn test_set_cell_iso_date_applies_iso_format() {
     use crate::bridge_types::CellInput;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     let edits = vec![(
@@ -818,7 +824,7 @@ fn test_set_cell_non_date_string_keeps_general_format() {
     use crate::bridge_types::CellInput;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // Plain text — no date format should be applied.
@@ -850,7 +856,7 @@ fn test_set_cell_existing_date_format_preserved() {
     use domain_types::CellFormat;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // Pre-apply yyyy-mm-dd format to F1.
@@ -899,7 +905,7 @@ fn test_set_cell_explicit_fraction_format_preserved_against_date_inference() {
     use domain_types::CellFormat;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // Pre-apply Fraction format to A1.
@@ -940,7 +946,7 @@ fn test_set_cell_explicit_currency_format_preserved_against_date_inference() {
     use domain_types::CellFormat;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // Pre-apply Currency format to B1.
@@ -992,7 +998,7 @@ fn test_set_cell_explicit_number_format_preserved_against_date_inference() {
     use domain_types::CellFormat;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // Pre-apply Number format `0.00` to C1.
@@ -1044,7 +1050,7 @@ fn test_set_cell_general_format_still_gets_inferred_date_format() {
     use crate::bridge_types::CellInput;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // No pre-applied format on D1 — it's General.
@@ -1074,7 +1080,7 @@ fn test_text_to_columns_general_preserves_leading_zeros() {
     use crate::bridge_types::CellInput;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // Seed C1 with "00123,abc,42" — we'll split into D1, E1, F1.
@@ -1145,7 +1151,7 @@ fn test_text_to_columns_destination_numeric_format_coerces_leading_zeros() {
     use domain_types::CellFormat;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // Seed C1 with "00123,abc".
@@ -1217,7 +1223,7 @@ fn test_set_cell_plain_number_does_not_get_date_format() {
     use crate::bridge_types::CellInput;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // "42" parses as a plain number, not a date — no format should be applied.
@@ -1247,7 +1253,7 @@ fn test_set_cell_percent_input_applies_percent_format() {
     use crate::bridge_types::CellInput;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     let edits = vec![(

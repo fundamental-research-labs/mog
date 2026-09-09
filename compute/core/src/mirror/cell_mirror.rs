@@ -25,6 +25,7 @@ pub struct CellMirror {
     pub(crate) evaluated_metadata_revision: u64,
     /// Workbook date system supplied by the engine's workbook settings store.
     pub(crate) date1904: bool,
+    pub(crate) history: crate::storage::engine::history::HistoryCapture,
     pub(super) sheets: FxHashMap<SheetId, SheetMirror>,
     /// Lowercase sheet name -> SheetId for case-insensitive lookup.
     pub(super) sheet_names: FxHashMap<String, SheetId>,
@@ -54,6 +55,8 @@ pub struct CellMirror {
     /// Reverse index: ColId -> SheetId. Same shape and motivation as
     /// `row_to_sheet` — closes cross-sheet full-column prefix drop.
     pub(super) col_to_sheet: FxHashMap<ColId, SheetId>,
+    pub(super) row_run_sheets: FxHashMap<(cell_types::AxisRunId, u32), Vec<SheetId>>,
+    pub(super) col_run_sheets: FxHashMap<(cell_types::AxisRunId, u32), Vec<SheetId>>,
     /// Monotonically increasing version counter per (SheetId, col).
     /// Bumped on every write; used by range caches to detect staleness.
     pub(super) col_versions: FxHashMap<(SheetId, u32), u64>,
@@ -81,6 +84,15 @@ impl Default for CellMirror {
 }
 
 impl CellMirror {
+    pub(crate) fn bind_history_capture(
+        &mut self,
+        capture: crate::storage::engine::history::HistoryCapture,
+    ) {
+        for sheet in self.sheets.values_mut() {
+            sheet.history = capture.share();
+        }
+        self.history = capture;
+    }
     /// Total number of cells across all sheets.
     pub fn total_cell_count(&self) -> usize {
         self.cell_to_sheet.len()
@@ -92,6 +104,7 @@ impl CellMirror {
             cell_metadata_provider: None,
             evaluated_metadata_revision: 0,
             date1904: false,
+            history: Default::default(),
             sheets: FxHashMap::default(),
             sheet_names: FxHashMap::default(),
             variables: VariableStore::new(),
@@ -104,6 +117,8 @@ impl CellMirror {
             cell_to_sheet: FxHashMap::default(),
             row_to_sheet: FxHashMap::default(),
             col_to_sheet: FxHashMap::default(),
+            row_run_sheets: FxHashMap::default(),
+            col_run_sheets: FxHashMap::default(),
             col_versions: FxHashMap::default(),
             cse_single_cell: FxHashSet::default(),
             cse_anchors: FxHashSet::default(),
@@ -277,47 +292,7 @@ impl CellMirror {
         if let Some(cell_id) = self.resolve_cell_id(sheet, SheetPos::new(row, col))
             && let Some(sheet_mirror) = self.sheets.get(sheet)
         {
-            if let Some(entry) = sheet_mirror.cells.get(&cell_id) {
-                // Mirror auto-unwraps Array sources to top-left scalar for
-                // backwards compatibility on the non-projection path; preserve
-                // that semantics. Ghost-cell fallback to `col_data` matches
-                // `get_cell_value`.
-                let value = match &entry.value {
-                    CellValue::Array(arr) => arr.get(0, 0).unwrap_or(&CellValue::Null),
-                    v if v.is_null() && entry.formula.is_none() => sheet_mirror
-                        .col_data
-                        .get(&col)
-                        .and_then(|v| v.get(row as usize))
-                        .filter(|cv| !cv.is_null())
-                        .unwrap_or(v),
-                    v => v,
-                };
-                return CellRender::Plain(PlainCellView {
-                    cell_id,
-                    value,
-                    region,
-                });
-            }
-
-            if let Some(value) = sheet_mirror
-                .col_data
-                .get(&col)
-                .and_then(|v| v.get(row as usize))
-                .filter(|cv| !cv.is_null())
-            {
-                return CellRender::Plain(PlainCellView {
-                    cell_id,
-                    value,
-                    region,
-                });
-            }
-
-            if cell_id.is_virtual()
-                && let Some(value) = sheet_mirror
-                    .col_data
-                    .get(&col)
-                    .and_then(|v| v.get(row as usize))
-            {
+            if let Some(value) = sheet_mirror.value_at(SheetPos::new(row, col)) {
                 return CellRender::Plain(PlainCellView {
                     cell_id,
                     value,
@@ -325,24 +300,14 @@ impl CellMirror {
                 });
             }
         }
-
-        if let Some(sheet_mirror) = self.sheets.get(sheet)
-            && let Some(value) = sheet_mirror
-                .col_data
-                .get(&col)
-                .and_then(|v| v.get(row as usize))
-                .filter(|cv| !cv.is_null())
+        if let Some(value) = self
+            .get_cell_value_at(sheet, SheetPos::new(row, col))
+            .filter(|value| !value.is_null())
         {
             return CellRender::Materialized(MaterializedCellView { value });
         }
 
-        // No CellId or materialized value at this position. If a region
-        // rectangle covers it anyway (theoretically possible if hydration is
-        // inconsistent), we still return `Empty` - the consumer cannot infer
-        // region semantics without a value or identity. The region case is
-        // logged via the type shape and surfaces if a future region kind
-        // requires it.
-        let _ = region;
+        // No authored identity or materialized value covers this position.
         CellRender::Empty
     }
 
@@ -359,7 +324,18 @@ impl CellMirror {
     /// deleted. unified reference model.
     #[inline]
     pub fn row_index_lookup(&self, row_id: &RowId) -> Option<(SheetId, u32)> {
-        let sheet_id = self.row_to_sheet.get(row_id).copied()?;
+        let sheet_id = self.row_to_sheet.get(row_id).copied().or_else(|| {
+            let decoded = row_id.compact_axis_identity()?;
+            self.row_run_sheets
+                .get(&(decoded.run_id, decoded.seed_fingerprint))?
+                .iter()
+                .copied()
+                .find(|sid| {
+                    self.sheets
+                        .get(sid)
+                        .is_some_and(|s| s.row_index_of(row_id).is_some())
+                })
+        })?;
         let idx = self.sheets.get(&sheet_id)?.row_index_of(row_id)?;
         Some((sheet_id, idx))
     }
@@ -372,7 +348,18 @@ impl CellMirror {
     /// Resolve a [`ColId`] to `(SheetId, col_index)` for display-time lookups.
     #[inline]
     pub fn col_index_lookup(&self, col_id: &ColId) -> Option<(SheetId, u32)> {
-        let sheet_id = self.col_to_sheet.get(col_id).copied()?;
+        let sheet_id = self.col_to_sheet.get(col_id).copied().or_else(|| {
+            let decoded = col_id.compact_axis_identity()?;
+            self.col_run_sheets
+                .get(&(decoded.run_id, decoded.seed_fingerprint))?
+                .iter()
+                .copied()
+                .find(|sid| {
+                    self.sheets
+                        .get(sid)
+                        .is_some_and(|s| s.col_index_of(col_id).is_some())
+                })
+        })?;
         let idx = self.sheets.get(&sheet_id)?.col_index_of(col_id)?;
         Some((sheet_id, idx))
     }
@@ -385,7 +372,7 @@ impl CellMirror {
     /// Install a per-sheet `(RowId, row_index)` / `(ColId, col_index)` mapping
     /// on the mirror.
     ///
-    /// Called by the engine during assembly after `build_grid_indexes_from_yrs`
+    /// Called by the engine during assembly after `grid index construction`
     /// produces the authoritative `GridIndex` set, and again after structural
     /// mutations (insert/delete rows/cols, sort remap) so the mirror's view
     /// matches the grid. unified reference model.
@@ -404,31 +391,152 @@ impl CellMirror {
         self.col_to_sheet.clear();
 
         for (sheet_id, row_ids, col_ids) in pairs {
-            if let Some(sheet) = self.sheets.get_mut(&sheet_id) {
-                sheet.row_to_index.clear();
-                sheet.col_to_index.clear();
-                sheet.index_to_row.clear();
-                sheet.index_to_col.clear();
-                sheet.row_to_index.reserve(row_ids.len());
-                sheet.col_to_index.reserve(col_ids.len());
-                sheet.index_to_row.reserve(row_ids.len());
-                sheet.index_to_col.reserve(col_ids.len());
-                for (i, rid) in row_ids.iter().enumerate() {
-                    sheet.row_to_index.insert(*rid, i as u32);
-                    sheet.index_to_row.insert(i as u32, *rid);
-                }
-                for (i, cid) in col_ids.iter().enumerate() {
-                    sheet.col_to_index.insert(*cid, i as u32);
-                    sheet.index_to_col.insert(i as u32, *cid);
-                }
-            }
-            for rid in row_ids {
-                self.row_to_sheet.insert(rid, sheet_id);
-            }
-            for cid in col_ids {
-                self.col_to_sheet.insert(cid, sheet_id);
+            self.install_sheet_row_col_indexes(sheet_id, row_ids, col_ids);
+        }
+    }
+
+    /// Install fresh axes for one sheet without disturbing other sheets' identities.
+    pub(crate) fn install_sheet_row_col_indexes(
+        &mut self,
+        sheet_id: SheetId,
+        row_ids: Vec<RowId>,
+        col_ids: Vec<ColId>,
+    ) {
+        let row_axis = std::sync::Arc::new(compute_document::identity::AxisIndex::new(
+            cell_types::AxisIdentityStore::Explicit(row_ids),
+        ));
+        let col_axis = std::sync::Arc::new(compute_document::identity::AxisIndex::new(
+            cell_types::AxisIdentityStore::Explicit(col_ids),
+        ));
+        self.install_sheet_axes(sheet_id, row_axis, col_axis);
+    }
+
+    /// Share a sheet's native axes with its grid index.
+    pub(crate) fn install_sheet_axes(
+        &mut self,
+        sheet_id: SheetId,
+        row_axis: std::sync::Arc<compute_document::identity::AxisIndex<RowId>>,
+        col_axis: std::sync::Arc<compute_document::identity::AxisIndex<ColId>>,
+    ) {
+        let Some(sheet) = self.sheets.get_mut(&sheet_id) else {
+            return;
+        };
+        if std::sync::Arc::ptr_eq(&sheet.row_axis, &row_axis)
+            && std::sync::Arc::ptr_eq(&sheet.col_axis, &col_axis)
+        {
+            return;
+        }
+        if let cell_types::AxisIdentityStore::Explicit(ids) = sheet.row_axis.store() {
+            for id in ids {
+                self.row_to_sheet.remove(id);
             }
         }
+        if let cell_types::AxisIdentityStore::Explicit(ids) = sheet.col_axis.store() {
+            for id in ids {
+                self.col_to_sheet.remove(id);
+            }
+        }
+        self.row_run_sheets.retain(|_, sheets| {
+            sheets.retain(|sid| *sid != sheet_id);
+            !sheets.is_empty()
+        });
+        self.col_run_sheets.retain(|_, sheets| {
+            sheets.retain(|sid| *sid != sheet_id);
+            !sheets.is_empty()
+        });
+        match row_axis.store() {
+            cell_types::AxisIdentityStore::Explicit(ids) => {
+                self.row_to_sheet
+                    .extend(ids.iter().map(|id| (*id, sheet_id)));
+            }
+            cell_types::AxisIdentityStore::Runs(runs) => {
+                for segment in runs.segments() {
+                    let id = cell_types::RowId::derive_compact(
+                        sheet_id,
+                        segment.run.run_id,
+                        segment.run.seed,
+                        segment.run.start_offset,
+                    )
+                    .compact_axis_identity()
+                    .unwrap();
+                    let sheets = self
+                        .row_run_sheets
+                        .entry((id.run_id, id.seed_fingerprint))
+                        .or_default();
+                    if !sheets.contains(&sheet_id) {
+                        sheets.push(sheet_id);
+                    }
+                }
+            }
+        }
+        match col_axis.store() {
+            cell_types::AxisIdentityStore::Explicit(ids) => {
+                self.col_to_sheet
+                    .extend(ids.iter().map(|id| (*id, sheet_id)));
+            }
+            cell_types::AxisIdentityStore::Runs(runs) => {
+                for segment in runs.segments() {
+                    let id = cell_types::ColId::derive_compact(
+                        sheet_id,
+                        segment.run.run_id,
+                        segment.run.seed,
+                        segment.run.start_offset,
+                    )
+                    .compact_axis_identity()
+                    .unwrap();
+                    let sheets = self
+                        .col_run_sheets
+                        .entry((id.run_id, id.seed_fingerprint))
+                        .or_default();
+                    if !sheets.contains(&sheet_id) {
+                        sheets.push(sheet_id);
+                    }
+                }
+            }
+        }
+        // Identity capacity includes blank metadata anchors. It must not replace
+        // the declared grid extent preserved from the workbook or grown by edits.
+        sheet.identity_rows = sheet.identity_rows.max(row_axis.len());
+        sheet.identity_cols = sheet.identity_cols.max(col_axis.len());
+        sheet.row_axis = row_axis;
+        sheet.col_axis = col_axis;
+    }
+
+    /// Install shared native axes without expanding generated runs.
+    pub(crate) fn install_native_axes(
+        &mut self,
+        axes: impl IntoIterator<
+            Item = (
+                SheetId,
+                std::sync::Arc<compute_document::identity::AxisIndex<RowId>>,
+                std::sync::Arc<compute_document::identity::AxisIndex<ColId>>,
+            ),
+        >,
+    ) {
+        for (sheet, rows, cols) in axes {
+            self.install_sheet_axes(sheet, rows, cols);
+        }
+    }
+
+    pub(super) fn refresh_axis_ownership(&mut self, sheet_id: SheetId) {
+        self.row_to_sheet.retain(|_, sid| *sid != sheet_id);
+        self.col_to_sheet.retain(|_, sid| *sid != sheet_id);
+        let Some(sheet) = self.sheets.get_mut(&sheet_id) else {
+            return;
+        };
+        let rows = std::mem::replace(
+            &mut sheet.row_axis,
+            std::sync::Arc::new(compute_document::identity::AxisIndex::new(
+                cell_types::AxisIdentityStore::Explicit(Vec::new()),
+            )),
+        );
+        let cols = std::mem::replace(
+            &mut sheet.col_axis,
+            std::sync::Arc::new(compute_document::identity::AxisIndex::new(
+                cell_types::AxisIdentityStore::Explicit(Vec::new()),
+            )),
+        );
+        self.install_sheet_axes(sheet_id, rows, cols);
     }
 
     /// Increment the version counter for a column on a sheet.
@@ -437,21 +545,29 @@ impl CellMirror {
         *entry += 1;
     }
 
-    /// Complete Range hydration after row/col index maps are populated.
+    /// Complete range hydration after native axes have been installed.
     ///
-    /// Must be called after `install_row_col_indexes`. Builds spatial indexes,
-    /// eagerly registers virtual CellIds for sub-256 Ranges, and rebuilds
-    /// col_data for Range-backed columns.
+    /// Builds spatial indexes, registers identities for small ranges, and
+    /// refreshes affected column extents.
     pub fn finalize_range_hydration(&mut self) {
-        use super::range_view::RangeExtent;
-        use cell_types::interval_tree::IntervalTree;
-
         let sheet_ids: Vec<SheetId> = self
             .sheets
             .iter()
             .filter(|(_, s)| !s.range_views.is_empty())
             .map(|(id, _)| *id)
             .collect();
+        self.finalize_range_hydration_for(sheet_ids);
+    }
+
+    /// Finalize one newly imported or copied sheet without revisiting other sheets.
+    pub(crate) fn finalize_sheet_range_hydration(&mut self, sheet_id: SheetId) {
+        self.finalize_range_hydration_for([sheet_id]);
+    }
+
+    fn finalize_range_hydration_for(&mut self, sheet_ids: impl IntoIterator<Item = SheetId>) {
+        use super::range_view::RangeExtent;
+        use cell_types::interval_tree::IntervalTree;
+
         for sheet_id in sheet_ids {
             let mut extents: Vec<RangeExtent> = Vec::new();
             let mut virtual_registrations: Vec<(SheetPos, CellId)> = Vec::new();
@@ -465,8 +581,9 @@ impl CellMirror {
                     if extent_cells > 0 && extent_cells < 256 {
                         for &row_id in rv.row_offset_by_id.keys() {
                             for &col_id in rv.col_offset_by_id.keys() {
-                                if let Some(&row_idx) = sheet.row_to_index.get(&row_id)
-                                    && let Some(&col_idx) = sheet.col_to_index.get(&col_id)
+                                if let Some(row_idx) = sheet.row_axis.position_of(sheet.id, row_id)
+                                    && let Some(col_idx) =
+                                        sheet.col_axis.position_of(sheet.id, col_id)
                                 {
                                     let pos = SheetPos::new(row_idx, col_idx);
                                     if !sheet.pos_to_id.contains_key(&pos) {
@@ -484,13 +601,13 @@ impl CellMirror {
                     let mut min_col = u32::MAX;
                     let mut max_col = 0u32;
                     for &row_id in rv.row_offset_by_id.keys() {
-                        if let Some(&idx) = sheet.row_to_index.get(&row_id) {
+                        if let Some(idx) = sheet.row_axis.position_of(sheet.id, row_id) {
                             min_row = min_row.min(idx);
                             max_row = max_row.max(idx);
                         }
                     }
                     for &col_id in rv.col_offset_by_id.keys() {
-                        if let Some(&idx) = sheet.col_to_index.get(&col_id) {
+                        if let Some(idx) = sheet.col_axis.position_of(sheet.id, col_id) {
                             min_col = min_col.min(idx);
                             max_col = max_col.max(idx);
                         }
@@ -506,9 +623,9 @@ impl CellMirror {
                         });
                     }
 
-                    // Collect affected columns for col_data rebuild
+                    // Collect affected columns for column_values rebuild
                     for col_id in rv.col_offset_by_id.keys() {
-                        if let Some(&idx) = sheet.col_to_index.get(col_id) {
+                        if let Some(idx) = sheet.col_axis.position_of(sheet.id, *col_id) {
                             range_cols.insert(idx);
                         }
                     }
@@ -522,12 +639,13 @@ impl CellMirror {
                     sheet.id_to_pos.insert(*vid, *pos);
                 }
                 sheet.range_spatial_index = IntervalTree::build(&extents);
-                sheet.rebuild_range_columns_data(&range_cols);
+                sheet.rebuild_column_index();
             }
             for (_, vid) in virtual_registrations {
                 self.cell_to_sheet.insert(vid, sheet_id);
             }
             for col in range_cols {
+                self.dense_cache.invalidate(&sheet_id, col);
                 self.bump_col_version(&sheet_id, col);
             }
         }
@@ -556,12 +674,8 @@ impl DataSource for CellMirror {
         self.sheets.get(sheet).map(|s| s.formula_cols())
     }
 
-    fn col_data_is_empty(&self, sheet: &SheetId) -> bool {
-        self.sheets.get(sheet).is_none_or(|s| s.col_data_is_empty())
-    }
-
-    fn get_column_slice(&self, sheet: &SheetId, col: u32) -> Option<&[CellValue]> {
-        self.sheets.get(sheet)?.get_column_slice(col)
+    fn get_column_view(&self, sheet: &SheetId, col: u32) -> Option<value_types::ColumnView<'_>> {
+        self.sheets.get(sheet)?.get_column_view(col)
     }
 
     fn cell_id_at(&self, sheet: &SheetId, row: u32, col: u32) -> Option<CellId> {

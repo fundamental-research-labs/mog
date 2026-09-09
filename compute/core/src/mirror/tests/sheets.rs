@@ -5,10 +5,25 @@ use cell_types::SheetId;
 #[test]
 fn test_remove_sheet() {
     let (mut mirror, sheet_id) = mirror_with_grid();
+    let grid = compute_document::identity::GridIndex::new(
+        sheet_id,
+        10,
+        5,
+        std::sync::Arc::new(cell_types::IdAllocator::new()),
+    );
+    mirror.install_sheet_axes(sheet_id, grid.row_axis(), grid.col_axis());
+    let row = mirror.get_sheet(&sheet_id).unwrap().row_id_at(0).unwrap();
+    let col = mirror.get_sheet(&sheet_id).unwrap().col_id_at(0).unwrap();
     mirror.remove_sheet(&sheet_id);
 
     assert!(mirror.get_sheet(&sheet_id).is_none());
     assert!(mirror.sheet_by_name("Grid").is_none());
+    assert_eq!(mirror.row_index_lookup(&row), None);
+    assert_eq!(mirror.col_index_lookup(&col), None);
+    assert!(mirror.row_to_sheet.is_empty());
+    assert!(mirror.col_to_sheet.is_empty());
+    assert!(mirror.row_run_sheets.is_empty());
+    assert!(mirror.col_run_sheets.is_empty());
 }
 #[test]
 fn test_rename_sheet() {

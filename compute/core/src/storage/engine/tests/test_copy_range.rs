@@ -14,7 +14,7 @@ use value_types::{CellValue, FiniteF64};
 #[test]
 fn test_copy_range_values_only() {
     let snap = copy_range_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
 
@@ -74,7 +74,7 @@ fn test_copy_range_values_only() {
 #[test]
 fn test_copy_range_formulas() {
     let snap = copy_range_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
 
@@ -122,7 +122,13 @@ fn test_copy_range_formulas() {
 fn copy_range_rebases_formula_after_column_insert() {
     let sid = sheet_id();
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sid.to_uuid_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -167,7 +173,7 @@ fn copy_range_rebases_formula_after_column_insert() {
         max_change: FiniteF64::must(0.001),
         calculation_settings: None,
     };
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     engine
         .structure_change(
@@ -216,7 +222,7 @@ fn copy_range_rebases_formula_after_column_insert() {
 #[test]
 fn test_copy_range_values_from_formula_cell() {
     let snap = copy_range_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
 
@@ -256,7 +262,7 @@ fn test_copy_range_values_from_formula_cell() {
 #[test]
 fn test_copy_range_skip_blanks() {
     let snap = copy_range_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
 
@@ -355,7 +361,7 @@ fn test_copy_range_skip_blanks() {
 #[test]
 fn test_copy_range_transpose() {
     let snap = copy_range_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
 
@@ -443,8 +449,14 @@ fn test_copy_range_transpose() {
 /// pointing to a sheet other than the formula's owner).
 fn cross_sheet_copy_snapshot() -> WorkbookSnapshot {
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
                 name: "Sheet1".to_string(),
                 rows: 100,
@@ -495,6 +507,9 @@ fn cross_sheet_copy_snapshot() -> WorkbookSnapshot {
                 ranges: vec![],
             },
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: "550e8400-e29b-41d4-a716-446655440099".to_string(),
                 name: "Sheet2".to_string(),
                 rows: 100,
@@ -503,6 +518,9 @@ fn cross_sheet_copy_snapshot() -> WorkbookSnapshot {
                 ranges: vec![],
             },
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: "550e8400-e29b-41d4-a716-446655440077".to_string(),
                 name: "Sheet3".to_string(),
                 rows: 100,
@@ -534,7 +552,7 @@ fn cross_sheet_copy_snapshot() -> WorkbookSnapshot {
 /// disambiguation against `display_sheet` (i.e. refs on `display_sheet` come
 /// out unqualified; refs elsewhere keep their explicit prefix).
 fn formula_at(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet: &SheetId,
     display_sheet: &SheetId,
     row: u32,
@@ -547,12 +565,7 @@ fn formula_at(
     Some(engine.to_a1_display(display_sheet, formula))
 }
 
-fn formula_text_at(
-    engine: &YrsComputeEngine,
-    sheet: &SheetId,
-    row: u32,
-    col: u32,
-) -> Option<String> {
+fn formula_text_at(engine: &ComputeEngine, sheet: &SheetId, row: u32, col: u32) -> Option<String> {
     let cell_id = engine
         .mirror()
         .get_sheet(sheet)?
@@ -563,7 +576,7 @@ fn formula_text_at(
 #[test]
 fn test_copy_range_cross_sheet_rebinds_naked_refs() {
     let snap = cross_sheet_copy_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sheet1 = SheetId::from_uuid_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
     let sheet2 = SheetId::from_uuid_str("550e8400-e29b-41d4-a716-446655440099").unwrap();
@@ -650,8 +663,14 @@ fn test_copy_range_cross_sheet_rebinds_naked_refs() {
 #[test]
 fn test_copy_range_cross_sheet_preserves_explicit_target_sheet_ref_text() {
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
                 name: "Sheet1".to_string(),
                 rows: 100,
@@ -668,6 +687,9 @@ fn test_copy_range_cross_sheet_preserves_explicit_target_sheet_ref_text() {
                 ranges: vec![],
             },
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: "550e8400-e29b-41d4-a716-446655440099".to_string(),
                 name: "Sheet2".to_string(),
                 rows: 100,
@@ -693,7 +715,7 @@ fn test_copy_range_cross_sheet_preserves_explicit_target_sheet_ref_text() {
         max_change: value_types::FiniteF64::must(0.001),
         calculation_settings: None,
     };
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sheet1 = SheetId::from_uuid_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
     let sheet2 = SheetId::from_uuid_str("550e8400-e29b-41d4-a716-446655440099").unwrap();
@@ -759,8 +781,14 @@ fn test_copy_range_cross_sheet_preserves_explicit_target_sheet_ref_text() {
 #[test]
 fn test_copy_range_cross_sheet_preserves_explicit_source_sheet_ref_after_formula_cache_refresh() {
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
                 name: "Sheet1".to_string(),
                 rows: 100,
@@ -797,6 +825,9 @@ fn test_copy_range_cross_sheet_preserves_explicit_source_sheet_ref_after_formula
                 ranges: vec![],
             },
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: "550e8400-e29b-41d4-a716-446655440099".to_string(),
                 name: "Sheet2".to_string(),
                 rows: 100,
@@ -833,7 +864,7 @@ fn test_copy_range_cross_sheet_preserves_explicit_source_sheet_ref_after_formula
         max_change: value_types::FiniteF64::must(0.001),
         calculation_settings: None,
     };
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sheet1 = SheetId::from_uuid_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
     let sheet2 = SheetId::from_uuid_str("550e8400-e29b-41d4-a716-446655440099").unwrap();

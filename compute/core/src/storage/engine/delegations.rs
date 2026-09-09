@@ -1,4 +1,4 @@
-//! Delegation methods (scenarios, bindings, batch ops, sheet management) for YrsComputeEngine.
+//! Delegation methods (scenarios, bindings, batch ops, sheet management) for ComputeEngine.
 
 mod batch_cells;
 mod compute_sheets_named;
@@ -6,9 +6,9 @@ mod defined_names_print_cells;
 mod scenarios_bindings;
 mod sheet_lifecycle;
 mod sheet_settings_print;
-mod what_if_sync;
+mod what_if;
 
-use super::YrsComputeEngine;
+use super::ComputeEngine;
 use crate::snapshot::{
     CellEdit, MutationResult, Scenario, ScenarioCreateInput, ScenarioUpdateInput, SheetSnapshot,
 };
@@ -25,36 +25,36 @@ use snapshot_types::versioning::SemanticWorkbookStateEnvelope;
 use value_types::ComputeError;
 
 #[bridge::api(
-    service = "YrsComputeEngine",
+    service = "ComputeEngine",
     key = "doc_id",
     group = "delegations",
     fn_prefix = "compute",
     crate_path = "compute_core"
 )]
-impl YrsComputeEngine {
+impl ComputeEngine {
     #[bridge::write]
     pub fn create_scenario(
-        &self,
+        &mut self,
         input: ScenarioCreateInput,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        scenarios_bindings::create_scenario(self, input)
+        self.with_history(|engine| scenarios_bindings::create_scenario(engine, input))
     }
 
     #[bridge::write]
     pub fn update_scenario(
-        &self,
+        &mut self,
         scenario_id: &str,
         input: ScenarioUpdateInput,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        scenarios_bindings::update_scenario(self, scenario_id, input)
+        self.with_history(|engine| scenarios_bindings::update_scenario(engine, scenario_id, input))
     }
 
     #[bridge::write]
     pub fn remove_scenario(
-        &self,
+        &mut self,
         scenario_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        scenarios_bindings::remove_scenario(self, scenario_id)
+        self.with_history(|engine| scenarios_bindings::remove_scenario(engine, scenario_id))
     }
 
     #[bridge::read]
@@ -72,7 +72,7 @@ impl YrsComputeEngine {
         &mut self,
         scenario_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        scenarios_bindings::apply_scenario(self, scenario_id)
+        self.with_history(|engine| scenarios_bindings::apply_scenario(engine, scenario_id))
     }
 
     #[bridge::write]
@@ -80,43 +80,37 @@ impl YrsComputeEngine {
         &mut self,
         baseline_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        scenarios_bindings::restore_scenario(self, baseline_id)
-    }
-
-    #[bridge::write]
-    pub fn set_active_scenario(
-        &self,
-        scenario_id: Option<String>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        scenarios_bindings::set_active_scenario(self, scenario_id)
+        self.with_history(|engine| scenarios_bindings::restore_scenario(engine, baseline_id))
     }
 
     #[bridge::write]
     pub fn create_binding(
-        &self,
+        &mut self,
         sheet_id: &SheetId,
         binding: bindings::CreateBindingInput,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        scenarios_bindings::create_binding(self, sheet_id, binding)
+        self.with_history(|engine| scenarios_bindings::create_binding(engine, sheet_id, binding))
     }
 
     #[bridge::write]
     pub fn update_binding(
-        &self,
+        &mut self,
         sheet_id: &SheetId,
         binding_id: &str,
         updates: bindings::UpdateBindingFields,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        scenarios_bindings::update_binding(self, sheet_id, binding_id, updates)
+        self.with_history(|engine| {
+            scenarios_bindings::update_binding(engine, sheet_id, binding_id, updates)
+        })
     }
 
     #[bridge::write]
     pub fn remove_binding(
-        &self,
+        &mut self,
         sheet_id: &SheetId,
         binding_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        scenarios_bindings::remove_binding(self, sheet_id, binding_id)
+        self.with_history(|engine| scenarios_bindings::remove_binding(engine, sheet_id, binding_id))
     }
 
     #[bridge::read]
@@ -143,27 +137,31 @@ impl YrsComputeEngine {
 
     #[bridge::write]
     pub fn update_refresh_metadata(
-        &self,
+        &mut self,
         sheet_id: &SheetId,
         binding_id: &str,
         last_refresh: i64,
         last_row_count: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        scenarios_bindings::update_refresh_metadata(
-            self,
-            sheet_id,
-            binding_id,
-            last_refresh,
-            last_row_count,
-        )
+        self.with_history(|engine| {
+            scenarios_bindings::update_refresh_metadata(
+                engine,
+                sheet_id,
+                binding_id,
+                last_refresh,
+                last_row_count,
+            )
+        })
     }
 
     #[bridge::write]
     pub fn remove_bindings_for_connection(
-        &self,
+        &mut self,
         connection_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        scenarios_bindings::remove_bindings_for_connection(self, connection_id)
+        self.with_history(|engine| {
+            scenarios_bindings::remove_bindings_for_connection(engine, connection_id)
+        })
     }
 
     #[bridge::write]
@@ -172,7 +170,7 @@ impl YrsComputeEngine {
         edits: Vec<(SheetId, CellId, u32, u32, super::mutation::CellInput)>,
         skip_cycle_check: bool,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        batch_cells::batch_set_cells(self, edits, skip_cycle_check)
+        self.with_history(|engine| batch_cells::batch_set_cells(engine, edits, skip_cycle_check))
     }
 
     #[bridge::write]
@@ -180,7 +178,7 @@ impl YrsComputeEngine {
         &mut self,
         cell_ids: Vec<CellId>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        batch_cells::batch_clear_cells(self, cell_ids)
+        self.with_history(|engine| batch_cells::batch_clear_cells(engine, cell_ids))
     }
 
     #[bridge::write]
@@ -189,7 +187,9 @@ impl YrsComputeEngine {
         edits: Vec<(SheetId, u32, u32, super::mutation::CellInput)>,
         skip_cycle_check: bool,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        batch_cells::batch_set_cells_by_position(self, edits, skip_cycle_check)
+        self.with_history(|engine| {
+            batch_cells::batch_set_cells_by_position(engine, edits, skip_cycle_check)
+        })
     }
 
     #[bridge::write]
@@ -198,7 +198,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         cells: Vec<crate::snapshot::BatchCellInput>,
     ) -> Result<crate::snapshot::SetCellsBatchResult, ComputeError> {
-        batch_cells::set_cells_batch(self, sheet_id, cells)
+        self.with_history(|engine| batch_cells::set_cells_batch(engine, sheet_id, cells))
     }
 
     #[bridge::write]
@@ -211,7 +211,9 @@ impl YrsComputeEngine {
         month: u32,
         day: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        batch_cells::set_date_value(self, sheet_id, row, col, year, month, day)
+        self.with_history(|engine| {
+            batch_cells::set_date_value(engine, sheet_id, row, col, year, month, day)
+        })
     }
 
     #[bridge::write]
@@ -224,7 +226,9 @@ impl YrsComputeEngine {
         minutes: u32,
         seconds: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        batch_cells::set_time_value(self, sheet_id, row, col, hours, minutes, seconds)
+        self.with_history(|engine| {
+            batch_cells::set_time_value(engine, sheet_id, row, col, hours, minutes, seconds)
+        })
     }
 
     #[bridge::write]
@@ -236,7 +240,11 @@ impl YrsComputeEngine {
         end_row: u32,
         end_col: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        batch_cells::clear_range_by_position(self, sheet_id, start_row, start_col, end_row, end_col)
+        self.with_history(|engine| {
+            batch_cells::clear_range_by_position(
+                engine, sheet_id, start_row, start_col, end_row, end_col,
+            )
+        })
     }
 
     #[bridge::write]
@@ -245,7 +253,7 @@ impl YrsComputeEngine {
         changes: Vec<CellEdit>,
         skip_cycle_check: bool,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        batch_cells::apply_changes(self, changes, skip_cycle_check)
+        self.with_history(|engine| batch_cells::apply_changes(engine, changes, skip_cycle_check))
     }
 
     #[bridge::write]
@@ -253,7 +261,7 @@ impl YrsComputeEngine {
         &mut self,
         snapshot: SheetSnapshot,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        compute_sheets_named::add_compute_sheet(self, snapshot)
+        self.without_history(|engine| compute_sheets_named::add_compute_sheet(engine, snapshot))
     }
 
     #[bridge::write]
@@ -261,7 +269,7 @@ impl YrsComputeEngine {
         &mut self,
         sheet_id: &SheetId,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        compute_sheets_named::remove_compute_sheet(self, sheet_id)
+        self.without_history(|engine| compute_sheets_named::remove_compute_sheet(engine, sheet_id))
     }
 
     #[bridge::skip(ts_bridge)]
@@ -271,7 +279,9 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         name: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        compute_sheets_named::rename_compute_sheet(self, sheet_id, name)
+        self.with_history(|engine| {
+            compute_sheets_named::rename_compute_sheet(engine, sheet_id, name)
+        })
     }
 
     #[bridge::write]
@@ -280,7 +290,7 @@ impl YrsComputeEngine {
         name: String,
         def: NamedRangeDef,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        compute_sheets_named::set_named_range(self, name, def)
+        self.with_history(|engine| compute_sheets_named::set_named_range(engine, name, def))
     }
 
     #[bridge::write]
@@ -288,7 +298,7 @@ impl YrsComputeEngine {
         &mut self,
         name: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        compute_sheets_named::remove_named_range(self, name)
+        self.with_history(|engine| compute_sheets_named::remove_named_range(engine, name))
     }
 
     #[bridge::read]
@@ -306,7 +316,9 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         formula_a1: &str,
     ) -> Result<IdentityFormula, ComputeError> {
-        compute_sheets_named::to_identity_formula(self, sheet_id, formula_a1)
+        self.without_history(|engine| {
+            compute_sheets_named::to_identity_formula(engine, sheet_id, formula_a1)
+        })
     }
 
     #[bridge::read]
@@ -339,7 +351,7 @@ impl YrsComputeEngine {
     #[bridge::read]
     #[bridge::skip(tauri)]
     pub fn solve(&self, params: &crate::solver::SolverParams) -> crate::solver::SolverResult {
-        what_if_sync::solve(self, params)
+        what_if::solve(self, params)
     }
 
     #[bridge::read]
@@ -347,7 +359,7 @@ impl YrsComputeEngine {
         &self,
         params: &crate::solver::GoalSeekParams,
     ) -> crate::solver::GoalSeekResult {
-        what_if_sync::goal_seek(self, params)
+        what_if::goal_seek(self, params)
     }
 
     #[bridge::read]
@@ -355,7 +367,7 @@ impl YrsComputeEngine {
         &self,
         params: &crate::data_table::DataTableParams,
     ) -> crate::data_table::DataTableResult {
-        what_if_sync::data_table(self, params)
+        what_if::data_table(self, params)
     }
 
     #[bridge::write]
@@ -368,20 +380,17 @@ impl YrsComputeEngine {
         end_col: u32,
         input: &crate::data_table::CreateDataTableInput,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        what_if_sync::create_data_table(
-            self, sheet_id, start_row, start_col, end_row, end_col, input,
-        )
-    }
-
-    #[bridge::read]
-    pub fn sync_full_state(&self) -> Vec<u8> {
-        what_if_sync::sync_full_state(self)
+        self.with_history(|engine| {
+            what_if::create_data_table(
+                engine, sheet_id, start_row, start_col, end_row, end_col, input,
+            )
+        })
     }
 
     #[bridge::skip(ts_bridge)]
     #[bridge::structural]
     pub fn create_sheet(&mut self, name: &str) -> Result<(String, MutationResult), ComputeError> {
-        sheet_lifecycle::create_sheet(self, name)
+        self.with_history(|engine| sheet_lifecycle::create_sheet(engine, name))
     }
 
     #[bridge::skip(ts_bridge)]
@@ -391,7 +400,13 @@ impl YrsComputeEngine {
         name: &str,
         default_col_width_px: f64,
     ) -> Result<(String, MutationResult), ComputeError> {
-        sheet_lifecycle::create_sheet_with_default_col_width(self, name, Some(default_col_width_px))
+        self.with_history(|engine| {
+            sheet_lifecycle::create_sheet_with_default_col_width(
+                engine,
+                name,
+                Some(default_col_width_px),
+            )
+        })
     }
 
     #[bridge::skip(ts_bridge)]
@@ -400,7 +415,7 @@ impl YrsComputeEngine {
         &mut self,
         name: &str,
     ) -> Result<(String, MutationResult), ComputeError> {
-        sheet_lifecycle::create_default_sheet(self, name)
+        self.without_history(|engine| sheet_lifecycle::create_default_sheet(engine, name))
     }
 
     #[bridge::skip(ts_bridge)]
@@ -410,11 +425,13 @@ impl YrsComputeEngine {
         name: &str,
         default_col_width_px: f64,
     ) -> Result<(String, MutationResult), ComputeError> {
-        sheet_lifecycle::create_default_sheet_with_default_col_width(
-            self,
-            name,
-            Some(default_col_width_px),
-        )
+        self.without_history(|engine| {
+            sheet_lifecycle::create_default_sheet_with_default_col_width(
+                engine,
+                name,
+                Some(default_col_width_px),
+            )
+        })
     }
 
     #[bridge::skip(ts_bridge)]
@@ -423,7 +440,7 @@ impl YrsComputeEngine {
         &mut self,
         sheet_id: &SheetId,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        sheet_lifecycle::delete_sheet(self, sheet_id)
+        self.with_history(|engine| sheet_lifecycle::delete_sheet(engine, sheet_id))
     }
 
     #[bridge::structural]
@@ -431,7 +448,7 @@ impl YrsComputeEngine {
         &mut self,
         new_order: Vec<String>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        sheet_lifecycle::reorder_sheets(self, new_order)
+        self.with_history(|engine| sheet_lifecycle::reorder_sheets(engine, new_order))
     }
 
     #[bridge::skip(ts_bridge)]
@@ -441,55 +458,57 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         new_name: &str,
     ) -> Result<(String, MutationResult), ComputeError> {
-        sheet_lifecycle::copy_sheet(self, sheet_id, new_name)
+        self.with_history(|engine| sheet_lifecycle::copy_sheet(engine, sheet_id, new_name))
     }
 
     #[bridge::write]
     pub fn set_frozen_panes(
-        &self,
+        &mut self,
         sheet_id: &SheetId,
         rows: u32,
         cols: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        sheet_lifecycle::set_frozen_panes(self, sheet_id, rows, cols)
+        self.with_history(|engine| sheet_lifecycle::set_frozen_panes(engine, sheet_id, rows, cols))
     }
 
     #[bridge::write]
     pub fn set_view_option(
-        &self,
+        &mut self,
         sheet_id: &SheetId,
         key: &str,
         value: bool,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        sheet_lifecycle::set_view_option(self, sheet_id, key, value)
+        self.with_history(|engine| sheet_lifecycle::set_view_option(engine, sheet_id, key, value))
     }
 
     #[bridge::write]
     pub fn set_scroll_position(
-        &self,
+        &mut self,
         sheet_id: &SheetId,
         top_row: u32,
         left_col: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        sheet_lifecycle::set_scroll_position(self, sheet_id, top_row, left_col)
+        self.without_history(|engine| {
+            sheet_lifecycle::set_scroll_position(engine, sheet_id, top_row, left_col)
+        })
     }
 
     #[bridge::write]
     pub fn move_sheet(
-        &self,
+        &mut self,
         sheet_id: &SheetId,
         new_index: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        sheet_lifecycle::move_sheet(self, sheet_id, new_index)
+        self.with_history(|engine| sheet_lifecycle::move_sheet(engine, sheet_id, new_index))
     }
 
     #[bridge::write]
     pub fn set_tab_color(
-        &self,
+        &mut self,
         sheet_id: &SheetId,
         color: Option<String>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        sheet_lifecycle::set_tab_color(self, sheet_id, color)
+        self.with_history(|engine| sheet_lifecycle::set_tab_color(engine, sheet_id, color))
     }
 
     #[bridge::write]
@@ -498,7 +517,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         hidden: bool,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        sheet_lifecycle::set_sheet_hidden(self, sheet_id, hidden)
+        self.with_history(|engine| sheet_lifecycle::set_sheet_hidden(engine, sheet_id, hidden))
     }
 
     #[bridge::write]
@@ -507,7 +526,9 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         enabled: bool,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        sheet_lifecycle::set_sheet_enable_calculation(self, sheet_id, enabled)
+        self.with_history(|engine| {
+            sheet_lifecycle::set_sheet_enable_calculation(engine, sheet_id, enabled)
+        })
     }
 
     #[bridge::write]
@@ -516,7 +537,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         state: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        sheet_lifecycle::set_sheet_visibility(self, sheet_id, state)
+        self.with_history(|engine| sheet_lifecycle::set_sheet_visibility(engine, sheet_id, state))
     }
 
     #[bridge::read]
@@ -536,7 +557,9 @@ impl YrsComputeEngine {
         key: &str,
         value: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        sheet_settings_print::set_sheet_setting(self, sheet_id, key, value)
+        self.with_history(|engine| {
+            sheet_settings_print::set_sheet_setting(engine, sheet_id, key, value)
+        })
     }
 
     #[bridge::write]
@@ -545,7 +568,9 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         password_hash: Option<String>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        sheet_settings_print::protect_sheet(self, sheet_id, password_hash)
+        self.with_history(|engine| {
+            sheet_settings_print::protect_sheet(engine, sheet_id, password_hash)
+        })
     }
 
     #[bridge::write]
@@ -555,7 +580,14 @@ impl YrsComputeEngine {
         password_hash: Option<String>,
         options: SheetProtectionOptions,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        sheet_settings_print::protect_sheet_with_options(self, sheet_id, password_hash, options)
+        self.with_history(|engine| {
+            sheet_settings_print::protect_sheet_with_options(
+                engine,
+                sheet_id,
+                password_hash,
+                options,
+            )
+        })
     }
 
     #[bridge::write]
@@ -564,7 +596,9 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         options: SheetProtectionOptions,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        sheet_settings_print::set_sheet_protection_options(self, sheet_id, options)
+        self.with_history(|engine| {
+            sheet_settings_print::set_sheet_protection_options(engine, sheet_id, options)
+        })
     }
 
     #[bridge::write]
@@ -573,7 +607,9 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         password_hash: Option<String>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        sheet_settings_print::unprotect_sheet(self, sheet_id, password_hash)
+        self.with_history(|engine| {
+            sheet_settings_print::unprotect_sheet(engine, sheet_id, password_hash)
+        })
     }
 
     #[bridge::read]
@@ -587,7 +623,9 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         row: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        sheet_settings_print::add_horizontal_page_break(self, sheet_id, row)
+        self.with_history(|engine| {
+            sheet_settings_print::add_horizontal_page_break(engine, sheet_id, row)
+        })
     }
 
     #[bridge::write]
@@ -596,7 +634,9 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         row: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        sheet_settings_print::remove_horizontal_page_break(self, sheet_id, row)
+        self.with_history(|engine| {
+            sheet_settings_print::remove_horizontal_page_break(engine, sheet_id, row)
+        })
     }
 
     #[bridge::write]
@@ -605,7 +645,9 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         col: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        sheet_settings_print::add_vertical_page_break(self, sheet_id, col)
+        self.with_history(|engine| {
+            sheet_settings_print::add_vertical_page_break(engine, sheet_id, col)
+        })
     }
 
     #[bridge::write]
@@ -614,7 +656,9 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         col: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        sheet_settings_print::remove_vertical_page_break(self, sheet_id, col)
+        self.with_history(|engine| {
+            sheet_settings_print::remove_vertical_page_break(engine, sheet_id, col)
+        })
     }
 
     #[bridge::write]
@@ -622,7 +666,7 @@ impl YrsComputeEngine {
         &mut self,
         sheet_id: &SheetId,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        sheet_settings_print::clear_all_page_breaks(self, sheet_id)
+        self.with_history(|engine| sheet_settings_print::clear_all_page_breaks(engine, sheet_id))
     }
 
     #[bridge::read]
@@ -636,7 +680,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         area: Option<PrintRange>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        sheet_settings_print::set_print_area(self, sheet_id, area)
+        self.with_history(|engine| sheet_settings_print::set_print_area(engine, sheet_id, area))
     }
 
     #[bridge::read]
@@ -650,7 +694,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         titles: PrintTitles,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        sheet_settings_print::set_print_titles(self, sheet_id, titles)
+        self.with_history(|engine| sheet_settings_print::set_print_titles(engine, sheet_id, titles))
     }
 
     #[bridge::read]
@@ -664,7 +708,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         config: Option<SplitViewConfig>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        sheet_settings_print::set_split_config(self, sheet_id, config)
+        self.with_history(|engine| sheet_settings_print::set_split_config(engine, sheet_id, config))
     }
 
     #[bridge::write]
@@ -672,7 +716,7 @@ impl YrsComputeEngine {
         &mut self,
         input: named_ranges::DefinedNameInput,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        defined_names_print_cells::create_named_range(self, input)
+        self.with_history(|engine| defined_names_print_cells::create_named_range(engine, input))
     }
 
     #[bridge::write]
@@ -681,7 +725,9 @@ impl YrsComputeEngine {
         id: &str,
         updates: named_ranges::NamedRangeUpdate,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        defined_names_print_cells::update_named_range(self, id, updates)
+        self.with_history(|engine| {
+            defined_names_print_cells::update_named_range(engine, id, updates)
+        })
     }
 
     #[bridge::write]
@@ -689,7 +735,7 @@ impl YrsComputeEngine {
         &mut self,
         id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        defined_names_print_cells::remove_named_range_by_id(self, id)
+        self.with_history(|engine| defined_names_print_cells::remove_named_range_by_id(engine, id))
     }
 
     #[bridge::write]
@@ -697,7 +743,9 @@ impl YrsComputeEngine {
         &mut self,
         scope: Option<String>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        defined_names_print_cells::remove_named_ranges_by_scope(self, scope)
+        self.with_history(|engine| {
+            defined_names_print_cells::remove_named_ranges_by_scope(engine, scope)
+        })
     }
 
     #[bridge::write]
@@ -706,7 +754,7 @@ impl YrsComputeEngine {
         &mut self,
         names: Vec<named_ranges::DefinedName>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        defined_names_print_cells::import_named_ranges(self, names)
+        self.with_history(|engine| defined_names_print_cells::import_named_ranges(engine, names))
     }
 
     #[bridge::write]
@@ -715,7 +763,9 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         settings: domain_types::domain::print::PrintSettings,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        defined_names_print_cells::set_print_settings(self, sheet_id, settings)
+        self.with_history(|engine| {
+            defined_names_print_cells::set_print_settings(engine, sheet_id, settings)
+        })
     }
 
     #[bridge::write]
@@ -724,7 +774,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         info: domain_types::domain::print::HeaderFooterImageInfo,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        defined_names_print_cells::set_hf_image(self, sheet_id, info)
+        self.with_history(|engine| defined_names_print_cells::set_hf_image(engine, sheet_id, info))
     }
 
     #[bridge::write]
@@ -733,7 +783,9 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         position: domain_types::domain::print::HfImagePosition,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        defined_names_print_cells::remove_hf_image(self, sheet_id, position)
+        self.with_history(|engine| {
+            defined_names_print_cells::remove_hf_image(engine, sheet_id, position)
+        })
     }
 
     #[bridge::write]
@@ -745,9 +797,11 @@ impl YrsComputeEngine {
         end_row: u32,
         end_col: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        defined_names_print_cells::clear_range(
-            self, sheet_id, start_row, start_col, end_row, end_col,
-        )
+        self.with_history(|engine| {
+            defined_names_print_cells::clear_range(
+                engine, sheet_id, start_row, start_col, end_row, end_col,
+            )
+        })
     }
 
     #[bridge::write]
@@ -759,9 +813,11 @@ impl YrsComputeEngine {
         end_row: u32,
         end_col: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        defined_names_print_cells::clear_range_and_return_ids(
-            self, sheet_id, start_row, start_col, end_row, end_col,
-        )
+        self.with_history(|engine| {
+            defined_names_print_cells::clear_range_and_return_ids(
+                engine, sheet_id, start_row, start_col, end_row, end_col,
+            )
+        })
     }
 
     #[bridge::write]
@@ -777,16 +833,18 @@ impl YrsComputeEngine {
         replacement: String,
         options: crate::engine_types::queries::FindInRangeOptions,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        defined_names_print_cells::replace_all_in_range(
-            self,
-            sheet_id,
-            start_row,
-            start_col,
-            end_row,
-            end_col,
-            text,
-            replacement,
-            options,
-        )
+        self.with_history(|engine| {
+            defined_names_print_cells::replace_all_in_range(
+                engine,
+                sheet_id,
+                start_row,
+                start_col,
+                end_row,
+                end_col,
+                text,
+                replacement,
+                options,
+            )
+        })
     }
 }

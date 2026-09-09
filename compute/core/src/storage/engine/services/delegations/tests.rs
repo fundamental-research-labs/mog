@@ -1,10 +1,5 @@
-use super::{
-    add_horizontal_page_break, add_vertical_page_break, clear_all_page_breaks,
-    remove_horizontal_page_break, remove_vertical_page_break, set_frozen_panes, set_print_area,
-    set_print_settings, set_print_titles, set_scroll_position, set_split_config,
-};
 use crate::snapshot::{ChangeKind as SnapChangeKind, SheetChangeField};
-use crate::storage::engine::YrsComputeEngine;
+use crate::storage::engine::ComputeEngine;
 use cell_types::SheetId;
 use domain_types::domain::print::PrintSettings as DomainPrintSettings;
 use domain_types::domain::sheet::{PrintRange, PrintTitles, SplitDirection, SplitViewConfig};
@@ -12,9 +7,12 @@ use snapshot_types::{SheetSnapshot, WorkbookSnapshot};
 
 const SHEET_UUID: &str = "550e8400-e29b-41d4-a716-446655440000";
 
-fn build_engine() -> YrsComputeEngine {
+fn build_engine() -> ComputeEngine {
     let snap = WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET_UUID.to_string(),
             name: "Sheet1".to_string(),
             rows: 50,
@@ -24,7 +22,7 @@ fn build_engine() -> YrsComputeEngine {
         }],
         ..Default::default()
     };
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).expect("from_snapshot");
+    let (engine, _) = ComputeEngine::from_snapshot(snap).expect("from_snapshot");
     engine
 }
 
@@ -38,8 +36,9 @@ fn sheet_id() -> SheetId {
 fn add_horizontal_page_break_returns_page_break_changes() {
     let mut engine = build_engine();
     let sid = sheet_id();
-    let result =
-        engine.with_internals_for_test(|stores, _, _| add_horizontal_page_break(stores, &sid, 5));
+    let result = engine
+        .add_horizontal_page_break(&sid, 5)
+        .map(|(_, result)| result);
     let result = result.expect("add_horizontal_page_break");
     assert_eq!(result.page_break_changes.len(), 1);
     assert_eq!(result.page_break_changes[0].sheet_id, sid.to_uuid_string());
@@ -57,8 +56,9 @@ fn add_horizontal_page_break_returns_page_break_changes() {
 fn add_vertical_page_break_returns_page_break_changes() {
     let mut engine = build_engine();
     let sid = sheet_id();
-    let result =
-        engine.with_internals_for_test(|stores, _, _| add_vertical_page_break(stores, &sid, 7));
+    let result = engine
+        .add_vertical_page_break(&sid, 7)
+        .map(|(_, result)| result);
     let result = result.expect("add_vertical_page_break");
     assert_eq!(result.page_break_changes.len(), 1);
     assert!(
@@ -76,11 +76,13 @@ fn remove_horizontal_page_break_returns_page_break_changes() {
     let sid = sheet_id();
     // Seed a break first so the removal path observes a transition.
     engine
-        .with_internals_for_test(|stores, _, _| add_horizontal_page_break(stores, &sid, 3))
+        .add_horizontal_page_break(&sid, 3)
+        .map(|(_, result)| result)
         .expect("seed");
 
     let result = engine
-        .with_internals_for_test(|stores, _, _| remove_horizontal_page_break(stores, &sid, 3))
+        .remove_horizontal_page_break(&sid, 3)
+        .map(|(_, result)| result)
         .expect("remove_horizontal_page_break");
     assert_eq!(result.page_break_changes.len(), 1);
     assert!(
@@ -98,11 +100,13 @@ fn remove_vertical_page_break_returns_page_break_changes() {
     let mut engine = build_engine();
     let sid = sheet_id();
     engine
-        .with_internals_for_test(|stores, _, _| add_vertical_page_break(stores, &sid, 4))
+        .add_vertical_page_break(&sid, 4)
+        .map(|(_, result)| result)
         .expect("seed");
 
     let result = engine
-        .with_internals_for_test(|stores, _, _| remove_vertical_page_break(stores, &sid, 4))
+        .remove_vertical_page_break(&sid, 4)
+        .map(|(_, result)| result)
         .expect("remove_vertical_page_break");
     assert_eq!(result.page_break_changes.len(), 1);
     assert!(
@@ -120,14 +124,17 @@ fn clear_all_page_breaks_returns_page_break_changes() {
     let mut engine = build_engine();
     let sid = sheet_id();
     engine
-        .with_internals_for_test(|stores, _, _| add_horizontal_page_break(stores, &sid, 1))
+        .add_horizontal_page_break(&sid, 1)
+        .map(|(_, result)| result)
         .expect("seed h");
     engine
-        .with_internals_for_test(|stores, _, _| add_vertical_page_break(stores, &sid, 2))
+        .add_vertical_page_break(&sid, 2)
+        .map(|(_, result)| result)
         .expect("seed v");
 
     let result = engine
-        .with_internals_for_test(|stores, _, _| clear_all_page_breaks(stores, &sid))
+        .clear_all_page_breaks(&sid)
+        .map(|(_, result)| result)
         .expect("clear_all_page_breaks");
     assert_eq!(result.page_break_changes.len(), 1);
     let breaks = &result.page_break_changes[0].breaks;
@@ -148,7 +155,8 @@ fn set_print_area_returns_print_area_change() {
         end_col: 5,
     };
     let result = engine
-        .with_internals_for_test(|stores, _, _| set_print_area(stores, &sid, Some(&area)))
+        .set_print_area(&sid, Some(area.clone()))
+        .map(|(_, result)| result)
         .expect("set_print_area");
     assert_eq!(result.print_area_changes.len(), 1);
     let change = &result.print_area_changes[0];
@@ -157,7 +165,8 @@ fn set_print_area_returns_print_area_change() {
 
     // Removal path → kind must be Removed.
     let result = engine
-        .with_internals_for_test(|stores, _, _| set_print_area(stores, &sid, None))
+        .set_print_area(&sid, None)
+        .map(|(_, result)| result)
         .expect("set_print_area(None)");
     assert_eq!(result.print_area_changes.len(), 1);
     assert_eq!(result.print_area_changes[0].kind, SnapChangeKind::Removed);
@@ -173,7 +182,8 @@ fn set_print_titles_returns_print_titles_change() {
         repeat_cols: None,
     };
     let result = engine
-        .with_internals_for_test(|stores, _, _| set_print_titles(stores, &sid, &titles))
+        .set_print_titles(&sid, titles)
+        .map(|(_, result)| result)
         .expect("set_print_titles");
     assert_eq!(result.print_titles_changes.len(), 1);
     assert_eq!(
@@ -189,7 +199,8 @@ fn set_print_settings_returns_print_settings_change() {
     let mut settings = DomainPrintSettings::default();
     settings.orientation = Some("landscape".to_string());
     let result = engine
-        .with_internals_for_test(|stores, _, _| set_print_settings(stores, &sid, &settings))
+        .set_print_settings(&sid, settings)
+        .map(|(_, result)| result)
         .expect("set_print_settings");
     assert_eq!(result.print_settings_changes.len(), 1);
     assert_eq!(
@@ -210,7 +221,8 @@ fn set_split_config_returns_split_config_change() {
         vertical_position: 200,
     };
     let result = engine
-        .with_internals_for_test(|stores, _, _| set_split_config(stores, &sid, Some(&config)))
+        .set_split_config(&sid, Some(config.clone()))
+        .map(|(_, result)| result)
         .expect("set_split_config");
     assert_eq!(result.split_config_changes.len(), 1);
     let change = &result.split_config_changes[0];
@@ -222,7 +234,8 @@ fn set_split_config_returns_split_config_change() {
 
     // Removal path → kind == Removed.
     let result = engine
-        .with_internals_for_test(|stores, _, _| set_split_config(stores, &sid, None))
+        .set_split_config(&sid, None)
+        .map(|(_, result)| result)
         .expect("set_split_config(None)");
     assert_eq!(result.split_config_changes.len(), 1);
     assert_eq!(result.split_config_changes[0].kind, SnapChangeKind::Removed);
@@ -238,11 +251,13 @@ fn set_split_config_reports_frozen_panes_cleared() {
         vertical_position: 200,
     };
     engine
-        .with_internals_for_test(|stores, _, _| set_frozen_panes(stores, &sid, 3, 2))
+        .set_frozen_panes(&sid, 3, 2)
+        .map(|(_, result)| result)
         .expect("set_frozen_panes");
 
     let result = engine
-        .with_internals_for_test(|stores, _, _| set_split_config(stores, &sid, Some(&config)))
+        .set_split_config(&sid, Some(config.clone()))
+        .map(|(_, result)| result)
         .expect("set_split_config");
 
     assert_eq!(result.split_config_changes.len(), 1);
@@ -258,7 +273,7 @@ fn set_split_config_reports_frozen_panes_cleared() {
 }
 
 #[test]
-fn yrs_bridge_set_split_config_returns_split_config_change() {
+fn native_bridge_set_split_config_returns_split_config_change() {
     let mut engine = build_engine();
     let sid = sheet_id();
     let config = SplitViewConfig {
@@ -284,11 +299,43 @@ fn set_scroll_position_returns_scroll_position_change() {
     let mut engine = build_engine();
     let sid = sheet_id();
     let result = engine
-        .with_internals_for_test(|stores, _, _| set_scroll_position(stores, &sid, 12, 7))
+        .set_scroll_position(&sid, 12, 7)
+        .map(|(_, result)| result)
         .expect("set_scroll_position");
     assert_eq!(result.scroll_position_changes.len(), 1);
     let change = &result.scroll_position_changes[0];
     assert_eq!(change.sheet_id, sid.to_uuid_string());
     assert_eq!(change.top_row, 12);
     assert_eq!(change.left_col, 7);
+}
+
+#[test]
+fn delete_sheet_preserves_other_sheet() {
+    let mut engine = build_engine();
+    engine.create_sheet("Sheet2").unwrap();
+    engine.delete_sheet(&sheet_id()).unwrap();
+    let order = engine.stores.storage.sheet_order();
+    assert_eq!(order.len(), 1);
+    assert_ne!(order[0], sheet_id());
+    engine.undo().unwrap();
+    assert_eq!(engine.stores.storage.sheet_order()[0], sheet_id());
+}
+
+#[test]
+fn delete_last_sheet_is_rejected() {
+    let mut engine = build_engine();
+    assert!(engine.delete_sheet(&sheet_id()).is_err());
+    assert_eq!(engine.stores.storage.sheet_order(), vec![sheet_id()]);
+    assert!(!engine.can_undo());
+}
+
+#[test]
+fn delete_missing_sheet_is_rejected() {
+    let mut engine = build_engine();
+    engine.create_sheet("Sheet2").unwrap();
+    let order = engine.stores.storage.sheet_order();
+    let depth = engine.get_undo_state().undo_depth;
+    assert!(engine.delete_sheet(&SheetId::from_raw(999)).is_err());
+    assert_eq!(engine.stores.storage.sheet_order(), order);
+    assert_eq!(engine.get_undo_state().undo_depth, depth);
 }

@@ -1,59 +1,16 @@
 use cell_types::SheetId;
-use compute_document::undo::ORIGIN_USER_EDIT;
 use domain_types::CFStyle;
 use domain_types::domain::conditional_format::{CFRule, ConditionalFormat};
-use yrs::{Map, MapPrelim, MapRef, Origin, Out, Transact};
 
 use crate::engine_types::cf::CFCellRange;
-use crate::storage::YrsStorage;
-use crate::storage::infra::grid_helpers::sheet_id_to_hex;
-
-/// Ensure the `rangeBindings` sub-map exists on the sheet for tests.
-pub(super) fn ensure_range_bindings_map(storage: &YrsStorage, sheet_id: &SheetId) {
-    let sheet_hex = sheet_id_to_hex(sheet_id);
-    let mut txn = storage
-        .doc()
-        .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let sheet_map = match storage.sheets_ref().get(&txn, &*sheet_hex) {
-        Some(Out::YMap(m)) => m,
-        _ => return,
-    };
-    if sheet_map
-        .get(&txn, compute_document::schema::KEY_RANGE_BINDINGS)
-        .is_none()
-    {
-        let empty = MapPrelim::from([] as [(&str, yrs::Any); 0]);
-        sheet_map.insert(
-            &mut txn,
-            compute_document::schema::KEY_RANGE_BINDINGS,
-            empty,
-        );
-    }
-}
-
-/// Get the `rangeBindings` Y.Map for a sheet.
-pub(super) fn get_range_bindings_map(
-    storage: &YrsStorage,
-    sheet_id: &SheetId,
-    txn: &impl yrs::ReadTxn,
-) -> MapRef {
-    let sheet_hex = sheet_id_to_hex(sheet_id);
-    let sheet_map = match storage.sheets_ref().get(txn, &*sheet_hex) {
-        Some(Out::YMap(m)) => m,
-        _ => panic!("no sheet map"),
-    };
-    match sheet_map.get(txn, compute_document::schema::KEY_RANGE_BINDINGS) {
-        Some(Out::YMap(m)) => m,
-        _ => panic!("no bindings map — call ensure_range_bindings_map() first"),
-    }
-}
+use crate::storage::WorkbookStorage;
 
 pub(super) fn make_sheet_id(n: u128) -> SheetId {
     SheetId::from_raw(n)
 }
 
-pub(super) fn storage_with_sheet() -> (YrsStorage, SheetId) {
-    let mut storage = YrsStorage::new();
+pub(super) fn storage_with_sheet() -> (WorkbookStorage, SheetId) {
+    let mut storage = WorkbookStorage::new();
     let mut mirror = crate::mirror::CellMirror::new();
     let sheet_id = make_sheet_id(1);
     storage
@@ -93,7 +50,7 @@ pub(super) fn make_format(
         id: id.to_string(),
         sheet_id: sheet_id.to_uuid_string(),
         pivot: None,
-        range_identities: None,
+
         ranges,
         rules,
     }

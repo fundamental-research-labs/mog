@@ -726,7 +726,7 @@ mod tests {
     }
 
     #[test]
-    fn versioning_reader_trait_scaffold_can_be_implemented_without_yrs_reader() {
+    fn versioning_reader_trait_can_be_implemented_for_explicit_state() {
         struct ExplicitReader(SemanticWorkbookState);
 
         impl SemanticWorkbookStateReader for ExplicitReader {

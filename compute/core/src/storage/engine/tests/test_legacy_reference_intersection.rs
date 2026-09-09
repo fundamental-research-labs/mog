@@ -1,5 +1,5 @@
 //! Legacy reference results intersect at the caller; value arrays have no origin.
-use super::super::YrsComputeEngine;
+use super::super::ComputeEngine;
 use super::helpers::cell_value_at;
 use domain_types::domain::table::{TableColumnSpec, TableSpec};
 use domain_types::{
@@ -184,7 +184,7 @@ fn workbook() -> Vec<u8> {
     xlsx_parser::write::write_xlsx_from_parse_output(&input).unwrap()
 }
 
-fn assert_results(engine: &YrsComputeEngine, second_name: &str) {
+fn assert_results(engine: &ComputeEngine, second_name: &str) {
     let sheet = engine.storage().sheet_order()[1];
     for col in [0, 2, 3, 4, 8, 9, 10, 15, 16, 18, 19] {
         assert_eq!(
@@ -247,7 +247,7 @@ fn assert_results(engine: &YrsComputeEngine, second_name: &str) {
 
 #[test]
 fn legacy_reference_intersection_preserves_geometry_and_formula_modes() {
-    let (mut engine, _) = YrsComputeEngine::from_xlsx_bytes(&workbook()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&workbook()).unwrap();
     engine.recalculate().unwrap();
     assert_results(&engine, "two");
     engine.rebuild_compute_core().unwrap();
@@ -258,7 +258,7 @@ fn legacy_reference_intersection_preserves_geometry_and_formula_modes() {
         .unwrap();
     assert_results(&engine, "changed");
     let (mut reloaded, _) =
-        YrsComputeEngine::from_xlsx_bytes(&engine.export_to_xlsx_bytes().unwrap()).unwrap();
+        ComputeEngine::from_xlsx_bytes(&engine.export_to_xlsx_bytes().unwrap()).unwrap();
     reloaded.recalculate().unwrap();
     assert_results(&reloaded, "changed");
 }

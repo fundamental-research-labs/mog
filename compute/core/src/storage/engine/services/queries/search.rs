@@ -5,7 +5,7 @@ use super::*;
 // -------------------------------------------------------------------
 
 pub(in crate::storage::engine) fn regex_search(
-    engine: &crate::storage::engine::YrsComputeEngine,
+    engine: &crate::storage::engine::ComputeEngine,
     sheet_id: &SheetId,
     options: RegexSearchOptions,
 ) -> RegexSearchResult {
@@ -117,7 +117,7 @@ pub(in crate::storage::engine) fn regex_search(
 // -------------------------------------------------------------------
 
 pub(in crate::storage::engine) fn sign_check(
-    engine: &crate::storage::engine::YrsComputeEngine,
+    engine: &crate::storage::engine::ComputeEngine,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,
@@ -284,7 +284,7 @@ fn build_find_regex(options: &FindInRangeOptions) -> Option<regex::Regex> {
 
 /// Find the first cell matching a regex pattern in a range.
 pub(in crate::storage::engine) fn find_in_range(
-    engine: &crate::storage::engine::YrsComputeEngine,
+    engine: &crate::storage::engine::ComputeEngine,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,
@@ -342,7 +342,7 @@ pub(in crate::storage::engine) fn find_in_range(
 
 /// Find all cells matching a regex pattern in a range.
 pub(in crate::storage::engine) fn find_all_in_range(
-    engine: &crate::storage::engine::YrsComputeEngine,
+    engine: &crate::storage::engine::ComputeEngine,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,
@@ -407,7 +407,7 @@ pub(in crate::storage::engine) fn find_all_in_range(
 /// Compiles patterns once, then iterates each sheet's data bounds.
 /// Range constraint from `options` is applied per-sheet when present.
 pub(in crate::storage::engine) fn regex_search_all_sheets(
-    engine: &crate::storage::engine::YrsComputeEngine,
+    engine: &crate::storage::engine::ComputeEngine,
     options: RegexSearchOptions,
 ) -> WorkbookSearchResult {
     let case_insensitive = !options.case_sensitive.unwrap_or(false);
@@ -443,12 +443,8 @@ pub(in crate::storage::engine) fn regex_search_all_sheets(
     let mut matches = Vec::new();
 
     for sheet_id in &sheet_ids {
-        let sheet_name = properties::get_sheet_name(
-            engine.stores.storage.doc(),
-            engine.stores.storage.sheets(),
-            sheet_id,
-        )
-        .unwrap_or_else(|| id_to_hex(sheet_id.as_u128()).into());
+        let sheet_name = properties::get_sheet_name(&engine.stores.storage, sheet_id)
+            .unwrap_or_else(|| id_to_hex(sheet_id.as_u128()).into());
 
         let bounds = match get_data_bounds(&engine.stores, &engine.mirror, sheet_id) {
             Some(b) => b,

@@ -1,13 +1,13 @@
 use super::super::*;
-use crate::storage::YrsStorage;
+use crate::storage::WorkbookStorage;
 use cell_types::SheetId;
 
 pub(super) fn make_sheet_id(n: u128) -> SheetId {
     SheetId::from_raw(n)
 }
 
-pub(super) fn storage_with_sheet() -> (YrsStorage, SheetId) {
-    let mut storage = YrsStorage::new();
+pub(super) fn storage_with_sheet() -> (WorkbookStorage, SheetId) {
+    let mut storage = WorkbookStorage::new();
     let mut mirror = crate::mirror::CellMirror::new();
     let sid = make_sheet_id(1);
     storage
@@ -17,11 +17,13 @@ pub(super) fn storage_with_sheet() -> (YrsStorage, SheetId) {
 }
 
 pub(super) struct MockCellAccessor {
+    pub(super) storage: WorkbookStorage,
     pub(super) cells: std::collections::HashMap<(u32, u32), String>,
 }
 impl MockCellAccessor {
     pub(super) fn new() -> Self {
         Self {
+            storage: storage_with_sheet().0,
             cells: std::collections::HashMap::new(),
         }
     }
@@ -30,6 +32,23 @@ impl MockCellAccessor {
     }
 }
 impl SubtotalsCellAccessor for MockCellAccessor {
+    fn group_rows(
+        &mut self,
+        sheet_id: &SheetId,
+        start: u32,
+        end: u32,
+    ) -> Result<GroupDefinition, String> {
+        group_rows(&mut self.storage, sheet_id, start, end)
+    }
+
+    fn clear_row_grouping(&mut self, sheet_id: &SheetId, start: u32, end: u32) {
+        clear_row_grouping(&mut self.storage, sheet_id, start, end);
+    }
+
+    fn get_row_groups(&self, sheet_id: &SheetId) -> Vec<GroupDefinition> {
+        get_groups(&self.storage, sheet_id, GroupAxis::Row)
+    }
+
     fn get_cell_value(&self, _: &SheetId, r: u32, c: u32) -> String {
         self.cells.get(&(r, c)).cloned().unwrap_or_default()
     }

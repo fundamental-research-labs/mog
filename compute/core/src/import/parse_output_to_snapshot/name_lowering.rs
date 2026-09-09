@@ -9,7 +9,7 @@
 //! The `resolver` maps XLSX sheet indices to actual SheetIds so that
 //! sheet-scoped named ranges use the correct scope for variable lookup.
 
-use cell_types::{ColId, RangeKind, RowId};
+use cell_types::{AxisIdentityStore, ColId, RangeKind, RowId, SheetId};
 use compute_parser::ParsedExpr;
 use domain_types::NamedRange;
 use formula_types::{CellRef, NamedRangeDef, Scope};
@@ -100,8 +100,8 @@ pub(crate) fn convert_named_ranges(
 pub(crate) fn link_named_ranges_to_data_ranges(
     named_ranges: &mut [NamedRangeDef],
     sheets: &[SheetSnapshot],
-    all_row_ids: &[Vec<RowId>],
-    all_col_ids: &[Vec<ColId>],
+    all_row_ids: &[AxisIdentityStore<RowId>],
+    all_col_ids: &[AxisIdentityStore<ColId>],
 ) {
     for def in named_ranges.iter_mut() {
         let raw = def.raw_expression.as_deref().unwrap_or("");
@@ -140,6 +140,9 @@ pub(crate) fn link_named_ranges_to_data_ranges(
         // CellRef, we check all sheets. For sheet-scoped named ranges we
         // could narrow this, but the cost is negligible at import time.
         for (sheet_idx, sheet) in sheets.iter().enumerate() {
+            let Ok(sheet_id) = SheetId::from_uuid_str(&sheet.id) else {
+                continue;
+            };
             let row_ids = match all_row_ids.get(sheet_idx) {
                 Some(r) => r,
                 None => continue,
@@ -150,14 +153,13 @@ pub(crate) fn link_named_ranges_to_data_ranges(
             };
 
             // Look up the ColId at the named range's column position.
-            let nr_col_id = match col_ids.get(start_col as usize) {
-                Some(c) => *c,
+            let nr_col_id = match col_ids.identity_at(sheet_id, start_col) {
+                Some(c) => c,
                 None => continue,
             };
 
             // Verify the named range's row span is within the sheet's row ID map.
-            if row_ids.get(start_row as usize).is_none() || row_ids.get(end_row as usize).is_none()
-            {
+            if start_row >= row_ids.len() || end_row >= row_ids.len() {
                 continue;
             }
 
@@ -184,12 +186,12 @@ pub(crate) fn link_named_ranges_to_data_ranges(
                 // the Data Range's row span.
                 // Use the row_ids array from the hydration map to find the
                 // positional index of each Data Range boundary RowId.
-                let rd_first_pos = row_ids.iter().position(|r| *r == rd_first_row);
-                let rd_last_pos = row_ids.iter().position(|r| *r == rd_last_row);
+                let rd_first_pos = row_ids.position_of(sheet_id, rd_first_row);
+                let rd_last_pos = row_ids.position_of(sheet_id, rd_last_row);
 
                 if let (Some(rd_fp), Some(rd_lp)) = (rd_first_pos, rd_last_pos)
-                    && (start_row as usize) >= rd_fp
-                    && (end_row as usize) <= rd_lp
+                    && start_row >= rd_fp
+                    && end_row <= rd_lp
                 {
                     def.linked_range_id = Some(rd.range_id);
                     break;
@@ -219,6 +221,9 @@ mod tests {
     #[test]
     fn inventory_scoped_names_bind_editable_ids_and_exclude_inert_tabs() {
         let sheets = [SheetSnapshot {
+            identities: vec![],
+            row_axis: None,
+            col_axis: None,
             id: cell_types::SheetId::from_raw(8).to_uuid_string(),
             name: "Data".into(),
             rows: 1,

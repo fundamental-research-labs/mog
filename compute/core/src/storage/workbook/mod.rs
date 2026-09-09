@@ -1,5 +1,7 @@
 pub(crate) mod annotations;
-pub mod data_tables;
+pub(crate) mod external_links;
+mod metadata;
+pub(crate) use metadata::WorkbookMetadata;
 pub mod imported_pivots;
 pub mod named_ranges;
 pub(crate) mod settings;

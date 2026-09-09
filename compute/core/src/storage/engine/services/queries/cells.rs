@@ -61,38 +61,65 @@ pub(in crate::storage::engine) fn resolve_cell_positions(
 
 pub(in crate::storage::engine) fn get_cell_data(
     stores: &EngineStores,
+    mirror: &CellMirror,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
 ) -> Option<serde_json::Value> {
-    let grid_index = stores.grid_indexes.get(sheet_id)?;
-    let data = cell_values::get_cell_data(
-        stores.storage.doc(),
-        stores.storage.sheets(),
+    let cell_id = mirror.resolve_cell_id(sheet_id, SheetPos::new(row, col))?;
+    if mirror.sheet_for_cell(&cell_id).as_ref() != Some(sheet_id) {
+        return None;
+    }
+    native_cell_data(stores, mirror, sheet_id, cell_id, row, col)
+}
+
+fn native_cell_data(
+    stores: &EngineStores,
+    mirror: &CellMirror,
+    sheet_id: &SheetId,
+    cell_id: CellId,
+    row: u32,
+    col: u32,
+) -> Option<serde_json::Value> {
+    let value = mirror.get_cell_value_at(sheet_id, SheetPos::new(row, col))?;
+    let formula = crate::storage::engine::formula_read::formula_text_at(
+        stores,
+        mirror,
         sheet_id,
         row,
         col,
-        grid_index,
-    )?;
-    Some(cell_data_to_json(&data))
+        Some(&cell_id),
+    );
+    if value.is_null() && formula.is_none() {
+        return None;
+    }
+    let mut data = serde_json::json!({
+        "cell_id": id_to_hex(cell_id.as_u128()),
+        "row": row,
+        "col": col,
+    });
+    if !value.is_null() {
+        data["raw"] = cell_value_to_json(value);
+    }
+    if let Some(formula) = formula {
+        data["formula"] = formula.strip_prefix('=').unwrap_or(&formula).into();
+    }
+    Some(data)
 }
 
 pub(in crate::storage::engine) fn get_cell_data_by_id_hex(
     stores: &EngineStores,
+    mirror: &CellMirror,
     sheet_id: &SheetId,
     cell_id_hex: &str,
 ) -> Option<serde_json::Value> {
     let id_u128 = hex_to_id(cell_id_hex)?;
     let cell_id = CellId::from_raw(id_u128);
-    let grid_index = stores.grid_indexes.get(sheet_id)?;
-    let data = cell_values::get_cell_data_by_id(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        cell_id,
-        grid_index,
-    )?;
-    Some(cell_data_to_json(&data))
+    if mirror.sheet_for_cell(&cell_id).as_ref() != Some(sheet_id) {
+        return None;
+    }
+    let pos = mirror.resolve_position(&cell_id)?;
+    native_cell_data(stores, mirror, sheet_id, cell_id, pos.row(), pos.col())
 }
 
 pub(in crate::storage::engine) fn get_raw_value(
@@ -102,23 +129,26 @@ pub(in crate::storage::engine) fn get_raw_value(
     row: u32,
     col: u32,
 ) -> String {
-    if let Some(formula) =
-        crate::storage::engine::data_table_formula::formula_at(mirror, sheet_id, row, col)
-    {
-        return formula;
-    }
-    let Some(grid_index) = stores.grid_indexes.get(sheet_id) else {
-        return String::new();
-    };
-    cell_values::get_raw_value(
+    let cell_id = mirror.resolve_cell_id(sheet_id, SheetPos::new(row, col));
+    if let Some(formula) = crate::storage::engine::formula_read::formula_text_at(
+        stores,
         mirror,
-        stores.storage.doc(),
-        stores.storage.sheets(),
         sheet_id,
         row,
         col,
-        grid_index,
-    )
+        cell_id.as_ref(),
+    ) {
+        return if formula.starts_with('=') {
+            formula
+        } else {
+            format!("={formula}")
+        };
+    }
+    mirror
+        .get_cell_value_at(sheet_id, SheetPos::new(row, col))
+        .filter(|value| !value.is_null())
+        .map(ToString::to_string)
+        .unwrap_or_default()
 }
 
 pub(in crate::storage::engine) fn get_effective_value(
@@ -131,22 +161,8 @@ pub(in crate::storage::engine) fn get_effective_value(
     Some(cell_value_to_json(&value))
 }
 
-pub(in crate::storage::engine) fn get_cell_count(
-    stores: &EngineStores,
-    sheet_id: &SheetId,
-) -> usize {
-    cell_values::get_cell_count(stores.storage.doc(), stores.storage.sheets(), sheet_id)
-}
-
-pub(in crate::storage::engine) fn get_cell_id_at_yrs(
-    stores: &EngineStores,
-    sheet_id: &SheetId,
-    row: u32,
-    col: u32,
-) -> Option<String> {
-    let grid = stores.grid_indexes.get(sheet_id)?;
-    grid.cell_id_at(row, col)
-        .map(|cid| id_to_hex(cid.as_u128()).into())
+pub(in crate::storage::engine) fn get_cell_count(mirror: &CellMirror, sheet_id: &SheetId) -> usize {
+    cell_values::get_cell_count(mirror, sheet_id)
 }
 
 pub(in crate::storage::engine) fn get_cells_in_range(
@@ -164,83 +180,6 @@ pub(in crate::storage::engine) fn get_cells_in_range(
     grid.cells_in_range(start_row, start_col, end_row, end_col)
         .map(|(cid, _, _)| id_to_hex(cid.as_u128()).into())
         .collect()
-}
-
-pub(in crate::storage::engine) fn get_all_cells_yrs(
-    stores: &EngineStores,
-    sheet_id: &SheetId,
-) -> serde_json::Value {
-    let mut cells = Vec::new();
-    let Some(grid_index) = stores.grid_indexes.get(sheet_id) else {
-        return serde_json::Value::Array(cells);
-    };
-    cell_iter::for_each_cell(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        *sheet_id,
-        grid_index,
-        |row, col, data| {
-            let mut entry = serde_json::json!({
-                "cell_id": id_to_hex(data.cell_id.as_u128()),
-                "row": row,
-                "col": col,
-            });
-            if let Some(ref value) = data.value {
-                entry["value"] = cell_value_to_json(value);
-            }
-            if let Some(ref formula) = data.formula {
-                entry["formula"] = serde_json::Value::String(formula.clone());
-            }
-            cells.push(entry);
-        },
-    );
-    serde_json::Value::Array(cells)
-}
-
-pub(in crate::storage::engine) fn get_cells_in_range_yrs(
-    stores: &EngineStores,
-    sheet_id: &SheetId,
-    start_row: u32,
-    start_col: u32,
-    end_row: u32,
-    end_col: u32,
-) -> serde_json::Value {
-    let range = cell_types::RangePos::new(*sheet_id, start_row, start_col, end_row, end_col);
-    let mut cells = Vec::new();
-    let Some(grid) = stores.grid_indexes.get(sheet_id) else {
-        return serde_json::Value::Array(cells);
-    };
-    cell_iter::for_each_cell_in_range(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        *sheet_id,
-        grid,
-        &range,
-        |row, col, data| {
-            if let Some(data) = data {
-                let mut entry = serde_json::json!({
-                    "cell_id": id_to_hex(data.cell_id.as_u128()),
-                    "row": row,
-                    "col": col,
-                    "has_data": true,
-                });
-                if let Some(ref value) = data.value {
-                    entry["value"] = cell_value_to_json(value);
-                }
-                if let Some(ref formula) = data.formula {
-                    entry["formula"] = serde_json::Value::String(formula.clone());
-                }
-                cells.push(entry);
-            } else {
-                cells.push(serde_json::json!({
-                    "row": row,
-                    "col": col,
-                    "has_data": false,
-                }));
-            }
-        },
-    );
-    serde_json::Value::Array(cells)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -264,16 +203,10 @@ pub(in crate::storage::engine) fn get_data_bounds_for_range(
         cell_iter::RangeSpan::Exact
     };
 
-    let grid = stores.grid_indexes.get(sheet_id)?;
-    let bounded = cell_iter::get_data_bounds_for_range_with_extra_data(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        *sheet_id,
-        grid,
-        &range,
-        span,
-        |r, c| super::dimensions::mirror_render_has_data(stores, mirror, sheet_id, r, c),
-    )?;
+    mirror.get_sheet(sheet_id)?;
+    let bounded = cell_iter::get_data_bounds_for_range(*sheet_id, &range, span, |r, c| {
+        super::dimensions::mirror_render_has_data(stores, mirror, sheet_id, r, c)
+    })?;
 
     Some(RectBounds {
         start_row: bounded.start_row(),

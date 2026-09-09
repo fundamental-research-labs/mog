@@ -9,14 +9,12 @@
 //!    Receives pre-materialized argument slices. Uses thread-local per-recalc
 //!    frequency caches (`frequency_cache::count_lookup()`).
 //!
-//! 2. **Borrowed path** (this module): borrows `&[CellValue]` directly from the
-//!    mirror's column store, avoiding O(n) allocation per range argument. Uses
-//!    persistent mirror-level `WorkbookCache` frequency maps for O(1) exact-match
-//!    lookups. This is async (calls `evaluator.eval_node_cv().await` for criteria).
+//! 2. **Borrowed path** (this module): borrows native column views, avoiding
+//!    O(n) allocation per range argument. Grouped result caches serve repeated
+//!    exact-match sums within a recalculation. Criteria evaluation is async.
 //!
-//! The ~330 lines in this module are **irreducible eval-layer adapter code**, not
-//! duplicated logic. They handle: AST argument extraction, mirror-level cache
-//! interaction, bitmask fast paths, and dispatch scaffolding — all of which require
+//! This adapter handles AST argument extraction, cache interaction, bitmask
+//! fast paths, and dispatch — all of which require
 //! `ASTNode` (from `compute-parser`) and `EvalMetadata` (from `compute-core`),
 //! which are unavailable in `compute-functions` (no such dependency exists).
 //!
@@ -33,7 +31,8 @@ use compute_functions::helpers::sumifs_result_cache::{
     SumifsCacheEpoch, SumifsCacheKey, SumifsRangeIdentity,
 };
 use compute_parser::ASTNode;
-use value_types::{CellError, CellValue, ComputeError};
+use value_types::ColumnView;
+use value_types::{CellValue, ComputeError};
 
 use crate::eval::context::traits::{EvalDataAccess, EvalMetadata};
 use crate::eval::engine::evaluator::Evaluator;
@@ -77,7 +76,7 @@ pub(in crate::eval) async fn try_eval_multi_criteria_borrowed<
     };
 
     // Extract all criteria ranges as borrowed slices
-    let mut range_slices: Vec<&[CellValue]> = Vec::new();
+    let mut range_slices: Vec<ColumnView<'_>> = Vec::new();
     let mut criteria_fns: Vec<Box<dyn Fn(&CellValue) -> bool>> = Vec::new();
     let mut criteria_vals: Vec<CellValue> = Vec::new();
     let mut range_coords: Vec<(SheetId, u32, u32, u32)> = Vec::new();
@@ -98,9 +97,9 @@ pub(in crate::eval) async fn try_eval_multi_criteria_borrowed<
         let start = start_row as usize;
         let end = (end_row as usize).saturating_add(1).min(col_values.len());
         let slice = if start < end {
-            &col_values[start..end]
+            col_values.slice(start..end)
         } else {
-            &[] as &[CellValue]
+            ColumnView::empty()
         };
 
         // Validate all ranges have same row count
@@ -137,7 +136,7 @@ pub(in crate::eval) async fn try_eval_multi_criteria_borrowed<
     // Get sum range slice if needed (before computing total_rows so we can
     // include it in the length calculation).
     let mut sum_range_coords: Option<(SheetId, u32, u32, u32)> = None;
-    let sum_slice: Option<&[CellValue]> = if let Some(sum_arg) = sum_range_arg {
+    let sum_slice: Option<ColumnView<'_>> = if let Some(sum_arg) = sum_range_arg {
         let (sheet, col, start_row, end_row) =
             try_extract_single_col_range_with_sentinels(sum_arg, evaluator.meta)?;
         sum_range_coords = Some((sheet, col, start_row, end_row));
@@ -145,9 +144,9 @@ pub(in crate::eval) async fn try_eval_multi_criteria_borrowed<
         let start = start_row as usize;
         let end = (end_row as usize).saturating_add(1).min(col_values.len());
         Some(if start < end {
-            &col_values[start..end]
+            col_values.slice(start..end)
         } else {
-            &[] as &[CellValue]
+            ColumnView::empty()
         })
     } else {
         None
@@ -162,35 +161,6 @@ pub(in crate::eval) async fn try_eval_multi_criteria_borrowed<
         max_len = max_len.max(ss.len());
     }
     let total_rows = row_count.unwrap_or(0).min(max_len);
-
-    // Try bitmask fast path: get per-criterion bitmasks from cache and AND them
-    let bitmask_path: Option<ColumnBitset> = (|| {
-        let mut combined = ColumnBitset::new_all_true(total_rows as u32);
-        for (i, &(ref sheet, col, start_row, end_row)) in range_coords.iter().enumerate() {
-            let bm = evaluator.meta.get_criteria_bitmask(
-                sheet,
-                col,
-                start_row,
-                end_row,
-                &criteria_vals[i],
-                range_slices[i],
-            )?;
-            // Handle size mismatch: truncate or pad to total_rows
-            if bm.len() == combined.len() {
-                combined.and_assign(&bm);
-            } else {
-                let mut padded = ColumnBitset::new_all_false(total_rows as u32);
-                let copy_len = (total_rows as u32).min(bm.len());
-                for idx in bm.ones() {
-                    if idx < copy_len {
-                        padded.set(idx, true);
-                    }
-                }
-                combined.and_assign(&padded);
-            }
-        }
-        Some(combined)
-    })();
 
     // Iterate rows and aggregate using shared conditional_aggregate module.
     // For Sum/Average/Max/Min, `sum_slice` must be Some; for Count it is None.
@@ -217,7 +187,7 @@ pub(in crate::eval) async fn try_eval_multi_criteria_borrowed<
     // When all criteria are exact-match and op is Sum, we can pre-compute ALL
     // results in a single O(rows × criteria_count) pass and serve each formula
     // with O(1) hash lookup. This eliminates 62K individual bitmap operations
-    // for workbooks like EGdLdI where thousands of SUMIFS share the same ranges.
+    // when thousands of SUMIFS share the same ranges.
     if matches!(op, AggregateOp::Sum)
         && unwrapped_criteria
             .iter()
@@ -241,7 +211,7 @@ pub(in crate::eval) async fn try_eval_multi_criteria_borrowed<
         let result = compute_functions::helpers::sumifs_result_cache::sumifs_lookup(
             &cache_key,
             &range_slices,
-            ss,
+            &ss,
             total_rows,
             &criteria_keys,
         );
@@ -250,6 +220,48 @@ pub(in crate::eval) async fn try_eval_multi_criteria_borrowed<
             Ok(sum) => CellValue::number(sum),
             Err(e) => CellValue::Error(e, None),
         }));
+    }
+
+    // An exact criterion can narrow the rows even when another criterion uses
+    // an operator or wildcard. Build only exact-match masks; other criteria
+    // may reuse an existing mask, or run on the selected rows below.
+    let mut bitmask_path: Option<ColumnBitset> = None;
+    let mut masked_criteria = vec![false; range_coords.len()];
+    for (i, &(ref sheet, col, start_row, end_row)) in range_coords.iter().enumerate() {
+        let mask = evaluator
+            .meta
+            .get_criteria_bitmask(
+                sheet,
+                col,
+                start_row,
+                end_row,
+                unwrapped_criteria[i],
+                range_slices[i],
+            )
+            .or_else(|| {
+                if is_exact_match_criteria(unwrapped_criteria[i]) {
+                    evaluator.meta.get_or_build_criteria_bitmask(
+                        sheet,
+                        col,
+                        start_row,
+                        end_row,
+                        unwrapped_criteria[i],
+                        range_slices[i],
+                    )
+                } else {
+                    None
+                }
+            });
+        if let Some(mask) = mask {
+            let mask =
+                align_criteria_mask(mask, total_rows as u32, criteria_fns[i](&CellValue::Null));
+            if let Some(combined) = &mut bitmask_path {
+                combined.and_assign(&mask);
+            } else {
+                bitmask_path = Some(mask);
+            }
+            masked_criteria[i] = true;
+        }
     }
 
     let bmc_span = tracing::info_span!(
@@ -262,9 +274,16 @@ pub(in crate::eval) async fn try_eval_multi_criteria_borrowed<
     let _bmc_guard = bmc_span.enter();
 
     let result = if let Some(ref combined) = bitmask_path {
-        // Bitmask fast path: iterate set bits
+        // Preserve source row order and the ordinary predicate semantics for
+        // any criterion that was not represented by a cached mask.
         bmc_span.record("fast_path", 1u64);
-        aggregate_matching_rows(combined.ones().map(|i| i as usize), sum_slice, op)
+        let matching_rows = combined.ones().map(|row| row as usize).filter(|&row| {
+            criteria_fns.iter().enumerate().all(|(i, criterion)| {
+                masked_criteria[i]
+                    || criterion(range_slices[i].get(row).unwrap_or(&CellValue::Null))
+            })
+        });
+        aggregate_matching_rows(matching_rows, sum_slice.as_ref(), op)
     } else {
         // Column index path: try to use column indexes for exact-match criteria
         let column_index_result: Option<ColumnBitset> = (|| {
@@ -285,34 +304,50 @@ pub(in crate::eval) async fn try_eval_multi_criteria_borrowed<
                     end_row,
                     range_slices[i],
                 );
-                let bitmap = index.query_exact(unwrapped_criteria[i]);
-                if bitmap.len() == combined.len() {
-                    combined.and_assign(&bitmap);
-                } else {
-                    let mut padded = ColumnBitset::new_all_false(combined.len());
-                    let copy_len = combined.len().min(bitmap.len());
-                    for idx in bitmap.ones() {
-                        if idx < copy_len {
-                            padded.set(idx, true);
-                        }
-                    }
-                    combined.and_assign(&padded);
-                }
+                let bitmap = align_criteria_mask(
+                    index.query_exact(unwrapped_criteria[i]),
+                    total_rows as u32,
+                    criteria_fns[i](&CellValue::Null),
+                );
+                combined.and_assign(&bitmap);
             }
             Some(combined)
         })();
 
         if let Some(ref combined) = column_index_result {
             bmc_span.record("fast_path", 2u64);
-            aggregate_matching_rows(combined.ones().map(|i| i as usize), sum_slice, op)
+            aggregate_matching_rows(combined.ones().map(|i| i as usize), sum_slice.as_ref(), op)
         } else {
             bmc_span.record("fast_path", 0u64);
             // Final fallback: multi-criteria linear scan
-            scan_multi_criteria(&range_slices, &criteria_fns, sum_slice, total_rows, op)
+            scan_multi_criteria(
+                &range_slices,
+                &criteria_fns,
+                sum_slice.as_ref(),
+                total_rows,
+                op,
+            )
         }
     };
 
     Some(Ok(result))
+}
+
+fn align_criteria_mask(mask: ColumnBitset, rows: u32, null_matches: bool) -> ColumnBitset {
+    if mask.len() == rows {
+        return mask;
+    }
+    let mut aligned = ColumnBitset::new_all_false(rows);
+    for row in mask.ones().take_while(|&row| row < rows) {
+        aligned.set(row, true);
+    }
+    // A shorter criteria column reads as Null, just like the scanning path.
+    if null_matches {
+        for row in mask.len()..rows {
+            aligned.set(row, true);
+        }
+    }
+    aligned
 }
 
 fn sumifs_cache_key(
@@ -320,7 +355,7 @@ fn sumifs_cache_key(
     total_rows: usize,
     sum_range: (SheetId, u32, u32, u32, usize),
     criteria_ranges: &[(SheetId, u32, u32, u32)],
-    criteria_slices: &[&[CellValue]],
+    criteria_slices: &[ColumnView<'_>],
 ) -> SumifsCacheKey {
     let (sum_sheet, sum_col, sum_start, sum_end, sum_effective_len) = sum_range;
     let sum_identity = SumifsRangeIdentity::sum_range(
@@ -388,9 +423,9 @@ pub(in crate::eval) async fn try_eval_single_criteria_borrowed<
     let start = start_row as usize;
     let end = (end_row as usize).saturating_add(1).min(col_values.len());
     let criteria_slice = if start < end {
-        &col_values[start..end]
+        col_values.slice(start..end)
     } else {
-        &[] as &[CellValue]
+        ColumnView::empty()
     };
     let total_rows = (end_row as usize)
         .saturating_sub(start_row as usize)
@@ -409,125 +444,84 @@ pub(in crate::eval) async fn try_eval_single_criteria_borrowed<
         return None;
     }
 
-    // --- Fast path: frequency cache for exact-match criteria ---
-    // When the criteria is an exact-match value (no operators, no wildcards),
-    // the persistent WorkbookCache frequency map gives O(1) lookup per formula
-    // cell instead of O(N) row iteration.
-    let use_frequency = is_exact_match_criteria(&criteria_val);
-
-    if use_frequency {
-        // Extract sum range coordinates for SUMIF/AVERAGEIF
-        let sum_coords: Option<(SheetId, u32, u32, u32, &[CellValue])> =
-            if let Some(sum_arg) = sum_range_arg {
-                let (s, c, sr, er) =
-                    try_extract_single_col_range_with_sentinels(sum_arg, evaluator.meta)?;
-                let cv = evaluator.meta.get_column_values(&s, c)?;
-                let s_start = sr as usize;
-                let s_end = (er as usize).saturating_add(1).min(cv.len());
-                let slice = if s_start < s_end {
-                    &cv[s_start..s_end]
-                } else {
-                    &[] as &[CellValue]
-                };
-                Some((s, c, sr, er, slice))
-            } else if is_sum_variant {
-                Some((sheet, col, start_row, end_row, criteria_slice))
-            } else {
-                None
-            };
-
-        match op {
-            AggregateOp::Count => {
-                let crit_refs: Vec<&CellValue> = criteria_slice.iter().collect();
-                if let Some(count) = evaluator.meta.count_frequency_lookup(
-                    &sheet,
-                    col,
-                    start_row,
-                    end_row,
-                    &crit_refs,
-                    &criteria_val,
-                ) {
-                    return Some(Ok(CellValue::number(count as f64)));
-                }
-            }
-            AggregateOp::Sum => {
-                let (s_sheet, s_col, s_start, s_end, sum_data) = sum_coords?;
-                let crit_refs: Vec<&CellValue> = criteria_slice.iter().collect();
-                let sum_refs: Vec<&CellValue> = sum_data.iter().collect();
-                if let Some(result) = evaluator.meta.sum_frequency_lookup(
-                    &sheet,
-                    col,
-                    start_row,
-                    end_row,
-                    &s_sheet,
-                    s_col,
-                    s_start,
-                    s_end,
-                    &crit_refs,
-                    &sum_refs,
-                    &criteria_val,
-                ) {
-                    return Some(Ok(match result {
-                        Ok(sum) => CellValue::number(sum),
-                        Err(e) => CellValue::Error(e, None),
-                    }));
-                }
-            }
-            AggregateOp::Average => {
-                let (s_sheet, s_col, s_start, s_end, sum_data) = sum_coords?;
-                let crit_refs: Vec<&CellValue> = criteria_slice.iter().collect();
-                let sum_refs: Vec<&CellValue> = sum_data.iter().collect();
-                if let Some(result) = evaluator.meta.sum_and_count_frequency_lookup(
-                    &sheet,
-                    col,
-                    start_row,
-                    end_row,
-                    &s_sheet,
-                    s_col,
-                    s_start,
-                    s_end,
-                    &crit_refs,
-                    &sum_refs,
-                    &criteria_val,
-                ) {
-                    return Some(Ok(match result {
-                        Ok((sum, count)) => {
-                            if count == 0 {
-                                CellValue::Error(CellError::Div0, None)
-                            } else {
-                                CellValue::number(sum / count as f64)
-                            }
-                        }
-                        Err(e) => CellValue::Error(e, None),
-                    }));
-                }
-            }
-            _ => {} // Max/Min don't use frequency cache
-        }
-    }
-
-    // --- Slow path: row-by-row iteration (fallback) ---
-    let criteria_fn = compute_functions::helpers::criteria::parse_criteria(&criteria_val);
-
-    // Get sum range if needed
-    let sum_slice: Option<&[CellValue]> = if let Some(sum_arg) = sum_range_arg {
+    let (sum_coords, sum_slice) = if let Some(sum_arg) = sum_range_arg {
         let (s, c, sr, er) = try_extract_single_col_range_with_sentinels(sum_arg, evaluator.meta)?;
         let cv = evaluator.meta.get_column_values(&s, c)?;
         let s_start = sr as usize;
         let s_end = (er as usize).saturating_add(1).min(cv.len());
-        Some(if s_start < s_end {
-            &cv[s_start..s_end]
+        let slice = if s_start < s_end {
+            cv.slice(s_start..s_end)
         } else {
-            &[] as &[CellValue]
-        })
+            ColumnView::empty()
+        };
+        (Some((s, c, sr, er, slice.len())), Some(slice))
     } else if is_sum_variant {
-        // SUMIF/AVERAGEIF with no sum_range: use criteria range as sum range
-        Some(criteria_slice)
+        (
+            Some((sheet, col, start_row, end_row, criteria_slice.len())),
+            Some(criteria_slice),
+        )
     } else {
-        None
+        (None, None)
     };
 
-    let result = scan_single_criteria(criteria_slice, &*criteria_fn, sum_slice, total_rows, op);
+    // Repeated scalar SUMIF calls share a grouped result map. Text matching
+    // retains the normal coercion/case rules. Numeric lookup falls back when
+    // multiple distinct values match the tolerance, preserving row-order sums.
+    let text_criterion = compute_functions::helpers::criteria::plain_text_criteria(&criteria_val);
+    let numeric_criterion =
+        compute_functions::helpers::criteria::numeric_equality_criteria(&criteria_val);
+    if matches!(op, AggregateOp::Sum)
+        && (text_criterion.is_some() || numeric_criterion.is_some())
+        && let Some(epoch) = evaluator.meta.sumifs_cache_epoch()
+        && let Some(ss) = sum_slice
+    {
+        let sum_coordinates = sum_coords?;
+        let cache_key = sumifs_cache_key(
+            epoch,
+            total_rows,
+            sum_coordinates,
+            &[(sheet, col, start_row, end_row)],
+            &[criteria_slice],
+        );
+        let criteria_version = evaluator.meta.col_version(&sheet, col);
+        let sum_version = evaluator
+            .meta
+            .col_version(&sum_coordinates.0, sum_coordinates.1);
+        let result = if let Some(text) = text_criterion {
+            Some(
+                compute_functions::helpers::sumifs_result_cache::sumifs_lookup(
+                    &cache_key.with_text_criteria(criteria_version, sum_version),
+                    &[criteria_slice],
+                    &ss,
+                    total_rows,
+                    &[NormalizedKey::Text(text.to_ascii_lowercase())],
+                ),
+            )
+        } else {
+            compute_functions::helpers::sumifs_result_cache::sumif_numeric_lookup(
+                &cache_key.with_numeric_criteria(criteria_version, sum_version),
+                &[criteria_slice],
+                &ss,
+                total_rows,
+                numeric_criterion?,
+            )
+        };
+        if let Some(result) = result {
+            return Some(Ok(match result {
+                Ok(sum) => CellValue::number(sum),
+                Err(e) => CellValue::Error(e, None),
+            }));
+        }
+    }
+
+    let criteria_fn = compute_functions::helpers::criteria::parse_criteria(&criteria_val);
+    let result = scan_single_criteria(
+        &criteria_slice,
+        &*criteria_fn,
+        sum_slice.as_ref(),
+        total_rows,
+        op,
+    );
 
     Some(Ok(result))
 }

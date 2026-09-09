@@ -1,4 +1,4 @@
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use domain_types::{CellData, ParseOutput, RowDimension, RowXmlHints, SheetData, SheetDimensions};
 use value_types::{CellValue, FiniteF64};
 
@@ -42,7 +42,7 @@ fn row_descent_merges_with_spans_height_and_empty_row_metadata() {
     };
     let mut bytes = xlsx_parser::write::write_xlsx_from_parse_output(&authored).unwrap();
     for _ in 0..2 {
-        let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).unwrap();
+        let (engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).unwrap();
         bytes = engine.export_to_xlsx_bytes().unwrap();
         let (parsed, _) = xlsx_parser::parse_xlsx_to_output(&bytes).unwrap();
         let dimensions = &parsed.sheets[0].dimensions.row_heights;

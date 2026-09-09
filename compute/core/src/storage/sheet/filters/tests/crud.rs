@@ -6,16 +6,15 @@ use super::super::{
     set_column_filter, set_filter_sort_state,
 };
 use super::helpers::{make_sheet_id, storage_with_sheet};
-use crate::storage::YrsStorage;
+use crate::storage::WorkbookStorage;
 use value_types::CellValue;
 
 #[test]
 fn test_create_filter_and_retrieve() {
-    let (storage, sheet_id) = storage_with_sheet();
+    let (mut storage, sheet_id) = storage_with_sheet();
 
     let filter = create_filter(
-        storage.doc(),
-        storage.sheets(),
+        &mut storage,
         &sheet_id,
         "header-start-id",
         "header-end-id",
@@ -38,18 +37,17 @@ fn test_create_filter_and_retrieve() {
     assert!(filter.updated_at.is_some());
 
     // Retrieve by ID
-    let fetched = get_filter(storage.doc(), storage.sheets(), &sheet_id, &filter.id);
+    let fetched = get_filter(&storage, &sheet_id, &filter.id);
     assert!(fetched.is_some());
     assert_eq!(fetched.unwrap().id, filter.id);
 }
 
 #[test]
 fn test_create_filter_with_table_id() {
-    let (storage, sheet_id) = storage_with_sheet();
+    let (mut storage, sheet_id) = storage_with_sheet();
 
     let filter = create_filter(
-        storage.doc(),
-        storage.sheets(),
+        &mut storage,
         &sheet_id,
         "h-start",
         "h-end",
@@ -64,18 +62,17 @@ fn test_create_filter_with_table_id() {
     assert_eq!(filter.table_id, Some("table-1".to_string()));
 
     // Look up by table ID
-    let table_filter = get_table_filter(storage.doc(), storage.sheets(), &sheet_id, "table-1");
+    let table_filter = get_table_filter(&storage, &sheet_id, "table-1");
     assert!(table_filter.is_some());
     assert_eq!(table_filter.unwrap().id, filter.id);
 }
 
 #[test]
 fn test_get_filters_in_sheet() {
-    let (storage, sheet_id) = storage_with_sheet();
+    let (mut storage, sheet_id) = storage_with_sheet();
 
     create_filter(
-        storage.doc(),
-        storage.sheets(),
+        &mut storage,
         &sheet_id,
         "a",
         "b",
@@ -86,8 +83,7 @@ fn test_get_filters_in_sheet() {
     )
     .unwrap();
     create_filter(
-        storage.doc(),
-        storage.sheets(),
+        &mut storage,
         &sheet_id,
         "d",
         "e",
@@ -98,8 +94,7 @@ fn test_get_filters_in_sheet() {
     )
     .unwrap();
     create_filter(
-        storage.doc(),
-        storage.sheets(),
+        &mut storage,
         &sheet_id,
         "g",
         "h",
@@ -110,21 +105,17 @@ fn test_get_filters_in_sheet() {
     )
     .unwrap();
 
-    let filters = get_filters_in_sheet(storage.doc(), storage.sheets(), &sheet_id);
+    let filters = get_filters_in_sheet(&storage, &sheet_id);
     assert_eq!(filters.len(), 3);
-    assert_eq!(
-        get_filter_count(storage.doc(), storage.sheets(), &sheet_id),
-        3
-    );
+    assert_eq!(get_filter_count(&storage, &sheet_id), 3);
 }
 
 #[test]
 fn test_set_column_filter() {
-    let (storage, sheet_id) = storage_with_sheet();
+    let (mut storage, sheet_id) = storage_with_sheet();
 
     let filter = create_filter(
-        storage.doc(),
-        storage.sheets(),
+        &mut storage,
         &sheet_id,
         "a",
         "b",
@@ -144,8 +135,7 @@ fn test_set_column_filter() {
     };
 
     set_column_filter(
-        storage.doc(),
-        storage.sheets(),
+        &mut storage,
         &sheet_id,
         &filter.id,
         "col-header-1",
@@ -153,7 +143,7 @@ fn test_set_column_filter() {
     );
 
     // Verify the filter was updated
-    let updated = get_filter(storage.doc(), storage.sheets(), &sheet_id, &filter.id).unwrap();
+    let updated = get_filter(&storage, &sheet_id, &filter.id).unwrap();
     assert_eq!(updated.column_filters.len(), 1);
     assert!(matches!(
         updated.column_filters["col-header-1"],
@@ -164,11 +154,10 @@ fn test_set_column_filter() {
 
 #[test]
 fn test_set_multiple_column_filters() {
-    let (storage, sheet_id) = storage_with_sheet();
+    let (mut storage, sheet_id) = storage_with_sheet();
 
     let filter = create_filter(
-        storage.doc(),
-        storage.sheets(),
+        &mut storage,
         &sheet_id,
         "a",
         "b",
@@ -193,24 +182,10 @@ fn test_set_multiple_column_filters() {
         logic: FilterLogic::And,
     };
 
-    set_column_filter(
-        storage.doc(),
-        storage.sheets(),
-        &sheet_id,
-        &filter.id,
-        "col-1",
-        criteria1,
-    );
-    set_column_filter(
-        storage.doc(),
-        storage.sheets(),
-        &sheet_id,
-        &filter.id,
-        "col-2",
-        criteria2,
-    );
+    set_column_filter(&mut storage, &sheet_id, &filter.id, "col-1", criteria1);
+    set_column_filter(&mut storage, &sheet_id, &filter.id, "col-2", criteria2);
 
-    let updated = get_filter(storage.doc(), storage.sheets(), &sheet_id, &filter.id).unwrap();
+    let updated = get_filter(&storage, &sheet_id, &filter.id).unwrap();
     assert_eq!(updated.column_filters.len(), 2);
     assert!(matches!(
         updated.column_filters["col-1"],
@@ -224,11 +199,10 @@ fn test_set_multiple_column_filters() {
 
 #[test]
 fn test_clear_column_filter() {
-    let (storage, sheet_id) = storage_with_sheet();
+    let (mut storage, sheet_id) = storage_with_sheet();
 
     let filter = create_filter(
-        storage.doc(),
-        storage.sheets(),
+        &mut storage,
         &sheet_id,
         "a",
         "b",
@@ -244,24 +218,16 @@ fn test_clear_column_filter() {
         include_blanks: false,
     };
     set_column_filter(
-        storage.doc(),
-        storage.sheets(),
+        &mut storage,
         &sheet_id,
         &filter.id,
         "col-1",
         criteria.clone(),
     );
-    set_column_filter(
-        storage.doc(),
-        storage.sheets(),
-        &sheet_id,
-        &filter.id,
-        "col-2",
-        criteria,
-    );
+    set_column_filter(&mut storage, &sheet_id, &filter.id, "col-2", criteria);
 
     assert_eq!(
-        get_filter(storage.doc(), storage.sheets(), &sheet_id, &filter.id)
+        get_filter(&storage, &sheet_id, &filter.id)
             .unwrap()
             .column_filters
             .len(),
@@ -269,14 +235,8 @@ fn test_clear_column_filter() {
     );
 
     // Clear one column
-    clear_column_filter(
-        storage.doc(),
-        storage.sheets(),
-        &sheet_id,
-        &filter.id,
-        "col-1",
-    );
-    let updated = get_filter(storage.doc(), storage.sheets(), &sheet_id, &filter.id).unwrap();
+    clear_column_filter(&mut storage, &sheet_id, &filter.id, "col-1");
+    let updated = get_filter(&storage, &sheet_id, &filter.id).unwrap();
     assert_eq!(updated.column_filters.len(), 1);
     assert!(updated.column_filters.contains_key("col-2"));
     assert!(!updated.column_filters.contains_key("col-1"));
@@ -284,11 +244,10 @@ fn test_clear_column_filter() {
 
 #[test]
 fn test_clear_all_column_filters() {
-    let (storage, sheet_id) = storage_with_sheet();
+    let (mut storage, sheet_id) = storage_with_sheet();
 
     let filter = create_filter(
-        storage.doc(),
-        storage.sheets(),
+        &mut storage,
         &sheet_id,
         "a",
         "b",
@@ -304,35 +263,26 @@ fn test_clear_all_column_filters() {
         include_blanks: false,
     };
     set_column_filter(
-        storage.doc(),
-        storage.sheets(),
+        &mut storage,
         &sheet_id,
         &filter.id,
         "col-1",
         criteria.clone(),
     );
-    set_column_filter(
-        storage.doc(),
-        storage.sheets(),
-        &sheet_id,
-        &filter.id,
-        "col-2",
-        criteria,
-    );
+    set_column_filter(&mut storage, &sheet_id, &filter.id, "col-2", criteria);
 
-    clear_all_column_filters(storage.doc(), storage.sheets(), &sheet_id, &filter.id);
+    clear_all_column_filters(&mut storage, &sheet_id, &filter.id);
 
-    let updated = get_filter(storage.doc(), storage.sheets(), &sheet_id, &filter.id).unwrap();
+    let updated = get_filter(&storage, &sheet_id, &filter.id).unwrap();
     assert!(updated.column_filters.is_empty());
 }
 
 #[test]
 fn test_delete_filter() {
-    let (storage, sheet_id) = storage_with_sheet();
+    let (mut storage, sheet_id) = storage_with_sheet();
 
     let filter = create_filter(
-        storage.doc(),
-        storage.sheets(),
+        &mut storage,
         &sheet_id,
         "a",
         "b",
@@ -343,39 +293,22 @@ fn test_delete_filter() {
     )
     .unwrap();
 
-    assert_eq!(
-        get_filter_count(storage.doc(), storage.sheets(), &sheet_id),
-        1
-    );
-    assert!(delete_filter(
-        storage.doc(),
-        storage.sheets(),
-        &sheet_id,
-        &filter.id
-    ));
-    assert_eq!(
-        get_filter_count(storage.doc(), storage.sheets(), &sheet_id),
-        0
-    );
-    assert!(get_filter(storage.doc(), storage.sheets(), &sheet_id, &filter.id).is_none());
+    assert_eq!(get_filter_count(&storage, &sheet_id), 1);
+    assert!(delete_filter(&mut storage, &sheet_id, &filter.id));
+    assert_eq!(get_filter_count(&storage, &sheet_id), 0);
+    assert!(get_filter(&storage, &sheet_id, &filter.id).is_none());
 
     // Deleting again returns false
-    assert!(!delete_filter(
-        storage.doc(),
-        storage.sheets(),
-        &sheet_id,
-        &filter.id
-    ));
+    assert!(!delete_filter(&mut storage, &sheet_id, &filter.id));
 }
 
 #[test]
 fn test_clear_all_filters() {
-    let (storage, sheet_id) = storage_with_sheet();
+    let (mut storage, sheet_id) = storage_with_sheet();
 
     for i in 0..5 {
         create_filter(
-            storage.doc(),
-            storage.sheets(),
+            &mut storage,
             &sheet_id,
             &format!("a{}", i),
             &format!("b{}", i),
@@ -386,25 +319,18 @@ fn test_clear_all_filters() {
         )
         .unwrap();
     }
-    assert_eq!(
-        get_filter_count(storage.doc(), storage.sheets(), &sheet_id),
-        5
-    );
+    assert_eq!(get_filter_count(&storage, &sheet_id), 5);
 
-    clear_all_filters(storage.doc(), storage.sheets(), &sheet_id);
-    assert_eq!(
-        get_filter_count(storage.doc(), storage.sheets(), &sheet_id),
-        0
-    );
+    clear_all_filters(&mut storage, &sheet_id);
+    assert_eq!(get_filter_count(&storage, &sheet_id), 0);
 }
 
 #[test]
 fn test_filter_sort_state() {
-    let (storage, sheet_id) = storage_with_sheet();
+    let (mut storage, sheet_id) = storage_with_sheet();
 
     let filter = create_filter(
-        storage.doc(),
-        storage.sheets(),
+        &mut storage,
         &sheet_id,
         "a",
         "b",
@@ -416,9 +342,7 @@ fn test_filter_sort_state() {
     .unwrap();
 
     // Initially no sort state
-    assert!(
-        get_filter_sort_state(storage.doc(), storage.sheets(), &sheet_id, &filter.id).is_none()
-    );
+    assert!(get_filter_sort_state(&storage, &sheet_id, &filter.id).is_none());
 
     // Set sort state
     let sort_state = FilterSortState {
@@ -427,15 +351,13 @@ fn test_filter_sort_state() {
         sort_by: SortBy::Value,
     };
     set_filter_sort_state(
-        storage.doc(),
-        storage.sheets(),
+        &mut storage,
         &sheet_id,
         &filter.id,
         Some(sort_state.clone()),
     );
 
-    let fetched_sort =
-        get_filter_sort_state(storage.doc(), storage.sheets(), &sheet_id, &filter.id);
+    let fetched_sort = get_filter_sort_state(&storage, &sheet_id, &filter.id);
     assert!(fetched_sort.is_some());
     let fetched_sort = fetched_sort.unwrap();
     assert_eq!(fetched_sort.column_cell_id, "col-header-1");
@@ -443,19 +365,16 @@ fn test_filter_sort_state() {
     assert_eq!(fetched_sort.sort_by, SortBy::Value);
 
     // Clear sort state
-    set_filter_sort_state(storage.doc(), storage.sheets(), &sheet_id, &filter.id, None);
-    assert!(
-        get_filter_sort_state(storage.doc(), storage.sheets(), &sheet_id, &filter.id).is_none()
-    );
+    set_filter_sort_state(&mut storage, &sheet_id, &filter.id, None);
+    assert!(get_filter_sort_state(&storage, &sheet_id, &filter.id).is_none());
 }
 
 #[test]
 fn test_active_filters() {
-    let (storage, sheet_id) = storage_with_sheet();
+    let (mut storage, sheet_id) = storage_with_sheet();
 
     let f1 = create_filter(
-        storage.doc(),
-        storage.sheets(),
+        &mut storage,
         &sheet_id,
         "a",
         "b",
@@ -466,8 +385,7 @@ fn test_active_filters() {
     )
     .unwrap();
     let f2 = create_filter(
-        storage.doc(),
-        storage.sheets(),
+        &mut storage,
         &sheet_id,
         "d",
         "e",
@@ -478,8 +396,7 @@ fn test_active_filters() {
     )
     .unwrap();
     let _f3 = create_filter(
-        storage.doc(),
-        storage.sheets(),
+        &mut storage,
         &sheet_id,
         "g",
         "h",
@@ -495,35 +412,14 @@ fn test_active_filters() {
         values: vec![serde_json::Value::String("X".to_string())],
         include_blanks: false,
     };
-    set_column_filter(
-        storage.doc(),
-        storage.sheets(),
-        &sheet_id,
-        &f1.id,
-        "col-1",
-        criteria.clone(),
-    );
-    set_column_filter(
-        storage.doc(),
-        storage.sheets(),
-        &sheet_id,
-        &f1.id,
-        "col-2",
-        criteria.clone(),
-    );
-    set_column_filter(
-        storage.doc(),
-        storage.sheets(),
-        &sheet_id,
-        &f2.id,
-        "col-3",
-        criteria,
-    );
+    set_column_filter(&mut storage, &sheet_id, &f1.id, "col-1", criteria.clone());
+    set_column_filter(&mut storage, &sheet_id, &f1.id, "col-2", criteria.clone());
+    set_column_filter(&mut storage, &sheet_id, &f2.id, "col-3", criteria);
 
-    let active = get_active_filters(storage.doc(), storage.sheets(), &sheet_id);
+    let active = get_active_filters(&storage, &sheet_id);
     assert_eq!(active.len(), 2); // f1 and f2 have filters; f3 does not
 
-    let count = get_active_filter_count(storage.doc(), storage.sheets(), &sheet_id);
+    let count = get_active_filter_count(&storage, &sheet_id);
     assert_eq!(count, 3); // 2 + 1
 }
 
@@ -531,41 +427,31 @@ fn test_active_filters() {
 fn test_empty_sheet_returns_empty() {
     let (storage, sheet_id) = storage_with_sheet();
 
-    assert!(get_filter(storage.doc(), storage.sheets(), &sheet_id, "nonexistent").is_none());
-    assert!(get_filters_in_sheet(storage.doc(), storage.sheets(), &sheet_id).is_empty());
-    assert_eq!(
-        get_filter_count(storage.doc(), storage.sheets(), &sheet_id),
-        0
-    );
-    assert!(get_table_filter(storage.doc(), storage.sheets(), &sheet_id, "t1").is_none());
-    assert!(get_active_filters(storage.doc(), storage.sheets(), &sheet_id).is_empty());
-    assert_eq!(
-        get_active_filter_count(storage.doc(), storage.sheets(), &sheet_id),
-        0
-    );
+    assert!(get_filter(&storage, &sheet_id, "nonexistent").is_none());
+    assert!(get_filters_in_sheet(&storage, &sheet_id).is_empty());
+    assert_eq!(get_filter_count(&storage, &sheet_id), 0);
+    assert!(get_table_filter(&storage, &sheet_id, "t1").is_none());
+    assert!(get_active_filters(&storage, &sheet_id).is_empty());
+    assert_eq!(get_active_filter_count(&storage, &sheet_id), 0);
 }
 
 #[test]
 fn test_nonexistent_sheet() {
-    let storage = YrsStorage::new();
+    let storage = WorkbookStorage::new();
     let fake_sheet = make_sheet_id(999);
 
-    assert!(get_filter(storage.doc(), storage.sheets(), &fake_sheet, "id").is_none());
-    assert!(get_filters_in_sheet(storage.doc(), storage.sheets(), &fake_sheet).is_empty());
-    assert_eq!(
-        get_filter_count(storage.doc(), storage.sheets(), &fake_sheet),
-        0
-    );
+    assert!(get_filter(&storage, &fake_sheet, "id").is_none());
+    assert!(get_filters_in_sheet(&storage, &fake_sheet).is_empty());
+    assert_eq!(get_filter_count(&storage, &fake_sheet), 0);
 }
 
 #[test]
 fn test_create_filter_nonexistent_sheet() {
-    let storage = YrsStorage::new();
+    let mut storage = WorkbookStorage::new();
     let fake_sheet = make_sheet_id(999);
 
     let result = create_filter(
-        storage.doc(),
-        storage.sheets(),
+        &mut storage,
         &fake_sheet,
         "a",
         "b",
@@ -579,7 +465,7 @@ fn test_create_filter_nonexistent_sheet() {
 
 #[test]
 fn test_set_column_filter_nonexistent() {
-    let (storage, sheet_id) = storage_with_sheet();
+    let (mut storage, sheet_id) = storage_with_sheet();
 
     let criteria = ColumnFilter::Values {
         values: vec![],
@@ -587,37 +473,21 @@ fn test_set_column_filter_nonexistent() {
     };
 
     // Should not panic
-    set_column_filter(
-        storage.doc(),
-        storage.sheets(),
-        &sheet_id,
-        "nonexistent",
-        "col-1",
-        criteria,
-    );
+    set_column_filter(&mut storage, &sheet_id, "nonexistent", "col-1", criteria);
 }
 
 #[test]
 fn test_clear_column_filter_nonexistent() {
-    let (storage, sheet_id) = storage_with_sheet();
+    let (mut storage, sheet_id) = storage_with_sheet();
 
     // Should not panic
-    clear_column_filter(
-        storage.doc(),
-        storage.sheets(),
-        &sheet_id,
-        "nonexistent",
-        "col-1",
-    );
+    clear_column_filter(&mut storage, &sheet_id, "nonexistent", "col-1");
 }
 
 #[test]
 fn test_clear_all_empty_sheet() {
-    let (storage, sheet_id) = storage_with_sheet();
+    let (mut storage, sheet_id) = storage_with_sheet();
     // Should not panic
-    clear_all_filters(storage.doc(), storage.sheets(), &sheet_id);
-    assert_eq!(
-        get_filter_count(storage.doc(), storage.sheets(), &sheet_id),
-        0
-    );
+    clear_all_filters(&mut storage, &sheet_id);
+    assert_eq!(get_filter_count(&storage, &sheet_id), 0);
 }

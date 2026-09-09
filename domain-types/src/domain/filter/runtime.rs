@@ -203,7 +203,7 @@ pub enum ColorPosition {
 
 /// Complete filter state for a range (Cell Identity Model).
 ///
-/// This is the ONE canonical representation stored in Yrs.
+/// This is the canonical representation in native sheet metadata.
 /// XLSX import transforms AutoFilter -> FilterState.
 /// XLSX export transforms FilterState -> AutoFilter.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

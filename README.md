@@ -93,6 +93,11 @@ support for an entire Excel API requirement set. Charts, pivots, and many other
 Excel members remain unimplemented. Word, PowerPoint, and Office dialogs are
 outside this spreadsheet engine's scope.
 
+Each mutating `context.sync()` is one native undo action. Rust callers use
+`workbook.history().undo()` / `redo()` and can group multiple operations with
+`begin_undo_group()` / `end_undo_group()`. See [undo and redo](docs/guides/undo-redo.md)
+for grouping, error handling, and redo behavior.
+
 ## Tests
 
 ```bash

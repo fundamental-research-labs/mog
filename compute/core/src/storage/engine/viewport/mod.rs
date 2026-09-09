@@ -1,5 +1,5 @@
 //! Viewport module — consolidated viewport rendering, registration, patches,
-//! and service logic for `YrsComputeEngine`.
+//! and service logic for `ComputeEngine`.
 
 mod functions;
 mod patches;
@@ -12,7 +12,7 @@ pub(crate) mod service;
 pub(crate) use functions::{apply_cf_to_format, apply_number_format_color, merge_cf_into_format};
 
 use crate::snapshot::{ActiveCellData, MutationResult, SelectionAggregates};
-use crate::storage::engine::YrsComputeEngine;
+use crate::storage::engine::ComputeEngine;
 use crate::storage::sheet::merges;
 use bridge_core as bridge;
 use cell_types::{CellId, SheetId};
@@ -22,13 +22,13 @@ use value_types::CellValue;
 use value_types::ComputeError;
 
 #[bridge::api(
-    service = "YrsComputeEngine",
+    service = "ComputeEngine",
     key = "doc_id",
     group = "viewport",
     fn_prefix = "compute",
     crate_path = "compute_core"
 )]
-impl YrsComputeEngine {
+impl ComputeEngine {
     /// Get full data for the active cell (for toolbar/formula bar display).
     #[bridge::skip(ts_bridge)]
     #[bridge::read]
@@ -72,12 +72,7 @@ impl YrsComputeEngine {
         if let Some(grid) = self.stores.grid_indexes.get(sheet_id) {
             // Build merge child→origin lookup for aggregation
             let merge_origins: std::collections::HashMap<(u32, u32), (u32, u32)> = {
-                let all_merges = merges::get_all_merges(
-                    self.stores.storage.doc(),
-                    self.stores.storage.sheets(),
-                    *sheet_id,
-                    grid,
-                );
+                let all_merges = merges::get_all_merges(&self.stores.storage, *sheet_id, grid);
                 let mut map = std::collections::HashMap::new();
                 for m in &all_merges {
                     let origin = (m.start_row, m.start_col);
@@ -393,11 +388,13 @@ impl YrsComputeEngine {
         &mut self,
         sheet_id: &SheetId,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let result = functions::reset_viewport_state(&self.viewport, sheet_id)?;
-        Ok((
-            compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-            result,
-        ))
+        self.without_history(|engine| {
+            let result = functions::reset_viewport_state(&engine.viewport, sheet_id)?;
+            Ok((
+                compute_wire::mutation::serialize_multi_viewport_patches(&[]),
+                result,
+            ))
+        })
     }
 }
 
@@ -534,7 +531,13 @@ mod delta_tests {
 
         let sheet_id_str = "00000000-0000-0000-0000-000000000001";
         let snapshot = WorkbookSnapshot {
+            axis_run_high_water_mark: None,
+            identity_high_water_mark: None,
+            canonical_tables: Vec::new(),
             sheets: vec![SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: sheet_id_str.to_string(),
                 name: "Sheet1".to_string(),
                 rows: 200,
@@ -552,7 +555,7 @@ mod delta_tests {
             calculation_settings: None,
         };
 
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+        let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
         let sheet_id = SheetId::from_uuid_str(sheet_id_str).unwrap();
 
         // First call: should be a full response (is_delta = false)
@@ -569,7 +572,13 @@ mod delta_tests {
 
         let sheet_id_str = "00000000-0000-0000-0000-000000000001";
         let snapshot = WorkbookSnapshot {
+            axis_run_high_water_mark: None,
+            identity_high_water_mark: None,
+            canonical_tables: Vec::new(),
             sheets: vec![SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: sheet_id_str.to_string(),
                 name: "Sheet1".to_string(),
                 rows: 200,
@@ -587,7 +596,7 @@ mod delta_tests {
             calculation_settings: None,
         };
 
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+        let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
         let sheet_id = SheetId::from_uuid_str(sheet_id_str).unwrap();
 
         // First call to establish state
@@ -617,7 +626,13 @@ mod delta_tests {
 
         let sheet_id_str = "00000000-0000-0000-0000-000000000001";
         let snapshot = WorkbookSnapshot {
+            axis_run_high_water_mark: None,
+            identity_high_water_mark: None,
+            canonical_tables: Vec::new(),
             sheets: vec![SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: sheet_id_str.to_string(),
                 name: "Sheet1".to_string(),
                 rows: 500,
@@ -635,7 +650,7 @@ mod delta_tests {
             calculation_settings: None,
         };
 
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+        let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
         let sheet_id = SheetId::from_uuid_str(sheet_id_str).unwrap();
 
         // First call
@@ -661,7 +676,13 @@ mod delta_tests {
         let cell_id_str = "00000000-0000-0000-0000-000000000010";
 
         let snapshot = WorkbookSnapshot {
+            axis_run_high_water_mark: None,
+            identity_high_water_mark: None,
+            canonical_tables: Vec::new(),
             sheets: vec![SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: sheet_id_str.to_string(),
                 name: "Sheet1".to_string(),
                 rows: 200,
@@ -687,7 +708,7 @@ mod delta_tests {
             calculation_settings: None,
         };
 
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+        let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
         let sheet_id = SheetId::from_uuid_str(sheet_id_str).unwrap();
 
         // Helper to extract palette from the binary buffer.

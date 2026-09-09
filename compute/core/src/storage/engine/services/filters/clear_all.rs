@@ -15,21 +15,11 @@ pub(super) fn clear_all_column_filters(
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> Result<MutationResult, ComputeError> {
-    filters::clear_all_column_filters(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        filter_id,
-    );
+    filters::clear_all_column_filters(&mut stores.storage, sheet_id, filter_id);
     imported_filters::sync_imported_auto_filter_metadata_from_runtime(
         stores, mirror, sheet_id, filter_id,
     );
-    let filter = filters::get_filter(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        filter_id,
-    );
+    let filter = filters::get_filter(&stores.storage, sheet_id, filter_id);
     let filter_kind = filter
         .as_ref()
         .map(|filter| super::filter_kind_wire(&filter.filter_kind).to_string());
@@ -38,8 +28,7 @@ pub(super) fn clear_all_column_filters(
     let visible_row_count = filter_data_row_count(stores, mirror, sheet_id, filter.as_ref());
 
     let transitions = dimensions::clear_filter_hidden_rows(
-        stores.storage.doc(),
-        stores.storage.sheets(),
+        &mut stores.storage,
         sheet_id,
         filter_id,
         stores.grid_indexes.get(sheet_id),

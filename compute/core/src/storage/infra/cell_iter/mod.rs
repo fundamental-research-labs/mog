@@ -2,7 +2,7 @@
 //!
 //! GridIndex-backed port (GridIndex migration). All `(sheet, row, col) ↔ CellId`
 //! resolution goes through `&GridIndex` / `&mut GridIndex`. Legacy
-//! position sub-maps in the yrs doc are no longer consulted here.
+//! shared axes resolve current cell positions.
 //!
 //! ## Responsibilities
 //! - Iterate cells (all cells, cells in range) — via `grid.cells()` /
@@ -25,10 +25,7 @@
 //!   actual data.
 
 mod clear;
-mod identity;
-mod iteration;
 mod navigation;
-mod read;
 mod region;
 mod relocation;
 mod types;
@@ -37,18 +34,10 @@ mod types;
 mod tests;
 
 pub(crate) use clear::clear_cells_by_hex;
-pub(crate) use identity::{get_or_create_cell_id, update_cell_position};
-pub(crate) use iteration::{for_each_cell, for_each_cell_in_range};
-pub(crate) use navigation::find_data_edge_with_extra_data;
-pub(crate) use region::{
-    get_current_region_with_extra_data, get_data_bounds_for_range_with_extra_data,
-};
+pub(crate) use navigation::find_data_edge;
+pub(crate) use region::{get_current_region, get_data_bounds_for_range};
 pub(crate) use relocation::relocate_cells;
 pub(crate) use types::RangeSpan;
 
 #[cfg(test)]
 pub(crate) use clear::clear_range_and_return_ids;
-#[cfg(test)]
-pub(crate) use navigation::find_data_edge;
-#[cfg(test)]
-pub(crate) use region::{get_current_region, get_data_bounds_for_range};

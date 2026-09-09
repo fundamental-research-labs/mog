@@ -1,5 +1,5 @@
 // Integration tests for mutation_auto_fill: exercises the full engine pipeline
-// (YrsComputeEngine → CellMirror → GridIndexes → build_adjusted_formula → to_a1_display).
+// (ComputeEngine → CellMirror → GridIndexes → build_adjusted_formula → to_a1_display).
 //
 // These tests reproduce the bugs documented in workstream-b-autofill-cellmirror.md:
 //   Bug #2: AutoFill overwrites source range
@@ -7,7 +7,7 @@
 
 use cell_types::{CellId, SheetId, SheetPos};
 use compute_core::engine_types::fill::{BridgeAutoFillRequest, BridgeFillRangeSpec};
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use domain_types::CellFormat;
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::CellValue;
@@ -37,6 +37,9 @@ fn make_cell(row: u32, col: u32, value: CellValue) -> CellData {
 fn make_snapshot(cells: Vec<CellData>) -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET_UUID.to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -85,7 +88,7 @@ fn fill_request(
     }
 }
 
-fn cell_id_at(engine: &YrsComputeEngine, sheet_id: &SheetId, row: u32, col: u32) -> CellId {
+fn cell_id_at(engine: &ComputeEngine, sheet_id: &SheetId, row: u32, col: u32) -> CellId {
     let cell_hex = engine
         .get_cell_id_at(sheet_id, row, col)
         .unwrap_or_else(|| panic!("cell at row {row} col {col} should have an id"));
@@ -93,7 +96,7 @@ fn cell_id_at(engine: &YrsComputeEngine, sheet_id: &SheetId, row: u32, col: u32)
 }
 
 fn set_format_at(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -105,7 +108,7 @@ fn set_format_at(
         .expect("set cell format");
 }
 
-fn format_at(engine: &YrsComputeEngine, sheet_id: &SheetId, row: u32, col: u32) -> CellFormat {
+fn format_at(engine: &ComputeEngine, sheet_id: &SheetId, row: u32, col: u32) -> CellFormat {
     let cell_id = cell_id_at(engine, sheet_id, row, col);
     engine.get_cell_format(sheet_id, &cell_id, row, col)
 }
@@ -126,7 +129,7 @@ fn bug3_formula_fill_down_no_ref_error() {
         make_cell(0, 0, num(10.0)), // A1 = 10
         make_cell(0, 1, num(20.0)), // B1 = 20
     ]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     // Set C1 = =A1+B1 via the parsing API (creates identity formula + CellIds)
@@ -180,15 +183,14 @@ fn bug3_formula_fill_down_no_ref_error() {
 }
 
 #[test]
-fn auto_fill_preview_adjusts_formula_without_mutating_cells_or_undo() {
+fn auto_fill_preview_adjusts_formula_without_mutating_cells() {
     let snapshot = make_snapshot(vec![make_cell(0, 0, num(10.0)), make_cell(0, 1, num(20.0))]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     engine
         .set_cell_value_parsed(&sheet_id, 0, 2, "=A1+B1")
         .unwrap();
-    let before_undo_depth = engine.get_undo_state().undo_depth;
 
     let request = fill_request(0, 2, 0, 2, 1, 2, 4, 2, "down");
     let preview = engine.auto_fill_preview(&sheet_id, request).unwrap();
@@ -196,7 +198,7 @@ fn auto_fill_preview_adjusts_formula_without_mutating_cells_or_undo() {
     assert_eq!(preview.pattern_type, "copy");
     assert_eq!(preview.filled_cell_count, 4);
     assert_eq!(preview.formulas.len(), 4);
-    assert_eq!(engine.get_undo_state().undo_depth, before_undo_depth);
+
     assert!(
         engine
             .mirror()
@@ -234,7 +236,7 @@ fn bug3_formula_fill_right_no_ref_error() {
         make_cell(0, 0, num(1.0)), // A1
         make_cell(1, 0, num(2.0)), // A2
     ]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     // A3 = =A1+A2
@@ -283,7 +285,7 @@ fn bug3_formula_fill_range_ref_no_ref_error() {
         make_cell(1, 0, num(2.0)),
         make_cell(2, 0, num(3.0)),
     ]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     // B1 = =SUM(A1:A3)
@@ -343,7 +345,7 @@ fn bug3_formula_fill_range_ref_no_ref_error() {
 #[test]
 fn bug3_formula_fill_absolute_ref_stays_fixed() {
     let snapshot = make_snapshot(vec![make_cell(0, 0, num(100.0))]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     // B1 = =$A$1*2
@@ -387,7 +389,7 @@ fn bug3_formula_fill_absolute_ref_stays_fixed() {
 #[test]
 fn bug3_formula_fill_mixed_refs() {
     let snapshot = make_snapshot(vec![make_cell(0, 0, num(1.0)), make_cell(0, 1, num(2.0))]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     // C1 = =$A$1+B1
@@ -427,7 +429,7 @@ fn bug2_autofill_preserves_source_values() {
         make_cell(0, 0, num(1.0)), // A1 = 1
         make_cell(1, 0, num(2.0)), // A2 = 2
     ]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     // Fill A1:A2 → A3:A10
@@ -473,7 +475,7 @@ fn bug2_autofill_preserves_source_formula() {
         make_cell(0, 0, num(10.0)), // A1 = 10
         make_cell(0, 1, num(20.0)), // B1 = 20
     ]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     // C1 = =A1+B1
@@ -522,7 +524,7 @@ fn bug2_autofill_preserves_source_formula() {
 #[test]
 fn autofill_copies_formats_for_value_and_formula_source_columns() {
     let snapshot = make_snapshot(vec![make_cell(0, 0, num(10.0)), make_cell(0, 1, num(20.0))]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     engine
@@ -619,7 +621,7 @@ fn formula_fill_up_adjusts_references() {
         make_cell(4, 0, num(5.0)),  // A5
         make_cell(4, 1, num(10.0)), // B5
     ]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     // C5 = =A5+B5
@@ -654,7 +656,7 @@ fn formula_fill_multi_source_pattern() {
         make_cell(0, 0, num(1.0)), // A1
         make_cell(1, 0, num(2.0)), // A2
     ]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     // B1 = =A1*10, B2 = =A2*10

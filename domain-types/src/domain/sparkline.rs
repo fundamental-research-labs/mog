@@ -2,7 +2,7 @@
 //!
 //! These types are the single source of truth for sparkline data across:
 //! - XLSX parser output (file-io)
-//! - CRDT storage (yrs_schema serialization)
+//! - Native worksheet storage
 //! - Compute engine (compute-core runtime)
 //!
 //! Design decisions:

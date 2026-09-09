@@ -24,7 +24,6 @@ members = [
     "compute/core/crates/compute-fill",
     "compute/core/crates/compute-charts",
     "compute/core/crates/compute-solver",
-    "compute/core/crates/compute-collab",
     "compute/core/crates/compute-document",
     "compute/core/crates/compute-wire",
     "compute/core/crates/compute-layout-index",
@@ -63,7 +62,6 @@ chrono = { version = "0.4", features = ["serde"] }
 thiserror = "1"
 tikv-jemallocator = "0.6"
 tracing = "0.1"
-yrs = { version = "0.21", features = ["sync"] }
 
 [profile.release]
 opt-level = 3

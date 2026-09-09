@@ -1,9 +1,9 @@
 use cell_types::{CellId, SheetId};
 use snapshot_types::RecalcResult;
 
-use super::{YrsComputeEngine, services};
+use super::{ComputeEngine, services};
 
-impl YrsComputeEngine {
+impl ComputeEngine {
     /// Post-process recalc (CF refresh + display text + schema validation) and stash for flush.
     ///
     /// This is the central funnel for every mutation path that produces a
@@ -25,6 +25,11 @@ impl YrsComputeEngine {
         //   CreateSubtotals, AutoFill, FlashFill, RelocateCells, CopyRange, …
         self.stores.compute.mark_dirty();
 
+        crate::storage::engine::cell_metadata::refresh(
+            &self.stores.storage,
+            &mut self.mirror,
+            self.stores.layout_metrics,
+        );
         self.refresh_cf_caches_after_recalc(recalc);
         self.enrich_display_text(recalc);
 
@@ -68,6 +73,7 @@ impl YrsComputeEngine {
         self.enrich_metadata_flags(recalc);
         if !pending_calculation {
             self.stores.compute.clear_dirty();
+            self.mark_metadata_evaluated();
         }
         self.mutation.pending_recalc = None;
     }

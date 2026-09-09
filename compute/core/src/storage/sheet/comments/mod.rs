@@ -1,31 +1,14 @@
 //! Cell comment CRUD with threading, resolution, and orphan cleanup.
 //!
-//! Port of `spreadsheet-model/src/comments.ts` (spreadsheet-model elimination).
-//!
-//! ## Yrs Storage Layout
-//!
-//! Each sheet has a `comments` map storing comments as structured Y.Maps keyed
-//! by comment ID:
-//! ```text
-//! sheets: Y.Map<SheetId, Y.Map>
-//!   +-- {sheetId}: Y.Map
-//!       +-- comments: Y.Map
-//!           +-- {commentId}: Y.Map  (structured fields: id, cellRef, author, ...)
-//! ```
-//!
-//! ## Cell Identity Model
-//!
-//! Comments reference cells via CellId (stable UUID). Position is resolved at
-//! render time. `validate_and_clean_comments()` removes orphaned comments when
-//! their parent cells are deleted.
+//! Comments keep typed stable cell anchors and all authored OOXML metadata.
+//! Positions are resolved from the native identity index at query/export time.
 
-// Keep this file as the compatibility facade for `storage::sheet::comments`.
-// New implementation logic belongs in the focused submodules below.
 mod cleanup;
 mod mutations;
 mod notes;
 mod queries;
-mod yrs_io;
+mod store;
+pub(crate) use store::{CommentAnchor, StoredComment, relocate_anchors, remap_for_copy};
 
 #[cfg(test)]
 mod tests;

@@ -22,8 +22,8 @@ pub fn fold_range_to_cells(
     cells: &mut FxHashMap<CellId, CellEntry>,
     pos_to_id: &mut FxHashMap<SheetPos, CellId>,
     id_to_pos: &mut FxHashMap<CellId, SheetPos>,
-    row_to_index: &FxHashMap<RowId, u32>,
-    col_to_index: &FxHashMap<cell_types::ColId, u32>,
+    row_to_index: &compute_document::identity::AxisIndex<RowId>,
+    col_to_index: &compute_document::identity::AxisIndex<cell_types::ColId>,
     sheet_id: &SheetId,
 ) -> Vec<CellId> {
     if range_view.encoding == PayloadEncoding::None {
@@ -45,9 +45,10 @@ pub fn fold_range_to_cells(
         );
         // Register position maps so lookups via pos_to_id / id_to_pos
         // succeed after the Range is removed.
-        if let (Some(&row_idx), Some(&col_idx)) =
-            (row_to_index.get(&row_id), col_to_index.get(&col_id))
-        {
+        if let (Some(row_idx), Some(col_idx)) = (
+            row_to_index.position_of(*sheet_id, row_id),
+            col_to_index.position_of(*sheet_id, col_id),
+        ) {
             let pos = SheetPos::new(row_idx, col_idx);
             pos_to_id.insert(pos, virtual_id);
             id_to_pos.insert(virtual_id, pos);
@@ -82,12 +83,10 @@ mod tests {
                 col_ids: vec![ColId::from_raw(1)],
             },
             encoding: PayloadEncoding::None,
-            payload: Arc::from([] as [u8; 0]),
+            values: Arc::from([] as [CellValue; 0]),
+            payload_cols: 1,
             row_offset_by_id,
             col_offset_by_id,
-            overrides: FxHashMap::default(),
-            override_count: 0,
-            folded_up_to: None,
         }
     }
 
@@ -97,8 +96,12 @@ mod tests {
         let mut cells = FxHashMap::default();
         let mut pos_to_id = FxHashMap::default();
         let mut id_to_pos = FxHashMap::default();
-        let row_to_index = FxHashMap::default();
-        let col_to_index = FxHashMap::default();
+        let row_to_index = compute_document::identity::AxisIndex::new(
+            cell_types::AxisIdentityStore::Explicit(Vec::new()),
+        );
+        let col_to_index = compute_document::identity::AxisIndex::new(
+            cell_types::AxisIdentityStore::Explicit(Vec::new()),
+        );
         let sheet_id = SheetId::from_raw(1);
 
         let folded = fold_range_to_cells(

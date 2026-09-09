@@ -1,33 +1,7 @@
-//! XLSX export — builds a `ParseOutput` from the current Yrs storage state and
-//! produces `.xlsx` bytes from the engine's live state.
-//!
-//! This is the reverse of `hydration.rs`: instead of writing structured Y.Maps
-//! from a `ParseOutput`, we READ the structured Y.Maps and produce a `ParseOutput`.
-//!
-//! This is needed so the unified XLSX writer can consume modeled `ParseOutput`
-//! from the running engine.
-//!
-//! ## Architecture
-//!
-//! ```text
-//! YrsComputeEngine (live state)
-//!     │
-//!     ▼
-//! build_parse_output_from_yrs()
-//!     ├── Per sheet:
-//!     │   ├── read cells from grid_indexes (CellId → position) + compute values
-//!     │   ├── read merges from Yrs merges map
-//!     │   ├── read frozen panes, view settings from sheet meta
-//!     │   ├── read row heights, col widths (custom dimensions)
-//!     │   ├── read comments from Yrs comments map
-//!     │   └── build style_palette entries from cell/row/col formats
-//!     └── Workbook-level: named ranges
-//! ```
-//!
-//! ## Key challenge: identity → position reversal
-//!
-//! Cells in Yrs are keyed by CellId (UUID), but `ParseOutput` needs `(row, col)`.
-//! We use the in-memory `GridIndex` to reverse CellId → `(row, col)`.
+//! XLSX export projects the live sparse values and native metadata into
+//! `ParseOutput`, which the shared XLSX writer converts into workbook bytes.
+//! Cell identities resolve through the shared row and column axes; compact
+//! values and formatting remain ranges until the writer needs individual cells.
 
 use bridge_core as bridge;
 use value_types::ComputeError;
@@ -46,42 +20,11 @@ use domain_types::{
     domain::workbook::WorkbookProtection,
 };
 
-use yrs::{Map, MapRef, Out, ReadTxn};
-
 use cell_types::SheetId;
 
-use super::YrsComputeEngine;
+use super::ComputeEngine;
 
 pub(super) use crate::range_manager::pos_to_a1;
-
-// =============================================================================
-// Sorted map iteration helpers
-// =============================================================================
-
-/// Parse the numeric suffix from a key like `"prefix-42"` and return it for sorting.
-/// Returns `None` for non-numeric suffixes (e.g., UUID keys from runtime CRUD).
-fn parse_key_suffix(key: &str) -> Option<usize> {
-    key.rsplit_once('-')
-        .and_then(|(_, suffix)| suffix.parse::<usize>().ok())
-}
-
-/// Collect map entries sorted by key numeric suffix.
-/// Numeric-suffix keys sort first (ascending by suffix), then non-numeric keys
-/// sort lexicographically after them.
-pub(super) fn sorted_map_entries<T: ReadTxn>(map: &MapRef, txn: &T) -> Vec<(String, Out)> {
-    let mut entries: Vec<(String, Out)> = map.iter(txn).map(|(k, v)| (k.to_string(), v)).collect();
-    entries.sort_by(|(a, _), (b, _)| {
-        let a_idx = parse_key_suffix(a);
-        let b_idx = parse_key_suffix(b);
-        match (a_idx, b_idx) {
-            (Some(ai), Some(bi)) => ai.cmp(&bi).then_with(|| a.cmp(b)),
-            (Some(_), None) => std::cmp::Ordering::Less,
-            (None, Some(_)) => std::cmp::Ordering::Greater,
-            (None, None) => a.cmp(b),
-        }
-    });
-    entries
-}
 
 // =============================================================================
 // Export result type
@@ -99,16 +42,16 @@ pub struct ExportParseResult {
 // =============================================================================
 
 #[bridge::api(
-    service = "YrsComputeEngine",
+    service = "ComputeEngine",
     key = "doc_id",
     group = "export",
     fn_prefix = "compute",
     crate_path = "compute_core"
 )]
-impl YrsComputeEngine {
+impl ComputeEngine {
     /// Exports the current workbook state to XLSX bytes in a single call.
     ///
-    /// Uses the export path: Yrs → `ParseOutput` → `write_xlsx_from_parse_output` → bytes.
+    /// Uses the export path: native state → `ParseOutput` → `write_xlsx_from_parse_output` → bytes.
     /// This produces a rich XLSX (styles, comments, dimensions, named ranges).
     #[bridge::read]
     #[tracing::instrument(name = "engine_export_to_xlsx_bytes", skip_all)]
@@ -163,18 +106,16 @@ impl YrsComputeEngine {
 // Main entry point
 // =============================================================================
 
-impl YrsComputeEngine {
-    /// Build a `ParseOutput` from the current Yrs storage state.
+impl ComputeEngine {
+    /// Build a `ParseOutput` from the current native storage state.
     ///
-    /// Reads structured Y.Map fields (not JSON blobs) for all domains.
+    /// Reads typed native metadata for all domains.
     /// This produces the same type that the XLSX parser emits, enabling
     /// the unified XLSX writer to consume it.
-    #[tracing::instrument(name = "build_parse_output_from_yrs", skip_all)]
-    pub fn build_parse_output_from_yrs(&self) -> Result<ParseOutput, ComputeError> {
-        let mut profile =
-            crate::xlsx_profile::PhaseTimer::new("export", "build_parse_output_from_yrs");
-        let parse_output =
-            super::services::export::build_parse_output_from_yrs(&self.stores, &self.mirror)?;
+    #[tracing::instrument(name = "build_parse_output", skip_all)]
+    pub fn build_parse_output(&self) -> Result<ParseOutput, ComputeError> {
+        let mut profile = crate::xlsx_profile::PhaseTimer::new("export", "build_parse_output");
+        let parse_output = super::services::export::build_parse_output(&self.stores, &self.mirror)?;
         profile.counter("sheets", parse_output.sheets.len() as u64);
         profile.counter(
             "cells",
@@ -191,12 +132,12 @@ impl YrsComputeEngine {
     #[tracing::instrument(name = "engine_export_to_parse_output", skip_all)]
     pub fn export_to_parse_output(&self) -> Result<ExportParseResult, ComputeError> {
         self.require_all_sheets_materialized("export_to_parse_output")?;
-        let parse_output = self.build_parse_output_from_yrs()?;
+        let parse_output = self.build_parse_output()?;
         Ok(ExportParseResult { parse_output })
     }
 }
 
-impl YrsComputeEngine {
+impl ComputeEngine {
     fn require_all_sheets_materialized(&self, operation: &str) -> Result<(), ComputeError> {
         if self.deferred_hydration.is_some() {
             return Err(ComputeError::InvalidInput {
@@ -214,7 +155,7 @@ impl YrsComputeEngine {
 // =============================================================================
 
 #[allow(dead_code)]
-impl YrsComputeEngine {
+impl ComputeEngine {
     /// Export all cells for a sheet as position-keyed `CellData`.
     ///
     /// Iterates the grid_index (which maps CellId → position) and reads
@@ -297,7 +238,11 @@ impl YrsComputeEngine {
 
     /// Export a container-level u32 attribute from sheet meta (e.g. dvXWindow, dvYWindow).
     fn export_dv_window_attr(&self, sheet_id: &SheetId, key: &str) -> Option<u32> {
-        super::services::export::export_dv_window_attr(&self.stores, sheet_id, key)
+        match key {
+            "dvXWindow" => super::services::export::export_dv_x_window(&self.stores, sheet_id),
+            "dvYWindow" => super::services::export::export_dv_y_window(&self.stores, sheet_id),
+            _ => None,
+        }
     }
 
     /// Export data validations from the canonical range-backed validation store.
@@ -305,18 +250,18 @@ impl YrsComputeEngine {
         super::services::export::export_data_validations_for_sheet(&self.stores, sheet_id)
     }
 
-    /// Export sheet protection from the structured Y.Map in sheet meta
-    /// using `yrs_schema::protection::sheet_from_yrs_map`. Falls back to legacy JSON string.
+    /// Export sheet protection from native sheet metadata
+    /// from native worksheet metadata.
     fn export_sheet_protection(&self, sheet_id: &SheetId) -> Option<SheetProtection> {
         super::services::export::export_sheet_protection(&self.stores, sheet_id)
     }
 
-    /// Export sparklines from the structured sparklines Y.Map using yrs_schema.
+    /// Export sparklines from native sparkline metadata.
     fn export_sparklines_for_sheet(&self, sheet_id: &SheetId) -> Vec<DomainSparkline> {
         super::services::export::export_sparklines_for_sheet(&self.stores, sheet_id)
     }
 
-    /// Export sparkline groups from the structured sparklines Y.Map using yrs_schema.
+    /// Export sparkline groups from native sparkline metadata.
     fn export_sparkline_groups_for_sheet(&self, sheet_id: &SheetId) -> Vec<SparklineGroup> {
         super::services::export::export_sparkline_groups_for_sheet(&self.stores, sheet_id)
     }
@@ -334,7 +279,7 @@ impl YrsComputeEngine {
         super::services::export::export_auto_filter_for_sheet(&self.stores, sheet_id, &pos_resolver)
     }
 
-    /// Export outline groups from the grouping Y.Map using yrs_schema.
+    /// Export outline groups from native grouping metadata.
     fn export_outline_groups_for_sheet(
         &self,
         sheet_id: &SheetId,
@@ -345,7 +290,7 @@ impl YrsComputeEngine {
         super::services::export::export_outline_groups_for_sheet(&self.stores, sheet_id)
     }
 
-    /// Export floating objects from the floating objects Y.Map.
+    /// Export floating objects from native floating-object metadata.
     fn export_floating_objects_for_sheet(
         &self,
         sheet_id: &SheetId,

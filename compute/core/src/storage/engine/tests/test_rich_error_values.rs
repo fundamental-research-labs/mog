@@ -1,5 +1,5 @@
 //! Rich error identity and legacy fallback survive the production import path.
-use super::super::YrsComputeEngine;
+use super::super::ComputeEngine;
 use super::helpers::cell_value_at;
 use domain_types::{
     CellData, CellMetadataRecord, FutureMetadataBlock, FutureMetadataGroup, MetadataType,
@@ -95,12 +95,11 @@ fn rich_error_values_preserve_cached_identity_fallback_and_recalculation() {
         assert_error(cell.value.clone(), expected);
         assert_eq!(cell.imported_rich_error.is_some(), row < 3);
     }
-    let (mut engine, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).unwrap();
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).unwrap();
     let sheet = engine.stores.storage.sheet_order()[0];
     assert_error(cell_value_at(&engine, &sheet, 0, 0), CellError::Spill);
     assert_error(cell_value_at(&engine, &sheet, 0, 1), CellError::Spill);
-    let state = compute_collab::encode_full_state(engine.storage().doc());
-    let (peer, _) = YrsComputeEngine::from_yrs_state(&state).unwrap();
+    let peer = super::helpers::rebuild_native_engine(&engine);
     assert_error(cell_value_at(&peer, &sheet, 0, 0), CellError::Spill);
 
     let exported = engine.export_to_xlsx_bytes().unwrap();
@@ -148,7 +147,7 @@ fn rich_error_values_missing_spill_offsets_preserve_identity_and_raw_details() {
     let bytes = rich_error_workbook(false);
     let (original, _) = xlsx_parser::parse_xlsx_to_output(&bytes).unwrap();
     let original_rich = original.metadata.unwrap().rich_data.unwrap();
-    let (mut engine, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).unwrap();
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).unwrap();
     let sheet = engine.stores.storage.sheet_order()[0];
     assert_error(cell_value_at(&engine, &sheet, 0, 0), CellError::Spill);
     engine.recalculate().unwrap();
@@ -163,4 +162,44 @@ fn rich_error_values_missing_spill_offsets_preserve_identity_and_raw_details() {
     assert_error(cell.value.clone(), CellError::Spill);
     assert_eq!(cell.imported_rich_error.unwrap().fallback, CellError::Value);
     assert_eq!(reloaded.metadata.unwrap().rich_data.unwrap(), original_rich);
+}
+
+#[test]
+fn imported_rich_error_provenance_survives_native_undo_redo() {
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&rich_error_workbook(true)).unwrap();
+    let sheet = engine.storage().sheet_order()[0];
+    let exported_cell = |engine: &ComputeEngine| {
+        let (output, _) =
+            xlsx_parser::parse_xlsx_to_output(&engine.export_to_xlsx_bytes().unwrap()).unwrap();
+        output.sheets[0]
+            .cells
+            .iter()
+            .find(|cell| cell.row == 0 && cell.col == 0)
+            .unwrap()
+            .clone()
+    };
+    let original = exported_cell(&engine);
+    assert!(original.vm.is_some());
+    assert!(original.imported_rich_error.is_some());
+
+    engine
+        .set_cell_value_parsed(&sheet, 0, 0, "#SPILL!")
+        .unwrap();
+    let edited = exported_cell(&engine);
+    assert_error(edited.value, CellError::Spill);
+    assert_eq!(edited.vm, None);
+    assert_eq!(edited.imported_rich_error, None);
+
+    for _ in 0..2 {
+        engine.undo().unwrap();
+        let restored = exported_cell(&engine);
+        assert_error(restored.value, CellError::Spill);
+        assert_eq!(restored.vm, original.vm);
+        assert_eq!(restored.imported_rich_error, original.imported_rich_error);
+        engine.redo().unwrap();
+        let redone = exported_cell(&engine);
+        assert_error(redone.value, CellError::Spill);
+        assert_eq!(redone.vm, None);
+        assert_eq!(redone.imported_rich_error, None);
+    }
 }

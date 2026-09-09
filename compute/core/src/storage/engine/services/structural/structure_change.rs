@@ -1,13 +1,11 @@
 use std::collections::HashSet;
 
-use cell_types::{CellId, SheetId};
+use cell_types::SheetId;
 use compute_document::hex::id_to_hex;
 use compute_document::identity::GridIndex;
-use compute_document::undo::ORIGIN_USER_EDIT;
 use domain_types::units::Points;
 use formula_types::StructureChange;
 use value_types::ComputeError;
-use yrs::{Map, Origin, Out, Transact};
 
 use crate::mirror::CellMirror;
 use crate::snapshot::{CellChange, RecalcResult, StructureChangeResult, StructureChangeType};
@@ -16,16 +14,10 @@ use crate::storage::engine::stores::EngineStores;
 use crate::storage::engine::validation;
 use crate::storage::sheet::dimensions;
 use crate::storage::sheet::structural::StructuralOps;
-use crate::storage::sheet_dimensions::SheetDimensionsMut;
 
 use super::super::metadata_shift;
 use super::super::mutation::{rebuild_merge_index, sync_mirror_merge_regions};
-use super::formula_writeback::{invalidate_stale_yrs_formulas, regenerate_named_range_yrs_refs};
 use super::pre_delete_reanchor::pre_delete_re_anchor_range_refs;
-use super::range_virtual_cells::{
-    collect_virtual_cell_ids_for_deleted_cols, collect_virtual_cell_ids_for_deleted_rows,
-    purge_virtual_cell_ids_from_yrs,
-};
 
 struct StructureChangePreflight {
     inherited_insert_row_height: Option<Points>,
@@ -35,11 +27,11 @@ struct StructureChangePreflight {
 // Structure Change (insert/delete rows/cols)
 // -------------------------------------------------------------------
 
-/// Apply a structural change (insert/delete rows/cols) to the Yrs document and indexes.
+/// Apply a structural change to native axes, cells, and metadata.
 ///
 /// Performs:
 /// 1. Validation (for deletes)
-/// 2. StructuralOps dispatch (Yrs CRDT mutations + GridIndex + CellMirror updates)
+/// 2. Shared GridIndex and CellMirror axis mutation
 /// 3. Merge spatial index rebuild
 /// 4. ComputeCore formula reparsing and full recalc
 ///
@@ -52,9 +44,79 @@ pub(in crate::storage::engine) fn apply_structure_change(
     change: &StructureChange,
 ) -> Result<RecalcResult, ComputeError> {
     let preflight = preflight_structure_change(stores, mirror, sheet_id, change)?;
+    crate::storage::engine::history::structure::capture_structure(
+        stores, mirror, *sheet_id, change,
+    );
     ensure_insert_axis_capacity(stores, sheet_id, change)?;
-    let doc = stores.storage.doc();
-    let sheets_map = doc.get_or_insert_map("sheets");
+    if let Some(grid) = stores.grid_indexes.get_mut(sheet_id) {
+        let deletion = match change {
+            StructureChange::DeleteRows { at, count, .. } => Some((*at, *count, true)),
+            StructureChange::DeleteCols { at, count, .. } => Some((*at, *count, false)),
+            _ => None,
+        };
+        if let Some((at, count, rows)) = deletion {
+            crate::storage::sheet::merges::reanchor_before_delete(
+                &mut stores.storage,
+                *sheet_id,
+                grid,
+                mirror,
+                at,
+                count,
+                rows,
+            );
+            crate::storage::sheet::hyperlinks::reanchor_before_delete(
+                &mut stores.storage,
+                *sheet_id,
+                grid,
+                mirror,
+                at,
+                count,
+                rows,
+            );
+        }
+    }
+    let deleted_metadata_ids: Vec<_> = stores
+        .storage
+        .cell_metadata
+        .keys()
+        .copied()
+        .filter(|id| {
+            let pos = stores
+                .grid_indexes
+                .get(sheet_id)
+                .and_then(|grid| grid.cell_position(id))
+                .map(|(row, col)| cell_types::SheetPos::new(row, col))
+                .or_else(|| {
+                    mirror
+                        .get_sheet(sheet_id)
+                        .and_then(|sheet| sheet.position_of(id))
+                });
+            pos.is_some_and(|pos| match change {
+                StructureChange::DeleteRows { at, count, .. } => {
+                    pos.row() >= *at && pos.row() < at.saturating_add(*count)
+                }
+                StructureChange::DeleteCols { at, count, .. } => {
+                    pos.col() >= *at && pos.col() < at.saturating_add(*count)
+                }
+                _ => false,
+            })
+        })
+        .collect();
+    // Pre-delete re-anchor pass: shrink any IdentityRangeRef whose endpoint
+    // sits inside the doomed row/col band to the nearest surviving cell so
+    // `SUM(A1:A5)` with row 0 deleted becomes `SUM(A1:A4)` instead of
+    // `SUM(#REF!)`. Must run BEFORE the structural op tears down the affected
+    // CellIds so their pre-delete positions can still be resolved.
+    let reanchored_formula_cells = match change {
+        StructureChange::DeleteRows { at, count, .. } => {
+            pre_delete_re_anchor_range_refs(stores, mirror, sheet_id, *at, *count, true)
+        }
+        StructureChange::DeleteCols { at, count, .. } => {
+            pre_delete_re_anchor_range_refs(stores, mirror, sheet_id, *at, *count, false)
+        }
+        _ => Vec::new(),
+    };
+
     let grid =
         stores
             .grid_indexes
@@ -63,45 +125,13 @@ pub(in crate::storage::engine) fn apply_structure_change(
                 sheet_id: sheet_id.to_uuid_string(),
             })?;
 
-    // Pre-delete re-anchor pass: shrink any IdentityRangeRef whose endpoint
-    // sits inside the doomed row/col band to the nearest surviving cell so
-    // `SUM(A1:A5)` with row 0 deleted becomes `SUM(A1:A4)` instead of
-    // `SUM(#REF!)`. Must run BEFORE the structural op tears down the affected
-    // CellIds so their pre-delete positions can still be resolved.
-    let reanchored_formula_cells = match change {
-        StructureChange::DeleteRows { at, count, .. } => {
-            pre_delete_re_anchor_range_refs(mirror, sheet_id, *at, *count, true)
-        }
-        StructureChange::DeleteCols { at, count, .. } => {
-            pre_delete_re_anchor_range_refs(mirror, sheet_id, *at, *count, false)
-        }
-        _ => Vec::new(),
-    };
-
-    // Collect virtual CellIds from Range views in the doomed band BEFORE
-    // StructuralOps runs. StructuralOps::delete_rows/cols only removes
-    // CellIds that GridIndex knows about, but virtual CellIds may exist
-    // in the Yrs `cells` map without a GridIndex entry (e.g. eagerly
-    // registered overrides for sub-256 Ranges). We remove these from Yrs
-    // after StructuralOps completes.
-    let virtual_cell_ids_to_purge: Vec<CellId> = match change {
-        StructureChange::DeleteRows { at, count, .. } => {
-            collect_virtual_cell_ids_for_deleted_rows(mirror, sheet_id, *at, *count)
-        }
-        StructureChange::DeleteCols { at, count, .. } => {
-            collect_virtual_cell_ids_for_deleted_cols(mirror, sheet_id, *at, *count)
-        }
-        _ => Vec::new(),
-    };
-
     match change {
         StructureChange::InsertRows { at, count, .. } => {
-            StructuralOps::insert_rows(doc, &sheets_map, grid, mirror, sheet_id, *at, *count)?;
+            StructuralOps::insert_rows(grid, mirror, sheet_id, *at, *count)?;
             if let Some(height) = preflight.inherited_insert_row_height {
                 for row in *at..(*at + *count) {
                     dimensions::set_row_height(
-                        doc,
-                        &sheets_map,
+                        &mut stores.storage,
                         sheet_id,
                         row,
                         height,
@@ -111,13 +141,13 @@ pub(in crate::storage::engine) fn apply_structure_change(
             }
         }
         StructureChange::DeleteRows { at, count, .. } => {
-            StructuralOps::delete_rows(doc, &sheets_map, grid, mirror, sheet_id, *at, *count)?;
+            StructuralOps::delete_rows(grid, mirror, sheet_id, *at, *count)?;
         }
         StructureChange::InsertCols { at, count, .. } => {
-            StructuralOps::insert_cols(doc, &sheets_map, grid, mirror, sheet_id, *at, *count)?;
+            StructuralOps::insert_cols(grid, mirror, sheet_id, *at, *count)?;
         }
         StructureChange::DeleteCols { at, count, .. } => {
-            StructuralOps::delete_cols(doc, &sheets_map, grid, mirror, sheet_id, *at, *count)?;
+            StructuralOps::delete_cols(grid, mirror, sheet_id, *at, *count)?;
         }
         StructureChange::RemapPositions { updates } => {
             for &(cell_id, new_row, new_col) in updates {
@@ -128,18 +158,45 @@ pub(in crate::storage::engine) fn apply_structure_change(
         }
     }
 
-    // Purge virtual CellId overrides from the Yrs `cells` map.
-    // StructuralOps already removed CellIds it found in GridIndex; this
-    // catches any virtual CellIds that GridIndex did not track (defensive).
-    // Removing a non-existent key from a Yrs map is a no-op, so duplicates
-    // with the StructuralOps pass are harmless.
-    if !virtual_cell_ids_to_purge.is_empty() {
-        purge_virtual_cell_ids_from_yrs(
-            stores.storage.doc(),
-            stores.storage.sheets(),
-            sheet_id,
-            &virtual_cell_ids_to_purge,
-        );
+    crate::storage::sheet::floating_objects::sync_after_structure(
+        &mut stores.storage,
+        grid,
+        mirror,
+        *sheet_id,
+        change,
+    );
+
+    for id in deleted_metadata_ids {
+        stores.storage.clear_cell_metadata(id);
+    }
+    crate::storage::engine::history::metadata::capture_pruned_axis_metadata(
+        &stores.storage,
+        *sheet_id,
+        grid,
+    );
+    if let Some(metadata) = stores.storage.sheet_metadata.get_mut(sheet_id) {
+        metadata.dimensions.retain_axes(grid);
+        metadata
+            .column_schemas
+            .retain(|id, _| grid.col_index(id).is_some());
+        if matches!(
+            change,
+            StructureChange::DeleteRows { .. } | StructureChange::DeleteCols { .. }
+        ) {
+            metadata.comments.retain(|comment| {
+                comment
+                    .cell_ref
+                    .cell()
+                    .is_none_or(|id| grid.cell_position(&id).is_some())
+            });
+            for (id, record) in &mut metadata.cell_annotations {
+                if grid.cell_position(id).is_none() {
+                    record.status = crate::engine_types::AnnotationStatus::Stale;
+                    record.stale_reason = Some("anchorMissing".into());
+                    record.checked_at = None;
+                }
+            }
+        }
     }
 
     // Shift all position-based metadata ranges (CF, tables, validations, etc.)
@@ -153,11 +210,11 @@ pub(in crate::storage::engine) fn apply_structure_change(
     // unified reference model — the mirror's `RowId/ColId → (SheetId, index)` maps were
     // seeded at engine assembly. A row/col insert, delete, or remap shifts
     // those indices, so re-sync from the authoritative `GridIndex` set.
-    mirror.install_row_col_indexes(
+    mirror.install_native_axes(
         stores
             .grid_indexes
             .iter()
-            .map(|(sid, grid)| (*sid, grid.row_ids_ordered(), grid.col_ids_ordered())),
+            .map(|(sid, grid)| (*sid, grid.row_axis(), grid.col_axis())),
     );
 
     if let Some(grid) = stores.grid_indexes.get(sheet_id) {
@@ -172,28 +229,14 @@ pub(in crate::storage::engine) fn apply_structure_change(
         stores.layout_indexes.insert(*sheet_id, layout);
     }
 
-    // Delegate to ComputeCore for formula reparsing and full recalc.
-    // Note: ComputeCore.structure_change() regenerates A1 formula strings
-    // from IdentityFormulas in memory (formula_strings cache), but does NOT
-    // persist them to Yrs KEY_FORMULA. The get_cell_data() read path overlays
-    // the authoritative formula_strings on top of Yrs data, so callers always
-    // see the updated formulas without needing to write back to Yrs.
+    crate::storage::engine::cell_metadata::refresh(&stores.storage, mirror, stores.layout_metrics);
+
+    // Refresh canonical A1 formula text from stable identities and recalculate.
     let result = stores.compute.structure_change_with_formula_refresh(
         mirror,
         Some((change, *sheet_id)),
         &reanchored_formula_cells,
     )?;
-
-    // Refresh stale KEY_FORMULA entries in Yrs for every formula cell whose
-    // A1 text changed. Cross-sheet formulas can shift when a different sheet's
-    // rows/columns change, so this scans the workbook's formula cells rather
-    // than only the affected sheet.
-    invalidate_stale_yrs_formulas(stores, mirror);
-
-    // Regenerate named range A1 strings in Yrs.
-    // CellIds in IdentityFormulas don't change on structural ops, but positions
-    // shift — so the A1 display representation must be regenerated.
-    regenerate_named_range_yrs_refs(stores, mirror);
 
     Ok(result)
 }
@@ -214,36 +257,11 @@ fn ensure_insert_axis_capacity(
     }
 }
 
-fn sheet_has_compact_axes<T: yrs::ReadTxn>(txn: &T, sheet_map: &yrs::MapRef) -> bool {
-    use compute_document::schema::{KEY_GRID_COL_AXIS, KEY_GRID_INDEX, KEY_GRID_ROW_AXIS};
-    match sheet_map.get(txn, KEY_GRID_INDEX) {
-        Some(Out::YMap(grid_index)) => {
-            grid_index.get(txn, KEY_GRID_ROW_AXIS).is_some()
-                || grid_index.get(txn, KEY_GRID_COL_AXIS).is_some()
-        }
-        _ => false,
-    }
-}
-
 fn ensure_row_capacity_before_insert(
     stores: &mut EngineStores,
     sheet_id: &SheetId,
     preceding_row: Option<u32>,
 ) -> Result<(), ComputeError> {
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let doc = stores.storage.doc();
-    let sheets = stores.storage.sheets();
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-
-    let compact_axes = match sheets.get(&txn, sheet_hex.as_str()) {
-        Some(Out::YMap(sheet_map)) => sheet_has_compact_axes(&txn, &sheet_map),
-        _ => {
-            return Err(ComputeError::SheetNotFound {
-                sheet_id: sheet_id.to_uuid_string(),
-            });
-        }
-    };
-
     let grid =
         stores
             .grid_indexes
@@ -251,12 +269,8 @@ fn ensure_row_capacity_before_insert(
             .ok_or_else(|| ComputeError::SheetNotFound {
                 sheet_id: sheet_id.to_uuid_string(),
             })?;
-    let mut dims = SheetDimensionsMut::from_grid_index(doc, sheets, grid);
     if let Some(row) = preceding_row {
-        dims.ensure_row_capacity(&mut txn, *sheet_id, row)?;
-    }
-    if compact_axes {
-        dims.materialize_dense_axes_and_remove_compact_keys(&mut txn, *sheet_id)?;
+        grid.ensure_row_capacity(row.min(cell_types::MAX_ROWS - 1));
     }
     Ok(())
 }
@@ -266,20 +280,6 @@ fn ensure_col_capacity_before_insert(
     sheet_id: &SheetId,
     preceding_col: Option<u32>,
 ) -> Result<(), ComputeError> {
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let doc = stores.storage.doc();
-    let sheets = stores.storage.sheets();
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-
-    let compact_axes = match sheets.get(&txn, sheet_hex.as_str()) {
-        Some(Out::YMap(sheet_map)) => sheet_has_compact_axes(&txn, &sheet_map),
-        _ => {
-            return Err(ComputeError::SheetNotFound {
-                sheet_id: sheet_id.to_uuid_string(),
-            });
-        }
-    };
-
     let grid =
         stores
             .grid_indexes
@@ -287,12 +287,8 @@ fn ensure_col_capacity_before_insert(
             .ok_or_else(|| ComputeError::SheetNotFound {
                 sheet_id: sheet_id.to_uuid_string(),
             })?;
-    let mut dims = SheetDimensionsMut::from_grid_index(doc, sheets, grid);
     if let Some(col) = preceding_col {
-        dims.ensure_col_capacity(&mut txn, *sheet_id, col)?;
-    }
-    if compact_axes {
-        dims.materialize_dense_axes_and_remove_compact_keys(&mut txn, *sheet_id)?;
+        grid.ensure_col_capacity(col.min(cell_types::MAX_COLS - 1));
     }
     Ok(())
 }
@@ -317,13 +313,9 @@ fn preflight_structure_change(
         }
 
         match change {
-            StructureChange::InsertRows { at, .. } => dimensions::get_row_height_explicit(
-                stores.storage.doc(),
-                stores.storage.sheets(),
-                sheet_id,
-                *at,
-                Some(grid),
-            ),
+            StructureChange::InsertRows { at, .. } => {
+                dimensions::get_row_height_explicit(&stores.storage, sheet_id, *at, Some(grid))
+            }
             _ => None,
         }
     };
@@ -345,57 +337,27 @@ fn hydrate_stored_formula_identities_for_structure_change(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
 ) -> Result<(), ComputeError> {
-    enum FormulaSeed {
-        Identity(formula_types::IdentityFormula),
-        A1(String),
-    }
-
-    let sheet_ids: Vec<SheetId> = mirror.sheet_ids().copied().collect();
-    let mut formulas_to_seed: Vec<(SheetId, CellId, FormulaSeed)> = Vec::new();
-
-    for sheet_id in &sheet_ids {
-        let Some(sheet_snap) =
-            construction::build_sheet_snapshot_from_yrs(&stores.storage, sheet_id)?
-        else {
+    // Deferred formula text belongs to the scheduler. Once resolved, the native
+    // identity formula is authoritative and retains references across moves.
+    let mut pending = Vec::new();
+    for sheet_id in mirror.sheet_ids() {
+        let Some(sheet) = mirror.get_sheet(sheet_id) else {
             continue;
         };
-
-        for cell_data in sheet_snap.cells {
-            let Ok(cell_id) = CellId::from_uuid_str(&cell_data.cell_id) else {
-                continue;
-            };
-
-            if let Some(identity_formula) = cell_data.identity_formula {
-                if mirror.get_formula(&cell_id).is_none() {
-                    formulas_to_seed.push((
-                        *sheet_id,
-                        cell_id,
-                        FormulaSeed::Identity(identity_formula),
-                    ));
-                }
-            } else if let Some(formula_a1) = cell_data.formula {
-                // Imported shared-formula followers can have a mirror identity
-                // formula that was derived from the shared master while the
-                // stored A1 text is the expanded per-cell formula. Reparse the
-                // stored formula before structural deletes so surviving shifted
-                // followers keep their own references instead of stale master
-                // edges into the deleted band.
-                formulas_to_seed.push((*sheet_id, cell_id, FormulaSeed::A1(formula_a1)));
+        for (cell_id, entry) in sheet.cells_iter() {
+            if entry.formula.is_none()
+                && let Some(formula) = stores.compute.get_formula(cell_id)
+            {
+                pending.push((*sheet_id, *cell_id, formula.to_owned()));
             }
         }
     }
-
-    for (sheet_id, cell_id, seed) in formulas_to_seed {
-        let identity_formula = match seed {
-            FormulaSeed::Identity(identity_formula) => Some(identity_formula),
-            FormulaSeed::A1(formula_a1) => stores
-                .compute
-                .to_identity_formula(mirror, &sheet_id, &formula_a1)
-                .ok(),
-        };
-
-        if let Some(identity_formula) = identity_formula {
-            mirror.set_formula(&cell_id, Some(identity_formula));
+    for (sheet_id, cell_id, formula) in pending {
+        if let Ok(identity) = stores
+            .compute
+            .to_identity_formula(mirror, &sheet_id, &formula)
+        {
+            mirror.set_formula(&cell_id, Some(identity));
         }
     }
     Ok(())

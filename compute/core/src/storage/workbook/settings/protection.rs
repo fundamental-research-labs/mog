@@ -1,175 +1,72 @@
-use compute_document::undo::ORIGIN_USER_EDIT;
-use domain_types::domain::workbook::WorkbookProtection;
-use domain_types::yrs_schema::protection as protection_schema;
-use yrs::{Any, Doc, Map, MapPrelim, MapRef, Origin, Out, Transact};
-
 use crate::snapshot::{ProtectedWorkbookOperation, WorkbookProtectionOptions};
-use crate::storage::infra::yrs_helpers::read_bool;
+use crate::storage::workbook::WorkbookMetadata;
+use domain_types::domain::workbook::WorkbookProtection;
 
-use super::map::{ensure_settings_map, get_settings_map};
-
-pub fn is_protected(doc: &Doc, workbook: &MapRef) -> bool {
-    let txn = doc.transact();
-    let settings_map = match get_settings_map(workbook, &txn) {
-        Some(m) => m,
-        None => return false,
-    };
-    if let Some(Out::YMap(prot_map)) = settings_map.get(&txn, "protection") {
-        return read_bool(&prot_map, &txn, protection_schema::KEY_WB_IS_PROTECTED).unwrap_or(false);
-    }
-    false
+pub fn is_protected(metadata: &WorkbookMetadata) -> bool {
+    metadata.settings.is_workbook_protected
 }
 
-/// Get workbook protection options.
-pub fn get_protection_options(doc: &Doc, workbook: &MapRef) -> WorkbookProtectionOptions {
-    let txn = doc.transact();
-    let settings_map = match get_settings_map(workbook, &txn) {
-        Some(m) => m,
-        None => return WorkbookProtectionOptions::default(),
-    };
-    if let Some(Out::YMap(prot_map)) = settings_map.get(&txn, "protection")
-        && let Some(prot) = protection_schema::workbook_from_yrs_map(&prot_map, &txn)
-    {
-        return WorkbookProtectionOptions {
-            structure: prot.lock_structure,
-        };
-    }
-    WorkbookProtectionOptions::default()
+pub fn get_protection_options(metadata: &WorkbookMetadata) -> WorkbookProtectionOptions {
+    metadata
+        .protection
+        .as_ref()
+        .map(|protection| WorkbookProtectionOptions {
+            structure: protection.lock_structure,
+        })
+        .unwrap_or_default()
 }
 
-/// Check if the workbook has a protection password set.
-pub fn has_protection_password(doc: &Doc, workbook: &MapRef) -> bool {
-    let txn = doc.transact();
-    let settings_map = match get_settings_map(workbook, &txn) {
-        Some(m) => m,
-        None => return false,
-    };
-    if let Some(Out::YMap(prot_map)) = settings_map.get(&txn, "protection")
-        && let Some(prot) = protection_schema::workbook_from_yrs_map(&prot_map, &txn)
-    {
-        return prot
-            .workbook_hash_value
-            .as_ref()
-            .map(|h| !h.is_empty())
-            .unwrap_or(false);
-    }
-    false
+fn password_hash(metadata: &WorkbookMetadata) -> Option<&str> {
+    let protection = metadata.protection.as_ref()?;
+    protection
+        .workbook_hash_value
+        .as_deref()
+        .or(protection.workbook_password.as_deref())
+        .filter(|hash| !hash.is_empty())
 }
 
-/// Protect the workbook with optional password hash and options.
-///
-/// Prevents sheet structure operations (add, delete, move, rename, hide, unhide).
-///
-/// Note: Password hashing is done by the caller (TypeScript layer) using
-/// Excel-compatible XOR hashing. This function stores the pre-computed hash.
+pub fn has_protection_password(metadata: &WorkbookMetadata) -> bool {
+    password_hash(metadata).is_some()
+}
+
+/// The caller supplies the precomputed Excel-compatible protection hash.
 pub fn protect_workbook(
-    doc: &Doc,
-    workbook: &MapRef,
+    metadata: &mut WorkbookMetadata,
     password_hash: Option<&str>,
     options: Option<&WorkbookProtectionOptions>,
 ) {
-    let full_options = options.cloned().unwrap_or_default();
-
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let settings_map = ensure_settings_map(workbook, &mut txn);
-
-    // Write structured "protection" sub-map
-    let mut domain_prot = WorkbookProtection {
-        lock_structure: full_options.structure,
+    metadata.settings.is_workbook_protected = true;
+    metadata.protection = Some(WorkbookProtection {
+        lock_structure: options.cloned().unwrap_or_default().structure,
+        workbook_password: password_hash
+            .filter(|hash| !hash.is_empty())
+            .map(str::to_owned),
         ..Default::default()
-    };
-    if let Some(hash) = password_hash
-        && !hash.is_empty()
-    {
-        domain_prot.workbook_hash_value = Some(hash.to_string());
-    }
-    let mut entries = protection_schema::workbook_to_yrs_prelim(&domain_prot);
-    entries.push((protection_schema::KEY_WB_IS_PROTECTED, Any::Bool(true)));
-    let prot_prelim: MapPrelim = entries.into_iter().collect();
-    settings_map.insert(&mut txn, "protection", prot_prelim);
+    });
 }
 
-/// Unprotect the workbook.
-///
-/// If the workbook has a password, the caller must verify it before calling
-/// this function. This function does NOT verify the password — that responsibility
-/// belongs to the TypeScript layer which has the hashing implementation.
-///
-/// Returns `true` if the workbook was successfully unprotected,
-/// `false` if the provided password hash doesn't match the stored one.
-pub fn unprotect_workbook(doc: &Doc, workbook: &MapRef, password_hash: Option<&str>) -> bool {
-    let txn = doc.transact();
-    let settings_map = match get_settings_map(workbook, &txn) {
-        Some(m) => m,
-        None => return true, // No settings = not protected
-    };
-
-    // Check if workbook is even protected via structured "protection" sub-map
-    let (is_protected, stored_hash) =
-        if let Some(Out::YMap(prot_map)) = settings_map.get(&txn, "protection") {
-            let protected =
-                read_bool(&prot_map, &txn, protection_schema::KEY_WB_IS_PROTECTED).unwrap_or(false);
-            let hash = protection_schema::workbook_from_yrs_map(&prot_map, &txn)
-                .and_then(|prot| prot.workbook_hash_value);
-            (protected, hash)
-        } else {
-            (false, None)
-        };
-
-    if !is_protected {
-        return true; // Already unprotected
+/// Remove protection only when any stored password hash matches.
+pub fn unprotect_workbook(metadata: &mut WorkbookMetadata, provided_hash: Option<&str>) -> bool {
+    if !is_protected(metadata) {
+        return true;
     }
-
-    // Verify password hash if set
-    if let Some(ref stored) = stored_hash
-        && !stored.is_empty()
-    {
-        match password_hash {
-            Some(provided) => {
-                if provided != stored {
-                    return false; // Wrong password
-                }
-            }
-            None => return false, // Password required but not provided
+    if let Some(stored_hash) = password_hash(metadata) {
+        if provided_hash != Some(stored_hash) {
+            return false;
         }
     }
-    drop(txn);
-
-    // Perform the unprotect
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let settings_map = match get_settings_map(workbook, &txn) {
-        Some(m) => m,
-        None => return true,
-    };
-
-    // Write default (unprotected) state to the structured "protection" sub-map
-    let domain_prot = WorkbookProtection::default();
-    let mut entries = protection_schema::workbook_to_yrs_prelim(&domain_prot);
-    entries.push((protection_schema::KEY_WB_IS_PROTECTED, Any::Bool(false)));
-    let prot_prelim: MapPrelim = entries.into_iter().collect();
-    settings_map.insert(&mut txn, "protection", prot_prelim);
-
+    metadata.settings.is_workbook_protected = false;
+    metadata.protection = None;
     true
 }
 
-/// Check if a workbook-level operation is allowed.
-///
-/// This checks workbook protection only.
 pub fn is_operation_allowed(
-    doc: &Doc,
-    workbook: &MapRef,
+    metadata: &WorkbookMetadata,
     operation: ProtectedWorkbookOperation,
 ) -> bool {
-    // If workbook is not protected, all operations are allowed
-    if !is_protected(doc, workbook) {
-        return true;
-    }
-
-    let options = get_protection_options(doc, workbook);
-
-    // Structure protection prevents all sheet structure operations
-    if options.structure {
-        !matches!(
+    !is_protected(metadata)
+        || !get_protection_options(metadata).structure
+        || !matches!(
             operation,
             ProtectedWorkbookOperation::AddSheet
                 | ProtectedWorkbookOperation::DeleteSheet
@@ -179,71 +76,56 @@ pub fn is_operation_allowed(
                 | ProtectedWorkbookOperation::UnhideSheet
                 | ProtectedWorkbookOperation::CopySheet
         )
-    } else {
-        true
-    }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::YrsStorage;
+    use crate::storage::workbook::WorkbookMetadata;
 
     #[test]
     fn test_protect_workbook() {
-        let storage = YrsStorage::new();
+        let mut metadata = WorkbookMetadata::default();
 
         // Initially not protected
-        assert!(!is_protected(storage.doc(), storage.workbook_map()));
+        assert!(!is_protected(&metadata));
         assert!(is_operation_allowed(
-            storage.doc(),
-            storage.workbook_map(),
+            &metadata,
             ProtectedWorkbookOperation::AddSheet
         ));
 
         // Protect without password
-        protect_workbook(storage.doc(), storage.workbook_map(), None, None);
+        protect_workbook(&mut metadata, None, None);
 
-        assert!(is_protected(storage.doc(), storage.workbook_map()));
-        assert!(!has_protection_password(
-            storage.doc(),
-            storage.workbook_map()
-        ));
+        assert!(is_protected(&metadata));
+        assert!(!has_protection_password(&metadata));
 
         // Structure operations should be blocked
         assert!(!is_operation_allowed(
-            storage.doc(),
-            storage.workbook_map(),
+            &metadata,
             ProtectedWorkbookOperation::AddSheet
         ));
         assert!(!is_operation_allowed(
-            storage.doc(),
-            storage.workbook_map(),
+            &metadata,
             ProtectedWorkbookOperation::DeleteSheet
         ));
         assert!(!is_operation_allowed(
-            storage.doc(),
-            storage.workbook_map(),
+            &metadata,
             ProtectedWorkbookOperation::RenameSheet
         ));
         assert!(!is_operation_allowed(
-            storage.doc(),
-            storage.workbook_map(),
+            &metadata,
             ProtectedWorkbookOperation::MoveSheet
         ));
         assert!(!is_operation_allowed(
-            storage.doc(),
-            storage.workbook_map(),
+            &metadata,
             ProtectedWorkbookOperation::HideSheet
         ));
         assert!(!is_operation_allowed(
-            storage.doc(),
-            storage.workbook_map(),
+            &metadata,
             ProtectedWorkbookOperation::UnhideSheet
         ));
         assert!(!is_operation_allowed(
-            storage.doc(),
-            storage.workbook_map(),
+            &metadata,
             ProtectedWorkbookOperation::CopySheet
         ));
     }
@@ -254,40 +136,25 @@ mod tests {
 
     #[test]
     fn test_protect_workbook_with_password() {
-        let storage = YrsStorage::new();
+        let mut metadata = WorkbookMetadata::default();
 
         // Protect with a password hash
-        protect_workbook(storage.doc(), storage.workbook_map(), Some("ABCD"), None);
+        protect_workbook(&mut metadata, Some("ABCD"), None);
 
-        assert!(is_protected(storage.doc(), storage.workbook_map()));
-        assert!(has_protection_password(
-            storage.doc(),
-            storage.workbook_map()
-        ));
+        assert!(is_protected(&metadata));
+        assert!(has_protection_password(&metadata));
 
         // Cannot unprotect with wrong password
-        assert!(!unprotect_workbook(
-            storage.doc(),
-            storage.workbook_map(),
-            Some("WRONG")
-        ));
-        assert!(is_protected(storage.doc(), storage.workbook_map()));
+        assert!(!unprotect_workbook(&mut metadata, Some("WRONG")));
+        assert!(is_protected(&metadata));
 
         // Cannot unprotect without password
-        assert!(!unprotect_workbook(
-            storage.doc(),
-            storage.workbook_map(),
-            None
-        ));
-        assert!(is_protected(storage.doc(), storage.workbook_map()));
+        assert!(!unprotect_workbook(&mut metadata, None));
+        assert!(is_protected(&metadata));
 
         // Can unprotect with correct password
-        assert!(unprotect_workbook(
-            storage.doc(),
-            storage.workbook_map(),
-            Some("ABCD")
-        ));
-        assert!(!is_protected(storage.doc(), storage.workbook_map()));
+        assert!(unprotect_workbook(&mut metadata, Some("ABCD")));
+        assert!(!is_protected(&metadata));
     }
 
     // -------------------------------------------------------------------
@@ -296,18 +163,14 @@ mod tests {
 
     #[test]
     fn test_unprotect_workbook_no_password() {
-        let storage = YrsStorage::new();
+        let mut metadata = WorkbookMetadata::default();
 
-        protect_workbook(storage.doc(), storage.workbook_map(), None, None);
-        assert!(is_protected(storage.doc(), storage.workbook_map()));
+        protect_workbook(&mut metadata, None, None);
+        assert!(is_protected(&metadata));
 
         // Unprotect succeeds without password when no password was set
-        assert!(unprotect_workbook(
-            storage.doc(),
-            storage.workbook_map(),
-            None
-        ));
-        assert!(!is_protected(storage.doc(), storage.workbook_map()));
+        assert!(unprotect_workbook(&mut metadata, None));
+        assert!(!is_protected(&metadata));
     }
 
     // -------------------------------------------------------------------
@@ -316,36 +179,25 @@ mod tests {
 
     #[test]
     fn test_unprotect_clears_state() {
-        let storage = YrsStorage::new();
+        let mut metadata = WorkbookMetadata::default();
 
-        protect_workbook(storage.doc(), storage.workbook_map(), Some("HASH"), None);
-        assert!(is_protected(storage.doc(), storage.workbook_map()));
-        assert!(has_protection_password(
-            storage.doc(),
-            storage.workbook_map()
-        ));
+        protect_workbook(&mut metadata, Some("HASH"), None);
+        assert!(is_protected(&metadata));
+        assert!(has_protection_password(&metadata));
 
         // Verify protection options are set
-        let options = get_protection_options(storage.doc(), storage.workbook_map());
+        let options = get_protection_options(&metadata);
         assert!(options.structure);
 
         // Unprotect
-        assert!(unprotect_workbook(
-            storage.doc(),
-            storage.workbook_map(),
-            Some("HASH")
-        ));
+        assert!(unprotect_workbook(&mut metadata, Some("HASH")));
 
-        assert!(!is_protected(storage.doc(), storage.workbook_map()));
-        assert!(!has_protection_password(
-            storage.doc(),
-            storage.workbook_map()
-        ));
+        assert!(!is_protected(&metadata));
+        assert!(!has_protection_password(&metadata));
 
         // Operations should be allowed again
         assert!(is_operation_allowed(
-            storage.doc(),
-            storage.workbook_map(),
+            &metadata,
             ProtectedWorkbookOperation::AddSheet
         ));
     }
@@ -356,17 +208,16 @@ mod tests {
 
     #[test]
     fn test_protect_with_custom_options() {
-        let storage = YrsStorage::new();
+        let mut metadata = WorkbookMetadata::default();
 
         let options = WorkbookProtectionOptions { structure: false };
-        protect_workbook(storage.doc(), storage.workbook_map(), None, Some(&options));
+        protect_workbook(&mut metadata, None, Some(&options));
 
-        assert!(is_protected(storage.doc(), storage.workbook_map()));
+        assert!(is_protected(&metadata));
 
         // Structure is not protected, so operations should be allowed
         assert!(is_operation_allowed(
-            storage.doc(),
-            storage.workbook_map(),
+            &metadata,
             ProtectedWorkbookOperation::AddSheet
         ));
     }
@@ -377,14 +228,10 @@ mod tests {
 
     #[test]
     fn test_unprotect_already_unprotected() {
-        let storage = YrsStorage::new();
+        let mut metadata = WorkbookMetadata::default();
 
         // Not protected at all
-        assert!(unprotect_workbook(
-            storage.doc(),
-            storage.workbook_map(),
-            None
-        ));
+        assert!(unprotect_workbook(&mut metadata, None));
     }
 
     // -------------------------------------------------------------------

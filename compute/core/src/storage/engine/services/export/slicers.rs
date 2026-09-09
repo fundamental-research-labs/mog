@@ -1,11 +1,6 @@
 //! Slicer export helpers.
 
-use compute_document::schema::KEY_SLICERS;
-use domain_types::{
-    domain::slicer::{SlicerSource, StoredSlicer},
-    yrs_schema,
-};
-use yrs::{Any, Map, Out, Transact};
+use domain_types::domain::slicer::{SlicerSource, StoredSlicer};
 
 use super::TableExportProjection;
 use crate::storage::engine::stores::EngineStores;
@@ -15,37 +10,22 @@ pub(in crate::storage::engine) fn export_workbook_slicer_caches(
     stores: &EngineStores,
     table_projection: Option<&TableExportProjection>,
 ) -> Vec<ooxml_types::slicers::SlicerCacheDef> {
-    let doc = stores.storage.doc();
-    let txn = doc.transact();
-    let workbook = stores.storage.workbook_map();
-
-    let slicers_map = match workbook.get(&txn, KEY_SLICERS) {
-        Some(Out::YMap(m)) => m,
-        _ => return vec![],
-    };
-
-    let mut caches = Vec::new();
-    for (_, value) in slicers_map.iter(&txn) {
-        if let Some(stored) = yrs_schema::slicer::from_yrs_out(value.clone(), &txn) {
-            let mut cache = domain_types::domain::slicer::stored_slicer_to_cache_def(&stored);
+    let mut caches: Vec<_> = stores
+        .storage
+        .metadata
+        .slicers
+        .values()
+        .map(|stored| {
+            let mut cache = domain_types::domain::slicer::stored_slicer_to_cache_def(stored);
             if let Some(table_projection) = table_projection {
-                reconcile_table_slicer_cache(&stored, &mut cache, table_projection);
+                reconcile_table_slicer_cache(stored, &mut cache, table_projection);
             }
-            caches.push(cache);
-            continue;
-        }
-        if let Out::Any(Any::String(json_str)) = value {
-            match serde_json::from_str::<ooxml_types::slicers::SlicerCacheDef>(&json_str) {
-                Ok(cache_def) => caches.push(cache_def),
-                Err(e) => {
-                    tracing::warn!(
-                        error = %e,
-                        "Failed to deserialize slicer entry during export, skipping"
-                    );
-                }
-            }
-        }
-    }
+            cache
+        })
+        .collect();
+    // Multiple worksheet controls may share one workbook cache part.
+    caches.sort_by(|left, right| left.name.cmp(&right.name));
+    caches.dedup_by(|left, right| left.name == right.name);
     caches
 }
 
@@ -83,5 +63,52 @@ fn reconcile_table_slicer_cache(
     }) {
         table_cache.column = index as u32;
         cache.source_name.clone_from(&column.name);
+    }
+}
+
+/// Resolve native pivot bindings against the worksheet IDs that the XLSX writer uses.
+pub(super) fn reconcile_pivot_bindings(output: &mut domain_types::ParseOutput) {
+    let Ok(sheet_ids) = output.resolved_worksheet_ids() else {
+        // The writer reports invalid or exhausted worksheet IDs at its fallible boundary.
+        return;
+    };
+    let resolve = |key: &str| {
+        let pivot = output
+            .pivot_tables
+            .iter()
+            .find(|pivot| pivot.config.id == key)
+            .or_else(|| {
+                output
+                    .pivot_tables
+                    .iter()
+                    .find(|pivot| pivot.config.name == key)
+            })?;
+        let index = output
+            .sheets
+            .iter()
+            .position(|sheet| sheet.name == pivot.config.output_sheet_name)?;
+        Some((&pivot.config, sheet_ids[index]))
+    };
+    for cache in &mut output.slicer_caches {
+        for reference in &mut cache.pivot_tables {
+            if let Some((pivot, tab_id)) = resolve(&reference.name) {
+                reference.name.clone_from(&pivot.name);
+                reference.tab_id = tab_id;
+                if let (Some(tabular), Some(cache_id)) = (&mut cache.tabular_data, pivot.cache_id) {
+                    tabular.pivot_cache_id = cache_id;
+                }
+            }
+        }
+    }
+    for cache in &mut output.timeline_caches {
+        for reference in &mut cache.pivot_tables {
+            if let Some((pivot, tab_id)) = resolve(&reference.name) {
+                reference.name.clone_from(&pivot.name);
+                reference.tab_id = tab_id;
+                if pivot.cache_id.is_some() {
+                    cache.pivot_cache_id = pivot.cache_id;
+                }
+            }
+        }
     }
 }

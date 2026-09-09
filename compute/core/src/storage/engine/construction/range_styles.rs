@@ -24,21 +24,6 @@ pub(in crate::storage::engine) fn build_imported_range_style_plan(
         style_by_pos.insert((cell.row, cell.col), cell.style_id);
     }
 
-    let row_index_by_id: HashMap<RowId, u32> = alloc
-        .row_ids
-        .iter()
-        .copied()
-        .enumerate()
-        .map(|(idx, row_id)| (row_id, idx as u32))
-        .collect();
-    let col_index_by_id: HashMap<ColId, u32> = alloc
-        .col_ids
-        .iter()
-        .copied()
-        .enumerate()
-        .map(|(idx, col_id)| (col_id, idx as u32))
-        .collect();
-
     let mut positions = std::collections::HashSet::new();
     let mut styles = Vec::new();
 
@@ -46,11 +31,11 @@ pub(in crate::storage::engine) fn build_imported_range_style_plan(
         let mut positions_by_style: HashMap<u32, Vec<(u32, u32)>> = HashMap::new();
 
         for row_id in &range.row_ids {
-            let Some(&row) = row_index_by_id.get(row_id) else {
+            let Some(row) = alloc.row_axis.position_of(alloc.sheet_id, *row_id) else {
                 continue;
             };
             for col_id in &range.col_ids {
-                let Some(&col) = col_index_by_id.get(col_id) else {
+                let Some(col) = alloc.col_axis.position_of(alloc.sheet_id, *col_id) else {
                     continue;
                 };
                 let Some(cell_style) = style_by_pos.get(&(row, col)).copied().flatten() else {

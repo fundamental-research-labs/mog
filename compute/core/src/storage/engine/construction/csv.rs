@@ -6,7 +6,7 @@ use super::*;
 //
 // CSV produces a `ParseOutput` (one sheet, 4-entry style palette, per-cell
 // `style_id`) rather than its own intermediate IR. The hydration path is
-// the same Range-before-Yrs pipeline as XLSX: allocate IDs →
+// the same native import pipeline as XLSX: allocate identities →
 // `parse_output_to_workbook_snapshot` with range classification →
 // `hydrate_from_parse_output_with_ranges` → `rebuild_engine_from_snapshot`.
 //
@@ -14,7 +14,7 @@ use super::*;
 // diagnostics-handling pattern at the top of `parse_and_hydrate_xlsx`);
 // they do NOT cross the bridge as TS errors.
 
-/// Parse CSV bytes and hydrate a new `YrsStorage` from the parse output.
+/// Parse CSV bytes and hydrate a new `WorkbookStorage` from the parse output.
 pub(in crate::storage::engine) fn parse_and_hydrate_csv(
     csv_data: &[u8],
     options: &csv_parser::CsvImportOptions,
@@ -60,22 +60,18 @@ pub(in crate::storage::engine) fn parse_and_hydrate_csv(
         for alloc in &allocations {
             m.sheet_ids.push(alloc.sheet_id);
             m.cell_ids.push(alloc.cell_ids.clone());
-            m.row_ids.push(alloc.row_ids.clone());
-            m.col_ids.push(alloc.col_ids.clone());
+            m.row_axes.push(alloc.row_axis.clone());
+            m.col_axes.push(alloc.col_axis.clone());
             for identity in &alloc.identity_only_cells {
-                m.identity_only_cells.push((
-                    alloc.sheet_id,
-                    identity.cell_id,
-                    identity.row,
-                    identity.col,
-                ));
+                m.identities
+                    .push((alloc.sheet_id, identity.cell_id, identity.row, identity.col));
             }
         }
         m
     };
 
     let t1 = crate::time_compat::WasmSafeInstant::now();
-    let workbook_snap = import::parse_output_to_snapshot::parse_output_to_workbook_snapshot(
+    let mut workbook_snap = import::parse_output_to_snapshot::parse_output_to_workbook_snapshot(
         &parse_output,
         Some(&id_map),
         &mut allocator,
@@ -88,11 +84,7 @@ pub(in crate::storage::engine) fn parse_and_hydrate_csv(
     let t2 = crate::time_compat::WasmSafeInstant::now();
     let mut ranged_positions: Vec<std::collections::HashSet<(u32, u32)>> =
         Vec::with_capacity(parse_output.sheets.len());
-    let mut range_data_per_sheet: Vec<Vec<snapshot_types::RangeData>> =
-        Vec::with_capacity(parse_output.sheets.len());
     let mut range_style_positions: Vec<std::collections::HashSet<(u32, u32)>> =
-        Vec::with_capacity(parse_output.sheets.len());
-    let mut range_styles_per_sheet: Vec<Vec<crate::storage::infra::hydration::ImportedRangeStyle>> =
         Vec::with_capacity(parse_output.sheets.len());
 
     for (sheet_idx, sheet_data) in parse_output.sheets.iter().enumerate() {
@@ -108,74 +100,63 @@ pub(in crate::storage::engine) fn parse_and_hydrate_csv(
             .collect();
 
         ranged_positions.push(ranged);
-        range_data_per_sheet.push(snap_sheet.ranges.clone());
+
         range_style_positions.push(std::collections::HashSet::new());
-        range_styles_per_sheet.push(Vec::new());
     }
 
     let (storage, id_map) = {
-        let mut storage = YrsStorage::new();
+        let mut storage = WorkbookStorage::new();
         let id_map = storage.hydrate_from_parse_output_with_ranges(
             &parse_output,
             &allocations,
             &ranged_positions,
             &range_style_positions,
-            &range_data_per_sheet,
-            &range_styles_per_sheet,
             &mut allocator,
         )?;
         (storage, id_map)
     };
     eprintln!("[construction] csv hydrate: {}ms", t2.elapsed().as_millis());
 
+    id_map.install_snapshot_identities(&mut workbook_snap);
+    allocator.stamp_snapshot_counters(&mut workbook_snap);
     Ok((
         storage,
         workbook_snap,
-        id_map.phantom_cells,
         domain_types::ImportReport::default(),
+        Vec::new(),
     ))
 }
 
-/// Construct a `YrsComputeEngine` from raw CSV bytes without recalculation.
+/// Construct a `ComputeEngine` from raw CSV bytes without recalculation.
 pub(in crate::storage::engine) fn from_csv_bytes(
     csv_data: &[u8],
     options: &csv_parser::CsvImportOptions,
-) -> Result<(YrsComputeEngine, RecalcResult), ComputeError> {
-    let (storage, workbook_snap, phantom_cells, import_report) =
+) -> Result<(ComputeEngine, RecalcResult), ComputeError> {
+    let (storage, workbook_snap, import_report, _imported_formats) =
         parse_and_hydrate_csv(csv_data, options)?;
 
-    let mut mirror = CellMirror::from_snapshot(workbook_snap.clone())?;
+    let mut mirror = CellMirror::new();
     let mut compute = ComputeCore::new();
     let recalc_result = compute.init_from_snapshot_no_recalc(&mut mirror, workbook_snap.clone())?;
 
     let mut engine = assemble_engine(storage, mirror, compute, &workbook_snap)?;
     engine.import_report = import_report;
 
-    for (sheet_id, cell_id, row, col) in phantom_cells {
-        if let Some(grid) = engine.stores.grid_indexes.get_mut(&sheet_id) {
-            grid.register_cell(cell_id, row, col);
-        }
-    }
-
     Ok((engine, recalc_result))
 }
 
 /// Import from raw CSV bytes into an existing engine, with or without recalc.
 pub(in crate::storage::engine) fn import_from_csv_bytes(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     csv_data: &[u8],
     options: &csv_parser::CsvImportOptions,
     do_recalc: bool,
 ) -> Result<RecalcResult, ComputeError> {
-    let (storage, workbook_snap, phantom_cells, import_report) =
+    let (storage, workbook_snap, import_report, _imported_formats) =
         parse_and_hydrate_csv(csv_data, options)?;
     let result = rebuild_engine_from_snapshot(engine, storage, workbook_snap, do_recalc)?;
     engine.import_report = import_report;
     engine.clear_runtime_diagnostics();
-    for (sheet_id, cell_id, row, col) in phantom_cells {
-        if let Some(grid) = engine.stores.grid_indexes.get_mut(&sheet_id) {
-            grid.register_cell(cell_id, row, col);
-        }
-    }
+
     Ok(result)
 }

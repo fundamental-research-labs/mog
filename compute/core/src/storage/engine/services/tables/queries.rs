@@ -139,7 +139,13 @@ pub(in crate::storage::engine) fn resolve_table_format_at_cell(
 pub(in crate::storage::engine) fn get_all_custom_table_styles(
     stores: &EngineStores,
 ) -> Vec<compute_table::custom_styles::CustomTableStyleConfig> {
-    let mut result: Vec<_> = stores.custom_table_styles.values().cloned().collect();
+    let mut result: Vec<_> = stores
+        .storage
+        .metadata
+        .custom_table_styles
+        .values()
+        .cloned()
+        .collect();
     result.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
     result
 }

@@ -1,10 +1,10 @@
-//! Layout index bridge methods for YrsComputeEngine.
+//! Layout index bridge methods for ComputeEngine.
 //!
 //! Exposes per-sheet cell-to-pixel position queries via the bridge API,
 //! and autofit operations that compute optimal column widths / row heights
 //! from cell content using Rust text measurement.
 
-use super::{YrsComputeEngine, services};
+use super::{ComputeEngine, services};
 use crate::snapshot::MutationResult;
 use bridge_core as bridge;
 use cell_types::SheetId;
@@ -12,13 +12,13 @@ use compute_wire::mutation::serialize_multi_viewport_patches;
 use value_types::ComputeError;
 
 #[bridge::api(
-    service = "YrsComputeEngine",
+    service = "ComputeEngine",
     key = "doc_id",
     group = "layout",
     fn_prefix = "compute",
     crate_path = "compute_core"
 )]
-impl YrsComputeEngine {
+impl ComputeEngine {
     /// Get the pixel position (top edge) of a row.
     #[bridge::read]
     pub fn get_row_position(&self, sheet_id: &SheetId, row: u32) -> f64 {
@@ -88,14 +88,16 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         col: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let result = services::autofit::auto_fit_column_and_set(
-            &mut self.stores,
-            &self.mirror,
-            &self.settings,
-            sheet_id,
-            col,
-        )?;
-        Ok((serialize_multi_viewport_patches(&[]), result))
+        self.with_history(|engine| {
+            let result = services::autofit::auto_fit_column_and_set(
+                &mut engine.stores,
+                &mut engine.mirror,
+                &engine.settings,
+                sheet_id,
+                col,
+            )?;
+            Ok((serialize_multi_viewport_patches(&[]), result))
+        })
     }
 
     /// Compute and set optimal widths for multiple columns in one call.
@@ -105,14 +107,16 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         cols: Vec<u32>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let result = services::autofit::auto_fit_columns_and_set(
-            &mut self.stores,
-            &self.mirror,
-            &self.settings,
-            sheet_id,
-            &cols,
-        )?;
-        Ok((serialize_multi_viewport_patches(&[]), result))
+        self.with_history(|engine| {
+            let result = services::autofit::auto_fit_columns_and_set(
+                &mut engine.stores,
+                &mut engine.mirror,
+                &engine.settings,
+                sheet_id,
+                &cols,
+            )?;
+            Ok((serialize_multi_viewport_patches(&[]), result))
+        })
     }
 
     /// Compute and set optimal heights for multiple rows in one call.
@@ -122,13 +126,15 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         rows: Vec<u32>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let result = services::autofit::auto_fit_rows_and_set(
-            &mut self.stores,
-            &self.mirror,
-            &self.settings,
-            sheet_id,
-            &rows,
-        )?;
-        Ok((serialize_multi_viewport_patches(&[]), result))
+        self.with_history(|engine| {
+            let result = services::autofit::auto_fit_rows_and_set(
+                &mut engine.stores,
+                &mut engine.mirror,
+                &engine.settings,
+                sheet_id,
+                &rows,
+            )?;
+            Ok((serialize_multi_viewport_patches(&[]), result))
+        })
     }
 }

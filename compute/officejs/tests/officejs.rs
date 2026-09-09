@@ -2,7 +2,85 @@
 //! eval entry used by the `mog` CLI.
 
 use compute_api::Workbook;
-use mog::{OfficeJsError, run_office_js};
+use mog::{OfficeJsError, run_office_js, run_office_js_with_workbook};
+
+#[test]
+fn bulk_sync_and_subsequent_rust_edit_share_values_and_dependencies() {
+    let (workbook, _) = Workbook::blank().unwrap();
+    let first = run_office_js_with_workbook(
+        &workbook,
+        r#"
+        return await Excel.run(async (context) => {
+          const sheet = context.workbook.worksheets.getItem("Sheet1");
+          const values = Array.from({length: 100}, (_, r) =>
+            Array.from({length: 10}, (_, c) => r * 10 + c + 1));
+          sheet.getRange("A1:J100").values = values;
+          const summary = context.workbook.worksheets.add("Summary");
+          const total = summary.getRange("A1");
+          total.formulas = [["=SUM(Sheet1!A1:J100)"]];
+          const data = sheet.getRange("A1:J100");
+          data.load("values");
+          total.load("values");
+          await context.sync();
+          if (JSON.stringify(data.values) !== JSON.stringify(values)) {
+            throw new Error("bulk write did not preserve every cell");
+          }
+          return total.values[0][0];
+        });
+        "#,
+    )
+    .expect("bulk Office.js sync");
+    assert_eq!(first.value.as_f64(), Some(500_500.0));
+
+    workbook
+        .sheet_by_name("Sheet1")
+        .unwrap()
+        .set_cell("A1", "101")
+        .unwrap();
+    let second = run_office_js_with_workbook(
+        &workbook,
+        r#"
+        return await Excel.run(async (context) => {
+          const total = context.workbook.worksheets.getItem("Summary").getRange("A1");
+          total.load("values");
+          await context.sync();
+          return total.values[0][0];
+        });
+        "#,
+    )
+    .expect("read dependent result after Rust edit");
+    assert_eq!(second.value.as_f64(), Some(500_600.0));
+}
+
+#[test]
+fn repeated_sync_preserves_mixed_values_and_refreshes_formula_results() {
+    let output = run_office_js(
+        r#"
+        return await Excel.run(async (context) => {
+          const sheet = context.workbook.worksheets.getItem("Sheet1");
+          sheet.getRange("A1:D1").values = [[7, true, "日本語 🦀", null]];
+          const result = sheet.getRange("E1");
+          result.formulas = [["=A1*3"]];
+          result.load("values");
+          await context.sync();
+          const before = result.values[0][0];
+          sheet.getRange("A1").values = [[11]];
+          const range = sheet.getRange("A1:E1");
+          range.load("values");
+          await context.sync();
+          return {before, after: range.values};
+        });
+        "#,
+    )
+    .expect("mixed values and repeated sync");
+    assert_eq!(
+        output.value,
+        serde_json::json!({
+            "before": 21,
+            "after": [[11, true, "日本語 🦀", "", 33]]
+        })
+    );
+}
 
 #[test]
 fn rust_workbook_can_add_sheet() {

@@ -1,4 +1,4 @@
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use xlsx_parser::write::{ZipWriter, write_xlsx_from_parse_output};
 
 const EXTENSIONS: &str = r#"<extLst><ext uri="{EB79DEF2-80B8-43e5-95BD-54CBDDF9020C}"><x14:slicerStyles defaultSlicerStyle="SlicerStyleLight1"><x14:slicerStyle name="Custom"><x14:slicerStyleElements count="1"><x14:slicerStyleElement type="wholeSlicer" dxfId="1"/></x14:slicerStyleElements></x14:slicerStyle></x14:slicerStyles></ext><ext uri="{9260A510-F301-46a8-8635-F512D64BE5F5}"><x15:timelineStyles defaultTimelineStyle="TimeSlicerStyleLight1"/></ext><ext uri="custom"><vendor:setting value="retained"/></ext></extLst>"#;
@@ -51,8 +51,7 @@ fn fixture(include_base_xfs: bool) -> Vec<u8> {
 #[test]
 fn stylesheet_extensions_and_referenced_dxfs_survive_engine_edit_and_reload() {
     for include_base_xfs in [true, false] {
-        let (mut engine, _) =
-            YrsComputeEngine::from_xlsx_bytes(&fixture(include_base_xfs)).unwrap();
+        let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&fixture(include_base_xfs)).unwrap();
         let sid = *engine.mirror().sheet_ids().next().unwrap();
         engine.set_cell_value_as_text(&sid, 0, 0, "edited").unwrap();
         for _ in 0..2 {
@@ -75,7 +74,7 @@ fn stylesheet_extensions_and_referenced_dxfs_survive_engine_edit_and_reload() {
                 parsed.sheets[0].cells[0].value,
                 value_types::CellValue::Text("edited".into())
             );
-            engine = YrsComputeEngine::from_xlsx_bytes(&bytes).unwrap().0;
+            engine = ComputeEngine::from_xlsx_bytes(&bytes).unwrap().0;
         }
     }
 }

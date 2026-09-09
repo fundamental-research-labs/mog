@@ -3,7 +3,7 @@
 use cell_types::SheetId;
 use compute_api::ComputeService;
 use compute_api::dispatch::Dispatch;
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use snapshot_types::{SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
 
@@ -12,6 +12,9 @@ fn service_reads_writes_and_creates_sheets_without_session_setup() {
     let sheet_uuid = "44444444-4444-4444-4444-444444444444";
     let snapshot = WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_uuid.into(),
             name: "Sheet1".into(),
             rows: 100,
@@ -21,7 +24,7 @@ fn service_reads_writes_and_creates_sheets_without_session_setup() {
         }],
         ..Default::default()
     };
-    let (engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let mut service = ComputeService::new(Dispatch::from_engine(engine).unwrap());
     let sheet_id = SheetId::from_uuid_str(sheet_uuid).unwrap();
 
@@ -46,9 +49,12 @@ fn service_reads_writes_and_creates_sheets_without_session_setup() {
         .set_cell_value_parsed(&created_id, 0, 0, "7")
         .unwrap();
 
-    let state = service.sync_full_state();
-    let (restored_engine, _) = YrsComputeEngine::from_yrs_state(&state).unwrap();
+    let state = service.export_to_xlsx_bytes().unwrap();
+    let (restored_engine, _) = ComputeEngine::from_xlsx_bytes(&state).unwrap();
     let mut restored = ComputeService::new(Dispatch::from_engine(restored_engine).unwrap());
+    let sheet_ids = restored.get_sheet_order();
+    let sheet_id = SheetId::from_uuid_str(&sheet_ids[0]).unwrap();
+    let created_id = SheetId::from_uuid_str(&sheet_ids[1]).unwrap();
     assert_eq!(
         restored.get_cell_value(&sheet_id, 0, 0),
         CellValue::Number(FiniteF64::must(21.0))

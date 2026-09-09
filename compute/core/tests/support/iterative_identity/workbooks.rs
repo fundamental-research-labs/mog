@@ -86,6 +86,9 @@ pub(super) fn workbook_for_case(
         }
         vec![
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: SHEET1_UUID.to_string(),
                 name: "Sheet1".to_string(),
                 rows: 100_000,
@@ -94,6 +97,9 @@ pub(super) fn workbook_for_case(
                 ranges: vec![],
             },
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: SHEET2_UUID.to_string(),
                 name: "Sheet2".to_string(),
                 rows: 1_000,
@@ -102,6 +108,9 @@ pub(super) fn workbook_for_case(
                 ranges: vec![],
             },
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: SHEET3_UUID.to_string(),
                 name: "Sheet3".to_string(),
                 rows: 1_000,
@@ -112,6 +121,9 @@ pub(super) fn workbook_for_case(
         ]
     } else {
         vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET1_UUID.to_string(),
             name: "Sheet1".to_string(),
             rows: 100_000,
@@ -194,6 +206,9 @@ pub(super) fn workbook_for_case_v2(
     let needs_sheet3 = sum3d;
 
     let mut sheets = vec![SheetSnapshot {
+        identities: Vec::new(),
+        row_axis: None,
+        col_axis: None,
         id: SHEET1_UUID.to_string(),
         name: "Sheet1".to_string(),
         rows: 100_000,
@@ -218,6 +233,9 @@ pub(super) fn workbook_for_case_v2(
             ));
         }
         sheets.push(SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET2_UUID.to_string(),
             name: "Sheet2".to_string(),
             rows: 100_000,
@@ -234,6 +252,9 @@ pub(super) fn workbook_for_case_v2(
             sheet3_cells.push(value_cell(2, i, 2, (i + 1) as f64));
         }
         sheets.push(SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET3_UUID.to_string(),
             name: "Sheet3".to_string(),
             rows: 1_000,
@@ -357,6 +378,9 @@ pub(super) fn workbook_for_case_v2_named(
             None,
         ));
         snapshot.sheets.push(SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET2_UUID.to_string(),
             name: "Sheet2".to_string(),
             rows: 100_000,
@@ -450,6 +474,9 @@ pub(super) fn workbook_for_case_v2_table(
             None,
         ));
         snapshot.sheets.push(SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET2_UUID.to_string(),
             name: "Sheet2".to_string(),
             rows: 100_000,

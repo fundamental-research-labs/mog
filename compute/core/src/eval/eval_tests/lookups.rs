@@ -588,6 +588,9 @@ fn test_formula_variable_with_function() {
 fn test_formula_variable_uses_explicit_sheet_context_without_a_current_cell() {
     let snapshot = WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: TEST_SHEET_UUID.to_string(),
             name: "Inputs".to_string(),
             rows: 100,

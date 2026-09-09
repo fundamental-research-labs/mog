@@ -6,7 +6,7 @@ use crate::mirror::CellMirror;
 use crate::storage::engine::settings::EngineSettings;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::properties;
-use crate::storage::sheet::{hyperlinks, merges};
+use crate::storage::sheet::merges;
 
 pub(in crate::storage::engine::viewport) fn get_active_cell(
     stores: &EngineStores,
@@ -20,14 +20,9 @@ pub(in crate::storage::engine::viewport) fn get_active_cell(
     let effective_cell_id = {
         let pos = mirror.resolve_position(cell_id);
         if let (Some(p), Some(grid)) = (pos, stores.grid_indexes.get(sheet_id)) {
-            if let Some(merge_info) = merges::get_merge_for_cell(
-                stores.storage.doc(),
-                stores.storage.sheets(),
-                *sheet_id,
-                grid,
-                p.row(),
-                p.col(),
-            ) {
+            if let Some(merge_info) =
+                merges::get_merge_for_cell(&stores.storage, *sheet_id, grid, p.row(), p.col())
+            {
                 if !merge_info.is_origin {
                     grid.cell_id_at(merge_info.merge.start_row, merge_info.merge.start_col)
                         .unwrap_or(*cell_id)
@@ -102,8 +97,7 @@ pub(in crate::storage::engine::viewport) fn get_active_cell(
         serde_json::to_value(effective).ok()
     });
 
-    // Region metadata is derived from runtime mirror state, not from Yrs
-    // properties — the projection registry + Data Table region rectangles
+    // Region metadata comes from the projection registry and Data Table rectangles, which
     // are populated at hydration / runtime. Excel `<f t="array">` on
     // hydration inserts into both the projection registry and
     // `mirror.cse_anchors`; XLSX `<f t="dataTable">` populates
@@ -180,64 +174,58 @@ pub(in crate::storage::engine::viewport) fn get_active_cell(
     );
     let is_array_member = matches!(&region_meta, Some(r) if !r.is_anchor);
 
-    let metadata = properties::get_properties(
-        stores.storage.doc(),
-        stores.storage.workbook_map(),
-        stores.storage.sheets(),
-        sheet_id,
-        &cell_id_hex,
-    )
-    .map(|props| crate::storage::properties::CellMetadata {
-        provenance: props.provenance,
-        validation: props.validation,
-        connection_id: props.connection_id,
-        style_id: props.style_id,
-        cell_metadata_index: props.cell_metadata_index,
-        vm: props.vm,
-        imported_rich_error: props.imported_rich_error,
-        phonetic: props.phonetic,
-        date_lexical_value: props.date_lexical_value,
-        formula_result_type: props.formula_result_type,
-        has_empty_cached_value: props.has_empty_cached_value,
-        formula_cache_provenance: props.formula_cache_provenance,
-        original_sst_index: props.original_sst_index,
-        original_value: props.original_value,
-        is_array_formula: false,
-        is_cse_anchor: false,
-        is_array_member: false,
-        region: None,
-    })
-    .map(|mut meta| {
-        // Overlay the runtime-derived region/back-compat fields before
-        // checking emptiness — if the cell is a region member but has no
-        // Yrs-side metadata, we still want `metadata` to be emitted so
-        // the formula bar can render `{=…}` braces.
-        meta.is_array_formula = is_array_formula;
-        meta.is_cse_anchor = is_cse_anchor;
-        meta.is_array_member = is_array_member;
-        meta.region = region_meta.clone();
-        meta
-    })
-    .or_else(|| {
-        if is_array_formula {
-            Some(crate::storage::properties::CellMetadata {
-                is_array_formula,
-                is_cse_anchor,
-                is_array_member,
-                region: region_meta.clone(),
-                ..Default::default()
-            })
-        } else {
-            None
-        }
-    })
-    .and_then(|meta| {
-        if meta.is_empty() {
-            None
-        } else {
-            serde_json::to_value(meta).ok()
-        }
-    });
+    let metadata = properties::get_properties(&stores.storage, sheet_id, &cell_id_hex)
+        .map(|props| crate::storage::properties::CellMetadata {
+            provenance: props.provenance,
+            validation: props.validation,
+            connection_id: props.connection_id,
+            style_id: props.style_id,
+            cell_metadata_index: props.cell_metadata_index,
+            vm: props.vm,
+            imported_rich_error: props.imported_rich_error,
+            phonetic: props.phonetic,
+            date_lexical_value: props.date_lexical_value,
+            formula_result_type: props.formula_result_type,
+            has_empty_cached_value: props.has_empty_cached_value,
+            formula_cache_provenance: props.formula_cache_provenance,
+            original_sst_index: props.original_sst_index,
+            original_value: props.original_value,
+            is_array_formula: false,
+            is_cse_anchor: false,
+            is_array_member: false,
+            region: None,
+        })
+        .map(|mut meta| {
+            // Overlay the runtime-derived region/back-compat fields before
+            // checking emptiness — if the cell is a region member but has no
+            // explicit cell metadata, we still want `metadata` to be emitted so
+            // the formula bar can render `{=…}` braces.
+            meta.is_array_formula = is_array_formula;
+            meta.is_cse_anchor = is_cse_anchor;
+            meta.is_array_member = is_array_member;
+            meta.region = region_meta.clone();
+            meta
+        })
+        .or_else(|| {
+            if is_array_formula {
+                Some(crate::storage::properties::CellMetadata {
+                    is_array_formula,
+                    is_cse_anchor,
+                    is_array_member,
+                    region: region_meta.clone(),
+                    ..Default::default()
+                })
+            } else {
+                None
+            }
+        })
+        .and_then(|meta| {
+            if meta.is_empty() {
+                None
+            } else {
+                serde_json::to_value(meta).ok()
+            }
+        });
 
     // Edit text for date/time cells.
     let edit_text = pos.and_then(|p| {
@@ -281,25 +269,17 @@ pub(in crate::storage::engine::viewport) fn get_active_cell(
 
     // Is formula hidden (sheet protected AND cell format has hidden flag).
     let is_formula_hidden = if is_sheet_protected {
-        properties::is_formula_hidden(
-            stores.storage.doc(),
-            stores.storage.workbook_map(),
-            stores.storage.sheets(),
-            sheet_id,
-            &cell_id_hex,
-        )
+        properties::is_formula_hidden(&stores.storage, sheet_id, &cell_id_hex)
     } else {
         false
     };
 
     // Hyperlink URL.
     let hyperlink_url = pos.and_then(|p| {
-        let grid = stores.grid_indexes.get(sheet_id)?;
-        hyperlinks::get_hyperlink(
-            stores.storage.doc(),
-            stores.storage.sheets(),
+        crate::storage::engine::services::objects::get_hyperlink(
+            stores,
+            mirror,
             sheet_id,
-            grid,
             p.row(),
             p.col(),
         )

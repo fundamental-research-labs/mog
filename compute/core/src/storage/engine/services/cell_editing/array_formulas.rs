@@ -1,23 +1,16 @@
-use cell_types::SheetId;
+use cell_types::{SheetId, SheetPos};
 use value_types::{CellValue, ComputeError};
-use yrs::{Map, Origin, Out, Transact};
 
 use crate::mirror::CellMirror;
 use crate::snapshot::RecalcResult;
-use crate::storage::engine::mutation_coordinator::MutationCoordinator;
+use crate::storage::engine::history::cells::capture_cell;
 use crate::storage::engine::stores::EngineStores;
-use compute_document::hex::id_to_hex;
-use compute_document::schema::KEY_CELLS;
-use compute_document::undo::ORIGIN_USER_EDIT;
 
-use super::{
-    a1_range_string, ensure_cell_id_mirrored, persist_cell_formula_identity, write_cell_to_yrs,
-};
+use super::{a1_range_string, ensure_cell_id_mirrored, register_formula_cell_identities};
 
 pub(in crate::storage::engine) fn set_array_formula(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
-    mutation: &mut MutationCoordinator,
     sheet_id: &SheetId,
     top_row: u32,
     left_col: u32,
@@ -33,15 +26,24 @@ pub(in crate::storage::engine) fn set_array_formula(
             ),
         });
     }
-    // Resolve / mint a CellId for the anchor in both the in-memory
-    // grid index and the Yrs `gridIndex/{posToId, idToPos}` mirror.
-    // Same path used by metadata writes on empty positions.
-    let Some(anchor_id) = ensure_cell_id_mirrored(stores, mirror, sheet_id, top_row, left_col)
-    else {
+    let Some(grid) = stores.grid_indexes.get(sheet_id) else {
         return Err(ComputeError::SheetNotFound {
             sheet_id: sheet_id.to_uuid_string(),
         });
     };
+    // Capture the anchor before implicit identity registration grows the axes.
+    let anchor_id = grid
+        .cell_id_at(top_row, left_col)
+        .or_else(|| mirror.resolve_cell_id(sheet_id, SheetPos::new(top_row, left_col)))
+        .unwrap_or_else(|| stores.grid_id_alloc.next_cell_id());
+    capture_cell(stores, mirror, *sheet_id, anchor_id, top_row, left_col);
+    stores
+        .grid_indexes
+        .get_mut(sheet_id)
+        .unwrap()
+        .register_cell(anchor_id, top_row, left_col);
+    // Share the native anchor identity with metadata writes on empty positions.
+    ensure_cell_id_mirrored(stores, mirror, sheet_id, top_row, left_col);
 
     // Snapshot old anchor value for the change-set patch.
     let old_val = stores
@@ -52,69 +54,47 @@ pub(in crate::storage::engine) fn set_array_formula(
         .unwrap_or(CellValue::Null);
     let old_formula = stores.compute.get_formula(&anchor_id).map(str::to_owned);
 
-    // Write the formula text to Yrs (suppressed observer, so we own
-    // the change-set construction). The body is normalized in the
-    // scheduler too, but Yrs storage requires the leading `=`-stripped
-    // form via `build_cell_prelim` (which `write_cell_to_yrs` calls).
-    let formula_body = formula.trim_start().strip_prefix('=').unwrap_or(formula);
-
-    mutation.observer.set_suppressed(true);
-    write_cell_to_yrs(
-        stores,
-        sheet_id,
-        anchor_id,
-        top_row,
-        left_col,
-        &CellValue::Null,
-        Some(formula_body),
-    );
-    mutation.observer.set_suppressed(false);
-
-    mirror.apply_edit(
-        sheet_id,
-        anchor_id,
-        cell_types::SheetPos::new(top_row, left_col),
-        CellValue::Null,
-        None,
-    );
-
     if let Some(grid) = stores.grid_indexes.get_mut(sheet_id) {
         grid.register_cell(anchor_id, top_row, left_col);
     }
 
-    let mut result = stores.compute.set_array_formula(
+    // Replace imported result-mode metadata before evaluation so an authored
+    // CSE formula cannot inherit a legacy scalar or dynamic-array declaration.
+    let old_metadata = stores.storage.cell_metadata(&anchor_id).cloned();
+    stores.storage.set_cell_metadata(
+        anchor_id,
+        crate::storage::CellMetadata {
+            array_ref: Some(a1_range_string(top_row, left_col, bottom_row, right_col)),
+            formula_result_mode: Some(crate::mirror::cell_metadata::FormulaResultMode::Cse),
+            ..Default::default()
+        },
+    );
+    crate::storage::engine::cell_metadata::refresh(&stores.storage, mirror, stores.layout_metrics);
+    let mut result = match stores.compute.set_array_formula(
         mirror, sheet_id, anchor_id, top_row, left_col, bottom_row, right_col, formula,
-    )?;
-    {
-        let _guard = mutation.suppress_guard();
-        persist_cell_formula_identity(stores, mirror, sheet_id, anchor_id)?;
-    }
-
-    // Persist the CSE marker into Yrs so the array-formula brace
-    // survives Yrs undo/redo. unified-reference left this runtime-only
-    // (mirror.cse_anchors), which meant undoing the CSE entry restored
-    // the value but lost the brace — this is the legacy string-rewrite followup.
-    //
-    // Stored on the anchor cell as `KEY_ARRAY_REF`, mirroring OOXML
-    // `<f t="array" ref="A1:C5">`. Hydration paths read this back into
-    // `mirror.cse_anchors` + `projection_registry` (snapshot-types
-    // already carries `array_ref` on `CellData`).
-    {
-        let sheet_hex = id_to_hex(sheet_id.as_u128());
-        let anchor_hex = id_to_hex(anchor_id.as_u128());
-        let range_a1 = a1_range_string(top_row, left_col, bottom_row, right_col);
-        let sheets_map = stores.storage.doc().get_or_insert_map("sheets");
-        let mut txn = stores
-            .storage
-            .doc()
-            .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-        if let Some(Out::YMap(sheet_map)) = sheets_map.get(&txn, &sheet_hex)
-            && let Some(Out::YMap(cells_map)) = sheet_map.get(&txn, KEY_CELLS)
-            && let Some(Out::YMap(cell_map)) = cells_map.get(&txn, &anchor_hex)
-        {
-            compute_document::cell_serde::write_array_ref_to_yrs(&cell_map, &mut txn, &range_a1);
+    ) {
+        Ok(result) => result,
+        Err(error) => {
+            if let Some(metadata) = old_metadata {
+                stores.storage.set_cell_metadata(anchor_id, metadata);
+            } else {
+                stores.storage.clear_cell_metadata(anchor_id);
+            }
+            crate::storage::engine::cell_metadata::refresh(
+                &stores.storage,
+                mirror,
+                stores.layout_metrics,
+            );
+            return Err(error);
         }
-    }
+    };
+    register_formula_cell_identities(stores, mirror, anchor_id);
+    crate::storage::properties::clear_formula_cache_metadata_for_cell_ids(
+        &mut stores.storage,
+        sheet_id,
+        &[anchor_id],
+    );
+    crate::storage::engine::cell_metadata::refresh(&stores.storage, mirror, stores.layout_metrics);
 
     // Patch before-side fields onto the seed change.
     let cell_id_str = anchor_id.to_uuid_string();

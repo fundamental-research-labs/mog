@@ -3,7 +3,6 @@
 use cell_types::interval_tree::IntervalTree;
 use cell_types::{CellId, ColId, RangeId, RowId, SheetId, SheetPos};
 use formula_types::StructureChange;
-use value_types::CellValue;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -16,15 +15,25 @@ impl CellMirror {
     /// Apply a structural change to a sheet (insert/delete rows/cols, remap positions).
     ///
     /// Returns the list of `RangeId`s that were removed (fully consumed by the
-    /// structural change). Callers with Yrs access must clean up the
-    /// corresponding `ranges`, `rangePayloads`, `rangeBindings`, and
-    /// `rangeFormats` entries.
+    /// structural change), so callers can remove associated range metadata.
     ///
     /// Silently ignored (returns empty) if the sheet does not exist.
     pub fn apply_structure_change(
         &mut self,
         sheet: &SheetId,
         change: &StructureChange,
+    ) -> Vec<RangeId> {
+        self.apply_structure_change_with_axes(sheet, change, None)
+    }
+
+    pub(crate) fn apply_structure_change_with_axes(
+        &mut self,
+        sheet: &SheetId,
+        change: &StructureChange,
+        axes: Option<(
+            std::sync::Arc<compute_document::identity::AxisIndex<RowId>>,
+            std::sync::Arc<compute_document::identity::AxisIndex<ColId>>,
+        )>,
     ) -> Vec<RangeId> {
         self.projection_registry.clear();
 
@@ -67,11 +76,7 @@ impl CellMirror {
             StructureChange::DeleteRows { at, count, .. } => self
                 .sheets
                 .get(sheet)
-                .map(|s| {
-                    (*at..*at + *count)
-                        .filter_map(|i| s.index_to_row.get(&i).copied())
-                        .collect()
-                })
+                .map(|s| (*at..*at + *count).filter_map(|i| s.row_id_at(i)).collect())
                 .unwrap_or_default(),
             _ => Vec::new(),
         };
@@ -79,11 +84,7 @@ impl CellMirror {
             StructureChange::DeleteCols { at, count, .. } => self
                 .sheets
                 .get(sheet)
-                .map(|s| {
-                    (*at..*at + *count)
-                        .filter_map(|i| s.index_to_col.get(&i).copied())
-                        .collect()
-                })
+                .map(|s| (*at..*at + *count).filter_map(|i| s.col_id_at(i)).collect())
                 .unwrap_or_default(),
             _ => Vec::new(),
         };
@@ -167,11 +168,14 @@ impl CellMirror {
             } => {
                 shift_positions(s, *at, *count, true, true);
                 remap_positional_metadata(s, *at, *count, true, true);
-                shift_identity_map_rows(s, *at, *count, true);
-                for (i, rid) in new_row_ids.iter().enumerate() {
-                    let idx = *at + i as u32;
-                    s.index_to_row.insert(idx, *rid);
-                    s.row_to_index.insert(*rid, idx);
+                if let Some((rows, _)) = &axes {
+                    s.row_axis = rows.clone();
+                } else {
+                    std::sync::Arc::make_mut(&mut s.row_axis).insert_explicit(
+                        *sheet,
+                        *at,
+                        new_row_ids.iter().copied(),
+                    );
                 }
                 s.rows = s.rows.saturating_add(*count);
                 s.grid_rows = s.grid_rows.saturating_add(*count);
@@ -190,12 +194,11 @@ impl CellMirror {
                 }
                 shift_positions(s, at + count, *count, true, false);
                 remap_positional_metadata(s, at + count, *count, true, false);
-                for i in *at..*at + *count {
-                    if let Some(rid) = s.index_to_row.remove(&i) {
-                        s.row_to_index.remove(&rid);
-                    }
+                if let Some((rows, _)) = &axes {
+                    s.row_axis = rows.clone();
+                } else {
+                    std::sync::Arc::make_mut(&mut s.row_axis).delete_range(*at, *count);
                 }
-                shift_identity_map_rows(s, *at + *count, *count, false);
                 s.rows = s.rows.saturating_sub(*count);
                 s.grid_rows = s.grid_rows.saturating_sub(*count);
                 s.identity_rows = s.identity_rows.saturating_sub(*count);
@@ -207,11 +210,14 @@ impl CellMirror {
             } => {
                 shift_positions(s, *at, *count, false, true);
                 remap_positional_metadata(s, *at, *count, false, true);
-                shift_identity_map_cols(s, *at, *count, true);
-                for (i, cid) in new_col_ids.iter().enumerate() {
-                    let idx = *at + i as u32;
-                    s.index_to_col.insert(idx, *cid);
-                    s.col_to_index.insert(*cid, idx);
+                if let Some((_, cols)) = &axes {
+                    s.col_axis = cols.clone();
+                } else {
+                    std::sync::Arc::make_mut(&mut s.col_axis).insert_explicit(
+                        *sheet,
+                        *at,
+                        new_col_ids.iter().copied(),
+                    );
                 }
                 s.cols = s.cols.saturating_add(*count);
                 s.grid_cols = s.grid_cols.saturating_add(*count);
@@ -230,12 +236,11 @@ impl CellMirror {
                 }
                 shift_positions(s, at + count, *count, false, false);
                 remap_positional_metadata(s, at + count, *count, false, false);
-                for i in *at..*at + *count {
-                    if let Some(cid) = s.index_to_col.remove(&i) {
-                        s.col_to_index.remove(&cid);
-                    }
+                if let Some((_, cols)) = &axes {
+                    s.col_axis = cols.clone();
+                } else {
+                    std::sync::Arc::make_mut(&mut s.col_axis).delete_range(*at, *count);
                 }
-                shift_identity_map_cols(s, *at + *count, *count, false);
                 s.cols = s.cols.saturating_sub(*count);
                 s.grid_cols = s.grid_cols.saturating_sub(*count);
                 s.identity_cols = s.identity_cols.saturating_sub(*count);
@@ -250,23 +255,24 @@ impl CellMirror {
                     let pos = SheetPos::new(*new_row, *new_col);
                     s.pos_to_id.insert(pos, *cell_id);
                     s.id_to_pos.insert(*cell_id, pos);
+                    if s.cells.get(cell_id).is_some_and(|entry| !entry.is_ghost()) {
+                        s.expand_extent(pos);
+                    } else {
+                        s.expand_identity_extent(pos);
+                    }
                 }
             }
         }
 
-        // --- Range-aware updates (after position shifts, before col_data rebuild) ---
+        // --- Range-aware updates (after position shifts, before column_values rebuild) ---
 
         let has_ranges = !s.range_views.is_empty();
         let mut cols_to_version: Vec<u32> = Vec::new();
         let mut structurally_removed_ranges: Vec<RangeId> = Vec::new();
 
         if has_ranges {
-            let row_order: Vec<RowId> = (0..s.rows)
-                .filter_map(|i| s.index_to_row.get(&i).copied())
-                .collect();
-            let col_order: Vec<ColId> = (0..s.cols)
-                .filter_map(|i| s.index_to_col.get(&i).copied())
-                .collect();
+            let row_order = (s.id, s.row_axis.clone());
+            let col_order = (s.id, s.col_axis.clone());
 
             let range_ids: Vec<RangeId> = s.range_views.keys().copied().collect();
             let mut removed_range_ids: Vec<RangeId> = Vec::new();
@@ -287,7 +293,6 @@ impl CellMirror {
                                     sheet,
                                     &range_id,
                                     new_row_ids,
-                                    &row_order,
                                     &mut self.cell_to_sheet,
                                 );
                             }
@@ -310,7 +315,6 @@ impl CellMirror {
                                         sheet,
                                         &range_id,
                                         new_col_ids,
-                                        &col_order,
                                         &mut self.cell_to_sheet,
                                     );
                                 }
@@ -323,8 +327,6 @@ impl CellMirror {
                     }
                 }
                 StructureChange::DeleteRows { .. } => {
-                    let deleted_set: FxHashSet<RowId> = deleted_row_ids.iter().copied().collect();
-
                     for &range_id in &range_ids {
                         let delta = {
                             let rv = s.range_views.get_mut(&range_id).unwrap();
@@ -334,19 +336,11 @@ impl CellMirror {
                             RangeExtentDelta::Removed => {
                                 removed_range_ids.push(range_id);
                             }
-                            _ => {
-                                if let Some(rv) = s.range_views.get_mut(&range_id) {
-                                    rv.overrides
-                                        .retain(|(row_id, _), _| !deleted_set.contains(row_id));
-                                    rv.override_count = rv.overrides.len() as u32;
-                                }
-                            }
+                            _ => {}
                         }
                     }
                 }
                 StructureChange::DeleteCols { .. } => {
-                    let deleted_set: FxHashSet<ColId> = deleted_col_ids.iter().copied().collect();
-
                     for &range_id in &range_ids {
                         let delta = {
                             let rv = s.range_views.get_mut(&range_id).unwrap();
@@ -356,13 +350,7 @@ impl CellMirror {
                             RangeExtentDelta::Removed => {
                                 removed_range_ids.push(range_id);
                             }
-                            _ => {
-                                if let Some(rv) = s.range_views.get_mut(&range_id) {
-                                    rv.overrides
-                                        .retain(|(_, col_id), _| !deleted_set.contains(col_id));
-                                    rv.override_count = rv.overrides.len() as u32;
-                                }
-                            }
+                            _ => {}
                         }
                     }
                 }
@@ -377,8 +365,8 @@ impl CellMirror {
                         &mut s.cells,
                         &mut s.pos_to_id,
                         &mut s.id_to_pos,
-                        &s.row_to_index,
-                        &s.col_to_index,
+                        &s.row_axis,
+                        &s.col_axis,
                         sheet,
                     );
                     for vid in folded {
@@ -389,12 +377,8 @@ impl CellMirror {
             structurally_removed_ranges.extend_from_slice(&removed_range_ids);
 
             // Rebuild spatial index from surviving Range views.
-            let row_order: Vec<RowId> = (0..s.rows)
-                .filter_map(|i| s.index_to_row.get(&i).copied())
-                .collect();
-            let col_order: Vec<ColId> = (0..s.cols)
-                .filter_map(|i| s.index_to_col.get(&i).copied())
-                .collect();
+            let row_order = (s.id, s.row_axis.clone());
+            let col_order = (s.id, s.col_axis.clone());
 
             let mut extents: Vec<RangeExtent> = Vec::new();
             for rv in s.range_views.values() {
@@ -411,31 +395,21 @@ impl CellMirror {
                 .flat_map(|rv| {
                     rv.col_offset_by_id
                         .keys()
-                        .filter_map(|cid| s.col_to_index.get(cid).copied())
+                        .filter_map(|cid| s.col_axis.position_of(s.id, *cid))
                 })
                 .collect();
             cols_to_version.extend(range_col_indices);
         }
 
-        // Rebuild col_data: standard rebuild for non-Range columns,
-        // then Range-aware rebuild overwrites Range-backed columns.
-        rebuild_col_data(s);
-        if has_ranges {
-            let range_backed_cols: FxHashSet<u32> = s
-                .range_views
-                .values()
-                .flat_map(|rv| {
-                    rv.col_offset_by_id
-                        .keys()
-                        .filter_map(|cid| s.col_to_index.get(cid).copied())
-                })
-                .collect();
-            for col in &range_backed_cols {
-                s.rebuild_col_data(*col);
-            }
-        }
+        s.projected_columns.clear();
+        s.generated_values.clear();
+        s.rebuild_column_index();
 
+        self.refresh_axis_ownership(*sheet);
         self.dense_cache.invalidate_sheet(sheet);
+        for &col in self.sheets[sheet].column_lengths.keys() {
+            self.dense_cache.register_column(*sheet, col);
+        }
 
         for col in cols_to_version {
             self.bump_col_version(sheet, col);
@@ -451,11 +425,8 @@ fn populate_virtual_cells_for_insert(
     sheet: &SheetId,
     range_id: &RangeId,
     new_row_ids: &[RowId],
-    row_order: &[RowId],
     cell_to_sheet: &mut FxHashMap<CellId, SheetId>,
 ) {
-    let new_set: FxHashSet<RowId> = new_row_ids.iter().copied().collect();
-
     let rv = match s.range_views.get(range_id) {
         Some(rv) => rv,
         None => return,
@@ -468,8 +439,8 @@ fn populate_virtual_cells_for_insert(
         _ => return,
     };
 
-    let start_pos = row_order.iter().position(|r| *r == anchor_start);
-    let end_pos = row_order.iter().position(|r| *r == anchor_end);
+    let start_pos = s.row_index_of(&anchor_start);
+    let end_pos = s.row_index_of(&anchor_end);
     let (start_idx, end_idx) = match (start_pos, end_pos) {
         (Some(s), Some(e)) => (s, e),
         _ => return,
@@ -477,20 +448,22 @@ fn populate_virtual_cells_for_insert(
 
     let col_ids: Vec<ColId> = rv.col_offset_by_id.keys().copied().collect();
 
-    let rows_in_extent: Vec<RowId> = row_order
-        [start_idx..=end_idx.min(row_order.len().saturating_sub(1))]
+    let rows_in_extent: Vec<RowId> = new_row_ids
         .iter()
         .copied()
-        .filter(|rid| new_set.contains(rid))
+        .filter(|id| {
+            s.row_index_of(id)
+                .is_some_and(|pos| pos >= start_idx && pos <= end_idx)
+        })
         .collect();
 
     for &rid in &rows_in_extent {
-        let row_idx = match s.row_to_index.get(&rid).copied() {
+        let row_idx = match s.row_index_of(&rid) {
             Some(idx) => idx,
             None => continue,
         };
         for &cid in &col_ids {
-            let col_idx = match s.col_to_index.get(&cid).copied() {
+            let col_idx = match s.col_index_of(&cid) {
                 Some(idx) => idx,
                 None => continue,
             };
@@ -515,11 +488,8 @@ fn populate_virtual_cells_for_col_insert(
     sheet: &SheetId,
     range_id: &RangeId,
     new_col_ids: &[ColId],
-    col_order: &[ColId],
     cell_to_sheet: &mut FxHashMap<CellId, SheetId>,
 ) {
-    let new_set: FxHashSet<ColId> = new_col_ids.iter().copied().collect();
-
     let rv = match s.range_views.get(range_id) {
         Some(rv) => rv,
         None => return,
@@ -532,8 +502,8 @@ fn populate_virtual_cells_for_col_insert(
         _ => return,
     };
 
-    let start_pos = col_order.iter().position(|c| *c == anchor_start_col);
-    let end_pos = col_order.iter().position(|c| *c == anchor_end_col);
+    let start_pos = s.col_index_of(&anchor_start_col);
+    let end_pos = s.col_index_of(&anchor_end_col);
     let (start_idx, end_idx) = match (start_pos, end_pos) {
         (Some(s), Some(e)) => (s, e),
         _ => return,
@@ -541,20 +511,22 @@ fn populate_virtual_cells_for_col_insert(
 
     let row_ids: Vec<RowId> = rv.row_offset_by_id.keys().copied().collect();
 
-    let cols_in_extent: Vec<ColId> = col_order
-        [start_idx..=end_idx.min(col_order.len().saturating_sub(1))]
+    let cols_in_extent: Vec<ColId> = new_col_ids
         .iter()
         .copied()
-        .filter(|cid| new_set.contains(cid))
+        .filter(|id| {
+            s.col_index_of(id)
+                .is_some_and(|pos| pos >= start_idx && pos <= end_idx)
+        })
         .collect();
 
     for &cid in &cols_in_extent {
-        let col_idx = match s.col_to_index.get(&cid).copied() {
+        let col_idx = match s.col_index_of(&cid) {
             Some(idx) => idx,
             None => continue,
         };
         for &rid in &row_ids {
-            let row_idx = match s.row_to_index.get(&rid).copied() {
+            let row_idx = match s.row_index_of(&rid) {
                 Some(idx) => idx,
                 None => continue,
             };
@@ -566,31 +538,6 @@ fn populate_virtual_cells_for_col_insert(
             s.pos_to_id.insert(pos, vid);
             s.id_to_pos.insert(vid, pos);
             cell_to_sheet.insert(vid, *sheet);
-        }
-    }
-}
-
-/// Rebuild col_data from per-cell entries (non-Range columns only).
-///
-/// Range-backed columns are overwritten by `SheetMirror::rebuild_col_data(col)`
-/// after this function runs.
-fn rebuild_col_data(s: &mut SheetMirror) {
-    s.col_data.clear();
-    s.col_data_state.clear();
-    for (cell_id, &pos) in &s.id_to_pos {
-        if let Some(entry) = s.cells.get(cell_id) {
-            let col_vec = s.col_data.entry(pos.col()).or_default();
-            let ri = pos.row() as usize;
-            if ri >= col_vec.len() {
-                col_vec.resize(ri + 1, CellValue::Null);
-            }
-            col_vec[ri] = entry.value.clone();
-        }
-    }
-    let target_len = s.rows as usize;
-    for col_vec in s.col_data.values_mut() {
-        if col_vec.len() < target_len {
-            col_vec.resize(target_len, CellValue::Null);
         }
     }
 }
@@ -695,45 +642,5 @@ fn remap_hashset_u32(set: &mut FxHashSet<u32>, threshold: u32, amount: u32, forw
             k.saturating_sub(amount)
         };
         set.insert(new_k);
-    }
-}
-
-/// Shift `index_to_row` / `row_to_index` so that the Range-aware section
-/// sees correct identity maps. Same pattern as `shift_positions` but for
-/// the RowId↔index maps rather than CellId↔pos maps.
-fn shift_identity_map_rows(s: &mut SheetMirror, threshold: u32, amount: u32, forward: bool) {
-    let to_shift: Vec<(u32, RowId)> = s
-        .index_to_row
-        .iter()
-        .filter(|(idx, _)| **idx >= threshold)
-        .map(|(&idx, &rid)| (idx, rid))
-        .collect();
-    for &(idx, rid) in &to_shift {
-        s.index_to_row.remove(&idx);
-        s.row_to_index.remove(&rid);
-    }
-    for &(idx, rid) in &to_shift {
-        let new_idx = if forward { idx + amount } else { idx - amount };
-        s.index_to_row.insert(new_idx, rid);
-        s.row_to_index.insert(rid, new_idx);
-    }
-}
-
-/// Symmetric to `shift_identity_map_rows` for columns.
-fn shift_identity_map_cols(s: &mut SheetMirror, threshold: u32, amount: u32, forward: bool) {
-    let to_shift: Vec<(u32, ColId)> = s
-        .index_to_col
-        .iter()
-        .filter(|(idx, _)| **idx >= threshold)
-        .map(|(&idx, &cid)| (idx, cid))
-        .collect();
-    for &(idx, cid) in &to_shift {
-        s.index_to_col.remove(&idx);
-        s.col_to_index.remove(&cid);
-    }
-    for &(idx, cid) in &to_shift {
-        let new_idx = if forward { idx + amount } else { idx - amount };
-        s.index_to_col.insert(new_idx, cid);
-        s.col_to_index.insert(cid, new_idx);
     }
 }

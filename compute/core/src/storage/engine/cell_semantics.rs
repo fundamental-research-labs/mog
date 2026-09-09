@@ -1,11 +1,11 @@
-//! High-level cell semantics methods for YrsComputeEngine.
+//! High-level cell semantics methods for ComputeEngine.
 //!
 //! These methods consolidate what TypeScript currently does across multiple IPC
 //! calls into single Rust calls: typed cell values, 2D range reads, and combined
 //! cell info queries. By living in the engine, all FFI targets (WASM, Tauri,
 //! N-API) get them automatically.
 
-use super::{YrsComputeEngine, services};
+use super::{ComputeEngine, services};
 use crate::storage::cells::values as cell_values;
 use crate::storage::properties;
 use bridge_core as bridge;
@@ -34,21 +34,20 @@ pub struct CellInfo {
 }
 
 #[bridge::api(
-    service = "YrsComputeEngine",
+    service = "ComputeEngine",
     key = "doc_id",
     group = "cell_semantics",
     fn_prefix = "compute",
     crate_path = "compute_core"
 )]
-impl YrsComputeEngine {
+impl ComputeEngine {
     /// Get the semantic value of a cell.
     ///
     /// For formula cells, returns the computed value from the mirror.
     /// For value cells, returns the raw value.
     /// For empty cells, returns `CellValue::Null`.
     ///
-    /// Uses the CellMirror as the authority (it is always populated, unlike
-    /// the Yrs grid index which is only written for interactive edits).
+    /// Resolves both sparse cells and compact ranges from the native value store.
     #[bridge::read]
     pub fn get_cell_value(&self, sheet_id: &SheetId, row: u32, col: u32) -> CellValue {
         match cell_values::get_effective_value(&self.mirror, sheet_id, row, col) {
@@ -108,21 +107,6 @@ impl YrsComputeEngine {
                 cell_id.as_ref(),
             ) {
                 Some(formula)
-            } else if let Some(grid_index) = self.stores.grid_indexes.get(sheet_id) {
-                let raw = cell_values::get_raw_value(
-                    &self.mirror,
-                    self.stores.storage.doc(),
-                    self.stores.storage.sheets(),
-                    sheet_id,
-                    row,
-                    col,
-                    grid_index,
-                );
-                if raw.starts_with('=') {
-                    Some(raw)
-                } else {
-                    None
-                }
             } else {
                 None
             }
@@ -376,13 +360,19 @@ fn classify_cell_value_type(value: &CellValue) -> &'static str {
 #[cfg(test)]
 mod tests {
     use crate::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
-    use crate::storage::engine::YrsComputeEngine;
+    use crate::storage::engine::ComputeEngine;
     use cell_types::SheetId;
     use value_types::{CellError, CellValue, FiniteF64};
 
     fn blank_snapshot() -> WorkbookSnapshot {
         WorkbookSnapshot {
+            axis_run_high_water_mark: None,
+            identity_high_water_mark: None,
+            canonical_tables: Vec::new(),
             sheets: vec![SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
                 name: "Sheet1".to_string(),
                 rows: 100,
@@ -430,7 +420,7 @@ mod tests {
 
     #[test]
     fn test_get_cell_value_number() {
-        let (engine, _) = YrsComputeEngine::from_snapshot(blank_snapshot()).unwrap();
+        let (engine, _) = ComputeEngine::from_snapshot(blank_snapshot()).unwrap();
         let sid = sheet_id();
         let val = engine.get_cell_value(&sid, 0, 0);
         assert_eq!(val, CellValue::Number(FiniteF64::must(10.0)));
@@ -438,7 +428,7 @@ mod tests {
 
     #[test]
     fn test_get_cell_value_text() {
-        let (engine, _) = YrsComputeEngine::from_snapshot(blank_snapshot()).unwrap();
+        let (engine, _) = ComputeEngine::from_snapshot(blank_snapshot()).unwrap();
         let sid = sheet_id();
         let val = engine.get_cell_value(&sid, 0, 1);
         assert_eq!(val, CellValue::Text("hello".into()));
@@ -446,9 +436,9 @@ mod tests {
 
     #[test]
     fn test_get_cell_value_formula_returns_computed() {
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(blank_snapshot()).unwrap();
+        let (mut engine, _) = ComputeEngine::from_snapshot(blank_snapshot()).unwrap();
         let sid = sheet_id();
-        // Set formula via interactive edit (populates Yrs grid index)
+        // Set formula via interactive edit (registers its formula identity)
         engine.set_cell_value_parsed(&sid, 1, 0, "=A1+10").unwrap();
         let val = engine.get_cell_value(&sid, 1, 0);
         assert_eq!(val, CellValue::Number(FiniteF64::must(20.0)));
@@ -456,7 +446,7 @@ mod tests {
 
     #[test]
     fn test_get_cell_value_empty() {
-        let (engine, _) = YrsComputeEngine::from_snapshot(blank_snapshot()).unwrap();
+        let (engine, _) = ComputeEngine::from_snapshot(blank_snapshot()).unwrap();
         let sid = sheet_id();
         let val = engine.get_cell_value(&sid, 4, 2);
         assert!(val.is_null());
@@ -468,7 +458,7 @@ mod tests {
 
     #[test]
     fn test_get_value_for_editing_formula_returns_formula_source() {
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(blank_snapshot()).unwrap();
+        let (mut engine, _) = ComputeEngine::from_snapshot(blank_snapshot()).unwrap();
         let sid = sheet_id();
 
         engine.set_cell_value_parsed(&sid, 1, 0, "=A1+10").unwrap();
@@ -478,7 +468,7 @@ mod tests {
 
     #[test]
     fn test_get_value_for_editing_scalar_values_return_raw_edit_text() {
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(blank_snapshot()).unwrap();
+        let (mut engine, _) = ComputeEngine::from_snapshot(blank_snapshot()).unwrap();
         let sid = sheet_id();
 
         engine.set_cell_value_parsed(&sid, 2, 0, "42.5").unwrap();
@@ -494,7 +484,7 @@ mod tests {
 
     #[test]
     fn test_get_value_for_editing_empty_cell_returns_empty_string() {
-        let (engine, _) = YrsComputeEngine::from_snapshot(blank_snapshot()).unwrap();
+        let (engine, _) = ComputeEngine::from_snapshot(blank_snapshot()).unwrap();
         let sid = sheet_id();
 
         assert_eq!(engine.get_value_for_editing(&sid, 9, 9), "");
@@ -512,7 +502,7 @@ mod tests {
             identity_formula: None,
             array_ref: None,
         });
-        let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+        let (engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
         let sid = sheet_id();
 
         assert_eq!(engine.get_value_for_editing(&sid, 3, 0), "#DIV/0!");
@@ -520,7 +510,7 @@ mod tests {
 
     #[test]
     fn test_get_value_for_editing_forced_text_strips_apostrophe_and_does_not_parse() {
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(blank_snapshot()).unwrap();
+        let (mut engine, _) = ComputeEngine::from_snapshot(blank_snapshot()).unwrap();
         let sid = sheet_id();
 
         engine.set_cell_value_as_text(&sid, 4, 0, "'00123").unwrap();
@@ -534,7 +524,7 @@ mod tests {
 
     #[test]
     fn test_get_value_for_editing_date_serial_preserves_current_raw_contract() {
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(blank_snapshot()).unwrap();
+        let (mut engine, _) = ComputeEngine::from_snapshot(blank_snapshot()).unwrap();
         let sid = sheet_id();
 
         engine
@@ -550,7 +540,7 @@ mod tests {
 
     #[test]
     fn test_get_range_values_2d() {
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(blank_snapshot()).unwrap();
+        let (mut engine, _) = ComputeEngine::from_snapshot(blank_snapshot()).unwrap();
         let sid = sheet_id();
         // Add a formula cell via interactive edit
         engine.set_cell_value_parsed(&sid, 1, 0, "=A1+10").unwrap();
@@ -571,7 +561,7 @@ mod tests {
 
     #[test]
     fn test_get_range_values_2d_with_gaps() {
-        let (engine, _) = YrsComputeEngine::from_snapshot(blank_snapshot()).unwrap();
+        let (engine, _) = ComputeEngine::from_snapshot(blank_snapshot()).unwrap();
         let sid = sheet_id();
         // A1:C3 — 3x3 grid, most cells empty
         let grid = engine.get_range_values_2d(&sid, 0, 0, 2, 2);
@@ -600,7 +590,7 @@ mod tests {
 
     #[test]
     fn test_get_cell_info_value_cell() {
-        let (engine, _) = YrsComputeEngine::from_snapshot(blank_snapshot()).unwrap();
+        let (engine, _) = ComputeEngine::from_snapshot(blank_snapshot()).unwrap();
         let sid = sheet_id();
         let info = engine.get_cell_info(&sid, 0, 0);
         assert!(info.is_some());
@@ -613,9 +603,9 @@ mod tests {
 
     #[test]
     fn test_get_cell_info_formula_cell() {
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(blank_snapshot()).unwrap();
+        let (mut engine, _) = ComputeEngine::from_snapshot(blank_snapshot()).unwrap();
         let sid = sheet_id();
-        // Set formula via interactive edit (populates Yrs grid index for formula detection)
+        // Set formula via interactive edit (registers its formula identity)
         engine.set_cell_value_parsed(&sid, 1, 0, "=A1+10").unwrap();
         let info = engine.get_cell_info(&sid, 1, 0);
         assert!(info.is_some());
@@ -628,7 +618,7 @@ mod tests {
 
     #[test]
     fn test_get_cell_info_empty_returns_none() {
-        let (engine, _) = YrsComputeEngine::from_snapshot(blank_snapshot()).unwrap();
+        let (engine, _) = ComputeEngine::from_snapshot(blank_snapshot()).unwrap();
         let sid = sheet_id();
         let info = engine.get_cell_info(&sid, 9, 9);
         assert!(info.is_none());

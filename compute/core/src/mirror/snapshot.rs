@@ -1,7 +1,5 @@
 //! Snapshot deserialization — bulk-loading a CellMirror from a WorkbookSnapshot.
 
-use std::sync::Arc;
-
 use crate::snapshot::{SheetSnapshot, WorkbookSnapshot};
 use cell_types::{CellId, SheetId, SheetPos};
 use rustc_hash::FxHashMap;
@@ -32,7 +30,48 @@ impl CellMirror {
     ///
     /// Parses UUID strings to u128 via `CellId::from_uuid_str()`.
     #[tracing::instrument(name = "mirror_from_snapshot", skip_all)]
-    pub fn from_snapshot(snapshot: WorkbookSnapshot) -> Result<Self, ComputeError> {
+    pub fn from_snapshot(mut snapshot: WorkbookSnapshot) -> Result<Self, ComputeError> {
+        let allocator = std::sync::Arc::new(cell_types::IdAllocator::new());
+        if let Some(next) = snapshot.axis_run_high_water_mark.filter(|next| *next > 1) {
+            allocator.ensure_axis_run_past(cell_types::AxisRunId::from_raw(next - 1));
+        }
+        // Legacy snapshots with Data ranges use the explicit row/column IDs
+        // minted by their original loader. Reserve that sequence before filling
+        // absent axes so mixed native/legacy sheets never collide.
+        for sheet in &snapshot.sheets {
+            if let Some(axis) = &sheet.row_axis {
+                reserve_axis_ids(&allocator, axis);
+            }
+            if let Some(axis) = &sheet.col_axis {
+                reserve_axis_ids(&allocator, axis);
+            }
+        }
+        let legacy_range_axes = snapshot
+            .sheets
+            .iter()
+            .any(|sheet| sheet.row_axis.is_none() && !sheet.ranges.is_empty());
+        for sheet in &mut snapshot.sheets {
+            if sheet.row_axis.is_none() && sheet.col_axis.is_none() {
+                if !legacy_range_axes {
+                    let sid = SheetId::from_uuid_str(&sheet.id)?;
+                    let grid = compute_document::identity::GridIndex::new(
+                        sid,
+                        sheet.rows,
+                        sheet.cols,
+                        allocator.clone(),
+                    );
+                    sheet.row_axis = Some(grid.row_axis().store().clone());
+                    sheet.col_axis = Some(grid.col_axis().store().clone());
+                } else {
+                    sheet.row_axis = Some(cell_types::AxisIdentityStore::Explicit(
+                        (0..sheet.rows).map(|_| allocator.next_row_id()).collect(),
+                    ));
+                    sheet.col_axis = Some(cell_types::AxisIdentityStore::Explicit(
+                        (0..sheet.cols).map(|_| allocator.next_col_id()).collect(),
+                    ));
+                }
+            }
+        }
         let mut mirror = Self::new();
 
         // Pre-size cell_to_sheet for the total cell count across all sheets.
@@ -51,50 +90,55 @@ impl CellMirror {
             mirror.variables.insert(scope, nr.name.clone(), nr);
         }
 
-        // Tables — snapshot carries Vec<TableDef> (formula engine view).
-        // Convert each to a canonical Table and also keep the TableDef cache.
-        mirror.table_defs = snapshot.tables;
-        mirror.tables = mirror
-            .table_defs
-            .iter()
-            .map(|td| domain_types::domain::table::Table {
-                id: td.name.clone(),
-                name: td.name.clone(),
-                display_name: td.name.clone(),
-                sheet_id: td.sheet.to_uuid_string(),
-                range: cell_types::SheetRange::new(
-                    td.start_row,
-                    td.start_col,
-                    td.end_row,
-                    td.end_col,
-                ),
-                columns: td
-                    .columns
-                    .iter()
-                    .enumerate()
-                    .map(|(i, name)| domain_types::domain::table::TableColumn {
-                        id: format!("{}", i + 1),
-                        name: name.clone(),
-                        index: i as u32,
-                        totals_function: None,
-                        totals_label: None,
-                        calculated_formula: None,
-                        ..Default::default()
-                    })
-                    .collect(),
-                has_header_row: td.has_headers,
-                has_totals_row: td.has_totals,
-                style: "TableStyleMedium2".to_string(),
-                banded_rows: true,
-                banded_columns: false,
-                emphasize_first_column: false,
-                emphasize_last_column: false,
-                show_filter_buttons: true,
-                auto_expand: true,
-                auto_calculated_columns: true,
-                ..Default::default()
-            })
-            .collect();
+        // Native snapshots carry the full catalog; formula-only inputs remain supported.
+        if !snapshot.canonical_tables.is_empty() {
+            for table in snapshot.canonical_tables {
+                mirror.set_table(table);
+            }
+        } else {
+            mirror.table_defs = snapshot.tables;
+            mirror.tables = mirror
+                .table_defs
+                .iter()
+                .map(|td| domain_types::domain::table::Table {
+                    id: td.name.clone(),
+                    name: td.name.clone(),
+                    display_name: td.name.clone(),
+                    sheet_id: td.sheet.to_uuid_string(),
+                    range: cell_types::SheetRange::new(
+                        td.start_row,
+                        td.start_col,
+                        td.end_row,
+                        td.end_col,
+                    ),
+                    columns: td
+                        .columns
+                        .iter()
+                        .enumerate()
+                        .map(|(i, name)| domain_types::domain::table::TableColumn {
+                            id: format!("{}", i + 1),
+                            name: name.clone(),
+                            index: i as u32,
+                            totals_function: None,
+                            totals_label: None,
+                            calculated_formula: None,
+                            ..Default::default()
+                        })
+                        .collect(),
+                    has_header_row: td.has_headers,
+                    has_totals_row: td.has_totals,
+                    style: "TableStyleMedium2".to_string(),
+                    banded_rows: true,
+                    banded_columns: false,
+                    emphasize_first_column: false,
+                    emphasize_last_column: false,
+                    show_filter_buttons: true,
+                    auto_expand: true,
+                    auto_calculated_columns: true,
+                    ..Default::default()
+                })
+                .collect();
+        }
 
         // Pivot tables
         mirror.pivot_tables = snapshot.pivot_tables;
@@ -133,6 +177,7 @@ impl CellMirror {
             snapshot.cols,
             cell_hint,
         );
+        sheet_mirror.history = self.history.share();
 
         // Track actual data extent from non-empty cells.
         let mut actual_max_row: u32 = 0;
@@ -148,19 +193,13 @@ impl CellMirror {
         // Each entry: (cell_id, start_row, start_col, end_row, end_col).
         let mut array_projections: Vec<(CellId, u32, u32, u32, u32)> = Vec::new();
 
-        // Collect (row, col, value) for col_data building in a single pass.
-        // This avoids a second iteration over pos_to_id + cells HashMap lookup.
-        let mut col_data_entries: Vec<(u32, u32, CellValue)> =
-            Vec::with_capacity(snapshot.cells.len());
-        let mut occupied_cols: rustc_hash::FxHashSet<u32> = rustc_hash::FxHashSet::default();
-
         for cell_data in snapshot.cells {
             let has_formula = cell_data.formula.is_some() || cell_data.identity_formula.is_some();
             let is_ghost = matches!(cell_data.value, CellValue::Null) && !has_formula;
 
             // ALL cells get identity registration (including ghost cells for comment targets).
             let entry = CellEntry {
-                value: cell_data.value.clone(),
+                value: cell_data.value,
                 formula: cell_data.identity_formula.map(Box::new),
             };
 
@@ -180,15 +219,12 @@ impl CellMirror {
                 identity_max_col = cell_data.col + 1;
             }
 
-            // Ghost cells get identity but don't affect content dimensions or col_data.
+            // Ghost cells get identity but don't affect content dimensions or column_values.
             if is_ghost {
                 continue;
             }
 
             // --- Content cells only below this point ---
-
-            // Move original value for col_data building (no extra clone needed).
-            let col_data_value = cell_data.value;
 
             // Track actual content extent.
             has_content = true;
@@ -208,9 +244,7 @@ impl CellMirror {
                 array_projections.push((cell_id, sr, sc, er, ec));
             }
 
-            // Save for col_data building (avoids second pass).
-            col_data_entries.push((cell_data.row, cell_data.col, col_data_value));
-            occupied_cols.insert(cell_data.col);
+            sheet_mirror.note_column_position(pos);
         }
 
         // Use actual data extent as authoritative dimensions.
@@ -240,31 +274,6 @@ impl CellMirror {
         if has_identity {
             sheet_mirror.identity_rows = identity_max_row;
             sheet_mirror.identity_cols = identity_max_col;
-        }
-
-        // Build column-major dense storage from collected entries (single-pass).
-        // First pass: find max row per column to avoid over-allocating.
-        if sheet_mirror.rows > 0 {
-            let mut col_max_row: rustc_hash::FxHashMap<u32, u32> = rustc_hash::FxHashMap::default();
-            for &(row, col, _) in &col_data_entries {
-                col_max_row
-                    .entry(col)
-                    .and_modify(|m| *m = (*m).max(row))
-                    .or_insert(row);
-            }
-
-            sheet_mirror.col_data.reserve(occupied_cols.len());
-            for (row, col, value) in col_data_entries {
-                let max_row = col_max_row.get(&col).copied().unwrap_or(0);
-                let col_len = (max_row + 1).min(sheet_mirror.rows) as usize;
-                if (row as usize) < col_len {
-                    let col_vec = sheet_mirror
-                        .col_data
-                        .entry(col)
-                        .or_insert_with(|| vec![CellValue::Null; col_len]);
-                    col_vec[row as usize] = value;
-                }
-            }
         }
 
         // Emit post-tightening dimensions for profiling (zero-cost when no subscriber).
@@ -320,11 +329,8 @@ impl CellMirror {
         }
 
         // Hydrate RangeViews from snapshot ranges.
-        // Only insert the RangeView objects here — spatial index building,
-        // virtual CellId registration, and col_data rebuild depend on
-        // row_to_index/col_to_index which aren't populated until
-        // install_row_col_indexes runs. finalize_range_hydration() completes
-        // the setup after those maps are available.
+        // Decode each payload once. Finalization resolves its native axis
+        // identities and builds the spatial lookup after shared axes install.
         for range_data in &snapshot.ranges {
             use super::range_view::RangeView;
 
@@ -342,12 +348,14 @@ impl CellMirror {
                 kind: range_data.kind,
                 anchor: range_data.anchor.clone(),
                 encoding: range_data.encoding,
-                payload: Arc::from(range_data.payload.as_slice()),
+                values: RangeView::decode_payload(
+                    range_data.encoding,
+                    &range_data.payload,
+                    range_data.row_ids.len() * range_data.col_ids.len(),
+                ),
+                payload_cols: range_data.col_ids.len() as u32,
                 row_offset_by_id,
                 col_offset_by_id,
-                overrides: FxHashMap::default(),
-                override_count: 0,
-                folded_up_to: None,
             };
 
             sheet_mirror.range_views.insert(range_data.range_id, rv);
@@ -355,38 +363,48 @@ impl CellMirror {
 
         self.sheet_names
             .insert(normalize_sheet_key(&snapshot.name), sheet_id);
+        self.dense_cache.remove_sheet(&sheet_id);
+        for &col in sheet_mirror.column_lengths.keys() {
+            self.dense_cache.register_column(sheet_id, col);
+        }
         self.sheets.insert(sheet_id, sheet_mirror);
-        Ok(())
-    }
+        for identity in snapshot.identities {
+            self.register_identity_position(
+                sheet_id,
+                SheetPos::new(identity.row, identity.col),
+                identity.cell_id,
+            );
+        }
+        match (snapshot.row_axis, snapshot.col_axis) {
+            (Some(rows), Some(cols)) => {
+                self.install_sheet_axes(
+                    sheet_id,
+                    std::sync::Arc::new(compute_document::identity::AxisIndex::new(rows)),
+                    std::sync::Arc::new(compute_document::identity::AxisIndex::new(cols)),
+                );
+                self.finalize_sheet_range_hydration(sheet_id);
+            }
+            (None, None) => {}
+            _ => {
+                return Err(ComputeError::Deserialize {
+                    message: "sheet snapshot must provide both row and column axes".into(),
+                });
+            }
+        }
 
-    /// Hydrate domain caches from Yrs document state.
-    ///
-    /// Called after the Yrs document has been populated (e.g., from a snapshot
-    /// or sync update). Reads domain maps from the Yrs transaction and populates
-    /// the corresponding SheetMirror domain caches.
-    ///
-    /// Currently a no-op placeholder: the WorkbookSnapshot does not yet carry
-    /// domain data (merges, dimensions, comments, sparklines). As snapshot fields
-    /// are added, this method will read from the Yrs document
-    /// and populate the mirror caches accordingly.
-    pub fn hydrate_domain_maps(&mut self) {
-        // Placeholder for domain map hydration.
-        //
-        // When SheetSnapshot gains fields like `merges`, `row_heights`, etc.,
-        // this method will iterate over sheets and populate:
-        //   - sheet.merge_regions
-        //   - sheet.row_heights / col_widths
-        //   - sheet.hidden_rows / hidden_cols
-        //   - sheet.comment_cells / sparkline_cells
-        //
-        // For now, all domain caches start empty (initialized in SheetMirror::new)
-        // and are populated incrementally via the write API as storage domain
-        // modules (merges.rs, dimensions.rs, comments.rs, etc.) call into the mirror.
+        Ok(())
     }
 
     /// Test-only helper: add a pre-built SheetMirror directly.
     #[cfg(test)]
-    pub fn add_sheet_mirror(&mut self, sheet_id: SheetId, name: String, sheet_mirror: SheetMirror) {
+    pub fn add_sheet_mirror(
+        &mut self,
+        sheet_id: SheetId,
+        name: String,
+        mut sheet_mirror: SheetMirror,
+    ) {
+        sheet_mirror.history = self.history.share();
+        sheet_mirror.rebuild_column_index();
         // Maintain cell_to_sheet for all cells in this sheet mirror
         for cell_id in sheet_mirror.cells.keys() {
             self.cell_to_sheet.insert(*cell_id, sheet_id);
@@ -432,7 +450,13 @@ mod tests {
     /// Helper: create a minimal WorkbookSnapshot with one sheet.
     fn make_snapshot(sheet_uuid: &str, cells: Vec<CellData>) -> WorkbookSnapshot {
         WorkbookSnapshot {
+            axis_run_high_water_mark: None,
+            identity_high_water_mark: None,
+            canonical_tables: Vec::new(),
             sheets: vec![SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: sheet_uuid.to_string(),
                 name: "Sheet1".to_string(),
                 rows: 100,
@@ -772,12 +796,29 @@ mod tests {
         assert_eq!(sheet.cell_id_at(SheetPos::new(5, 2)), Some(content_id));
 
         // Range materialization pads only the eval-time array out to the
-        // formula grid; it does not pad SheetMirror::col_data storage.
+        // formula grid; it does not pad SheetMirror::column_values storage.
         let range = RangeKey::new(sheet_id, 0, 2, 99, 2);
         let values = materialize_range(&range, &mirror, None);
         assert_eq!(values.rows(), 100);
         assert_eq!(values.get(5, 0), Some(&CellValue::number(42.0)));
         assert_eq!(values.get(99, 0), Some(&CellValue::Null));
-        assert_eq!(sheet.get_column_slice(2).map(|col| col.len()), Some(6));
+        assert_eq!(sheet.get_column_view(2).map(|col| col.len()), Some(6));
+    }
+}
+
+fn reserve_axis_ids<Id: cell_types::AxisIdentityId>(
+    allocator: &cell_types::IdAllocator,
+    axis: &cell_types::AxisIdentityStore<Id>,
+) {
+    if let Some(run_id) = axis.max_run_id() {
+        allocator.ensure_axis_run_past(run_id);
+    }
+    match axis {
+        cell_types::AxisIdentityStore::Explicit(ids) => {
+            for id in ids {
+                allocator.ensure_past(id.as_raw());
+            }
+        }
+        cell_types::AxisIdentityStore::Runs(_) => {}
     }
 }

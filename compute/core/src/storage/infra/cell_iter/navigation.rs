@@ -1,12 +1,8 @@
 use std::collections::HashSet;
 
 use cell_types::{CellId, SheetId};
-use compute_document::hex::{hex_to_id, id_to_hex};
+use compute_document::hex::hex_to_id;
 use compute_document::identity::GridIndex;
-use yrs::{Doc, MapRef, Transact};
-
-use super::super::grid_helpers::get_cells_map;
-use super::read::has_data_at;
 
 /// Find the data edge from a cell in a given direction (Ctrl+Arrow navigation).
 ///
@@ -24,69 +20,30 @@ use super::read::has_data_at;
 /// horizontally. Horizontal navigation follows the visible route through hidden
 /// columns, and collapsed outline rows/columns are traversed to their visible
 /// exit.
-#[cfg(test)]
-pub fn find_data_edge(
-    doc: &Doc,
-    sheets: &MapRef,
+pub(crate) fn find_data_edge(
+    storage: &crate::storage::WorkbookStorage,
     sheet_id: SheetId,
     grid: &GridIndex,
     start_row: u32,
     start_col: u32,
     direction: &str,
-) -> snapshot_types::queries::CellPosition {
-    find_data_edge_with_extra_data(
-        doc,
-        sheets,
-        sheet_id,
-        grid,
-        start_row,
-        start_col,
-        direction,
-        |_, _| false,
-    )
-}
-
-/// Like [`find_data_edge`], but lets higher layers contribute cell occupancy
-/// from non-Yrs sources such as the compute mirror. This keeps the low-level
-/// storage iterator reusable while matching viewport/query semantics for
-/// deferred imports where formula cells can be mirror-resident before every
-/// formula body has been written into Yrs.
-pub fn find_data_edge_with_extra_data(
-    doc: &Doc,
-    sheets: &MapRef,
-    sheet_id: SheetId,
-    grid: &GridIndex,
-    start_row: u32,
-    start_col: u32,
-    direction: &str,
-    extra_has_data: impl Fn(u32, u32) -> bool,
+    has_data: impl Fn(u32, u32) -> bool,
 ) -> snapshot_types::queries::CellPosition {
     use crate::storage::sheet::{dimensions, grouping, merges};
 
     const MAX_ROW: u32 = 1_048_575;
     const MAX_COL: u32 = 16_383;
 
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let txn = doc.transact();
-
-    let fallback = snapshot_types::queries::CellPosition {
-        row: start_row,
-        col: start_col,
-    };
-
-    let Some(cells_map) = get_cells_map(&txn, sheets, &sheet_hex) else {
-        return fallback;
-    };
-
     // Pre-fetch hidden sets for efficiency. `dimensions::get_hidden_columns`
     // contains manually hidden columns, but imported collapsed outlines can
     // also hydrate their detail columns into the same map. Treat columns also
     // owned by an outline group as structural for horizontal navigation.
-    let dimension_hidden_rows: HashSet<u32> = dimensions::get_hidden_rows(doc, sheets, &sheet_id)
-        .into_iter()
-        .collect();
+    let dimension_hidden_rows: HashSet<u32> =
+        dimensions::get_hidden_rows(&storage, &sheet_id, Some(grid))
+            .into_iter()
+            .collect();
     let structural_hidden_rows: HashSet<u32> =
-        grouping::get_rows_hidden_by_structural_groups(doc, sheets, &sheet_id)
+        grouping::get_rows_hidden_by_structural_groups(&storage, &sheet_id)
             .into_iter()
             .collect();
     let rendered_hidden_rows: HashSet<u32> = dimension_hidden_rows
@@ -95,11 +52,11 @@ pub fn find_data_edge_with_extra_data(
         .chain(structural_hidden_rows.iter().copied())
         .collect();
     let dimension_hidden_cols: HashSet<u32> =
-        dimensions::get_hidden_columns(doc, sheets, &sheet_id)
+        dimensions::get_hidden_columns(&storage, &sheet_id, Some(grid))
             .into_iter()
             .collect();
     let structural_hidden_cols: HashSet<u32> =
-        grouping::get_columns_hidden_by_structural_groups(doc, sheets, &sheet_id)
+        grouping::get_columns_hidden_by_structural_groups(&storage, &sheet_id)
             .into_iter()
             .collect();
     let rendered_hidden_cols: HashSet<u32> = dimension_hidden_cols
@@ -131,20 +88,18 @@ pub fn find_data_edge_with_extra_data(
     let is_traversable_structural_row =
         |r: u32| -> bool { dr != 0 && structural_hidden_rows.contains(&r) };
 
-    let relevant_filter_ids = relevant_vertical_filter_ids(
-        doc, sheets, &sheet_id, grid, start_row, start_col, direction,
-    );
+    let relevant_filter_ids =
+        relevant_vertical_filter_ids(storage, &sheet_id, grid, start_row, start_col, direction);
 
     let is_filter_skipped_row = |r: u32, _c: u32| -> bool {
         if dc != 0 || !rendered_hidden_rows.contains(&r) {
             return false;
         }
         let ownership =
-            dimensions::get_row_visibility_ownership(doc, sheets, &sheet_id, r, Some(grid));
+            dimensions::get_row_visibility_ownership(&storage, &sheet_id, r, Some(grid));
         ownership.effective_hidden
             && !ownership.manual
             && !ownership.structural
-            && !ownership.cache_hidden_without_owner
             && !ownership.filter_owner_ids.is_empty()
             && ownership
                 .filter_owner_ids
@@ -195,22 +150,18 @@ pub fn find_data_edge_with_extra_data(
         result
     };
 
-    let check_data = |r: u32, c: u32| -> bool {
-        has_data_at(&txn, grid, &cells_map, r, c) || extra_has_data(r, c)
-    };
-
     // Check data at a cell, accounting for merges (check merge origin).
     let cell_has_data = |r: u32, c: u32| -> bool {
-        if let Some(info) = merges::get_merge_for_cell(doc, sheets, sheet_id, grid, r, c) {
+        if let Some(info) = merges::get_merge_for_cell(&storage, sheet_id, grid, r, c) {
             let m = &info.merge;
-            return check_data(m.start_row, m.start_col);
+            return has_data(m.start_row, m.start_col);
         }
-        check_data(r, c)
+        has_data(r, c)
     };
 
     // Advance past a merged cell in the walking direction.
     let advance_past_merge = |r: u32, c: u32| -> (i64, i64) {
-        if let Some(info) = merges::get_merge_for_cell(doc, sheets, sheet_id, grid, r, c) {
+        if let Some(info) = merges::get_merge_for_cell(&storage, sheet_id, grid, r, c) {
             let m = &info.merge;
             if dr > 0 {
                 return (m.end_row as i64 + 1, c as i64);
@@ -230,7 +181,7 @@ pub fn find_data_edge_with_extra_data(
 
     // Return merge origin for a cell, or the cell itself.
     let to_merge_origin = |r: u32, c: u32| -> snapshot_types::queries::CellPosition {
-        if let Some(info) = merges::get_merge_for_cell(doc, sheets, sheet_id, grid, r, c) {
+        if let Some(info) = merges::get_merge_for_cell(&storage, sheet_id, grid, r, c) {
             let m = &info.merge;
             return snapshot_types::queries::CellPosition {
                 row: m.start_row,
@@ -422,8 +373,7 @@ pub fn find_data_edge_with_extra_data(
 }
 
 fn relevant_vertical_filter_ids(
-    doc: &Doc,
-    sheets: &MapRef,
+    storage: &crate::storage::WorkbookStorage,
     sheet_id: &SheetId,
     grid: &GridIndex,
     start_row: u32,
@@ -434,7 +384,7 @@ fn relevant_vertical_filter_ids(
         return HashSet::new();
     }
 
-    crate::storage::sheet::filters::get_filters_in_sheet(doc, sheets, sheet_id)
+    crate::storage::sheet::filters::get_filters_in_sheet(storage, sheet_id)
         .into_iter()
         .filter(|filter| !filter.column_filters.is_empty())
         .filter_map(|filter| {

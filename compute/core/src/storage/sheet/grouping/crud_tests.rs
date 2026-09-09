@@ -3,8 +3,8 @@ use super::test_support::*;
 
 #[test]
 fn test_group_rows_basic() {
-    let (s, id) = storage_with_sheet();
-    let g = group_rows(s.doc(), &s.sheets_ref(), &id, 2, 5).unwrap();
+    let (mut s, id) = storage_with_sheet();
+    let g = group_rows(&mut s, &id, 2, 5).unwrap();
     assert_eq!(g.start, 2);
     assert_eq!(g.end, 5);
     assert_eq!(g.level, 1);
@@ -13,15 +13,15 @@ fn test_group_rows_basic() {
 
 #[test]
 fn test_group_rows_reversed() {
-    let (s, id) = storage_with_sheet();
-    let g = group_rows(s.doc(), &s.sheets_ref(), &id, 5, 2).unwrap();
+    let (mut s, id) = storage_with_sheet();
+    let g = group_rows(&mut s, &id, 5, 2).unwrap();
     assert_eq!(g.start, 2);
     assert_eq!(g.end, 5);
 }
 
 #[test]
 fn test_group_creation_avoids_existing_ids_across_axes() {
-    let (s, id) = storage_with_sheet();
+    let (mut s, id) = storage_with_sheet();
     let mut config = SheetGroupingConfig::default();
     for n in 1..=8 {
         let group_id = format!("group-{n}");
@@ -41,17 +41,17 @@ fn test_group_creation_avoids_existing_ids_across_axes() {
         .chain(config.column_groups.iter())
         .map(|group| group.id.clone())
         .collect();
-    set_sheet_grouping_config(s.doc(), &s.sheets_ref(), &id, &config);
+    set_sheet_grouping_config(&mut s, &id, &config);
 
-    let row = group_rows(s.doc(), &s.sheets_ref(), &id, 2, 5).unwrap();
-    let column = group_columns(s.doc(), &s.sheets_ref(), &id, 1, 3).unwrap();
+    let row = group_rows(&mut s, &id, 2, 5).unwrap();
+    let column = group_columns(&mut s, &id, 1, 3).unwrap();
 
     assert!(!existing_ids.contains(&row.id));
     assert!(!existing_ids.contains(&column.id));
     assert_ne!(row.id, column.id);
 
-    set_group_collapsed(s.doc(), &s.sheets_ref(), &id, &row.id, true);
-    let toggled = get_group_in_sheet(s.doc(), &s.sheets_ref(), &id, &row.id).unwrap();
+    set_group_collapsed(&mut s, &id, &row.id, true);
+    let toggled = get_group_in_sheet(&s, &id, &row.id).unwrap();
     assert_eq!(toggled.axis, GroupAxis::Row);
     assert_eq!((toggled.start, toggled.end), (2, 5));
     assert!(toggled.collapsed);
@@ -59,9 +59,9 @@ fn test_group_creation_avoids_existing_ids_across_axes() {
 
 #[test]
 fn test_nested_groups() {
-    let (s, id) = storage_with_sheet();
-    let o = group_rows(s.doc(), &s.sheets_ref(), &id, 1, 10).unwrap();
-    let i = group_rows(s.doc(), &s.sheets_ref(), &id, 3, 7).unwrap();
+    let (mut s, id) = storage_with_sheet();
+    let o = group_rows(&mut s, &id, 1, 10).unwrap();
+    let i = group_rows(&mut s, &id, 3, 7).unwrap();
     assert_eq!(o.level, 1);
     assert_eq!(i.level, 2);
     assert_eq!(i.parent_id, Some(o.id));
@@ -69,40 +69,35 @@ fn test_nested_groups() {
 
 #[test]
 fn test_max_level_exceeded() {
-    let (s, id) = storage_with_sheet();
+    let (mut s, id) = storage_with_sheet();
     for i in 0..8u32 {
-        group_rows(s.doc(), &s.sheets_ref(), &id, i, 20 - i).unwrap();
+        group_rows(&mut s, &id, i, 20 - i).unwrap();
     }
-    assert!(group_rows(s.doc(), &s.sheets_ref(), &id, 4, 16).is_err());
+    assert!(group_rows(&mut s, &id, 4, 16).is_err());
 }
 
 #[test]
 fn test_ungroup_rows() {
-    let (s, id) = storage_with_sheet();
-    group_rows(s.doc(), &s.sheets_ref(), &id, 2, 5).unwrap();
-    group_rows(s.doc(), &s.sheets_ref(), &id, 3, 4).unwrap();
-    ungroup_rows(s.doc(), &s.sheets_ref(), &id, 3, 4);
-    assert_eq!(
-        get_sheet_grouping_config(s.doc(), &s.sheets_ref(), &id)
-            .row_groups
-            .len(),
-        1
-    );
+    let (mut s, id) = storage_with_sheet();
+    group_rows(&mut s, &id, 2, 5).unwrap();
+    group_rows(&mut s, &id, 3, 4).unwrap();
+    ungroup_rows(&mut s, &id, 3, 4);
+    assert_eq!(get_sheet_grouping_config(&s, &id).row_groups.len(), 1);
 }
 
 #[test]
 fn test_ungroup_rows_split_allocates_unique_residual_ids() {
-    let (s, id) = storage_with_sheet();
+    let (mut s, id) = storage_with_sheet();
     let config = SheetGroupingConfig {
         row_groups: vec![test_group("group-1", GroupAxis::Row, 1, 10)],
         column_groups: vec![test_group("group-2", GroupAxis::Column, 2, 4)],
         ..SheetGroupingConfig::default()
     };
-    set_sheet_grouping_config(s.doc(), &s.sheets_ref(), &id, &config);
+    set_sheet_grouping_config(&mut s, &id, &config);
 
-    ungroup_rows(s.doc(), &s.sheets_ref(), &id, 4, 6);
+    ungroup_rows(&mut s, &id, 4, 6);
 
-    let config = get_sheet_grouping_config(s.doc(), &s.sheets_ref(), &id);
+    let config = get_sheet_grouping_config(&s, &id);
     assert!(
         config
             .row_groups
@@ -128,58 +123,45 @@ fn test_ungroup_rows_split_allocates_unique_residual_ids() {
 
 #[test]
 fn test_clear_row_grouping() {
-    let (s, id) = storage_with_sheet();
-    group_rows(s.doc(), &s.sheets_ref(), &id, 2, 5).unwrap();
-    group_rows(s.doc(), &s.sheets_ref(), &id, 3, 4).unwrap();
-    clear_row_grouping(s.doc(), &s.sheets_ref(), &id, 2, 5);
-    assert!(
-        get_sheet_grouping_config(s.doc(), &s.sheets_ref(), &id)
-            .row_groups
-            .is_empty()
-    );
+    let (mut s, id) = storage_with_sheet();
+    group_rows(&mut s, &id, 2, 5).unwrap();
+    group_rows(&mut s, &id, 3, 4).unwrap();
+    clear_row_grouping(&mut s, &id, 2, 5);
+    assert!(get_sheet_grouping_config(&s, &id).row_groups.is_empty());
 }
 
 #[test]
 fn test_group_columns_basic() {
-    let (s, id) = storage_with_sheet();
-    let g = group_columns(s.doc(), &s.sheets_ref(), &id, 1, 3).unwrap();
+    let (mut s, id) = storage_with_sheet();
+    let g = group_columns(&mut s, &id, 1, 3).unwrap();
     assert_eq!(g.axis, GroupAxis::Column);
     assert_eq!(g.level, 1);
 }
 
 #[test]
 fn test_ungroup_columns() {
-    let (s, id) = storage_with_sheet();
-    group_columns(s.doc(), &s.sheets_ref(), &id, 1, 5).unwrap();
-    group_columns(s.doc(), &s.sheets_ref(), &id, 2, 3).unwrap();
-    ungroup_columns(s.doc(), &s.sheets_ref(), &id, 2, 3);
-    assert_eq!(
-        get_sheet_grouping_config(s.doc(), &s.sheets_ref(), &id)
-            .column_groups
-            .len(),
-        1
-    );
+    let (mut s, id) = storage_with_sheet();
+    group_columns(&mut s, &id, 1, 5).unwrap();
+    group_columns(&mut s, &id, 2, 3).unwrap();
+    ungroup_columns(&mut s, &id, 2, 3);
+    assert_eq!(get_sheet_grouping_config(&s, &id).column_groups.len(), 1);
 }
 
 #[test]
 fn test_clear_column_grouping() {
-    let (s, id) = storage_with_sheet();
-    group_columns(s.doc(), &s.sheets_ref(), &id, 1, 5).unwrap();
-    clear_column_grouping(s.doc(), &s.sheets_ref(), &id, 1, 5);
-    assert!(
-        get_sheet_grouping_config(s.doc(), &s.sheets_ref(), &id)
-            .column_groups
-            .is_empty()
-    );
+    let (mut s, id) = storage_with_sheet();
+    group_columns(&mut s, &id, 1, 5).unwrap();
+    clear_column_grouping(&mut s, &id, 1, 5);
+    assert!(get_sheet_grouping_config(&s, &id).column_groups.is_empty());
 }
 
 #[test]
 fn test_clear_all() {
-    let (s, id) = storage_with_sheet();
-    group_rows(s.doc(), &s.sheets_ref(), &id, 1, 5).unwrap();
-    group_columns(s.doc(), &s.sheets_ref(), &id, 0, 3).unwrap();
-    clear_all_grouping(s.doc(), &s.sheets_ref(), &id);
-    let c = get_sheet_grouping_config(s.doc(), &s.sheets_ref(), &id);
+    let (mut s, id) = storage_with_sheet();
+    group_rows(&mut s, &id, 1, 5).unwrap();
+    group_columns(&mut s, &id, 0, 3).unwrap();
+    clear_all_grouping(&mut s, &id);
+    let c = get_sheet_grouping_config(&s, &id);
     assert!(c.row_groups.is_empty() && c.column_groups.is_empty());
 }
 

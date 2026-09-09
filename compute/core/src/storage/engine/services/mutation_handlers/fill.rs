@@ -5,7 +5,6 @@ use value_types::{CellValue, ComputeError};
 
 use crate::mirror::{CellEntry, CellMirror};
 use crate::snapshot::{CellChange, CellPosition, RecalcResult};
-use crate::storage::engine::mutation_coordinator::MutationCoordinator;
 use crate::storage::engine::stores::EngineStores;
 use compute_document::hex::id_to_hex;
 
@@ -146,8 +145,7 @@ fn build_fill_input(
 
     let resolved_merges = match stores.grid_indexes.get(sheet_id) {
         Some(grid) => merges::get_merges_in_range(
-            stores.storage.doc(),
-            stores.storage.sheets(),
+            &stores.storage,
             *sheet_id,
             grid,
             combined_start_row,
@@ -168,9 +166,12 @@ fn build_fill_input(
         .collect();
 
     let hidden_rows_vec =
-        dimensions::get_hidden_rows(stores.storage.doc(), stores.storage.sheets(), sheet_id);
-    let hidden_cols_vec =
-        dimensions::get_hidden_columns(stores.storage.doc(), stores.storage.sheets(), sheet_id);
+        dimensions::get_hidden_rows(&stores.storage, sheet_id, stores.grid_indexes.get(sheet_id));
+    let hidden_cols_vec = dimensions::get_hidden_columns(
+        &stores.storage,
+        sheet_id,
+        stores.grid_indexes.get(sheet_id),
+    );
     let hidden_rows: std::collections::BTreeSet<u32> = hidden_rows_vec.into_iter().collect();
     let hidden_cols: std::collections::BTreeSet<u32> = hidden_cols_vec.into_iter().collect();
 
@@ -227,7 +228,6 @@ fn fill_result_summary(
 pub(in crate::storage::engine) fn mutation_auto_fill(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
-    mutation: &mut MutationCoordinator,
     sheet_id: &SheetId,
     request: crate::engine_types::fill::BridgeAutoFillRequest,
 ) -> Result<(RecalcResult, compute_fill::types::FillResultSummary), ComputeError> {
@@ -271,8 +271,6 @@ pub(in crate::storage::engine) fn mutation_auto_fill(
     // -- 3. Apply fill updates to storage --
     let mut cell_edits: Vec<(SheetId, u32, u32, CellValue, Option<String>)> = Vec::new();
     let mut format_edits: Vec<(u32, u32, domain_types::CellFormat)> = Vec::new();
-
-    mutation.observer.set_suppressed(true);
 
     for update in &fill_result.updates {
         match update {
@@ -326,16 +324,13 @@ pub(in crate::storage::engine) fn mutation_auto_fill(
         }
     }
 
-    mutation.observer.set_suppressed(false);
-
     let mut recalc = if cell_edits.is_empty() {
         RecalcResult::empty()
     } else {
-        mutation_set_cells_by_position_raw(stores, &mut *mirror, mutation, cell_edits, false)?
+        mutation_set_cells_by_position_raw(stores, &mut *mirror, cell_edits, false)?
     };
 
     let mut format_changes: Vec<CellChange> = Vec::with_capacity(format_edits.len());
-    mutation.observer.set_suppressed(true);
     for (row, col, format) in &format_edits {
         let Some(cell_id) = super::super::cell_editing::ensure_cell_id_mirrored(
             stores, mirror, sheet_id, *row, *col,
@@ -344,9 +339,7 @@ pub(in crate::storage::engine) fn mutation_auto_fill(
         };
         let cell_hex = id_to_hex(cell_id.as_u128());
         crate::storage::properties::replace_cell_format(
-            stores.storage.doc(),
-            stores.storage.workbook_map(),
-            stores.storage.sheets(),
+            &mut stores.storage,
             sheet_id,
             &cell_hex,
             format,
@@ -373,7 +366,6 @@ pub(in crate::storage::engine) fn mutation_auto_fill(
             old_value: None,
         });
     }
-    mutation.observer.set_suppressed(false);
 
     for change in format_changes {
         let Some(position) = &change.position else {
@@ -506,7 +498,6 @@ pub(in crate::storage::engine) fn auto_fill_preview(
 pub fn mutation_flash_fill(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
-    mutation: &mut MutationCoordinator,
     sheet_id: &SheetId,
     request: crate::engine_types::fill::BridgeFlashFillRequest,
 ) -> Result<
@@ -588,9 +579,7 @@ pub fn mutation_flash_fill(
         return Ok((RecalcResult::empty(), summary));
     }
 
-    mutation.observer.set_suppressed(true);
-    let recalc = mutation_set_cells_by_position_raw(stores, mirror, mutation, cell_edits, false)?;
-    mutation.observer.set_suppressed(false);
+    let recalc = mutation_set_cells_by_position_raw(stores, mirror, cell_edits, false)?;
 
     Ok((recalc, summary))
 }

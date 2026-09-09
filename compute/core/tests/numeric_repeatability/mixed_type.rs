@@ -1,4 +1,4 @@
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 
 use crate::edit::{op_inverse_pair, sheet_id};
 use crate::runner::{EDIT_DELTA, FamilyResult};
@@ -25,14 +25,14 @@ fn class_iii_mixed_type() {
 
     for (f_seed, f_slug) in float_seeds {
         let (snapshot, dependent) = mixed_type_snapshot(1.0, *f_seed);
-        let (mut engine, _init) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+        let (mut engine, _init) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
         let outcome = op_inverse_pair(&mut engine, &sid, 0, 0, 1.0, 1.0, dependent);
         result.record(format!("edit_int_with_float_{}", f_slug), outcome);
     }
 
     for (i_seed, i_slug) in int_seeds {
         let (snapshot, dependent) = mixed_type_snapshot(*i_seed, 0.4);
-        let (mut engine, _init) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+        let (mut engine, _init) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
         let outcome = op_inverse_pair(&mut engine, &sid, 1, 0, 0.4, EDIT_DELTA, dependent);
         result.record(format!("edit_float_with_int_{}", i_slug), outcome);
     }

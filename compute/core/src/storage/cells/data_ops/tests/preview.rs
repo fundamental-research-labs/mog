@@ -1,121 +1,59 @@
 use super::super::*;
-use super::fixtures::*;
+use crate::mirror::CellMirror;
+use crate::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
+use cell_types::{CellId, SheetPos};
 use value_types::CellValue;
 
-// ===================================================================
-// preview_text_to_columns tests
-// ===================================================================
-
 #[test]
-fn test_preview_text_to_columns_basic() {
-    let (storage, sid, mut grid) = storage_with_sheet();
-    seed_cell(
-        &storage,
-        &mut grid,
-        sid,
-        0,
-        0,
-        CellValue::Text("a,b,c".into()),
+fn preview_splits_native_values_respects_limit_and_preserves_cells() {
+    let sheet_id = SheetId::from_raw(1);
+    let mirror = CellMirror::from_snapshot(WorkbookSnapshot {
+        sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
+            id: sheet_id.to_uuid_string(),
+            name: "Data".into(),
+            rows: 100,
+            cols: 3,
+            cells: ["a,b,c", "d,e", "untouched"]
+                .into_iter()
+                .enumerate()
+                .map(|(row, text)| CellData {
+                    cell_id: CellId::from_raw(row as u128 + 10).to_uuid_string(),
+                    row: row as u32,
+                    col: 0,
+                    value: CellValue::Text(text.into()),
+                    formula: None,
+                    identity_formula: None,
+                    array_ref: None,
+                })
+                .collect(),
+            ranges: vec![],
+        }],
+        ..Default::default()
+    })
+    .unwrap();
+    let options = TextToColumnsOptions {
+        split_type: TextToColumnsSplitType::Delimited,
+        delimiters: Delimiters::default(),
+        treat_consecutive_as_one: false,
+        text_qualifier: TextQualifier::None,
+        fixed_width_breaks: vec![],
+    };
+    assert_eq!(
+        preview_text_to_columns(&mirror, sheet_id, 0, 99, 0, &options, 2),
+        vec![vec!["a", "b", "c"], vec!["d", "e"]]
     );
-    seed_cell(
-        &storage,
-        &mut grid,
-        sid,
-        1,
-        0,
-        CellValue::Text("d,e".into()),
+    assert_eq!(mirror.get_sheet(&sheet_id).unwrap().cell_count(), 3);
+    assert_eq!(
+        mirror.get_cell_value_at(&sheet_id, SheetPos::new(0, 0)),
+        Some(&CellValue::Text("a,b,c".into()))
     );
-
-    let preview = preview_text_to_columns(
-        storage.doc(),
-        &storage.sheets_ref(),
-        sid,
-        &grid,
-        0,
-        1,
-        0,
-        &TextToColumnsOptions {
-            split_type: TextToColumnsSplitType::Delimited,
-            delimiters: Delimiters::default(),
-            treat_consecutive_as_one: false,
-            text_qualifier: TextQualifier::None,
-            fixed_width_breaks: vec![],
-        },
-        10,
+    assert_eq!(
+        mirror.get_cell_value_at(&sheet_id, SheetPos::new(0, 1)),
+        None
     );
-
-    assert_eq!(preview.len(), 2);
-    assert_eq!(preview[0], vec!["a", "b", "c"]);
-    assert_eq!(preview[1], vec!["d", "e"]);
-}
-
-#[test]
-fn test_preview_text_to_columns_limited_rows() {
-    let (storage, sid, mut grid) = storage_with_sheet();
-    for i in 0..10 {
-        seed_cell(
-            &storage,
-            &mut grid,
-            sid,
-            i,
-            0,
-            CellValue::Text(format!("row{}", i).into()),
-        );
-    }
-
-    let preview = preview_text_to_columns(
-        storage.doc(),
-        &storage.sheets_ref(),
-        sid,
-        &grid,
-        0,
-        9,
-        0,
-        &TextToColumnsOptions {
-            split_type: TextToColumnsSplitType::Delimited,
-            delimiters: Delimiters::default(),
-            treat_consecutive_as_one: false,
-            text_qualifier: TextQualifier::None,
-            fixed_width_breaks: vec![],
-        },
-        3,
-    );
-
-    assert_eq!(preview.len(), 3);
-}
-
-#[test]
-fn test_preview_does_not_modify() {
-    let (storage, sid, mut grid) = storage_with_sheet();
-    seed_cell(
-        &storage,
-        &mut grid,
-        sid,
-        0,
-        0,
-        CellValue::Text("a,b,c".into()),
-    );
-
-    let _preview = preview_text_to_columns(
-        storage.doc(),
-        &storage.sheets_ref(),
-        sid,
-        &grid,
-        0,
-        0,
-        0,
-        &TextToColumnsOptions {
-            split_type: TextToColumnsSplitType::Delimited,
-            delimiters: Delimiters::default(),
-            treat_consecutive_as_one: false,
-            text_qualifier: TextQualifier::None,
-            fixed_width_breaks: vec![],
-        },
-        5,
-    );
-
-    // Original cell should be unchanged
-    assert_eq!(read_value_at(&storage, &grid, sid, 0, 0), "a,b,c");
-    // Destination cells should not exist
-    assert_eq!(read_value_at(&storage, &grid, sid, 0, 1), "");
+    assert!(preview_text_to_columns(&mirror, sheet_id, 2, 1, 0, &options, 2).is_empty());
+    assert!(preview_text_to_columns(&mirror, sheet_id, 0, 99, 0, &options, 0).is_empty());
 }

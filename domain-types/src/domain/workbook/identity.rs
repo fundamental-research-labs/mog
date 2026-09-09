@@ -127,3 +127,14 @@ impl Default for WorkbookSheetPackageInfo {
         }
     }
 }
+
+/// Choose a positive OOXML sheet ID after the highest reserved identity.
+/// At the numeric limit, reuse the first available positive gap instead.
+/// Callers reserve worksheet and inert-tab identities before allocating.
+pub fn next_worksheet_id(used: &std::collections::BTreeSet<u32>) -> Option<u32> {
+    used.last()
+        .copied()
+        .unwrap_or(0)
+        .checked_add(1)
+        .or_else(|| (1..=u32::MAX).find(|id| !used.contains(id)))
+}

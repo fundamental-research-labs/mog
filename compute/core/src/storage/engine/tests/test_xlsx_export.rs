@@ -156,7 +156,7 @@ fn assert_archive_has_no_entry_prefix(bytes: &[u8], prefix: &str) {
 }
 
 fn picture_source_xlsx() -> Vec<u8> {
-    let (mut source, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut source, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let source_sheet_id = sheet_id();
     let picture_config = serde_json::json!({
         "type": "picture",
@@ -231,7 +231,7 @@ fn form_control_object(
 }
 
 #[test]
-fn xlsx_export_preserves_imported_form_control_order_through_yrs_storage() {
+fn xlsx_export_preserves_imported_form_control_order_through_native_storage() {
     let output = ParseOutput {
         sheets: vec![SheetData {
             name: "Controls".to_string(),
@@ -270,7 +270,7 @@ fn xlsx_export_preserves_imported_form_control_order_through_yrs_storage() {
 }
 
 #[test]
-fn grouped_connector_ownership_survives_yrs_without_duplicate_top_level_anchor() {
+fn grouped_connector_ownership_survives_native_without_duplicate_top_level_anchor() {
     use domain_types::domain::{
         drawings::{DrawingContent, GroupShapeData},
         floating_object::{
@@ -350,7 +350,7 @@ fn grouped_connector_ownership_survives_yrs_without_duplicate_top_level_anchor()
     let engine = engine_from_parse_output_normal(&input);
     let hydrated = engine
         .export_to_parse_output()
-        .expect("Yrs export should succeed")
+        .expect("native export should succeed")
         .parse_output;
     let connector_ooxml = hydrated.sheets[0]
         .floating_objects
@@ -359,7 +359,7 @@ fn grouped_connector_ownership_survives_yrs_without_duplicate_top_level_anchor()
             FloatingObjectData::Connector(connector) => connector.ooxml.as_ref(),
             _ => None,
         })
-        .expect("projected connector should survive Yrs hydration");
+        .expect("projected connector should survive native hydration");
     assert!(connector_ooxml.nested_in_group);
 
     let exported_bytes = engine.export_to_xlsx_bytes().expect("export xlsx bytes");
@@ -444,7 +444,7 @@ fn ole_owner_parse_output() -> ParseOutput {
 }
 
 #[test]
-fn shared_string_hints_survive_yrs_hydration_export() {
+fn shared_string_hints_survive_native_hydration_export() {
     let input = ParseOutput {
         sheets: vec![SheetData {
             name: "Sheet1".to_string(),
@@ -609,7 +609,7 @@ fn modeled_ole_survives_context_stripped_hydration_export_and_deletion_removes_p
 }
 
 #[test]
-fn workbook_stylesheet_survives_yrs_hydration_export() {
+fn workbook_stylesheet_survives_native_hydration_export() {
     let mut input = ParseOutput::default();
     input.sheets = vec![SheetData {
         name: "Sheet1".to_string(),
@@ -635,15 +635,13 @@ fn workbook_stylesheet_survives_yrs_hydration_export() {
     ));
 
     let engine = engine_from_parse_output_normal(&input);
-    let exported = engine
-        .build_parse_output_from_yrs()
-        .expect("export projection");
+    let exported = engine.build_parse_output().expect("export projection");
 
     assert_eq!(exported.workbook_stylesheet, input.workbook_stylesheet);
 }
 
 #[test]
-fn pivot_cache_records_survive_yrs_hydration_export_without_context() {
+fn pivot_cache_records_survive_native_hydration_export_without_context() {
     let mut input = ParseOutput {
         sheets: vec![SheetData {
             name: "Data".to_string(),
@@ -676,15 +674,13 @@ fn pivot_cache_records_survive_yrs_hydration_export_without_context() {
     );
 
     let engine = engine_from_parse_output_normal(&input);
-    let exported = engine
-        .build_parse_output_from_yrs()
-        .expect("export projection");
+    let exported = engine.build_parse_output().expect("export projection");
 
     assert_eq!(exported.pivot_cache_records, input.pivot_cache_records);
 }
 
 #[test]
-fn pivot_cache_sources_survive_yrs_hydration_export_without_context() {
+fn pivot_cache_sources_survive_native_hydration_export_without_context() {
     let mut input = ParseOutput {
         sheets: vec![SheetData {
             name: "Data".to_string(),
@@ -713,9 +709,7 @@ fn pivot_cache_sources_survive_yrs_hydration_export_without_context() {
         });
 
     let engine = engine_from_parse_output_normal(&input);
-    let exported = engine
-        .build_parse_output_from_yrs()
-        .expect("export projection");
+    let exported = engine.build_parse_output().expect("export projection");
 
     assert_eq!(exported.pivot_cache_sources, input.pivot_cache_sources);
 }
@@ -733,15 +727,13 @@ fn modeled_export_does_not_recreate_absent_pivot_cache_records() {
     };
 
     let engine = engine_from_parse_output_normal(&input);
-    let exported = engine
-        .build_parse_output_from_yrs()
-        .expect("export projection");
+    let exported = engine.build_parse_output().expect("export projection");
 
     assert!(exported.pivot_cache_records.is_empty());
 }
 
 #[test]
-fn sheet_protection_modern_hash_fields_survive_yrs_hydration_export() {
+fn sheet_protection_modern_hash_fields_survive_native_hydration_export() {
     let protection = domain_types::SheetProtection {
         is_protected: true,
         password_hash: Some("CC2A".to_string()),
@@ -772,7 +764,7 @@ fn sheet_protection_modern_hash_fields_survive_yrs_hydration_export() {
 }
 
 #[test]
-fn explicit_empty_cached_formula_value_survives_yrs_hydration_export() {
+fn explicit_empty_cached_formula_value_survives_native_hydration_export() {
     let input = ParseOutput {
         sheets: vec![SheetData {
             name: "Sheet1".to_string(),
@@ -861,7 +853,7 @@ fn editing_formula_clears_explicit_empty_cached_value_metadata() {
 }
 
 #[test]
-fn sheet_extent_survives_yrs_hydration_export_when_sheet_has_data() {
+fn sheet_extent_survives_native_hydration_export_when_sheet_has_data() {
     let input = ParseOutput {
         sheets: vec![SheetData {
             name: "Sheet1".to_string(),
@@ -886,7 +878,7 @@ fn sheet_extent_survives_yrs_hydration_export_when_sheet_has_data() {
 }
 
 #[test]
-fn build_parse_output_from_yrs_preserves_xlsx_metadata_domain() {
+fn build_parse_output_preserves_xlsx_metadata_domain() {
     let mut output = ParseOutput {
         sheets: vec![SheetData {
             name: "Sheet1".to_string(),
@@ -927,9 +919,7 @@ fn build_parse_output_from_yrs_preserves_xlsx_metadata_domain() {
     });
 
     let engine = engine_from_parse_output_normal(&output);
-    let exported = engine
-        .build_parse_output_from_yrs()
-        .expect("export projection");
+    let exported = engine.build_parse_output().expect("export projection");
 
     assert_eq!(exported.metadata, output.metadata);
 }
@@ -973,7 +963,7 @@ fn l2_xlsx_export_preserves_threaded_comment_persons() {
     let engine = engine_from_parse_output_normal(&input);
     let exported_parse = engine
         .export_to_parse_output()
-        .expect("production Yrs export should succeed")
+        .expect("production native export should succeed")
         .parse_output;
     assert_eq!(exported_parse.persons, input.persons);
 
@@ -1010,7 +1000,7 @@ fn l2_xlsx_export_preserves_empty_threaded_comment_persons_part() {
     let engine = engine_from_parse_output_normal(&input);
     let exported_parse = engine
         .export_to_parse_output()
-        .expect("production Yrs export should succeed")
+        .expect("production native export should succeed")
         .parse_output;
     assert!(exported_parse.has_persons_part);
     assert!(exported_parse.persons.is_empty());
@@ -1025,7 +1015,7 @@ fn l2_xlsx_export_preserves_empty_threaded_comment_persons_part() {
 }
 
 #[test]
-fn build_parse_output_from_yrs_preserves_workbook_views() {
+fn build_parse_output_preserves_workbook_views() {
     let output = ParseOutput {
         sheets: vec![SheetData {
             name: "Sheet1".to_string(),
@@ -1052,15 +1042,13 @@ fn build_parse_output_from_yrs_preserves_workbook_views() {
     };
 
     let engine = engine_from_parse_output_normal(&output);
-    let exported = engine
-        .build_parse_output_from_yrs()
-        .expect("export projection");
+    let exported = engine.build_parse_output().expect("export projection");
 
     assert_eq!(exported.workbook_views, output.workbook_views);
 }
 
 #[test]
-fn build_parse_output_from_yrs_preserves_workbook_web_publishing() {
+fn build_parse_output_preserves_workbook_web_publishing() {
     let output = ParseOutput {
         sheets: vec![SheetData {
             name: "Web".to_string(),
@@ -1084,15 +1072,13 @@ fn build_parse_output_from_yrs_preserves_workbook_web_publishing() {
     };
 
     let engine = engine_from_parse_output_normal(&output);
-    let exported = engine
-        .build_parse_output_from_yrs()
-        .expect("export projection");
+    let exported = engine.build_parse_output().expect("export projection");
 
     assert_eq!(exported.web_publishing, output.web_publishing);
 }
 
 #[test]
-fn build_parse_output_from_yrs_preserves_imported_array_refs() {
+fn build_parse_output_preserves_imported_array_refs() {
     let cell_formula = ooxml_types::worksheet::CellFormula {
         t: ooxml_types::worksheet::CellFormulaType::Array,
         r#ref: Some("A1:A3".to_string()),
@@ -1120,9 +1106,7 @@ fn build_parse_output_from_yrs_preserves_imported_array_refs() {
     };
 
     let engine = engine_from_parse_output_normal(&output);
-    let exported = engine
-        .build_parse_output_from_yrs()
-        .expect("export projection");
+    let exported = engine.build_parse_output().expect("export projection");
     let cell = exported.sheets[0]
         .cells
         .iter()
@@ -1131,10 +1115,12 @@ fn build_parse_output_from_yrs_preserves_imported_array_refs() {
 
     assert_eq!(cell.formula.as_deref(), Some("SEQUENCE(3)"));
     assert_eq!(cell.array_ref.as_deref(), Some("A1:A3"));
-    assert_eq!(cell.cell_formula.as_ref(), Some(&cell_formula));
+    let mut expected_metadata = cell_formula;
+    expected_metadata.text = "SEQUENCE(3)".to_string();
+    assert_eq!(cell.cell_formula.as_ref(), Some(&expected_metadata));
 }
 
-fn engine_from_parse_output_with_ranges(output: &ParseOutput) -> YrsComputeEngine {
+fn engine_from_parse_output_with_ranges(output: &ParseOutput) -> ComputeEngine {
     use crate::storage::infra::hydration::{
         DefaultIdAllocator, HydrationIdMap, allocate_sheet_ids,
     };
@@ -1150,15 +1136,12 @@ fn engine_from_parse_output_with_ranges(output: &ParseOutput) -> YrsComputeEngin
     for alloc in &allocations {
         id_map.sheet_ids.push(alloc.sheet_id);
         id_map.cell_ids.push(alloc.cell_ids.clone());
-        id_map.row_ids.push(alloc.row_ids.clone());
-        id_map.col_ids.push(alloc.col_ids.clone());
+        id_map.row_axes.push(alloc.row_axis.clone());
+        id_map.col_axes.push(alloc.col_axis.clone());
         for identity in &alloc.identity_only_cells {
-            id_map.identity_only_cells.push((
-                alloc.sheet_id,
-                identity.cell_id,
-                identity.row,
-                identity.col,
-            ));
+            id_map
+                .identities
+                .push((alloc.sheet_id, identity.cell_id, identity.row, identity.col));
         }
     }
 
@@ -1172,27 +1155,19 @@ fn engine_from_parse_output_with_ranges(output: &ParseOutput) -> YrsComputeEngin
         .iter()
         .map(|_| std::collections::HashSet::new())
         .collect::<Vec<_>>();
-    let range_data_per_sheet = workbook_snap
-        .sheets
-        .iter()
-        .map(|sheet| sheet.ranges.clone())
-        .collect::<Vec<_>>();
     let range_style_positions = output
         .sheets
         .iter()
         .map(|_| std::collections::HashSet::new())
         .collect::<Vec<_>>();
-    let range_styles_per_sheet = output.sheets.iter().map(|_| Vec::new()).collect::<Vec<_>>();
 
-    let mut storage = crate::storage::YrsStorage::new();
+    let mut storage = crate::storage::WorkbookStorage::new();
     storage
         .hydrate_from_parse_output_with_ranges(
             output,
             &allocations,
             &ranged_positions,
             &range_style_positions,
-            &range_data_per_sheet,
-            &range_styles_per_sheet,
             &mut allocator,
         )
         .expect("hydrate ranged parse output");
@@ -1208,7 +1183,13 @@ fn engine_from_parse_output_with_ranges(output: &ParseOutput) -> YrsComputeEngin
 fn test_xlsx_export_roundtrip() {
     // 1. Create engine from a snapshot with diverse cell types
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: "RoundTrip".to_string(),
             rows: 100,
@@ -1267,7 +1248,7 @@ fn test_xlsx_export_roundtrip() {
         calculation_settings: None,
     };
 
-    let (mut engine, _recalc) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _recalc) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // 2. Add a merge region: A3:B3 (row=2, col 0..1)
@@ -1357,7 +1338,7 @@ fn test_xlsx_export_roundtrip() {
 fn test_xlsx_export_simple_snapshot_reparseable() {
     // 1. Create engine from the standard simple_snapshot (A1=10, B1=20, A2==A1+B1)
     let snap = simple_snapshot();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // 2. Export to XLSX bytes
     let xlsx_bytes = engine
@@ -1422,7 +1403,13 @@ fn range_export_snapshot() -> WorkbookSnapshot {
     }
 
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: "RangeExport".to_string(),
             rows,
@@ -1475,7 +1462,7 @@ fn xlsx_export_calculation_settings_use_modeled_storage() {
     input.calculation.calc_id = Some(191029);
 
     let input_bytes = xlsx_api::export_from_parse_output(&input).expect("write input xlsx");
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     engine
         .import_from_xlsx_bytes(&input_bytes, false)
         .expect("import xlsx bytes");
@@ -1505,9 +1492,28 @@ fn xlsx_export_calculation_settings_use_modeled_storage() {
 }
 
 fn imported_external_link() -> ExternalLink {
+    use domain_types::domain::external_link::{
+        CachedValue, ExternalCacheValue, ExternalDefinedName,
+    };
     ExternalLink {
         id: "1".to_string(),
         file_path: Some("Book2.xlsx".to_string()),
+        sheet_names: vec!["Source Data".into()],
+        sheet_data_ids: vec![0],
+        refresh_error_sheet_ids: vec![0],
+        defined_names: vec![ExternalDefinedName::with_details(
+            "Amount".into(),
+            Some("'Source Data'!$A$1".into()),
+            None,
+        )],
+        cache_values: vec![ExternalCacheValue {
+            sheet_id: 0,
+            row: Some(1),
+            cell_ref: "A1".into(),
+            value: CachedValue::Number(42.5),
+            raw_value: Some("42.500".into()),
+            preserve_space: false,
+        }],
         imported_identity: Some(ImportedExternalLinkIdentity {
             excel_ordinal: 1,
             workbook_rel_id: "rId20".to_string(),
@@ -1535,7 +1541,7 @@ fn imported_external_links_export_from_modeled_storage() {
     input.external_links = vec![imported_external_link()];
 
     let input_bytes = xlsx_api::export_from_parse_output(&input).expect("write input xlsx");
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     engine
         .import_from_xlsx_bytes(&input_bytes, false)
         .expect("import xlsx bytes");
@@ -1556,6 +1562,40 @@ fn imported_external_links_export_from_modeled_storage() {
             .as_ref()
             .map(|identity| identity.workbook_rel_id.as_str()),
         Some("rId20")
+    );
+    let imported = xlsx_api::parse(&input_bytes).unwrap().output.external_links;
+    assert_eq!(exported.external_links, imported);
+
+    // Native edits update the sole payload while preserving the durable link ID.
+    let native = &mut engine.stores.storage.metadata.external_links;
+    let link_id = *native.links.keys().next().unwrap();
+    let payload = native.links.get_mut(&link_id).unwrap();
+    payload.file_path = Some("Book3.xlsx".into());
+    payload.cache_values[0].value = domain_types::domain::external_link::CachedValue::Number(123.5);
+    payload.cache_values[0].raw_value = Some("123.50".into());
+    let bytes = engine.export_to_xlsx_bytes().unwrap();
+    let parsed = xlsx_api::parse(&bytes).unwrap().output;
+    let link = &parsed.external_links[0];
+    assert_eq!(link.file_path.as_deref(), Some("Book3.xlsx"));
+    assert_eq!(link.cache_values[0].raw_value.as_deref(), Some("123.50"));
+    assert_eq!(
+        link.cache_values[0].value,
+        domain_types::domain::external_link::CachedValue::Number(123.5)
+    );
+    assert_eq!(link.defined_names, imported[0].defined_names);
+    assert_eq!(link.refresh_error_sheet_ids, vec![0]);
+    let (reloaded, _) = ComputeEngine::from_xlsx_bytes(&bytes).unwrap();
+    assert_eq!(
+        reloaded
+            .stores
+            .storage
+            .metadata
+            .external_links
+            .links
+            .keys()
+            .copied()
+            .collect::<Vec<_>>(),
+        vec![link_id]
     );
 }
 
@@ -1583,7 +1623,7 @@ fn absent_modeled_external_links_do_not_export_external_references() {
 }
 
 fn exported_cell_map(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
 ) -> std::collections::HashMap<(u32, u32), domain_types::CellData> {
     let exported = engine
         .export_to_parse_output()
@@ -1839,7 +1879,7 @@ fn deleted_named_ranges_do_not_resurrect_on_export() {
 
 #[test]
 fn test_xlsx_export_streams_range_backed_cells_without_grid_entries() {
-    let (engine, _) = YrsComputeEngine::from_snapshot(range_export_snapshot()).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(range_export_snapshot()).unwrap();
     let cells = exported_cell_map(&engine);
 
     assert_eq!(cells.len(), 12, "all range payload cells should export");
@@ -1850,7 +1890,7 @@ fn test_xlsx_export_streams_range_backed_cells_without_grid_entries() {
 
 #[test]
 fn test_xlsx_export_range_override_matches_dense_materialization() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(range_export_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(range_export_snapshot()).unwrap();
     let sid = sheet_id();
     let override_id = CellId::virtual_at(sid, range_export_row_id(1), range_export_col_id(4, 1));
 
@@ -1867,7 +1907,7 @@ fn test_xlsx_export_range_override_matches_dense_materialization() {
     let dense_value = engine
         .mirror()
         .get_sheet(&sid)
-        .and_then(|sheet| sheet.get_column_slice(1))
+        .and_then(|sheet| sheet.get_column_view(1))
         .and_then(|col| col.get(1))
         .cloned()
         .expect("dense column materialization should include override");
@@ -1879,7 +1919,7 @@ fn test_xlsx_export_range_override_matches_dense_materialization() {
 
 #[test]
 fn test_xlsx_export_blank_range_override_suppresses_payload_value() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(range_export_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(range_export_snapshot()).unwrap();
     let sid = sheet_id();
     let override_id = CellId::virtual_at(sid, range_export_row_id(2), range_export_col_id(4, 2));
 
@@ -1896,7 +1936,7 @@ fn test_xlsx_export_blank_range_override_suppresses_payload_value() {
     let dense_value = engine
         .mirror()
         .get_sheet(&sid)
-        .and_then(|sheet| sheet.get_column_slice(2))
+        .and_then(|sheet| sheet.get_column_view(2))
         .and_then(|col| col.get(2))
         .cloned()
         .expect("dense column materialization should include cleared override");
@@ -1917,7 +1957,7 @@ fn worksheet_sort_state_survives_normal_parse_output_hydration_export() {
 
     let exported = engine
         .export_to_parse_output()
-        .expect("production Yrs export should succeed")
+        .expect("production native export should succeed")
         .parse_output;
 
     assert_eq!(exported.sheets[0].sort_state, input.sheets[0].sort_state);
@@ -1934,7 +1974,7 @@ fn worksheet_sort_state_survives_range_aware_parse_output_hydration_export() {
 
     let exported = engine
         .export_to_parse_output()
-        .expect("production Yrs export should succeed")
+        .expect("production native export should succeed")
         .parse_output;
 
     assert_eq!(exported.sheets[0].sort_state, input.sheets[0].sort_state);
@@ -1950,7 +1990,7 @@ fn worksheet_sort_state_l2_xlsx_export_keeps_standalone_distinct_from_autofilter
     let input_bytes = xlsx_api::export_from_parse_output(&input).expect("write input xlsx");
     let initial = xlsx_api::parse(&input_bytes).expect("parse input xlsx");
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     engine
         .import_from_xlsx_bytes(&input_bytes, false)
         .expect("import xlsx bytes");
@@ -1971,7 +2011,7 @@ fn worksheet_sort_state_l2_xlsx_export_keeps_standalone_distinct_from_autofilter
 }
 
 #[test]
-fn test_parse_output_export_preserves_yrs_data_table_regions() {
+fn test_parse_output_export_preserves_native_data_table_regions() {
     let row_input = CellRef::Positional {
         sheet: sheet_id(),
         row: 0,
@@ -1994,17 +2034,17 @@ fn test_parse_output_export_preserves_yrs_data_table_regions() {
         ooxml_flags: None,
     });
 
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let exported = engine
         .export_to_parse_output()
-        .expect("production Yrs export should succeed")
+        .expect("production native export should succeed")
         .parse_output;
 
     assert_eq!(
         exported.data_table_regions.len(),
         1,
-        "Yrs-backed ParseOutput export must carry data table regions"
+        "native ParseOutput export must carry data table regions"
     );
     let region = &exported.data_table_regions[0];
     assert_eq!(region.sheet_index, 0);
@@ -2048,15 +2088,15 @@ fn test_parse_output_export_preserves_data_table_ooxml_flags() {
         }),
     });
 
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let exported = engine
         .export_to_parse_output()
-        .expect("production Yrs export should succeed")
+        .expect("production native export should succeed")
         .parse_output;
     let flags = exported.data_table_regions[0]
         .ooxml_flags
         .as_ref()
-        .expect("data table OOXML flags should export from canonical Yrs metadata");
+        .expect("data table OOXML flags should export from canonical native metadata");
 
     assert!(flags.aca);
     assert!(flags.ca);

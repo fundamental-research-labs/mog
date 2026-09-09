@@ -19,14 +19,13 @@ use crate::snapshot::{
     WorkbookSettings, WorkbookSettingsChange,
 };
 use crate::storage::cells::values as cell_values;
-use crate::storage::engine::YrsComputeEngine;
+use crate::storage::engine::ComputeEngine;
 use crate::storage::engine::query_serialization::{cell_value_to_json, region_json};
 use crate::storage::engine::{data_table_formula, services};
 use crate::storage::sheet::{hyperlinks, merges, properties as sheets};
 use crate::storage::workbook::settings as workbook;
 use cell_types::{CellId, SheetId, SheetPos};
 use compute_document::hex::{hex_to_id, id_to_hex};
-use compute_document::undo::{ORIGIN_UI_STATE, ORIGIN_USER_EDIT};
 use compute_wire::mutation::serialize_multi_viewport_patches;
 use domain_types::domain::merge::{CellMergeInfo, MergeRegion, ResolvedMergedRegion};
 use domain_types::domain::sheet::{FrozenPanes, SheetMeta, SheetScrollPosition, SheetViewOptions};
@@ -37,56 +36,56 @@ use value_types::CellValue;
 use value_types::ComputeError;
 
 pub(in crate::storage::engine) fn get_document_properties(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
 ) -> domain_types::DocumentProperties {
     services::queries::get_document_properties(&engine.stores)
 }
 
 pub(in crate::storage::engine) fn set_document_properties(
-    engine: &YrsComputeEngine,
+    engine: &mut ComputeEngine,
     props: domain_types::DocumentProperties,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    services::queries::set_document_properties(&engine.stores, &props);
+    services::queries::set_document_properties(&mut engine.stores, &props);
     Ok((
         serialize_multi_viewport_patches(&[]),
         MutationResult::empty(),
     ))
 }
 
-pub(in crate::storage::engine) fn get_all_sheet_ids(engine: &YrsComputeEngine) -> Vec<String> {
+pub(in crate::storage::engine) fn get_all_sheet_ids(engine: &ComputeEngine) -> Vec<String> {
     services::queries::get_all_sheet_ids(&engine.stores)
 }
 
 pub(in crate::storage::engine) fn get_sheet_name(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> Option<String> {
     services::queries::get_sheet_name(&engine.stores, sheet_id)
 }
 
 pub(in crate::storage::engine) fn is_sheet_hidden(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> bool {
     services::queries::is_sheet_hidden(&engine.stores, sheet_id)
 }
 
 pub(in crate::storage::engine) fn is_sheet_calculation_enabled(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> bool {
     engine.mirror.is_calculation_enabled(sheet_id)
 }
 
 pub(in crate::storage::engine) fn is_sheet_protected(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> bool {
     services::queries::is_sheet_protected(&engine.stores, sheet_id)
 }
 
 pub(in crate::storage::engine) fn is_row_hidden_query(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
 ) -> bool {
@@ -94,7 +93,7 @@ pub(in crate::storage::engine) fn is_row_hidden_query(
 }
 
 pub(in crate::storage::engine) fn is_col_hidden_query(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     col: u32,
 ) -> bool {
@@ -102,77 +101,77 @@ pub(in crate::storage::engine) fn is_col_hidden_query(
 }
 
 pub(in crate::storage::engine) fn get_hidden_rows(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> Vec<u32> {
     services::queries::get_hidden_rows(&engine.stores, sheet_id)
 }
 
 pub(in crate::storage::engine) fn get_filter_hidden_rows(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> Vec<u32> {
     services::queries::get_filter_hidden_rows(&engine.stores, sheet_id)
 }
 
 pub(in crate::storage::engine) fn get_hidden_columns(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> Vec<u32> {
     services::queries::get_hidden_columns(&engine.stores, sheet_id)
 }
 
 pub(in crate::storage::engine) fn get_data_bounds(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> Option<DataBounds> {
     services::queries::get_data_bounds(&engine.stores, &engine.mirror, sheet_id)
 }
 
 pub(in crate::storage::engine) fn get_sheet_index(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> Option<usize> {
     services::queries::get_sheet_index(&engine.stores, sheet_id)
 }
 
 pub(in crate::storage::engine) fn get_frozen_panes_query(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> FrozenPanes {
     services::queries::get_frozen_panes_query(&engine.stores, sheet_id)
 }
 
 pub(in crate::storage::engine) fn get_view_options_query(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> SheetViewOptions {
     services::queries::get_view_options_query(&engine.stores, sheet_id)
 }
 
 pub(in crate::storage::engine) fn get_scroll_position_query(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> SheetScrollPosition {
     services::queries::get_scroll_position_query(&engine.stores, sheet_id)
 }
 
 pub(in crate::storage::engine) fn get_tab_color_query(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> Option<String> {
     services::queries::get_tab_color_query(&engine.stores, sheet_id)
 }
 
 pub(in crate::storage::engine) fn get_sheet_protection_config(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> SheetProtectionConfig {
     services::queries::get_sheet_protection_config(&engine.stores, sheet_id)
 }
 
 pub(in crate::storage::engine) fn get_row_height_query(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
 ) -> f64 {
@@ -180,7 +179,7 @@ pub(in crate::storage::engine) fn get_row_height_query(
 }
 
 pub(in crate::storage::engine) fn get_col_width_query(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     col: u32,
 ) -> f64 {
@@ -188,7 +187,7 @@ pub(in crate::storage::engine) fn get_col_width_query(
 }
 
 pub(in crate::storage::engine) fn get_default_row_height(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> f64 {
     let pt = services::queries::get_default_row_height(&engine.stores, sheet_id);
@@ -196,7 +195,7 @@ pub(in crate::storage::engine) fn get_default_row_height(
 }
 
 pub(in crate::storage::engine) fn get_default_col_width(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> f64 {
     let cw = services::queries::get_default_col_width(&engine.stores, sheet_id);
@@ -204,7 +203,7 @@ pub(in crate::storage::engine) fn get_default_col_width(
 }
 
 pub(in crate::storage::engine) fn get_row_heights_batch(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     start_row: u32,
     end_row: u32,
@@ -216,7 +215,7 @@ pub(in crate::storage::engine) fn get_row_heights_batch(
 }
 
 pub(in crate::storage::engine) fn get_col_widths_batch(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     start_col: u32,
     end_col: u32,
@@ -228,7 +227,7 @@ pub(in crate::storage::engine) fn get_col_widths_batch(
 }
 
 pub(in crate::storage::engine) fn get_col_width_chars_query(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     col: u32,
 ) -> f64 {
@@ -236,14 +235,14 @@ pub(in crate::storage::engine) fn get_col_width_chars_query(
 }
 
 pub(in crate::storage::engine) fn get_default_col_width_chars(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> f64 {
     services::queries::get_default_col_width(&engine.stores, sheet_id).0
 }
 
 pub(in crate::storage::engine) fn get_col_widths_batch_chars(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     start_col: u32,
     end_col: u32,
@@ -255,91 +254,42 @@ pub(in crate::storage::engine) fn get_col_widths_batch_chars(
 }
 
 pub(in crate::storage::engine) fn get_all_named_ranges_wire(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
 ) -> Vec<crate::engine_types::queries::DefinedNameWire> {
-    let raw = services::queries::get_all_named_ranges_wire(&engine.stores);
-    let mut result = Vec::with_capacity(raw.len());
-    let mut invalid_refers_to_count = 0usize;
-    let mut invalid_refers_to_samples = Vec::new();
-
-    for dn in raw {
-        let refers_to = match defined_name_wire_identity_formula(&dn) {
-            Ok(identity) => identity,
-            Err(reason) => {
-                invalid_refers_to_count += 1;
-                if invalid_refers_to_samples.len() < 5 {
-                    invalid_refers_to_samples.push(format!("{}: {reason}", dn.name));
-                }
-                continue;
+    services::queries::get_all_named_ranges_wire(&engine.stores)
+        .into_iter()
+        .filter_map(|dn| {
+            // Broken visible names remain preserved for export but are not usable API names.
+            if dn.visible
+                && dn.raw_refers_to.as_deref().is_some_and(|raw| {
+                    matches!(
+                        compute_parser::ParsedExpr::classify(raw),
+                        compute_parser::ParsedExpr::BrokenRef { .. }
+                            | compute_parser::ParsedExpr::Empty
+                    )
+                })
+            {
+                return None;
             }
-        };
-
-        let scope = match dn.scope {
-            Some(ref hex) => match hex_to_id(hex) {
-                Some(raw) => formula_types::Scope::Sheet(SheetId::from_raw(raw)),
-                None => formula_types::Scope::Workbook,
-            },
-            None => formula_types::Scope::Workbook,
-        };
-
-        result.push(crate::engine_types::queries::DefinedNameWire {
-            id: dn.id,
-            name: dn.name,
-            refers_to,
-            scope,
-            comment: dn.comment,
-            visible: dn.visible,
-        });
-    }
-
-    if invalid_refers_to_count > 0 {
-        tracing::warn!(
-            invalid_refers_to_count,
-            samples = ?invalid_refers_to_samples,
-            "Yrs DefinedName.refers_to contains entries that are not valid IdentityFormula JSON; \
-             omitted invalid entries from wire response. Typed formula boundary: IdentityFormula \
-             JSON is the single canonical on-disk format."
-        );
-    }
-
-    result
-}
-
-fn defined_name_wire_identity_formula(dn: &DefinedName) -> Result<IdentityFormula, String> {
-    let trimmed_refers_to = dn.refers_to.trim_start();
-    if !trimmed_refers_to.starts_with('{') {
-        return preserved_opaque_defined_name_identity_formula(dn)
-            .ok_or_else(|| "expected JSON object".to_string());
-    }
-
-    match serde_json::from_str::<IdentityFormula>(&dn.refers_to) {
-        Ok(identity) => Ok(identity),
-        Err(e) => preserved_opaque_defined_name_identity_formula(dn).ok_or_else(|| e.to_string()),
-    }
-}
-
-fn preserved_opaque_defined_name_identity_formula(dn: &DefinedName) -> Option<IdentityFormula> {
-    let raw = dn.raw_refers_to.as_deref()?;
-    if dn.visible
-        && matches!(
-            compute_parser::ParsedExpr::classify(raw),
-            compute_parser::ParsedExpr::BrokenRef { .. } | compute_parser::ParsedExpr::Empty
-        )
-    {
-        return None;
-    }
-
-    Some(IdentityFormula {
-        template: raw.strip_prefix('=').unwrap_or(raw).to_string(),
-        refs: Vec::new(),
-        is_dynamic_array: false,
-        is_volatile: false,
-        is_aggregate: false,
-    })
+            let scope = dn
+                .scope
+                .as_deref()
+                .and_then(|scope| SheetId::from_uuid_str(scope).ok())
+                .map_or(formula_types::Scope::Workbook, formula_types::Scope::Sheet);
+            Some(crate::engine_types::queries::DefinedNameWire {
+                id: dn.id,
+                name: dn.name,
+                refers_to: dn.refers_to,
+                scope,
+                comment: dn.comment,
+                visible: dn.visible,
+            })
+        })
+        .collect()
 }
 
 pub(in crate::storage::engine) fn get_dependents(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -370,7 +320,7 @@ pub(in crate::storage::engine) fn get_dependents(
 }
 
 pub(in crate::storage::engine) fn get_precedents(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -406,7 +356,7 @@ pub(in crate::storage::engine) fn get_precedents(
 }
 
 pub(in crate::storage::engine) fn get_merge_at_cell_query(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -415,14 +365,14 @@ pub(in crate::storage::engine) fn get_merge_at_cell_query(
 }
 
 pub(in crate::storage::engine) fn get_all_merges_in_sheet(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> Vec<ResolvedMergedRegion> {
     services::queries::get_all_merges_in_sheet(&engine.stores, sheet_id)
 }
 
 pub(in crate::storage::engine) fn get_cell_id_at(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -431,7 +381,7 @@ pub(in crate::storage::engine) fn get_cell_id_at(
 }
 
 pub(in crate::storage::engine) fn get_cell_position(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     cell_id_hex: &str,
 ) -> Option<CellPositionResult> {
@@ -459,7 +409,7 @@ pub(in crate::storage::engine) fn get_cell_position(
 }
 
 pub(in crate::storage::engine) fn resolve_cell_positions(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     cell_id_hexes: Vec<String>,
 ) -> Vec<Option<CellPositionResult>> {
     services::queries::resolve_cell_positions(&engine.mirror, &cell_id_hexes)
@@ -477,7 +427,7 @@ pub(in crate::storage::engine) fn resolve_cell_positions(
 }
 
 pub(in crate::storage::engine) fn is_projection_source(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -486,7 +436,7 @@ pub(in crate::storage::engine) fn is_projection_source(
 }
 
 pub(in crate::storage::engine) fn is_projected_position(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
     col: u32,

@@ -1,5 +1,3 @@
-use std::collections::BTreeSet;
-
 use domain_types::{ParseOutput, WorkbookSheetKind};
 
 use super::WriteError;
@@ -225,46 +223,9 @@ fn add_generated_sheet_defs(
 }
 
 fn allocate_generated_sheet_ids(output: &ParseOutput) -> Result<Vec<u32>, WriteError> {
-    let mut used = BTreeSet::new();
-    for sheet in &output.sheets {
-        let Some(sheet_id) = sheet.sheet_id else {
-            continue;
-        };
-        if sheet_id == 0 {
-            return Err(WriteError::PackageIntegrity(format!(
-                "worksheet {:?} has invalid sheetId 0",
-                sheet.name
-            )));
-        }
-        if !used.insert(sheet_id) {
-            return Err(WriteError::PackageIntegrity(format!(
-                "duplicate worksheet sheetId {sheet_id}"
-            )));
-        }
-    }
-
-    let mut allocated = Vec::with_capacity(output.sheets.len());
-    for sheet in &output.sheets {
-        if let Some(sheet_id) = sheet.sheet_id {
-            allocated.push(sheet_id);
-            continue;
-        }
-
-        let sheet_id = used
-            .last()
-            .copied()
-            .unwrap_or(0)
-            .checked_add(1)
-            .ok_or_else(|| {
-                WriteError::PackageIntegrity(
-                    "cannot allocate a positive worksheet sheetId".to_string(),
-                )
-            })?;
-        used.insert(sheet_id);
-        allocated.push(sheet_id);
-    }
-
-    Ok(allocated)
+    output
+        .resolved_worksheet_ids()
+        .map_err(WriteError::PackageIntegrity)
 }
 
 fn add_inventory_sheet_defs(

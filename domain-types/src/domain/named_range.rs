@@ -1,6 +1,6 @@
 //! Named range (defined name) domain types.
 //!
-//! Pure data contracts — no Yrs, no storage internals.
+//! Pure data contracts without storage internals.
 
 use cell_types::RangeId;
 use serde::{Deserialize, Serialize};
@@ -8,14 +8,14 @@ use serde::{Deserialize, Serialize};
 /// A defined name (named range).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct DefinedName {
+pub struct DefinedName<Reference = String> {
     /// Unique identifier for the defined name.
     pub id: String,
     /// The name (e.g., "SalesData", "TaxRate"). Case-insensitive for lookup.
     pub name: String,
-    /// The reference formula string (e.g., "=Sheet1!$A$1:$B$10").
-    /// Stored as plain string. IdentityFormula conversion deferred to integration layer.
-    pub refers_to: String,
+    /// Reference value: formula text at import/API boundaries, or a typed
+    /// identity formula in native engine storage.
+    pub refers_to: Reference,
     /// Original opaque reference text for references the compute engine cannot
     /// model structurally, such as external-workbook names.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -68,6 +68,35 @@ pub struct DefinedName {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub linked_range_id: Option<RangeId>,
 }
+impl<Reference> DefinedName<Reference> {
+    /// Convert the reference representation while preserving all name metadata.
+    pub fn map_reference<Other>(
+        self,
+        convert: impl FnOnce(Reference) -> Other,
+    ) -> DefinedName<Other> {
+        DefinedName {
+            id: self.id,
+            name: self.name,
+            refers_to: convert(self.refers_to),
+            raw_refers_to: self.raw_refers_to,
+            scope: self.scope,
+            comment: self.comment,
+            custom_menu: self.custom_menu,
+            description: self.description,
+            help: self.help,
+            status_bar: self.status_bar,
+            visible: self.visible,
+            xlm: self.xlm,
+            function: self.function,
+            vb_procedure: self.vb_procedure,
+            publish_to_server: self.publish_to_server,
+            workbook_parameter: self.workbook_parameter,
+            xml_space_preserve: self.xml_space_preserve,
+            order: self.order,
+            linked_range_id: self.linked_range_id,
+        }
+    }
+}
 
 /// Serde helper for `true` default values.
 fn default_true() -> bool {
@@ -77,11 +106,11 @@ fn default_true() -> bool {
 /// Input for creating a defined name.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct DefinedNameInput {
+pub struct DefinedNameInput<Reference = String> {
     /// The name to define.
     pub name: String,
     /// The reference formula string.
-    pub refers_to: String,
+    pub refers_to: Reference,
     /// Scope: None = workbook, Some(sheet_id) = sheet-local.
     pub scope: Option<String>,
     /// Optional comment.
@@ -89,17 +118,28 @@ pub struct DefinedNameInput {
 }
 
 /// Partial update for an existing defined name.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct NamedRangeUpdate {
+pub struct NamedRangeUpdate<Reference = String> {
     /// New name (if renaming).
     pub name: Option<String>,
     /// New refers_to formula string.
-    pub refers_to: Option<String>,
+    pub refers_to: Option<Reference>,
     /// New comment.
     pub comment: Option<Option<String>>,
     /// New visibility.
     pub visible: Option<bool>,
+}
+
+impl<Reference> Default for NamedRangeUpdate<Reference> {
+    fn default() -> Self {
+        Self {
+            name: None,
+            refers_to: None,
+            comment: None,
+            visible: None,
+        }
+    }
 }
 
 /// Result of name validation.

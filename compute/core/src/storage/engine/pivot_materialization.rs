@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 
 use cell_types::{SheetId, SheetPos};
 use compute_document::hex::{SmallHex, id_to_hex};
-use compute_document::undo::ORIGIN_FORMULA_RESULT;
 use domain_types::CellFormat;
 use domain_types::domain::pivot::{PivotTableConfig, ShowValuesAs, ShowValuesAsConfig};
 use value_types::ComputeError;
@@ -10,7 +9,7 @@ use value_types::ComputeError;
 use crate::mirror::CellMirror;
 use crate::storage::properties;
 
-use super::{YrsComputeEngine, services, stores::EngineStores};
+use super::{ComputeEngine, services, stores::EngineStores};
 
 fn is_percent_show_values_as(show_values_as: Option<&ShowValuesAsConfig>) -> bool {
     matches!(
@@ -44,7 +43,7 @@ fn pivot_value_number_formats(config: &PivotTableConfig) -> Vec<Option<String>> 
 }
 
 pub(in crate::storage::engine) fn apply_pivot_value_number_formats(
-    stores: &EngineStores,
+    stores: &mut EngineStores,
     mirror: &CellMirror,
     output_sheet_id: &SheetId,
     anchor_row: u32,
@@ -128,19 +127,16 @@ pub(in crate::storage::engine) fn apply_pivot_value_number_formats(
             number_format: Some(number_format),
             ..Default::default()
         };
-        properties::set_cell_formats_with_origin(
-            stores.storage.doc(),
-            stores.storage.workbook_map(),
-            stores.storage.sheets(),
+        properties::set_cell_formats(
+            &mut stores.storage,
             output_sheet_id,
             &cell_hex_refs,
             &format,
-            ORIGIN_FORMULA_RESULT,
         );
     }
 }
 
-impl YrsComputeEngine {
+impl ComputeEngine {
     /// Materialize all pivot tables across all sheets after recalc.
     pub(in crate::storage::engine) fn materialize_all_pivots_for_import_open(
         stores: &mut EngineStores,
@@ -457,7 +453,7 @@ impl YrsComputeEngine {
                         &self.stores.grid_id_alloc,
                     );
                     apply_pivot_value_number_formats(
-                        &self.stores,
+                        &mut self.stores,
                         &self.mirror,
                         &output_sheet_id,
                         config.output_location.row,

@@ -2,10 +2,8 @@ use std::collections::HashMap;
 
 use cell_types::SheetId;
 use compute_document::hex::{hex_to_id, id_to_hex};
-use compute_document::schema::KEY_CELLS;
 use compute_wire::flags as render_flags;
 use value_types::CellValue;
-use yrs::{Map, Out, Transact};
 
 use super::cf_format::{apply_cf_to_format, apply_number_format_color};
 use super::materialized_cells::build_materialized_cell_material;
@@ -13,7 +11,7 @@ use crate::mirror::CellMirror;
 use crate::storage::engine::settings::EngineSettings;
 use crate::storage::engine::stores::{CFCacheEntry, EngineStores};
 use crate::storage::properties;
-use crate::storage::sheet::{comments, hyperlinks, merges, sparklines};
+use crate::storage::sheet::{comments, merges, sparklines};
 
 pub(super) struct RenderCellMaterial {
     pub(super) format: domain_types::CellFormat,
@@ -27,25 +25,10 @@ pub(super) struct RenderCellMaterial {
 
 fn read_cell_rich_string(
     stores: &EngineStores,
-    sheet_id: &SheetId,
     cell_id_hex: &str,
 ) -> Option<domain_types::RichSharedString> {
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let txn = stores.storage.doc().transact();
-    let sheet_map = match stores.storage.sheets().get(&txn, &sheet_hex) {
-        Some(Out::YMap(map)) => map,
-        _ => return None,
-    };
-    let cells_map = match sheet_map.get(&txn, KEY_CELLS) {
-        Some(Out::YMap(map)) => map,
-        _ => return None,
-    };
-    let cell_map = match cells_map.get(&txn, cell_id_hex) {
-        Some(Out::YMap(map)) => map,
-        _ => return None,
-    };
-
-    compute_document::cell_serde::read_rich_string_from_yrs(&cell_map, &txn)
+    let cell_id = cell_types::CellId::from_uuid_str(cell_id_hex).ok()?;
+    stores.storage.cell_metadata(&cell_id)?.rich_string.clone()
 }
 
 fn workbook_theme_colors(theme_palette: &HashMap<String, String>) -> Vec<String> {
@@ -252,7 +235,6 @@ fn apply_rich_text_aggregate_font(
 
 fn apply_cell_rich_text_aggregate_font(
     stores: &EngineStores,
-    sheet_id: &SheetId,
     cell_id_hex: &str,
     value: &CellValue,
     format: &mut domain_types::CellFormat,
@@ -261,7 +243,7 @@ fn apply_cell_rich_text_aggregate_font(
     let CellValue::Text(text) = value else {
         return;
     };
-    let Some(rich_string) = read_cell_rich_string(stores, sheet_id, cell_id_hex) else {
+    let Some(rich_string) = read_cell_rich_string(stores, cell_id_hex) else {
         return;
     };
     if rich_string.plain_text != text.as_ref() {
@@ -311,11 +293,7 @@ pub(super) fn build_render_cell_materials(
     // Build a set of cell IDs that have comments in the viewport,
     // so we can check per-cell without repeated full scans.
     let comment_cell_ids: std::collections::HashSet<u128> = {
-        let cell_id_hexes = comments::get_cell_ids_with_comments(
-            stores.storage.doc(),
-            stores.storage.sheets(),
-            sheet_id,
-        );
+        let cell_id_hexes = comments::get_cell_ids_with_comments(&stores.storage, sheet_id);
         cell_id_hexes
             .iter()
             .filter_map(|hex| hex_to_id(hex))
@@ -326,12 +304,7 @@ pub(super) fn build_render_cell_materials(
     if let Some(grid) = stores.grid_indexes.get(sheet_id) {
         // Build merge child→origin lookup for this viewport
         let merge_origins: std::collections::HashMap<(u32, u32), (u32, u32)> = {
-            let all_merges = merges::get_all_merges(
-                stores.storage.doc(),
-                stores.storage.sheets(),
-                *sheet_id,
-                grid,
-            );
+            let all_merges = merges::get_all_merges(&stores.storage, *sheet_id, grid);
             let mut map = std::collections::HashMap::new();
             for m in &all_merges {
                 let origin = (m.start_row, m.start_col);
@@ -363,23 +336,12 @@ pub(super) fn build_render_cell_materials(
                 let render = mirror.cell_render_at(sheet_id, eff_row, eff_col);
 
                 let mut sparkline_flag = 0u16;
-                if sparklines::has_sparkline(
-                    stores.storage.doc(),
-                    &stores.storage.sheets_ref(),
-                    sheet_id,
-                    row,
-                    col,
-                ) {
+                if sparklines::has_sparkline(&stores.storage, sheet_id, row, col) {
                     sparkline_flag |= render_flags::HAS_SPARKLINE;
                 }
                 let mut hyperlink_flag = 0u16;
-                if hyperlinks::get_hyperlink(
-                    stores.storage.doc(),
-                    stores.storage.sheets(),
-                    sheet_id,
-                    grid,
-                    row,
-                    col,
+                if crate::storage::engine::services::objects::get_hyperlink(
+                    stores, mirror, sheet_id, row, col,
                 )
                 .is_some()
                 {
@@ -414,7 +376,6 @@ pub(super) fn build_render_cell_materials(
                         );
                         apply_cell_rich_text_aggregate_font(
                             stores,
-                            sheet_id,
                             &format_cell_id_hex,
                             proj.value,
                             &mut effective,
@@ -546,7 +507,6 @@ pub(super) fn build_render_cell_materials(
                         );
                         apply_cell_rich_text_aggregate_font(
                             stores,
-                            sheet_id,
                             &cell_id_hex,
                             value,
                             &mut effective,

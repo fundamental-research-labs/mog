@@ -35,18 +35,25 @@ fn test_effective_format_full_inheritance() {
 
     // Cell at (2, 1): set bold=false (overrides row's bold)
     set_cell_format(
-        storage.doc(),
-        storage.workbook_map(),
-        storage.sheets(),
+        &mut storage,
         &sid,
-        "cell-x",
+        "00000000000000000000000000000003",
         &CellFormat {
             bold: Some(false),
             ..Default::default()
         },
     );
 
-    let eff = get_effective_format(&storage, &sid, "cell-x", 2, 1, None, Some(&gi), None);
+    let eff = get_effective_format(
+        &storage,
+        &sid,
+        "00000000000000000000000000000003",
+        2,
+        1,
+        None,
+        Some(&gi),
+        None,
+    );
 
     // bold: cell says false -> false
     assert_eq!(eff.bold, Some(false));
@@ -62,7 +69,16 @@ fn test_effective_format_full_inheritance() {
 fn test_effective_format_no_overrides() {
     let (storage, sid, gi) = storage_with_sheet();
 
-    let eff = get_effective_format(&storage, &sid, "no-cell", 0, 0, None, Some(&gi), None);
+    let eff = get_effective_format(
+        &storage,
+        &sid,
+        "0000000000000000000000000000000b",
+        0,
+        0,
+        None,
+        Some(&gi),
+        None,
+    );
     let def = default_format();
 
     assert_eq!(eff.font_family, def.font_family);
@@ -92,11 +108,9 @@ fn test_effective_format_canonicalizes_sparse_authored_no_fill_only_after_cascad
     )
     .unwrap();
     set_cell_format(
-        storage.doc(),
-        storage.workbook_map(),
-        storage.sheets(),
+        &mut storage,
         &sid,
-        "sparse-authored-cell",
+        "0000000000000000000000000000000d",
         &CellFormat {
             bold: Some(true),
             ..Default::default()
@@ -106,7 +120,7 @@ fn test_effective_format_canonicalizes_sparse_authored_no_fill_only_after_cascad
     let eff = get_effective_format(
         &storage,
         &sid,
-        "sparse-authored-cell",
+        "0000000000000000000000000000000d",
         3,
         2,
         None,
@@ -129,7 +143,7 @@ fn test_premerged_range_cascade_uses_the_same_effective_fill_contract() {
     let base = default_format();
 
     let no_fill = get_effective_format_from_preloaded_layers_with_range(
-        &base, None, None, 2, None, None, None, None, false,
+        &base, None, None, 2, None, None, None, None, None, false,
     );
     assert_eq!(
         no_fill.pattern_type,
@@ -146,6 +160,7 @@ fn test_premerged_range_cascade_uses_the_same_effective_fill_contract() {
         None,
         2,
         Some(&range_fill),
+        None,
         None,
         None,
         None,
@@ -180,7 +195,7 @@ fn test_higher_fill_layers_prevent_effective_no_fill_canonicalization() {
     let shorthand = get_effective_format(
         &storage,
         &sid,
-        "background-shorthand",
+        "00000000000000000000000000000001",
         3,
         2,
         None,
@@ -195,11 +210,9 @@ fn test_higher_fill_layers_prevent_effective_no_fill_canonicalization() {
     );
 
     set_cell_format(
-        storage.doc(),
-        storage.workbook_map(),
-        storage.sheets(),
+        &mut storage,
         &sid,
-        "higher-solid-fill",
+        "00000000000000000000000000000005",
         &CellFormat {
             background_color: Some("#ED7D31".to_string()),
             pattern_type: Some(ooxml_types::styles::PatternType::Solid),
@@ -210,7 +223,7 @@ fn test_higher_fill_layers_prevent_effective_no_fill_canonicalization() {
     let solid = get_effective_format(
         &storage,
         &sid,
-        "higher-solid-fill",
+        "00000000000000000000000000000005",
         3,
         2,
         None,
@@ -226,10 +239,9 @@ fn test_higher_fill_layers_prevent_effective_no_fill_canonicalization() {
 
 #[test]
 fn test_workbook_normal_style_overrides_builtin_default_base() {
-    let (storage, sid, gi) = storage_with_sheet();
+    let (mut storage, sid, gi) = storage_with_sheet();
     insert_style_palette_entry(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage,
         0,
         &CellFormat {
             font_family: Some("Aptos".to_string()),
@@ -238,7 +250,16 @@ fn test_workbook_normal_style_overrides_builtin_default_base() {
         },
     );
 
-    let eff = get_effective_format(&storage, &sid, "no-cell", 0, 0, None, Some(&gi), None);
+    let eff = get_effective_format(
+        &storage,
+        &sid,
+        "0000000000000000000000000000000b",
+        0,
+        0,
+        None,
+        Some(&gi),
+        None,
+    );
 
     assert_eq!(eff.font_family, Some("Aptos".to_string()));
     assert_eq!(
@@ -253,8 +274,7 @@ fn test_workbook_normal_style_overrides_builtin_default_base() {
 fn test_workbook_normal_style_is_below_row_col_and_cell_layers() {
     let (mut storage, sid, gi) = storage_with_sheet();
     insert_style_palette_entry(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage,
         0,
         &CellFormat {
             font_size: Some(domain_types::FontSize::from_millipoints(12000)),
@@ -286,11 +306,9 @@ fn test_workbook_normal_style_is_below_row_col_and_cell_layers() {
     )
     .unwrap();
     set_cell_format(
-        storage.doc(),
-        storage.workbook_map(),
-        storage.sheets(),
+        &mut storage,
         &sid,
-        "cell-normal-cascade",
+        "00000000000000000000000000000002",
         &CellFormat {
             font_color: Some("#333333".to_string()),
             ..Default::default()
@@ -300,7 +318,7 @@ fn test_workbook_normal_style_is_below_row_col_and_cell_layers() {
     let eff = get_effective_format(
         &storage,
         &sid,
-        "cell-normal-cascade",
+        "00000000000000000000000000000002",
         2,
         1,
         None,
@@ -317,10 +335,9 @@ fn test_workbook_normal_style_is_below_row_col_and_cell_layers() {
 
 #[test]
 fn test_positional_format_uses_workbook_normal_style() {
-    let (storage, sid, gi) = storage_with_sheet();
+    let (mut storage, sid, gi) = storage_with_sheet();
     insert_style_palette_entry(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage,
         0,
         &CellFormat {
             font_size: Some(domain_types::FontSize::from_millipoints(12000)),
@@ -352,7 +369,16 @@ fn test_effective_format_only_row() {
     )
     .unwrap();
 
-    let eff = get_effective_format(&storage, &sid, "some-cell", 7, 0, None, Some(&gi), None);
+    let eff = get_effective_format(
+        &storage,
+        &sid,
+        "0000000000000000000000000000000c",
+        7,
+        0,
+        None,
+        Some(&gi),
+        None,
+    );
     assert_eq!(eff.italic, Some(true));
     // Other properties from default
     assert_eq!(eff.font_family, Some("Calibri".to_string()));
@@ -374,7 +400,16 @@ fn test_effective_format_only_col() {
     )
     .unwrap();
 
-    let eff = get_effective_format(&storage, &sid, "some-cell", 0, 3, None, Some(&gi), None);
+    let eff = get_effective_format(
+        &storage,
+        &sid,
+        "0000000000000000000000000000000c",
+        0,
+        3,
+        None,
+        Some(&gi),
+        None,
+    );
     assert_eq!(eff.wrap_text, Some(true));
     assert_eq!(
         eff.font_size,
@@ -384,22 +419,22 @@ fn test_effective_format_only_col() {
 
 #[test]
 fn test_is_locked_default_true() {
-    let (storage, sid, gi) = storage_with_sheet();
-    let (doc, workbook, sheets) = (storage.doc(), storage.workbook_map(), storage.sheets());
-    assert!(is_cell_locked(doc, workbook, sheets, &sid, "unknown-cell"));
+    let (storage, sid, _gi) = storage_with_sheet();
+    assert!(is_cell_locked(
+        &storage,
+        &sid,
+        "0000000000000000000000000000000e"
+    ));
 }
 
 #[test]
 fn test_is_locked_explicitly_false() {
-    let (mut storage, sid, gi) = storage_with_sheet();
-    let (doc, workbook, sheets) = (storage.doc(), storage.workbook_map(), storage.sheets());
+    let (mut storage, sid, _gi) = storage_with_sheet();
 
     set_cell_format(
-        storage.doc(),
-        storage.workbook_map(),
-        storage.sheets(),
+        &mut storage,
         &sid,
-        "unlocked-cell",
+        "0000000000000000000000000000000f",
         &CellFormat {
             locked: Some(false),
             ..Default::default()
@@ -407,38 +442,30 @@ fn test_is_locked_explicitly_false() {
     );
 
     assert!(!is_cell_locked(
-        doc,
-        workbook,
-        sheets,
+        &storage,
         &sid,
-        "unlocked-cell"
+        "0000000000000000000000000000000f"
     ));
 }
 
 #[test]
 fn test_is_formula_hidden_default_false() {
-    let (storage, sid, gi) = storage_with_sheet();
-    let (doc, workbook, sheets) = (storage.doc(), storage.workbook_map(), storage.sheets());
+    let (storage, sid, _gi) = storage_with_sheet();
     assert!(!is_formula_hidden(
-        doc,
-        workbook,
-        sheets,
+        &storage,
         &sid,
-        "unknown-cell"
+        "0000000000000000000000000000000e"
     ));
 }
 
 #[test]
 fn test_is_formula_hidden_explicitly_true() {
-    let (mut storage, sid, gi) = storage_with_sheet();
-    let (doc, workbook, sheets) = (storage.doc(), storage.workbook_map(), storage.sheets());
+    let (mut storage, sid, _gi) = storage_with_sheet();
 
     set_cell_format(
-        storage.doc(),
-        storage.workbook_map(),
-        storage.sheets(),
+        &mut storage,
         &sid,
-        "hidden-cell",
+        "00000000000000000000000000000004",
         &CellFormat {
             hidden: Some(true),
             ..Default::default()
@@ -446,11 +473,9 @@ fn test_is_formula_hidden_explicitly_true() {
     );
 
     assert!(is_formula_hidden(
-        doc,
-        workbook,
-        sheets,
+        &storage,
         &sid,
-        "hidden-cell"
+        "00000000000000000000000000000004"
     ));
 }
 
@@ -510,15 +535,19 @@ fn test_effective_format_preloaded_no_ranges_uses_supplied_cell_format() {
 fn test_imported_cell_xf_blocks_row_col_alignment_defaults() {
     let (mut storage, sid, gi) = storage_with_sheet();
     insert_style_palette_entry(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage,
         7,
         &CellFormat {
             bold: Some(true),
             ..Default::default()
         },
     );
-    insert_compact_cell_properties(&storage, &sid, "imported-cell", r#"{"s":7}"#);
+    insert_compact_cell_properties(
+        &mut storage,
+        &sid,
+        "00000000000000000000000000000007",
+        r#"{"s":7}"#,
+    );
 
     set_col_format(
         &mut storage,
@@ -540,7 +569,16 @@ fn test_imported_cell_xf_blocks_row_col_alignment_defaults() {
     )
     .unwrap();
 
-    let eff = get_effective_format(&storage, &sid, "imported-cell", 3, 2, None, Some(&gi), None);
+    let eff = get_effective_format(
+        &storage,
+        &sid,
+        "00000000000000000000000000000007",
+        3,
+        2,
+        None,
+        Some(&gi),
+        None,
+    );
 
     assert_eq!(eff.bold, Some(true));
     assert_eq!(eff.number_format.as_deref(), Some("General"));
@@ -564,15 +602,19 @@ fn test_imported_cell_xf_blocks_row_col_alignment_defaults() {
 fn test_imported_cell_xf_no_fill_clears_row_fill_while_unstyled_cell_inherits() {
     let (mut storage, sid, gi) = storage_with_sheet();
     insert_style_palette_entry(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage,
         7,
         &CellFormat {
             bold: Some(true),
             ..Default::default()
         },
     );
-    insert_compact_cell_properties(&storage, &sid, "imported-no-fill", r#"{"s":7}"#);
+    insert_compact_cell_properties(
+        &mut storage,
+        &sid,
+        "00000000000000000000000000000009",
+        r#"{"s":7}"#,
+    );
 
     set_row_format(
         &mut storage,
@@ -592,7 +634,7 @@ fn test_imported_cell_xf_no_fill_clears_row_fill_while_unstyled_cell_inherits() 
     let imported = get_effective_format(
         &storage,
         &sid,
-        "imported-no-fill",
+        "00000000000000000000000000000009",
         3,
         2,
         None,
@@ -607,7 +649,16 @@ fn test_imported_cell_xf_no_fill_clears_row_fill_while_unstyled_cell_inherits() 
     assert!(imported.pattern_foreground_color.is_none());
     assert!(imported.pattern_foreground_color_tint.is_none());
 
-    let unstyled = get_effective_format(&storage, &sid, "unstyled", 3, 2, None, Some(&gi), None);
+    let unstyled = get_effective_format(
+        &storage,
+        &sid,
+        "00000000000000000000000000000010",
+        3,
+        2,
+        None,
+        Some(&gi),
+        None,
+    );
     assert_eq!(
         unstyled.pattern_type,
         Some(ooxml_types::styles::PatternType::Solid)
@@ -623,15 +674,19 @@ fn test_imported_cell_xf_no_fill_clears_row_fill_while_unstyled_cell_inherits() 
 fn test_imported_cell_xf_no_fill_clears_column_fill_while_user_cell_inherits() {
     let (mut storage, sid, gi) = storage_with_sheet();
     insert_style_palette_entry(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage,
         7,
         &CellFormat {
             italic: Some(true),
             ..Default::default()
         },
     );
-    insert_compact_cell_properties(&storage, &sid, "imported-no-fill", r#"{"s":7}"#);
+    insert_compact_cell_properties(
+        &mut storage,
+        &sid,
+        "00000000000000000000000000000009",
+        r#"{"s":7}"#,
+    );
 
     set_col_format(
         &mut storage,
@@ -649,7 +704,7 @@ fn test_imported_cell_xf_no_fill_clears_column_fill_while_user_cell_inherits() {
     let imported = get_effective_format(
         &storage,
         &sid,
-        "imported-no-fill",
+        "00000000000000000000000000000009",
         3,
         2,
         None,
@@ -663,11 +718,9 @@ fn test_imported_cell_xf_no_fill_clears_column_fill_while_user_cell_inherits() {
     assert!(imported.background_color.is_none());
 
     set_cell_format(
-        storage.doc(),
-        storage.workbook_map(),
-        storage.sheets(),
+        &mut storage,
         &sid,
-        "user-sparse-cell",
+        "00000000000000000000000000000012",
         &CellFormat {
             bold: Some(true),
             ..Default::default()
@@ -676,7 +729,7 @@ fn test_imported_cell_xf_no_fill_clears_column_fill_while_user_cell_inherits() {
     let user = get_effective_format(
         &storage,
         &sid,
-        "user-sparse-cell",
+        "00000000000000000000000000000012",
         3,
         2,
         None,
@@ -692,7 +745,7 @@ fn test_imported_cell_xf_no_fill_clears_column_fill_while_user_cell_inherits() {
 
 #[test]
 fn test_imported_cell_xf_materialization_preserves_direct_pattern_and_gradient_fills() {
-    let (storage, sid, gi) = storage_with_sheet();
+    let (mut storage, sid, gi) = storage_with_sheet();
     let gradient = domain_types::GradientFillFormat {
         gradient_type: "linear".to_string(),
         degree: Some(45.0),
@@ -700,8 +753,7 @@ fn test_imported_cell_xf_materialization_preserves_direct_pattern_and_gradient_f
         stops: Vec::new(),
     };
     insert_style_palette_entry(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage,
         8,
         &CellFormat {
             background_color: Some("#FFF2CC".to_string()),
@@ -711,21 +763,30 @@ fn test_imported_cell_xf_materialization_preserves_direct_pattern_and_gradient_f
         },
     );
     insert_style_palette_entry(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage,
         9,
         &CellFormat {
             gradient_fill: Some(gradient.clone()),
             ..Default::default()
         },
     );
-    insert_compact_cell_properties(&storage, &sid, "imported-pattern", r#"{"s":8}"#);
-    insert_compact_cell_properties(&storage, &sid, "imported-gradient", r#"{"s":9}"#);
+    insert_compact_cell_properties(
+        &mut storage,
+        &sid,
+        "0000000000000000000000000000000a",
+        r#"{"s":8}"#,
+    );
+    insert_compact_cell_properties(
+        &mut storage,
+        &sid,
+        "00000000000000000000000000000008",
+        r#"{"s":9}"#,
+    );
 
     let pattern = get_effective_format(
         &storage,
         &sid,
-        "imported-pattern",
+        "0000000000000000000000000000000a",
         1,
         1,
         None,
@@ -742,7 +803,7 @@ fn test_imported_cell_xf_materialization_preserves_direct_pattern_and_gradient_f
     let gradient_format = get_effective_format(
         &storage,
         &sid,
-        "imported-gradient",
+        "00000000000000000000000000000008",
         2,
         2,
         None,
@@ -771,18 +832,25 @@ fn test_user_sparse_cell_format_still_inherits_row_col_alignment() {
     )
     .unwrap();
     set_cell_format(
-        storage.doc(),
-        storage.workbook_map(),
-        storage.sheets(),
+        &mut storage,
         &sid,
-        "user-cell",
+        "00000000000000000000000000000011",
         &CellFormat {
             bold: Some(true),
             ..Default::default()
         },
     );
 
-    let eff = get_effective_format(&storage, &sid, "user-cell", 3, 2, None, Some(&gi), None);
+    let eff = get_effective_format(
+        &storage,
+        &sid,
+        "00000000000000000000000000000011",
+        3,
+        2,
+        None,
+        Some(&gi),
+        None,
+    );
 
     assert_eq!(eff.bold, Some(true));
     assert_eq!(
@@ -823,11 +891,9 @@ fn test_positional_format_no_ranges_omits_cell_and_table_layers() {
     )
     .unwrap();
     set_cell_format(
-        storage.doc(),
-        storage.workbook_map(),
-        storage.sheets(),
+        &mut storage,
         &sid,
-        "ignored-cell",
+        "00000000000000000000000000000006",
         &CellFormat {
             bold: Some(true),
             ..Default::default()

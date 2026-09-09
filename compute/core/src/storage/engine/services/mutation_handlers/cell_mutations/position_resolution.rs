@@ -4,7 +4,6 @@ use value_types::{CellValue, ComputeError};
 use crate::mirror::CellMirror;
 use crate::snapshot::RecalcResult;
 use crate::storage::engine::mutation::CellInput;
-use crate::storage::engine::mutation_coordinator::MutationCoordinator;
 use crate::storage::engine::stores::EngineStores;
 
 use super::edits::{
@@ -16,7 +15,6 @@ use super::set_cells::mutation_set_cells;
 pub(in crate::storage::engine) fn mutation_set_cells_by_position(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
-    mutation: &mut MutationCoordinator,
     edits: Vec<(SheetId, u32, u32, CellInput)>,
     skip_cycle_check: bool,
 ) -> Result<RecalcResult, ComputeError> {
@@ -57,7 +55,7 @@ pub(in crate::storage::engine) fn mutation_set_cells_by_position(
         .compute
         .validate_region_partial_writes(mirror, &resolved)?;
 
-    mutation_set_cells(stores, mirror, mutation, resolved, skip_cycle_check)
+    mutation_set_cells(stores, mirror, resolved, skip_cycle_check)
 }
 
 // ---------------------------------------------------------------------------
@@ -75,7 +73,6 @@ pub(in crate::storage::engine) fn mutation_set_cells_by_position(
 pub(in crate::storage::engine) fn mutation_set_cells_by_position_raw(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
-    mutation: &mut MutationCoordinator,
     edits: Vec<(SheetId, u32, u32, CellValue, Option<String>)>,
     skip_cycle_check: bool,
 ) -> Result<RecalcResult, ComputeError> {
@@ -112,5 +109,5 @@ pub(in crate::storage::engine) fn mutation_set_cells_by_position_raw(
         return Ok(RecalcResult::empty());
     }
 
-    mutation_set_cells_raw(stores, mirror, mutation, resolved, skip_cycle_check)
+    mutation_set_cells_raw(stores, mirror, resolved, skip_cycle_check)
 }

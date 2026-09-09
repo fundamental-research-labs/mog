@@ -294,7 +294,13 @@ mod tests {
         let mut core = ComputeCore::new();
         let mut mirror = CellMirror::new();
         let snapshot = WorkbookSnapshot {
+            axis_run_high_water_mark: None,
+            identity_high_water_mark: None,
+            canonical_tables: Vec::new(),
             sheets: vec![SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: "00000000-0000-0000-0000-000000000001".into(),
                 name: "Sheet1".into(),
                 rows: 10,
@@ -363,7 +369,13 @@ mod tests {
         let mut core = ComputeCore::new();
         let mut mirror = CellMirror::new();
         let snapshot = WorkbookSnapshot {
+            axis_run_high_water_mark: None,
+            identity_high_water_mark: None,
+            canonical_tables: Vec::new(),
             sheets: vec![SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: "00000000-0000-0000-0000-000000000001".into(),
                 name: "Sheet1".into(),
                 rows: 10,
@@ -403,7 +415,13 @@ mod tests {
         let mut core = ComputeCore::new();
         let mut mirror = CellMirror::new();
         let snapshot = WorkbookSnapshot {
+            axis_run_high_water_mark: None,
+            identity_high_water_mark: None,
+            canonical_tables: Vec::new(),
             sheets: vec![SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: "00000000-0000-0000-0000-000000000001".into(),
                 name: "Sheet1".into(),
                 rows: 10,
@@ -465,7 +483,13 @@ mod tests {
     /// Helper: create a single-sheet workbook snapshot with one cell at (0,0).
     fn one_cell_snapshot(sheet_uuid: &str, cell_uuid: &str) -> WorkbookSnapshot {
         WorkbookSnapshot {
+            axis_run_high_water_mark: None,
+            identity_high_water_mark: None,
+            canonical_tables: Vec::new(),
             sheets: vec![SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: sheet_uuid.into(),
                 name: "Sheet1".into(),
                 rows: 100,
@@ -500,8 +524,14 @@ mod tests {
         cell2_uuid: &str,
     ) -> WorkbookSnapshot {
         WorkbookSnapshot {
+            axis_run_high_water_mark: None,
+            identity_high_water_mark: None,
+            canonical_tables: Vec::new(),
             sheets: vec![
                 SheetSnapshot {
+                    identities: Vec::new(),
+                    row_axis: None,
+                    col_axis: None,
                     id: sheet1_uuid.into(),
                     name: "Sheet1".into(),
                     rows: 100,
@@ -518,6 +548,9 @@ mod tests {
                     ranges: vec![],
                 },
                 SheetSnapshot {
+                    identities: Vec::new(),
+                    row_axis: None,
+                    col_axis: None,
                     id: sheet2_uuid.into(),
                     name: "Sheet2".into(),
                     rows: 100,

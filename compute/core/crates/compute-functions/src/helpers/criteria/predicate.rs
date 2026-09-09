@@ -3,6 +3,46 @@ use value_types::CellValue;
 use super::number::try_parse_criteria_number;
 use super::wildcard::WildcardPattern;
 
+/// Return a plain text criterion whose equality uses string coercion and
+/// ASCII-insensitive comparison. Numeric text, operators and wildcard patterns
+/// require the general criteria predicate instead.
+pub fn plain_text_criteria(criteria: &CellValue) -> Option<&str> {
+    let text = match criteria {
+        CellValue::Text(text) => text.as_ref(),
+        CellValue::Array(array) if array.rows() == 1 && array.cols() == 1 => {
+            return plain_text_criteria(array.get(0, 0)?);
+        }
+        _ => return None,
+    };
+    if text.trim().starts_with(['<', '>', '='])
+        || text.contains(['*', '?'])
+        || try_parse_criteria_number(text).is_some()
+    {
+        None
+    } else {
+        Some(text)
+    }
+}
+
+/// Numeric equality uses the same tolerant comparison for a numeric scalar,
+/// numeric text, and an explicit `=number` criterion.
+pub fn numeric_equality_criteria(criteria: &CellValue) -> Option<f64> {
+    match criteria {
+        CellValue::Number(number) => Some(number.get()),
+        CellValue::Text(text) => {
+            if let Some(number) = text.trim().strip_prefix('=') {
+                try_parse_criteria_number(number.trim())
+            } else {
+                try_parse_criteria_number(text)
+            }
+        }
+        CellValue::Array(array) if array.rows() == 1 && array.cols() == 1 => {
+            numeric_equality_criteria(array.get(0, 0)?)
+        }
+        _ => None,
+    }
+}
+
 /// Parse a SUMIF/COUNTIF criteria string into a comparison function.
 /// Supports: ">5", ">=5", "<5", "<=5", "=5", "<>5", "text*", plain value.
 pub fn parse_criteria(criteria: &CellValue) -> Box<dyn Fn(&CellValue) -> bool> {

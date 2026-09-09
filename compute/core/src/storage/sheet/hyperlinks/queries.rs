@@ -1,124 +1,60 @@
-use cell_types::{CellId, SheetId};
-use compute_document::hex::{hex_to_id, id_to_hex};
+use cell_types::SheetId;
 use compute_document::identity::GridIndex;
-use compute_document::schema::KEY_FORMULA;
 use compute_parser::{ASTNode, FormulaSource};
 use domain_types::domain::hyperlink::Hyperlink;
-use yrs::{Any, Doc, Map, MapRef, Out, Transact};
 
 use crate::range_manager::pos_to_a1;
-use crate::storage::infra::grid_helpers::get_cells_map;
+use crate::storage::WorkbookStorage;
 
-use super::codec::{decode_full_hyperlink, decode_sheet_hyperlink, read_hyperlink_url};
-
-/// Get the hyperlink URL for a cell at the given position.
-///
-/// Returns `None` if no cell exists at the position or the cell has no hyperlink.
+/// Read explicit hyperlink metadata at its anchor position.
 pub fn get_hyperlink(
-    doc: &Doc,
-    sheets: &MapRef,
+    storage: &WorkbookStorage,
     sheet_id: &SheetId,
     grid: &GridIndex,
     row: u32,
     col: u32,
 ) -> Option<String> {
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let txn = doc.transact();
-
-    let cell_id = grid.cell_id_at(row, col)?;
-    let cell_hex = id_to_hex(cell_id.as_u128());
-    let cells_map = get_cells_map(&txn, sheets, &sheet_hex)?;
-    let cell_map = match cells_map.get(&txn, &cell_hex) {
-        Some(Out::YMap(m)) => m,
-        _ => return None,
-    };
-
-    read_hyperlink_url(&txn, &cell_map).or_else(|| read_hyperlink_formula_url(&txn, &cell_map))
+    let id = grid.cell_id_at(row, col)?;
+    let link = &storage
+        .sheet_metadata
+        .get(sheet_id)?
+        .hyperlinks
+        .iter()
+        .find(|link| link.start_id == id)?
+        .data;
+    link.target
+        .clone()
+        .or_else(|| link.location.clone())
+        .or_else(|| link.uid.as_ref().map(|_| String::new()))
 }
 
-/// Get the full hyperlink metadata for a cell at the given position.
-///
-/// Returns `None` if no cell exists at the position or the cell has no hyperlink
-/// primary key. The `cell_ref` field is left empty because the caller owns point
-/// position context.
-#[allow(dead_code)]
-pub fn get_hyperlink_full(
-    doc: &Doc,
-    sheets: &MapRef,
-    sheet_id: &SheetId,
-    grid: &GridIndex,
-    row: u32,
-    col: u32,
-) -> Option<Hyperlink> {
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let txn = doc.transact();
-
-    let cell_id = grid.cell_id_at(row, col)?;
-    let cell_hex = id_to_hex(cell_id.as_u128());
-    let cells_map = get_cells_map(&txn, sheets, &sheet_hex)?;
-    let cell_map = match cells_map.get(&txn, &cell_hex) {
-        Some(Out::YMap(m)) => m,
-        _ => return None,
-    };
-
-    decode_full_hyperlink(&txn, &cell_map, String::new()).or_else(|| {
-        read_hyperlink_formula_url(&txn, &cell_map).map(|url| Hyperlink {
-            cell_ref: String::new(),
-            target: Some(url),
-            ..Default::default()
-        })
-    })
-}
-
-/// Batch-read all cell-level hyperlinks for a sheet in a single transaction.
+/// Project stable anchors to current coordinates, preserving authored order.
 pub fn get_all_hyperlinks(
-    doc: &Doc,
-    sheets: &MapRef,
+    storage: &WorkbookStorage,
     sheet_id: &SheetId,
     grid: &GridIndex,
 ) -> Vec<Hyperlink> {
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let txn = doc.transact();
-
-    let cells_map = match get_cells_map(&txn, sheets, &sheet_hex) {
-        Some(m) => m,
-        None => return vec![],
+    let Some(metadata) = storage.sheet_metadata.get(sheet_id) else {
+        return Vec::new();
     };
-
-    let mut result = Vec::new();
-    for (cell_hex, cell_out) in cells_map.iter(&txn) {
-        let cell_map = match cell_out {
-            Out::YMap(m) => m,
-            _ => continue,
-        };
-
-        let cell_ref = hex_to_id(cell_hex)
-            .and_then(|raw| {
-                let cid = CellId::from_raw(raw);
-                grid.cell_position(&cid)
-            })
-            .map(|(row, col)| pos_to_a1(row, col))
-            .unwrap_or_default();
-
-        if let Some(link) = decode_sheet_hyperlink(&txn, &cell_map, cell_ref) {
-            result.push(link);
-        }
-    }
-
-    result.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cell_ref.cmp(&b.1.cell_ref)));
-    result.into_iter().map(|(_, h)| h).collect()
+    metadata
+        .hyperlinks
+        .iter()
+        .filter_map(|stored| {
+            let (row, col) = grid.cell_position(&stored.start_id)?;
+            let mut data = stored.data.clone();
+            data.cell_ref = pos_to_a1(row, col);
+            if let Some(end_id) = stored.end_id {
+                let (row, col) = grid.cell_position(&end_id)?;
+                data.cell_ref.push(':');
+                data.cell_ref.push_str(&pos_to_a1(row, col));
+            }
+            Some(data)
+        })
+        .collect()
 }
 
-fn read_hyperlink_formula_url<T: yrs::ReadTxn>(txn: &T, cell_map: &MapRef) -> Option<String> {
-    let formula = match cell_map.get(txn, KEY_FORMULA) {
-        Some(Out::Any(Any::String(formula))) => formula,
-        _ => return None,
-    };
-
-    hyperlink_formula_url(formula.as_ref())
-}
-
-fn hyperlink_formula_url(formula: &str) -> Option<String> {
+pub(crate) fn hyperlink_formula_url(formula: &str) -> Option<String> {
     let formula = formula.trim();
     if formula.is_empty() {
         return None;

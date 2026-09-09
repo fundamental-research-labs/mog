@@ -55,6 +55,47 @@ impl ValueSlice for [&CellValue] {
     }
 }
 
+impl ValueSlice for value_types::ColumnView<'_> {
+    fn get_value(&self, index: usize) -> Option<&CellValue> {
+        self.get(index)
+    }
+    fn len(&self) -> usize {
+        self.len()
+    }
+}
+impl<V: ValueSlice + ?Sized> ValueSlice for &V {
+    fn get_value(&self, index: usize) -> Option<&CellValue> {
+        (**self).get_value(index)
+    }
+    fn len(&self) -> usize {
+        (**self).len()
+    }
+}
+
+impl<T, const N: usize> ValueSlice for [T; N]
+where
+    [T]: ValueSlice,
+{
+    fn get_value(&self, index: usize) -> Option<&CellValue> {
+        self.as_slice().get_value(index)
+    }
+    fn len(&self) -> usize {
+        N
+    }
+}
+
+impl<T> ValueSlice for Vec<T>
+where
+    [T]: ValueSlice,
+{
+    fn get_value(&self, index: usize) -> Option<&CellValue> {
+        self.as_slice().get_value(index)
+    }
+    fn len(&self) -> usize {
+        Vec::len(self)
+    }
+}
+
 /// Extract a numeric value or error from a value slice at the given index.
 /// Returns `None` for non-numeric, non-error values (booleans, text, null)
 /// and for out-of-bounds indices.
@@ -220,10 +261,10 @@ pub fn scan_single_criteria<CR: ValueSlice + ?Sized, SR: ValueSlice + ?Sized>(
 /// unavailable and multiple criteria pairs need evaluation.
 #[inline]
 #[allow(clippy::type_complexity)]
-pub fn scan_multi_criteria(
-    criteria_ranges: &[&[CellValue]],
+pub fn scan_multi_criteria<CR: ValueSlice, SR: ValueSlice + ?Sized>(
+    criteria_ranges: &[CR],
     criteria_fns: &[Box<dyn Fn(&CellValue) -> bool>],
-    sum_range: Option<&[CellValue]>,
+    sum_range: Option<&SR>,
     total_rows: usize,
     op: AggregateOp,
 ) -> CellValue {
@@ -232,7 +273,7 @@ pub fn scan_multi_criteria(
             .iter()
             .zip(criteria_fns.iter())
             .all(|(slice, pred)| {
-                let v = slice.get(row).unwrap_or(&CellValue::Null);
+                let v = slice.get_value(row).unwrap_or(&CellValue::Null);
                 pred(v)
             })
     });
@@ -531,7 +572,8 @@ mod tests {
             Box::new(|v: &CellValue| matches!(v, CellValue::Text(s) if &**s == "apple")),
             Box::new(|v: &CellValue| matches!(v, CellValue::Text(s) if &**s == "green")),
         ];
-        let result = scan_multi_criteria(&ranges, &fns, None, 3, AggregateOp::Count);
+        let result =
+            scan_multi_criteria(&ranges, &fns, None::<&[CellValue]>, 3, AggregateOp::Count);
         // Only row 2: apple AND green
         assert_eq!(result, num(1.0));
     }

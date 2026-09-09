@@ -46,15 +46,15 @@ pub(super) fn inventory_workbook() -> Vec<u8> {
     zip.finish().unwrap()
 }
 
-fn imported_engine() -> YrsComputeEngine {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+fn imported_engine() -> ComputeEngine {
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     engine
         .import_from_xlsx_bytes(&inventory_workbook(), false)
         .unwrap();
     engine
 }
 
-fn assert_membership(engine: &YrsComputeEngine, expected: &[(&str, u32)]) {
+fn assert_membership(engine: &ComputeEngine, expected: &[(&str, u32)]) {
     let bytes = engine.export_to_xlsx_bytes().expect("production save");
     let (reopened, _) = xlsx_parser::parse_xlsx_to_output(&bytes).expect("reopen saved workbook");
     let inventory = &reopened.workbook_sheet_inventory;
@@ -110,7 +110,7 @@ fn assert_membership(engine: &YrsComputeEngine, expected: &[(&str, u32)]) {
 }
 
 #[test]
-fn workbook_sheet_inventory_survives_production_save_and_yrs_replay() {
+fn workbook_sheet_inventory_survives_production_save_and_native_rebuild() {
     let engine = imported_engine();
     let (parsed, _) = xlsx_parser::parse_xlsx_to_output(&inventory_workbook()).unwrap();
     let normal_hydration = engine_from_parse_output_normal(&parsed);
@@ -131,9 +131,7 @@ fn workbook_sheet_inventory_survives_production_save_and_yrs_replay() {
         &engine,
         &[("Data", 7), ("Chart", 2), ("More", 9), ("Dialog", 3)],
     );
-    let (mut replayed, _) = YrsComputeEngine::from_snapshot(WorkbookSnapshot::default()).unwrap();
-    let update = engine.encode_diff(&replayed.encode_state_vector()).unwrap();
-    replayed.apply_sync_update_legacy(&update).unwrap();
+    let replayed = super::helpers::rebuild_native_engine(&engine);
     assert_membership(
         &replayed,
         &[("Data", 7), ("Chart", 2), ("More", 9), ("Dialog", 3)],
@@ -164,11 +162,11 @@ fn workbook_sheet_inventory_tracks_editable_lifecycle() {
     );
     assert_membership(
         &engine,
-        &[("Renamed", 7), ("Chart", 2), ("Dialog", 3), ("Added", 1)],
+        &[("Renamed", 7), ("Chart", 2), ("Dialog", 3), ("Added", 8)],
     );
 }
 
-fn imported_engine_with_indexed_metadata(active_tab: u32) -> YrsComputeEngine {
+fn imported_engine_with_indexed_metadata(active_tab: u32) -> ComputeEngine {
     let (mut output, _) = xlsx_parser::parse_xlsx_to_output(&inventory_workbook()).unwrap();
     output.workbook_views = vec![
         domain_types::domain::workbook::WorkbookView {
@@ -203,10 +201,10 @@ fn imported_engine_with_indexed_metadata(active_tab: u32) -> YrsComputeEngine {
         },
     ];
     let bytes = xlsx_parser::write::write_xlsx_from_parse_output(&output).unwrap();
-    YrsComputeEngine::from_xlsx_bytes(&bytes).unwrap().0
+    ComputeEngine::from_xlsx_bytes(&bytes).unwrap().0
 }
 
-fn reopened_output(engine: &YrsComputeEngine) -> domain_types::ParseOutput {
+fn reopened_output(engine: &ComputeEngine) -> domain_types::ParseOutput {
     let bytes = engine.export_to_xlsx_bytes().unwrap();
     xlsx_parser::parse_xlsx_to_output(&bytes).unwrap().0
 }
@@ -215,29 +213,17 @@ fn reopened_output(engine: &YrsComputeEngine) -> domain_types::ParseOutput {
 fn workbook_sheet_inventory_maps_named_scopes_print_areas_and_all_views() {
     let mut engine = imported_engine_with_indexed_metadata(2);
     let ids = engine.stores.storage.sheet_order();
-    let settings = crate::storage::workbook::settings::get_settings(
-        engine.stores.storage.doc(),
-        engine.stores.storage.workbook_map(),
-    );
+    let settings =
+        crate::storage::workbook::settings::get_settings(&engine.stores.storage.metadata);
     assert_eq!(
         settings.selected_sheet_ids,
         Some(vec![ids[1].to_uuid_string()])
     );
     assert!(
-        crate::storage::sheet::print::get_print_area(
-            engine.stores.storage.doc(),
-            engine.stores.storage.sheets(),
-            &ids[0],
-        )
-        .is_none()
+        crate::storage::sheet::print::get_print_area(&engine.stores.storage, &ids[0],).is_none()
     );
     assert!(
-        crate::storage::sheet::print::get_print_area(
-            engine.stores.storage.doc(),
-            engine.stores.storage.sheets(),
-            &ids[1],
-        )
-        .is_some()
+        crate::storage::sheet::print::get_print_area(&engine.stores.storage, &ids[1],).is_some()
     );
     let before = reopened_output(&engine);
     assert_eq!(before.workbook_views[0].active_tab, 2);
@@ -294,12 +280,10 @@ fn workbook_sheet_inventory_maps_named_scopes_print_areas_and_all_views() {
 }
 
 #[test]
-fn workbook_sheet_inventory_keeps_inert_active_tab_and_names_through_yrs_replay() {
+fn workbook_sheet_inventory_keeps_inert_active_tab_and_names_through_native_rebuild() {
     let engine = imported_engine_with_indexed_metadata(1);
     assert_eq!(reopened_output(&engine).workbook_views[0].active_tab, 1);
-    let (mut replayed, _) = YrsComputeEngine::from_snapshot(WorkbookSnapshot::default()).unwrap();
-    let update = engine.encode_diff(&replayed.encode_state_vector()).unwrap();
-    replayed.apply_sync_update_legacy(&update).unwrap();
+    let replayed = super::helpers::rebuild_native_engine(&engine);
     let output = reopened_output(&replayed);
     assert_eq!(output.workbook_views[0].active_tab, 1);
     assert!(

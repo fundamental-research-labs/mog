@@ -4,7 +4,7 @@
 //! under `compute/core/src/mirror/`. The four `frame_survives_*` tests below
 //! lock in the structural framing the materializer must emit (Bugs A, B, C,
 //! D from pivot framing) by hand-building `PivotTableResult` values and reading
-//! cells back from `col_data`. The three `#[should_panic]` tests exercise
+//! cells back from `column_values`. The three `#[should_panic]` tests exercise
 //! the `debug_assert!`s added in sub-scope D — without those asserts firing
 //! on malformed input, the runtime invariants are hopes, not gates.
 

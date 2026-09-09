@@ -1,15 +1,15 @@
 //! SUBTOTAL retains row identities across reference-producing expressions.
-use super::super::YrsComputeEngine;
+use super::super::ComputeEngine;
 use super::helpers::cell_value_at;
 use domain_types::domain::table::{TableColumnSpec, TableSpec};
 use domain_types::{CellData, ParseOutput, SheetData};
 use value_types::{CellError, CellValue};
 
-fn table_engine() -> (YrsComputeEngine, cell_types::SheetId) {
+fn table_engine() -> (ComputeEngine, cell_types::SheetId) {
     table_engine_with_hidden_rows(&[])
 }
 
-fn table_engine_with_hidden_rows(hidden_rows: &[u32]) -> (YrsComputeEngine, cell_types::SheetId) {
+fn table_engine_with_hidden_rows(hidden_rows: &[u32]) -> (ComputeEngine, cell_types::SheetId) {
     let headers = ["Sales", "Unrelated", "Extra", "Status"];
     let mut cells: Vec<_> = headers
         .iter()
@@ -87,14 +87,14 @@ fn table_engine_with_hidden_rows(hidden_rows: &[u32]) -> (YrsComputeEngine, cell
         ..Default::default()
     };
     let bytes = xlsx_parser::write::write_xlsx_from_parse_output(&output).unwrap();
-    let (mut engine, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).unwrap();
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).unwrap();
     let sheet = engine.stores.storage.sheet_order()[0];
     engine.recalculate().unwrap();
     (engine, sheet)
 }
 
 fn assert_formula(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet: &cell_types::SheetId,
     formula: &str,
     expected: CellValue,
@@ -254,15 +254,14 @@ fn aggregate_reference_options_preserve_documented_nested_hidden_and_error_bits(
 #[test]
 fn subtotal_imported_manual_hidden_rows_reach_initial_recalc_rebuild_and_replay() {
     let (mut engine, sheet) = table_engine_with_hidden_rows(&[3]);
-    let assert_totals = |engine: &YrsComputeEngine, high: f64| {
+    let assert_totals = |engine: &ComputeEngine, high: f64| {
         assert_eq!(cell_value_at(engine, &sheet, 8, 5), CellValue::from(high));
         assert_eq!(cell_value_at(engine, &sheet, 9, 5), CellValue::from(100.0));
     };
     assert_totals(&engine, 70.0);
     engine.rebuild_compute_core().unwrap();
     assert_totals(&engine, 70.0);
-    let state = compute_collab::encode_full_state(engine.storage().doc());
-    let (peer, _) = YrsComputeEngine::from_yrs_state(&state).unwrap();
+    let peer = super::helpers::rebuild_native_engine(&engine);
     assert_totals(&peer, 70.0);
     engine.unhide_rows(&sheet, &[3]).unwrap();
     engine.recalculate().unwrap();

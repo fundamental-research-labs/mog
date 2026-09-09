@@ -1,5 +1,5 @@
 //! Authored data-bar colors must survive XLSX → domain → Yrs → XLSX.
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use domain_types::{CFColor, CFDataBar, CFRule, ParseOutput, SheetData};
 use xlsx_parser::write::{ZipWriter, write_xlsx_from_parse_output};
 use xlsx_parser::{XlsxArchive, parse_xlsx_to_output};
@@ -120,7 +120,7 @@ fn data_bar_color_kinds_survive_production_save_and_reopen_in_all_five_roles() {
             let original = fixture(&xml);
             let (parsed, _) = parse_xlsx_to_output(&original).unwrap();
             assert_colors(data_bar(&parsed), &expected, extended);
-            let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&original).unwrap();
+            let (engine, _) = ComputeEngine::from_xlsx_bytes(&original).unwrap();
             let snapshot = engine.export_to_parse_output().unwrap();
             assert_colors(data_bar(&snapshot.parse_output), &expected, extended);
             let saved = engine.export_to_xlsx_bytes().unwrap();
@@ -131,7 +131,7 @@ fn data_bar_color_kinds_survive_production_save_and_reopen_in_all_five_roles() {
             if extended {
                 assert!(sheet_xml.contains("<x14:fillColor "));
             }
-            let (reopened, _) = YrsComputeEngine::from_xlsx_bytes(&saved).unwrap();
+            let (reopened, _) = ComputeEngine::from_xlsx_bytes(&saved).unwrap();
             assert_colors(
                 data_bar(&reopened.export_to_parse_output().unwrap().parse_output),
                 &expected,

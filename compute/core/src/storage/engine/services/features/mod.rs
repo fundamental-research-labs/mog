@@ -1,7 +1,7 @@
 mod grouping;
 mod outline_expansion;
-mod slicer_crdt;
 mod slicer_helpers;
+mod slicer_store;
 mod sorting;
 mod sparklines;
 mod text_to_columns;
@@ -16,14 +16,14 @@ pub(in crate::storage::engine) use self::grouping::{
     set_level_collapsed, set_outline_settings, should_render_outlines, toggle_group_collapsed,
     ungroup_columns, ungroup_rows,
 };
-pub(in crate::storage::engine) use self::slicer_crdt::{
-    clear_slicer_selection, create_slicer, delete_slicer, delete_slicers, get_all_slicers,
-    get_all_slicers_workbook, get_slicer_state, set_slicer_selection, toggle_slicer_item,
-    update_slicer_config,
-};
 pub(in crate::storage::engine) use self::slicer_helpers::{
     find_disconnected_slicers, find_slicers_for_table, get_slicer_items_from_cache,
     is_slicer_column_connected, map_slicer_disconnection_reason, map_slicer_invalidation_reason,
+};
+pub(in crate::storage::engine) use self::slicer_store::{
+    clear_slicer_selection, create_slicer, delete_slicer, delete_slicers, get_all_slicers,
+    get_all_slicers_workbook, get_slicer_state, set_slicer_selection, toggle_slicer_item,
+    update_slicer_config,
 };
 pub(in crate::storage::engine) use self::sorting::check_sort_range_merges;
 pub(in crate::storage::engine) use self::sparklines::{

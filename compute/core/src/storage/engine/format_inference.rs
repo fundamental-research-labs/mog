@@ -7,9 +7,9 @@ use formula_types::IdentityFormulaRef;
 use snapshot_types::MutationResult;
 use value_types::{CellValue, ComputeError};
 
-use super::{YrsComputeEngine, mutation, services};
+use super::{ComputeEngine, mutation, services};
 
-impl YrsComputeEngine {
+impl ComputeEngine {
     /// cell does not already have a date format applied, write the
     /// suggested format code (e.g. `"M/d/yyyy"`, `"yyyy-mm-dd"`) into the
     /// per-cell number_format. This is the Rust-side replacement for the
@@ -106,7 +106,6 @@ impl YrsComputeEngine {
         // Suppress observer rebroadcast for the format writes — these are
         // structural follow-ups to the value mutation that already fired its
         // own observer notification.
-        let _guard = self.mutation.suppress_guard();
         for (sheet_id, row, col, fmt) in to_apply {
             let format = CellFormat {
                 number_format: Some(fmt),
@@ -114,7 +113,7 @@ impl YrsComputeEngine {
             };
             services::formatting::set_format_for_ranges(
                 &mut self.stores,
-                &self.mirror,
+                &mut self.mirror,
                 &sheet_id,
                 &[(row, col, row, col)],
                 &format,
@@ -181,7 +180,6 @@ impl YrsComputeEngine {
             return Ok(());
         }
 
-        let _guard = self.mutation.suppress_guard();
         for (sheet_id, row, col, fmt) in to_apply {
             let format = CellFormat {
                 number_format: Some(fmt),
@@ -189,7 +187,7 @@ impl YrsComputeEngine {
             };
             services::formatting::set_format_for_ranges(
                 &mut self.stores,
-                &self.mirror,
+                &mut self.mirror,
                 &sheet_id,
                 &[(row, col, row, col)],
                 &format,
@@ -255,7 +253,6 @@ impl YrsComputeEngine {
             return Ok(());
         }
 
-        let _guard = self.mutation.suppress_guard();
         for (sheet_id, row, col, fmt) in to_apply {
             let format = CellFormat {
                 number_format: Some(fmt),
@@ -263,7 +260,7 @@ impl YrsComputeEngine {
             };
             services::formatting::set_format_for_ranges(
                 &mut self.stores,
-                &self.mirror,
+                &mut self.mirror,
                 &sheet_id,
                 &[(row, col, row, col)],
                 &format,
@@ -329,7 +326,6 @@ impl YrsComputeEngine {
             return Ok(());
         }
 
-        let _guard = self.mutation.suppress_guard();
         for (sheet_id, row, col) in to_apply {
             let format = CellFormat {
                 number_format: Some("0%".to_string()),
@@ -337,7 +333,7 @@ impl YrsComputeEngine {
             };
             services::formatting::set_format_for_ranges(
                 &mut self.stores,
-                &self.mirror,
+                &mut self.mirror,
                 &sheet_id,
                 &[(row, col, row, col)],
                 &format,
@@ -412,10 +408,9 @@ impl YrsComputeEngine {
                 ..Default::default()
             };
             let (affected, format_result) = {
-                let _guard = self.mutation.suppress_guard();
                 services::formatting::set_format_for_ranges(
                     &mut self.stores,
-                    &self.mirror,
+                    &mut self.mirror,
                     &sheet_id,
                     &[(row, col, row, col)],
                     &format,

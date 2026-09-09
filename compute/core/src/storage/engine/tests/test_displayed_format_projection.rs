@@ -6,7 +6,7 @@ use domain_types::CellFormat;
 
 #[test]
 fn displayed_format_projection_matches_scalar_for_range_sweep_edge_cases() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
     {
         let (stores, mirror) = (&mut engine.stores, &mut engine.mirror);
@@ -42,8 +42,6 @@ fn displayed_format_projection_matches_scalar_for_range_sweep_edge_cases() {
                 },
             };
             crate::storage::properties::add_format_range(
-                &mut stores.storage,
-                &sid,
                 sheet_mirror,
                 crate::mirror::RangeId::from_raw(u128::from(1_000 + index)),
                 start_row,
@@ -54,14 +52,12 @@ fn displayed_format_projection_matches_scalar_for_range_sweep_edge_cases() {
             );
         }
 
-        // Invalid rectangles can arrive through imported or collaborative state.
+        // Invalid rectangles can arrive through imported state.
         // Neither orientation may affect a cell or panic the batch sweep.
         for (id, start_row, start_col, end_row, end_col) in
             [(2_000, 9, 0, 4, 9), (2_001, 0, 8, 11, 3)]
         {
             crate::storage::properties::add_format_range(
-                &mut stores.storage,
-                &sid,
                 sheet_mirror,
                 crate::mirror::RangeId::from_raw(id),
                 start_row,

@@ -214,7 +214,7 @@ fn direct_cell_row_col_and_styled_blank_formats_export_through_xlsx() {
     };
 
     let engine = engine_from_parse_output_normal(&input);
-    let exported = engine.build_parse_output_from_yrs().expect("export projection");
+    let exported = engine.build_parse_output().expect("export projection");
     assert_eq!(exported.sheets[0].cells[0].style_id, Some(1));
     assert_eq!(
         exported.sheets[0].row_styles,
@@ -284,7 +284,9 @@ fn direct_cell_row_col_and_styled_blank_formats_export_through_xlsx() {
         .expect("styled blank run fill should round-trip");
     assert_eq!(fill.pattern_type.as_deref(), Some("solid"));
     assert_eq!(
-        fill.background_color.as_deref().or(fill.pattern_foreground_color.as_deref()),
+        fill.background_color
+            .as_deref()
+            .or(fill.pattern_foreground_color.as_deref()),
         Some("#00CC99"),
         "styled blank fill color should survive XLSX export/import"
     );
@@ -352,7 +354,7 @@ fn imported_col_style_ranges_can_be_overridden_and_cleared_by_column() {
         "right neighbor should keep imported column style"
     );
 
-    let exported = engine.build_parse_output_from_yrs().expect("export projection");
+    let exported = engine.build_parse_output().expect("export projection");
     assert!(exported.sheets[0].col_styles.is_empty());
     let mut ranges = exported.sheets[0].col_style_ranges.clone();
     ranges.sort_by_key(|range| range.start_col);
@@ -387,7 +389,7 @@ fn set_col_format_range_preserves_sparse_column_range_storage() {
     assert_eq!(resolved.number_format.as_deref(), Some("0.0"));
     assert_eq!(resolved.bold, Some(true));
 
-    let exported = engine.build_parse_output_from_yrs().expect("export projection");
+    let exported = engine.build_parse_output().expect("export projection");
     assert!(
         exported.sheets[0].col_styles.is_empty(),
         "range formatting should not materialize dense col_styles"

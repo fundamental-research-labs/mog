@@ -1,6 +1,6 @@
 /// Walk a formula body and yield each identifier-token byte range that is a
 /// candidate for named-range rewriting.
-pub(super) fn formula_identifier_candidates(formula: &str) -> Vec<(usize, usize)> {
+pub(crate) fn formula_identifier_candidates(formula: &str) -> Vec<(usize, usize)> {
     let bytes = formula.as_bytes();
     let mut out = Vec::new();
     let mut i = 0;
@@ -31,6 +31,18 @@ pub(super) fn formula_identifier_candidates(formula: &str) -> Vec<(usize, usize)
                         }
                         i += 1;
                         break;
+                    }
+                    i += 1;
+                }
+            }
+            b'[' => {
+                let mut depth = 1;
+                i += 1;
+                while i < bytes.len() && depth > 0 {
+                    match bytes[i] {
+                        b'[' => depth += 1,
+                        b']' => depth -= 1,
+                        _ => {}
                     }
                     i += 1;
                 }
@@ -71,6 +83,7 @@ pub(super) fn formula_identifier_candidates(formula: &str) -> Vec<(usize, usize)
 }
 
 /// Check if a formula body references a specific named range.
+#[cfg(test)]
 pub(super) fn formula_contains_name_ref(formula: &str, name: &str) -> bool {
     if name.is_empty() || formula.is_empty() {
         return false;
@@ -86,6 +99,7 @@ pub(super) fn formula_contains_name_ref(formula: &str, name: &str) -> bool {
 }
 
 /// Replace a named range identifier in a formula body with a new name.
+#[cfg(test)]
 pub(super) fn replace_name_in_formula(formula: &str, old_name: &str, new_name: &str) -> String {
     if formula.is_empty() || old_name.is_empty() {
         return formula.to_string();

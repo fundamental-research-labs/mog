@@ -10,7 +10,7 @@ fn mixed_deferred_value(row: u32, col: u32) -> CellValue {
     }
 }
 
-fn assert_mixed_grid_visible(engine: &YrsComputeEngine, sheet_id: &SheetId, rows: u32, cols: u32) {
+fn assert_mixed_grid_visible(engine: &ComputeEngine, sheet_id: &SheetId, rows: u32, cols: u32) {
     for &(row, col) in &[
         (0, 0),
         (1, 0),
@@ -29,7 +29,7 @@ fn assert_mixed_grid_visible(engine: &YrsComputeEngine, sheet_id: &SheetId, rows
     }
 }
 
-fn assert_mixed_cbor_ranges(engine: &YrsComputeEngine, sheet_id: &SheetId, rows: u32, cols: u32) {
+fn assert_mixed_cbor_ranges(engine: &ComputeEngine, sheet_id: &SheetId, rows: u32, cols: u32) {
     let sheet = engine
         .mirror()
         .get_sheet(sheet_id)
@@ -51,11 +51,11 @@ fn assert_mixed_cbor_ranges(engine: &YrsComputeEngine, sheet_id: &SheetId, rows:
     }
 }
 
-fn assert_mixed_counta_formula(engine: &mut YrsComputeEngine, sheet_id: &SheetId, rows: u32) {
+fn assert_mixed_counta_formula(engine: &mut ComputeEngine, sheet_id: &SheetId, rows: u32) {
     let col_len = engine
         .mirror()
         .get_sheet(sheet_id)
-        .and_then(|sheet| sheet.get_column_slice(0))
+        .and_then(|sheet| sheet.get_column_view(0))
         .map(|col| col.len())
         .unwrap_or(0);
     assert_eq!(
@@ -171,7 +171,7 @@ fn deferred_xlsx_import_streams_long_mixed_cbor_ranges() {
     let cols = 3;
     let bytes = mixed_cbor_deferred_import_fixture_xlsx(rows, cols);
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     engine
         .import_from_xlsx_bytes_deferred(&bytes)
         .expect("deferred mixed-cbor XLSX import should succeed");
@@ -198,7 +198,7 @@ fn deferred_xlsx_import_streams_long_mixed_cbor_ranges() {
 fn deferred_xlsx_import_materializes_range_data_on_non_critical_sheet() {
     let bytes = second_sheet_range_backed_date_fixture_xlsx();
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     engine
         .import_from_xlsx_bytes_deferred(&bytes)
         .expect("deferred XLSX import should succeed");
@@ -238,7 +238,7 @@ fn deferred_xlsx_import_materializes_range_data_on_non_critical_sheet() {
         "RangeBacked date column should be imported as RangeData",
     );
     let q_col = sheet
-        .get_column_slice(16)
+        .get_column_view(16)
         .expect("RangeBacked!Q should be materialized into dense col_data");
     assert_eq!(q_col.get(3821), Some(&CellValue::number(38353.0)));
 }

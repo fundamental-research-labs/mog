@@ -11,8 +11,7 @@ use super::sheet_hydration::build_sheet_hydration_changes;
 // ---------------------------------------------------------------------------
 
 /// Build a [`MutationResult`] that represents a freshly hydrated workbook
-/// (XLSX / CSV import). Hydration writes directly to Yrs storage and
-/// rebuilds engine indexes, bypassing the live observer. This helper walks
+/// (XLSX / CSV import). After native hydration and index construction, this helper walks
 /// the post-hydration engine state and emits per-domain "Set" / "Created"
 /// changes so the kernel TS event pipeline (`MutationResultHandler.applyAndNotify`)
 /// can populate the TS-side projections (drawings, tables, comments,
@@ -44,7 +43,6 @@ pub(in crate::storage::engine) fn build_mutation_result_for_hydration(
     for sid in &sheet_ids {
         build_sheet_hydration_changes(stores, mirror, sid, None, &mut result);
     }
-    let doc = stores.storage.doc();
 
     // ----- Named ranges (workbook-scoped enumeration) -----
     let named_ranges =
@@ -62,7 +60,7 @@ pub(in crate::storage::engine) fn build_mutation_result_for_hydration(
     // field on the snapshot so the kernel mirror knows the entire
     // payload was "changed from nothing" on hydration. The mirror
     // replaces its full workbook-settings payload from `settings`.
-    let workbook_settings = workbook::settings::get_settings(doc, stores.storage.workbook_map());
+    let workbook_settings = workbook::settings::get_settings(&stores.storage.metadata);
     let workbook_settings_value =
         serde_json::to_value(&workbook_settings).expect("WorkbookSettings must serialize to JSON");
     let changed_keys = match &workbook_settings_value {

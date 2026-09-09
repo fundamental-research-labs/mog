@@ -242,7 +242,9 @@ impl<'a> EvalDataAccess for MirrorContext<'a> {
         range_type: &RangeType,
     ) -> Result<std::sync::Arc<CellArray>, CellError> {
         // If we have a range store, resolve refs to a RangeKey and delegate
-        if let Some(store) = self.range_store {
+        if let Some(store) = self.range_store
+            && self.access.pending_override.is_none()
+        {
             use crate::eval::cache::range_store::RangeKey;
 
             let (s_sheet, s_row, s_col) = self
@@ -378,7 +380,18 @@ impl<'a> EvalMetadata for MirrorContext<'a> {
         self.access.get_dense_column(sheet, col)
     }
 
-    fn get_column_values(&self, sheet: &SheetId, col: u32) -> Option<&[CellValue]> {
+    fn get_dense_column_for_range(
+        &self,
+        sheet: &SheetId,
+        col: u32,
+        start_row: u32,
+        end_row: u32,
+    ) -> Option<&DenseColumn> {
+        self.access
+            .get_dense_column_for_range(sheet, col, start_row, end_row)
+    }
+
+    fn get_column_values(&self, sheet: &SheetId, col: u32) -> Option<value_types::ColumnView<'_>> {
         self.access.get_column_values(sheet, col)
     }
 
@@ -590,30 +603,17 @@ impl<'a> EvalMetadata for MirrorContext<'a> {
         row_start: u32,
         row_end: u32,
         criteria: &CellValue,
-        _col_values: &[CellValue],
+        _col_values: value_types::ColumnView<'_>,
     ) -> Option<compute_functions::helpers::column_bitset::ColumnBitset> {
         #[cfg(feature = "native")]
         {
+            if self.access.pending_override.is_some() {
+                return None;
+            }
             let cache = self.workbook_cache?;
-
-            // Hash the criteria for the cache key using NormalizedKey (same as frequency cache)
-            use std::hash::{Hash, Hasher};
-            let normalized =
-                compute_functions::helpers::frequency_cache::NormalizedKey::from_cell_value(
-                    criteria,
-                );
-            let mut hasher = rustc_hash::FxHasher::default();
-            normalized.hash(&mut hasher);
-            let criteria_hash = hasher.finish();
-
+            let criteria_hash =
+                compute_functions::helpers::bitmask_cache::hash_criteria_value(criteria);
             let key = (*sheet, col, row_start, row_end, criteria_hash);
-
-            // Hit-only: check cache but don't build on miss.
-            // Building on miss is pathological for dynamic criteria (e.g., ">="&$CY109)
-            // where each cell has a unique criteria value — every miss allocates a
-            // full column clone via to_vec() that's used once then evicted, causing OOM.
-            // The row-scan fallback in borrowed_multi_criteria handles misses efficiently.
-            // Bitmasks will be pre-populated by the agg prepass for shared criteria patterns.
             cache.try_get_bitmask(&key, self.access.mirror, criteria)
         }
         #[cfg(not(feature = "native"))]
@@ -630,43 +630,19 @@ impl<'a> EvalMetadata for MirrorContext<'a> {
         row_start: u32,
         row_end: u32,
         criteria: &CellValue,
-        col_values: &[CellValue],
+        col_values: value_types::ColumnView<'_>,
     ) -> Option<compute_functions::helpers::column_bitset::ColumnBitset> {
         #[cfg(feature = "native")]
         {
+            if self.access.pending_override.is_some() {
+                return None;
+            }
             let cache = self.workbook_cache?;
-
-            use std::hash::{Hash, Hasher};
-            let normalized =
-                compute_functions::helpers::frequency_cache::NormalizedKey::from_cell_value(
-                    criteria,
-                );
-            let mut hasher = rustc_hash::FxHasher::default();
-            normalized.hash(&mut hasher);
-            let criteria_hash = hasher.finish();
-
+            let criteria_hash =
+                compute_functions::helpers::bitmask_cache::hash_criteria_value(criteria);
             let key = (*sheet, col, row_start, row_end, criteria_hash);
-
-            // Build-on-miss: safe for exact-match criteria where key space is bounded.
-            // The caller must verify is_exact_match_criteria() before calling this.
-            let start = row_start as usize;
-            let end = (row_end as usize).saturating_add(1).min(col_values.len());
-            let entry = cache.get_or_build_bitmask(
-                key,
-                self.access.mirror,
-                sheet,
-                col,
-                col,
-                criteria,
-                || {
-                    if start < end {
-                        col_values[start..end].to_vec()
-                    } else {
-                        Vec::new()
-                    }
-                },
-            );
-            Some(entry.value.bitmask.clone())
+            // The evaluator already clipped this view to the requested range.
+            cache.get_or_build_bitmask(key, self.access.mirror, criteria, &col_values)
         }
         #[cfg(not(feature = "native"))]
         {

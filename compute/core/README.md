@@ -2,11 +2,12 @@
 
 Native Rust compute engine. All formula parsing, evaluation, dependency
 tracking, recalculation, and data transforms run in this crate (or its
-extracted sub-crates). Document state is Yrs-backed and local. The Office.js
-scripting host in `compute/officejs` evaluates Excel JS against this engine.
+extracted sub-crates). Document state uses native sparse values and typed
+metadata. The Office.js scripting host in `compute/officejs` evaluates Excel JS
+against this engine.
 
-The compute-core workspace slice contains the root crate plus 28 extracted
-sub-crates.
+The compute-core workspace slice contains the root crate and its extracted
+support and domain crates.
 
 
 ## Table of Contents
@@ -24,16 +25,18 @@ sub-crates.
 
 ## Architecture
 
-The engine is split into a **root orchestration crate** (`compute-core`) and **28
-extracted sub-crates** organized into type/support crates and domain crates.
+The engine is split into a **root orchestration crate** (`compute-core`) and **extracted support and domain crates** organized into type/support crates and domain crates.
 
 ### Design Principles
 
 1. **Identity-keyed, not position-keyed.** All data structures use `CellId` (u128)
    as the primary key. Position (`row, col`) is ephemeral and resolved via index.
-2. **Zero-copy at boundaries.** The wire protocol (`compute-wire`) serializes
-   viewport data as flat `Vec<u8>` blobs read directly via `DataView` in
-   TypeScript -- no JSON parsing per cell.
+2. **Borrowed evaluation reads.** Formulas read the native cell store through
+   column views. Compact imported ranges share immutable value buffers;
+   numeric and aggregate caches are disposable derived data. Versioned
+   exact-criterion masks retain match bits under a 32 MiB accounting cap;
+   remaining predicates scan only selected rows in source order. Office.js
+   uses JSON batches at its QuickJS boundary.
 3. **Layered type crates.** Runtime type crates form a strict dependency DAG.
    Leaf crates depend only on the types they need, minimizing compile-time coupling.
 4. **Native/WASM duality.** The `native` feature gates `rayon` (parallel recalc)
@@ -44,10 +47,14 @@ extracted sub-crates** organized into type/support crates and domain crates.
 ### Data Flow
 
 ```
-Cell Edit (TS)
+Office.js script (QuickJS)
     |
     v
-[IPC Boundary] -- WorkbookSnapshot (JSON) or CellEdit (bincode) -->
+Excel.run / load / context.sync
+    |
+    | JSON batch
+    v
+compute-api::Workbook --> ComputeEngine
     |
     v
 CellMirror (identity-keyed cell store)
@@ -73,10 +80,10 @@ Scheduler (shared Evaluator + MirrorContext, four orchestration paths)
     |                               compute-schema (validation)
     |
     v
-RecalcResult --> [IPC Boundary] --> MutationResult binary (compute-wire)
+RecalcResult --> compute-api::Workbook
     |
     v
-TypeScript renderer (zero-parse DataView reads)
+Loaded Office.js values (QuickJS)
 ```
 
 > **Why four paths?** All share the same `Evaluator::evaluate()` and `MirrorContext`.
@@ -121,12 +128,10 @@ Located under `crates/`. Pure computation modules, each independently testable.
 | **compute-schema** | `crates/compute-schema` | value-types, cell-types | Schema engine: type validation, inference, coercion, constraint checking, editor resolution, format bridge |
 | **compute-charts** | `crates/compute-charts` | compute-stats | Chart data transforms: statistics, regression, density, binning, stacking, grouping |
 | **compute-solver** | `crates/compute-solver` | none | Numerical optimization: Nelder-Mead, BFGS, L-BFGS-B, Differential Evolution, root finding (bisection/Brent/Newton), auto dispatch |
-| **compute-collab** | `crates/compute-collab` | none | Yrs sync protocol: state vector exchange, diff computation, update application (lib0 v1 wire format) |
-| **compute-document** | `crates/compute-document` | formula-types, cell-types | CRDT document layer: Yrs schema definition, cell serde (hex encoding), identity mapping, undo support, observation hooks |
+| **compute-document** | `crates/compute-document` | formula-types, cell-types | Native row/column axes, sparse cell identity indexes, compact axis runs, and range metadata |
 | **compute-wire** | `crates/compute-wire` | formula-types, value-types, cell-types, snapshot-types, compute-cf | Binary wire protocol: viewport serialization, mutation patches, FormatPalette interning, TS codegen |
 | **compute-fill** | `crates/compute-fill` | value-types, cell-types, formula-types | Autofill engine: pattern detection, series generation, formula reference adjustment |
 | **compute-relational** | `crates/compute-relational` | value-types, cell-types, compute-stats, pivot-types | Relational compute engine: GROUP BY, aggregation, window functions over tabular data |
-| **compute-coordinator** | `crates/compute-coordinator` | cell-types, compute-collab, compute-document | Multi-participant sync coordinator with sheet-level locking |
 | **compute-layout-index** | `crates/compute-layout-index` | none | Spatial layout index: Fenwick tree over dimension deltas for O(log k) cell-to-pixel mapping |
 | **compute-text-measurement** | `crates/compute-text-measurement` | none | Text measurement engine for autofit, PDF export, and server-side layout |
 | **compute-screenshot** | `crates/compute-screenshot` | compute-wire, compute-layout-index, compute-text-measurement | Headless sheet screenshot rasterizer over `ViewportRenderData` |
@@ -135,7 +140,31 @@ Located under `crates/`. Pure computation modules, each independently testable.
 
 | Module | Purpose |
 |--------|---------|
-| `compute-core` (root) | Orchestration: CellMirror, AST evaluator, recalc scheduler, identity model, Yrs storage, projection registry, data tables, what-if analysis, solver integration, bridge wrappers |
+| `compute-core` (root) | Orchestration: CellMirror, AST evaluator, recalc scheduler, identity model, native metadata, projection registry, data tables, what-if analysis, solver integration, bridge wrappers |
+
+## Native storage
+
+`ComputeEngine` coordinates one sparse cell/value store with typed metadata.
+Cells, rows, columns, and sheets retain UUID identities as positions change.
+Row and column axes share compact runs, so a large mostly empty sheet does not
+allocate one record per row or column. Imported value ranges keep shared immutable
+payloads plus sparse edits; formatting rectangles do not create blank values.
+
+Workbook and sheet metadata live in `WorkbookStorage`; formulas and dependencies
+resolve native identities through the same axes. XLSX import installs metadata
+and values once. Deferred import keeps the active sheet's native data and loads
+only the remaining sheets before building the complete formula graph.
+
+Native undo/redo records typed inverses for the cells, metadata entries, and
+structural changes touched by a user action. Replay updates the same native
+store and recalculates dependents. Recalculation, bootstrap, and transient UI
+state are excluded; nested user actions join the enclosing history group.
+Yrs and collaboration are removed. The public scripting surface remains
+Office.js, with one undo action per mutating `context.sync()`.
+
+See [undo and redo](../../docs/guides/undo-redo.md) for the Rust API and grouping
+contract. The [storage benchmark comparison](../../docs/guides/remove-yrs-bench.md)
+records release CPU and memory measurements and their revision scope.
 
 ## Type System
 
@@ -201,7 +230,6 @@ pub use compute_graph as graph;           // compute_core::graph::*
 pub use compute_formats as formats;       // compute_core::formats::*
 pub use compute_charts as charts;         // compute_core::charts::*
 pub use compute_cf as cf;                 // compute_core::cf::*
-pub use compute_collab as collab;         // compute_core::collab::*
 pub use compute_document as document;     // compute_core::document::*
 pub use compute_pivot as pivot;           // compute_core::pivot::*
 pub use compute_table as table;           // compute_core::table::*
@@ -227,18 +255,18 @@ crates because they depend on multiple sub-crates or own mutable state:
 
 | Module | Description |
 |--------|-------------|
-| `mirror` | **CellMirror** -- identity-keyed in-memory cell store. Dense columnar storage per sheet. The read-side data structure that the evaluator queries. |
+| `mirror` | **CellMirror** -- authoritative native sparse values and compact imported ranges, queried by the evaluator through borrowed views and disposable numeric caches. |
 | `eval` | **AST Evaluator** -- recursive descent evaluator that walks `ASTNode` trees. Two trait hierarchies: `EvalDataAccess` (async data reads) and `EvalMetadata` (sync positional/structural queries). Sub-modules: `core` (dispatch), `context` (traits), `cache` (multi-tier), `lookup` (INDEX/MATCH/XLOOKUP), `functions` (special dispatch), `coordination` (cycle detection, vectorized eval). |
-| `scheduler` | **Recalc Scheduler** -- top-level `ComputeCore` struct. Owns the CellMirror, DependencyGraph, and AST cache. Processes edits by parsing, building the dep graph, and evaluating in topological order. Level-based parallel recalc with rayon (native) or sequential fallback (WASM). |
+| `scheduler` | **Recalc Scheduler** -- top-level `ComputeCore` struct. Owns the DependencyGraph and AST cache and evaluates against the engine's CellMirror. Processes edits by parsing, building the dep graph, and evaluating in topological order. Level-based parallel recalc with rayon (native) or sequential fallback (WASM). |
 | `identity` | Per-sheet identity-to-position tracker. Maps `CellId <-> (row, col)` for the Cell Identity Model. |
-| `storage` | Yrs-backed CRDT storage. Hybrid of `yrs::Doc` + `CellMirror`. Reads/writes cells, dimensions, properties, sheets. The persistence layer. |
+| `storage` | `WorkbookStorage` owns typed workbook, sheet, and cell metadata. `CellMirror` owns sparse values and compact ranges; derived indexes share its native axes. |
 | `projection` | Dynamic array projection registry. Spatial index tracking which cells are spill array members. |
 | `domain_types` | Pure serializable data contracts for domain features (charts, ranges, etc.). |
 | `what_if` | What-If Analysis -- scenario management (Goal Seek moved to solver, Data Tables to `data_table`). |
 | `solver` | Solver module -- numerical optimization integration (root finding for Goal Seek, multi-variable via Python fallback). |
 | `data_table` | Data Table -- parametric formula evaluation (one/two-variable data tables). |
 | `bridge_pure` | Bridge Mode 1 wrappers -- zero-sized types with `#[bridge::api]` annotations for generating WASM/Tauri bindings for stateless functions (pivot, schema, parser, etc.). |
-| `range_manager` | `pub(crate)` A1-style range parsing utilities, no Yrs dependency. |
+| `range_manager` | `pub(crate)` A1-style range parsing utilities. |
 
 
 ## Dependency Graph
@@ -269,11 +297,10 @@ value-types + cell-types + ooxml-types                |
                                                   value-types
 
 Standalone domain crates with zero compute-core internal deps:
-  compute-solver, compute-collab, compute-layout-index, compute-text-measurement
+  compute-solver, compute-layout-index, compute-text-measurement
 
-CRDT layer:
-  compute-document --> formula-types + cell-types + yrs
-  compute-coordinator --> cell-types + compute-collab + compute-document
+Native identity layer:
+  compute-document --> value-types + cell-types
 
 Wire protocol:
   compute-wire --> formula-types + value-types + cell-types + snapshot-types
@@ -291,8 +318,8 @@ Rendering:
 ```
 Layer 4 (orchestration):  compute-core
 Layer 3 (domain):         parser, functions, table, graph, cf, pivot,
-                          schema, formats, charts, stats, solver, collab,
-                          document, wire, fill, relational, coordinator,
+                          schema, formats, charts, stats, solver,
+                          document, wire, fill, relational,
                           layout-index, text-measurement, screenshot
 Layer 2 (type bridge):    formula-types, pivot-types, snapshot-types
 Layer 1 (leaf types):     value-types, cell-types
@@ -337,7 +364,6 @@ cargo test -p cell-types             # 47 tests
 cargo test -p snapshot-types         # 42 tests
 cargo test -p compute-wire           # 33 tests
 cargo test -p compute-document       # 33 tests
-cargo test -p compute-collab         # 12 tests
 
 # Root crate tests (unit + integration)
 cargo test -p compute-core
@@ -455,7 +481,6 @@ cargo run -p compute-wire --bin generate-ts > kernel/src/bridges/wire/constants.
 | `chrono` | 0.4 | many | Date/time functions, serial date conversions |
 | `statrs` | 0.17 | compute-functions | Statistical distributions (NORM.DIST, T.INV, etc.) |
 | `nalgebra` | 0.32 | compute-functions | Linear algebra (MINVERSE, MMULT, LINEST) |
-| `yrs` | 0.21 | compute-collab, compute-document, compute-core | Yjs CRDT port for collaborative editing |
 | `bitvec` | 1 | compute-core | Null bitmaps in dense columnar store |
 | `phf` | 0.11 | compute-core | Compile-time perfect hash for function registry |
 | `stacker` | 0.1 | compute-core | Grow call stack on demand (deep dependency chains) |

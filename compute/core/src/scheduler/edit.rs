@@ -180,7 +180,7 @@ impl ComputeCore {
         }
 
         // Normalize the formula string to canonical `=<body>` form so
-        // the formula bar / Yrs storage / parser all see the same
+        // the formula bar / native store / parser all see the same
         // shape downstream.
         let formula_str = if formula.trim_start().starts_with('=') {
             formula.trim_start().to_string()
@@ -285,7 +285,7 @@ impl ComputeCore {
         self.set_cells_with_contexts(mirror, edits, &contexts, skip_cycle_check)
     }
 
-    pub fn set_cells_with_contexts(
+    pub(crate) fn set_cells_with_contexts(
         &mut self,
         mirror: &mut CellMirror,
         edits: &[(SheetId, CellId, u32, u32, CellInput)],
@@ -362,7 +362,7 @@ impl ComputeCore {
     /// as `set_cells` (CSE rectangles + Data Table regions). Use this
     /// for any caller that originates from a user op (`import_values`,
     /// fill operations, structural value-replays). `TrustedReplay`
-    /// skips the guard for Yrs replays and engine-internal writes whose
+    /// skips the guard for engine-internal writes whose
     /// upstream op already cleared the guard.
     pub fn set_cells_raw_with_trust(
         &mut self,
@@ -402,11 +402,11 @@ impl ComputeCore {
         Ok(result)
     }
 
-    /// Apply changes from remote collaboration, undo, or redo.
+    /// Apply a batch of typed cell edits.
     ///
     /// When `skip_cycle_check` is true, per-edge DFS cycle detection is skipped
     /// during formula registration. This is safe for trusted bulk operations
-    /// (undo/redo, collaboration sync) because the topological sort in `recalc()`
+    /// because the topological sort in `recalc()`
     /// will catch any cycles. Skipping saves O(N * edges * graph_depth) work.
     pub fn apply_changes(
         &mut self,
@@ -622,15 +622,8 @@ impl ComputeCore {
         //    it). See `shift_ast_for_structure_change` for the full
         //    rewrite contract.
         //
-        //    `change = None` is the observer-driven rebuild path: yrs has
-        //    already been re-read into mirror+grid_index, so positional
-        //    refs in cached ASTs from that previous in-memory state would
-        //    not re-derive from yrs. The rebuild path predates this
-        //    invariant; it's safe today only because formulas with
-        //    `Positional` refs aren't a steady-state shape on the rebuild
-        //    path (caller re-parses legacy formula strings into fresh
-        //    `IdentityFormula`s). The `None` arm is preserved for that
-        //    legacy contract.
+        //    A full rebuild supplies no positional change; its formulas are
+        //    parsed again from their native identities.
         if let Some((change, target_sheet)) = change {
             self.shift_positional_refs_for_structure_change(target_sheet, change);
         }
@@ -744,7 +737,7 @@ impl ComputeCore {
     ///
     /// Walks all sheets, finds cells with IdentityFormulas, and converts them back
     /// to A1 notation using the mirror's current position mappings. This cache is
-    /// secondary to `cell_formula_text`: ordinary observer sync must not replace
+    /// secondary to `cell_formula_text`: formula graph refresh must not replace
     /// authored formula text because rendering an IdentityFormula intentionally
     /// drops qualifiers that are implicit for the formula's owner sheet.
     pub(crate) fn regenerate_formula_strings(&mut self, mirror: &CellMirror) {

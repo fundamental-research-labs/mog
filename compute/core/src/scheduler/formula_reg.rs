@@ -1,9 +1,6 @@
 //! Formula parsing, registration, and variable DAG management.
 
 use super::*;
-use crate::storage::cells::structured_ref_updater::{
-    replace_column_name_in_formula, template_contains_column_ref, template_contains_table_ref,
-};
 use crate::storage::engine::mutation::CellInput;
 
 impl ComputeCore {
@@ -255,7 +252,7 @@ impl ComputeCore {
     /// Process a value-typed cell input: a typed `CellValue` with an optional formula body.
     ///
     /// This is the lossless counterpart to [`process_input`]. Callers that already
-    /// own a typed `CellValue` (fill, paste, move, collaboration sync, programmatic
+    /// own a typed `CellValue` (fill, paste, move, programmatic
     /// import) must route through here — rendering to a string and re-parsing via
     /// `process_input` is lossy (strips `'` prefix, coerces `Text("42")` → `Number(42)`,
     /// drops `Error` / `Array` values, etc.).
@@ -263,8 +260,7 @@ impl ComputeCore {
     /// - `formula = Some(body)` — body is parsed and registered exactly like the
     ///   `=…` branch of [`process_input`]. The leading `=` is optional: if present
     ///   it passes through, if absent it is prepended before parsing. Callers that
-    ///   route through `read_cell_from_yrs` (which re-prepends `=`) and callers
-    ///   that strip `=` ahead of time are both accepted.
+    ///   provide either form are accepted.
     /// - `formula = None` — store `value` directly via `mirror.apply_edit` and
     ///   clear any pre-existing formula deps. No parser involvement, no coercion.
     ///
@@ -606,71 +602,40 @@ impl ComputeCore {
             Err(_parse_err) => {
                 // Parse failed — set cell to #NAME? error
                 mirror.set_value_mut(&cell_id, CellValue::Error(CellError::Name, None));
-                self.graph.remove_cell(&cell_id);
-                self.formula_text_deps.clear_formula(&cell_id);
-                self.ast_cache.remove(&cell_id);
-                self.cell_range_keys.remove(&cell_id);
+                // An invalid formula is still a value-producing dependency
+                // target. Keep reverse edges so its error, and later repairs,
+                // reach formulas that reference this cell.
+                self.clear_formula_deps(mirror, cell_id);
                 self.formula_strings.insert(cell_id, formula.clone());
                 self.cell_formula_text.insert(cell_id, formula);
             }
         }
     }
 
-    /// Rewrite and re-register runtime formula text after a table column rename.
-    ///
-    /// Yrs persistence is handled by `structured_ref_updater`; this keeps the
-    /// live scheduler caches and dependency graph aligned within the same
-    /// mutation so API reads observe renamed structured references immediately.
-    pub(crate) fn rewrite_table_column_rename_formula_texts(
+    /// Rewrite native formula sources and rebuild their identity references and DAG edges.
+    /// Evaluation is performed by the caller after all related metadata is updated.
+    pub(crate) fn rewrite_formula_sources(
         &mut self,
         mirror: &mut CellMirror,
-        table_name: &str,
-        old_column_name: &str,
-        new_column_name: &str,
-    ) -> RecalcResult {
-        if table_name.is_empty()
-            || old_column_name.is_empty()
-            || new_column_name.is_empty()
-            || old_column_name == new_column_name
-        {
-            return RecalcResult::empty();
-        }
-
+        rewrite: impl Fn(Option<u32>, &str) -> String,
+    ) -> Vec<CellId> {
         let updates: Vec<(CellId, SheetId, String)> = self
             .cell_formula_text
             .iter()
             .filter_map(|(cell_id, formula)| {
-                if !template_contains_table_ref(formula, table_name)
-                    || !template_contains_column_ref(formula, old_column_name)
-                {
-                    return None;
-                }
-                let rewritten = replace_column_name_in_formula(
-                    formula,
-                    table_name,
-                    old_column_name,
-                    new_column_name,
-                );
-                if rewritten == *formula {
-                    return None;
-                }
-                let sheet_id = mirror.sheet_for_cell(cell_id)?;
-                Some((*cell_id, sheet_id, rewritten))
+                let row = mirror.resolve_position(cell_id).map(|pos| pos.row());
+                let rewritten = rewrite(row, formula);
+                (rewritten != *formula)
+                    .then(|| Some((*cell_id, mirror.sheet_for_cell(cell_id)?, rewritten)))
+                    .flatten()
             })
             .collect();
-
-        if updates.is_empty() {
-            return RecalcResult::empty();
-        }
-
         let mut dirty = Vec::with_capacity(updates.len());
         for (cell_id, sheet_id, formula) in updates {
             self.parse_and_register_formula(mirror, cell_id, sheet_id, formula, false);
             dirty.push(cell_id);
         }
-
-        self.recalc(mirror, &dirty)
-            .unwrap_or_else(|_| RecalcResult::empty())
+        dirty
     }
 
     // -----------------------------------------------------------------------

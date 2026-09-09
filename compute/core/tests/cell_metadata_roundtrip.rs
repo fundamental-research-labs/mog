@@ -1,4 +1,4 @@
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use domain_types::{
     AlignmentFormat, CellData, CellFormat, ColDimension, DocumentFormat, ParseOutput,
     ProtectionFormat, SheetData, SheetDimensions,
@@ -89,7 +89,7 @@ fn workbook() -> Vec<u8> {
     .unwrap()
 }
 
-fn check(engine: &YrsComputeEngine, expected: &[CellValue]) {
+fn check(engine: &ComputeEngine, expected: &[CellValue]) {
     let sheet = *engine.mirror().sheet_ids().next().unwrap();
     for (row, expected) in expected.iter().enumerate() {
         assert_eq!(
@@ -107,7 +107,7 @@ fn check(engine: &YrsComputeEngine, expected: &[CellValue]) {
 
 #[test]
 fn cell_reads_imported_metadata_then_live_edits_and_reload() {
-    let (mut engine, _) = YrsComputeEngine::from_xlsx_bytes(&workbook()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&workbook()).unwrap();
     engine.recalculate().unwrap();
     check(
         &engine,
@@ -201,7 +201,7 @@ fn cell_reads_imported_metadata_then_live_edits_and_reload() {
     engine.recalculate().unwrap();
     check(&engine, &expected);
     let exported = engine.export_to_xlsx_bytes().unwrap();
-    let (mut reloaded, _) = YrsComputeEngine::from_xlsx_bytes(&exported).unwrap();
+    let (mut reloaded, _) = ComputeEngine::from_xlsx_bytes(&exported).unwrap();
     reloaded.recalculate().unwrap();
     check(&reloaded, &expected);
     // Removing a live direct layer must reveal the inherited row layer.
@@ -238,14 +238,20 @@ fn cell_reads_imported_metadata_then_live_edits_and_reload() {
 
 #[test]
 fn cell_width_uses_supplied_metrics_after_document_reload_and_rebuild() {
-    let (mut source, _) = YrsComputeEngine::from_xlsx_bytes(&workbook()).unwrap();
+    let (mut source, _) = ComputeEngine::from_xlsx_bytes(&workbook()).unwrap();
     let sheet = *source.mirror().sheet_ids().next().unwrap();
     source.set_col_width_chars(&sheet, 0, 8.95).unwrap();
-    let state = source.sync_full_state();
+    let bytes = source.export_to_xlsx_bytes().unwrap();
     for (mdw, expected) in [(7.0, 8.0), (14.0, 9.0)] {
         let metrics = domain_types::units::LayoutMetrics::from_column_width_mdw(mdw).unwrap();
-        let (mut engine, _) =
-            YrsComputeEngine::from_yrs_state_with_layout_metrics(&state, metrics).unwrap();
+        let (mut engine, _) = ComputeEngine::from_snapshot_with_layout_metrics(
+            snapshot_types::WorkbookSnapshot::default(),
+            metrics,
+        )
+        .unwrap();
+        // Reload through public XLSX import so column metadata is hydrated
+        // alongside formulas using the engine's supplied layout metrics.
+        engine.import_from_xlsx_bytes(&bytes, true).unwrap();
         let sheet = *engine.mirror().sheet_ids().next().unwrap();
         assert_eq!(
             engine.get_cell_value(&sheet, 5, 1),

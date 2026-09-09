@@ -16,7 +16,7 @@
 //! The test is kept as a regression guard in case a future refactor
 //! starts relying on the KEY_ROWS/KEY_COLS fallback path.
 
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
 
@@ -38,6 +38,9 @@ fn copy_sheet_preserves_source_dimensions_50x20() {
     // so a regression to the default is detectable.
     let snap = WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: "Source".to_string(),
             rows: 50,
@@ -52,7 +55,7 @@ fn copy_sheet_preserves_source_dimensions_50x20() {
         ..Default::default()
     };
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).expect("from_snapshot");
     let src_sid = *engine.mirror().sheet_ids().next().expect("source sheet");
 
     // Sanity: source has the declared dimensions.

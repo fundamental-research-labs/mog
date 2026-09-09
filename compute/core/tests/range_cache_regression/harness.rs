@@ -53,7 +53,7 @@ pub(crate) fn col_data_value(mirror: &CellMirror, col: u32, row: u32) -> CellVal
     let sid = mirror.sheet_by_name("sheet1").expect("sheet not found");
     let sheet = mirror.get_sheet(&sid).expect("sheet mirror not found");
     sheet
-        .get_column_slice(col)
+        .get_column_view(col)
         .and_then(|s| s.get(row as usize))
         .cloned()
         .unwrap_or(CellValue::Null)
@@ -76,7 +76,7 @@ pub(crate) fn warm_dense_cache(mirror: &mut CellMirror, col: u32) {
 
     let mut values = vec![f64::NAN; num_rows];
     let mut numeric_count = 0usize;
-    if let Some(col_slice) = sheet.get_column_slice(col) {
+    if let Some(col_slice) = sheet.get_column_view(col) {
         let len = num_rows.min(col_slice.len());
         for row in 0..len {
             if let CellValue::Number(n) = &col_slice[row] {

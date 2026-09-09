@@ -36,10 +36,8 @@ pub struct StoredTimelineCache {
     pub start_date: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub end_date: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pivot_table_tab_id: Option<u32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pivot_table_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pivot_tables: Vec<ooxml_types::timelines::TimelinePivotTableRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ext_lst_xml: Option<String>,
 }
@@ -125,8 +123,7 @@ pub fn xlsx_import_to_stored_timeline(
             filter_type: cache.filter_type.clone(),
             start_date: cache.start_date.clone(),
             end_date: cache.end_date.clone(),
-            pivot_table_tab_id: cache.pivot_tables.first().map(|pivot| pivot.tab_id),
-            pivot_table_name: cache.pivot_tables.first().map(|pivot| pivot.name.clone()),
+            pivot_tables: cache.pivot_tables.clone(),
             ext_lst_xml: cache.ext_lst.clone(),
         }),
         position: anchor.map(|anchor| FloatingObjectAnchor {
@@ -184,13 +181,7 @@ pub fn stored_timeline_to_cache_def(
         filter_type: cache.filter_type.clone(),
         start_date: cache.start_date.clone(),
         end_date: cache.end_date.clone(),
-        pivot_tables: match (cache.pivot_table_tab_id, cache.pivot_table_name.as_ref()) {
-            (Some(tab_id), Some(name)) => vec![ooxml_types::timelines::TimelinePivotTableRef {
-                tab_id,
-                name: name.clone(),
-            }],
-            _ => Vec::new(),
-        },
+        pivot_tables: cache.pivot_tables.clone(),
         ext_lst: cache.ext_lst_xml.clone(),
     })
 }

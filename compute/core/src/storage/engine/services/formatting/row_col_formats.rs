@@ -117,19 +117,18 @@ pub(in crate::storage::engine) fn clear_col_format(
     sheet_id: &SheetId,
     col: u32,
 ) -> Result<MutationResult, ComputeError> {
-    properties::clear_col_format_with_alloc(
+    properties::clear_col_format(
         &mut stores.storage,
         sheet_id,
         col,
         stores.grid_indexes.get(sheet_id),
-        &stores.id_alloc,
     );
     let Some(sheet_mirror) = mirror.get_sheet_mut(sheet_id) else {
         return Err(ComputeError::SheetNotFound {
             sheet_id: sheet_id.to_uuid_string(),
         });
     };
-    properties::hydrate_col_format_ranges(&stores.storage, sheet_id, sheet_mirror);
+    properties::clear_col_format_ranges_in_span(sheet_mirror, col, col, &stores.id_alloc);
     Ok(MutationResult::empty())
 }
 
@@ -146,19 +145,17 @@ pub(in crate::storage::engine) fn set_col_format_range(
             sheet_id: sheet_id.to_uuid_string(),
         });
     }
-    properties::set_col_format_range_with_alloc(
-        &mut stores.storage,
-        sheet_id,
-        start_col,
-        end_col,
-        format,
-        &stores.id_alloc,
-    );
     let Some(sheet_mirror) = mirror.get_sheet_mut(sheet_id) else {
         return Err(ComputeError::SheetNotFound {
             sheet_id: sheet_id.to_uuid_string(),
         });
     };
-    properties::hydrate_col_format_ranges(&stores.storage, sheet_id, sheet_mirror);
+    properties::set_col_format_range_with_alloc(
+        sheet_mirror,
+        start_col,
+        end_col,
+        format,
+        &stores.id_alloc,
+    );
     Ok(MutationResult::empty())
 }

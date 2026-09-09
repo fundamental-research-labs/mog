@@ -48,15 +48,4 @@ impl WorkbookScenarios {
     pub fn get_all_scenarios(&self) -> Result<Vec<Scenario>, ComputeApiError> {
         self.dispatch.query_engine(|e| e.get_all_scenarios())
     }
-
-    /// Set the active scenario (pass `None` to clear).
-    pub fn set_active_scenario(
-        &self,
-        scenario_id: Option<&str>,
-    ) -> Result<MutationResult, ComputeApiError> {
-        let owned_id = scenario_id.map(|s| s.to_owned());
-        self.dispatch
-            .call_engine(move |e| e.set_active_scenario(owned_id).map(|(_, r)| r))
-            .and_then(|r| r.map_err(ComputeApiError::from))
-    }
 }

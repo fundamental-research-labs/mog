@@ -12,7 +12,7 @@ use cell_types::{CellId, RangePos, SheetId};
 use compute_graph::{CellPosition, DepTarget, DependencyGraph, RangeAccess};
 
 fn main() {
-    // Allocate stable CellIds (in production these come from the CRDT layer).
+    // Allocate stable CellIds (production uses the workbook identity allocator).
     let a1 = CellId::from_raw(1);
     let b1 = CellId::from_raw(2);
     let c1 = CellId::from_raw(3);

@@ -1,11 +1,6 @@
-use compute_document::hex::id_to_hex;
-use compute_document::identity::GridIndex;
-use yrs::{Doc, MapRef, Transact};
-
-use super::super::grid_helpers::get_cells_map;
-use super::read::has_data_at;
-use super::types::RangeSpan;
 use cell_types::{RangePos, SheetId};
+
+use super::types::RangeSpan;
 
 /// Get the current region around a cell (Ctrl+Shift+* functionality).
 ///
@@ -15,47 +10,16 @@ use cell_types::{RangePos, SheetId};
 ///
 /// If the starting cell is empty and has no adjacent data, returns a
 /// single-cell range.
-#[cfg(test)]
-pub fn get_current_region(
-    doc: &Doc,
-    sheets: &MapRef,
+pub(crate) fn get_current_region(
     sheet_id: SheetId,
-    grid: &GridIndex,
     start_row: u32,
     start_col: u32,
-) -> RangePos {
-    get_current_region_with_extra_data(doc, sheets, sheet_id, grid, start_row, start_col, |_, _| {
-        false
-    })
-}
-
-/// Like [`get_current_region`], but lets higher layers contribute cell
-/// occupancy from mirror-backed sources such as range payloads, projection
-/// values, and imported dense data.
-pub fn get_current_region_with_extra_data(
-    doc: &Doc,
-    sheets: &MapRef,
-    sheet_id: SheetId,
-    grid: &GridIndex,
-    start_row: u32,
-    start_col: u32,
-    extra_has_data: impl Fn(u32, u32) -> bool,
+    has_data: impl Fn(u32, u32) -> bool,
 ) -> RangePos {
     let max_row: u32 = 10_000;
     let max_col: u32 = 500;
 
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let txn = doc.transact();
-
     let single_cell = RangePos::new(sheet_id, start_row, start_col, start_row, start_col);
-
-    let cells_map = get_cells_map(&txn, sheets, &sheet_hex);
-    let has_data = |row: u32, col: u32| -> bool {
-        cells_map
-            .as_ref()
-            .is_some_and(|cells_map| has_data_at(&txn, grid, cells_map, row, col))
-            || extra_has_data(row, col)
-    };
 
     // Check if start cell has data
     let start_has_data = has_data(start_row, start_col);
@@ -117,46 +81,16 @@ pub fn get_current_region_with_extra_data(
 /// range unchanged.
 ///
 /// Returns `None` if no data is found in the selected columns/rows.
-#[cfg(test)]
 pub(crate) fn get_data_bounds_for_range(
-    doc: &Doc,
-    sheets: &MapRef,
     sheet_id: SheetId,
-    grid: &GridIndex,
     range: &RangePos,
     span: RangeSpan,
-) -> Option<RangePos> {
-    get_data_bounds_for_range_with_extra_data(doc, sheets, sheet_id, grid, range, span, |_, _| {
-        false
-    })
-}
-
-/// Like [`get_data_bounds_for_range`], but uses higher-layer mirror-backed
-/// occupancy in addition to Yrs cell-map data.
-pub(crate) fn get_data_bounds_for_range_with_extra_data(
-    doc: &Doc,
-    sheets: &MapRef,
-    sheet_id: SheetId,
-    grid: &GridIndex,
-    range: &RangePos,
-    span: RangeSpan,
-    extra_has_data: impl Fn(u32, u32) -> bool + Copy,
+    has_data: impl Fn(u32, u32) -> bool + Copy,
 ) -> Option<RangePos> {
     // If not a full column/row selection, return as-is
     if span == RangeSpan::Exact {
         return Some(*range);
     }
-
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let txn = doc.transact();
-    let cells_map = get_cells_map(&txn, sheets, &sheet_hex);
-
-    let has_data = |row: u32, col: u32| -> bool {
-        cells_map
-            .as_ref()
-            .is_some_and(|cells_map| has_data_at(&txn, grid, cells_map, row, col))
-            || extra_has_data(row, col)
-    };
 
     if span == RangeSpan::FullColumns {
         let search_limit: u32 = 10_000;
@@ -175,15 +109,7 @@ pub(crate) fn get_data_bounds_for_range_with_extra_data(
         let first_data_row = first_data_row?;
 
         // Use get_current_region to find the contiguous data block
-        let data_region = get_current_region_with_extra_data(
-            doc,
-            sheets,
-            sheet_id,
-            grid,
-            first_data_row,
-            range.start_col(),
-            extra_has_data,
-        );
+        let data_region = get_current_region(sheet_id, first_data_row, range.start_col(), has_data);
 
         Some(RangePos::new(
             sheet_id,
@@ -209,15 +135,7 @@ pub(crate) fn get_data_bounds_for_range_with_extra_data(
 
         let first_data_col = first_data_col?;
 
-        let data_region = get_current_region_with_extra_data(
-            doc,
-            sheets,
-            sheet_id,
-            grid,
-            range.start_row(),
-            first_data_col,
-            extra_has_data,
-        );
+        let data_region = get_current_region(sheet_id, range.start_row(), first_data_col, has_data);
 
         Some(RangePos::new(
             sheet_id,

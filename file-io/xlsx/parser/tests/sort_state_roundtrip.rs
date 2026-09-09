@@ -4,7 +4,7 @@
 //! (sort state) with a typed field
 //! (`SheetData.sort_state`). Before the typing, the writer would silently
 //! drop worksheet-level sort state on any path where the blob was absent —
-//! most notably the Yrs hydration path. These tests lock the correctness
+//! including engine hydration. These tests lock the correctness
 //! fix: write → re-parse preserves sort state even when no raw blob exists
 //! (i.e. the `ParseOutput` was built from the typed field alone).
 

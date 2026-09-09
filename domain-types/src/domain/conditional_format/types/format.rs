@@ -31,9 +31,6 @@ pub struct ConditionalFormat {
     pub pivot: Option<bool>,
     /// Position-based ranges (structured, not A1 strings).
     pub ranges: Vec<CFCellRange>,
-    /// Cell-identity-based ranges (optional, for collaborative editing).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub range_identities: Option<Vec<CellIdRange>>,
     /// Rules to evaluate (in priority order).
     pub rules: Vec<CFRule>,
 }

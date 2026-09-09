@@ -1,14 +1,10 @@
 use std::sync::Arc;
 
 use cell_types::{CellId, SheetId};
-use compute_document::hex::id_to_hex;
 use compute_document::identity::GridIndex;
-use compute_document::undo::ORIGIN_USER_EDIT;
 use value_types::CellValue;
-use yrs::{Any, Map, MapPrelim, Origin, Transact};
 
-use crate::storage::infra::grid_helpers::get_cells_map;
-use crate::storage::{KEY_VALUE, YrsStorage};
+use crate::storage::WorkbookStorage;
 
 // -------------------------------------------------------------------
 // Helpers
@@ -25,13 +21,8 @@ pub(super) fn make_cell_id(n: u128) -> CellId {
 /// Create a storage with one sheet plus a fresh `GridIndex` that serves
 /// as the authoritative identity store for that sheet in the test.
 ///
-/// The GridIndex is built via `GridIndex::new` with a fresh
-/// `IdAllocator`; it does not share identities with the yrs rowOrder /
-/// colOrder arrays installed by `add_sheet`. Sort-path tests don't need
-/// that correspondence because, post-migration, sort consults only the
-/// GridIndex for identity/positions and only yrs for cell values.
-pub(super) fn storage_with_sheet() -> (YrsStorage, SheetId, GridIndex) {
-    let mut storage = YrsStorage::new();
+pub(super) fn storage_with_sheet() -> (WorkbookStorage, SheetId, GridIndex) {
+    let mut storage = WorkbookStorage::new();
     let mut mirror = crate::mirror::CellMirror::new();
     let sheet_id = make_sheet_id(1);
     storage
@@ -43,45 +34,57 @@ pub(super) fn storage_with_sheet() -> (YrsStorage, SheetId, GridIndex) {
     (storage, sheet_id, grid)
 }
 
-/// Place a cell with a given CellId, value, and position.
-/// Writes the value into the yrs `cells` map (keyed by cell_hex) and
-/// registers the CellId in the GridIndex at (row, col).
+pub(super) type PlannerValues = std::collections::HashMap<(u32, u32), CellValue>;
+
+pub(super) fn planner_fixture() -> (PlannerValues, SheetId, GridIndex) {
+    let id = make_sheet_id(1);
+    (
+        PlannerValues::new(),
+        id,
+        GridIndex::new(id, 100, 26, Arc::new(cell_types::IdAllocator::new())),
+    )
+}
+
 pub(super) fn place_cell(
-    storage: &YrsStorage,
+    values: &mut PlannerValues,
     grid: &mut GridIndex,
-    sheet_id: SheetId,
+    _sheet_id: SheetId,
     cell_id: CellId,
     row: u32,
     col: u32,
     value: &CellValue,
 ) {
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let cell_hex = id_to_hex(cell_id.as_u128());
-    let mut txn = storage
-        .doc()
-        .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-
-    // Write cell into cells map (keyed by cell_hex — identity-only)
-    if let Some(cells_map) = get_cells_map(&txn, &storage.sheets_ref(), &sheet_hex) {
-        let v = match value {
-            CellValue::Number(n) => Any::Number(n.get()),
-            CellValue::Text(s) => Any::String(Arc::clone(s)),
-            CellValue::Boolean(b) => Any::Bool(*b),
-            CellValue::Null => Any::Null,
-            CellValue::Error(e, _) => Any::String(Arc::from(e.as_str())),
-            _ => Any::Null,
-        };
-        let cell_prelim = MapPrelim::from([(KEY_VALUE, v)]);
-        cells_map.insert(&mut txn, &*cell_hex, cell_prelim);
-    }
-
-    drop(txn);
-
-    // Register in GridIndex (sole identity authority).
+    values.insert((row, col), value.clone());
     grid.register_cell(cell_id, row, col);
 }
 
-/// Read a cell's position via the GridIndex.
-pub(super) fn read_cell_position(grid: &GridIndex, cell_id: CellId) -> Option<(u32, u32)> {
-    grid.cell_position(&cell_id)
+pub(super) fn compute_sorted_row_order<F: Fn(u32, u32) -> domain_types::CellFormat>(
+    values: &PlannerValues,
+    range: &super::types::CellRange,
+    options: &super::types::SortOptions,
+    grid: &GridIndex,
+    format: F,
+) -> super::types::SortResult {
+    let criteria: Vec<_> = options
+        .criteria
+        .iter()
+        .map(|criterion| super::types::SortColumnCriterion {
+            column: grid
+                .cell_position(&criterion.header_cell_id)
+                .map(|(_, col)| col)
+                .unwrap_or(u32::MAX),
+            direction: criterion.direction,
+            case_sensitive: criterion.case_sensitive,
+            mode: criterion.mode.clone(),
+        })
+        .collect();
+    super::planner::compute_sorted_row_order_by_columns_with_scope(
+        &Default::default(),
+        range,
+        &criteria,
+        options.has_headers,
+        |row, col| values.get(&(row, col)).cloned().unwrap_or_default(),
+        format,
+        false,
+    )
 }

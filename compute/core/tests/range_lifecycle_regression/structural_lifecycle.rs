@@ -2,7 +2,7 @@ use super::support::{
     as_f64, cell_at, formula_cell, sheet_id, sheet_snap, value_cell, workbook_10_rows,
 };
 use compute_core::bridge_types::{BridgeSortCriterion, BridgeSortMode, BridgeSortOptions};
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use domain_types::domain::filter::SortOrder;
 use formula_types::StructureChange;
 use snapshot_types::WorkbookSnapshot;
@@ -19,7 +19,7 @@ fn lifecycle_sort() {
         ..Default::default()
     };
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).expect("from_snapshot");
     let sid = sheet_id(0);
 
     engine
@@ -63,8 +63,7 @@ fn lifecycle_sort() {
 
 #[test]
 fn lifecycle_insert_delete_rows() {
-    let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(workbook_10_rows()).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(workbook_10_rows()).expect("from_snapshot");
     let sid = sheet_id(0);
 
     let pre_a10 = cell_at(&engine, &sid, 9, 0);
@@ -121,49 +120,5 @@ fn lifecycle_insert_delete_rows() {
         (as_f64(&sum) - 55.0).abs() < 1e-9,
         "SUM should be 55 after insert+delete, got {:?}",
         sum
-    );
-}
-
-#[test]
-fn lifecycle_undo_redo_structural() {
-    let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(workbook_10_rows()).expect("from_snapshot");
-    let sid = sheet_id(0);
-
-    let pre_a6 = cell_at(&engine, &sid, 5, 0);
-    assert_eq!(as_f64(&pre_a6), 6.0, "A6 should be 6 before insert");
-
-    engine
-        .structure_change(
-            &sid,
-            &StructureChange::InsertRows {
-                at: 3,
-                count: 2,
-                new_row_ids: Vec::new(),
-            },
-        )
-        .expect("insert_rows");
-
-    let mid_a6 = cell_at(&engine, &sid, 7, 0);
-    assert_eq!(as_f64(&mid_a6), 6.0, "A6 should be at row 7 after insert");
-
-    engine.undo().expect("undo structural");
-
-    let post_undo = cell_at(&engine, &sid, 5, 0);
-    assert_eq!(
-        as_f64(&post_undo),
-        6.0,
-        "A6 should be back at row 5 after undo, got {:?}",
-        post_undo
-    );
-
-    engine.redo().expect("redo structural");
-
-    let post_redo = cell_at(&engine, &sid, 7, 0);
-    assert_eq!(
-        as_f64(&post_redo),
-        6.0,
-        "A6 should be at row 7 after redo, got {:?}",
-        post_redo
     );
 }

@@ -1,262 +1,36 @@
 use cell_types::{CellId, SheetId};
-use value_types::{CellValue, ComputeError};
+use value_types::ComputeError;
 
 use crate::mirror::CellMirror;
 use crate::snapshot::RecalcResult;
-use crate::storage::cells::values as cell_values;
 use crate::storage::engine::mutation::CellInput;
-use crate::storage::engine::mutation_coordinator::MutationCoordinator;
 use crate::storage::engine::stores::EngineStores;
-use compute_document::hex::id_to_hex;
 
-use super::{
-    NO_OLD_FORMULA_SENTINEL, cell_id_for_region_guard, find_cell_id_at,
-    persist_cell_formula_identity, write_cell_to_yrs,
-};
-
-fn patch_direct_edit_before_snapshot(
-    result: &mut RecalcResult,
-    cell_id: CellId,
-    sheet_id: &SheetId,
-    row: u32,
-    col: u32,
-    old_value: &CellValue,
-    old_formula: Option<&String>,
-) {
-    let cell_id_str = cell_id.to_uuid_string();
-    let sheet_id_str = sheet_id.to_uuid_string();
-
-    for change in &mut result.changed_cells {
-        let same_cell_id = change.cell_id == cell_id_str;
-        let same_position = change.sheet_id == sheet_id_str
-            && change
-                .position
-                .as_ref()
-                .is_some_and(|pos| pos.row == row && pos.col == col);
-
-        if same_cell_id || same_position {
-            change.old_value = Some(old_value.clone());
-            if change.old_formula.is_none() {
-                change.old_formula = Some(
-                    old_formula
-                        .cloned()
-                        .unwrap_or_else(|| NO_OLD_FORMULA_SENTINEL.to_string()),
-                );
-            }
-        }
-    }
-}
-
-fn validate_cell_input_before_write(
-    stores: &EngineStores,
-    mirror: &CellMirror,
-    sheet_id: &SheetId,
-    row: u32,
-    col: u32,
-    input: &CellInput,
-) -> Result<(), ComputeError> {
-    let cell_id = cell_id_for_region_guard(stores, mirror, sheet_id, row, col);
-    stores
-        .compute
-        .validate_region_partial_writes(mirror, &[(*sheet_id, cell_id, row, col, input.clone())])
-}
+use super::super::mutation_handlers::{mutation_set_cells, mutation_set_cells_by_position};
 
 pub(in crate::storage::engine) fn set_cell_value_parsed(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
-    mutation: &mut MutationCoordinator,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
     raw_input: &str,
 ) -> Result<RecalcResult, ComputeError> {
-    let input = CellInput::Parse {
-        text: raw_input.to_string(),
+    let input = if raw_input.trim().is_empty() {
+        CellInput::Clear
+    } else {
+        CellInput::Parse {
+            text: raw_input.to_owned(),
+        }
     };
-    validate_cell_input_before_write(stores, mirror, sheet_id, row, col, &input)?;
-
-    // Snapshot old value from mirror BEFORE the cell_values write updates it.
-    // Try to resolve cell_id from grid index; for new cells, old value is Null.
-    let pre_cell_id = stores
-        .grid_indexes
-        .get(sheet_id)
-        .and_then(|g| g.cell_id_at(row, col));
-    let old_val = pre_cell_id
-        .as_ref()
-        .and_then(|cid| {
-            stores
-                .compute
-                .get_cell_value(mirror, cid)
-                .cloned()
-                .or_else(|| mirror.get_cell_value(cid).cloned())
-        })
-        .unwrap_or(CellValue::Null);
-    let old_formula = pre_cell_id
-        .as_ref()
-        .and_then(|cid| stores.compute.get_formula(cid).map(str::to_owned));
-
-    mutation.observer.set_suppressed(true);
-    {
-        // Borrow `stores.storage` immutably for the duration of this block;
-        // the format-aware dispatch inside `set_cell_value` reads its
-        // cascade through this borrow.
-        let storage_ref: &crate::storage::YrsStorage = &stores.storage;
-        let doc = storage_ref.doc();
-        let sheets = storage_ref.sheets();
-        // Route identity through the in-memory grid_index — the sole
-        // identity authority mapping (sheet, row, col) ↔ CellId.
-        let Some(grid_index) = stores.grid_indexes.get_mut(sheet_id) else {
-            mutation.observer.set_suppressed(false);
-            return Ok(RecalcResult::empty());
-        };
-        // sub-scope/A: carry the raw user string as `CellInput::Parse { text }`.
-        // The dispatcher inside `cell_values::set_cell_value` classifies
-        // exactly once via `CellWrite::from_user_string`; no downstream
-        // consumer re-sniffs `starts_with('=')`.
-        cell_values::set_cell_value(
-            storage_ref,
-            doc,
-            sheets,
-            mirror,
-            sheet_id,
-            row,
-            col,
-            input.clone(),
-            &stores.grid_id_alloc,
-            grid_index,
-        );
-    }
-    mutation.observer.set_suppressed(false);
-
-    // Look up the cell_id that was created/updated
-    let cell_id = stores
-        .grid_indexes
-        .get_mut(sheet_id)
-        .and_then(|g| g.cell_id_at(row, col))
-        .or_else(|| {
-            let cid = find_cell_id_at(stores, sheet_id, row, col);
-            if let Some(cid) = cid
-                && let Some(grid) = stores.grid_indexes.get_mut(sheet_id)
-            {
-                grid.register_cell(cid, row, col);
-            }
-            cid
-        });
-
-    if let Some(cell_id) = cell_id {
-        {
-            let _guard = mutation.suppress_guard();
-            crate::storage::properties::clear_formula_cache_metadata(
-                stores.storage.doc(),
-                stores.storage.workbook_map(),
-                stores.storage.sheets(),
-                sheet_id,
-                &id_to_hex(cell_id.as_u128()),
-            );
-        }
-        // If the position is beyond GridIndex bounds, rebuild from YArrays
-        // (the cell write may have auto-expanded rowOrder/colOrder)
-        if let Some(grid) = stores.grid_indexes.get(sheet_id) {
-            if row >= grid.row_count() || col >= grid.col_count() {
-                let snap = crate::snapshot::SheetSnapshot {
-                    id: sheet_id.to_uuid_string(),
-                    name: String::new(),
-                    rows: std::cmp::max(grid.row_count(), row + 1),
-                    cols: std::cmp::max(grid.col_count(), col + 1),
-                    cells: vec![],
-                    ranges: vec![],
-                };
-                let mut new_grid = super::super::super::build_grid_from_yrs_for_sheet(
-                    &stores.storage,
-                    *sheet_id,
-                    &snap,
-                    stores.grid_id_alloc.clone(),
-                )?;
-                // Carry over existing cell registrations
-                if let Some(old_grid) = stores.grid_indexes.get(sheet_id) {
-                    for (cid, r, c) in old_grid.cells() {
-                        new_grid.register_cell(cid, r, c);
-                    }
-                }
-                new_grid.register_cell(cell_id, row, col);
-                stores.grid_indexes.insert(*sheet_id, new_grid);
-            } else if let Some(grid) = stores.grid_indexes.get_mut(sheet_id) {
-                grid.register_cell(cell_id, row, col);
-            }
-        }
-        // Format-aware classification already ran inside
-        // `cell_values::set_cell_value`; re-classifying inside
-        // `process_input` (via `compute.set_cell(... raw_input)`) would
-        // be format-BLIND. Pass the resolved hint through `set_cell_with_target`
-        // so the scheduler-side classifier matches the value we just wrote.
-        let target = {
-            let grid = stores.grid_indexes.get(sheet_id);
-            grid.and_then(|g| {
-                use crate::storage::properties;
-                let format = match g.cell_id_at(row, col) {
-                    Some(cid) => {
-                        let cell_hex = compute_document::hex::id_to_hex(cid.as_u128());
-                        properties::get_effective_format(
-                            &stores.storage,
-                            sheet_id,
-                            &cell_hex,
-                            row,
-                            col,
-                            None,
-                            Some(g),
-                            mirror.get_sheet(sheet_id),
-                        )
-                    }
-                    None => properties::get_positional_format(
-                        &stores.storage,
-                        sheet_id,
-                        row,
-                        col,
-                        Some(g),
-                        mirror.get_sheet(sheet_id),
-                    ),
-                };
-                format
-                    .number_format
-                    .as_deref()
-                    .map(compute_formats::detect_format_type)
-            })
-        };
-        let mut result = stores
-            .compute
-            .set_cell_with_target(mirror, sheet_id, cell_id, row, col, input, target)?;
-        {
-            let _guard = mutation.suppress_guard();
-            persist_cell_formula_identity(stores, mirror, sheet_id, cell_id)?;
-        }
-
-        patch_direct_edit_before_snapshot(
-            &mut result,
-            cell_id,
-            sheet_id,
-            row,
-            col,
-            &old_val,
-            old_formula.as_ref(),
-        );
-        return Ok(result);
-    }
-
-    Ok(RecalcResult::empty())
+    mutation_set_cells_by_position(stores, mirror, vec![(*sheet_id, row, col, input)], false)
 }
 
-/// Write a single cell value as literal text (forcedTextMode), then build
-/// edits for ComputeCore.
-///
-/// Empty input maps to `CellInput::Clear` (removes the cell); non-empty
-/// input strips the optional leading apostrophe and stores verbatim via
-/// `CellInput::Literal { text }`. This is the sub-scope distinction: an
-/// empty-string force-text edit *clears* the cell rather than storing
-/// `Text("")`, preserving pre-sub-scope behaviour for the force-text path.
+/// Force text after stripping the optional Excel apostrophe prefix.
+/// Empty input clears the cell; an explicit Literal("") retains empty text.
 pub(in crate::storage::engine) fn set_cell_value_as_text(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
-    mutation: &mut MutationCoordinator,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -265,193 +39,26 @@ pub(in crate::storage::engine) fn set_cell_value_as_text(
     let input = if value.is_empty() {
         CellInput::Clear
     } else {
-        let stored = value.strip_prefix('\'').unwrap_or(value);
         CellInput::Literal {
-            text: stored.to_string(),
+            text: value.strip_prefix('\'').unwrap_or(value).to_owned(),
         }
     };
-    validate_cell_input_before_write(stores, mirror, sheet_id, row, col, &input)?;
-
-    // Snapshot old value from mirror BEFORE the write updates it.
-    let pre_cell_id = stores
-        .grid_indexes
-        .get(sheet_id)
-        .and_then(|g| g.cell_id_at(row, col));
-    let old_val = pre_cell_id
-        .as_ref()
-        .and_then(|cid| {
-            stores
-                .compute
-                .get_cell_value(mirror, cid)
-                .cloned()
-                .or_else(|| mirror.get_cell_value(cid).cloned())
-        })
-        .unwrap_or(CellValue::Null);
-    let old_formula = pre_cell_id
-        .as_ref()
-        .and_then(|cid| stores.compute.get_formula(cid).map(str::to_owned));
-
-    mutation.observer.set_suppressed(true);
-    {
-        let storage_ref: &crate::storage::YrsStorage = &stores.storage;
-        let doc = storage_ref.doc();
-        let sheets = storage_ref.sheets();
-        let Some(grid_index) = stores.grid_indexes.get_mut(sheet_id) else {
-            mutation.observer.set_suppressed(false);
-            return Ok(RecalcResult::empty());
-        };
-        cell_values::set_cell_value(
-            storage_ref,
-            doc,
-            sheets,
-            mirror,
-            sheet_id,
-            row,
-            col,
-            input.clone(),
-            &stores.grid_id_alloc,
-            grid_index,
-        );
-    }
-    mutation.observer.set_suppressed(false);
-
-    let cell_id = find_cell_id_at(stores, sheet_id, row, col);
-    if let Some(cell_id) = cell_id {
-        {
-            let _guard = mutation.suppress_guard();
-            crate::storage::properties::clear_formula_cache_metadata(
-                stores.storage.doc(),
-                stores.storage.workbook_map(),
-                stores.storage.sheets(),
-                sheet_id,
-                &id_to_hex(cell_id.as_u128()),
-            );
-        }
-        if let Some(grid) = stores.grid_indexes.get_mut(sheet_id) {
-            grid.register_cell(cell_id, row, col);
-        }
-        let mut result = stores
-            .compute
-            .set_cell(mirror, sheet_id, cell_id, row, col, input)?;
-        {
-            let _guard = mutation.suppress_guard();
-            persist_cell_formula_identity(stores, mirror, sheet_id, cell_id)?;
-        }
-
-        patch_direct_edit_before_snapshot(
-            &mut result,
-            cell_id,
-            sheet_id,
-            row,
-            col,
-            &old_val,
-            old_formula.as_ref(),
-        );
-        return Ok(result);
-    }
-
-    Ok(RecalcResult::empty())
+    mutation_set_cells_by_position(stores, mirror, vec![(*sheet_id, row, col, input)], false)
 }
 
-/// Set a single cell with ORIGIN_USER_EDIT write, mirror update, grid registration, and recalc.
-#[allow(clippy::too_many_arguments)]
 pub(in crate::storage::engine) fn set_cell(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
-    mutation: &mut MutationCoordinator,
     sheet_id: &SheetId,
     cell_id: CellId,
     row: u32,
     col: u32,
-    input: &crate::storage::engine::mutation::CellInput,
+    input: &CellInput,
 ) -> Result<RecalcResult, ComputeError> {
-    use crate::storage::engine::mutation::CellInput;
-    stores
-        .compute
-        .validate_region_partial_writes(mirror, &[(*sheet_id, cell_id, row, col, input.clone())])?;
-
-    let (value, formula) = match input {
-        CellInput::Clear => (CellValue::Null, None),
-        CellInput::Literal { text } => (CellValue::Text(text.clone().into()), None),
-        CellInput::Value { value } => (value.clone(), None),
-        CellInput::Parse { text } => {
-            let trimmed = text.trim();
-            if trimmed.is_empty() {
-                (CellValue::Null, None)
-            } else if let Some(stripped) = trimmed.strip_prefix('\'') {
-                // Leading apostrophe = forced text mode (Excel convention).
-                (CellValue::Text(stripped.to_string().into()), None)
-            } else if trimmed.starts_with('=') {
-                // Strip leading '=' for Yrs storage — KEY_FORMULA stores the
-                // formula body only; get_raw_value() re-adds the '=' on read.
-                (
-                    CellValue::Null,
-                    Some(trimmed.strip_prefix('=').unwrap_or(trimmed).to_string()),
-                )
-            } else {
-                (super::super::parse_rich_value(trimmed), None)
-            }
-        }
-    };
-
-    // Snapshot before-side fields before the Yrs write and mirror update replace
-    // formula/value state for this cell.
-    let old_val = stores
-        .compute
-        .get_cell_value(mirror, &cell_id)
-        .cloned()
-        .or_else(|| mirror.get_cell_value(&cell_id).cloned())
-        .unwrap_or(CellValue::Null);
-    let old_formula = stores.compute.get_formula(&cell_id).map(str::to_owned);
-
-    mutation.observer.set_suppressed(true);
-    write_cell_to_yrs(
+    mutation_set_cells(
         stores,
-        sheet_id,
-        cell_id,
-        row,
-        col,
-        &value,
-        formula.as_deref(),
-    );
-    crate::storage::properties::clear_formula_cache_metadata(
-        stores.storage.doc(),
-        stores.storage.workbook_map(),
-        stores.storage.sheets(),
-        sheet_id,
-        &id_to_hex(cell_id.as_u128()),
-    );
-    mutation.observer.set_suppressed(false);
-
-    mirror.apply_edit(
-        sheet_id,
-        cell_id,
-        cell_types::SheetPos::new(row, col),
-        value,
-        None,
-    );
-
-    if let Some(grid) = stores.grid_indexes.get_mut(sheet_id) {
-        grid.register_cell(cell_id, row, col);
-    }
-
-    let mut result = stores
-        .compute
-        .set_cell(mirror, sheet_id, cell_id, row, col, input)?;
-    {
-        let _guard = mutation.suppress_guard();
-        persist_cell_formula_identity(stores, mirror, sheet_id, cell_id)?;
-    }
-
-    patch_direct_edit_before_snapshot(
-        &mut result,
-        cell_id,
-        sheet_id,
-        row,
-        col,
-        &old_val,
-        old_formula.as_ref(),
-    );
-
-    Ok(result)
+        mirror,
+        vec![(*sheet_id, cell_id, row, col, input.clone())],
+        false,
+    )
 }

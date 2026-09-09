@@ -9,7 +9,7 @@ use crate::{DataTableRegion, SheetData, WorkbookMetadata};
 
 /// Workbook-owned aggregate for active OOXML data features.
 ///
-/// Existing parser, Yrs, and writer compatibility fields still project out of
+/// Existing parser, storage, and writer compatibility fields still project out of
 /// this shape during Round 9 migration. New data-feature surfaces should attach
 /// here first, then add compatibility projections only where older call sites
 /// still require them.

@@ -7,7 +7,7 @@
 //! coordinates (`SparklineCellAddress` + `SparklineDataRange`, both
 //! numeric), and the runtime path is XLSX parser → `features.rs`
 //! (`convert_sparkline_groups`, which parses the XML strings once into
-//! typed form) → `SheetData.sparklines` → Yrs hydration
+//! typed form) → `SheetData.sparklines` → native sparkline metadata
 //! (`storage::infra::hydration::features::hydrate_sparklines`). No
 //! compute-core snapshot surface consumes sparklines, so there is no
 //! typed-to-string-to-typed hop to eliminate here.

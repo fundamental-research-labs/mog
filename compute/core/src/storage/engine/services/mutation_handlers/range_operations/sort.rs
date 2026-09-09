@@ -1,11 +1,9 @@
 use cell_types::{CellId, SheetId, SheetPos};
 use compute_document::hex::id_to_hex;
 use value_types::{CellValue, ComputeError};
-use yrs::{Map, Transact};
 
 use crate::mirror::CellMirror;
 use crate::snapshot::RecalcResult;
-use crate::storage::engine::mutation_coordinator::MutationCoordinator;
 use crate::storage::engine::services::resolved_formats;
 use crate::storage::engine::settings::EngineSettings;
 use crate::storage::engine::stores::EngineStores;
@@ -89,7 +87,7 @@ fn capture_filter_range_anchors(
         end_row,
         end_col,
     };
-    filters::get_filters_in_sheet(stores.storage.doc(), stores.storage.sheets(), sheet_id)
+    filters::get_filters_in_sheet(&stores.storage, sheet_id)
         .into_iter()
         .filter_map(|filter| {
             let header_start =
@@ -125,7 +123,7 @@ fn capture_filter_range_anchors(
 
 fn ensure_filter_anchor_id(
     stores: &mut EngineStores,
-    mirror: &CellMirror,
+    mirror: &mut CellMirror,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -138,17 +136,13 @@ fn ensure_filter_anchor_id(
 
 fn restore_filter_range_anchors(
     stores: &mut EngineStores,
-    mirror: &CellMirror,
+    mirror: &mut CellMirror,
     sheet_id: &SheetId,
     anchors: &[FilterRangeAnchor],
 ) -> Result<(), ComputeError> {
     for anchor in anchors {
-        let Some(mut filter) = filters::get_filter(
-            stores.storage.doc(),
-            stores.storage.sheets(),
-            sheet_id,
-            &anchor.filter_id,
-        ) else {
+        let Some(mut filter) = filters::get_filter(&stores.storage, sheet_id, &anchor.filter_id)
+        else {
             continue;
         };
         let Some(header_start_cell_id) = ensure_filter_anchor_id(
@@ -182,12 +176,7 @@ fn restore_filter_range_anchors(
         filter.header_start_cell_id = header_start_cell_id;
         filter.header_end_cell_id = header_end_cell_id;
         filter.data_end_cell_id = data_end_cell_id;
-        filters::upsert_filter_state(
-            stores.storage.doc(),
-            stores.storage.sheets(),
-            sheet_id,
-            &filter,
-        )?;
+        filters::upsert_filter_state(&mut stores.storage, sheet_id, &filter)?;
     }
     Ok(())
 }
@@ -201,7 +190,6 @@ fn restore_filter_range_anchors(
 pub(in crate::storage::engine) fn mutation_sort_range(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
-    mutation: &mut MutationCoordinator,
     settings: &EngineSettings,
     sheet_id: &SheetId,
     start_row: u32,
@@ -262,10 +250,12 @@ pub(in crate::storage::engine) fn mutation_sort_range(
                 .unwrap_or(CellValue::Null)
         };
 
+        let hidden_rows =
+            crate::storage::engine::services::queries::get_hidden_rows(stores, sheet_id)
+                .into_iter()
+                .collect();
         sorting::compute_sorted_row_order_by_columns_with_scope(
-            stores.storage.doc(),
-            stores.storage.sheets(),
-            *sheet_id,
+            &hidden_rows,
             &range,
             &criteria,
             has_headers,
@@ -309,8 +299,15 @@ pub(in crate::storage::engine) fn mutation_sort_range(
     let has_ranges =
         sort_range_intersects_range_view(mirror, sheet_id, start_row, start_col, end_row, end_col);
 
+    crate::storage::engine::history::structure::capture_sort(
+        stores,
+        mirror,
+        *sheet_id,
+        &permutation,
+        has_ranges,
+    );
     if has_ranges {
-        let recalc = sort_range_backed_rows(stores, mirror, mutation, sheet_id, &permutation)?;
+        let recalc = sort_range_backed_rows(stores, mirror, sheet_id, &permutation)?;
         restore_filter_range_anchors(stores, mirror, sheet_id, &filter_range_anchors)?;
         return Ok(recalc);
     }
@@ -318,56 +315,21 @@ pub(in crate::storage::engine) fn mutation_sort_range(
     // ===================================================================
     // Per-cell sort path (existing code — unchanged)
     // ===================================================================
-    let grid_for_reorder =
-        stores
-            .grid_indexes
-            .get(sheet_id)
-            .ok_or_else(|| ComputeError::SheetNotFound {
-                sheet_id: id_to_hex(sheet_id.as_u128()).to_string(),
-            })?;
-    mutation.observer.set_suppressed(true);
-    sorting::reorder_rows_in_range(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        *sheet_id,
-        &range,
-        &sort_result.sorted_indices,
-        has_headers,
-        grid_for_reorder,
-    );
-    mutation.observer.set_suppressed(false);
-
     if let Some(grid) = stores.grid_indexes.get_mut(sheet_id) {
         grid.sort_rows(&permutation);
     }
 
     let mut edits: Vec<(SheetId, CellId, u32, u32, CellValue, Option<String>)> = Vec::new();
 
-    // Pass 1: update mirror positions for every cell in the sort range,
-    // preserving the pre-sort IdentityFormula. XLSX hydration leaves
-    // KEY_FORMULA_TEMPLATE empty in yrs, so `identity_formula` coming
-    // back from `read_cell_from_yrs` is typically `None`;
-    // `bulk_parse_and_register` populated the identity in the mirror
-    // at hydration, which we must keep so refs still point at the cells
-    // that moved with them.
+    // Move values and identity formulas together so references follow their cells.
     for new_row in data_start..=end_row {
         for col in start_col..=end_col {
             if let Some(cell_id) = stores
                 .grid_indexes
                 .get(sheet_id)
                 .and_then(|g| g.cell_id_at(new_row, col))
-                && let Some((value, _, identity_formula)) =
-                    stores.storage.read_cell_from_yrs(sheet_id, &cell_id)
             {
-                let preserved_identity =
-                    identity_formula.or_else(|| mirror.get_formula(&cell_id).cloned());
-                mirror.apply_edit(
-                    sheet_id,
-                    cell_id,
-                    SheetPos::new(new_row, col),
-                    value.clone(),
-                    preserved_identity,
-                );
+                mirror.move_cell(&cell_id, sheet_id, SheetPos::new(new_row, col));
             }
         }
     }
@@ -384,25 +346,14 @@ pub(in crate::storage::engine) fn mutation_sort_range(
                 .grid_indexes
                 .get(sheet_id)
                 .and_then(|g| g.cell_id_at(new_row, col))
-                && let Some((value, formula, _)) =
-                    stores.storage.read_cell_from_yrs(sheet_id, &cell_id)
+                && let Some(value) = mirror.get_cell_value_raw(&cell_id).cloned()
             {
-                // Resolve the post-sort formula body, if any. Preference order:
-                // 1. Render the preserved IdentityFormula to an A1 body — refs
-                //    follow the cells that moved.
-                // 2. Fall back to the raw yrs formula body.
-                // 3. No formula — the cell carries a plain typed value.
-                let formula_body = if let Some(id_formula) = mirror.get_formula(&cell_id).cloned() {
+                let formula_body = if let Some(id_formula) = mirror.get_formula(&cell_id) {
                     let lookup = crate::mirror::MirrorPositionLookup::new(mirror, *sheet_id);
-                    let a1 = compute_parser::to_a1_string(&id_formula, &lookup);
-                    let body = a1.strip_prefix('=').unwrap_or(&a1).to_string();
-                    if body.is_empty() {
-                        formula.clone()
-                    } else {
-                        Some(body)
-                    }
+                    let a1 = compute_parser::to_a1_string(id_formula, &lookup);
+                    Some(a1.strip_prefix('=').unwrap_or(&a1).to_string())
                 } else {
-                    formula.clone()
+                    stores.compute.get_formula(&cell_id).map(str::to_owned)
                 };
 
                 edits.push((*sheet_id, cell_id, new_row, col, value, formula_body));
@@ -414,87 +365,9 @@ pub(in crate::storage::engine) fn mutation_sort_range(
         return Ok(RecalcResult::empty());
     }
 
-    // Persist the post-sort identity positions into the authoritative Yrs
-    // gridIndex mirror in one user-edit transaction. The visible sort above
-    // mutates GridIndex + CellMirror, but undo/redo only tracks Yrs writes;
-    // without this transaction a per-cell sort never reaches the undo stack.
-    //
-    // Remove all old CellId -> position bindings first, then write the new
-    // bindings, so rows containing blanks do not leave stale posToId entries
-    // at positions no moved cell overwrites.
-    //
-    // The same transaction also rewrites yrs KEY_FORMULA to the re-rendered
-    // A1 body so xlsx export — which prefers the raw yrs formula for
-    // lossless round-trip — sees the post-sort A1 refs, and the entire sort
-    // remains one undo step.
-    {
-        use crate::storage::cells::values::{
-            remove_cell_position_from_yrs, write_cell_position_to_yrs,
-        };
-        use compute_document::schema::{KEY_CELLS, KEY_FORMULA};
-        use compute_document::undo::ORIGIN_USER_EDIT;
-        use yrs::{Any, Origin, Out};
+    crate::storage::engine::cell_metadata::refresh(&stores.storage, mirror, stores.layout_metrics);
 
-        let sheet_hex = id_to_hex(sheet_id.as_u128());
-        let doc = stores.storage.doc();
-        let sheets = stores.storage.sheets();
-        let position_writes: Vec<(String, String, String)> = stores
-            .grid_indexes
-            .get(sheet_id)
-            .map(|grid| {
-                edits
-                    .iter()
-                    .filter_map(|(_, cell_id, row, col, _, _)| {
-                        let row_hex = grid.row_id_hex(*row)?;
-                        let col_hex = grid.col_id_hex(*col)?;
-                        Some((
-                            String::from(id_to_hex(cell_id.as_u128())),
-                            String::from(row_hex),
-                            String::from(col_hex),
-                        ))
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-
-        mutation.observer.set_suppressed(true);
-        let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-        for (cell_hex, _, _) in &position_writes {
-            remove_cell_position_from_yrs(&mut txn, sheets, &sheet_hex, cell_hex);
-        }
-        for (cell_hex, row_hex, col_hex) in &position_writes {
-            write_cell_position_to_yrs(&mut txn, sheets, &sheet_hex, cell_hex, row_hex, col_hex);
-        }
-        if let Some(Out::YMap(sheet_map)) = sheets.get(&txn, &sheet_hex)
-            && let Some(Out::YMap(cells_map)) = sheet_map.get(&txn, KEY_CELLS)
-        {
-            for (_, cell_id, _, _, _, formula_body) in &edits {
-                let Some(body) = formula_body.as_deref() else {
-                    continue;
-                };
-                // KEY_FORMULA stores the body WITHOUT the leading '='. The
-                // identity-rendered branch in Pass 2 has already stripped it;
-                // the fallback branch passes through the raw yrs formula,
-                // which `read_cell_from_yrs` re-prepends '=' onto — strip it
-                // again here so we never double-prefix on the next read.
-                let body = body.strip_prefix('=').unwrap_or(body);
-                if body.is_empty() {
-                    continue;
-                }
-                let cell_hex = id_to_hex(cell_id.as_u128());
-                if let Some(Out::YMap(cell_map)) = cells_map.get(&txn, &cell_hex) {
-                    cell_map.insert(
-                        &mut txn,
-                        KEY_FORMULA,
-                        Any::String(std::sync::Arc::from(body)),
-                    );
-                }
-            }
-        }
-        drop(txn);
-        mutation.observer.set_suppressed(false);
-    }
-
+    // Publish the moved authored values and recalculate dependents.
     let mut recalc = stores.compute.set_cells_raw_with_trust(
         mirror,
         &edits,

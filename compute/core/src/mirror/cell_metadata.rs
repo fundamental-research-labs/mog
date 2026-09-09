@@ -25,6 +25,10 @@ pub(crate) enum FormulaResultMode {
 /// mutable storage interface. Queries use the current mirror identities and
 /// formatting ranges, including positions that have no allocated cell.
 pub(crate) trait CellMetadataProvider: std::fmt::Debug + Send + Sync {
+    /// Optional implementation identity for allocation-free native refresh checks.
+    fn as_any(&self) -> Option<&dyn std::any::Any> {
+        None
+    }
     fn formula_result_mode(&self, _sheet: &SheetId, _cell: &CellId) -> Option<FormulaResultMode> {
         None
     }
@@ -36,7 +40,7 @@ pub(crate) trait CellMetadataProvider: std::fmt::Debug + Send + Sync {
     }
     /// Canonical live visibility, including imported manual and outline state.
     /// None leaves standalone mirrors responsible for their own visibility.
-    fn row_hidden(&self, _sheet: &SheetId, _row: u32) -> Option<bool> {
+    fn row_hidden(&self, _mirror: &CellMirror, _sheet: &SheetId, _row: u32) -> Option<bool> {
         None
     }
     fn is_row_filtered(&self, _mirror: &CellMirror, _sheet: &SheetId, _row: u32) -> bool {

@@ -3,10 +3,11 @@
 //! These methods replace multi-step TypeScript orchestration logic with single
 //! Rust calls, eliminating redundant IPC round-trips.
 
-use super::YrsComputeEngine;
+use super::ComputeEngine;
 use crate::snapshot::{
     CalcMode, CalculationSettings, ChangeKind, MutationResult, WorkbookSettingsChange,
 };
+use crate::storage::engine::history::metadata::capture_workbook_field;
 use crate::storage::properties;
 use crate::storage::sheet::settings as sheets;
 use bridge_core as bridge;
@@ -15,7 +16,7 @@ use compute_wire::mutation::serialize_multi_viewport_patches;
 use value_types::ComputeError;
 
 fn update_calculation_settings(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     update: impl FnOnce(&mut CalculationSettings),
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
     let mut settings = super::services::queries::get_workbook_settings(&engine.stores);
@@ -24,15 +25,14 @@ fn update_calculation_settings(
     update(&mut post_calc);
     settings.calculation_settings = Some(post_calc);
 
+    capture_workbook_field!(engine.stores.storage, settings.calculation_settings);
     crate::storage::workbook::settings::set_settings(
-        engine.stores.storage.doc(),
-        engine.stores.storage.workbook_map(),
+        &mut engine.stores.storage.metadata,
         &settings,
     );
 
     let post_calc = crate::storage::workbook::settings::get_calculation_settings(
-        engine.stores.storage.doc(),
-        engine.stores.storage.workbook_map(),
+        &engine.stores.storage.metadata,
     );
     engine.sync_runtime_calculation_settings(&pre_calc, &post_calc);
 
@@ -51,13 +51,13 @@ fn update_calculation_settings(
 }
 
 #[bridge::api(
-    service = "YrsComputeEngine",
+    service = "ComputeEngine",
     key = "doc_id",
     group = "atomics",
     fn_prefix = "compute",
     crate_path = "compute_core"
 )]
-impl YrsComputeEngine {
+impl ComputeEngine {
     // ===================================================================
     // Atomic Settings Methods
     // ===================================================================
@@ -70,19 +70,21 @@ impl YrsComputeEngine {
         &mut self,
         mode: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let calc_mode = match mode {
-            "auto" => CalcMode::Auto,
-            "autoNoTable" => CalcMode::AutoNoTable,
-            "manual" => CalcMode::Manual,
-            _ => {
-                return Err(ComputeError::Eval {
-                    message: format!("Invalid calculation mode: {mode}"),
-                });
-            }
-        };
+        self.with_history(|engine| {
+            let calc_mode = match mode {
+                "auto" => CalcMode::Auto,
+                "autoNoTable" => CalcMode::AutoNoTable,
+                "manual" => CalcMode::Manual,
+                _ => {
+                    return Err(ComputeError::Eval {
+                        message: format!("Invalid calculation mode: {mode}"),
+                    });
+                }
+            };
 
-        update_calculation_settings(self, |calc| {
-            calc.calc_mode = calc_mode;
+            update_calculation_settings(engine, |calc| {
+                calc.calc_mode = calc_mode;
+            })
         })
     }
 
@@ -92,8 +94,10 @@ impl YrsComputeEngine {
         &mut self,
         n: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        update_calculation_settings(self, |calc| {
-            calc.max_iterations = n;
+        self.with_history(|engine| {
+            update_calculation_settings(engine, |calc| {
+                calc.max_iterations = n;
+            })
         })
     }
 
@@ -103,8 +107,10 @@ impl YrsComputeEngine {
         &mut self,
         enabled: bool,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        update_calculation_settings(self, |calc| {
-            calc.enable_iterative_calculation = enabled;
+        self.with_history(|engine| {
+            update_calculation_settings(engine, |calc| {
+                calc.enable_iterative_calculation = enabled;
+            })
         })
     }
 
@@ -114,15 +120,18 @@ impl YrsComputeEngine {
         &mut self,
         threshold: f64,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        // The bridge `threshold: f64` parameter is preserved (not a boundary
-        // type field); reject non-finite values explicitly so they never
-        // reach the FiniteF64-typed setting.
-        let threshold_finite =
-            value_types::FiniteF64::new(threshold).ok_or_else(|| ComputeError::InvalidInput {
-                message: "convergence threshold must be finite".to_string(),
+        self.with_history(|engine| {
+            // The bridge `threshold: f64` parameter is preserved (not a boundary
+            // type field); reject non-finite values explicitly so they never
+            // reach the FiniteF64-typed setting.
+            let threshold_finite = value_types::FiniteF64::new(threshold).ok_or_else(|| {
+                ComputeError::InvalidInput {
+                    message: "convergence threshold must be finite".to_string(),
+                }
             })?;
-        update_calculation_settings(self, |calc| {
-            calc.max_change = threshold_finite;
+            update_calculation_settings(engine, |calc| {
+                calc.max_change = threshold_finite;
+            })
         })
     }
 
@@ -132,8 +141,10 @@ impl YrsComputeEngine {
         &mut self,
         enabled: bool,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        update_calculation_settings(self, |calc| {
-            calc.full_precision = !enabled;
+        self.with_history(|engine| {
+            update_calculation_settings(engine, |calc| {
+                calc.full_precision = !enabled;
+            })
         })
     }
 
@@ -157,57 +168,57 @@ impl YrsComputeEngine {
         end_col: u32,
         mode: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        match mode {
-            "all" => {
-                // Clear contents (values + formulas)
-                let (_patches1, r1) =
-                    self.clear_range(sheet_id, start_row, start_col, end_row, end_col)?;
-                // Clear formats
-                let ranges = vec![(start_row, start_col, end_row, end_col)];
-                let _r2 = {
-                    let _guard = self.mutation.suppress_guard();
-                    super::services::formatting::clear_format_for_ranges(
-                        &mut self.stores,
-                        sheet_id,
-                        &ranges,
-                    )?
-                };
-                // Clear hyperlinks
-                self.clear_hyperlinks_in_range(sheet_id, start_row, start_col, end_row, end_col)?;
-                let patches = self.flush_viewport_patches();
-                Ok((patches, r1))
+        self.with_history(|engine| {
+            match mode {
+                "all" => {
+                    // Clear contents (values + formulas)
+                    let (_patches1, mut r1) =
+                        engine.clear_range(sheet_id, start_row, start_col, end_row, end_col)?;
+                    // Clear formats
+                    let ranges = vec![(start_row, start_col, end_row, end_col)];
+                    let (_, r2) = {
+                        super::services::formatting::clear_format_for_ranges(
+                            &mut engine.stores,
+                            &mut engine.mirror,
+                            sheet_id,
+                            &ranges,
+                        )?
+                    };
+                    // Clear hyperlinks
+                    engine.clear_hyperlinks_in_range(
+                        sheet_id, start_row, start_col, end_row, end_col,
+                    )?;
+                    r1.property_changes.extend(r2.property_changes);
+                    let value_patches = engine.flush_viewport_patches();
+                    let format_patches = engine.produce_full_viewport_patches(sheet_id);
+                    let patches = compute_wire::mutation::concat_multi_viewport_patches(&[
+                        value_patches,
+                        format_patches,
+                    ]);
+                    Ok((patches, r1))
+                }
+                "contents" => {
+                    let (_patches1, result) =
+                        engine.clear_range(sheet_id, start_row, start_col, end_row, end_col)?;
+                    let patches = engine.flush_viewport_patches();
+                    Ok((patches, result))
+                }
+                "formats" => engine
+                    .clear_format_for_ranges(sheet_id, &[(start_row, start_col, end_row, end_col)]),
+                "hyperlinks" => {
+                    engine.clear_hyperlinks_in_range(
+                        sheet_id, start_row, start_col, end_row, end_col,
+                    )?;
+                    Ok((
+                        serialize_multi_viewport_patches(&[]),
+                        MutationResult::empty(),
+                    ))
+                }
+                _ => Err(ComputeError::Eval {
+                    message: format!("Invalid clear mode: {mode}"),
+                }),
             }
-            "contents" => {
-                let (_patches1, result) =
-                    self.clear_range(sheet_id, start_row, start_col, end_row, end_col)?;
-                let patches = self.flush_viewport_patches();
-                Ok((patches, result))
-            }
-            "formats" => {
-                let ranges = vec![(start_row, start_col, end_row, end_col)];
-                let (affected_cells, result) = {
-                    let _guard = self.mutation.suppress_guard();
-                    super::services::formatting::clear_format_for_ranges(
-                        &mut self.stores,
-                        sheet_id,
-                        &ranges,
-                    )?
-                };
-                let _patches = self.produce_format_change_patches(sheet_id, &affected_cells);
-                let patches = self.flush_viewport_patches();
-                Ok((patches, result))
-            }
-            "hyperlinks" => {
-                self.clear_hyperlinks_in_range(sheet_id, start_row, start_col, end_row, end_col)?;
-                Ok((
-                    serialize_multi_viewport_patches(&[]),
-                    MutationResult::empty(),
-                ))
-            }
-            _ => Err(ComputeError::Eval {
-                message: format!("Invalid clear mode: {mode}"),
-            }),
-        }
+        })
     }
 
     // ===================================================================
@@ -237,13 +248,7 @@ impl YrsComputeEngine {
         let cell_hex = super::services::queries::get_cell_id_at(&self.stores, sheet_id, row, col);
         match cell_hex {
             Some(hex) => {
-                let locked = properties::is_cell_locked(
-                    self.stores.storage.doc(),
-                    self.stores.storage.workbook_map(),
-                    self.stores.storage.sheets(),
-                    sheet_id,
-                    &hex,
-                );
+                let locked = properties::is_cell_locked(&self.stores.storage, sheet_id, &hex);
                 !locked
             }
             // No cell at position — defaults to locked
@@ -263,8 +268,7 @@ impl YrsComputeEngine {
         }
 
         let settings = sheets::get_sheet_settings_with_layout_metrics(
-            self.stores.storage.doc(),
-            self.stores.storage.sheets(),
+            &self.stores.storage,
             sheet_id,
             self.stores.layout_metrics,
         );
@@ -293,25 +297,31 @@ impl YrsComputeEngine {
     /// Freeze a number of rows, preserving the current column freeze.
     #[bridge::write]
     pub fn freeze_rows(
-        &self,
+        &mut self,
         sheet_id: &SheetId,
         count: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let current = super::services::queries::get_frozen_panes_query(&self.stores, sheet_id);
-        let (_patches, result) = self.set_frozen_panes(sheet_id, count, current.cols)?;
-        Ok((serialize_multi_viewport_patches(&[]), result))
+        self.with_history(|engine| {
+            let current =
+                super::services::queries::get_frozen_panes_query(&engine.stores, sheet_id);
+            let (_patches, result) = engine.set_frozen_panes(sheet_id, count, current.cols)?;
+            Ok((serialize_multi_viewport_patches(&[]), result))
+        })
     }
 
     /// Freeze a number of columns, preserving the current row freeze.
     #[bridge::write]
     pub fn freeze_columns(
-        &self,
+        &mut self,
         sheet_id: &SheetId,
         count: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let current = super::services::queries::get_frozen_panes_query(&self.stores, sheet_id);
-        let (_patches, result) = self.set_frozen_panes(sheet_id, current.rows, count)?;
-        Ok((serialize_multi_viewport_patches(&[]), result))
+        self.with_history(|engine| {
+            let current =
+                super::services::queries::get_frozen_panes_query(&engine.stores, sheet_id);
+            let (_patches, result) = engine.set_frozen_panes(sheet_id, current.rows, count)?;
+            Ok((serialize_multi_viewport_patches(&[]), result))
+        })
     }
 }
 
@@ -330,7 +340,13 @@ mod tests {
 
     fn simple_snapshot() -> WorkbookSnapshot {
         WorkbookSnapshot {
+            axis_run_high_water_mark: None,
+            identity_high_water_mark: None,
+            canonical_tables: Vec::new(),
             sheets: vec![SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
                 name: "Sheet1".to_string(),
                 rows: 100,
@@ -367,7 +383,7 @@ mod tests {
         }
     }
 
-    fn number_at(engine: &YrsComputeEngine, row: u32, col: u32) -> f64 {
+    fn number_at(engine: &ComputeEngine, row: u32, col: u32) -> f64 {
         match engine
             .mirror()
             .get_cell_value_at(&sheet_id(), SheetPos::new(row, col))
@@ -377,7 +393,7 @@ mod tests {
         }
     }
 
-    fn assert_circular_error_at(engine: &YrsComputeEngine, row: u32, col: u32) {
+    fn assert_circular_error_at(engine: &ComputeEngine, row: u32, col: u32) {
         match engine
             .mirror()
             .get_cell_value_at(&sheet_id(), SheetPos::new(row, col))
@@ -393,7 +409,7 @@ mod tests {
 
     #[test]
     fn atomics_set_calculation_mode_manual() {
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+        let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         engine.set_calculation_mode("manual").unwrap();
 
         let settings = engine.get_workbook_settings();
@@ -403,7 +419,7 @@ mod tests {
 
     #[test]
     fn atomics_set_calculation_mode_auto() {
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+        let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         // First set to manual, then back to auto
         engine.set_calculation_mode("manual").unwrap();
         engine.set_calculation_mode("auto").unwrap();
@@ -415,14 +431,14 @@ mod tests {
 
     #[test]
     fn atomics_set_calculation_mode_invalid() {
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+        let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         let result = engine.set_calculation_mode("invalid");
         assert!(result.is_err());
     }
 
     #[test]
     fn atomics_set_max_iterations() {
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+        let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         engine.set_max_iterations(500).unwrap();
 
         let settings = engine.get_workbook_settings();
@@ -432,7 +448,7 @@ mod tests {
 
     #[test]
     fn atomics_set_iterative_calculation() {
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+        let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         engine.set_iterative_calculation(true).unwrap();
 
         let settings = engine.get_workbook_settings();
@@ -442,7 +458,7 @@ mod tests {
 
     #[test]
     fn atomics_set_iterative_calculation_marks_dirty_for_existing_circular_recalc() {
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+        let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         let sid = sheet_id();
         engine
             .batch_set_cells_by_position(
@@ -482,7 +498,7 @@ mod tests {
 
     #[test]
     fn atomics_clear_range_contents_preserves_formats() {
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+        let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         let sid = sheet_id();
 
         // Set a value first
@@ -499,7 +515,7 @@ mod tests {
 
     #[test]
     fn atomics_clear_range_all() {
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+        let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         let sid = sheet_id();
 
         let result = engine.clear_range_with_mode(&sid, 0, 0, 0, 0, "all");
@@ -508,7 +524,7 @@ mod tests {
 
     #[test]
     fn atomics_clear_range_invalid_mode() {
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+        let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         let sid = sheet_id();
         let result = engine.clear_range_with_mode(&sid, 0, 0, 0, 0, "bogus");
         assert!(result.is_err());
@@ -520,7 +536,7 @@ mod tests {
 
     #[test]
     fn atomics_can_edit_cell_unprotected() {
-        let (engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+        let (engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         let sid = sheet_id();
         // Sheet is not protected — all cells editable
         assert!(engine.can_edit_cell(&sid, 0, 0));
@@ -529,7 +545,7 @@ mod tests {
 
     #[test]
     fn atomics_can_edit_cell_protected_locked_default() {
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+        let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         let sid = sheet_id();
 
         // Protect the sheet
@@ -547,7 +563,7 @@ mod tests {
 
     #[test]
     fn atomics_can_do_structure_op_unprotected() {
-        let (engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+        let (engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         let sid = sheet_id();
         assert!(engine.can_do_structure_op(&sid, "insertRows"));
         assert!(engine.can_do_structure_op(&sid, "deleteColumns"));
@@ -556,7 +572,7 @@ mod tests {
 
     #[test]
     fn atomics_can_do_structure_op_protected_default() {
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+        let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         let sid = sheet_id();
         engine.protect_sheet(&sid, None).unwrap();
 
@@ -568,7 +584,7 @@ mod tests {
 
     #[test]
     fn atomics_can_do_structure_op_unknown_op() {
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+        let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         let sid = sheet_id();
         engine.protect_sheet(&sid, None).unwrap();
         assert!(!engine.can_do_structure_op(&sid, "unknownOp"));
@@ -580,7 +596,7 @@ mod tests {
 
     #[test]
     fn atomics_freeze_rows_preserves_cols() {
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+        let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         let sid = sheet_id();
 
         // Set initial freeze state: 0 rows, 2 cols
@@ -596,7 +612,7 @@ mod tests {
 
     #[test]
     fn atomics_freeze_columns_preserves_rows() {
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+        let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         let sid = sheet_id();
 
         // Set initial freeze state: 3 rows, 0 cols
@@ -612,7 +628,7 @@ mod tests {
 
     #[test]
     fn atomics_freeze_rows_from_zero() {
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+        let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         let sid = sheet_id();
 
         engine.freeze_rows(&sid, 5).unwrap();

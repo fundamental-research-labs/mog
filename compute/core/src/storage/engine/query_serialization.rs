@@ -1,9 +1,7 @@
 //! JSON serialization helpers for query bridge payloads.
 
 use crate::mirror::CellMirror;
-use crate::storage::cells::values as cell_values;
 use cell_types::SheetId;
-use compute_document::hex::id_to_hex;
 use value_types::CellValue;
 
 /// Convert a CellValue to a JSON representation.
@@ -25,35 +23,6 @@ pub(in crate::storage::engine) fn cell_value_to_json(value: &CellValue) -> serde
             "width": image.width,
         }),
     }
-}
-
-/// Convert a CellData to a JSON representation.
-pub(in crate::storage::engine) fn cell_data_to_json(
-    data: &cell_values::CellData,
-) -> serde_json::Value {
-    let mut json = serde_json::json!({
-        "cell_id": id_to_hex(data.cell_id.as_u128()),
-        "row": data.row,
-        "col": data.col,
-    });
-
-    if let Some(ref raw) = data.raw {
-        json["raw"] = cell_value_to_json(raw);
-    }
-    if let Some(ref computed) = data.computed {
-        json["computed"] = cell_value_to_json(computed);
-    }
-    if let Some(ref formula) = data.formula {
-        json["formula"] = serde_json::Value::String(formula.clone());
-    }
-    if let Some(ref hyperlink) = data.hyperlink {
-        json["hyperlink"] = serde_json::Value::String(hyperlink.clone());
-    }
-    if let Some(ref note) = data.note {
-        json["note"] = serde_json::Value::String(note.clone());
-    }
-
-    json
 }
 
 /// Build the `region` JSON value for a cell at `(sheet, row, col)` by

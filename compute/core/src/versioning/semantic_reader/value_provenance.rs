@@ -1,22 +1,13 @@
 use std::collections::BTreeMap;
 
-use compute_document::schema::{
-    KEY_ARRAY_REF, KEY_CELLS, KEY_FORMULA, KEY_FORMULA_AGGREGATE, KEY_FORMULA_DYNAMIC_ARRAY,
-    KEY_FORMULA_METADATA, KEY_FORMULA_REFS, KEY_FORMULA_TEMPLATE, KEY_FORMULA_VOLATILE,
-};
 use serde::Serialize;
 use serde_json::{Number, Value};
 use snapshot_types::versioning::{
     CanonicalCellValue, SemanticObjectDigest, SemanticObjectKind, canonical_digest,
 };
 use value_types::CellValue;
-use yrs::{Map, Out, Transact};
 
-use crate::storage::{
-    engine::YrsComputeEngine,
-    infra::grid_helpers::{get_sheet_submap, sheet_id_to_hex},
-    properties,
-};
+use crate::storage::{engine::ComputeEngine, properties};
 
 use super::{SemanticStateReadError, UNSUPPORTED_CELL_VALUES_DOMAIN, canonicalize_json_value};
 
@@ -52,14 +43,14 @@ impl CellValueProvenance {
 }
 
 pub(super) fn cell_value_provenance(
-    engine: &YrsComputeEngine,
-    sheet_id: &cell_types::SheetId,
+    engine: &ComputeEngine,
+    _sheet_id: &cell_types::SheetId,
     cell_hex: &str,
     props: Option<&properties::CellProperties>,
 ) -> CellValueProvenance {
     let mut provenance = CellValueProvenance::default();
     record_property_value_provenance(props, &mut provenance);
-    record_raw_cell_value_provenance(engine, sheet_id, cell_hex, &mut provenance);
+    record_native_cell_value_provenance(engine, cell_hex, &mut provenance);
     provenance
 }
 
@@ -192,60 +183,54 @@ fn record_property_value_provenance(
     }
 }
 
-fn record_raw_cell_value_provenance(
-    engine: &YrsComputeEngine,
-    sheet_id: &cell_types::SheetId,
+fn record_native_cell_value_provenance(
+    engine: &ComputeEngine,
     cell_hex: &str,
     provenance: &mut CellValueProvenance,
 ) {
-    let sheets = engine.storage().sheets_ref();
-    let txn = engine.storage().doc().transact();
-    let sheet_hex = sheet_id_to_hex(sheet_id);
-    let Some(cells_map) = get_sheet_submap(&txn, &sheets, &sheet_hex, KEY_CELLS) else {
+    let Ok(cell_id) = cell_types::CellId::from_uuid_str(cell_hex) else {
         return;
     };
-    let Some(Out::YMap(cell_map)) = cells_map.get(&txn, cell_hex) else {
+    if let Some(formula) = engine.mirror().get_formula(&cell_id) {
+        provenance.insert_marker(
+            FORMULA_METADATA_CATEGORY,
+            "identityFormula",
+            serde_json::to_value(formula).expect("typed formula serializes"),
+        );
+    } else if let Some(formula) = engine.compute().get_formula(&cell_id) {
+        provenance.insert_marker(
+            FORMULA_METADATA_CATEGORY,
+            "formula",
+            Value::String(formula.to_string()),
+        );
+    }
+    let Some(metadata) = engine.storage().cell_metadata(&cell_id) else {
         return;
     };
-
-    for key in [
-        KEY_FORMULA,
-        KEY_FORMULA_TEMPLATE,
-        KEY_FORMULA_REFS,
-        KEY_FORMULA_DYNAMIC_ARRAY,
-        KEY_FORMULA_VOLATILE,
-        KEY_FORMULA_AGGREGATE,
-        KEY_FORMULA_METADATA,
-        compute_document::schema::KEY_FORMULA_RESULT_MODE,
-    ] {
-        if let Some(value) = raw_cell_marker_value(&cell_map, &txn, key) {
-            provenance.insert_marker(FORMULA_METADATA_CATEGORY, key, value);
-        }
+    if let Some(mode) = metadata.formula_result_mode {
+        provenance.insert_marker(
+            FORMULA_METADATA_CATEGORY,
+            "formulaResultMode",
+            serde_json::to_value(mode).expect("typed formula result mode serializes"),
+        );
     }
-    if let Some(value) = raw_cell_marker_value(&cell_map, &txn, KEY_ARRAY_REF) {
-        provenance.insert_marker("array-marker", KEY_ARRAY_REF, value);
+    if let Some(formula) = &metadata.formula {
+        provenance.insert_marker(
+            FORMULA_METADATA_CATEGORY,
+            "formulaMetadata",
+            serde_json::to_value(formula).expect("typed formula metadata serializes"),
+        );
     }
-    if let Some(value) = raw_cell_marker_value(&cell_map, &txn, RICH_STRING_CELL_KEY) {
-        provenance.insert_marker("rich-value-metadata", RICH_STRING_CELL_KEY, value);
+    if let Some(array_ref) = &metadata.array_ref {
+        provenance.insert_marker("array-marker", "arrayRef", Value::String(array_ref.clone()));
     }
-}
-
-fn raw_cell_marker_value<T: yrs::ReadTxn>(
-    cell_map: &yrs::MapRef,
-    txn: &T,
-    key: &str,
-) -> Option<Value> {
-    cell_map.get(txn, key).map(|value| match value {
-        Out::Any(any) => Value::String(format!("{any:?}")),
-        Out::YText(_) => Value::String("ytext".to_string()),
-        Out::YArray(_) => Value::String("yarray".to_string()),
-        Out::YMap(_) => Value::String("ymap".to_string()),
-        Out::YXmlElement(_) => Value::String("yxml-element".to_string()),
-        Out::YXmlFragment(_) => Value::String("yxml-fragment".to_string()),
-        Out::YXmlText(_) => Value::String("yxml-text".to_string()),
-        Out::YDoc(_) => Value::String("ydoc".to_string()),
-        Out::UndefinedRef(_) => Value::String("undefined-ref".to_string()),
-    })
+    if let Some(rich_string) = &metadata.rich_string {
+        provenance.insert_marker(
+            "rich-value-metadata",
+            RICH_STRING_CELL_KEY,
+            serde_json::to_value(rich_string).expect("typed rich string serializes"),
+        );
+    }
 }
 
 pub(super) fn ambiguous_cell_value(

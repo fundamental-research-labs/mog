@@ -113,9 +113,7 @@ pub struct ConditionalFormatting {
     ///
     /// Stays `String` at the `ooxml-types` layer by policy:
     /// `ooxml-types` must never depend on `formula-types`. This is the
-    /// XLSX external-format boundary, symmetric to typed Yrs boundary's Yrs
-    /// on-disk JSON rule — `String` here is architecturally correct, not
-    /// debt. The typed treatment lives at every in-engine consumer:
+    /// XLSX external-format boundary. In-engine consumers use typed ranges:
     ///
     /// - Read: `xlsx-parser::output::to_parse_output::features::
     ///   convert_conditional_formats` parses via `SqrefList::parse`.

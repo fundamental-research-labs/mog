@@ -49,7 +49,13 @@ pub fn single_sheet_table_snapshot(
     }
 
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_uuid(si),
             name: sheet_name.to_string(),
             rows: total_rows + 10,
@@ -93,7 +99,13 @@ pub fn single_sheet_table_with_outside_formulas(
     }
 
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_uuid(si),
             name: sheet_name.to_string(),
             rows: 10,
@@ -138,8 +150,14 @@ pub fn cross_sheet_table_summary_snapshot(
         .collect();
 
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: sheet_uuid(si_data),
                 name: data_sheet_name.to_string(),
                 rows: total_rows + 1,
@@ -148,6 +166,9 @@ pub fn cross_sheet_table_summary_snapshot(
                 ranges: vec![],
             },
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: sheet_uuid(si_formula),
                 name: summary_sheet_name.to_string(),
                 rows: 5,
@@ -183,7 +204,13 @@ pub fn no_table_formula_snapshot(formulas: Vec<(u32, u32, &str)>) -> WorkbookSna
         .collect();
 
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_uuid(si),
             name: "Sheet1".to_string(),
             rows: 5,

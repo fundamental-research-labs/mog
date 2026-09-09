@@ -1,4 +1,4 @@
-use super::super::YrsComputeEngine;
+use super::super::ComputeEngine;
 use super::super::services;
 use super::super::validation;
 use crate::snapshot::MutationResult;
@@ -6,7 +6,7 @@ use cell_types::SheetId;
 use compute_wire::mutation::serialize_multi_viewport_patches;
 use value_types::ComputeError;
 
-impl YrsComputeEngine {
+impl ComputeEngine {
     pub(super) fn apply_set_row_height(
         &mut self,
         sheet_id: &SheetId,
@@ -17,8 +17,14 @@ impl YrsComputeEngine {
         let height_px = domain_types::units::Pixels(height_px);
         let height_pt = domain_types::units::pixels_to_points(height_px);
         validation::structure::validate_row_height(height_pt)?;
-        services::structural::set_row_height(&mut self.stores, sheet_id, row, height_px)
-            .map(|r| (serialize_multi_viewport_patches(&[]), r))
+        services::structural::set_row_height(
+            &mut self.stores,
+            &mut self.mirror,
+            sheet_id,
+            row,
+            height_px,
+        )
+        .map(|r| (serialize_multi_viewport_patches(&[]), r))
     }
 
     pub(super) fn apply_set_col_width(
@@ -32,8 +38,14 @@ impl YrsComputeEngine {
         let mdw = self.stores.layout_metrics.column_width_mdw;
         let width_cw = domain_types::units::pixels_to_char_width(width_px, mdw);
         validation::structure::validate_col_width(width_cw)?;
-        services::structural::set_col_width(&mut self.stores, sheet_id, col, width_px)
-            .map(|r| (serialize_multi_viewport_patches(&[]), r))
+        services::structural::set_col_width(
+            &mut self.stores,
+            &mut self.mirror,
+            sheet_id,
+            col,
+            width_px,
+        )
+        .map(|r| (serialize_multi_viewport_patches(&[]), r))
     }
 
     pub(super) fn apply_set_col_widths(
@@ -50,10 +62,13 @@ impl YrsComputeEngine {
             let width_cw = domain_types::units::pixels_to_char_width(*width_px, mdw);
             validation::structure::validate_col_width(width_cw)?;
         }
-        self.with_undo_group_if(widths_px.len() > 1, |engine| {
-            services::structural::set_col_widths(&mut engine.stores, sheet_id, &widths_px)
-                .map(|r| (serialize_multi_viewport_patches(&[]), r))
-        })
+        services::structural::set_col_widths(
+            &mut self.stores,
+            &mut self.mirror,
+            sheet_id,
+            &widths_px,
+        )
+        .map(|r| (serialize_multi_viewport_patches(&[]), r))
     }
 
     pub(super) fn apply_set_col_width_chars(
@@ -64,8 +79,14 @@ impl YrsComputeEngine {
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
         let width_cw = domain_types::units::CharWidth(width_chars);
         validation::structure::validate_col_width(width_cw)?;
-        services::structural::set_col_width_chars(&mut self.stores, sheet_id, col, width_cw)
-            .map(|r| (serialize_multi_viewport_patches(&[]), r))
+        services::structural::set_col_width_chars(
+            &mut self.stores,
+            &mut self.mirror,
+            sheet_id,
+            col,
+            width_cw,
+        )
+        .map(|r| (serialize_multi_viewport_patches(&[]), r))
     }
 
     pub(super) fn apply_set_col_widths_chars(
@@ -80,10 +101,13 @@ impl YrsComputeEngine {
         for (_, width_cw) in &widths_cw {
             validation::structure::validate_col_width(*width_cw)?;
         }
-        self.with_undo_group_if(widths_cw.len() > 1, |engine| {
-            services::structural::set_col_widths_chars(&mut engine.stores, sheet_id, &widths_cw)
-                .map(|r| (serialize_multi_viewport_patches(&[]), r))
-        })
+        services::structural::set_col_widths_chars(
+            &mut self.stores,
+            &mut self.mirror,
+            sheet_id,
+            &widths_cw,
+        )
+        .map(|r| (serialize_multi_viewport_patches(&[]), r))
     }
 
     pub(super) fn apply_hide_rows(
@@ -109,8 +133,7 @@ impl YrsComputeEngine {
     fn sync_row_visibility_for_evaluation(&mut self, sheet_id: &SheetId, rows: &[u32]) {
         for &row in rows {
             let hidden = crate::storage::sheet::dimensions::get_row_visibility_ownership(
-                self.stores.storage.doc(),
-                self.stores.storage.sheets(),
+                &self.stores.storage,
                 sheet_id,
                 row,
                 self.stores.grid_indexes.get(sheet_id),

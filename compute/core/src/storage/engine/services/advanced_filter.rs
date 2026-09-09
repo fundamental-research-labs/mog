@@ -1,6 +1,5 @@
 use crate::mirror::CellMirror;
 use crate::snapshot::{ChangeKind, FilterChange, MutationResult};
-use crate::storage::engine::mutation_coordinator::MutationCoordinator;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::{dimensions, filters};
 use cell_types::{CellId, SheetId, SheetPos};
@@ -89,15 +88,10 @@ fn ensure_cell_id_hex(
     row: u32,
     col: u32,
 ) -> Result<String, ComputeError> {
-    let grid =
-        stores
-            .grid_indexes
-            .get_mut(sheet_id)
-            .ok_or_else(|| ComputeError::SheetNotFound {
-                sheet_id: sheet_id.to_uuid_string(),
-            })?;
-    let cell_id = grid.ensure_cell_id(row, col);
-    mirror.register_identity_only(sheet_id, SheetPos::new(row, col), cell_id);
+    let cell_id = super::cell_editing::ensure_cell_id_mirrored(stores, mirror, sheet_id, row, col)
+        .ok_or_else(|| ComputeError::SheetNotFound {
+            sheet_id: sheet_id.to_uuid_string(),
+        })?;
     Ok(id_to_hex(cell_id.as_u128()).to_string())
 }
 
@@ -203,8 +197,7 @@ fn resolve_advanced_filter_target(
     request_filter_id: Option<&str>,
     list: &ResolvedUserRange,
 ) -> Result<Option<filters::FilterState>, ComputeError> {
-    let filters_in_sheet =
-        filters::get_filters_in_sheet(stores.storage.doc(), stores.storage.sheets(), sheet_id);
+    let filters_in_sheet = filters::get_filters_in_sheet(&stores.storage, sheet_id);
     if let Some(filter_id) = request_filter_id {
         let filter = filters_in_sheet
             .into_iter()
@@ -285,7 +278,6 @@ fn copy_projection_columns(
 pub(in crate::storage::engine) fn apply_advanced_filter(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
-    mutation_coord: &mut MutationCoordinator,
     sheet_id: &SheetId,
     request: filters::AdvancedFilterRequest,
 ) -> Result<MutationResult, ComputeError> {
@@ -364,7 +356,7 @@ pub(in crate::storage::engine) fn apply_advanced_filter(
                 },
                 unique_records_only: request.unique_records_only,
             };
-            let now = crate::storage::infra::yrs_helpers::now_millis();
+            let now = crate::storage::infra::time::now_millis();
             let state = filters::FilterState {
                 id: filter_id.clone(),
                 filter_kind: filters::FilterKind::AdvancedFilter,
@@ -387,18 +379,12 @@ pub(in crate::storage::engine) fn apply_advanced_filter(
             };
 
             let prior_transitions = dimensions::clear_filter_hidden_rows(
-                stores.storage.doc(),
-                stores.storage.sheets(),
+                &mut stores.storage,
                 sheet_id,
                 &filter_id,
                 stores.grid_indexes.get(sheet_id),
             );
-            filters::upsert_filter_state(
-                stores.storage.doc(),
-                stores.storage.sheets(),
-                sheet_id,
-                &state,
-            )?;
+            filters::upsert_filter_state(&mut stores.storage, sheet_id, &state)?;
 
             let mut rows_to_hide = Vec::new();
             let mut rows_to_release = Vec::new();
@@ -411,8 +397,7 @@ pub(in crate::storage::engine) fn apply_advanced_filter(
                 }
             }
             let transitions = dimensions::set_filter_hidden_rows(
-                stores.storage.doc(),
-                stores.storage.sheets(),
+                &mut stores.storage,
                 sheet_id,
                 &filter_id,
                 &rows_to_hide,
@@ -503,11 +488,7 @@ pub(in crate::storage::engine) fn apply_advanced_filter(
                 dest_row += 1;
             }
             let recalc = super::mutation_handlers::mutation_set_cells_by_position_raw(
-                stores,
-                mirror,
-                mutation_coord,
-                edits,
-                true,
+                stores, mirror, edits, true,
             )?;
             let copied_rows = rows_matched + 1;
             let destination_range = range_to_a1(

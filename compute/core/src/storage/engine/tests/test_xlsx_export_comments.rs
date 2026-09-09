@@ -180,7 +180,7 @@ fn l2_xlsx_export_preserves_imported_comment_package_paths() {
     let engine = engine_from_parse_output_normal(&input);
     let exported_parse = engine
         .export_to_parse_output()
-        .expect("production Yrs export should succeed")
+        .expect("production native export should succeed")
         .parse_output;
     let exported_package = exported_parse.sheets[0]
         .comment_package

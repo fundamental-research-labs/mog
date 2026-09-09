@@ -45,8 +45,8 @@ impl WorkbookSettings {
     }
 
     /// Read the active tab from the first persisted workbook view, if one is
-    /// present. Workbook views are retained as a raw engine setting because
-    /// they are OOXML round-trip metadata rather than workbook settings.
+    /// present. The engine projects its native OOXML view metadata through
+    /// the JSON setting boundary.
     pub fn get_workbook_view_active_tab(&self) -> Result<Option<u32>, ComputeApiError> {
         let raw = self
             .dispatch

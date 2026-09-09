@@ -185,7 +185,7 @@ fn imported_classic_validations_survive_hydrate_export_roundtrip() {
 
     let bytes = xlsx_parser::write::write_xlsx_from_parse_output(&input)
         .expect("write_xlsx_from_parse_output");
-    let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
+    let (engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
 
     let exported = engine
         .export_to_parse_output()
@@ -209,7 +209,7 @@ fn imported_classic_validations_survive_hydrate_export_roundtrip() {
 
 #[test]
 fn runtime_created_range_backed_validations_export_to_parse_output_and_xlsx() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
 
     engine
@@ -333,7 +333,7 @@ fn imported_x14_validations_hydrate_to_canonical_store_and_export_as_classic() {
 
     let bytes = xlsx_parser::write::write_xlsx_from_parse_output(&input)
         .expect("write_xlsx_from_parse_output");
-    let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
+    let (engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
 
     let exported = engine
         .export_to_parse_output()
@@ -370,4 +370,132 @@ fn imported_x14_validations_hydrate_to_canonical_store_and_export_as_classic() {
     );
     assert!(!sheet_xml.contains("<x14:dataValidations"), "{sheet_xml}");
     assert!(!sheet_xml.contains("xr:uid="), "{sheet_xml}");
+}
+
+#[test]
+fn native_validation_copy_and_structural_edits_preserve_complete_rule_properties() {
+    let spec = ValidationSpec {
+        ranges: vec!["A2:A4".into()],
+        rule: ValidationRule::None {
+            formula1: "ROUND(1.25,1)".into(),
+        },
+        error_style: ErrorStyle::Information,
+        error_title: Some("Check input".into()),
+        error_message: Some("Review this value".into()),
+        show_prompt: true,
+        prompt_title: Some("Entry".into()),
+        prompt_message: Some("Use the expected value".into()),
+        ime_mode: ImeMode::Disabled,
+        uid: Some("{11223344-5566-7788-9900-112233445566}".into()),
+        ..Default::default()
+    };
+    let input = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Source".into(),
+            rows: 8,
+            cols: 4,
+            data_validations: vec![spec.clone()],
+            data_validations_disable_prompts: true,
+            data_validations_x_window: Some(37),
+            data_validations_y_window: Some(41),
+            data_validations_declared_count: Some(1),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let mut engine = engine_from_parse_output_normal(&input);
+    let source = SheetId::from_uuid_str(&engine.get_all_sheet_ids()[0]).unwrap();
+    let (copy_hex, _) = engine.copy_sheet(&source, "Copy").unwrap();
+    let copy = SheetId::from_uuid_str(&copy_hex).unwrap();
+    engine
+        .structure_change(
+            &copy,
+            &formula_types::StructureChange::InsertRows {
+                at: 0,
+                count: 2,
+                new_row_ids: vec![],
+            },
+        )
+        .unwrap();
+    let output = engine.export_to_parse_output().unwrap().parse_output;
+    let source_out = output
+        .sheets
+        .iter()
+        .find(|sheet| sheet.name == "Source")
+        .unwrap();
+    let copy_out = output
+        .sheets
+        .iter()
+        .find(|sheet| sheet.name == "Copy")
+        .unwrap();
+    assert_eq!(source_out.data_validations, vec![spec.clone()]);
+    let mut shifted = spec;
+    shifted.ranges = vec!["A4:A6".into()];
+    assert_eq!(copy_out.data_validations, vec![shifted.clone()]);
+    assert_eq!(copy_out.data_validations_x_window, Some(37));
+    assert_eq!(copy_out.data_validations_y_window, Some(41));
+    assert!(copy_out.data_validations_disable_prompts);
+    let bytes = engine.export_to_xlsx_bytes().unwrap();
+    let (reparsed, _) = xlsx_parser::parse_xlsx_to_output(&bytes).unwrap();
+    assert_eq!(
+        reparsed
+            .sheets
+            .iter()
+            .find(|sheet| sheet.name == "Copy")
+            .unwrap()
+            .data_validations,
+        vec![shifted]
+    );
+}
+
+#[test]
+fn native_validation_cut_between_sheets_keeps_distinct_imported_rules() {
+    let first = validation_spec(
+        "A1:A3",
+        ValidationRule::List {
+            formula1: "\"One,Two\"".into(),
+            show_dropdown: false,
+        },
+    );
+    let second = validation_spec(
+        "C1:C3",
+        ValidationRule::WholeNumber {
+            operator: ValidationOperator::GreaterThan,
+            formula1: "5".into(),
+            formula2: None,
+        },
+    );
+    let input = ParseOutput {
+        sheets: vec![
+            SheetData {
+                name: "Source".into(),
+                rows: 8,
+                cols: 4,
+                data_validations: vec![first.clone()],
+                ..Default::default()
+            },
+            SheetData {
+                name: "Target".into(),
+                rows: 8,
+                cols: 4,
+                data_validations: vec![second.clone()],
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+    let mut engine = engine_from_parse_output_normal(&input);
+    let source = SheetId::from_uuid_str(&engine.get_all_sheet_ids()[0]).unwrap();
+    let target = SheetId::from_uuid_str(&engine.get_all_sheet_ids()[1]).unwrap();
+    engine
+        .relocate_cells(&source, 0, 0, 2, 0, &target, 0, 1)
+        .unwrap();
+    let output = engine.export_to_parse_output().unwrap().parse_output;
+    assert!(output.sheets[0].data_validations.is_empty());
+    let target_rules = &output.sheets[1].data_validations;
+    assert_eq!(target_rules.len(), 2);
+    let mut moved = first;
+    moved.ranges = vec!["B1:B3".into()];
+    assert!(target_rules.contains(&moved));
+    assert!(target_rules.contains(&second));
 }

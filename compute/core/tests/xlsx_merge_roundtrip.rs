@@ -7,13 +7,16 @@
 //! legacy `cellGrid` sub-map unset). Each test merges or unmerges over a
 //! range that includes at least one formula cell, exports, and re-parses.
 
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
 
 fn one_sheet_snapshot(name: &str, rows: u32, cols: u32, cells: Vec<CellData>) -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: name.to_string(),
             rows,
@@ -50,7 +53,7 @@ fn formula_cell(uuid_suffix: u32, row: u32, col: u32, formula: &str, cached: f64
 }
 
 fn xlsx_bytes_for(snapshot: WorkbookSnapshot) -> Vec<u8> {
-    let (engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (engine, _) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
     engine.export_to_xlsx_bytes().expect("export_to_xlsx_bytes")
 }
 
@@ -72,7 +75,7 @@ fn merge_over_formula_fixture() -> WorkbookSnapshot {
 #[test]
 fn xlsx_merge_range_persists_on_export() {
     let bytes = xlsx_bytes_for(merge_over_formula_fixture());
-    let (mut engine, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
     let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
 
     engine
@@ -100,7 +103,7 @@ fn xlsx_unmerge_range_persists_on_export() {
     // Start with the merged fixture — do the merge first, export, reload,
     // then unmerge and export again to observe the unmerge round-trips.
     let bytes = xlsx_bytes_for(merge_over_formula_fixture());
-    let (mut engine, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
     let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
 
     engine
@@ -110,7 +113,7 @@ fn xlsx_unmerge_range_persists_on_export() {
 
     // Reload fully to exercise the hydration path again.
     let (mut engine2, _) =
-        YrsComputeEngine::from_xlsx_bytes(&after_merge).expect("from_xlsx_bytes after merge");
+        ComputeEngine::from_xlsx_bytes(&after_merge).expect("from_xlsx_bytes after merge");
     let sid2 = *engine2.mirror().sheet_ids().next().expect("sheet present");
 
     engine2

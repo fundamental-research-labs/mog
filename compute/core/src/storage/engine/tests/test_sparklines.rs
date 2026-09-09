@@ -96,7 +96,7 @@ fn flag_for_position(patches: &[u8], row: u32, col: u32) -> u16 {
 
 #[test]
 fn add_sparkline_emits_change_and_has_sparkline_patch() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
     engine
         .register_viewport("main", &sid, 0, 0, 10, 10)
@@ -119,7 +119,7 @@ fn add_sparkline_emits_change_and_has_sparkline_patch() {
 
 #[test]
 fn update_sparkline_move_emits_removed_and_set_changes_with_patches() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
     engine
         .register_viewport("main", &sid, 0, 0, 10, 10)
@@ -161,7 +161,7 @@ fn update_sparkline_move_emits_removed_and_set_changes_with_patches() {
 
 #[test]
 fn delete_sparkline_emits_removed_change_and_clears_patch_flag() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
     engine
         .register_viewport("main", &sid, 0, 0, 10, 10)
@@ -186,7 +186,7 @@ fn delete_sparkline_emits_removed_change_and_clears_patch_flag() {
 
 #[test]
 fn explicit_sparkline_mutations_reject_missing_targets() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
 
     let update_err = engine
@@ -216,7 +216,7 @@ fn explicit_sparkline_mutations_reject_missing_targets() {
 
 #[test]
 fn group_and_clear_sparkline_mutations_emit_member_changes() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
     engine
         .register_viewport("main", &sid, 0, 0, 10, 10)

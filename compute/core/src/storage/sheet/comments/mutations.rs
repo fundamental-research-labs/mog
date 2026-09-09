@@ -1,51 +1,36 @@
-use std::sync::Arc;
-
-use yrs::{Any, Doc, Map, MapPrelim, MapRef, Origin, Out, Transact};
-
+use super::store::{CommentAnchor, comment_mut, wire};
+use crate::storage::WorkbookStorage;
+use crate::storage::infra::time::now_millis;
 use cell_types::SheetId;
-use compute_document::hex::id_to_hex;
-use compute_document::undo::ORIGIN_USER_EDIT;
 use domain_types::domain::comment::{AddCommentOptions, Comment, CommentType, RichTextRun};
-use domain_types::yrs_schema::comment as comment_schema;
 use value_types::ComputeError;
-
-use super::yrs_io::{get_comments_map, read_all_comments};
-use crate::storage::infra::yrs_helpers::now_millis;
 
 fn runs_plain_text(runs: &[RichTextRun]) -> String {
     runs.iter().map(|run| run.text.as_str()).collect()
 }
 
-/// Add a new comment to a cell.
-///
-/// `options.comment_type` is the single discriminator that drives both
-/// storage shape (notes have no `thread_id`; threaded comments do) and
-/// downstream XLSX writer dispatch. Notes cannot have replies; passing
-/// `parent_id` together with `CommentType::Note` is a contract violation
-/// and returns an error.
-#[allow(clippy::too_many_arguments)]
+/// Add a note or threaded comment, preserving the supplied thread metadata.
 pub fn add_comment(
-    doc: &Doc,
-    sheets: &MapRef,
-    sheet_id: &SheetId,
-    cell_id: &str,
+    storage: &mut WorkbookStorage,
+    sheet: &SheetId,
+    cell: &str,
     runs: Vec<RichTextRun>,
     author: &str,
     options: AddCommentOptions,
     id_alloc: &cell_types::IdAllocator,
 ) -> Result<Comment, ComputeError> {
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let n = id_alloc.next_u128();
-    let id = format!("{:032x}", n);
-    let now = now_millis();
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let comments_map =
-        get_comments_map(&txn, sheets, &sheet_hex).ok_or_else(|| ComputeError::SheetNotFound {
-            sheet_id: sheet_hex.to_string(),
-        })?;
+    let id = format!("{:032x}", id_alloc.next_u128());
+    crate::storage::engine::history::metadata::capture_sheet_vector_entry!(storage, *sheet, comments, id, comment => comment.id);
+
+    let metadata =
+        storage
+            .sheet_metadata
+            .get_mut(sheet)
+            .ok_or_else(|| ComputeError::SheetNotFound {
+                sheet_id: sheet.to_uuid_string(),
+            })?;
     let (thread_id, parent_id) = match options.comment_type {
         CommentType::Note => {
-            // Notes never have replies; reject `parent_id` as a contract violation.
             if options.parent_id.is_some() {
                 return Err(ComputeError::Eval {
                     message: "notes cannot have a parent_id".into(),
@@ -54,17 +39,19 @@ pub fn add_comment(
             (None, None)
         }
         CommentType::ThreadedComment => {
-            let tid = if let Some(ref pid) = options.parent_id {
-                match comments_map.get(&txn, pid.as_str()) {
-                    Some(Out::YMap(map)) => comment_schema::from_yrs_map(&map, &txn)
-                        .and_then(|parent| parent.thread_id)
-                        .unwrap_or_else(|| pid.clone()),
-                    _ => pid.clone(),
-                }
-            } else {
-                id.clone()
-            };
-            (Some(tid), options.parent_id.clone())
+            let thread = options
+                .parent_id
+                .as_ref()
+                .map(|parent_id| {
+                    metadata
+                        .comments
+                        .iter()
+                        .find(|comment| comment.id == *parent_id)
+                        .and_then(|parent| parent.thread_id.clone())
+                        .unwrap_or_else(|| parent_id.clone())
+                })
+                .unwrap_or_else(|| id.clone());
+            (Some(thread), options.parent_id.clone())
         }
     };
     let content = match options.comment_type {
@@ -76,295 +63,150 @@ pub fn add_comment(
         ),
         CommentType::Note => options.content.clone(),
     };
-    let resolved = match options.comment_type {
-        CommentType::ThreadedComment => Some(options.resolved.unwrap_or(false)),
-        CommentType::Note => options.resolved,
-    };
     let comment = Comment {
-        id: id.clone(),
-        cell_ref: cell_id.to_string(),
-        author: author.to_string(),
-        author_id: options.author_id.clone(),
-        author_email: None,
-        created_at: Some(now),
-        modified_at: None,
+        id,
+        cell_ref: cell.to_owned(),
+        author: author.to_owned(),
+        author_id: options.author_id,
         runs,
         content,
         thread_id,
         parent_id,
-        resolved,
-        person_id: options.person_id.clone(),
-        timestamp: options.timestamp.clone(),
-        xr_uid: None,
-        shape_id: None,
-        ext_lst_xml: None,
+        person_id: options.person_id,
+        resolved: if options.comment_type == CommentType::ThreadedComment {
+            Some(options.resolved.unwrap_or(false))
+        } else {
+            options.resolved
+        },
+        timestamp: options.timestamp,
+        created_at: Some(now_millis()),
         content_type: options.content_type,
         mentions: options.mentions.unwrap_or_default(),
         comment_type: options.comment_type,
-        visible: None,
-        note_height: None,
-        note_width: None,
-        note_shape_anchor: None,
-        note_images: Vec::new(),
-        comment_pr: None,
+        ..Default::default()
     };
-    let prelim: MapPrelim = comment_schema::to_yrs_prelim(&comment)
-        .into_iter()
-        .collect();
-    comments_map.insert(&mut txn, &*id, prelim);
+    metadata
+        .comments
+        .push(comment.clone().map_cell_ref(CommentAnchor::from_wire));
     Ok(comment)
 }
-/// Update a comment's content. Sets `modified_at` to now.
+
 pub fn update_comment(
-    doc: &Doc,
-    sheets: &MapRef,
-    sheet_id: &SheetId,
-    comment_id: &str,
+    storage: &mut WorkbookStorage,
+    sheet: &SheetId,
+    id: &str,
     runs: Vec<RichTextRun>,
 ) -> Option<Comment> {
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let comments_map = get_comments_map(&txn, sheets, &sheet_hex)?;
-    let comment_map = match comments_map.get(&txn, comment_id)? {
-        Out::YMap(m) => m,
-        _ => return None,
-    };
-    let mut comment = comment_schema::from_yrs_map(&comment_map, &txn)?;
-    comment.runs = runs.clone();
-    let now = now_millis();
-    comment.modified_at = Some(now);
-    // `runs` is the formatted representation while `content` is its plain-text
-    // projection. Imported legacy notes populate both fields, so every text edit
-    // must update them together. Otherwise note UI (runs) and API readback
-    // (content) observe different values, including after redo.
+    let comment = comment_mut(storage, sheet, id)?;
     comment.content = Some(runs_plain_text(&runs));
-    // Update fields in-place on the existing Y.Map.
-    if let Ok(json) = serde_json::to_string(&runs) {
-        comment_map.insert(
-            &mut txn,
-            comment_schema::KEY_RUNS,
-            Any::String(Arc::from(json)),
-        );
-    }
-    if let Some(ref content) = comment.content {
-        comment_map.insert(
-            &mut txn,
-            comment_schema::KEY_CONTENT,
-            Any::String(Arc::from(content.as_str())),
-        );
-    }
-    comment_map.insert(
-        &mut txn,
-        comment_schema::KEY_MODIFIED_AT,
-        Any::Number(now as f64),
-    );
-    Some(comment)
+    comment.runs = runs;
+    comment.modified_at = Some(now_millis());
+    Some(wire(comment))
 }
-
-/// Update a comment with mention content. Sets content text, content_type to Mention,
-/// and mentions array, plus updates `modified_at`.
 pub fn update_comment_mentions(
-    doc: &Doc,
-    sheets: &MapRef,
-    sheet_id: &SheetId,
-    comment_id: &str,
+    storage: &mut WorkbookStorage,
+    sheet: &SheetId,
+    id: &str,
     content: &str,
     mentions: Vec<domain_types::domain::comment::CommentMention>,
 ) -> Option<Comment> {
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let comments_map = get_comments_map(&txn, sheets, &sheet_hex)?;
-    let comment_map = match comments_map.get(&txn, comment_id)? {
-        Out::YMap(m) => m,
-        _ => return None,
-    };
-    let mut comment = comment_schema::from_yrs_map(&comment_map, &txn)?;
-    let now = now_millis();
-    comment.content = Some(content.to_string());
+    let comment = comment_mut(storage, sheet, id)?;
+    comment.content = Some(content.to_owned());
     comment.content_type = Some(domain_types::domain::comment::CommentContentType::Mention);
-    comment.mentions = mentions.clone();
-    comment.modified_at = Some(now);
-
-    // Update fields in-place on the existing Y.Map.
-    comment_map.insert(
-        &mut txn,
-        comment_schema::KEY_CONTENT,
-        Any::String(Arc::from(content)),
-    );
-    comment_map.insert(
-        &mut txn,
-        comment_schema::KEY_CONTENT_TYPE,
-        Any::String(Arc::from("mention")),
-    );
-    if let Ok(json) = serde_json::to_string(&mentions) {
-        comment_map.insert(
-            &mut txn,
-            comment_schema::KEY_MENTIONS,
-            Any::String(Arc::from(json)),
-        );
-    }
-    comment_map.insert(
-        &mut txn,
-        comment_schema::KEY_MODIFIED_AT,
-        Any::Number(now as f64),
-    );
-    Some(comment)
+    comment.mentions = mentions;
+    comment.modified_at = Some(now_millis());
+    Some(wire(comment))
 }
-
-/// Complete threaded-comment metadata after a note promotion or legacy import repair.
-///
-/// This updates the same domain fields populated by XLSX threaded-comment import:
-/// `content`, `person_id`, `resolved`, and `timestamp`.
 pub fn complete_thread_metadata(
-    doc: &Doc,
-    sheets: &MapRef,
-    sheet_id: &SheetId,
-    comment_id: &str,
-    person_id: &str,
+    storage: &mut WorkbookStorage,
+    sheet: &SheetId,
+    id: &str,
+    person: &str,
     timestamp: &str,
 ) -> Option<Comment> {
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let comments_map = get_comments_map(&txn, sheets, &sheet_hex)?;
-    let comment_map = match comments_map.get(&txn, comment_id)? {
-        Out::YMap(m) => m,
-        _ => return None,
-    };
-    let mut comment = comment_schema::from_yrs_map(&comment_map, &txn)?;
-    if comment.comment_type != CommentType::ThreadedComment {
-        return Some(comment);
+    let comment = comment_mut(storage, sheet, id)?;
+    if comment.comment_type == CommentType::ThreadedComment {
+        comment
+            .content
+            .get_or_insert_with(|| runs_plain_text(&comment.runs));
+        comment.person_id = Some(person.to_owned());
+        comment.resolved.get_or_insert(false);
+        comment
+            .timestamp
+            .get_or_insert_with(|| timestamp.to_owned());
     }
-
-    let content = comment
-        .content
-        .clone()
-        .unwrap_or_else(|| runs_plain_text(&comment.runs));
-    comment.content = Some(content.clone());
-    comment.person_id = Some(person_id.to_string());
-    if comment.resolved.is_none() {
-        comment.resolved = Some(false);
-    }
-    if comment.timestamp.is_none() {
-        comment.timestamp = Some(timestamp.to_string());
-    }
-
-    comment_map.insert(
-        &mut txn,
-        comment_schema::KEY_CONTENT,
-        Any::String(Arc::from(content.as_str())),
-    );
-    comment_map.insert(
-        &mut txn,
-        comment_schema::KEY_PERSON_ID,
-        Any::String(Arc::from(person_id)),
-    );
-    if let Some(resolved) = comment.resolved {
-        comment_map.insert(&mut txn, comment_schema::KEY_RESOLVED, Any::Bool(resolved));
-    }
-    if let Some(ref timestamp) = comment.timestamp {
-        comment_map.insert(
-            &mut txn,
-            comment_schema::KEY_TIMESTAMP,
-            Any::String(Arc::from(timestamp.as_str())),
-        );
-    }
-
-    Some(comment)
+    Some(wire(comment))
 }
+pub fn delete_comment(storage: &mut WorkbookStorage, sheet: &SheetId, id: &str) -> bool {
+    crate::storage::engine::history::metadata::capture_sheet_vector_entry!(storage, *sheet, comments, id, comment => comment.id);
 
-/// Delete a single comment.
-pub fn delete_comment(doc: &Doc, sheets: &MapRef, sheet_id: &SheetId, comment_id: &str) -> bool {
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let comments_map = match get_comments_map(&txn, sheets, &sheet_hex) {
-        Some(m) => m,
-        None => return false,
-    };
-    if comments_map.get(&txn, comment_id).is_none() {
+    let Some(metadata) = storage.sheet_metadata.get_mut(sheet) else {
         return false;
-    }
-    comments_map.remove(&mut txn, comment_id);
-    true
-}
-
-/// Delete all comments for a cell.
-pub fn delete_comments_for_cell(
-    doc: &Doc,
-    sheets: &MapRef,
-    sheet_id: &SheetId,
-    cell_id: &str,
-) -> usize {
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let comments_map = match get_comments_map(&txn, sheets, &sheet_hex) {
-        Some(m) => m,
-        None => return 0,
     };
-    let to_delete: Vec<String> = comments_map
-        .iter(&txn)
-        .filter_map(|(key, value)| {
-            if let Out::YMap(map) = value {
-                let comment = comment_schema::from_yrs_map(&map, &txn)?;
-                if comment.cell_ref == cell_id {
-                    Some(key.to_string())
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        })
-        .collect();
-    let count = to_delete.len();
-    for id in &to_delete {
-        comments_map.remove(&mut txn, id.as_str());
-    }
-    count
+    let before = metadata.comments.len();
+    metadata.comments.retain(|comment| comment.id != id);
+    before != metadata.comments.len()
 }
+pub fn delete_comments_for_cell(
+    storage: &mut WorkbookStorage,
+    sheet: &SheetId,
+    cell: &str,
+) -> usize {
+    if storage.history.is_active() {
+        if let Some(meta) = storage.sheet_metadata.get(sheet) {
+            for comment in &meta.comments {
+                if comment.cell_ref.matches(cell) {
+                    crate::storage::engine::history::metadata::capture_sheet_vector_entry!(storage, *sheet, comments, comment.id, value => value.id);
+                }
+            }
+        }
+    }
 
-/// Resolve or unresolve a thread.
+    let Some(metadata) = storage.sheet_metadata.get_mut(sheet) else {
+        return 0;
+    };
+    let before = metadata.comments.len();
+    metadata
+        .comments
+        .retain(|comment| !comment.cell_ref.matches(cell));
+    before - metadata.comments.len()
+}
 pub fn set_thread_resolved(
-    doc: &Doc,
-    sheets: &MapRef,
-    sheet_id: &SheetId,
-    thread_id: &str,
+    storage: &mut WorkbookStorage,
+    sheet: &SheetId,
+    thread: &str,
     resolved: bool,
 ) {
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let comments_map = match get_comments_map(&txn, sheets, &sheet_hex) {
-        Some(m) => m,
-        None => return,
-    };
-    // Collect the IDs of comments in this thread, then update each Y.Map in-place.
-    let thread_ids: Vec<String> = read_all_comments(&txn, &comments_map)
-        .into_iter()
-        .filter(|c| c.thread_id.as_deref() == Some(thread_id) || c.id == thread_id)
-        .map(|c| c.id)
-        .collect();
-    if thread_ids.is_empty() {
-        return;
+    if storage.history.is_active() {
+        if let Some(meta) = storage.sheet_metadata.get(sheet) {
+            for comment in &meta.comments {
+                if comment.thread_id.as_deref() == Some(thread) || comment.id == thread {
+                    crate::storage::engine::history::metadata::capture_sheet_vector_entry!(storage, *sheet, comments, comment.id, value => value.id);
+                }
+            }
+        }
     }
-    for cid in &thread_ids {
-        if let Some(Out::YMap(map)) = comments_map.get(&txn, cid.as_str()) {
-            map.insert(&mut txn, comment_schema::KEY_RESOLVED, Any::Bool(resolved));
+
+    if let Some(metadata) = storage.sheet_metadata.get_mut(sheet) {
+        for comment in &mut metadata.comments {
+            if comment.thread_id.as_deref() == Some(thread) || comment.id == thread {
+                comment.resolved = Some(resolved);
+            }
         }
     }
 }
+pub fn clear_all_comments(storage: &mut WorkbookStorage, sheet: &SheetId) {
+    if storage.history.is_active() {
+        if let Some(meta) = storage.sheet_metadata.get(sheet) {
+            for comment in &meta.comments {
+                if true {
+                    crate::storage::engine::history::metadata::capture_sheet_vector_entry!(storage, *sheet, comments, comment.id, value => value.id);
+                }
+            }
+        }
+    }
 
-/// Clear all comments for a sheet.
-pub fn clear_all_comments(doc: &Doc, sheets: &MapRef, sheet_id: &SheetId) {
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let comments_map = match get_comments_map(&txn, sheets, &sheet_hex) {
-        Some(m) => m,
-        None => return,
-    };
-    let keys: Vec<String> = comments_map
-        .iter(&txn)
-        .map(|(key, _)| key.to_string())
-        .collect();
-    for key in &keys {
-        comments_map.remove(&mut txn, key.as_str());
+    if let Some(metadata) = storage.sheet_metadata.get_mut(sheet) {
+        metadata.comments.clear();
     }
 }

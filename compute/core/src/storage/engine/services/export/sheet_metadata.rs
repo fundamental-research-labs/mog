@@ -4,33 +4,29 @@
 //! validations, sheet protection, sparklines, page breaks, auto filter,
 //! outline groups, floating objects, and conditional formats.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use cell_types::{CellId, SheetId, SheetPos};
 use compute_document::hex::{hex_to_id, id_to_hex};
-use compute_document::schema::*;
 use domain_types::{
     domain::conditional_format::ConditionalFormat as DomainConditionalFormat,
     domain::filter::{AutoFilter, SortState},
     domain::floating_object::{FloatingObject, FloatingObjectData, FormControlOoxmlProps},
     domain::grouping::SheetGroupingConfig,
-    domain::hyperlink::{Hyperlink, HyperlinkTargetKind},
+    domain::hyperlink::Hyperlink,
     domain::outline::OutlineGroup,
     domain::print::PageBreaks,
     domain::protection::SheetProtection,
     domain::sparkline::{Sparkline as DomainSparkline, SparklineGroup},
     domain::validation::ValidationSpec,
-    yrs_schema,
 };
 use value_types::CellValue;
-use yrs::{Any, Array, Map, Out, Transact};
 
 use crate::import::phantom::{parse_cell_ref, parse_range_ref};
 use crate::mirror::CellMirror;
 use crate::range_manager::pos_to_a1;
-use crate::storage::sheet::{cf_store, hyperlinks, print, schemas};
+use crate::storage::sheet::{cf_store, hyperlinks, schemas};
 
-use super::super::super::export::sorted_map_entries;
 use crate::storage::engine::stores::EngineStores;
 
 // -------------------------------------------------------------------
@@ -56,8 +52,7 @@ pub(super) fn resolve_cell_position_from_grid_index(
 /// Resolve a hydrated comment/note target through the runtime GridIndex.
 ///
 /// Imported comments store `cell_ref` as a CellId hex string. The authoritative
-/// path for turning that identity back into A1 is the GridIndex hydrated from
-/// Yrs `gridIndex/{posToId,idToPos}`.
+/// GridIndex resolves that identity back into its current A1 position.
 pub(super) fn resolve_hydrated_comment_position(
     stores: &EngineStores,
     sheet_id: &SheetId,
@@ -70,178 +65,64 @@ pub(super) fn resolve_hydrated_comment_position(
 // Hyperlinks export
 // -------------------------------------------------------------------
 
-/// Export all hyperlinks for a sheet, reading both cell-level hyperlinks
-/// and any range hyperlinks stored in the sheet meta.
-///
-/// Position resolution is handled by `GridIndex` (the sole identity authority);
-/// no external resolver is needed.
+/// Export native hyperlink metadata in authored order at current coordinates.
 pub(in crate::storage::engine) fn export_hyperlinks_for_sheet(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> Vec<Hyperlink> {
-    let mut result = match stores.grid_indexes.get(sheet_id) {
-        Some(grid) => hyperlinks::get_all_hyperlinks(
-            stores.storage.doc(),
-            stores.storage.sheets(),
-            sheet_id,
-            grid,
-        ),
-        None => Vec::new(),
-    };
-
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let txn = stores.storage.doc().transact();
-    if let Some(Out::YMap(sheet_map)) = stores.storage.sheets().get(&txn, &sheet_hex)
-        && let Some(Out::YMap(meta)) = sheet_map.get(&txn, compute_document::schema::KEY_PROPERTIES)
-        && let Some(Out::Any(yrs::Any::String(json))) = meta.get(&txn, "rangeHyperlinks")
-        && let Ok(entries) = serde_json::from_str::<Vec<serde_json::Value>>(&json)
-    {
-        for entry in entries {
-            let cell_ref = entry
-                .get("ref")
-                .and_then(|v| v.as_str())
-                .unwrap_or_default()
-                .to_string();
-            let target = entry
-                .get("target")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
-            let location = entry
-                .get("location")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
-            let display = entry
-                .get("display")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
-            let tooltip = entry
-                .get("tooltip")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
-            let uid = entry
-                .get("uid")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
-            let target_kind = entry
-                .get("targetKind")
-                .and_then(|v| v.as_str())
-                .and_then(target_kind_from_str);
-            let target_mode = entry
-                .get("targetMode")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
-            result.push(Hyperlink {
-                cell_ref,
-                target,
-                location,
-                display,
-                tooltip,
-                uid,
-                target_kind,
-                target_mode,
-            });
-        }
-    }
-
-    result
-}
-
-fn target_kind_from_str(value: &str) -> Option<HyperlinkTargetKind> {
-    match value {
-        "inlineLocation" => Some(HyperlinkTargetKind::InlineLocation),
-        "relationship" => Some(HyperlinkTargetKind::Relationship),
-        _ => None,
-    }
+    stores
+        .grid_indexes
+        .get(sheet_id)
+        .map(|grid| hyperlinks::get_all_hyperlinks(&stores.storage, sheet_id, grid))
+        .unwrap_or_default()
 }
 
 // -------------------------------------------------------------------
 // Data validation helpers
 // -------------------------------------------------------------------
 
-/// Export the container-level `disablePrompts` flag for data validations.
 pub(in crate::storage::engine) fn export_dv_disable_prompts(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> bool {
-    export_meta_bool(stores, sheet_id, "dvDisablePrompts")
+    stores
+        .storage
+        .sheet_metadata
+        .get(sheet_id)
+        .is_some_and(|metadata| metadata.validations.disable_prompts)
 }
-
-fn export_meta_bool(stores: &EngineStores, sheet_id: &SheetId, key: &str) -> bool {
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let doc = stores.storage.doc();
-    let txn = doc.transact();
-    let sheets = stores.storage.sheets();
-
-    let sheet_map = match sheets.get(&txn, &sheet_hex) {
-        Some(Out::YMap(m)) => m,
-        _ => return false,
-    };
-    let meta_map = match sheet_map.get(&txn, KEY_PROPERTIES) {
-        Some(Out::YMap(m)) => m,
-        _ => return false,
-    };
-
-    match meta_map.get(&txn, key) {
-        Some(Out::Any(Any::Bool(b))) => b,
-        _ => false,
-    }
-}
-
-/// Export a container-level u32 attribute from sheet meta (e.g. dvXWindow, dvYWindow).
-pub(in crate::storage::engine) fn export_dv_window_attr(
+pub(in crate::storage::engine) fn export_dv_x_window(
     stores: &EngineStores,
     sheet_id: &SheetId,
-    key: &str,
 ) -> Option<u32> {
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let doc = stores.storage.doc();
-    let txn = doc.transact();
-    let sheets = stores.storage.sheets();
-
-    let sheet_map = match sheets.get(&txn, &sheet_hex) {
-        Some(Out::YMap(m)) => m,
-        _ => return None,
-    };
-    let meta_map = match sheet_map.get(&txn, KEY_PROPERTIES) {
-        Some(Out::YMap(m)) => m,
-        _ => return None,
-    };
-
-    match meta_map.get(&txn, key) {
-        Some(Out::Any(Any::BigInt(v))) if v >= 0 => Some(v as u32),
-        Some(Out::Any(Any::Number(v))) if v.is_finite() && v >= 0.0 => Some(v as u32),
-        _ => None,
-    }
+    stores
+        .storage
+        .sheet_metadata
+        .get(sheet_id)?
+        .validations
+        .x_window
 }
-
-/// Export the source-declared data validations container count, when preserved.
+pub(in crate::storage::engine) fn export_dv_y_window(
+    stores: &EngineStores,
+    sheet_id: &SheetId,
+) -> Option<u32> {
+    stores
+        .storage
+        .sheet_metadata
+        .get(sheet_id)?
+        .validations
+        .y_window
+}
 pub(in crate::storage::engine) fn export_dv_declared_count(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> Option<u32> {
-    export_meta_u32(stores, sheet_id, "dvDeclaredCount")
-}
-
-fn export_meta_u32(stores: &EngineStores, sheet_id: &SheetId, key: &str) -> Option<u32> {
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let doc = stores.storage.doc();
-    let txn = doc.transact();
-    let sheets = stores.storage.sheets();
-
-    let sheet_map = match sheets.get(&txn, &sheet_hex) {
-        Some(Out::YMap(m)) => m,
-        _ => return None,
-    };
-    let meta_map = match sheet_map.get(&txn, KEY_PROPERTIES) {
-        Some(Out::YMap(m)) => m,
-        _ => return None,
-    };
-
-    match meta_map.get(&txn, key) {
-        Some(Out::Any(Any::BigInt(v))) if v >= 0 => Some(v as u32),
-        Some(Out::Any(Any::Number(v))) if v.is_finite() && v >= 0.0 => Some(v as u32),
-        _ => None,
-    }
+    stores
+        .storage
+        .sheet_metadata
+        .get(sheet_id)?
+        .validations
+        .declared_count
 }
 
 /// Export data validations from the canonical range-backed validation store.
@@ -249,108 +130,45 @@ pub(in crate::storage::engine) fn export_data_validations_for_sheet(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> Vec<ValidationSpec> {
-    schemas::get_validation_specs_for_sheet(stores.storage.doc(), stores.storage.sheets(), sheet_id)
+    schemas::get_validation_specs_for_sheet(&stores.storage, sheet_id)
 }
 
 // -------------------------------------------------------------------
 // Sheet protection
 // -------------------------------------------------------------------
 
-/// Export sheet protection from the structured Y.Map in sheet meta.
+/// Export sheet protection from native sheet metadata.
 /// Falls back to legacy JSON string.
 pub(in crate::storage::engine) fn export_sheet_protection(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> Option<SheetProtection> {
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let doc = stores.storage.doc();
-    let txn = doc.transact();
-    let sheets = stores.storage.sheets();
-
-    let sheet_map = match sheets.get(&txn, &sheet_hex) {
-        Some(Out::YMap(m)) => m,
-        _ => return None,
-    };
-    let meta_map = match sheet_map.get(&txn, KEY_PROPERTIES) {
-        Some(Out::YMap(m)) => m,
-        _ => return None,
-    };
-
-    match meta_map.get(&txn, "protectionDetails") {
-        Some(Out::YMap(sub_map)) => yrs_schema::protection::sheet_from_yrs_map(&sub_map, &txn),
-        Some(Out::Any(Any::String(s))) => serde_json::from_str::<SheetProtection>(&s).ok(),
-        _ => None,
-    }
+    stores
+        .storage
+        .sheet_metadata
+        .get(sheet_id)?
+        .protection
+        .clone()
 }
 
 // -------------------------------------------------------------------
 // Sparklines
 // -------------------------------------------------------------------
 
-/// Export sparklines from the structured sparklines Y.Map using yrs_schema.
+/// Export native sparkline definitions.
 pub(in crate::storage::engine) fn export_sparklines_for_sheet(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> Vec<DomainSparkline> {
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let doc = stores.storage.doc();
-    let txn = doc.transact();
-    let sheets = stores.storage.sheets();
-
-    let sheet_map = match sheets.get(&txn, &sheet_hex) {
-        Some(Out::YMap(m)) => m,
-        _ => return vec![],
-    };
-    let sparklines_map = match sheet_map.get(&txn, KEY_SPARKLINES) {
-        Some(Out::YMap(m)) => m,
-        _ => return vec![],
-    };
-
-    let mut result = Vec::new();
-    for (key, value) in sorted_map_entries(&sparklines_map, &txn) {
-        if key.starts_with("group:") || key.starts_with("idx:") {
-            continue;
-        }
-        if let Out::YMap(map) = value
-            && let Some(sparkline) = yrs_schema::sparkline::from_yrs_map(&map, &txn)
-        {
-            result.push(sparkline);
-        }
-    }
-    result
+    crate::storage::sheet::sparklines::get_sparklines_in_sheet(&stores.storage, sheet_id)
 }
 
-/// Export sparkline groups from the structured sparklines Y.Map using yrs_schema.
+/// Export native sparkline group definitions.
 pub(in crate::storage::engine) fn export_sparkline_groups_for_sheet(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> Vec<SparklineGroup> {
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let doc = stores.storage.doc();
-    let txn = doc.transact();
-    let sheets = stores.storage.sheets();
-
-    let sheet_map = match sheets.get(&txn, &sheet_hex) {
-        Some(Out::YMap(m)) => m,
-        _ => return vec![],
-    };
-    let sparklines_map = match sheet_map.get(&txn, KEY_SPARKLINES) {
-        Some(Out::YMap(m)) => m,
-        _ => return vec![],
-    };
-
-    let mut result = Vec::new();
-    for (key, value) in sorted_map_entries(&sparklines_map, &txn) {
-        if !key.starts_with("group:") {
-            continue;
-        }
-        if let Out::YMap(map) = value
-            && let Some(group) = yrs_schema::sparkline::group_from_yrs_map(&map, &txn)
-        {
-            result.push(group);
-        }
-    }
-    result
+    crate::storage::sheet::sparklines::get_sparkline_groups_in_sheet(&stores.storage, sheet_id)
 }
 
 // -------------------------------------------------------------------
@@ -362,12 +180,12 @@ pub(in crate::storage::engine) fn export_page_breaks_for_sheet(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> Option<PageBreaks> {
-    let pb = print::get_page_breaks(stores.storage.doc(), stores.storage.sheets(), sheet_id);
-    if pb.row_breaks.is_empty() && pb.col_breaks.is_empty() {
-        None
-    } else {
-        Some(pb)
-    }
+    stores
+        .storage
+        .sheet_metadata
+        .get(sheet_id)?
+        .page_breaks
+        .clone()
 }
 
 // -------------------------------------------------------------------
@@ -392,15 +210,13 @@ pub(in crate::storage::engine) fn export_auto_filter_for_sheet(
     use crate::storage::sheet::filters;
     use domain_types::domain::filter::{FilterKind, filter_state_to_auto_filter};
 
-    let doc = stores.storage.doc();
-    let sheets = stores.storage.sheets();
-    let all_filters = filters::get_filters_in_sheet(doc, sheets, sheet_id);
+    let all_filters = filters::get_filters_in_sheet(&stores.storage, sheet_id);
     let auto_filter_state = all_filters
         .into_iter()
         .find(|f| f.filter_kind == FilterKind::AutoFilter)?;
 
     let binding =
-        filters::get_filter_metadata_binding(doc, sheets, sheet_id, &auto_filter_state.id);
+        filters::get_filter_metadata_binding(&stores.storage, sheet_id, &auto_filter_state.id);
     let binding_allows_lossless_export = binding.as_ref().is_none_or(|binding| {
         matches!(
             &binding.owner_path,
@@ -409,19 +225,14 @@ pub(in crate::storage::engine) fn export_auto_filter_for_sheet(
         )
     });
 
-    if binding_allows_lossless_export {
-        // Preferred path: typed AutoFilter at properties/autoFilter, but only
-        // while a live runtime sheet AutoFilter still owns it. This prevents
-        // stale lossless metadata from resurrecting a deleted filter on export.
-        let sheet_hex = id_to_hex(sheet_id.as_u128());
-        let txn = doc.transact();
-        if let Some(Out::YMap(sheet_map)) = sheets.get(&txn, &sheet_hex)
-            && let Some(Out::YMap(meta_map)) = sheet_map.get(&txn, KEY_PROPERTIES)
-            && let Some(Out::YMap(af_map)) = meta_map.get(&txn, "autoFilter")
-            && let Some(af) = yrs_schema::auto_filter::from_yrs_map(&af_map, &txn)
-        {
-            return Some(af);
-        }
+    if binding_allows_lossless_export
+        && let Some(auto_filter) = stores
+            .storage
+            .sheet_metadata
+            .get(sheet_id)
+            .and_then(|metadata| metadata.auto_filter.clone())
+    {
+        return Some(auto_filter);
     }
 
     // Fallback: reconstruct from runtime FilterState (lossy for round-trip-only
@@ -443,26 +254,19 @@ pub(in crate::storage::engine) fn export_sort_state_for_sheet(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> Option<SortState> {
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let doc = stores.storage.doc();
-    let txn = doc.transact();
-    let sheets = stores.storage.sheets();
-
-    if let Some(Out::YMap(sheet_map)) = sheets.get(&txn, &sheet_hex)
-        && let Some(Out::YMap(meta_map)) = sheet_map.get(&txn, KEY_PROPERTIES)
-        && let Some(Out::YMap(sort_map)) = meta_map.get(&txn, yrs_schema::sort_state::PROPERTY_KEY)
-    {
-        yrs_schema::sort_state::from_yrs_map(&sort_map, &txn)
-    } else {
-        None
-    }
+    stores
+        .storage
+        .sheet_metadata
+        .get(sheet_id)?
+        .sort_state
+        .clone()
 }
 
 // -------------------------------------------------------------------
 // Outline groups
 // -------------------------------------------------------------------
 
-/// Export outline groups from the grouping Y.Map using yrs_schema.
+/// Project native outline groups into the XLSX domain.
 pub(in crate::storage::engine) fn export_outline_groups_for_sheet(
     stores: &EngineStores,
     sheet_id: &SheetId,
@@ -470,24 +274,28 @@ pub(in crate::storage::engine) fn export_outline_groups_for_sheet(
     Vec<OutlineGroup>,
     Option<ooxml_types::worksheet::OutlineProperties>,
 ) {
-    let config = crate::storage::sheet::grouping::get_sheet_grouping_config(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-    );
+    let config =
+        crate::storage::sheet::grouping::get_sheet_grouping_config(&stores.storage, sheet_id);
     if config == SheetGroupingConfig::default() {
         return (vec![], None);
     }
-    let (groups, outline_pr) =
+    let (groups, derived_outline) =
         domain_types::domain::grouping::grouping_config_to_outline_groups(&config);
-    (groups, Some(outline_pr))
+    let outline = stores
+        .storage
+        .sheet_metadata
+        .get(sheet_id)
+        .and_then(|meta| meta.properties.as_ref())
+        .and_then(|properties| properties.outline_pr.clone())
+        .unwrap_or(derived_outline);
+    (groups, Some(outline))
 }
 
 // -------------------------------------------------------------------
 // Floating objects
 // -------------------------------------------------------------------
 
-/// Export floating objects from the floating objects Y.Map.
+/// Export floating objects from native sheet metadata.
 pub(in crate::storage::engine) fn export_floating_objects_for_sheet(
     stores: &EngineStores,
     mirror: &CellMirror,
@@ -499,126 +307,75 @@ pub(in crate::storage::engine) fn export_floating_objects_for_sheet(
     Vec<ooxml_types::timelines::TimelineDef>,
     Vec<ooxml_types::timelines::TimelineAnchor>,
 ) {
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let doc = stores.storage.doc();
-    let txn = doc.transact();
-    let sheets = stores.storage.sheets();
-
-    let sheet_map = match sheets.get(&txn, &sheet_hex) {
-        Some(Out::YMap(m)) => m,
-        _ => return (vec![], vec![], vec![], vec![], vec![]),
-    };
-    let mut floating_objects_by_key: HashMap<String, FloatingObject> = HashMap::new();
-    let mut floating_object_keys_by_id: HashMap<String, String> = HashMap::new();
+    let mut floating_objects = Vec::new();
+    if let Some(metadata) = stores.storage.sheet_metadata.get(sheet_id) {
+        let state = &metadata.floating_objects;
+        let mut seen = HashSet::new();
+        for id in &state.order {
+            if seen.insert(id.as_str()) {
+                if let Some(object) = state.objects.get(id) {
+                    floating_objects.push(object.as_ref().clone());
+                }
+            }
+        }
+        let mut remaining: Vec<_> = state
+            .objects
+            .iter()
+            .filter(|(id, _)| !seen.contains(id.as_str()))
+            .collect();
+        remaining.sort_by(|(left_id, left), (right_id, right)| {
+            left.common
+                .z_index
+                .cmp(&right.common.z_index)
+                .then_with(|| left_id.cmp(right_id))
+        });
+        floating_objects.extend(
+            remaining
+                .into_iter()
+                .map(|(_, object)| object.as_ref().clone()),
+        );
+    }
+    floating_objects.sort_by_key(|object| object.common.z_index);
     let mut slicers = Vec::new();
     let mut slicer_anchors = Vec::new();
     let mut timelines = Vec::new();
     let mut timeline_anchors = Vec::new();
-
-    if let Some(Out::YMap(fobj_map)) = sheet_map.get(&txn, KEY_FLOATING_OBJECTS) {
-        for (key, value) in sorted_map_entries(&fobj_map, &txn) {
-            if key.starts_with("slicer-anchor-") {
-                if let Out::Any(Any::String(json)) = value
-                    && let Ok(sa) =
-                        serde_json::from_str::<ooxml_types::slicers::SlicerAnchor>(&json)
-                {
-                    slicer_anchors.push(sa);
-                }
-            } else if key.starts_with("slicer-") {
-                if let Out::Any(Any::String(json)) = value
-                    && let Ok(sl) = serde_json::from_str::<ooxml_types::slicers::SlicerDef>(&json)
-                {
-                    slicers.push(sl);
-                }
-            } else if let Out::YMap(map) = value {
-                // Any non-slicer YMap entry is a floating object. Keys may be
-                // `fobj-{ts}-{random}` (API-created) or the object's own ID
-                // such as `chart-import-{index}` (XLSX-imported).
-                if let Some(obj) = yrs_schema::floating_object::from_yrs_map(&map, &txn) {
-                    floating_object_keys_by_id.insert(obj.common.id.clone(), key.clone());
-                    floating_objects_by_key.insert(key, obj);
-                }
-            }
+    let mut stored_slicers: Vec<_> = stores
+        .storage
+        .metadata
+        .slicers
+        .values()
+        .filter(|stored| SheetId::from_uuid_str(&stored.sheet_id).ok().as_ref() == Some(sheet_id))
+        .collect();
+    stored_slicers.sort_by(|a, b| a.z_index.cmp(&b.z_index).then_with(|| a.id.cmp(&b.id)));
+    for stored in stored_slicers {
+        slicers.push(domain_types::domain::slicer::stored_slicer_to_slicer_def(
+            stored,
+        ));
+        if let Some(anchor) = domain_types::domain::slicer::stored_slicer_to_anchor(stored) {
+            slicer_anchors.push(anchor);
+        }
+    }
+    let mut stored_timelines: Vec<_> = stores
+        .storage
+        .metadata
+        .timelines
+        .values()
+        .filter(|stored| SheetId::from_uuid_str(&stored.sheet_id).ok().as_ref() == Some(sheet_id))
+        .collect();
+    stored_timelines.sort_by(|a, b| a.z_index.cmp(&b.z_index).then_with(|| a.id.cmp(&b.id)));
+    for stored in stored_timelines {
+        timelines.push(domain_types::domain::slicer::stored_timeline_to_timeline_def(stored));
+        if let Some(anchor) = domain_types::domain::slicer::stored_timeline_to_anchor(stored) {
+            timeline_anchors.push(anchor);
         }
     }
 
-    let mut floating_objects = Vec::with_capacity(floating_objects_by_key.len());
-    let mut seen_order_ids = HashSet::new();
-    if let Some(Out::YArray(order)) = sheet_map.get(&txn, KEY_FLOATING_OBJECT_ORDER) {
-        for value in order.iter(&txn) {
-            let Out::Any(Any::String(object_id)) = value else {
-                continue;
-            };
-            if !seen_order_ids.insert(object_id.to_string()) {
-                continue;
-            }
-            if let Some(obj) = take_floating_object_by_order_id(
-                &mut floating_objects_by_key,
-                &floating_object_keys_by_id,
-                &object_id,
-            ) {
-                floating_objects.push(obj);
-            }
+    if let Some(grid) = stores.grid_indexes.get(sheet_id) {
+        for object in &mut floating_objects {
+            crate::storage::sheet::floating_objects::project_anchor_positions(object, grid);
         }
     }
-    let mut remaining_objects: Vec<(String, FloatingObject)> =
-        floating_objects_by_key.into_iter().collect();
-    remaining_objects.sort_by(|(a_key, a), (b_key, b)| {
-        a.common
-            .z_index
-            .cmp(&b.common.z_index)
-            .then_with(|| a.common.id.cmp(&b.common.id))
-            .then_with(|| a_key.cmp(b_key))
-    });
-    floating_objects.extend(remaining_objects.into_iter().map(|(_, obj)| obj));
-
-    let workbook = stores.storage.workbook_map();
-
-    // New format: read StoredSlicer entries from workbook slicers map,
-    // filtered to this sheet.
-    if slicers.is_empty() {
-        if let Some(Out::YMap(slicers_map)) = workbook.get(&txn, KEY_SLICERS) {
-            let mut stored_slicers = Vec::new();
-            for (_, value) in slicers_map.iter(&txn) {
-                if let Some(stored) = yrs_schema::slicer::from_yrs_out(value, &txn)
-                    && sheet_hex == stored.sheet_id
-                {
-                    stored_slicers.push(stored);
-                }
-            }
-            stored_slicers.sort_by(|a, b| a.z_index.cmp(&b.z_index).then_with(|| a.id.cmp(&b.id)));
-            for stored in stored_slicers {
-                slicers.push(domain_types::domain::slicer::stored_slicer_to_slicer_def(
-                    &stored,
-                ));
-                if let Some(anchor) = domain_types::domain::slicer::stored_slicer_to_anchor(&stored)
-                {
-                    slicer_anchors.push(anchor);
-                }
-            }
-        }
-    }
-
-    if let Some(Out::YMap(timelines_map)) = workbook.get(&txn, KEY_TIMELINES) {
-        let mut stored_timelines = Vec::new();
-        for (_, value) in timelines_map.iter(&txn) {
-            if let Out::Any(Any::String(json_str)) = value
-                && let Ok(stored) =
-                    serde_json::from_str::<domain_types::domain::slicer::StoredTimeline>(&json_str)
-                && sheet_hex == stored.sheet_id
-            {
-                stored_timelines.push(stored);
-            }
-        }
-        stored_timelines.sort_by(|a, b| a.z_index.cmp(&b.z_index).then_with(|| a.id.cmp(&b.id)));
-        for stored in stored_timelines {
-            timelines.push(domain_types::domain::slicer::stored_timeline_to_timeline_def(&stored));
-            if let Some(anchor) = domain_types::domain::slicer::stored_timeline_to_anchor(&stored) {
-                timeline_anchors.push(anchor);
-            }
-        }
-    }
-
     project_form_control_references_for_export(&mut floating_objects, stores, mirror, sheet_id);
 
     (
@@ -628,18 +385,6 @@ pub(in crate::storage::engine) fn export_floating_objects_for_sheet(
         timelines,
         timeline_anchors,
     )
-}
-
-fn take_floating_object_by_order_id(
-    objects_by_key: &mut HashMap<String, FloatingObject>,
-    keys_by_object_id: &HashMap<String, String>,
-    object_id: &str,
-) -> Option<FloatingObject> {
-    objects_by_key.remove(object_id).or_else(|| {
-        keys_by_object_id
-            .get(object_id)
-            .and_then(|key| objects_by_key.remove(key))
-    })
 }
 
 fn project_form_control_references_for_export(
@@ -858,5 +603,5 @@ pub(in crate::storage::engine) fn export_conditional_formats_for_sheet(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> Vec<DomainConditionalFormat> {
-    cf_store::get_formats_for_sheet(stores.storage.doc(), &stores.storage.sheets_ref(), sheet_id)
+    cf_store::get_formats_for_sheet(&stores.storage, sheet_id)
 }

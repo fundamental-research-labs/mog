@@ -440,6 +440,9 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                     continue;
                 }
 
+                let target =
+                    hyperlink_targets::relationship_target(&target, hl.location.as_deref())
+                        .to_owned();
                 let target_mode = hl.target_mode.clone().or_else(|| {
                     if target.starts_with('#') {
                         None

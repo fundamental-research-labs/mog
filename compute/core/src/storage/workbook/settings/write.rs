@@ -1,144 +1,172 @@
-use compute_document::undo::ORIGIN_USER_EDIT;
-use yrs::{Any, Doc, Map, MapPrelim, MapRef, Origin, Out, Transact};
-
-use crate::snapshot::{
-    AutomaticConversionPolicy, AutomaticConversionPolicyPatch, RustWorkbookSettingsPatch,
-    WorkbookSettings,
-};
-
-use super::map::{ensure_settings_map, json_to_any};
 use super::read::get_settings;
+use crate::snapshot::{RustWorkbookSettingsPatch, WorkbookSettings};
+use crate::storage::workbook::WorkbookMetadata;
+use value_types::ComputeError;
 
-pub fn set_setting(doc: &Doc, workbook: &MapRef, key: &str, value: serde_json::Value) {
-    set_setting_with_origin(doc, workbook, key, value, ORIGIN_USER_EDIT);
-}
-
-/// Set a single workbook setting with an explicit undo origin.
-pub fn set_setting_with_origin(
-    doc: &Doc,
-    workbook: &MapRef,
+/// Decode a single setting at the public JSON boundary, then mutate typed state.
+pub fn set_setting(
+    metadata: &mut WorkbookMetadata,
     key: &str,
     value: serde_json::Value,
-    origin: &'static [u8],
-) {
-    let mut txn = doc.transact_mut_with(Origin::from(origin));
-    let settings_map = ensure_settings_map(workbook, &mut txn);
-
-    let any_value = json_to_any(&value);
-    settings_map.insert(&mut txn, key, any_value);
-}
-
-/// Set multiple workbook settings at once within a single transaction.
-pub fn set_settings(doc: &Doc, workbook: &MapRef, updates: &WorkbookSettings) {
-    set_settings_with_origin(doc, workbook, updates, ORIGIN_USER_EDIT);
-}
-
-/// Set multiple workbook settings at once with an explicit undo origin.
-pub fn set_settings_with_origin(
-    doc: &Doc,
-    workbook: &MapRef,
-    updates: &WorkbookSettings,
-    origin: &'static [u8],
-) {
-    let mut txn = doc.transact_mut_with(Origin::from(origin));
-    let settings_map = ensure_settings_map(workbook, &mut txn);
-
-    // Serialize WorkbookSettings to JSON, then write each field
-    if let Ok(json_val) = serde_json::to_value(updates)
-        && let serde_json::Value::Object(map) = json_val
-    {
-        for (key, value) in map {
-            let any_value = json_to_any(&value);
-            settings_map.insert(&mut txn, key.as_str(), any_value);
+) -> Result<(), ComputeError> {
+    let mut settings = get_settings(metadata);
+    let invalid = |error| ComputeError::InvalidInput {
+        message: format!("Invalid workbook setting '{key}': {error}"),
+    };
+    match key {
+        "workbookViews" => {
+            // Accept the legacy serialized setting and the native JSON array
+            // at the boundary; only typed views enter canonical storage.
+            let views = match value {
+                serde_json::Value::String(serialized) => serde_json::from_str(&serialized),
+                value => serde_json::from_value(value),
+            }
+            .map_err(invalid)?;
+            metadata.views = views;
+            return Ok(());
+        }
+        "showHorizontalScrollbar" => {
+            settings.show_horizontal_scrollbar = serde_json::from_value(value).map_err(invalid)?
+        }
+        "showVerticalScrollbar" => {
+            settings.show_vertical_scrollbar = serde_json::from_value(value).map_err(invalid)?
+        }
+        "autoHideScrollBars" => {
+            settings.auto_hide_scroll_bars = serde_json::from_value(value).map_err(invalid)?
+        }
+        "showTabStrip" => {
+            settings.show_tab_strip = serde_json::from_value(value).map_err(invalid)?
+        }
+        "showFormulaBar" => {
+            settings.show_formula_bar = serde_json::from_value(value).map_err(invalid)?
+        }
+        "allowSheetReorder" => {
+            settings.allow_sheet_reorder = serde_json::from_value(value).map_err(invalid)?
+        }
+        "autoFitOnDoubleClick" => {
+            settings.auto_fit_on_double_click = serde_json::from_value(value).map_err(invalid)?
+        }
+        "showCutCopyIndicator" => {
+            settings.show_cut_copy_indicator = serde_json::from_value(value).map_err(invalid)?
+        }
+        "allowDragFill" => {
+            settings.allow_drag_fill = serde_json::from_value(value).map_err(invalid)?
+        }
+        "enterKeyDirection" => {
+            settings.enter_key_direction = serde_json::from_value(value).map_err(invalid)?
+        }
+        "allowCellDragDrop" => {
+            settings.allow_cell_drag_drop = serde_json::from_value(value).map_err(invalid)?
+        }
+        "themeId" => settings.theme_id = serde_json::from_value(value).map_err(invalid)?,
+        "themeFontsId" => {
+            settings.theme_fonts_id = serde_json::from_value(value).map_err(invalid)?
+        }
+        "culture" => settings.culture = serde_json::from_value(value).map_err(invalid)?,
+        "selectedSheetIds" => {
+            settings.selected_sheet_ids = serde_json::from_value(value).map_err(invalid)?
+        }
+        "isWorkbookProtected" => {
+            settings.is_workbook_protected = serde_json::from_value(value).map_err(invalid)?
+        }
+        "workbookProtectionPasswordHash" => {
+            settings.workbook_protection_password_hash =
+                serde_json::from_value(value).map_err(invalid)?
+        }
+        "workbookProtectionOptions" => {
+            settings.workbook_protection_options = serde_json::from_value(value).map_err(invalid)?
+        }
+        "calculationSettings" => {
+            settings.calculation_settings = serde_json::from_value(value).map_err(invalid)?
+        }
+        "date1904" => settings.date1904 = serde_json::from_value(value).map_err(invalid)?,
+        "defaultTableStyleId" => {
+            settings.default_table_style_id = serde_json::from_value(value).map_err(invalid)?
+        }
+        "customSettings" => {
+            settings.custom_settings = serde_json::from_value(value).map_err(invalid)?
+        }
+        "automaticConversionPolicy" => {
+            settings.automatic_conversion_policy = serde_json::from_value(value).map_err(invalid)?
+        }
+        "defaultSlicerStyle" => {
+            metadata.default_slicer_style = serde_json::from_value(value).map_err(invalid)?;
+            return Ok(());
+        }
+        "defaultPivotTableStyle" => {
+            metadata.default_pivot_table_style = serde_json::from_value(value).map_err(invalid)?;
+            return Ok(());
+        }
+        _ => {
+            return Err(ComputeError::InvalidInput {
+                message: format!("Unknown workbook setting: {key}"),
+            });
         }
     }
+    set_settings(metadata, &settings);
+    Ok(())
 }
 
-/// Reset all workbook settings to defaults.
-pub fn reset_settings(doc: &Doc, workbook: &MapRef) {
-    set_settings(doc, workbook, &WorkbookSettings::default());
+pub fn set_settings(metadata: &mut WorkbookMetadata, updates: &WorkbookSettings) {
+    let previous = get_settings(metadata);
+    if updates.date1904 != previous.date1904 {
+        metadata
+            .properties
+            .get_or_insert_with(Default::default)
+            .date1904 = updates.date1904;
+    }
+    if updates.workbook_protection_password_hash != previous.workbook_protection_password_hash
+        || updates.workbook_protection_options != previous.workbook_protection_options
+        || updates.is_workbook_protected != previous.is_workbook_protected
+    {
+        if !updates.is_workbook_protected
+            && updates.workbook_protection_options.is_none()
+            && updates.workbook_protection_password_hash.is_none()
+        {
+            metadata.protection = None;
+        } else {
+            let protection = metadata.protection.get_or_insert_with(Default::default);
+            if updates.is_workbook_protected {
+                protection.lock_structure = updates
+                    .workbook_protection_options
+                    .clone()
+                    .unwrap_or_default()
+                    .structure;
+            } else {
+                protection.lock_structure = false;
+                protection.lock_windows = false;
+                protection.lock_revision = false;
+            }
+            if updates.workbook_protection_password_hash
+                != previous.workbook_protection_password_hash
+            {
+                protection.workbook_password = updates.workbook_protection_password_hash.clone();
+                protection.workbook_hash_value = None;
+                protection.workbook_salt_value = None;
+                protection.workbook_spin_count = None;
+                protection.workbook_algorithm_name = Default::default();
+            }
+        }
+    }
+    metadata.settings = updates.clone();
+    // These fields are projections of the complete native OOXML objects.
+    metadata.settings.date1904 = false;
+    metadata.settings.workbook_protection_password_hash = None;
+    metadata.settings.workbook_protection_options = None;
 }
 
-/// Apply a partial workbook settings patch. Returns whether any field changed.
-pub fn patch_settings_with_origin(
-    doc: &Doc,
-    workbook: &MapRef,
-    patch: &RustWorkbookSettingsPatch,
-    origin: &'static [u8],
-) -> bool {
-    let pre = get_settings(doc, workbook);
-    let mut desired = pre.clone();
-    apply_patch_to_settings(&mut desired, patch);
-    if desired == pre {
+pub fn reset_settings(metadata: &mut WorkbookMetadata) {
+    set_settings(metadata, &WorkbookSettings::default());
+}
+
+pub fn patch_settings(metadata: &mut WorkbookMetadata, patch: &RustWorkbookSettingsPatch) -> bool {
+    let previous = get_settings(metadata);
+    let mut settings = previous.clone();
+    apply_patch_to_settings(&mut settings, patch);
+    if previous == settings {
         return false;
     }
-
-    let mut txn = doc.transact_mut_with(Origin::from(origin));
-    let settings_map = ensure_settings_map(workbook, &mut txn);
-
-    macro_rules! set_non_null {
-        ($field:expr, $key:literal) => {
-            if let Some(value) = &$field {
-                let json = serde_json::to_value(value).expect("workbook setting must serialize");
-                settings_map.insert(&mut txn, $key, json_to_any(&json));
-            }
-        };
-    }
-    macro_rules! set_nullable {
-        ($field:expr, $key:literal) => {
-            if let Some(value) = &$field {
-                match value {
-                    Some(inner) => {
-                        let json =
-                            serde_json::to_value(inner).expect("workbook setting must serialize");
-                        settings_map.insert(&mut txn, $key, json_to_any(&json));
-                    }
-                    None => {
-                        settings_map.remove(&mut txn, $key);
-                    }
-                }
-            }
-        };
-    }
-
-    set_non_null!(patch.show_horizontal_scrollbar, "showHorizontalScrollbar");
-    set_non_null!(patch.show_vertical_scrollbar, "showVerticalScrollbar");
-    set_non_null!(patch.auto_hide_scroll_bars, "autoHideScrollBars");
-    set_non_null!(patch.show_tab_strip, "showTabStrip");
-    set_non_null!(patch.show_formula_bar, "showFormulaBar");
-    set_non_null!(patch.allow_sheet_reorder, "allowSheetReorder");
-    set_non_null!(patch.auto_fit_on_double_click, "autoFitOnDoubleClick");
-    set_non_null!(patch.show_cut_copy_indicator, "showCutCopyIndicator");
-    set_non_null!(patch.allow_drag_fill, "allowDragFill");
-    set_non_null!(patch.enter_key_direction, "enterKeyDirection");
-    set_non_null!(patch.allow_cell_drag_drop, "allowCellDragDrop");
-    set_non_null!(patch.theme_id, "themeId");
-    set_nullable!(patch.theme_fonts_id, "themeFontsId");
-    set_non_null!(patch.culture, "culture");
-    set_nullable!(patch.selected_sheet_ids, "selectedSheetIds");
-    set_non_null!(patch.is_workbook_protected, "isWorkbookProtected");
-    set_nullable!(
-        patch.workbook_protection_password_hash,
-        "workbookProtectionPasswordHash"
-    );
-    set_nullable!(
-        patch.workbook_protection_options,
-        "workbookProtectionOptions"
-    );
-    set_nullable!(patch.calculation_settings, "calculationSettings");
-    set_non_null!(patch.date1904, "date1904");
-    set_nullable!(patch.default_table_style_id, "defaultTableStyleId");
-    set_nullable!(patch.custom_settings, "customSettings");
-    if let Some(policy_patch) = &patch.automatic_conversion_policy {
-        patch_automatic_conversion_policy_in_txn(
-            &settings_map,
-            &mut txn,
-            &pre.automatic_conversion_policy,
-            policy_patch,
-        );
-    }
-    drop(txn);
-
+    set_settings(metadata, &settings);
     true
 }
 
@@ -146,42 +174,35 @@ pub(super) fn apply_patch_to_settings(
     settings: &mut WorkbookSettings,
     patch: &RustWorkbookSettingsPatch,
 ) {
-    macro_rules! apply_non_null {
+    macro_rules! apply_field {
         ($field:ident) => {
             if let Some(value) = &patch.$field {
                 settings.$field = value.clone();
             }
         };
     }
-    macro_rules! apply_nullable {
-        ($field:ident) => {
-            if let Some(value) = &patch.$field {
-                settings.$field = value.clone();
-            }
-        };
-    }
-    apply_non_null!(show_horizontal_scrollbar);
-    apply_non_null!(show_vertical_scrollbar);
-    apply_non_null!(auto_hide_scroll_bars);
-    apply_non_null!(show_tab_strip);
-    apply_non_null!(show_formula_bar);
-    apply_non_null!(allow_sheet_reorder);
-    apply_non_null!(auto_fit_on_double_click);
-    apply_non_null!(show_cut_copy_indicator);
-    apply_non_null!(allow_drag_fill);
-    apply_non_null!(enter_key_direction);
-    apply_non_null!(allow_cell_drag_drop);
-    apply_non_null!(theme_id);
-    apply_nullable!(theme_fonts_id);
-    apply_non_null!(culture);
-    apply_nullable!(selected_sheet_ids);
-    apply_non_null!(is_workbook_protected);
-    apply_nullable!(workbook_protection_password_hash);
-    apply_nullable!(workbook_protection_options);
-    apply_nullable!(calculation_settings);
-    apply_non_null!(date1904);
-    apply_nullable!(default_table_style_id);
-    apply_nullable!(custom_settings);
+    apply_field!(show_horizontal_scrollbar);
+    apply_field!(show_vertical_scrollbar);
+    apply_field!(auto_hide_scroll_bars);
+    apply_field!(show_tab_strip);
+    apply_field!(show_formula_bar);
+    apply_field!(allow_sheet_reorder);
+    apply_field!(auto_fit_on_double_click);
+    apply_field!(show_cut_copy_indicator);
+    apply_field!(allow_drag_fill);
+    apply_field!(enter_key_direction);
+    apply_field!(allow_cell_drag_drop);
+    apply_field!(theme_id);
+    apply_field!(theme_fonts_id);
+    apply_field!(culture);
+    apply_field!(selected_sheet_ids);
+    apply_field!(is_workbook_protected);
+    apply_field!(workbook_protection_password_hash);
+    apply_field!(workbook_protection_options);
+    apply_field!(calculation_settings);
+    apply_field!(date1904);
+    apply_field!(default_table_style_id);
+    apply_field!(custom_settings);
     if let Some(policy) = &patch.automatic_conversion_policy {
         if let Some(value) = policy.convert_date_like_text {
             settings.automatic_conversion_policy.convert_date_like_text = value;
@@ -223,84 +244,74 @@ pub(super) fn apply_patch_to_settings(
     }
 }
 
-pub(super) fn patch_automatic_conversion_policy_in_txn(
-    settings_map: &MapRef,
-    txn: &mut yrs::TransactionMut<'_>,
-    base: &AutomaticConversionPolicy,
-    patch: &AutomaticConversionPolicyPatch,
-) {
-    let policy_map = match settings_map.get(txn, "automaticConversionPolicy") {
-        Some(Out::YMap(map)) => map,
-        _ => {
-            let base_json = serde_json::to_value(base).expect("serialize");
-            match json_to_any(&base_json) {
-                Any::Map(entries) => settings_map.insert(
-                    txn,
-                    "automaticConversionPolicy",
-                    entries
-                        .iter()
-                        .map(|(k, v)| (k.as_str(), v.clone()))
-                        .collect::<MapPrelim>(),
-                ),
-                _ => settings_map.insert(
-                    txn,
-                    "automaticConversionPolicy",
-                    std::iter::empty::<(&str, Any)>().collect::<MapPrelim>(),
-                ),
-            }
-        }
-    };
-    macro_rules! patch_bool {
-        ($field:expr, $key:literal) => {
-            if let Some(value) = $field {
-                policy_map.insert(txn, $key, Any::Bool(value));
-            }
-        };
-    }
-    patch_bool!(patch.convert_date_like_text, "convertDateLikeText");
-    patch_bool!(patch.convert_time_like_text, "convertTimeLikeText");
-    patch_bool!(patch.convert_fraction_like_text, "convertFractionLikeText");
-    patch_bool!(
-        patch.convert_scientific_notation,
-        "convertScientificNotation"
-    );
-    patch_bool!(
-        patch.convert_leading_zero_numbers,
-        "convertLeadingZeroNumbers"
-    );
-    patch_bool!(patch.convert_long_digit_numbers, "convertLongDigitNumbers");
-    patch_bool!(patch.convert_percent_suffix, "convertPercentSuffix");
-    patch_bool!(patch.convert_currency_symbol, "convertCurrencySymbol");
-    patch_bool!(patch.convert_formatted_numbers, "convertFormattedNumbers");
-}
-
-/// Set calculation settings (merges with current values).
-///
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::snapshot::{AutomaticConversionPolicy, AutomaticConversionPolicyPatch};
-    use crate::storage::YrsStorage;
+    use crate::storage::workbook::WorkbookMetadata;
     use serde_json::json;
 
     #[test]
+    fn workbook_views_decode_both_wire_forms_and_reject_invalid_values_atomically() {
+        let mut metadata = WorkbookMetadata::default();
+        let views = vec![domain_types::domain::workbook::WorkbookView {
+            active_tab: 2,
+            x_window: Some(127),
+            ..Default::default()
+        }];
+        let value = serde_json::to_value(&views).unwrap();
+        for wire in [value.clone(), json!(serde_json::to_string(&views).unwrap())] {
+            set_setting(&mut metadata, "workbookViews", wire).unwrap();
+            assert_eq!(metadata.views, views);
+            assert_eq!(
+                super::super::get_setting(&metadata, "workbookViews"),
+                Some(value.clone())
+            );
+        }
+        for invalid in [json!(42), json!("not JSON"), json!([{"activeTab": "bad"}])] {
+            assert!(set_setting(&mut metadata, "workbookViews", invalid).is_err());
+            assert_eq!(metadata.views, views);
+        }
+    }
+
+    #[test]
+    fn invalid_setting_does_not_change_native_state() {
+        let mut metadata = WorkbookMetadata::default();
+        let before = get_settings(&metadata);
+        assert!(set_setting(&mut metadata, "culture", json!(42)).is_err());
+        assert!(set_setting(&mut metadata, "unknownSetting", json!(true)).is_err());
+        assert_eq!(get_settings(&metadata), before);
+    }
+
+    #[test]
+    fn clearing_protection_updates_the_exported_lock_flags() {
+        let mut metadata = WorkbookMetadata::default();
+        super::super::protect_workbook(&mut metadata, Some("CC2A"), None);
+        set_setting(&mut metadata, "isWorkbookProtected", json!(false)).unwrap();
+        let protection = metadata.protection.as_ref().unwrap();
+        assert!(!protection.lock_structure);
+        assert!(!protection.lock_windows);
+        assert!(!protection.lock_revision);
+        assert!(!get_settings(&metadata).is_workbook_protected);
+    }
+
+    #[test]
     fn test_set_get_single_bool_setting() {
-        let storage = YrsStorage::new();
+        let mut metadata = WorkbookMetadata::default();
 
         // Default is true
-        let settings = get_settings(storage.doc(), storage.workbook_map());
+        let settings = get_settings(&metadata);
         assert!(settings.show_horizontal_scrollbar);
 
         // Set to false
         set_setting(
-            storage.doc(),
-            storage.workbook_map(),
+            &mut metadata,
             "showHorizontalScrollbar",
             serde_json::Value::Bool(false),
-        );
+        )
+        .unwrap();
 
-        let settings = get_settings(storage.doc(), storage.workbook_map());
+        let settings = get_settings(&metadata);
         assert!(!settings.show_horizontal_scrollbar);
         // Other settings unchanged
         assert!(settings.show_vertical_scrollbar);
@@ -312,16 +323,16 @@ mod tests {
 
     #[test]
     fn test_set_get_single_string_setting() {
-        let storage = YrsStorage::new();
+        let mut metadata = WorkbookMetadata::default();
 
         set_setting(
-            storage.doc(),
-            storage.workbook_map(),
+            &mut metadata,
             "themeId",
             serde_json::Value::String("dark-mode".to_string()),
-        );
+        )
+        .unwrap();
 
-        let settings = get_settings(storage.doc(), storage.workbook_map());
+        let settings = get_settings(&metadata);
         assert_eq!(settings.theme_id, "dark-mode");
     }
 
@@ -331,7 +342,7 @@ mod tests {
 
     #[test]
     fn test_set_settings_multiple() {
-        let storage = YrsStorage::new();
+        let mut metadata = WorkbookMetadata::default();
 
         let mut updates = WorkbookSettings::default();
         updates.show_horizontal_scrollbar = false;
@@ -339,9 +350,9 @@ mod tests {
         updates.theme_id = "slice".to_string();
         updates.culture = "de-DE".to_string();
 
-        set_settings(storage.doc(), storage.workbook_map(), &updates);
+        set_settings(&mut metadata, &updates);
 
-        let settings = get_settings(storage.doc(), storage.workbook_map());
+        let settings = get_settings(&metadata);
         assert!(!settings.show_horizontal_scrollbar);
         assert!(!settings.show_vertical_scrollbar);
         assert_eq!(settings.theme_id, "slice");
@@ -354,31 +365,31 @@ mod tests {
 
     #[test]
     fn test_reset_settings() {
-        let storage = YrsStorage::new();
+        let mut metadata = WorkbookMetadata::default();
 
         // Set non-default values
         set_setting(
-            storage.doc(),
-            storage.workbook_map(),
+            &mut metadata,
             "showHorizontalScrollbar",
             serde_json::Value::Bool(false),
-        );
+        )
+        .unwrap();
         set_setting(
-            storage.doc(),
-            storage.workbook_map(),
+            &mut metadata,
             "themeId",
             serde_json::Value::String("dark".to_string()),
-        );
+        )
+        .unwrap();
 
         // Verify changed
-        let settings = get_settings(storage.doc(), storage.workbook_map());
+        let settings = get_settings(&metadata);
         assert!(!settings.show_horizontal_scrollbar);
         assert_eq!(settings.theme_id, "dark");
 
         // Reset
-        reset_settings(storage.doc(), storage.workbook_map());
+        reset_settings(&mut metadata);
 
-        let settings = get_settings(storage.doc(), storage.workbook_map());
+        let settings = get_settings(&metadata);
         assert!(settings.show_horizontal_scrollbar);
         assert_eq!(settings.theme_id, "office");
     }
@@ -388,28 +399,28 @@ mod tests {
     // -------------------------------------------------------------------
     #[test]
     fn test_multiple_set_setting_calls() {
-        let storage = YrsStorage::new();
+        let mut metadata = WorkbookMetadata::default();
 
         set_setting(
-            storage.doc(),
-            storage.workbook_map(),
+            &mut metadata,
             "showHorizontalScrollbar",
             serde_json::Value::Bool(false),
-        );
+        )
+        .unwrap();
         set_setting(
-            storage.doc(),
-            storage.workbook_map(),
+            &mut metadata,
             "showVerticalScrollbar",
             serde_json::Value::Bool(false),
-        );
+        )
+        .unwrap();
         set_setting(
-            storage.doc(),
-            storage.workbook_map(),
+            &mut metadata,
             "culture",
             serde_json::Value::String("ja-JP".to_string()),
-        );
+        )
+        .unwrap();
 
-        let settings = get_settings(storage.doc(), storage.workbook_map());
+        let settings = get_settings(&metadata);
         assert!(!settings.show_horizontal_scrollbar);
         assert!(!settings.show_vertical_scrollbar);
         assert_eq!(settings.culture, "ja-JP");
@@ -419,13 +430,8 @@ mod tests {
 
     #[test]
     fn test_patch_nullable_remove_and_automatic_conversion_policy() {
-        let storage = YrsStorage::new();
-        set_setting(
-            storage.doc(),
-            storage.workbook_map(),
-            "themeFontsId",
-            json!("body-font"),
-        );
+        let mut metadata = WorkbookMetadata::default();
+        set_setting(&mut metadata, "themeFontsId", json!("body-font")).unwrap();
 
         let patch = RustWorkbookSettingsPatch {
             theme_fonts_id: Some(None),
@@ -437,13 +443,8 @@ mod tests {
             ..Default::default()
         };
 
-        assert!(patch_settings_with_origin(
-            storage.doc(),
-            storage.workbook_map(),
-            &patch,
-            ORIGIN_USER_EDIT
-        ));
-        let settings = get_settings(storage.doc(), storage.workbook_map());
+        assert!(patch_settings(&mut metadata, &patch));
+        let settings = get_settings(&metadata);
         assert_eq!(settings.theme_fonts_id, None);
         assert!(!settings.automatic_conversion_policy.convert_date_like_text);
         assert!(!settings.automatic_conversion_policy.convert_currency_symbol);

@@ -1,17 +1,16 @@
 //! XLSX auto-filter round-trip through the full compute-core engine path.
 //!
-//! Regression pin for the Typed OOXML preservation gap where hydration → Yrs → export
-//! silently dropped `<autoFilter>` because the Yrs side only stored a
-//! lossy `FilterState` derived from the OOXML `AutoFilter`.
+//! Native filter metadata preserves the full OOXML `AutoFilter` through
+//! hydration and export, including fields outside the runtime `FilterState`.
 //!
 //! This test constructs XLSX bytes carrying a rich `<autoFilter>`
 //! (every `OoxmlFilterType` variant + sort state + button attrs),
-//! hydrates it into a `YrsComputeEngine`, exports back to XLSX bytes,
+//! hydrates it into a `ComputeEngine`, exports back to XLSX bytes,
 //! and asserts the `<autoFilter>` element survives the round-trip.
 
 use std::sync::Arc;
 
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use domain_types::domain::filter::{
     CalendarType, DateGroupItem, DateTimeGrouping, OoxmlFilterCondition, SortCondition,
     SortConditionBy, SortMethod, SortState,
@@ -190,7 +189,7 @@ fn vc06_conditional_format() -> ConditionalFormat {
         sheet_id: String::new(),
         pivot: None,
         ranges: vec![CFCellRange::new(1, 0, 9, 0)], // A2:A10
-        range_identities: None,
+
         rules: vec![
             CFRule::CellValue {
                 id: "vc06-cell-value".to_string(),
@@ -406,7 +405,7 @@ fn rich_auto_filter_survives_hydrate_export_roundtrip() {
         other => panic!("written col 4 should be Color, got {other:?}"),
     };
 
-    let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
+    let (engine, _) = ComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
 
     // Export back out. The canonical check: the re-exported XLSX must still
     // contain <autoFilter with the original ref.
@@ -496,7 +495,7 @@ fn conditional_formats_survive_hydrate_export_roundtrip() {
     let xlsx_bytes =
         write_xlsx_from_parse_output(&parse_output).expect("write_xlsx_from_parse_output");
 
-    let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
+    let (engine, _) = ComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
     let exported = engine
         .export_to_parse_output()
         .expect("export_to_parse_output")
@@ -546,7 +545,7 @@ fn standalone_sort_state_survives_hydrate_export_roundtrip() {
     let xlsx_bytes =
         write_xlsx_from_parse_output(&parse_output).expect("write_xlsx_from_parse_output");
 
-    let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
+    let (engine, _) = ComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
     let exported = engine
         .export_to_parse_output()
         .expect("export_to_parse_output")
@@ -595,7 +594,7 @@ fn childless_and_explicit_empty_values_filters_survive_hydrate_export_roundtrip(
     let xlsx_bytes =
         write_xlsx_from_parse_output(&parse_output).expect("write_xlsx_from_parse_output");
 
-    let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
+    let (engine, _) = ComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
     let exported = engine.export_to_xlsx_bytes().expect("export_to_xlsx_bytes");
     let (reparsed, _diags) =
         xlsx_parser::parse_xlsx_to_output(&exported).expect("parse_xlsx_to_output");
@@ -634,7 +633,7 @@ fn simple_auto_filter_survives_when_no_column_filters() {
 
     let xlsx_bytes =
         write_xlsx_from_parse_output(&parse_output).expect("write_xlsx_from_parse_output");
-    let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
+    let (engine, _) = ComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
     let exported = engine.export_to_xlsx_bytes().expect("export_to_xlsx_bytes");
     let (reparsed, _diags) =
         xlsx_parser::parse_xlsx_to_output(&exported).expect("parse_xlsx_to_output");

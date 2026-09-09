@@ -1,6 +1,6 @@
 use cell_types::{SheetId, SheetPos};
 use compute_core::data_table::DataTableParams;
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
 
@@ -36,7 +36,13 @@ fn formula_cell(id_suffix: u32, row: u32, col: u32, formula: &str) -> CellData {
 
 fn workbook() -> WorkbookSnapshot {
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET_UUID.to_string(),
             name: "Sheet1".to_string(),
             rows: 20,
@@ -59,7 +65,7 @@ fn workbook() -> WorkbookSnapshot {
     }
 }
 
-fn value_at(engine: &YrsComputeEngine, sheet_id: &SheetId, row: u32, col: u32) -> CellValue {
+fn value_at(engine: &ComputeEngine, sheet_id: &SheetId, row: u32, col: u32) -> CellValue {
     engine
         .mirror()
         .get_cell_value_at(sheet_id, SheetPos::new(row, col))
@@ -69,7 +75,7 @@ fn value_at(engine: &YrsComputeEngine, sheet_id: &SheetId, row: u32, col: u32) -
 
 #[test]
 fn data_table_is_transient_and_restores_input_cells() {
-    let (engine, _) = YrsComputeEngine::from_snapshot(workbook()).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(workbook()).unwrap();
     let sheet_id = SheetId::from_uuid_str(SHEET_UUID).unwrap();
     let row_input_before = value_at(&engine, &sheet_id, 0, 0);
     let col_input_before = value_at(&engine, &sheet_id, 1, 0);

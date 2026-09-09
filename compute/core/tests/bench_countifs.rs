@@ -7,7 +7,7 @@
 //!   cargo test -p compute-core --features perf-tests --release \
 //!     --test bench_countifs -- --nocapture
 //!
-//! The test builds a synthetic workbook (no XLSX parsing, no Yrs overhead)
+//! The test builds a synthetic workbook (without XLSX parsing or workbook storage overhead)
 //! and times just the ComputeCore recalc — the exact bottleneck.
 
 #![cfg(feature = "perf-tests")]
@@ -110,7 +110,13 @@ fn build_snapshot(data_rows: u32, formula_count: u32) -> WorkbookSnapshot {
     }
 
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET_UUID.to_string(),
             name: "Data".to_string(),
             rows: data_rows + formula_count,
@@ -300,7 +306,13 @@ fn bench_sumifs_full_column() {
     }
 
     let snapshot = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET_UUID.to_string(),
             name: "Data".to_string(),
             rows: data_rows + formula_count,

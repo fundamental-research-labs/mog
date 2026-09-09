@@ -20,10 +20,10 @@
 //!
 //! | Op family | Entry point | Status |
 //! |---|---|---|
-//! | `insert_rows` / `delete_rows` / `insert_cols` / `delete_cols` | `YrsComputeEngine::structure_change(sheet_id, &StructureChange)` (`compute/core/src/storage/engine/structural.rs:29`) | ready |
-//! | `add_sheet` / `delete_sheet` | `YrsComputeEngine::create_sheet(name)` / `YrsComputeEngine::delete_sheet(sheet_id)` (`compute/core/src/storage/engine/delegations.rs:888/905`) | ready |
-//! | `rename_sheet` | `YrsComputeEngine::rename_compute_sheet(sheet_id, name)` (`compute/core/src/storage/engine/delegations.rs:616`) | ready |
-//! | `merge_range` / `unmerge_range` | `YrsComputeEngine::merge_range` / `unmerge_range` (`compute/core/src/storage/engine/structural.rs:298/318`) | ready |
+//! | `insert_rows` / `delete_rows` / `insert_cols` / `delete_cols` | `ComputeEngine::structure_change(sheet_id, &StructureChange)` (`compute/core/src/storage/engine/structural.rs:29`) | ready |
+//! | `add_sheet` / `delete_sheet` | `ComputeEngine::create_sheet(name)` / `ComputeEngine::delete_sheet(sheet_id)` (`compute/core/src/storage/engine/delegations.rs:888/905`) | ready |
+//! | `rename_sheet` | `ComputeEngine::rename_compute_sheet(sheet_id, name)` (`compute/core/src/storage/engine/delegations.rs:616`) | ready |
+//! | `merge_range` / `unmerge_range` | `ComputeEngine::merge_range` / `unmerge_range` (`compute/core/src/storage/engine/structural.rs:298/318`) | ready |
 //!
 //! All entry points are publicly reachable from an integration test — no
 //! additional wrapper was required. See `stage1-3-preflight.md` in the
@@ -33,7 +33,7 @@
 //!   cargo test -p compute-core --test structural_op_smoke
 
 use cell_types::{SheetId, SheetPos};
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use formula_types::StructureChange;
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
@@ -80,6 +80,9 @@ fn text_cell(id_suffix: u32, row: u32, col: u32, t: &str) -> CellData {
 fn smoke_snapshot_one_sheet() -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_id_str(1),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -107,6 +110,9 @@ fn smoke_snapshot_two_sheets() -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: sheet_id_str(1),
                 name: "Alpha".to_string(),
                 rows: 100,
@@ -115,6 +121,9 @@ fn smoke_snapshot_two_sheets() -> WorkbookSnapshot {
                 ranges: vec![],
             },
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: sheet_id_str(2),
                 name: "Beta".to_string(),
                 rows: 100,
@@ -128,7 +137,7 @@ fn smoke_snapshot_two_sheets() -> WorkbookSnapshot {
 }
 
 /// Helper: read a cell value at a sheet position via the mirror.
-fn cell_at(engine: &YrsComputeEngine, sid: &SheetId, row: u32, col: u32) -> CellValue {
+fn cell_at(engine: &ComputeEngine, sid: &SheetId, row: u32, col: u32) -> CellValue {
     engine
         .mirror()
         .get_cell_value_at(sid, SheetPos::new(row, col))
@@ -137,7 +146,7 @@ fn cell_at(engine: &YrsComputeEngine, sid: &SheetId, row: u32, col: u32) -> Cell
 }
 
 /// Helper: list of (start_row, start_col, end_row, end_col) for all merges on a sheet.
-fn merges(engine: &YrsComputeEngine, sid: &SheetId) -> Vec<(u32, u32, u32, u32)> {
+fn merges(engine: &ComputeEngine, sid: &SheetId) -> Vec<(u32, u32, u32, u32)> {
     engine
         .get_all_merges_in_sheet(sid)
         .into_iter()
@@ -146,7 +155,7 @@ fn merges(engine: &YrsComputeEngine, sid: &SheetId) -> Vec<(u32, u32, u32, u32)>
 }
 
 /// Helper: sorted list of sheet names currently in the mirror.
-fn sheet_names(engine: &YrsComputeEngine) -> Vec<String> {
+fn sheet_names(engine: &ComputeEngine) -> Vec<String> {
     let mut names: Vec<String> = engine
         .mirror()
         .sheet_ids()
@@ -169,7 +178,7 @@ fn sheet_names(engine: &YrsComputeEngine) -> Vec<String> {
 #[test]
 fn smoke_insert_rows_then_delete_rows() {
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(smoke_snapshot_one_sheet()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(smoke_snapshot_one_sheet()).expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
 
     // Pre-state
@@ -220,7 +229,7 @@ fn smoke_insert_rows_then_delete_rows() {
 #[test]
 fn smoke_delete_rows_then_insert_rows() {
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(smoke_snapshot_one_sheet()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(smoke_snapshot_one_sheet()).expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
 
     let pre_row2 = cell_at(&engine, &sid, 2, 0);
@@ -267,7 +276,7 @@ fn smoke_delete_rows_then_insert_rows() {
 #[test]
 fn smoke_insert_cols_then_delete_cols() {
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(smoke_snapshot_one_sheet()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(smoke_snapshot_one_sheet()).expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
 
     let pre_col2 = cell_at(&engine, &sid, 0, 2);
@@ -315,7 +324,7 @@ fn smoke_insert_cols_then_delete_cols() {
 #[test]
 fn smoke_delete_cols_then_insert_cols() {
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(smoke_snapshot_one_sheet()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(smoke_snapshot_one_sheet()).expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
 
     let pre_col2 = cell_at(&engine, &sid, 0, 2);
@@ -360,7 +369,7 @@ fn smoke_delete_cols_then_insert_cols() {
 #[test]
 fn smoke_add_sheet_then_delete_sheet() {
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(smoke_snapshot_two_sheets()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(smoke_snapshot_two_sheets()).expect("from_snapshot");
 
     let pre_names = sheet_names(&engine);
     assert_eq!(pre_names, vec!["Alpha".to_string(), "Beta".to_string()]);
@@ -403,7 +412,7 @@ fn smoke_add_sheet_then_delete_sheet() {
 #[test]
 fn smoke_delete_sheet_then_add_sheet() {
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(smoke_snapshot_two_sheets()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(smoke_snapshot_two_sheets()).expect("from_snapshot");
 
     let pre_names = sheet_names(&engine);
 
@@ -428,7 +437,7 @@ fn smoke_delete_sheet_then_add_sheet() {
 #[test]
 fn smoke_rename_sheet_then_rename_back() {
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(smoke_snapshot_two_sheets()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(smoke_snapshot_two_sheets()).expect("from_snapshot");
 
     let alpha_sid = engine.mirror().sheet_by_name("Alpha").expect("Alpha sid");
     let pre_names = sheet_names(&engine);
@@ -464,7 +473,7 @@ fn smoke_rename_sheet_then_rename_back() {
 #[test]
 fn smoke_merge_range_then_unmerge_range() {
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(smoke_snapshot_one_sheet()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(smoke_snapshot_one_sheet()).expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
 
     let pre_merges = merges(&engine, &sid);
@@ -494,7 +503,7 @@ fn smoke_unmerge_range_then_merge_range() {
     // API (the snapshot builder doesn't carry merges). The "pre-state" for
     // this op pair is therefore "B2:C3 merged".
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(smoke_snapshot_one_sheet()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(smoke_snapshot_one_sheet()).expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
     engine
         .merge_range(&sid, 1, 1, 2, 2)

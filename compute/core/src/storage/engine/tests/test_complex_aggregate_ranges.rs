@@ -1,5 +1,5 @@
 //! Complex aggregation must consume production range and array arguments.
-use super::super::YrsComputeEngine;
+use super::super::ComputeEngine;
 use super::helpers::cell_value_at;
 use domain_types::{CellData, ParseOutput, SheetData};
 use value_types::{CellError, CellValue};
@@ -72,7 +72,7 @@ fn complex_aggregate_ranges_recalculate_after_xlsx_import() {
         ..Default::default()
     };
     let bytes = xlsx_parser::write::write_xlsx_from_parse_output(&input).unwrap();
-    let (mut engine, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).unwrap();
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).unwrap();
     engine.recalculate().unwrap();
     let sheet_id = engine.stores.storage.sheet_order()[0];
     for (row, (formula, expected)) in formulas.iter().enumerate() {

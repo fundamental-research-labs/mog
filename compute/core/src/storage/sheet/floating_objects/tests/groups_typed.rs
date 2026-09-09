@@ -6,9 +6,7 @@ use crate::storage::sheet::floating_objects::{
 
 #[test]
 fn test_create_floating_object_group_typed() {
-    let (storage, sheet_id) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
+    let (mut storage, sheet_id) = storage_with_sheet();
     let config = serde_json::json!({
         "children": ["obj-a", "obj-b"],
         "x": 10.0,
@@ -17,8 +15,7 @@ fn test_create_floating_object_group_typed() {
         "height": 150.0
     });
     let group_id = create_floating_object_group(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         &config,
         &crate::storage::STORAGE_ID_ALLOC,
@@ -26,7 +23,7 @@ fn test_create_floating_object_group_typed() {
     .expect("create group should succeed");
     assert!(group_id.starts_with("grp-"));
 
-    let grp = get_floating_object_group_typed(doc, sheets, &sheet_id, &group_id).unwrap();
+    let grp = get_floating_object_group_typed(&storage, &sheet_id, &group_id).unwrap();
     assert_eq!(grp.id, group_id);
     assert_eq!(grp.children, vec!["obj-a", "obj-b"]);
     assert_eq!(grp.x, Some(value_types::FiniteF64::must(10.0)));
@@ -37,13 +34,10 @@ fn test_create_floating_object_group_typed() {
 
 #[test]
 fn test_update_floating_object_group_typed() {
-    let (storage, sheet_id) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
+    let (mut storage, sheet_id) = storage_with_sheet();
     let config = serde_json::json!({ "children": ["obj-a"], "x": 10.0 });
     let group_id = create_floating_object_group(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         &config,
         &crate::storage::STORAGE_ID_ALLOC,
@@ -51,10 +45,10 @@ fn test_update_floating_object_group_typed() {
     .unwrap();
 
     let updates = serde_json::json!({ "x": 99.0, "width": 500.0 });
-    let updated = update_floating_object_group(doc, sheets, &sheet_id, &group_id, &updates);
+    let updated = update_floating_object_group(&mut storage, &sheet_id, &group_id, &updates);
     assert!(updated);
 
-    let grp = get_floating_object_group_typed(doc, sheets, &sheet_id, &group_id).unwrap();
+    let grp = get_floating_object_group_typed(&storage, &sheet_id, &group_id).unwrap();
     assert_eq!(grp.x, Some(value_types::FiniteF64::must(99.0)));
     assert_eq!(grp.width, Some(value_types::FiniteF64::must(500.0)));
     assert_eq!(grp.children, vec!["obj-a"]); // untouched
@@ -62,26 +56,22 @@ fn test_update_floating_object_group_typed() {
 
 #[test]
 fn test_get_all_floating_object_groups_typed() {
-    let (storage, sheet_id) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
+    let (mut storage, sheet_id) = storage_with_sheet();
     let id1 = create_floating_object_group(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         &serde_json::json!({"children": []}),
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
     let id2 = create_floating_object_group(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         &serde_json::json!({"children": []}),
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
-    let all = get_all_floating_object_groups_typed(doc, sheets, &sheet_id);
+    let all = get_all_floating_object_groups_typed(&storage, &sheet_id);
     assert_eq!(all.len(), 2);
     let ids: Vec<&str> = all.iter().map(|g| g.id.as_str()).collect();
     assert!(ids.contains(&id1.as_str()));
@@ -90,13 +80,10 @@ fn test_get_all_floating_object_groups_typed() {
 
 #[test]
 fn test_create_floating_object_group_nonexistent_sheet() {
-    let (storage, _) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = storage.sheets();
+    let (mut storage, _) = storage_with_sheet();
     let fake = make_sheet_id(999);
     let result = create_floating_object_group(
-        doc,
-        sheets,
+        &mut storage,
         &fake,
         &serde_json::json!({"children": []}),
         &crate::storage::STORAGE_ID_ALLOC,

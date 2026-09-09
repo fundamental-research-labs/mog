@@ -1,7 +1,7 @@
 //! Extracted CF cache service functions.
 //!
 //! Handles re-evaluation of conditional formatting rules and cache management.
-//! The original methods on `YrsComputeEngine` delegate to these free functions.
+//! The original methods on `ComputeEngine` delegate to these free functions.
 
 use std::collections::HashMap;
 
@@ -11,7 +11,7 @@ use crate::storage::engine::CFCacheEntry;
 use crate::storage::engine::cf_cache::convert_cf_formats_to_rules;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::cf_store;
-use cell_types::{CellId, SheetId};
+use cell_types::SheetId;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 /// After a recalculation pass, refresh the CF cache for every sheet that
@@ -117,7 +117,7 @@ pub(in crate::storage::engine) fn refresh_cf_caches_after_recalc(
 
 /// Re-evaluate all conditional formatting rules for a sheet and update the cache.
 ///
-/// Pipeline: read CF formats from Yrs storage -> convert domain types to
+/// Pipeline: read CF formats from native storage -> convert domain types to
 /// compute-cf rules -> evaluate via `ComputeCore::eval_cf` -> store results
 /// in `cf_cache` keyed by `(row, col)`.
 pub(in crate::storage::engine) fn refresh_cf_cache(
@@ -155,28 +155,10 @@ pub(in crate::storage::engine) fn evaluate_cf_for_sheet(
     theme_palette: &HashMap<String, String>,
     sheet_id: &SheetId,
 ) -> Option<Vec<crate::cf::types::CellCFResult>> {
-    // 1. Read CF formats from Yrs storage
-    let formats = cf_store::get_formats_for_sheet(
-        stores.storage.doc(),
-        &stores.storage.sheets_ref(),
-        sheet_id,
-    );
+    // 1. Read CF formats from native storage
+    let formats = cf_store::get_formats_for_sheet(&stores.storage, sheet_id);
 
-    // 2. Convert domain types to evaluation types.
-    //    Pass a resolver closure that resolves CellId UUID strings to (row, col)
-    //    positions via the CellMirror.
-    let rules = convert_cf_formats_to_rules(
-        &formats,
-        |sheet_id_str, cell_id_str| {
-            let sid = SheetId::from_uuid_str(sheet_id_str).ok()?;
-            let cid = CellId::from_uuid_str(cell_id_str).ok()?;
-            let sheet = mirror.get_sheet(&sid)?;
-            let pos = sheet.position_of(&cid)?;
-            Some((pos.row(), pos.col()))
-        },
-        Some(*sheet_id),
-        theme_palette,
-    );
+    let rules = convert_cf_formats_to_rules(&formats, Some(*sheet_id), theme_palette);
 
     // 3. If no rules, remove cache entry and return
     if rules.is_empty() {
@@ -194,18 +176,14 @@ pub(in crate::storage::engine) fn evaluate_filter_icons(
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> FxHashMap<(u32, u32), domain_types::FilterIconIdentity> {
-    let needs_icons = crate::storage::sheet::filters::get_filter(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        filter_id,
-    )
-    .is_some_and(|filter| {
-        filter
-            .column_filters
-            .values()
-            .any(|criterion| matches!(criterion, domain_types::ColumnFilter::Icon { .. }))
-    });
+    let needs_icons =
+        crate::storage::sheet::filters::get_filter(&stores.storage, sheet_id, filter_id)
+            .is_some_and(|filter| {
+                filter
+                    .column_filters
+                    .values()
+                    .any(|criterion| matches!(criterion, domain_types::ColumnFilter::Icon { .. }))
+            });
     if !needs_icons {
         return FxHashMap::default();
     }

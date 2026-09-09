@@ -82,9 +82,9 @@ fn cell_iterator_call_site_audit() {
     //     find_last_column (RowEdge): finds last data column in a row.
     //     Must see Range-backed cells to avoid truncating data.
     //
-    // 15. storage/engine/services/structural.rs:817 — SPARSE_ONLY
-    //     invalidate_stale_yrs_formulas: walks formula cells to sync
-    //     shifted formulas back to Yrs. Only anchored cells have formulas.
+    // 15. scheduler::formula_strings_iter — SPARSE_ONLY
+    //     Exposes regenerated formula text after structural changes.
+    //     Only authored formula cells participate.
     //
     // 16. storage/engine/services/structural.rs:1126 — SPARSE_ONLY
     //     pre_delete_re_anchor_range_refs: walks formula cells to update

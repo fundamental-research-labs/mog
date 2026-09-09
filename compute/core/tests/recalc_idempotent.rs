@@ -16,7 +16,7 @@
 //!   cargo test -p compute-core --test recalc_idempotent -- --nocapture
 
 use cell_types::SheetPos;
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use snapshot_types::{
     CalcMode, CalculationSettings, CellData, RecalcOptions, SheetSnapshot, WorkbookSnapshot,
 };
@@ -57,6 +57,9 @@ fn formula_cell(row: u32, col: u32, formula: &str) -> CellData {
 fn one_sheet_snapshot(cells: Vec<CellData>) -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -72,7 +75,7 @@ fn sheet_id() -> cell_types::SheetId {
     cell_types::SheetId::from_uuid_str("550e8400-e29b-41d4-a716-446655440000").unwrap()
 }
 
-fn number_at(engine: &YrsComputeEngine, row: u32, col: u32) -> f64 {
+fn number_at(engine: &ComputeEngine, row: u32, col: u32) -> f64 {
     match engine
         .mirror()
         .get_cell_value_at(&sheet_id(), SheetPos::new(row, col))
@@ -105,7 +108,7 @@ fn idempotent_recalc_reports_zero_cells_evaluated() {
     ];
 
     let (mut engine, init_recalc) =
-        YrsComputeEngine::from_snapshot(one_sheet_snapshot(cells)).unwrap();
+        ComputeEngine::from_snapshot(one_sheet_snapshot(cells)).unwrap();
 
     // Init path evaluated the three formula cells.
     assert!(
@@ -154,7 +157,7 @@ fn idempotent_recalc_after_xlsx_export() {
         formula_cell(2, 0, "=A2*2"),
     ];
 
-    let (mut engine, _init) = YrsComputeEngine::from_snapshot(one_sheet_snapshot(cells)).unwrap();
+    let (mut engine, _init) = ComputeEngine::from_snapshot(one_sheet_snapshot(cells)).unwrap();
 
     let opts = RecalcOptions::default();
     let r1 = engine.recalculate_with_options(&opts).unwrap();
@@ -201,7 +204,7 @@ fn idempotent_recalc_with_range_dep_formulas() {
     cells.push(formula_cell(1, 3, "=SUM(A1:A20)"));
     cells.push(formula_cell(2, 3, "=D1+D2"));
 
-    let (mut engine, _init) = YrsComputeEngine::from_snapshot(one_sheet_snapshot(cells)).unwrap();
+    let (mut engine, _init) = ComputeEngine::from_snapshot(one_sheet_snapshot(cells)).unwrap();
 
     let opts = RecalcOptions::default();
     let r1 = engine.recalculate_with_options(&opts).unwrap();
@@ -238,7 +241,7 @@ fn recalc_after_edit_still_evaluates() {
     ];
     let formula_count = 1u64;
 
-    let (mut engine, _init) = YrsComputeEngine::from_snapshot(one_sheet_snapshot(cells)).unwrap();
+    let (mut engine, _init) = ComputeEngine::from_snapshot(one_sheet_snapshot(cells)).unwrap();
 
     let opts = RecalcOptions::default();
     let _r1 = engine.recalculate_with_options(&opts).unwrap();
@@ -279,7 +282,7 @@ fn recalc_after_structural_change_still_evaluates() {
     ];
     let formula_count = 2u64;
 
-    let (mut engine, _init) = YrsComputeEngine::from_snapshot(one_sheet_snapshot(cells)).unwrap();
+    let (mut engine, _init) = ComputeEngine::from_snapshot(one_sheet_snapshot(cells)).unwrap();
 
     let opts = RecalcOptions::default();
     let _r1 = engine.recalculate_with_options(&opts).unwrap();
@@ -328,7 +331,7 @@ fn recalc_bit_accumulates_across_multiple_edits() {
     ];
     let formula_count = 3u64;
 
-    let (mut engine, _init) = YrsComputeEngine::from_snapshot(one_sheet_snapshot(cells)).unwrap();
+    let (mut engine, _init) = ComputeEngine::from_snapshot(one_sheet_snapshot(cells)).unwrap();
 
     let opts = RecalcOptions::default();
     let _r1 = engine.recalculate_with_options(&opts).unwrap();
@@ -378,7 +381,7 @@ fn init_leaves_bit_clean() {
     ];
 
     let (mut engine, init_recalc) =
-        YrsComputeEngine::from_snapshot(one_sheet_snapshot(cells)).unwrap();
+        ComputeEngine::from_snapshot(one_sheet_snapshot(cells)).unwrap();
 
     // Init did the heavy lifting.
     assert!(
@@ -403,7 +406,7 @@ fn init_leaves_bit_clean() {
 #[test]
 fn manual_calculation_keeps_dependents_stale_until_explicit_recalc() {
     let cells = vec![value_cell(0, 0, 10.0), formula_cell(0, 1, "=A1+1")];
-    let (mut engine, _init) = YrsComputeEngine::from_snapshot(one_sheet_snapshot(cells)).unwrap();
+    let (mut engine, _init) = ComputeEngine::from_snapshot(one_sheet_snapshot(cells)).unwrap();
     assert_eq!(number_at(&engine, 0, 1), 11.0);
 
     let mut settings = engine.get_workbook_settings();
@@ -438,7 +441,7 @@ fn manual_calculation_keeps_dependents_stale_until_explicit_recalc() {
 fn clean_recalc_still_evaluates_volatile_formulas() {
     compute_core::scheduler::ComputeCore::set_current_time(46147.25);
     let cells = vec![formula_cell(0, 0, "=NOW()")];
-    let (mut engine, _init) = YrsComputeEngine::from_snapshot(one_sheet_snapshot(cells)).unwrap();
+    let (mut engine, _init) = ComputeEngine::from_snapshot(one_sheet_snapshot(cells)).unwrap();
     assert_eq!(number_at(&engine, 0, 0), 46147.25);
 
     // Init leaves dirty=false, but volatile formulas must still calculate on

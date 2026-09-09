@@ -32,6 +32,7 @@ impl PreparedRangeFormatLayers {
     fn new(
         sheet_mirror: Option<&crate::mirror::SheetMirror>,
         requested_positions: &[(u32, u32)],
+        layer: crate::mirror::FormatRangeLayer,
     ) -> Self {
         let mut positions = requested_positions.to_vec();
         positions.sort_unstable();
@@ -67,6 +68,7 @@ impl PreparedRangeFormatLayers {
         let mut ranges = sheet_mirror
             .format_ranges()
             .iter()
+            .filter(|range| range.layer == layer)
             .filter_map(|range| {
                 sheet_mirror
                     .range_format_cache()
@@ -74,7 +76,7 @@ impl PreparedRangeFormatLayers {
                     .map(|format| (range, format))
             })
             .collect::<Vec<_>>();
-        ranges.sort_unstable_by_key(|(range, _)| range.id.as_u128());
+        ranges.sort_unstable_by_key(|(range, _)| (range.precedence, range.id.as_u128()));
 
         let default_state = Rc::new(RangeFormatState {
             id: 0,
@@ -85,7 +87,7 @@ impl PreparedRangeFormatLayers {
         let mut next_state_id = 1_u64;
         let mut transitions: FxHashMap<u64, Rc<RangeFormatState>> = FxHashMap::default();
         for (range, range_format) in ranges {
-            // Imported or collaborative state can contain malformed rectangles.
+            // Imported state can contain malformed rectangles.
             // They cover no positions and must not make the partition slice panic.
             if range.start_row > range.end_row || range.start_col > range.end_col {
                 continue;
@@ -160,17 +162,18 @@ impl PreparedRangeFormatLayers {
 }
 
 struct PreparedDisplayedFormatContext<'a> {
-    engine: &'a YrsComputeEngine,
+    engine: &'a ComputeEngine,
     sheet_id: &'a SheetId,
     base_format: CellFormat,
     cell_formats: properties::PreloadedCellFormatLayers,
     row_formats: FxHashMap<u32, CellFormat>,
     col_formats: FxHashMap<u32, CellFormat>,
     range_formats: PreparedRangeFormatLayers,
+    direct_range_formats: PreparedRangeFormatLayers,
 }
 
 impl<'a> PreparedDisplayedFormatContext<'a> {
-    fn new(engine: &'a YrsComputeEngine, sheet_id: &'a SheetId, positions: &[(u32, u32)]) -> Self {
+    fn new(engine: &'a ComputeEngine, sheet_id: &'a SheetId, positions: &[(u32, u32)]) -> Self {
         let grid_index = engine.stores.grid_indexes.get(sheet_id);
         let mut cell_ids = positions
             .iter()
@@ -187,13 +190,8 @@ impl<'a> PreparedDisplayedFormatContext<'a> {
         cell_ids.sort_unstable_by_key(|cell_id| cell_id.as_u128());
         cell_ids.dedup();
 
-        let cell_formats = properties::get_cell_format_layers_for_ids(
-            engine.stores.storage.doc(),
-            engine.stores.storage.workbook_map(),
-            engine.stores.storage.sheets(),
-            sheet_id,
-            &cell_ids,
-        );
+        let cell_formats =
+            properties::get_cell_format_layers_for_ids(&engine.stores.storage, sheet_id, &cell_ids);
         let row_formats =
             properties::get_all_row_formats(&engine.stores.storage, sheet_id, grid_index)
                 .into_iter()
@@ -215,6 +213,12 @@ impl<'a> PreparedDisplayedFormatContext<'a> {
             range_formats: PreparedRangeFormatLayers::new(
                 engine.mirror.get_sheet(sheet_id),
                 positions,
+                crate::mirror::FormatRangeLayer::Inherited,
+            ),
+            direct_range_formats: PreparedRangeFormatLayers::new(
+                engine.mirror.get_sheet(sheet_id),
+                positions,
+                crate::mirror::FormatRangeLayer::Direct,
             ),
         }
     }
@@ -244,6 +248,7 @@ impl<'a> PreparedDisplayedFormatContext<'a> {
             self.row_formats.get(&row),
             col,
             self.range_formats.get(row, col),
+            self.direct_range_formats.get(row, col),
             structured_format.as_ref(),
             cell_format,
             self.engine.mirror.get_sheet(self.sheet_id),
@@ -254,7 +259,7 @@ impl<'a> PreparedDisplayedFormatContext<'a> {
 }
 
 fn finish_displayed_format(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -295,7 +300,7 @@ fn finish_displayed_format(
 }
 
 pub(super) fn get_displayed_cell_properties(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -337,7 +342,7 @@ pub(super) fn get_displayed_cell_properties(
 }
 
 pub(super) fn get_displayed_formats_for_cells(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     positions: &[(u32, u32)],
 ) -> DisplayedFormatProjection {
@@ -374,7 +379,7 @@ pub(super) fn get_displayed_formats_for_cells(
 }
 
 pub(super) fn get_displayed_range_properties(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,

@@ -7,7 +7,7 @@
 //! a different code path than `from_snapshot`; this file pins the invariant
 //! that meta mutations on XLSX-hydrated sheets survive export + re-parse.
 
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use domain_types::{
     CellData as DomainCellData, ParseOutput, SheetData, SheetDimensions, ThemeData,
     WorkbookStylesheet,
@@ -21,6 +21,9 @@ use value_types::{CellValue, FiniteF64};
 fn one_sheet_snapshot(name: &str, rows: u32, cols: u32, cells: Vec<CellData>) -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: name.to_string(),
             rows,
@@ -45,7 +48,7 @@ fn value_cell(uuid_suffix: u32, row: u32, col: u32, n: f64) -> CellData {
 }
 
 fn xlsx_bytes_for(snapshot: WorkbookSnapshot) -> Vec<u8> {
-    let (engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (engine, _) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
     engine.export_to_xlsx_bytes().expect("export_to_xlsx_bytes")
 }
 
@@ -105,7 +108,7 @@ fn tab_color_xlsx_bytes() -> Vec<u8> {
         .expect("tab color parse output should be writable")
 }
 
-fn sheet_id_by_name(engine: &YrsComputeEngine, name: &str) -> cell_types::SheetId {
+fn sheet_id_by_name(engine: &ComputeEngine, name: &str) -> cell_types::SheetId {
     engine
         .get_all_sheet_ids()
         .into_iter()
@@ -117,7 +120,7 @@ fn sheet_id_by_name(engine: &YrsComputeEngine, name: &str) -> cell_types::SheetI
 #[test]
 fn xlsx_rename_sheet_persists_on_export() {
     let bytes = xlsx_bytes_for(one_cell_fixture("Original"));
-    let (mut engine, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
     let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
 
     engine
@@ -138,7 +141,7 @@ fn xlsx_rename_sheet_persists_on_export() {
 #[test]
 fn xlsx_set_tab_color_persists_on_export() {
     let bytes = xlsx_bytes_for(one_cell_fixture("TabColor"));
-    let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
     let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
 
     engine
@@ -159,7 +162,7 @@ fn xlsx_set_tab_color_persists_on_export() {
 #[test]
 fn xlsx_imported_tab_colors_render_from_ooxml_color_variants() {
     let bytes = tab_color_xlsx_bytes();
-    let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
 
     assert_eq!(
         engine
@@ -191,7 +194,7 @@ fn xlsx_imported_tab_colors_render_from_ooxml_color_variants() {
 fn deferred_xlsx_import_preserves_metadata_only_sheet_tab_colors() {
     let bytes = tab_color_xlsx_bytes();
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(WorkbookSnapshot::default()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(WorkbookSnapshot::default()).expect("from_snapshot");
 
     engine
         .import_from_xlsx_bytes_deferred(&bytes)
@@ -224,6 +227,9 @@ fn xlsx_set_sheet_hidden_persists_on_export() {
     let snap = WorkbookSnapshot {
         sheets: vec![
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
                 name: "Visible".to_string(),
                 rows: 5,
@@ -232,6 +238,9 @@ fn xlsx_set_sheet_hidden_persists_on_export() {
                 ranges: vec![],
             },
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: "550e8400-e29b-41d4-a716-446655440001".to_string(),
                 name: "ToHide".to_string(),
                 rows: 5,
@@ -243,7 +252,7 @@ fn xlsx_set_sheet_hidden_persists_on_export() {
         ..Default::default()
     };
     let bytes = xlsx_bytes_for(snap);
-    let (mut engine, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
 
     // Find the "ToHide" sheet id via mirror.
     let sid_hide = *engine

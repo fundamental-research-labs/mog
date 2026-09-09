@@ -5,7 +5,7 @@ use cell_types::SheetId;
 use domain_types::{ParseOutput, SheetData, SheetView, domain::workbook::WorkbookView};
 
 #[test]
-fn build_parse_output_from_yrs_projects_selected_sheets_into_workbook_views() {
+fn build_parse_output_projects_selected_sheets_into_workbook_views() {
     let input = ParseOutput {
         sheets: vec![
             SheetData {
@@ -41,7 +41,7 @@ fn build_parse_output_from_yrs_projects_selected_sheets_into_workbook_views() {
         .set_workbook_settings(settings)
         .expect("selected sheet state write should succeed");
 
-    let exported = engine.build_parse_output_from_yrs().expect("export projection");
+    let exported = engine.build_parse_output().expect("export projection");
 
     assert_eq!(exported.workbook_views[0].active_tab, 1);
     assert!(!exported.sheets[0].view.tab_selected);

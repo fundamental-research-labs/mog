@@ -4,11 +4,7 @@ version = "0.1.0"
 publish = false
 edition.workspace = true
 authors = ["Shortcut Team"]
-description = "Shared domain types for XLSX pipeline: parser produces, Yrs stores (structured), writer consumes. Single source of truth."
-
-[features]
-default = ["yrs"]
-yrs = ["dep:yrs"]
+description = "Shared domain types for XLSX pipeline: native compute, parser, and writer."
 
 [dependencies]
 # Foundation types
@@ -24,12 +20,9 @@ serde_json = { workspace = true }
 uuid = { workspace = true, features = ["v5"] }
 # Schema description derive macro (DescribeSchema)
 bridge-types = { path = "../infra/rust-bridge/bridge-types" }
-# Observability — Yrs read paths log unknown OOXML tokens (round-D follow-up)
+# Domain diagnostics
 tracing = { workspace = true }
 
-# CRDT storage (feature-gated for environments without Yrs)
-yrs = { workspace = true, optional = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }
-yrs = { workspace = true }

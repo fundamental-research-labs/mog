@@ -1,4 +1,4 @@
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 
 use crate::edit::{op_inverse_pair, sheet_id};
 use crate::runner::{EDIT_DELTA, FamilyResult};
@@ -13,7 +13,7 @@ fn class_iii_chain() {
     let sid = sheet_id();
     for seed in seeds() {
         let (snapshot, dependent) = chain_snapshot(seed.value);
-        let (mut engine, _init) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+        let (mut engine, _init) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
         let outcome = op_inverse_pair(&mut engine, &sid, 0, 0, seed.value, EDIT_DELTA, dependent);
         result.record(format!("chain_{}", seed.slug), outcome);
     }
@@ -26,7 +26,7 @@ fn class_iii_fanin() {
     let sid = sheet_id();
     for seed in seeds() {
         let (snapshot, dependent) = fanin_snapshot(seed.value);
-        let (mut engine, _init) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+        let (mut engine, _init) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
         let outcome = op_inverse_pair(&mut engine, &sid, 0, 0, seed.value, EDIT_DELTA, dependent);
         result.record(format!("fanin_{}", seed.slug), outcome);
     }
@@ -39,7 +39,7 @@ fn class_iii_diamond() {
     let sid = sheet_id();
     for seed in seeds() {
         let (snapshot, dependent) = diamond_snapshot(seed.value);
-        let (mut engine, _init) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+        let (mut engine, _init) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
         let outcome = op_inverse_pair(&mut engine, &sid, 0, 0, seed.value, EDIT_DELTA, dependent);
         result.record(format!("diamond_{}", seed.slug), outcome);
     }
@@ -52,7 +52,7 @@ fn class_iii_mmult() {
     let sid = sheet_id();
     let seed = 0.4_f64;
     let (snapshot, dependent) = mmult_like_snapshot(seed);
-    let (mut engine, _init) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (mut engine, _init) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
     let outcome = op_inverse_pair(&mut engine, &sid, 0, 0, seed, EDIT_DELTA, dependent);
     result.record("mmult_like_3x3_at_0_4".to_string(), outcome);
     result.report();
@@ -64,7 +64,7 @@ fn class_iii_sumproduct() {
     let sid = sheet_id();
     for seed in seeds() {
         let (snapshot, dependent) = sumproduct_snapshot(seed.value);
-        let (mut engine, _init) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+        let (mut engine, _init) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
         let outcome = op_inverse_pair(&mut engine, &sid, 0, 0, seed.value, EDIT_DELTA, dependent);
         result.record(format!("sumproduct_{}", seed.slug), outcome);
     }

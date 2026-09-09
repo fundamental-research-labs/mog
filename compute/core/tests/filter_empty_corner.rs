@@ -26,7 +26,7 @@
 //!   cargo test -p compute-core --test filter_empty_corner
 
 use cell_types::{SheetId, SheetPos};
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use serde_json::json;
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
@@ -76,6 +76,9 @@ fn text_cell(id_suffix: u32, row: u32, col: u32, t: &str) -> CellData {
 fn snapshot_with_empty_corner() -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_id_str(1),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -97,7 +100,7 @@ fn snapshot_with_empty_corner() -> WorkbookSnapshot {
     }
 }
 
-fn is_row_hidden(engine: &YrsComputeEngine, sid: &SheetId, row: u32) -> bool {
+fn is_row_hidden(engine: &ComputeEngine, sid: &SheetId, row: u32) -> bool {
     engine.is_row_hidden_query(sid, row)
 }
 
@@ -108,7 +111,7 @@ fn is_row_hidden(engine: &YrsComputeEngine, sid: &SheetId, row: u32) -> bool {
 #[test]
 fn create_filter_allocates_cell_ids_for_empty_corners() {
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_with_empty_corner()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(snapshot_with_empty_corner()).expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
 
     // Pre-condition: corner cells (1..=4, 1..=2) are *all* empty in the mirror.
@@ -193,7 +196,7 @@ fn apply_filter_hides_rows_after_empty_corner_create() {
     use domain_types::domain::filter::ColumnFilter;
 
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_with_empty_corner()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(snapshot_with_empty_corner()).expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
 
     engine
@@ -239,8 +242,8 @@ fn apply_filter_hides_rows_after_empty_corner_create() {
 //
 // Hack B (right-fix/rust-event-emit): the renderer reads `hidden` from each
 // `RenderRowDimension` to decide whether to draw a row. Earlier behaviour
-// (commit c3947ed87) was that `applyFilter` only marked rows hidden in the
-// `KEY_HIDDEN_ROWS` Yrs map but the row-dim records emitted to the viewport
+// (commit c3947ed87) was that `applyFilter` only marked rows hidden in native
+// hidden-row metadata but the row-dim records emitted to the viewport
 // binary still reported `hidden=false`. The TS layer compensated by deleting
 // filter-hidden cells from the snapshot post-hoc. This test pins the
 // contract that the viewport binary itself reports `hidden=true` for every
@@ -251,7 +254,7 @@ fn row_dim_binary_marks_filter_hidden_rows() {
     use domain_types::domain::filter::ColumnFilter;
 
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_with_empty_corner()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(snapshot_with_empty_corner()).expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
 
     engine

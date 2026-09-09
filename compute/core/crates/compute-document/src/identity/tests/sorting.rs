@@ -21,7 +21,7 @@ fn sort_rows_simple_swap() {
 
     grid.sort_rows(&[(0, 2), (2, 0)]);
 
-    // RowIds should remain unchanged (Yrs rowOrder is authoritative)
+    // Sorting cell positions preserves row identities
     assert_eq!(grid.row_id(0), Some(rid0));
     assert_eq!(grid.row_id(2), Some(rid2));
     // Cell positions should follow the permutation
@@ -61,7 +61,7 @@ fn sort_rows_three_way_rotation() {
     // Rotate rows 0->1, 1->2, 2->0. Row 3 is not in the permutation.
     grid.sort_rows(&[(0, 1), (1, 2), (2, 0)]);
 
-    // RowIds should remain unchanged (Yrs rowOrder is authoritative)
+    // Sorting cell positions preserves row identities
     assert_eq!(grid.row_id(0), Some(rid0));
     assert_eq!(grid.row_id(1), Some(rid1));
     assert_eq!(grid.row_id(2), Some(rid2));

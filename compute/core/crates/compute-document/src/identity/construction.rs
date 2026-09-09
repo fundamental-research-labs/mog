@@ -9,81 +9,42 @@ impl GridIndex {
     /// Create a new GridIndex for a sheet with the given dimensions.
     /// Generates RowIds and ColIds for all initial rows/columns.
     pub fn new(sheet_id: SheetId, rows: u32, cols: u32, id_alloc: Arc<IdAllocator>) -> Self {
-        let mut row_ids = Vec::with_capacity(rows as usize);
-        for _ in 0..rows {
-            let rid = id_alloc.next_row_id();
-            row_ids.push(rid);
-        }
-
-        let mut col_ids = Vec::with_capacity(cols as usize);
-        for _ in 0..cols {
-            let cid = id_alloc.next_col_id();
-            col_ids.push(cid);
-        }
-
-        Self {
-            sheet_id,
-            id_alloc,
-            row_axis: AxisIdentityStore::Explicit(row_ids),
-            col_axis: AxisIdentityStore::Explicit(col_ids),
-            cell_at_pos: FxHashMap::default(),
-            cell_to_pos: FxHashMap::default(),
-        }
-    }
-
-    /// Create a GridIndex from Yrs YArray data (for rebuild from CRDT state).
-    ///
-    /// Takes the ordered RowId and ColId hex strings from the rowOrder/colOrder
-    /// YArrays. This avoids allocating fresh random IDs and instead uses the
-    /// stable identities already stored in the CRDT document.
-    pub fn from_yrs_arrays(
-        sheet_id: SheetId,
-        row_id_hexes: &[String],
-        col_id_hexes: &[String],
-        id_alloc: Arc<IdAllocator>,
-    ) -> Self {
-        let mut row_ids = Vec::with_capacity(row_id_hexes.len());
-        for hex in row_id_hexes {
-            if let Some(raw) = crate::hex::hex_to_id(hex) {
-                id_alloc.ensure_past(raw);
-                let rid = RowId::from_raw(raw);
-                row_ids.push(rid);
-            }
-        }
-
-        let mut col_ids = Vec::with_capacity(col_id_hexes.len());
-        for hex in col_id_hexes {
-            if let Some(raw) = crate::hex::hex_to_id(hex) {
-                id_alloc.ensure_past(raw);
-                let cid = ColId::from_raw(raw);
-                col_ids.push(cid);
-            }
-        }
-
-        Self {
-            sheet_id,
-            id_alloc,
-            row_axis: AxisIdentityStore::Explicit(row_ids),
-            col_axis: AxisIdentityStore::Explicit(col_ids),
-            cell_at_pos: FxHashMap::default(),
-            cell_to_pos: FxHashMap::default(),
-        }
+        let row_axis = native_axis(rows, &id_alloc);
+        let col_axis = native_axis(cols, &id_alloc);
+        Self::from_axis_stores(sheet_id, row_axis, col_axis, id_alloc)
     }
 
     /// Create a GridIndex from persisted compact/explicit axis identity stores.
     ///
-    /// This path is used when the document carries compact row/column axis
-    /// metadata under `gridIndex`. Unlike [`Self::from_yrs_arrays`], reverse
-    /// lookups for compact axes do not build dense maps.
+    /// Compact axes retain generated runs and build no dense identity maps.
     pub fn from_axis_stores(
         sheet_id: SheetId,
         row_axis: AxisIdentityStore<RowId>,
         col_axis: AxisIdentityStore<ColId>,
         id_alloc: Arc<IdAllocator>,
     ) -> Self {
-        ensure_allocator_past_axis_store(&id_alloc, sheet_id, &row_axis);
-        ensure_allocator_past_axis_store(&id_alloc, sheet_id, &col_axis);
+        ensure_allocator_past_axis_store(&id_alloc, &row_axis);
+        ensure_allocator_past_axis_store(&id_alloc, &col_axis);
 
+        Self {
+            sheet_id,
+            id_alloc,
+            row_axis: Arc::new(super::AxisIndex::new(row_axis)),
+            col_axis: Arc::new(super::AxisIndex::new(col_axis)),
+            cell_at_pos: FxHashMap::default(),
+            cell_to_pos: FxHashMap::default(),
+        }
+    }
+
+    /// Build a grid sharing existing native axis indexes.
+    pub fn from_shared_axes(
+        sheet_id: SheetId,
+        row_axis: Arc<super::AxisIndex<RowId>>,
+        col_axis: Arc<super::AxisIndex<ColId>>,
+        id_alloc: Arc<IdAllocator>,
+    ) -> Self {
+        ensure_allocator_past_axis_store(&id_alloc, row_axis.store());
+        ensure_allocator_past_axis_store(&id_alloc, col_axis.store());
         Self {
             sheet_id,
             id_alloc,
@@ -119,17 +80,23 @@ impl GridIndex {
     }
 }
 
-fn ensure_allocator_past_axis_store<Id>(
-    id_alloc: &IdAllocator,
-    sheet_id: SheetId,
-    store: &AxisIdentityStore<Id>,
-) where
+fn ensure_allocator_past_axis_store<Id>(id_alloc: &IdAllocator, store: &AxisIdentityStore<Id>)
+where
     Id: AxisIdentityId,
 {
-    let AxisIdentityStore::Explicit(_) = store else {
-        return;
-    };
-    for id in store.identities_in(sheet_id, 0, store.len()) {
-        id_alloc.ensure_past(id.as_raw());
+    if let Some(run_id) = store.max_run_id() {
+        id_alloc.ensure_axis_run_past(run_id);
     }
+    match store {
+        AxisIdentityStore::Explicit(ids) => {
+            for id in ids {
+                id_alloc.ensure_past(id.as_raw());
+            }
+        }
+        AxisIdentityStore::Runs(_) => {}
+    }
+}
+
+fn native_axis<Id: AxisIdentityId>(len: u32, allocator: &IdAllocator) -> AxisIdentityStore<Id> {
+    AxisIdentityStore::from_runs([allocator.next_axis_run(len)])
 }

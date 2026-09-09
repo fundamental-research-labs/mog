@@ -16,7 +16,7 @@ pub(super) fn num(value: f64) -> CellValue {
 }
 
 pub(super) fn cell_value_at(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -30,7 +30,13 @@ pub(super) fn cell_value_at(
 
 pub(super) fn empty_bulk_snapshot() -> WorkbookSnapshot {
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_id().to_uuid_string(),
             name: "Sheet1".to_string(),
             rows: 0,
@@ -52,7 +58,13 @@ pub(super) fn empty_bulk_snapshot() -> WorkbookSnapshot {
 /// Build a simple snapshot with one sheet and a few cells.
 pub(super) fn simple_snapshot() -> WorkbookSnapshot {
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -115,30 +127,10 @@ pub(super) fn cell_id_a2() -> CellId {
     CellId::from_uuid_str("550e8400-e29b-41d4-a716-446655440003").unwrap()
 }
 
-// -------------------------------------------------------------------
-// Collaboration bootstrap helpers
-// -------------------------------------------------------------------
-
-pub(super) fn canonical_room_state() -> (Vec<u8>, SheetId) {
-    let doc = yrs::Doc::new();
-    let (_workbook, _sheets, sheet_hex) = compute_document::schema::init_canonical_schema(&doc);
-    let sheet_id = SheetId::from_uuid_str(sheet_hex.as_str()).unwrap();
-    (compute_collab::encode_full_state(&doc), sheet_id)
-}
-
-pub(super) fn fork_engine_from_state(state: &[u8]) -> YrsComputeEngine {
-    let (engine, _) = YrsComputeEngine::from_yrs_state(state).expect("from_yrs_state fork");
-    engine
-}
-
-pub(super) fn fork_engine_pair_from_state(state: &[u8]) -> (YrsComputeEngine, YrsComputeEngine) {
-    (fork_engine_from_state(state), fork_engine_from_state(state))
-}
-
 pub(super) fn assemble_engine_from_parse_output_storage(
-    storage: crate::storage::YrsStorage,
+    storage: crate::storage::WorkbookStorage,
     workbook_snap: WorkbookSnapshot,
-) -> YrsComputeEngine {
+) -> ComputeEngine {
     let mut mirror =
         crate::mirror::CellMirror::from_snapshot(workbook_snap.clone()).expect("mirror");
     let mut compute = crate::scheduler::ComputeCore::new();
@@ -149,9 +141,9 @@ pub(super) fn assemble_engine_from_parse_output_storage(
         .expect("assemble engine")
 }
 
-pub(super) fn engine_from_parse_output_normal(output: &ParseOutput) -> YrsComputeEngine {
+pub(super) fn engine_from_parse_output_normal(output: &ParseOutput) -> ComputeEngine {
     let mut allocator = crate::storage::infra::hydration::DefaultIdAllocator::new();
-    let mut storage = crate::storage::YrsStorage::new();
+    let mut storage = crate::storage::WorkbookStorage::new();
     let id_map = storage
         .hydrate_from_parse_output(output, &mut allocator)
         .expect("hydrate parse output");
@@ -161,7 +153,15 @@ pub(super) fn engine_from_parse_output_normal(output: &ParseOutput) -> YrsComput
         &mut allocator,
     );
 
-    assemble_engine_from_parse_output_storage(storage, workbook_snap)
+    let formats =
+        super::super::construction::collect_imported_formats(output, &id_map.sheet_ids, &[]);
+    let mut engine = assemble_engine_from_parse_output_storage(storage, workbook_snap);
+    super::super::construction::install_imported_formats(
+        &mut engine.mirror,
+        &engine.stores.storage.metadata.style_palette,
+        &formats,
+    );
+    engine
 }
 
 pub(super) fn archive_text(bytes: &[u8], path: &str) -> Option<String> {
@@ -180,7 +180,13 @@ pub(super) fn archive_text(bytes: &[u8], path: &str) -> Option<String> {
 /// Snapshot with values A1=10, B1=20, A2=30, B2=40 and formula C1=A1+B1 (=30).
 pub(super) fn copy_range_snapshot() -> WorkbookSnapshot {
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -368,4 +374,17 @@ pub(super) fn extract_patch_positions(mutation_bytes: &[u8]) -> Vec<(u32, u32)> 
         positions.push((row, col));
     }
     positions
+}
+
+/// Reconstruct runtime calculation state from the native snapshot and metadata.
+/// Native storage owns imported workbook/cell metadata; the snapshot owns cells,
+/// formulas and stable identities. Both participate in an engine rebuild.
+pub(super) fn rebuild_native_engine(source: &ComputeEngine) -> ComputeEngine {
+    let snapshot = construction::build_workbook_snapshot(&source.stores, &source.mirror);
+    let (mut rebuilt, _) = ComputeEngine::from_snapshot(snapshot).expect("native snapshot");
+    rebuilt.stores.storage = source.stores.storage.clone();
+    rebuilt
+        .rebuild_compute_core()
+        .expect("native metadata rebuild");
+    rebuilt
 }

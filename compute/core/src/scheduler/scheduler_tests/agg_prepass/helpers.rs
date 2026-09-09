@@ -47,9 +47,12 @@ pub(super) fn formula_cell(counter: &mut u128, row: u32, col: u32, formula: Stri
 
 pub(super) fn workbook_snapshot(sheets: Vec<SheetSnapshot>) -> WorkbookSnapshot {
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
         sheets,
         named_ranges: vec![],
         tables: vec![],
+        canonical_tables: vec![],
         pivot_tables: vec![],
         data_table_regions: vec![],
         iterative_calc: false,
@@ -66,6 +69,9 @@ pub(super) fn single_sheet_snapshot(
     cells: Vec<CellData>,
 ) -> WorkbookSnapshot {
     workbook_snapshot(vec![SheetSnapshot {
+        identities: Vec::new(),
+        row_axis: None,
+        col_axis: None,
         id: cell_id(1),
         name: name.to_string(),
         rows,

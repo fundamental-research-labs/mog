@@ -1,7 +1,7 @@
 use crate::helpers::*;
 use crate::matrix::CoverageReason;
 use crate::summary::Summary;
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use snapshot_types::WorkbookSnapshot;
 use value_types::{CellValue, FiniteF64};
 
@@ -24,7 +24,7 @@ pub(crate) fn three_d_workbook() -> WorkbookSnapshot {
 }
 
 pub(crate) fn run_3d_case(variant: u8) -> Result<(), String> {
-    let (mut engine, _init) = YrsComputeEngine::from_snapshot(three_d_workbook())
+    let (mut engine, _init) = ComputeEngine::from_snapshot(three_d_workbook())
         .map_err(|e| format!("from_snapshot err: {:?}", e))?;
     let dependent = cell_id(3, 0, 0);
     let before = read_value(&engine, &dependent);

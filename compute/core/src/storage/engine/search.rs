@@ -1,4 +1,4 @@
-//! Search and cross-sheet aggregation methods for YrsComputeEngine.
+//! Search and cross-sheet aggregation methods for ComputeEngine.
 //!
 //! These methods consolidate TS orchestration logic (N IPC calls) into
 //! single engine calls: cell search by value/formula and workbook-wide
@@ -14,7 +14,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use value_types::CellValue;
 
-use super::YrsComputeEngine;
+use super::ComputeEngine;
 use super::services;
 use crate::engine_types::{SignCheckOptions, SignCheckResult};
 use crate::range_manager;
@@ -88,13 +88,13 @@ fn values_match(search: &str, cell_value: &CellValue) -> bool {
 // ---------------------------------------------------------------------------
 
 #[bridge::api(
-    service = "YrsComputeEngine",
+    service = "ComputeEngine",
     key = "doc_id",
     group = "search",
     fn_prefix = "compute",
     crate_path = "compute_core"
 )]
-impl YrsComputeEngine {
+impl ComputeEngine {
     // -------------------------------------------------------------------
     // Search: find cells by value
     // -------------------------------------------------------------------

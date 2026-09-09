@@ -11,6 +11,10 @@ use crate::import::phantom::{parse_cell_ref, parse_range_ref};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum IdentityAnchorReason {
     Comment,
+    /// One endpoint of a merge needs stable native identity.
+    Merge,
+    /// One endpoint of a hyperlink needs stable native identity.
+    Hyperlink,
     /// A sheet-level AutoFilter range or header column needs a
     /// durable CellId so the runtime FilterState can resolve its range.
     AutoFilter,
@@ -44,8 +48,6 @@ pub(crate) fn collect_anchored_positions(
     anchors_from_merges(sheet_data, &mut anchored);
     anchors_from_array_formulas(sheet_data, &mut anchored);
     anchors_from_cse_arrays(sheet_data, &mut anchored);
-    anchors_from_conditional_formats(sheet_data, &mut anchored);
-    anchors_from_validations(sheet_data, &mut anchored);
     anchors_from_floating_objects(sheet_data, &mut anchored);
     anchors_from_sparklines(sheet_data, &mut anchored);
     anchors_from_tables(snapshot, sheet_id, &mut anchored);
@@ -62,6 +64,29 @@ pub(crate) fn collect_identity_required_anchors(
     sheet_data: &SheetData,
 ) -> FxHashMap<(u32, u32), Vec<IdentityAnchorReason>> {
     let mut anchors = FxHashMap::default();
+    for merge in &sheet_data.merges {
+        for position in [
+            (merge.start_row, merge.start_col),
+            (merge.end_row, merge.end_col),
+        ] {
+            let reasons = anchors.entry(position).or_insert_with(Vec::new);
+            if !reasons.contains(&IdentityAnchorReason::Merge) {
+                reasons.push(IdentityAnchorReason::Merge);
+            }
+        }
+    }
+    for hyperlink in &sheet_data.hyperlinks {
+        if let Some((sr, sc, er, ec)) = parse_range_ref(&hyperlink.cell_ref)
+            .or_else(|| parse_cell_ref(&hyperlink.cell_ref).map(|(row, col)| (row, col, row, col)))
+        {
+            for position in [(sr, sc), (er, ec)] {
+                let reasons = anchors.entry(position).or_insert_with(Vec::new);
+                if !reasons.contains(&IdentityAnchorReason::Hyperlink) {
+                    reasons.push(IdentityAnchorReason::Hyperlink);
+                }
+            }
+        }
+    }
     identity_anchors_from_auto_filter(sheet_data, &mut anchors);
     identity_anchors_from_comments(sheet_data, &mut anchors);
     identity_anchors_from_floating_objects(sheet_data, &mut anchors);
@@ -258,32 +283,6 @@ fn anchors_from_cse_arrays(sheet_data: &SheetData, out: &mut FxHashSet<(u32, u32
             && matches!(cf.t, CellFormulaType::Shared | CellFormulaType::Array)
         {
             out.insert((cell.row, cell.col));
-        }
-    }
-}
-
-fn anchors_from_conditional_formats(sheet_data: &SheetData, out: &mut FxHashSet<(u32, u32)>) {
-    for cf in &sheet_data.conditional_formats {
-        for range in &cf.ranges {
-            out.insert((range.start_row(), range.start_col()));
-            out.insert((range.start_row(), range.end_col()));
-            out.insert((range.end_row(), range.start_col()));
-            out.insert((range.end_row(), range.end_col()));
-        }
-    }
-}
-
-fn anchors_from_validations(sheet_data: &SheetData, out: &mut FxHashSet<(u32, u32)>) {
-    for validation in &sheet_data.data_validations {
-        for range_str in &validation.ranges {
-            if let Some((sr, sc, er, ec)) = parse_range_ref(range_str) {
-                out.insert((sr, sc));
-                out.insert((sr, ec));
-                out.insert((er, sc));
-                out.insert((er, ec));
-            } else if let Some(pos) = parse_cell_ref(range_str) {
-                out.insert(pos);
-            }
         }
     }
 }
@@ -493,7 +492,7 @@ mod tests {
             sheet_id: String::new(),
             pivot: None,
             ranges: vec![SheetRange::new(10, 10, 12, 12)],
-            range_identities: None,
+
             rules: vec![],
         }];
 
@@ -659,23 +658,23 @@ mod tests {
         // 1. formulas: 1       → (0,0)
         // 2. comments: 1       → (1,1)
         // 3. hyperlinks: 1     → (2,2)
-        // 4. merges: 1         → (3,3)
+        // 4. merges: 2         → (3,3), (4,4)
         // 5. spill anchors: 1  → (0,1)
         // 6. CSE arrays: 2     → (0,2), (0,3)
-        // 7. CF corners: 4     → (10,10),(10,12),(12,10),(12,12)
-        // 8. validations: 4    → (4,4),(4,6),(6,4),(6,6)
+        // 7. Conditional formats: positional metadata; no cell identities
+        // 8. Validations: positional metadata; no cell identities
         // 9. floating: 1       → (7,7)
         // 10. sparklines: 1    → (8,8)
         // 11. table headers: 3 → (20,20),(20,21),(20,22)
         // 12. named ranges: 3  → (30,30),(31,31),(32,32)
         // 13. pivots: 1        → (40,40)
         // 14. data tables: 1   → (50,50)
-        // Total: 25
+        // Total: 18
 
         let result =
             collect_anchored_positions(&sheet_data, SHEET_UUID, &snapshot, Some(&cell_id_to_pos));
 
-        assert_eq!(result.len(), 25, "total anchored positions");
+        assert_eq!(result.len(), 18, "total anchored positions");
 
         // Verify per-type via individual sub-functions.
         let mut out = FxHashSet::default();
@@ -683,8 +682,16 @@ mod tests {
         assert_eq!(out.len(), 1, "formulas");
 
         let identity_anchors = collect_identity_required_anchors(&sheet_data);
-        // Comment at (1,1) + floating object at (7,7).
-        assert_eq!(identity_anchors.len(), 2, "identity-required anchors");
+        // Comment, floating object, hyperlink, and both merge corners.
+        assert_eq!(identity_anchors.len(), 5, "identity-required anchors");
+        assert_eq!(
+            identity_anchors.get(&(2, 2)).unwrap(),
+            &[IdentityAnchorReason::Hyperlink]
+        );
+        assert_eq!(
+            identity_anchors.get(&(4, 4)).unwrap(),
+            &[IdentityAnchorReason::Merge]
+        );
         let reasons = identity_anchors
             .get(&(1, 1))
             .expect("comment identity anchor");
@@ -711,14 +718,6 @@ mod tests {
         assert_eq!(out.len(), 2, "CSE arrays");
 
         out.clear();
-        anchors_from_conditional_formats(&sheet_data, &mut out);
-        assert_eq!(out.len(), 4, "conditional formats");
-
-        out.clear();
-        anchors_from_validations(&sheet_data, &mut out);
-        assert_eq!(out.len(), 4, "validations");
-
-        out.clear();
         anchors_from_floating_objects(&sheet_data, &mut out);
         assert_eq!(out.len(), 1, "floating objects");
 
@@ -742,7 +741,7 @@ mod tests {
         anchors_from_data_tables(&snapshot, SHEET_UUID, &mut out);
         assert_eq!(out.len(), 1, "data tables");
 
-        let per_type_sum = 1 + 1 + 1 + 1 + 1 + 2 + 4 + 4 + 1 + 1 + 3 + 3 + 1 + 1;
+        let per_type_sum = 1 + 1 + 1 + 2 + 1 + 2 + 1 + 1 + 3 + 3 + 1 + 1;
         assert_eq!(result.len(), per_type_sum, "total matches per-type sum");
     }
 

@@ -1,15 +1,12 @@
 use super::super::*;
 use super::helpers::*;
-use crate::storage::YrsStorage;
+use crate::storage::WorkbookStorage;
 
 #[test]
 fn test_add_comment_and_retrieve() {
-    let (storage, sheet_id) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = &storage.sheets_ref();
+    let (mut storage, sheet_id) = storage_with_sheet();
     let comment = add_comment(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         "cell-001",
         simple_runs("Hello world"),
@@ -29,19 +26,16 @@ fn test_add_comment_and_retrieve() {
     assert_eq!(comment.thread_id, Some(comment.id.clone()));
     assert!(comment.parent_id.is_none());
     assert_eq!(comment.resolved, Some(false));
-    let fetched = get_comment(doc, sheets, &sheet_id, &comment.id);
+    let fetched = get_comment(&storage, &sheet_id, &comment.id);
     assert!(fetched.is_some());
     assert_eq!(fetched.unwrap(), comment);
 }
 
 #[test]
 fn test_get_comment_thread() {
-    let (storage, sheet_id) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = &storage.sheets_ref();
+    let (mut storage, sheet_id) = storage_with_sheet();
     let root = add_comment(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         "cell-001",
         simple_runs("Thread root"),
@@ -51,8 +45,7 @@ fn test_get_comment_thread() {
     )
     .unwrap();
     let _reply1 = add_comment(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         "cell-001",
         simple_runs("Reply 1"),
@@ -66,8 +59,7 @@ fn test_get_comment_thread() {
     )
     .unwrap();
     let _reply2 = add_comment(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         "cell-001",
         simple_runs("Reply 2"),
@@ -81,8 +73,7 @@ fn test_get_comment_thread() {
     )
     .unwrap();
     let _other = add_comment(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         "cell-002",
         simple_runs("Different thread"),
@@ -91,7 +82,7 @@ fn test_get_comment_thread() {
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
-    let thread = get_comment_thread(doc, sheets, &sheet_id, &root.id);
+    let thread = get_comment_thread(&storage, &sheet_id, &root.id);
     assert_eq!(thread.len(), 3);
     assert_eq!(thread[0].runs[0].text, "Thread root");
     let reply_texts: Vec<&str> = thread[1..]
@@ -104,12 +95,9 @@ fn test_get_comment_thread() {
 
 #[test]
 fn test_get_all_notes_and_note_count_on_mixed_sheet() {
-    let (storage, sheet_id) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = &storage.sheets_ref();
+    let (mut storage, sheet_id) = storage_with_sheet();
     add_comment(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         "cell-001",
         simple_runs("Note 1"),
@@ -122,8 +110,7 @@ fn test_get_all_notes_and_note_count_on_mixed_sheet() {
     )
     .unwrap();
     add_comment(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         "cell-002",
         simple_runs("Thread"),
@@ -133,8 +120,7 @@ fn test_get_all_notes_and_note_count_on_mixed_sheet() {
     )
     .unwrap();
     add_comment(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         "cell-003",
         simple_runs("Note 2"),
@@ -147,15 +133,15 @@ fn test_get_all_notes_and_note_count_on_mixed_sheet() {
     )
     .unwrap();
 
-    let notes = get_all_notes(doc, sheets, &sheet_id);
+    let notes = get_all_notes(&storage, &sheet_id);
     assert_eq!(notes.len(), 2);
-    assert_eq!(get_note_count(doc, sheets, &sheet_id), 2);
+    assert_eq!(get_note_count(&storage, &sheet_id), 2);
     assert!(notes.iter().all(|c| c.comment_type == CommentType::Note));
 }
 
 #[test]
-fn test_get_all_comments_uses_deterministic_storage_ordering() {
-    let (storage, sheet_id) = storage_with_sheet();
+fn test_get_all_comments_preserves_authored_insertion_order() {
+    let (mut storage, sheet_id) = storage_with_sheet();
     let mut comment_2 = Comment {
         id: "comment-2-id".to_string(),
         cell_ref: "cell-001".to_string(),
@@ -194,42 +180,34 @@ fn test_get_all_comments_uses_deterministic_storage_ordering() {
         ..Default::default()
     };
 
-    insert_comment_with_key(&storage, &sheet_id, "zeta", &zeta);
-    insert_comment_with_key(
-        &storage,
-        &sheet_id,
-        "00000000000000000000000000000001",
-        &runtime_hex,
-    );
-    insert_comment_with_key(&storage, &sheet_id, "comment-10", &comment_10);
-    insert_comment_with_key(&storage, &sheet_id, "alpha", &alpha);
-    insert_comment_with_key(&storage, &sheet_id, "comment-2", &comment_2);
+    insert_comment(&mut storage, &sheet_id, &zeta);
+    insert_comment(&mut storage, &sheet_id, &runtime_hex);
+    insert_comment(&mut storage, &sheet_id, &comment_10);
+    insert_comment(&mut storage, &sheet_id, &alpha);
+    insert_comment(&mut storage, &sheet_id, &comment_2);
 
-    let ids: Vec<String> = get_all_comments(storage.doc(), &storage.sheets_ref(), &sheet_id)
+    let ids: Vec<String> = get_all_comments(&storage, &sheet_id)
         .into_iter()
         .map(|c| c.id)
         .collect();
     assert_eq!(
         ids,
         vec![
-            "comment-2-id",
-            "comment-10-id",
+            "zeta-id",
             "runtime-hex-id",
+            "comment-10-id",
             "alpha-id",
-            "zeta-id"
+            "comment-2-id"
         ]
     );
 }
 
 #[test]
 fn test_has_comments() {
-    let (storage, sheet_id) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = &storage.sheets_ref();
-    assert!(!has_comments(doc, sheets, &sheet_id, "cell-001"));
+    let (mut storage, sheet_id) = storage_with_sheet();
+    assert!(!has_comments(&storage, &sheet_id, "cell-001"));
     add_comment(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         "cell-001",
         simple_runs("A comment"),
@@ -238,18 +216,15 @@ fn test_has_comments() {
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
-    assert!(has_comments(doc, sheets, &sheet_id, "cell-001"));
-    assert!(!has_comments(doc, sheets, &sheet_id, "cell-002"));
+    assert!(has_comments(&storage, &sheet_id, "cell-001"));
+    assert!(!has_comments(&storage, &sheet_id, "cell-002"));
 }
 
 #[test]
 fn test_get_cell_ids_with_comments() {
-    let (storage, sheet_id) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = &storage.sheets_ref();
+    let (mut storage, sheet_id) = storage_with_sheet();
     add_comment(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         "cell-001",
         simple_runs("Comment 1"),
@@ -259,8 +234,7 @@ fn test_get_cell_ids_with_comments() {
     )
     .unwrap();
     add_comment(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         "cell-001",
         simple_runs("Comment 2"),
@@ -270,8 +244,7 @@ fn test_get_cell_ids_with_comments() {
     )
     .unwrap();
     add_comment(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         "cell-002",
         simple_runs("Comment 3"),
@@ -280,7 +253,7 @@ fn test_get_cell_ids_with_comments() {
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
-    let mut cell_ids = get_cell_ids_with_comments(doc, sheets, &sheet_id);
+    let mut cell_ids = get_cell_ids_with_comments(&storage, &sheet_id);
     cell_ids.sort();
     assert_eq!(cell_ids.len(), 2);
     assert!(cell_ids.contains(&"cell-001".to_string()));
@@ -289,13 +262,10 @@ fn test_get_cell_ids_with_comments() {
 
 #[test]
 fn test_comment_count() {
-    let (storage, sheet_id) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = &storage.sheets_ref();
-    assert_eq!(get_comment_count(doc, sheets, &sheet_id), 0);
+    let (mut storage, sheet_id) = storage_with_sheet();
+    assert_eq!(get_comment_count(&storage, &sheet_id), 0);
     add_comment(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         "cell-001",
         simple_runs("First"),
@@ -304,10 +274,9 @@ fn test_comment_count() {
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
-    assert_eq!(get_comment_count(doc, sheets, &sheet_id), 1);
+    assert_eq!(get_comment_count(&storage, &sheet_id), 1);
     add_comment(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         "cell-002",
         simple_runs("Second"),
@@ -316,31 +285,26 @@ fn test_comment_count() {
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
-    assert_eq!(get_comment_count(doc, sheets, &sheet_id), 2);
+    assert_eq!(get_comment_count(&storage, &sheet_id), 2);
 }
 
 #[test]
 fn test_empty_sheet_returns_empty() {
     let (storage, sheet_id) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = &storage.sheets_ref();
-    assert!(get_comments_for_cell(doc, sheets, &sheet_id, "cell-001").is_empty());
-    assert!(get_comment(doc, sheets, &sheet_id, "nonexistent").is_none());
-    assert!(!has_comments(doc, sheets, &sheet_id, "cell-001"));
-    assert!(get_all_comments(doc, sheets, &sheet_id).is_empty());
-    assert!(get_cell_ids_with_comments(doc, sheets, &sheet_id).is_empty());
-    assert_eq!(get_comment_count(doc, sheets, &sheet_id), 0);
-    assert!(get_comment_thread(doc, sheets, &sheet_id, "nonexistent").is_empty());
+    assert!(get_comments_for_cell(&storage, &sheet_id, "cell-001").is_empty());
+    assert!(get_comment(&storage, &sheet_id, "nonexistent").is_none());
+    assert!(!has_comments(&storage, &sheet_id, "cell-001"));
+    assert!(get_all_comments(&storage, &sheet_id).is_empty());
+    assert!(get_cell_ids_with_comments(&storage, &sheet_id).is_empty());
+    assert_eq!(get_comment_count(&storage, &sheet_id), 0);
+    assert!(get_comment_thread(&storage, &sheet_id, "nonexistent").is_empty());
 }
 
 #[test]
 fn test_comments_sorted_by_created_at() {
-    let (storage, sheet_id) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = &storage.sheets_ref();
+    let (mut storage, sheet_id) = storage_with_sheet();
     add_comment(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         "cell-001",
         simple_runs("First"),
@@ -350,8 +314,7 @@ fn test_comments_sorted_by_created_at() {
     )
     .unwrap();
     add_comment(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         "cell-001",
         simple_runs("Second"),
@@ -361,8 +324,7 @@ fn test_comments_sorted_by_created_at() {
     )
     .unwrap();
     add_comment(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         "cell-001",
         simple_runs("Third"),
@@ -371,7 +333,7 @@ fn test_comments_sorted_by_created_at() {
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
-    let comments = get_comments_for_cell(doc, sheets, &sheet_id, "cell-001");
+    let comments = get_comments_for_cell(&storage, &sheet_id, "cell-001");
     assert_eq!(comments.len(), 3);
     assert!(comments[0].created_at.unwrap_or(0) <= comments[1].created_at.unwrap_or(0));
     assert!(comments[1].created_at.unwrap_or(0) <= comments[2].created_at.unwrap_or(0));
@@ -379,12 +341,9 @@ fn test_comments_sorted_by_created_at() {
 
 #[test]
 fn test_multiple_cells_different_comments() {
-    let (storage, sheet_id) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = &storage.sheets_ref();
+    let (mut storage, sheet_id) = storage_with_sheet();
     let c1 = add_comment(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         "cell-A1",
         simple_runs("Comment on A1"),
@@ -394,8 +353,7 @@ fn test_multiple_cells_different_comments() {
     )
     .unwrap();
     let c2 = add_comment(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         "cell-B2",
         simple_runs("Comment on B2"),
@@ -405,8 +363,7 @@ fn test_multiple_cells_different_comments() {
     )
     .unwrap();
     let c3 = add_comment(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         "cell-C3",
         simple_runs("Comment on C3"),
@@ -416,39 +373,37 @@ fn test_multiple_cells_different_comments() {
     )
     .unwrap();
     assert_eq!(
-        get_comments_for_cell(doc, sheets, &sheet_id, "cell-A1").len(),
+        get_comments_for_cell(&storage, &sheet_id, "cell-A1").len(),
         1
     );
     assert_eq!(
-        get_comments_for_cell(doc, sheets, &sheet_id, "cell-B2").len(),
+        get_comments_for_cell(&storage, &sheet_id, "cell-B2").len(),
         1
     );
     assert_eq!(
-        get_comments_for_cell(doc, sheets, &sheet_id, "cell-C3").len(),
+        get_comments_for_cell(&storage, &sheet_id, "cell-C3").len(),
         1
     );
-    assert_eq!(get_comment_count(doc, sheets, &sheet_id), 3);
-    assert_eq!(get_all_comments(doc, sheets, &sheet_id).len(), 3);
-    let cell_ids = get_cell_ids_with_comments(doc, sheets, &sheet_id);
+    assert_eq!(get_comment_count(&storage, &sheet_id), 3);
+    assert_eq!(get_all_comments(&storage, &sheet_id).len(), 3);
+    let cell_ids = get_cell_ids_with_comments(&storage, &sheet_id);
     assert_eq!(cell_ids.len(), 3);
-    delete_comments_for_cell(doc, sheets, &sheet_id, "cell-B2");
-    assert_eq!(get_comment_count(doc, sheets, &sheet_id), 2);
-    assert!(get_comment(doc, sheets, &sheet_id, &c1.id).is_some());
-    assert!(get_comment(doc, sheets, &sheet_id, &c2.id).is_none());
-    assert!(get_comment(doc, sheets, &sheet_id, &c3.id).is_some());
+    delete_comments_for_cell(&mut storage, &sheet_id, "cell-B2");
+    assert_eq!(get_comment_count(&storage, &sheet_id), 2);
+    assert!(get_comment(&storage, &sheet_id, &c1.id).is_some());
+    assert!(get_comment(&storage, &sheet_id, &c2.id).is_none());
+    assert!(get_comment(&storage, &sheet_id, &c3.id).is_some());
 }
 
 #[test]
 fn test_nonexistent_sheet() {
-    let storage = YrsStorage::new();
-    let doc = storage.doc();
-    let sheets = &storage.sheets_ref();
+    let storage = WorkbookStorage::new();
     let fake_sheet = make_sheet_id(999);
-    assert!(get_comments_for_cell(doc, sheets, &fake_sheet, "cell-001").is_empty());
-    assert!(get_comment(doc, sheets, &fake_sheet, "some-id").is_none());
-    assert!(!has_comments(doc, sheets, &fake_sheet, "cell-001"));
-    assert!(get_all_comments(doc, sheets, &fake_sheet).is_empty());
-    assert!(get_cell_ids_with_comments(doc, sheets, &fake_sheet).is_empty());
-    assert_eq!(get_comment_count(doc, sheets, &fake_sheet), 0);
-    assert!(get_comment_thread(doc, sheets, &fake_sheet, "some-id").is_empty());
+    assert!(get_comments_for_cell(&storage, &fake_sheet, "cell-001").is_empty());
+    assert!(get_comment(&storage, &fake_sheet, "some-id").is_none());
+    assert!(!has_comments(&storage, &fake_sheet, "cell-001"));
+    assert!(get_all_comments(&storage, &fake_sheet).is_empty());
+    assert!(get_cell_ids_with_comments(&storage, &fake_sheet).is_empty());
+    assert_eq!(get_comment_count(&storage, &fake_sheet), 0);
+    assert!(get_comment_thread(&storage, &fake_sheet, "some-id").is_empty());
 }

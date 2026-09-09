@@ -62,6 +62,9 @@ pub fn one_sheet_snapshot(cells: Vec<CellData>) -> WorkbookSnapshot {
     // (axis 3 `FarOutside`) without an off-by-one on the sheet bounds.
     WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET1_UUID.to_string(),
             name: "Sheet1".to_string(),
             rows: 100_000,
@@ -280,6 +283,9 @@ pub fn numeric_column_snapshot(rows: u32) -> WorkbookSnapshot {
     }
     WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET1_UUID.to_string(),
             name: "Sheet1".to_string(),
             rows,
@@ -306,6 +312,9 @@ pub fn two_column_snapshot(rows: u32) -> WorkbookSnapshot {
     }
     WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET1_UUID.to_string(),
             name: "Sheet1".to_string(),
             rows,

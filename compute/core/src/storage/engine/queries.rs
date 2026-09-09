@@ -1,5 +1,6 @@
-//! Read-only query methods for YrsComputeEngine.
+//! Read-only query methods for ComputeEngine.
 
+mod a1_named_values;
 mod cell_regions;
 mod document_sheets;
 mod helpers;
@@ -7,9 +8,8 @@ mod projections_settings;
 mod ranges_search_formula;
 mod styles_named_ranges;
 mod workbook_settings;
-mod yrs_a1_named_values;
 
-use super::YrsComputeEngine;
+use super::ComputeEngine;
 use crate::diagnostics::formula_references::{
     FormulaReferenceDiagnosticsOptions, FormulaReferenceDiagnosticsPage,
 };
@@ -34,13 +34,13 @@ use domain_types::{DefinedName, ImportDiagnostic, NameValidationResult};
 use value_types::{CellValue, ComputeError};
 
 #[bridge::api(
-    service = "YrsComputeEngine",
+    service = "ComputeEngine",
     key = "doc_id",
     group = "queries",
     fn_prefix = "compute",
     crate_path = "compute_core"
 )]
-impl YrsComputeEngine {
+impl ComputeEngine {
     #[bridge::read]
     pub fn get_workbook_settings(&self) -> WorkbookSettings {
         workbook_settings::get_workbook_settings(self)
@@ -72,7 +72,19 @@ impl YrsComputeEngine {
         &mut self,
         settings: WorkbookSettings,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        workbook_settings::set_workbook_settings(self, settings)
+        let current = self.get_workbook_settings();
+        let authored = WorkbookSettings {
+            selected_sheet_ids: current.selected_sheet_ids.clone(),
+            custom_settings: current.custom_settings.clone(),
+            ..settings.clone()
+        };
+        if authored == current {
+            self.without_history(|engine| {
+                workbook_settings::set_workbook_settings(engine, settings)
+            })
+        } else {
+            self.with_history(|engine| workbook_settings::set_workbook_settings(engine, settings))
+        }
     }
 
     #[bridge::write]
@@ -80,7 +92,16 @@ impl YrsComputeEngine {
         &mut self,
         patch: RustWorkbookSettingsPatch,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        workbook_settings::patch_workbook_settings(self, patch)
+        let authored = RustWorkbookSettingsPatch {
+            selected_sheet_ids: None,
+            custom_settings: None,
+            ..patch.clone()
+        };
+        if authored == RustWorkbookSettingsPatch::default() {
+            self.without_history(|engine| workbook_settings::patch_workbook_settings(engine, patch))
+        } else {
+            self.with_history(|engine| workbook_settings::patch_workbook_settings(engine, patch))
+        }
     }
 
     #[bridge::read]
@@ -90,10 +111,10 @@ impl YrsComputeEngine {
 
     #[bridge::write]
     pub fn set_document_properties(
-        &self,
+        &mut self,
         props: domain_types::DocumentProperties,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        document_sheets::set_document_properties(self, props)
+        self.with_history(|engine| document_sheets::set_document_properties(engine, props))
     }
 
     #[bridge::read]
@@ -370,12 +391,20 @@ impl YrsComputeEngine {
         key: &str,
         value: serde_json::Value,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        projections_settings::set_workbook_setting(self, key, value)
+        if matches!(key, "selectedSheetIds" | "customSettings" | "workbookViews") {
+            self.without_history(|engine| {
+                projections_settings::set_workbook_setting(engine, key, value)
+            })
+        } else {
+            self.with_history(|engine| {
+                projections_settings::set_workbook_setting(engine, key, value)
+            })
+        }
     }
 
     #[bridge::write]
     pub fn reset_workbook_settings(&mut self) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        projections_settings::reset_workbook_settings(self)
+        self.with_history(|engine| projections_settings::reset_workbook_settings(engine))
     }
 
     #[bridge::read]
@@ -388,7 +417,7 @@ impl YrsComputeEngine {
         &mut self,
         settings: CalculationSettings,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        projections_settings::set_calculation_settings(self, settings)
+        self.with_history(|engine| projections_settings::set_calculation_settings(engine, settings))
     }
 
     #[bridge::read]
@@ -401,7 +430,9 @@ impl YrsComputeEngine {
         &mut self,
         enabled: bool,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        projections_settings::set_iterative_calculation_enabled(self, enabled)
+        self.with_history(|engine| {
+            projections_settings::set_iterative_calculation_enabled(engine, enabled)
+        })
     }
 
     #[bridge::write]
@@ -410,7 +441,9 @@ impl YrsComputeEngine {
         password_hash: Option<String>,
         options: Option<WorkbookProtectionOptions>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        projections_settings::protect_workbook(self, password_hash, options)
+        self.with_history(|engine| {
+            projections_settings::protect_workbook(engine, password_hash, options)
+        })
     }
 
     #[bridge::write]
@@ -418,7 +451,7 @@ impl YrsComputeEngine {
         &mut self,
         password_hash: Option<String>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        projections_settings::unprotect_workbook(self, password_hash)
+        self.with_history(|engine| projections_settings::unprotect_workbook(engine, password_hash))
     }
 
     #[bridge::read]
@@ -449,7 +482,9 @@ impl YrsComputeEngine {
         &mut self,
         style_id: Option<String>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        projections_settings::set_default_table_style_id(self, style_id)
+        self.with_history(|engine| {
+            projections_settings::set_default_table_style_id(engine, style_id)
+        })
     }
 
     #[bridge::read]
@@ -462,7 +497,7 @@ impl YrsComputeEngine {
         &mut self,
         style_id: Option<String>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        projections_settings::set_default_slicer_style(self, style_id)
+        self.with_history(|engine| projections_settings::set_default_slicer_style(engine, style_id))
     }
 
     #[bridge::read]
@@ -492,7 +527,9 @@ impl YrsComputeEngine {
         style: SlicerCustomStyle,
         make_unique_name: bool,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        styles_named_ranges::add_slicer_style(self, name, style, make_unique_name)
+        self.with_history(|engine| {
+            styles_named_ranges::add_slicer_style(engine, name, style, make_unique_name)
+        })
     }
 
     #[bridge::write]
@@ -500,7 +537,7 @@ impl YrsComputeEngine {
         &mut self,
         name: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        styles_named_ranges::delete_slicer_style(self, name)
+        self.with_history(|engine| styles_named_ranges::delete_slicer_style(engine, name))
     }
 
     #[bridge::write]
@@ -508,7 +545,7 @@ impl YrsComputeEngine {
         &mut self,
         name: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        styles_named_ranges::duplicate_slicer_style(self, name)
+        self.with_history(|engine| styles_named_ranges::duplicate_slicer_style(engine, name))
     }
 
     #[bridge::write]
@@ -516,7 +553,9 @@ impl YrsComputeEngine {
         &mut self,
         style_id: Option<String>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        styles_named_ranges::set_default_pivot_table_style(self, style_id)
+        self.with_history(|engine| {
+            styles_named_ranges::set_default_pivot_table_style(engine, style_id)
+        })
     }
 
     #[bridge::read]
@@ -535,7 +574,7 @@ impl YrsComputeEngine {
         key: &str,
         value: Option<String>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        styles_named_ranges::set_custom_setting(self, key, value)
+        self.without_history(|engine| styles_named_ranges::set_custom_setting(engine, key, value))
     }
 
     #[bridge::read]
@@ -725,11 +764,6 @@ impl YrsComputeEngine {
     }
 
     #[bridge::read]
-    pub fn get_cell_id_at_yrs(&self, sheet_id: &SheetId, row: u32, col: u32) -> Option<String> {
-        yrs_a1_named_values::get_cell_id_at_yrs(self, sheet_id, row, col)
-    }
-
-    #[bridge::read]
     pub fn get_cells_in_range(
         &self,
         sheet_id: &SheetId,
@@ -738,28 +772,7 @@ impl YrsComputeEngine {
         end_row: u32,
         end_col: u32,
     ) -> Vec<String> {
-        yrs_a1_named_values::get_cells_in_range(
-            self, sheet_id, start_row, start_col, end_row, end_col,
-        )
-    }
-
-    #[bridge::read]
-    pub fn get_all_cells_yrs(&self, sheet_id: &SheetId) -> serde_json::Value {
-        yrs_a1_named_values::get_all_cells_yrs(self, sheet_id)
-    }
-
-    #[bridge::read]
-    pub fn get_cells_in_range_yrs(
-        &self,
-        sheet_id: &SheetId,
-        start_row: u32,
-        start_col: u32,
-        end_row: u32,
-        end_col: u32,
-    ) -> serde_json::Value {
-        yrs_a1_named_values::get_cells_in_range_yrs(
-            self, sheet_id, start_row, start_col, end_row, end_col,
-        )
+        a1_named_values::get_cells_in_range(self, sheet_id, start_row, start_col, end_row, end_col)
     }
 
     #[bridge::read]
@@ -774,7 +787,7 @@ impl YrsComputeEngine {
         is_full_column: bool,
         is_full_row: bool,
     ) -> Option<RectBounds> {
-        yrs_a1_named_values::get_data_bounds_for_range(
+        a1_named_values::get_data_bounds_for_range(
             self,
             sheet_id,
             start_row,
@@ -788,26 +801,26 @@ impl YrsComputeEngine {
 
     #[bridge::read]
     pub fn parse_range_ref(&self, range_str: &str) -> Option<A1RangeRef> {
-        yrs_a1_named_values::parse_range_ref(self, range_str)
+        a1_named_values::parse_range_ref(self, range_str)
     }
 
     #[bridge::read]
     pub fn stringify_range_ref(&self, range: A1RangeRef) -> Option<String> {
-        yrs_a1_named_values::stringify_range_ref(self, range)
+        a1_named_values::stringify_range_ref(self, range)
     }
 
     #[bridge::read]
     pub fn parse_cell_ref(&self, cell_str: &str) -> Option<A1CellRef> {
-        yrs_a1_named_values::parse_cell_ref(self, cell_str)
+        a1_named_values::parse_cell_ref(self, cell_str)
     }
 
     #[bridge::read]
     pub fn stringify_cell_ref(&self, cell: A1CellRef) -> Option<String> {
-        yrs_a1_named_values::stringify_cell_ref(self, cell)
+        a1_named_values::stringify_cell_ref(self, cell)
     }
 
     #[bridge::read]
-    pub fn get_merges_in_viewport_spatial(
+    pub fn get_merges_in_range_spatial(
         &self,
         sheet_id: &SheetId,
         start_row: u32,
@@ -815,7 +828,7 @@ impl YrsComputeEngine {
         end_row: u32,
         end_col: u32,
     ) -> Vec<MergeRegion> {
-        yrs_a1_named_values::get_merges_in_viewport_spatial(
+        a1_named_values::get_merges_in_range_spatial(
             self, sheet_id, start_row, start_col, end_row, end_col,
         )
     }
@@ -827,7 +840,7 @@ impl YrsComputeEngine {
         row: u32,
         col: u32,
     ) -> Option<CellMergeInfo> {
-        yrs_a1_named_values::get_merge_at_cell_spatial(self, sheet_id, row, col)
+        a1_named_values::get_merge_at_cell_spatial(self, sheet_id, row, col)
     }
 
     #[bridge::read]
@@ -836,7 +849,7 @@ impl YrsComputeEngine {
         name: &str,
         current_sheet: Option<String>,
     ) -> Option<String> {
-        yrs_a1_named_values::get_named_range_display_value(self, name, current_sheet)
+        a1_named_values::get_named_range_display_value(self, name, current_sheet)
     }
 
     #[bridge::read]
@@ -845,7 +858,7 @@ impl YrsComputeEngine {
         name: &str,
         current_sheet: Option<String>,
     ) -> Option<CellValue> {
-        yrs_a1_named_values::get_named_range_typed_value(self, name, current_sheet)
+        a1_named_values::get_named_range_typed_value(self, name, current_sheet)
     }
 
     #[bridge::read]
@@ -854,7 +867,7 @@ impl YrsComputeEngine {
         name: &str,
         current_sheet: Option<String>,
     ) -> Option<String> {
-        yrs_a1_named_values::get_named_range_type(self, name, current_sheet)
+        a1_named_values::get_named_range_type(self, name, current_sheet)
     }
 
     #[bridge::read]
@@ -863,12 +876,12 @@ impl YrsComputeEngine {
         name: &str,
         current_sheet: Option<String>,
     ) -> Option<Vec<Vec<CellValue>>> {
-        yrs_a1_named_values::get_named_range_array_values(self, name, current_sheet)
+        a1_named_values::get_named_range_array_values(self, name, current_sheet)
     }
 
     #[bridge::read]
     pub fn format_cell_value_for_display(&self, sheet_id: &SheetId, row: u32, col: u32) -> String {
-        yrs_a1_named_values::format_cell_value_for_display(self, sheet_id, row, col)
+        a1_named_values::format_cell_value_for_display(self, sheet_id, row, col)
     }
 
     #[bridge::read]
@@ -993,7 +1006,7 @@ impl YrsComputeEngine {
     }
 }
 
-impl YrsComputeEngine {
+impl ComputeEngine {
     fn build_scope_chain(&self, current_sheet: Option<&str>) -> Vec<formula_types::Scope> {
         let mut chain = Vec::with_capacity(2);
         if let Some(hex) = current_sheet
@@ -1014,12 +1027,8 @@ impl YrsComputeEngine {
             sheet_ids
                 .iter()
                 .find(|sid| {
-                    crate::storage::sheet::properties::get_sheet_name(
-                        self.stores.storage.doc(),
-                        self.stores.storage.sheets(),
-                        sid,
-                    )
-                    .as_deref()
+                    crate::storage::sheet::properties::get_sheet_name(&self.stores.storage, sid)
+                        .as_deref()
                         == Some(sheet_name.as_str())
                 })
                 .copied()

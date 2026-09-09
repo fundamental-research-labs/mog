@@ -239,6 +239,6 @@ fn regression_formula_fill_right_adjusts_columns() {
     assert_eq!(formulas[2].2[0].target_col, 4); // col 3 → ref col 4
 }
 
-// Full storage-level integration tests that exercise YrsComputeEngine::mutation_auto_fill
+// Full storage-level integration tests that exercise ComputeEngine::mutation_auto_fill
 // are in auto_fill_integration.rs — they reproduce the #REF! bug (Bug #3) and source
 // overwrite bug (Bug #2) through the complete engine pipeline.

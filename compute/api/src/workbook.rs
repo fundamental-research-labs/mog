@@ -47,9 +47,9 @@ impl Workbook {
     pub fn from_snapshot(
         snapshot: WorkbookSnapshot,
     ) -> Result<(Self, RecalcResult), ComputeApiError> {
-        use compute_core::storage::engine::YrsComputeEngine;
+        use compute_core::storage::engine::ComputeEngine;
 
-        let (engine, recalc) = YrsComputeEngine::from_snapshot(snapshot)?;
+        let (engine, recalc) = ComputeEngine::from_snapshot(snapshot)?;
 
         #[cfg(feature = "native")]
         let dispatch = Dispatch::spawn(engine)?;
@@ -64,6 +64,9 @@ impl Workbook {
     pub fn blank() -> Result<(Self, RecalcResult), ComputeApiError> {
         Self::from_snapshot(WorkbookSnapshot {
             sheets: vec![crate::SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: "00000000-0000-0000-0000-000000000001".to_string(),
                 name: "Sheet1".to_string(),
                 rows: 1_000,
@@ -79,11 +82,10 @@ impl Workbook {
     ///
     /// Call [`Self::recalculate`] explicitly to evaluate formulas before exporting.
     pub fn from_xlsx_path(path: &str) -> Result<(Self, RecalcResult), ComputeApiError> {
-        let data = std::fs::read(path).map_err(|e| {
-            ComputeApiError::InvalidOperation(format!("read {path}: {e}"))
-        })?;
-        use compute_core::storage::engine::YrsComputeEngine;
-        let (engine, recalc) = YrsComputeEngine::from_xlsx_bytes(&data)?;
+        let data = std::fs::read(path)
+            .map_err(|e| ComputeApiError::InvalidOperation(format!("read {path}: {e}")))?;
+        use compute_core::storage::engine::ComputeEngine;
+        let (engine, recalc) = ComputeEngine::from_xlsx_bytes(&data)?;
 
         #[cfg(feature = "native")]
         let dispatch = Dispatch::spawn(engine)?;

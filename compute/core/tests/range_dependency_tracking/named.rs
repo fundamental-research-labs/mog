@@ -1,6 +1,6 @@
 use crate::helpers::*;
 use crate::summary::Summary;
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use formula_types::{NamedRangeDef, Scope};
 use snapshot_types::WorkbookSnapshot;
 use value_types::{CellValue, FiniteF64};
@@ -61,9 +61,8 @@ pub(crate) fn run_named_case(variant: u8) -> Result<(), String> {
         _ => return Ok(()),
     };
 
-    let (mut engine, _init) =
-        YrsComputeEngine::from_snapshot(named_workbook_with_range(range_expr))
-            .map_err(|e| format!("from_snapshot err: {:?}", e))?;
+    let (mut engine, _init) = ComputeEngine::from_snapshot(named_workbook_with_range(range_expr))
+        .map_err(|e| format!("from_snapshot err: {:?}", e))?;
     let source = sheet_id(0);
     let dependent = cell_id(1, 0, 0);
     let target = cell_id(0, target_row, target_col);

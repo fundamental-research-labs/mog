@@ -9,7 +9,7 @@ fn create_default_sheet_does_not_enter_undo_stack() {
 
     // Boot from an empty snapshot, mirroring the lifecycle's "blank
     // workbook" path before the implicit Sheet1 is created.
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(WorkbookSnapshot::default()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(WorkbookSnapshot::default()).unwrap();
     assert!(!engine.can_undo(), "fresh empty engine has nothing to undo");
 
     // The bootstrap path used by `executeStartBridge`.
@@ -37,7 +37,7 @@ fn create_default_sheet_does_not_enter_undo_stack() {
 #[test]
 fn selected_sheet_ids_do_not_clear_redo_stack() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     engine
         .set_cell(
@@ -68,7 +68,7 @@ fn selected_sheet_ids_do_not_clear_redo_stack() {
 #[test]
 fn scroll_position_does_not_clear_redo_stack() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     engine
         .set_cell(
@@ -97,7 +97,7 @@ fn scroll_position_does_not_clear_redo_stack() {
 #[test]
 fn custom_settings_do_not_clear_redo_stack() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     engine
         .set_cell(

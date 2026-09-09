@@ -18,7 +18,7 @@ fn assert_chart_not_found(err: value_types::ComputeError, sid: &cell_types::Shee
 
 #[test]
 fn delete_missing_floating_object_is_an_error() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
 
     let err = engine
@@ -32,7 +32,7 @@ fn delete_missing_floating_object_is_an_error() {
 
 #[test]
 fn group_rejects_missing_members_without_creating_a_group() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
     let config = serde_json::json!({ "children": ["missing-a", "missing-b"] });
 
@@ -48,7 +48,7 @@ fn group_rejects_missing_members_without_creating_a_group() {
 
 #[test]
 fn chart_mutations_reject_missing_root_targets() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
     let id = "missing-chart";
     let updates = serde_json::json!({ "name": "must-not-be-created" });
@@ -87,7 +87,7 @@ fn chart_mutations_reject_missing_root_targets() {
 
 #[test]
 fn missing_chart_reads_remain_tolerant() {
-    let (engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
 
     assert!(engine.get_chart(&sid, "missing-chart").is_none());
@@ -96,7 +96,7 @@ fn missing_chart_reads_remain_tolerant() {
 
 #[test]
 fn chart_mutations_reject_stale_ids_after_deletion() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
     let config = serde_json::json!({
         "chartType": "bar",

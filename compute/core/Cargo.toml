@@ -26,7 +26,7 @@ power-query-full = []
 profile = []
 # Enable execution journal (structured runtime path tracing for agent debugging)
 journal = []
-# Expose internal modules (mirror, scheduler, import, graph, collab, document, fill)
+# Expose internal modules (mirror, scheduler, import, graph, document, fill)
 # for dev tools like formula-eval. External consumers should NOT enable this.
 __internal = []
 # Enable double-double precision for intermediate arithmetic — carries (hi, lo) error
@@ -96,13 +96,8 @@ snapshot-types = { path = "crates/types/snapshot-types" }
 # Numerical optimization (root finding, NM, BFGS, L-BFGS-B, DE, auto dispatch)
 compute-solver = { path = "crates/compute-solver" }
 
-# Collaborative sync protocol (Yrs state vectors, diffs, updates)
-compute-collab = { path = "crates/compute-collab" }
-
-# CRDT document layer (schema, cell serde, hex, undo, observe, identity)
+# Native UUID identities, compact axes, and position indexes
 compute-document = { path = "crates/compute-document" }
-
-# Policy types and access-control engine (structural-op privacy rebuild)
 
 # XLSX parser and API (direct Rust types for import — no serde roundtrip)
 xlsx-api = { path = "../../file-io/xlsx-api" }
@@ -182,8 +177,6 @@ dashmap = { version = "6", optional = true }
 # Hashable f64 wrapper for exact-match lookup indexes
 ordered-float = "4"
 
-# Yrs (Yjs CRDT port) — collaborative document storage
-yrs = { workspace = true }
 
 # WASM-specific dependency overrides:
 # - getrandom needs "js" feature for random number source (used by rand/nalgebra/statrs)

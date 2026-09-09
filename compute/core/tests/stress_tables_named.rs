@@ -6,7 +6,7 @@ use stress_engine_common::*;
 use cell_types::SheetPos;
 use compute_core::bridge_types::{BridgeSortCriterion, BridgeSortOptions};
 use compute_core::engine_types::fill::{BridgeAutoFillRequest, BridgeFillRangeSpec};
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use domain_types::domain::copy::CopyType;
 use domain_types::domain::filter::{SortBy, SortOrder};
 use snapshot_types::{CellData, CellEdit, RecalcResult, SheetSnapshot, WorkbookSnapshot};
@@ -29,7 +29,7 @@ fn test_create_table_preserves_data() {
         make_cell(2, 0, CellValue::Text("Bob".into()), None),
         make_cell(2, 1, num(80.0), None),
     ]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     // Create table over A1:B3 with headers
@@ -71,7 +71,7 @@ fn test_table_formula_column() {
         make_cell(2, 0, CellValue::Text("Bob".into()), None),
         make_cell(2, 1, num(80.0), None),
     ]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     // Create table over A1:C3
@@ -115,7 +115,7 @@ fn test_delete_table_preserves_data() {
         make_cell(2, 0, CellValue::Text("Bob".into()), None),
         make_cell(2, 1, num(80.0), None),
     ]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     engine
@@ -159,7 +159,7 @@ fn test_delete_table_preserves_data() {
 #[test]
 fn test_named_range_basic_lookup() {
     let snapshot = make_snapshot(vec![make_cell(0, 0, num(100.0), None)]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     // Create named range "MyVal" → Sheet1!A1
@@ -195,7 +195,7 @@ fn test_named_range_redefine_target() {
         make_cell(0, 0, num(10.0), None),
         make_cell(0, 1, num(20.0), None),
     ]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     // Create NR → A1
@@ -236,7 +236,7 @@ fn test_table_autofill_extends_formulas() {
         make_cell(1, 0, num(5.0), None),
         make_cell(2, 0, num(10.0), None),
     ]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     // Create table
@@ -281,7 +281,7 @@ fn test_table_autofill_extends_formulas() {
 #[test]
 fn test_named_range_remove_and_readd() {
     let snapshot = make_snapshot(vec![make_cell(0, 0, num(100.0), None)]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     // Create workbook-scoped NR
@@ -326,7 +326,7 @@ fn test_multiple_named_ranges_in_formula() {
         make_cell(0, 0, num(10.0), None),
         make_cell(0, 1, num(20.0), None),
     ]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     // Create Alpha → A1

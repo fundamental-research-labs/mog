@@ -1,8 +1,8 @@
 //! Production evaluation bridge for sheet filters.
 
+use crate::storage::WorkbookStorage;
 use cell_types::SheetId;
 use value_types::CellValue;
-use yrs::{Doc, MapRef};
 
 use super::bridge::column_filter_to_table_criteria;
 use super::crud::get_filter;
@@ -22,8 +22,7 @@ use super::{ColumnFilter, FilterEvaluationResult, FilterRecordCount};
 /// Returns evaluation results for each data row. An empty result means
 /// no column filters are active (all rows match).
 pub fn evaluate_filter<F, G, I, R>(
-    doc: &Doc,
-    sheets: &MapRef,
+    storage: &WorkbookStorage,
     sheet_id: &SheetId,
     filter_id: &str,
     get_cell_value: F,
@@ -37,7 +36,7 @@ where
     I: Fn(u32, u32) -> Option<domain_types::FilterIconIdentity>,
     R: Fn(&str) -> Option<(u32, u32)>,
 {
-    let filter = match get_filter(doc, sheets, sheet_id, filter_id) {
+    let filter = match get_filter(storage, sheet_id, filter_id) {
         Some(f) => f,
         None => return vec![],
     };
@@ -158,8 +157,7 @@ where
 ///
 /// Returns deduplicated cell values sorted: nulls first, then numbers, then strings.
 pub fn get_unique_values<F, R>(
-    doc: &Doc,
-    sheets: &MapRef,
+    storage: &WorkbookStorage,
     sheet_id: &SheetId,
     filter_id: &str,
     header_cell_id: &str,
@@ -170,7 +168,7 @@ where
     F: Fn(u32, u32) -> CellValue,
     R: Fn(&str) -> Option<(u32, u32)>,
 {
-    let filter = match get_filter(doc, sheets, sheet_id, filter_id) {
+    let filter = match get_filter(storage, sheet_id, filter_id) {
         Some(f) => f,
         None => return vec![],
     };
@@ -237,8 +235,7 @@ where
 
 /// Get filtered vs total record count for a specific filter.
 pub fn get_filtered_record_count<F, G, I, R>(
-    doc: &Doc,
-    sheets: &MapRef,
+    storage: &WorkbookStorage,
     sheet_id: &SheetId,
     filter_id: &str,
     get_cell_value: F,
@@ -253,8 +250,7 @@ where
     R: Fn(&str) -> Option<(u32, u32)>,
 {
     let results = evaluate_filter(
-        doc,
-        sheets,
+        storage,
         sheet_id,
         filter_id,
         get_cell_value,

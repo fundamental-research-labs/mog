@@ -4,28 +4,21 @@
 //! reconciles those bindings with live sheet order so deletion, insertion,
 //! renaming, and reordering cannot revive or misidentify imported worksheets.
 use std::collections::{BTreeSet, HashMap, HashSet};
-use std::sync::Arc;
 
 use cell_types::SheetId;
 use domain_types::{ParseOutput, SheetData, WorkbookSheetKind, WorkbookSheetPackageInfo};
-use serde::{Deserialize, Serialize};
-use yrs::{Any, Doc, Map, MapRef, Out, Transact, TransactionMut};
 
-const KEY_SHEET_INVENTORY: &str = "workbookSheetInventory";
-
-#[derive(Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct StoredInventory {
+#[derive(Debug, Clone, Default)]
+pub(crate) struct StoredInventory {
     entries: Vec<WorkbookSheetPackageInfo>,
     editable_sheet_ids: Vec<String>,
     parsed_workbook_sheet_indices: BTreeSet<u32>,
 }
 
 pub(crate) fn hydrate(
-    workbook: &MapRef,
+    metadata: &mut super::WorkbookMetadata,
     output: &ParseOutput,
     sheet_ids: &[SheetId],
-    txn: &mut TransactionMut,
 ) {
     if output.workbook_sheet_inventory.is_empty() {
         return;
@@ -35,13 +28,11 @@ pub(crate) fn hydrate(
         editable_sheet_ids: sheet_ids.iter().map(SheetId::to_uuid_string).collect(),
         parsed_workbook_sheet_indices: output.parsed_workbook_sheet_indices.clone(),
     };
-    let json = serde_json::to_string(&inventory).expect("sheet inventory is serializable");
-    workbook.insert(txn, KEY_SHEET_INVENTORY, Any::String(Arc::from(json)));
+    metadata.sheet_inventory = Some(inventory);
 }
 
 pub(crate) fn export(
-    doc: &Doc,
-    workbook: &MapRef,
+    metadata: &super::WorkbookMetadata,
     sheet_ids: &[SheetId],
     sheets: &mut [SheetData],
 ) -> (
@@ -49,14 +40,10 @@ pub(crate) fn export(
     BTreeSet<u32>,
     HashMap<u32, u32>,
 ) {
-    let txn = doc.transact();
-    let Some(Out::Any(Any::String(json))) = workbook.get(&txn, KEY_SHEET_INVENTORY) else {
+    let Some(stored) = metadata.sheet_inventory.as_ref() else {
         return Default::default();
     };
-    let Ok(stored) = serde_json::from_str::<StoredInventory>(&json) else {
-        return Default::default();
-    };
-    reconcile(stored, sheet_ids, sheets)
+    reconcile(stored.clone(), sheet_ids, sheets)
 }
 
 fn reconcile(
@@ -79,20 +66,30 @@ fn reconcile(
             Some((id, entry))
         })
         .collect();
-    // Reserve inert and surviving worksheet identities before allocating IDs
-    // for newly created sheets. Numeric Excel IDs are independent of tab order.
+    // Native sheet metadata owns current numeric IDs; imported inventory is a
+    // fallback for bound originals. Reserve every preferred ID before assigning
+    // missing IDs, so allocation cannot steal a later tab's canonical identity.
     let mut used_ids: BTreeSet<_> = stored
         .entries
         .iter()
-        .filter(|entry| {
-            entry.editable_sheet_index.is_none()
-                || entry
-                    .editable_sheet_index
-                    .and_then(|index| stored.editable_sheet_ids.get(index))
-                    .is_some_and(|id| current_id_set.contains(id))
-        })
+        .filter(|entry| entry.editable_sheet_index.is_none())
         .filter_map(|entry| entry.sheet_id)
         .collect();
+    let mut preferred_ids = vec![None; sheets.len()];
+    for (index, (id, sheet)) in current_ids.iter().zip(sheets.iter()).enumerate() {
+        if let Some(original) = imported.get(id) {
+            preferred_ids[index] = sheet
+                .sheet_id
+                .or(original.sheet_id)
+                .filter(|id| *id > 0 && used_ids.insert(*id));
+        }
+    }
+    for (index, (id, sheet)) in current_ids.iter().zip(sheets.iter()).enumerate() {
+        if !imported.contains_key(id) {
+            // A copy may inherit its original's ID; only a free ID is usable.
+            preferred_ids[index] = sheet.sheet_id.filter(|id| *id > 0 && used_ids.insert(*id));
+        }
+    }
     let mut editable = Vec::with_capacity(sheets.len());
     for (index, (id, sheet)) in current_ids.iter().zip(sheets.iter_mut()).enumerate() {
         let original = imported.get(id);
@@ -113,22 +110,9 @@ fn reconcile(
                 ..Default::default()
             }
                 });
-        // Copy-sheet can inherit the imported numeric ID in its properties;
-        // only the bound original owns that ID. New tabs require a free ID.
-        let preferred_id = if original.is_some() {
-            entry.sheet_id.or(sheet.sheet_id)
-        } else {
-            sheet
-                .sheet_id
-                .filter(|id| *id > 0 && !used_ids.contains(id))
-        };
-        let sheet_id = preferred_id.unwrap_or_else(|| {
-            let mut candidate = 1;
-            while used_ids.contains(&candidate) {
-                candidate += 1;
-            }
-            used_ids.insert(candidate);
-            candidate
+        let sheet_id = preferred_ids[index].unwrap_or_else(|| {
+            domain_types::domain::workbook::next_worksheet_id(&used_ids)
+                .expect("workbook has an available positive sheet ID")
         });
         used_ids.insert(sheet_id);
         sheet.sheet_id = Some(sheet_id);
@@ -207,4 +191,136 @@ fn reconcile(
         })
         .collect();
     (inventory, parsed_indices, imported_order_to_export_order)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn original_inventory() -> StoredInventory {
+        StoredInventory {
+            entries: vec![WorkbookSheetPackageInfo {
+                sheet_id: Some(1),
+                editable_sheet_index: Some(0),
+                kind: WorkbookSheetKind::Worksheet,
+                ..Default::default()
+            }],
+            editable_sheet_ids: vec![SheetId::from_raw(1).to_uuid_string()],
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn native_original_and_copy_ids_match_canonical_writer_allocation() {
+        let mut sheets = vec![
+            SheetData {
+                sheet_id: Some(7),
+                ..Default::default()
+            },
+            SheetData::default(),
+        ];
+        let expected = ParseOutput {
+            sheets: sheets.clone(),
+            ..Default::default()
+        }
+        .resolved_worksheet_ids()
+        .unwrap();
+        let (inventory, _, _) = reconcile(
+            original_inventory(),
+            &[SheetId::from_raw(1), SheetId::from_raw(2)],
+            &mut sheets,
+        );
+        assert_eq!(expected, vec![7, 8]);
+        assert_eq!(
+            sheets
+                .iter()
+                .map(|sheet| sheet.sheet_id.unwrap())
+                .collect::<Vec<_>>(),
+            expected
+        );
+        assert_eq!(
+            inventory
+                .iter()
+                .map(|entry| entry.sheet_id.unwrap())
+                .collect::<Vec<_>>(),
+            expected
+        );
+    }
+
+    #[test]
+    fn maximum_native_id_allocates_copy_from_first_available_gap() {
+        for inert_id in [None, Some(1)] {
+            let mut stored = original_inventory();
+            if let Some(sheet_id) = inert_id {
+                stored.entries.push(WorkbookSheetPackageInfo {
+                    workbook_order: 1,
+                    sheet_id: Some(sheet_id),
+                    kind: WorkbookSheetKind::Chartsheet,
+                    ..Default::default()
+                });
+            }
+            let mut sheets = vec![
+                SheetData {
+                    sheet_id: Some(u32::MAX),
+                    ..Default::default()
+                },
+                SheetData::default(),
+            ];
+            reconcile(
+                stored,
+                &[SheetId::from_raw(1), SheetId::from_raw(2)],
+                &mut sheets,
+            );
+            assert_eq!(sheets[0].sheet_id, Some(u32::MAX));
+            assert_eq!(sheets[1].sheet_id, Some(inert_id.unwrap_or(0) + 1));
+        }
+    }
+
+    #[test]
+    fn reordered_copy_reserves_later_native_and_inert_ids_before_allocation() {
+        let mut stored = original_inventory();
+        stored.entries.push(WorkbookSheetPackageInfo {
+            workbook_order: 1,
+            sheet_id: Some(8),
+            kind: WorkbookSheetKind::Chartsheet,
+            ..Default::default()
+        });
+        let mut sheets = vec![
+            SheetData {
+                sheet_id: Some(7),
+                ..Default::default()
+            },
+            SheetData {
+                sheet_id: Some(7),
+                ..Default::default()
+            },
+            SheetData {
+                sheet_id: Some(9),
+                ..Default::default()
+            },
+        ];
+        let (inventory, _, _) = reconcile(
+            stored,
+            &[
+                SheetId::from_raw(2),
+                SheetId::from_raw(1),
+                SheetId::from_raw(3),
+            ],
+            &mut sheets,
+        );
+        assert_eq!(
+            sheets
+                .iter()
+                .map(|sheet| sheet.sheet_id)
+                .collect::<Vec<_>>(),
+            vec![Some(10), Some(7), Some(9)]
+        );
+        assert_eq!(
+            inventory
+                .iter()
+                .map(|entry| entry.sheet_id)
+                .collect::<Vec<_>>(),
+            vec![Some(10), Some(8), Some(7), Some(9)]
+        );
+    }
 }

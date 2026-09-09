@@ -1,10 +1,10 @@
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use xlsx_parser::write::ZipWriter;
 
 #[test]
 fn l2_roundtrip_preserves_modeled_theme_format_scheme_and_sidecars() {
     let original = theme_fixture_xlsx();
-    let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&original).expect("import xlsx");
+    let (engine, _) = ComputeEngine::from_xlsx_bytes(&original).expect("import xlsx");
 
     let exported_parse = engine
         .export_to_parse_output()

@@ -1,15 +1,9 @@
-//! Sheet-level floating object storage facade.
-//!
-//! Floating objects (shapes, images, connectors, textboxes, group shapes) are stored as
-//! structured Y.Map entries in per-sheet Yrs maps. The implementation is split into
-//! focused submodules for storage codec, CRUD, z-order, constructors, mutations,
-//! connector lookup, and layout projection. Keep new implementation logic in those
-//! submodules and preserve this file as the compatibility path for existing callers.
-//!
-//! Public callers should continue to use `crate::storage::sheet::floating_objects::*`.
+//! Typed native drawings, charts, controls, groups, and their ordering.
+//! Public JSON inputs are decoded at the API boundary; storage owns domain values.
 
+mod anchors;
+pub(crate) use anchors::{project_anchor_positions, sync_after_structure};
 mod bounds;
-mod codec;
 mod connectors;
 mod constructors;
 mod groups;
@@ -17,10 +11,11 @@ mod ids;
 mod keys;
 mod mutations;
 mod objects;
-mod order;
-mod sheet_map;
+mod state;
 mod units;
 mod z_order;
+
+pub(crate) use state::FloatingObjectState;
 
 #[cfg(test)]
 mod tests;

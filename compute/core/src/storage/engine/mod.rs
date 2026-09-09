@@ -1,23 +1,18 @@
-//! # Yrs-backed Compute Engine
+//! Native spreadsheet engine coordinating sparse cells, UUID identities,
+//! metadata, and incremental formula evaluation.
 //!
-//! `YrsComputeEngine` is the orchestrator that wires CRDT storage, identity
-//! tracking, undo/redo, and the `ComputeCore` recalculation scheduler.
-//! All user edits flow through the yrs Doc, are detected by the
-//! `StorageObserver`, and delegated to `ComputeCore` for recalculation.
-//!
-//! Root module policy: keep type ownership and module wiring here. Put bridge
-//! domain APIs in sibling modules and shared behavior in services or focused
-//! private modules.
+//! Mutations update the native stores and schedule dependent formulas directly.
+//! Root ownership and module wiring live here; domain APIs and shared behavior
+//! live in the sibling modules.
 
 pub mod construction;
 mod mutation_coordinator;
 mod mutation_dispatch;
 mod pivot_materialization;
 mod recalc;
+mod runtime_settings;
 mod settings;
 mod stores;
-mod sync_authored_cells;
-mod sync_pipeline;
 mod viewport;
 // Wire format types and serialization — now in compute-wire crate
 pub use compute_wire::mutation as mutation_binary;
@@ -31,9 +26,7 @@ mod bridge_imports;
 mod cell_bridge;
 pub(crate) mod cell_metadata;
 mod cell_semantics;
-mod sync_bridge;
 mod table_result_merge;
-mod undo_bridge;
 #[doc(hidden)]
 pub mod versioning;
 mod workbook_theme;
@@ -48,6 +41,7 @@ mod format_inference;
 mod formatting;
 mod formula_read;
 mod grid_indexing;
+pub(crate) mod history;
 mod layout;
 mod merge_index;
 pub(crate) mod mutation;
@@ -62,7 +56,6 @@ pub(crate) mod services;
 mod structural;
 mod styles;
 mod tables;
-pub(crate) mod update_buffer;
 mod validation;
 
 #[cfg(test)]
@@ -76,7 +69,7 @@ mod integration_tests_replace_all;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
-use crate::{CellId, RangePos, SheetId, WorkbookSnapshot};
+use crate::{CellId, SheetId, WorkbookSnapshot};
 #[cfg(test)]
 use cell_types::SheetPos;
 #[cfg(test)]
@@ -96,31 +89,30 @@ pub use csv_parser::CsvImportOptions;
 
 use crate::mirror::CellMirror;
 
-pub(in crate::storage::engine) use grid_indexing::build_grid_from_yrs_for_sheet;
+pub(in crate::storage::engine) use grid_indexing::build_grid_from_native_sheet;
 use mutation_coordinator::MutationCoordinator;
 use settings::EngineSettings;
-use snapshot_types::SyncApplyOperationContextWire;
 pub(crate) use stores::CFCacheEntry;
 use stores::EngineStores;
 use viewport::service::ViewportService;
 
-/// Yrs-backed compute engine: CRDT storage + identity tracking + compute scheduler.
-pub struct YrsComputeEngine {
+/// Native spreadsheet state, identity tracking, and the formula scheduler.
+pub struct ComputeEngine {
     mirror: CellMirror,
     pub(crate) stores: EngineStores,
     pub(crate) mutation: MutationCoordinator,
+    history: history::HistoryStack,
     pub(crate) viewport: ViewportService,
     pub(crate) settings: EngineSettings,
     /// Last canonical import report for this engine instance.
     ///
     /// This is runtime-only diagnostic state: it is replaced on workbook import,
-    /// not persisted in Yrs, and not exported back to XLSX.
+    /// and excluded from XLSX export.
     pub(crate) import_report: domain_types::ImportReport,
 
     /// Runtime operation diagnostics emitted by user/session commands.
     ///
-    /// This is engine-local state: it is retained only in memory, not persisted
-    /// in Yrs, and not exported back to XLSX.
+    /// These diagnostics are retained only in memory.
     pub(crate) runtime_diagnostics: runtime_diagnostics::RuntimeDiagnosticsStore,
 
     /// Document-local version operation admission state.
@@ -130,47 +122,19 @@ pub struct YrsComputeEngine {
     /// crosses into Rust; guarded mutation boundaries consume it.
     version_runtime_operation_context: versioning::VersionRuntimeOperationContext,
 
-    /// Yrs `update_v1` buffer.
-    ///
-    /// One observer is installed at engine construction; every committed
-    /// write transaction pushes its v1-encoded update bytes onto this
-    /// buffer. The bridge method `drain_pending_updates` pops the
-    /// pending list for the kernel-side orchestrator (`RustDocument`) to
-    /// fan out to attached Providers (IndexedDB / Tauri-file / etc.).
-    ///
-    /// Held in an `Arc` because the yrs observer callback runs on the
-    /// commit path (Send + Sync) while the bridge drain runs on the
-    /// dispatch actor thread. The subscription handle is held in
-    /// `_update_subscription` to keep the observer alive for the engine's
-    /// lifetime — dropping it would silently detach the observer.
-    pub(crate) update_buffer: std::sync::Arc<update_buffer::UpdateBuffer>,
-
-    /// Sync apply context currently being applied to Yrs and rebuilt into
-    /// runtime state.
-    pub(crate) active_sync_context: Option<SyncApplyOperationContextWire>,
-
-    /// Lifetime anchor for the `update_v1` subscription. Dropping this
-    /// removes the observer from the yrs Doc; we keep it alive for the
-    /// engine's lifetime so every transaction commit feeds
-    /// `update_buffer`. Read only via `Drop`.
-    _update_subscription: compute_collab::UpdateSubscriptionHandle,
-
     /// Session-scoped Scenario Manager apply/restore state.
     ///
-    /// This is intentionally not persisted in Yrs. Apply captures a local
+    /// Apply captures a local
     /// baseline, writes scenario values through `apply_mutation`, and restore
     /// consumes that baseline through `apply_mutation`.
     pub(crate) scenario_session: crate::what_if::scenarios::ScenarioSessionState,
 
-    /// Stored data for deferred Yrs CRDT hydration.
-    /// When set, the engine was initialized in "fast" mode: CellMirror and
-    /// indexes are populated from the snapshot/parse_output, but Yrs is empty.
-    /// Call `complete_deferred_hydration()` to perform the slow Yrs write and
-    /// rebuild indexes with full fidelity.
+    /// Remaining import state when only the critical sheet has been hydrated.
+    /// `complete_deferred_hydration` installs the remaining metadata and indexes.
     deferred_hydration: Option<construction::DeferredHydrationData>,
 }
 
-impl YrsComputeEngine {
+impl ComputeEngine {
     // -------------------------------------------------------------------
     // CF cache initialization
     // -------------------------------------------------------------------
@@ -198,12 +162,11 @@ impl YrsComputeEngine {
     }
 }
 
-impl std::fmt::Debug for YrsComputeEngine {
+impl std::fmt::Debug for ComputeEngine {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("YrsComputeEngine")
+        f.debug_struct("ComputeEngine")
             .field("storage", &self.stores.storage)
             .field("grid_indexes", &self.stores.grid_indexes.len())
-            .field("observer", &self.mutation.observer)
             .finish()
     }
 }

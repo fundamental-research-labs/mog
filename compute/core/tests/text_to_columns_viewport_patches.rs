@@ -9,7 +9,7 @@
 //!     written into A1, B1, C1.
 //!   - Pre-R5, the kernel followed every `textToColumns` with
 //!     `forceRefreshAllViewports()`, which blasted the viewport buffer with
-//!     fresh values from YRS. That masked any patch-emission gap.
+//!     fresh values from workbook storage. That masked any patch-emission gap.
 //!   - R5 dropped the band-aid. The latent bug surfaced: writes to the
 //!     newly-allocated destination columns (B1, C1) propagated patches, but
 //!     the in-place overwrite at A1 did NOT — `recalc.changed_cells`
@@ -26,7 +26,7 @@
 //! Run:
 //!   cargo test -p compute-core --test text_to_columns_viewport_patches
 
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::CellValue;
 
@@ -52,6 +52,9 @@ fn text_cell(id_suffix: u32, row: u32, col: u32, text: &str) -> CellData {
 fn snapshot_with_delimited_strings() -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_id_str(1),
             name: "S1".to_string(),
             rows: 50,
@@ -99,7 +102,7 @@ fn find_change<'a>(
 #[test]
 fn text_to_columns_emits_change_for_source_column_overwrite() {
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_with_delimited_strings()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(snapshot_with_delimited_strings()).expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("S1").expect("S1");
 
     // Split A1:A3 in-place: dest_row == start_row, dest_col == source_col.
@@ -159,7 +162,7 @@ fn text_to_columns_emits_change_for_source_column_overwrite() {
 #[test]
 fn text_to_columns_emits_viewport_patches_for_source_column() {
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_with_delimited_strings()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(snapshot_with_delimited_strings()).expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("S1").expect("S1");
     engine
         .register_viewport("vp", &sid, 0, 0, 9, 5)
@@ -194,7 +197,7 @@ fn text_to_columns_emits_viewport_patches_for_source_column() {
 #[test]
 fn text_to_columns_fixed_width_emits_change_for_source_column_overwrite() {
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_with_delimited_strings()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(snapshot_with_delimited_strings()).expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("S1").expect("S1");
 
     // Fixed-width: break at column 7 (so "Seattle" / ", WA, 98101").

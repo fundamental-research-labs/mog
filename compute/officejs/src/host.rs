@@ -671,6 +671,27 @@ impl Host {
             message: format!("invalid Office.js batch: {e}"),
         })?;
 
+        // Every context.sync() brackets all operation families, including extension
+        // mutations. Empty/read-only groups leave history and redo untouched.
+        // One mutating sync is one user action. Nesting lets callers
+        // combine several syncs with an explicit WorkbookHistory group.
+        let history = self.workbook.history();
+        history.begin_undo_group().map_err(engine_error)?;
+        let result = self.apply_batch(ops);
+        let end_result = history.end_undo_group().map_err(engine_error);
+
+        // A failed batch retains its successful prefix. Close the group even
+        // on that path, and preserve the original operation's error.
+        match result {
+            Ok(batch) => {
+                end_result?;
+                Ok(batch)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    fn apply_batch(&self, ops: Vec<Value>) -> Result<BatchResult, BatchError> {
         let mut loaded = HashMap::new();
         let mut results = HashMap::new();
         for raw_op in ops {

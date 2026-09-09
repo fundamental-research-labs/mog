@@ -1,15 +1,13 @@
-use super::super::YrsComputeEngine;
+use super::super::ComputeEngine;
 use super::super::services;
-use super::yrs_position_persistence::persist_remapped_cell_positions;
 use crate::mirror::CellMirror;
 use crate::snapshot::{MutationResult, RecalcResult};
 use cell_types::{CellId, SheetId};
-use compute_document::undo::ORIGIN_STRUCTURAL;
 use compute_wire::mutation::serialize_multi_viewport_patches;
 use formula_types::StructureChange;
 use value_types::ComputeError;
 
-impl YrsComputeEngine {
+impl ComputeEngine {
     pub(super) fn apply_insert_cells_with_shift(
         &mut self,
         sheet_id: &SheetId,
@@ -219,28 +217,15 @@ impl YrsComputeEngine {
         }
 
         let change = StructureChange::RemapPositions { updates };
-        self.mutation.undo_manager.begin_undo_group();
-        let _guard = self.mutation.suppress_guard();
+
         let apply_result = services::structural::apply_structure_change(
             &mut self.stores,
             &mut self.mirror,
             sheet_id,
             &change,
         );
-        let persist_result = apply_result.and_then(|recalc| {
-            persist_remapped_cell_positions(
-                &self.stores,
-                sheet_id,
-                match &change {
-                    StructureChange::RemapPositions { updates } => updates,
-                    _ => unreachable!(),
-                },
-            )?;
-            Ok(recalc)
-        });
-        drop(_guard);
-        self.mutation.undo_manager.end_undo_group();
-        persist_result
+
+        apply_result
     }
 
     fn apply_partial_cell_delete_and_remap(
@@ -252,9 +237,6 @@ impl YrsComputeEngine {
         if deleted_cell_ids.is_empty() && updates.is_empty() {
             return Ok(RecalcResult::empty());
         }
-
-        self.mutation.undo_manager.begin_undo_group();
-        let _guard = self.mutation.suppress_guard();
 
         let clear_result = if deleted_cell_ids.is_empty() {
             Ok(())
@@ -280,20 +262,10 @@ impl YrsComputeEngine {
                     sheet_id,
                     &change,
                 )?;
-                persist_remapped_cell_positions(
-                    &self.stores,
-                    sheet_id,
-                    match &change {
-                        StructureChange::RemapPositions { updates } => updates,
-                        _ => unreachable!(),
-                    },
-                )?;
                 Ok(recalc)
             }
         };
 
-        drop(_guard);
-        self.mutation.undo_manager.end_undo_group();
         recalc_result
     }
 
@@ -305,12 +277,8 @@ impl YrsComputeEngine {
     ) -> Result<(), ComputeError> {
         stores.compute.clear_cells(mirror, cell_ids)?;
         for cell_id in cell_ids {
-            stores.storage.remove_cell_with_origin(
-                mirror,
-                sheet_id,
-                cell_id,
-                Some(ORIGIN_STRUCTURAL),
-            );
+            stores.storage.clear_cell_metadata(*cell_id);
+            mirror.remove_cell(cell_id);
             let grid = stores.grid_indexes.get_mut(sheet_id).ok_or_else(|| {
                 ComputeError::SheetNotFound {
                     sheet_id: sheet_id.to_uuid_string(),

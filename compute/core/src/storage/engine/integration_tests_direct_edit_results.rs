@@ -12,7 +12,13 @@ fn cell_id_b1() -> CellId {
 
 fn formula_deps_snapshot() -> WorkbookSnapshot {
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -65,7 +71,7 @@ fn cell_change_at(
 }
 
 fn apply_set_b1_formula(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     formula: &str,
 ) -> crate::snapshot::MutationResult {
     let output = engine
@@ -90,7 +96,7 @@ fn apply_set_b1_formula(
 
 #[test]
 fn set_cells_by_position_same_formula_rewrite_does_not_emit_placeholder_value() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(formula_deps_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(formula_deps_snapshot()).unwrap();
 
     let mutation_result = apply_set_b1_formula(&mut engine, "=A1*2");
 
@@ -111,7 +117,7 @@ fn set_cells_by_position_same_formula_rewrite_does_not_emit_placeholder_value() 
 
 #[test]
 fn set_cells_by_position_formula_rewrite_same_value_reports_formula_change() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(formula_deps_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(formula_deps_snapshot()).unwrap();
 
     let mutation_result = apply_set_b1_formula(&mut engine, "=A1+10");
     let b1_change = cell_change_at(&mutation_result.recalc.changed_cells, 0, 1)

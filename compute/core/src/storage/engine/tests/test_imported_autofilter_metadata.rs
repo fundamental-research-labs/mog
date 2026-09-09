@@ -147,8 +147,7 @@ fn imported_table_autofilter_materializes_runtime_table_filter() {
     assert_eq!(engine.get_hidden_rows(&sheet_id), vec![2]);
 
     let binding = crate::storage::sheet::filters::get_filter_metadata_binding(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
+        &engine.stores.storage,
         &sheet_id,
         &filter.id,
     )
@@ -306,8 +305,7 @@ fn unsupported_imported_table_autofilter_records_import_diagnostic() {
     );
 
     let binding = crate::storage::sheet::filters::get_filter_metadata_binding(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
+        &engine.stores.storage,
         &sheet_id,
         &filter.id,
     )
@@ -411,7 +409,7 @@ fn unsupported_imported_table_autofilter_runtime_diagnostics_distinguish_apply_a
 fn unsupported_table_autofilter_roundtrip_preserves_metadata_without_runtime_claim() {
     let input = unsupported_people_table_filter_parse_output();
     let input_bytes = xlsx_api::export_from_parse_output(&input).expect("write input xlsx");
-    let (engine, _) = crate::storage::engine::YrsComputeEngine::from_xlsx_bytes(&input_bytes)
+    let (engine, _) = crate::storage::engine::ComputeEngine::from_xlsx_bytes(&input_bytes)
         .expect("from_xlsx_bytes");
     let sheet_id =
         SheetId::from_uuid_str(&engine.get_all_sheet_ids()[0]).expect("valid hydrated sheet id");
@@ -432,8 +430,7 @@ fn unsupported_table_autofilter_roundtrip_preserves_metadata_without_runtime_cla
         "unsupported table filter must not fabricate executable runtime criteria"
     );
     let binding = crate::storage::sheet::filters::get_filter_metadata_binding(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
+        &engine.stores.storage,
         &sheet_id,
         &filter.id,
     )
@@ -562,4 +559,117 @@ fn people_table_spec(filter_columns: Vec<FilterColumnSpec>) -> TableSpec {
         filter_columns,
         ..Default::default()
     }
+}
+
+#[test]
+fn copied_native_filter_has_independent_ids_visibility_and_lossless_metadata() {
+    use crate::storage::sheet::{dimensions, filters};
+    let input = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Source".into(),
+            rows: 3,
+            cols: 1,
+            cells: ["Status", "Keep", "Drop"]
+                .into_iter()
+                .enumerate()
+                .map(|(row, value)| domain_types::CellData {
+                    row: row as u32,
+                    col: 0,
+                    value: CellValue::Text(Arc::from(value)),
+                    ..Default::default()
+                })
+                .collect(),
+            auto_filter: Some(AutoFilter {
+                range_ref: "A1:A3".into(),
+                xr_uid: Some("filter-uid".into()),
+                columns: vec![FilterColumn {
+                    col_index: 0,
+                    hidden_button: true,
+                    filter_type: Some(OoxmlFilterType::Values {
+                        values: vec!["Keep".into()],
+                        blanks: false,
+                        calendar_type: None,
+                        date_group_items: Vec::new(),
+                    }),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let mut engine = engine_from_parse_output_normal(&input);
+    let source = *engine.mirror.sheet_ids().next().unwrap();
+    let original = engine.get_filters_in_sheet(&source).pop().unwrap();
+    engine.apply_filter(&source, &original.id).unwrap();
+    filters::set_filter_sort_state(
+        &mut engine.stores.storage,
+        &source,
+        &original.id,
+        Some(filters::FilterSortState {
+            column_cell_id: original.header_start_cell_id.clone(),
+            order: filters::SortOrder::Desc,
+            sort_by: filters::SortBy::Value,
+        }),
+    );
+    let (copy_hex, _) = engine.copy_sheet(&source, "Copy").unwrap();
+    let copy = SheetId::from_raw(compute_document::hex::hex_to_id(&copy_hex).unwrap());
+    let copied = engine.get_filters_in_sheet(&copy).pop().unwrap();
+    assert_ne!(copied.id, original.id);
+    assert_ne!(copied.header_start_cell_id, original.header_start_cell_id);
+    assert_ne!(copied.data_end_cell_id, original.data_end_cell_id);
+    assert_eq!(
+        copied.sort_state.as_ref().unwrap().column_cell_id,
+        copied.header_start_cell_id
+    );
+    assert!(
+        copied
+            .column_filters
+            .contains_key(&copied.header_start_cell_id)
+    );
+    assert!(
+        dimensions::get_row_visibility_ownership(
+            &engine.stores.storage,
+            &copy,
+            2,
+            engine.stores.grid_indexes.get(&copy)
+        )
+        .filter_owner_ids
+        .contains(&copied.id)
+    );
+    engine.clear_all_column_filters(&copy, &copied.id).unwrap();
+    assert!(!dimensions::is_row_hidden(
+        &engine.stores.storage,
+        &copy,
+        2,
+        engine.stores.grid_indexes.get(&copy)
+    ));
+    assert!(dimensions::is_row_hidden(
+        &engine.stores.storage,
+        &source,
+        2,
+        engine.stores.grid_indexes.get(&source)
+    ));
+    let output = engine.export_to_parse_output().unwrap().parse_output;
+    let source_filter = output
+        .sheets
+        .iter()
+        .find(|sheet| sheet.name == "Source")
+        .unwrap()
+        .auto_filter
+        .as_ref()
+        .unwrap();
+    let copied_filter = output
+        .sheets
+        .iter()
+        .find(|sheet| sheet.name == "Copy")
+        .unwrap()
+        .auto_filter
+        .as_ref()
+        .unwrap();
+    assert!(source_filter.columns[0].filter_type.is_some());
+    assert!(copied_filter.columns[0].filter_type.is_none());
+    assert!(copied_filter.columns[0].hidden_button);
+    assert_eq!(copied_filter.xr_uid.as_deref(), Some("filter-uid"));
 }

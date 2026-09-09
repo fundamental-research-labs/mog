@@ -5,7 +5,6 @@ use crate::storage::engine::stores::EngineStores;
 use crate::storage::properties;
 use cell_types::SheetId;
 use compute_document::hex::{SmallHex, id_to_hex};
-use compute_document::undo::ORIGIN_USER_EDIT;
 use domain_types::{CellBorders, CellFormat};
 use value_types::ComputeError;
 
@@ -29,38 +28,57 @@ enum RangeFormatPatch<'a> {
 impl RangeFormatPatch<'_> {
     fn apply(
         &self,
-        stores: &EngineStores,
+        stores: &mut EngineStores,
         sheet_id: &SheetId,
         cell_ids: &[&str],
-        origin: &'static [u8],
     ) -> Result<(), ComputeError> {
         match self {
             Self::Format {
                 format,
                 clear_fields,
-            } => properties::patch_cell_formats_with_origin(
-                stores.storage.doc(),
-                stores.storage.workbook_map(),
-                stores.storage.sheets(),
+            } => properties::patch_cell_formats(
+                &mut stores.storage,
                 sheet_id,
                 cell_ids,
                 format,
                 clear_fields,
-                origin,
             ),
             Self::Borders {
                 borders,
                 clear_fields,
-            } => properties::patch_cell_borders_with_origin(
-                stores.storage.doc(),
-                stores.storage.workbook_map(),
-                stores.storage.sheets(),
+            } => properties::patch_cell_borders(
+                &mut stores.storage,
                 sheet_id,
                 cell_ids,
                 borders,
                 clear_fields,
-                origin,
             ),
+        }
+    }
+
+    fn clear_overlay_fields(&self, format: &CellFormat) -> Result<CellFormat, ComputeError> {
+        match self {
+            Self::Format { clear_fields, .. } => {
+                properties::apply_format_patch(format, &CellFormat::default(), clear_fields)
+            }
+            Self::Borders { clear_fields, .. } => {
+                let mut format = format.clone();
+                format.borders = properties::apply_borders_patch(
+                    format.borders.as_ref(),
+                    &CellBorders::default(),
+                    clear_fields,
+                );
+                Ok(format)
+            }
+        }
+    }
+    fn direct_overlay(&self) -> CellFormat {
+        match self {
+            Self::Format { format, .. } => (*format).clone(),
+            Self::Borders { borders, .. } => CellFormat {
+                borders: (**borders != CellBorders::default()).then(|| (*borders).clone()),
+                ..Default::default()
+            },
         }
     }
 
@@ -101,7 +119,7 @@ impl RangeFormatPatch<'_> {
 
 pub(in crate::storage::engine) fn toggle_format_property(
     stores: &mut EngineStores,
-    mirror: &CellMirror,
+    mirror: &mut CellMirror,
     sheet_id: &SheetId,
     ranges: &[(u32, u32, u32, u32)],
     property: &str,
@@ -110,27 +128,27 @@ pub(in crate::storage::engine) fn toggle_format_property(
 ) -> FormatResult {
     let grid = stores
         .grid_indexes
-        .get_mut(sheet_id)
-        .ok_or_else(|| ComputeError::Eval {
-            message: format!("Sheet not found: {:?}", sheet_id),
+        .get(sheet_id)
+        .ok_or_else(|| ComputeError::SheetNotFound {
+            sheet_id: sheet_id.to_uuid_string(),
         })?;
-
-    let active_cell_id = grid.ensure_cell_id(active_row, active_col);
-    let active_cell_hex = id_to_hex(active_cell_id.as_u128());
+    let active_id = grid.cell_id_at(active_row, active_col).or_else(|| {
+        mirror.resolve_cell_id(sheet_id, cell_types::SheetPos::new(active_row, active_col))
+    });
+    let active_props = active_id.and_then(|id| {
+        properties::get_properties(&stores.storage, sheet_id, &id_to_hex(id.as_u128()))
+    });
     let table_fmt = resolve_structured_format_at_cell(mirror, sheet_id, active_row, active_col);
-    let effective = properties::get_effective_format(
+    let effective = properties::get_effective_format_preloaded(
         &stores.storage,
         sheet_id,
-        &active_cell_hex,
         active_row,
         active_col,
         table_fmt.as_ref(),
-        stores.grid_indexes.get(sheet_id),
+        active_props.as_ref(),
+        Some(grid),
         mirror.get_sheet(sheet_id),
     );
-
-    let sheet_id_str: String = id_to_hex(sheet_id.as_u128()).into();
-    let mut result = MutationResult::empty();
 
     let patch: CellFormat = match property {
         "bold" => {
@@ -183,40 +201,121 @@ pub(in crate::storage::engine) fn toggle_format_property(
             });
         }
     };
-    let patch = properties::normalize_format_patch(&patch);
+    patch_format_for_ranges(stores, mirror, sheet_id, ranges, &patch, &[])
+}
 
-    let format_json = serde_json::to_value(&patch).ok();
+pub(in crate::storage::engine) fn set_format_for_ranges(
+    stores: &mut EngineStores,
+    mirror: &mut CellMirror,
+    sheet_id: &SheetId,
+    ranges: &[(u32, u32, u32, u32)],
+    format: &CellFormat,
+) -> FormatResult {
+    patch_format_for_ranges(stores, mirror, sheet_id, ranges, format, &[])
+}
+
+pub(in crate::storage::engine) fn patch_format_for_ranges(
+    stores: &mut EngineStores,
+    mirror: &mut CellMirror,
+    sheet_id: &SheetId,
+    ranges: &[(u32, u32, u32, u32)],
+    format: &CellFormat,
+    clear_fields: &[String],
+) -> FormatResult {
+    let format = properties::normalize_format_patch(format);
+    patch_ranges(
+        stores,
+        mirror,
+        sheet_id,
+        ranges,
+        RangeFormatPatch::Format {
+            format: &format,
+            clear_fields,
+        },
+    )
+}
+
+pub(in crate::storage::engine) fn patch_borders_for_ranges(
+    stores: &mut EngineStores,
+    mirror: &mut CellMirror,
+    sheet_id: &SheetId,
+    ranges: &[(u32, u32, u32, u32)],
+    borders: &CellBorders,
+    clear_fields: &[BorderPatchField],
+) -> FormatResult {
+    patch_ranges(
+        stores,
+        mirror,
+        sheet_id,
+        ranges,
+        RangeFormatPatch::Borders {
+            borders,
+            clear_fields,
+        },
+    )
+}
+
+fn patch_ranges(
+    stores: &mut EngineStores,
+    mirror: &mut CellMirror,
+    sheet_id: &SheetId,
+    ranges: &[(u32, u32, u32, u32)],
+    patch: RangeFormatPatch<'_>,
+) -> FormatResult {
+    if !stores.grid_indexes.contains_key(sheet_id) {
+        return Err(ComputeError::Eval {
+            message: format!("Sheet not found: {:?}", sheet_id),
+        });
+    }
+
+    for &(sr, sc, er, ec) in ranges {
+        crate::storage::engine::validation::range::validate_range_bounds(sr, sc, er, ec)?;
+        if er >= cell_types::MAX_ROWS || ec >= cell_types::MAX_COLS {
+            return Err(ComputeError::InvalidInput {
+                message: "Format range exceeds sheet bounds".into(),
+            });
+        }
+    }
+
+    let sheet_id_str: String = id_to_hex(sheet_id.as_u128()).into();
+    let format_json = patch.mutation_json();
+    let mut result = MutationResult::empty();
     let mut affected_cells: Vec<(u128, u32, u32)> = Vec::new();
 
     for &(start_row, start_col, end_row, end_col) in ranges {
         let range_size = (end_row - start_row + 1) as u64 * (end_col - start_col + 1) as u64;
 
+        if let Some(sheet) = mirror.get_sheet_mut(sheet_id) {
+            let direct = (range_size >= LARGE_RANGE_THRESHOLD).then(|| patch.direct_overlay());
+            properties::patch_native_format_ranges(
+                sheet,
+                cell_types::SheetRange::new(start_row, start_col, end_row, end_col),
+                |format| patch.clear_overlay_fields(format),
+                direct.as_ref(),
+                &stores.id_alloc,
+            )?;
+        }
+
         if range_size >= LARGE_RANGE_THRESHOLD {
             eprintln!(
-                "[formatting] toggle_format_property: large range ({} cells), using bulk mode",
+                "[formatting] {}: large range ({} cells), using bulk mode",
+                patch.operation_name(),
                 range_size
             );
 
-            let Some(grid) = stores.grid_indexes.get(sheet_id) else {
-                continue;
-            };
-            let existing: Vec<_> = grid
-                .cells_in_range(start_row, start_col, end_row, end_col)
-                .collect();
+            let existing = formatted_cells_in_range(
+                stores,
+                mirror,
+                sheet_id,
+                cell_types::SheetRange::new(start_row, start_col, end_row, end_col),
+            );
 
             let cell_hexes: Vec<SmallHex> = existing
                 .iter()
                 .map(|(cell_id, _, _)| id_to_hex(cell_id.as_u128()))
                 .collect();
             let cell_hex_refs: Vec<&str> = cell_hexes.iter().map(|s| s.as_str()).collect();
-            properties::set_cell_formats(
-                stores.storage.doc(),
-                stores.storage.workbook_map(),
-                stores.storage.sheets(),
-                sheet_id,
-                &cell_hex_refs,
-                &patch,
-            );
+            patch.apply(stores, sheet_id, &cell_hex_refs)?;
 
             for (cell_id, row, col) in existing {
                 affected_cells.push((cell_id.as_u128(), row, col));
@@ -250,14 +349,7 @@ pub(in crate::storage::engine) fn toggle_format_property(
                 .iter()
                 .map(|(hex, _, _, _)| hex.as_str())
                 .collect();
-            properties::set_cell_formats(
-                stores.storage.doc(),
-                stores.storage.workbook_map(),
-                stores.storage.sheets(),
-                sheet_id,
-                &cell_hex_refs,
-                &patch,
-            );
+            patch.apply(stores, sheet_id, &cell_hex_refs)?;
 
             for (cell_hex, cell_id_u128, row, col) in &cell_data {
                 affected_cells.push((*cell_id_u128, *row, *col));
@@ -275,201 +367,15 @@ pub(in crate::storage::engine) fn toggle_format_property(
         }
     }
 
-    Ok((affected_cells, result))
-}
-
-pub(in crate::storage::engine) fn set_format_for_ranges(
-    stores: &mut EngineStores,
-    mirror: &CellMirror,
-    sheet_id: &SheetId,
-    ranges: &[(u32, u32, u32, u32)],
-    format: &CellFormat,
-) -> FormatResult {
-    patch_format_for_ranges_with_origin(
-        stores,
-        mirror,
-        sheet_id,
-        ranges,
-        format,
-        &[],
-        ORIGIN_USER_EDIT,
-    )
-}
-
-pub(in crate::storage::engine) fn set_format_for_ranges_with_origin(
-    stores: &mut EngineStores,
-    mirror: &CellMirror,
-    sheet_id: &SheetId,
-    ranges: &[(u32, u32, u32, u32)],
-    format: &CellFormat,
-    origin: &'static [u8],
-) -> FormatResult {
-    patch_format_for_ranges_with_origin(stores, mirror, sheet_id, ranges, format, &[], origin)
-}
-
-pub(in crate::storage::engine) fn patch_format_for_ranges(
-    stores: &mut EngineStores,
-    mirror: &CellMirror,
-    sheet_id: &SheetId,
-    ranges: &[(u32, u32, u32, u32)],
-    format: &CellFormat,
-    clear_fields: &[String],
-) -> FormatResult {
-    patch_format_for_ranges_with_origin(
-        stores,
-        mirror,
-        sheet_id,
-        ranges,
-        format,
-        clear_fields,
-        ORIGIN_USER_EDIT,
-    )
-}
-
-pub(in crate::storage::engine) fn patch_format_for_ranges_with_origin(
-    stores: &mut EngineStores,
-    mirror: &CellMirror,
-    sheet_id: &SheetId,
-    ranges: &[(u32, u32, u32, u32)],
-    format: &CellFormat,
-    clear_fields: &[String],
-    origin: &'static [u8],
-) -> FormatResult {
-    let format = properties::normalize_format_patch(format);
-    patch_ranges_with_origin(
-        stores,
-        mirror,
-        sheet_id,
-        ranges,
-        RangeFormatPatch::Format {
-            format: &format,
-            clear_fields,
-        },
-        origin,
-    )
-}
-
-pub(in crate::storage::engine) fn patch_borders_for_ranges(
-    stores: &mut EngineStores,
-    mirror: &CellMirror,
-    sheet_id: &SheetId,
-    ranges: &[(u32, u32, u32, u32)],
-    borders: &CellBorders,
-    clear_fields: &[BorderPatchField],
-) -> FormatResult {
-    patch_ranges_with_origin(
-        stores,
-        mirror,
-        sheet_id,
-        ranges,
-        RangeFormatPatch::Borders {
-            borders,
-            clear_fields,
-        },
-        ORIGIN_USER_EDIT,
-    )
-}
-
-fn patch_ranges_with_origin(
-    stores: &mut EngineStores,
-    mirror: &CellMirror,
-    sheet_id: &SheetId,
-    ranges: &[(u32, u32, u32, u32)],
-    patch: RangeFormatPatch<'_>,
-    origin: &'static [u8],
-) -> FormatResult {
-    if !stores.grid_indexes.contains_key(sheet_id) {
-        return Err(ComputeError::Eval {
-            message: format!("Sheet not found: {:?}", sheet_id),
-        });
-    }
-
-    let sheet_id_str: String = id_to_hex(sheet_id.as_u128()).into();
-    let format_json = patch.mutation_json();
-    let mut result = MutationResult::empty();
-    let mut affected_cells: Vec<(u128, u32, u32)> = Vec::new();
-
-    for &(start_row, start_col, end_row, end_col) in ranges {
-        let range_size = (end_row - start_row + 1) as u64 * (end_col - start_col + 1) as u64;
-
-        if range_size >= LARGE_RANGE_THRESHOLD {
-            eprintln!(
-                "[formatting] {}: large range ({} cells), using bulk mode",
-                patch.operation_name(),
-                range_size
-            );
-
-            let Some(grid) = stores.grid_indexes.get(sheet_id) else {
-                continue;
-            };
-            let existing: Vec<_> = grid
-                .cells_in_range(start_row, start_col, end_row, end_col)
-                .collect();
-
-            let cell_hexes: Vec<SmallHex> = existing
-                .iter()
-                .map(|(cell_id, _, _)| id_to_hex(cell_id.as_u128()))
-                .collect();
-            let cell_hex_refs: Vec<&str> = cell_hexes.iter().map(|s| s.as_str()).collect();
-            patch.apply(stores, sheet_id, &cell_hex_refs, origin)?;
-
-            for (cell_id, row, col) in existing {
-                affected_cells.push((cell_id.as_u128(), row, col));
-            }
-
-            result.property_changes.push(PropertyChange {
-                sheet_id: sheet_id_str.clone(),
-                cell_id: String::new(),
-                position: Some(CellPosition {
-                    row: start_row,
-                    col: start_col,
-                }),
-                kind: ChangeKind::Set,
-                format: format_json.clone(),
-            });
-        } else {
-            let mut cell_data: Vec<(SmallHex, u128, u32, u32)> = Vec::new();
-            for row in start_row..=end_row {
-                for col in start_col..=end_col {
-                    let Some(cell_id) =
-                        super::super::cell_editing::ensure_cell_id_mirrored_with_origin(
-                            stores, mirror, sheet_id, row, col, origin,
-                        )
-                    else {
-                        continue;
-                    };
-                    let cell_hex = id_to_hex(cell_id.as_u128());
-                    cell_data.push((cell_hex, cell_id.as_u128(), row, col));
-                }
-            }
-
-            let cell_hex_refs: Vec<&str> = cell_data
-                .iter()
-                .map(|(hex, _, _, _)| hex.as_str())
-                .collect();
-            patch.apply(stores, sheet_id, &cell_hex_refs, origin)?;
-
-            for (cell_hex, cell_id_u128, row, col) in &cell_data {
-                affected_cells.push((*cell_id_u128, *row, *col));
-                result.property_changes.push(PropertyChange {
-                    sheet_id: sheet_id_str.clone(),
-                    cell_id: (*cell_hex).into(),
-                    position: Some(CellPosition {
-                        row: *row,
-                        col: *col,
-                    }),
-                    kind: ChangeKind::Set,
-                    format: format_json.clone(),
-                });
-            }
-        }
-    }
-
+    // Native range overlays live in the mirror, outside the storage metadata
+    // projection. Invalidate formula evaluation when CELL reads their format.
+    stores.compute.mark_dirty();
     Ok((affected_cells, result))
 }
 
 pub(in crate::storage::engine) fn clear_format_for_ranges(
     stores: &mut EngineStores,
+    mirror: &mut CellMirror,
     sheet_id: &SheetId,
     ranges: &[(u32, u32, u32, u32)],
 ) -> FormatResult {
@@ -479,6 +385,15 @@ pub(in crate::storage::engine) fn clear_format_for_ranges(
         });
     }
 
+    for &(sr, sc, er, ec) in ranges {
+        crate::storage::engine::validation::range::validate_range_bounds(sr, sc, er, ec)?;
+        if er >= cell_types::MAX_ROWS || ec >= cell_types::MAX_COLS {
+            return Err(ComputeError::InvalidInput {
+                message: "Format range exceeds sheet bounds".into(),
+            });
+        }
+    }
+
     let sheet_id_str: String = id_to_hex(sheet_id.as_u128()).into();
     let mut result = MutationResult::empty();
     let mut affected_cells: Vec<(u128, u32, u32)> = Vec::new();
@@ -486,31 +401,34 @@ pub(in crate::storage::engine) fn clear_format_for_ranges(
     for &(start_row, start_col, end_row, end_col) in ranges {
         let range_size = (end_row - start_row + 1) as u64 * (end_col - start_col + 1) as u64;
 
+        if let Some(sheet) = mirror.get_sheet_mut(sheet_id) {
+            properties::patch_native_format_ranges(
+                sheet,
+                cell_types::SheetRange::new(start_row, start_col, end_row, end_col),
+                |_| Ok(CellFormat::default()),
+                None,
+                &stores.id_alloc,
+            )?;
+        }
         if range_size >= LARGE_RANGE_THRESHOLD {
             eprintln!(
                 "[formatting] clear_format_for_ranges: large range ({} cells), using bulk mode",
                 range_size
             );
 
-            let Some(grid) = stores.grid_indexes.get(sheet_id) else {
-                continue;
-            };
-            let existing: Vec<_> = grid
-                .cells_in_range(start_row, start_col, end_row, end_col)
-                .collect();
+            let existing = formatted_cells_in_range(
+                stores,
+                mirror,
+                sheet_id,
+                cell_types::SheetRange::new(start_row, start_col, end_row, end_col),
+            );
 
             let cell_hexes: Vec<SmallHex> = existing
                 .iter()
                 .map(|(cell_id, _, _)| id_to_hex(cell_id.as_u128()))
                 .collect();
             let cell_hex_refs: Vec<&str> = cell_hexes.iter().map(|s| s.as_str()).collect();
-            properties::clear_cell_formats(
-                stores.storage.doc(),
-                stores.storage.workbook_map(),
-                stores.storage.sheets(),
-                sheet_id,
-                &cell_hex_refs,
-            );
+            properties::clear_cell_formats(&mut stores.storage, sheet_id, &cell_hex_refs);
 
             for (cell_id, row, col) in existing {
                 affected_cells.push((cell_id.as_u128(), row, col));
@@ -544,13 +462,7 @@ pub(in crate::storage::engine) fn clear_format_for_ranges(
                 .iter()
                 .map(|(hex, _, _, _)| hex.as_str())
                 .collect();
-            properties::clear_cell_formats(
-                stores.storage.doc(),
-                stores.storage.workbook_map(),
-                stores.storage.sheets(),
-                sheet_id,
-                &cell_hex_refs,
-            );
+            properties::clear_cell_formats(&mut stores.storage, sheet_id, &cell_hex_refs);
 
             for (cell_hex, cell_id_u128, row, col) in &cell_data {
                 affected_cells.push((*cell_id_u128, *row, *col));
@@ -568,5 +480,90 @@ pub(in crate::storage::engine) fn clear_format_for_ranges(
         }
     }
 
+    // Native range overlays live in the mirror, outside the storage metadata
+    // projection. Invalidate formula evaluation when CELL reads their format.
+    stores.compute.mark_dirty();
     Ok((affected_cells, result))
+}
+
+/// Direct overlays already style value-only cells; visit only stronger authored
+/// cell formats that must receive the same patch. This remains sparse even when
+/// the values themselves use eager native identities.
+fn formatted_cells_in_range(
+    stores: &EngineStores,
+    mirror: &CellMirror,
+    sheet_id: &SheetId,
+    bounds: cell_types::SheetRange,
+) -> Vec<(cell_types::CellId, u32, u32)> {
+    let grid = stores.grid_indexes.get(sheet_id);
+    let sheet = mirror.get_sheet(sheet_id);
+    stores
+        .storage
+        .sheet_metadata
+        .get(sheet_id)
+        .into_iter()
+        .flat_map(|metadata| metadata.cell_properties.iter())
+        .filter(|(_, properties)| properties.has_format())
+        .filter_map(|(id, _)| {
+            let (row, col) = grid.and_then(|grid| grid.cell_position(id)).or_else(|| {
+                sheet
+                    .and_then(|sheet| sheet.position_of(id))
+                    .map(|pos| (pos.row(), pos.col()))
+            })?;
+            bounds.contains(row, col).then_some((*id, row, col))
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn large_overlay_does_not_create_properties_for_eager_unformatted_values() {
+        let mut engine = crate::storage::engine::ComputeEngine::from_snapshot(
+            crate::snapshot::WorkbookSnapshot::default(),
+        )
+        .unwrap()
+        .0;
+        let (hex, _) = engine.create_sheet("Formats").unwrap();
+        let id = SheetId::from_raw(u128::from_str_radix(&hex, 16).unwrap());
+        for row in 0..8 {
+            engine.set_cell_value_parsed(&id, row, 0, "1").unwrap();
+        }
+        let before = engine.stores.storage.sheet_metadata[&id]
+            .cell_properties
+            .len();
+        engine
+            .set_format_for_ranges(
+                &id,
+                &[(0, 0, 599, 199)],
+                &CellFormat {
+                    bold: Some(true),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            engine.stores.storage.sheet_metadata[&id]
+                .cell_properties
+                .len(),
+            before
+        );
+        assert_eq!(engine.get_resolved_format(&id, 7, 0).bold, Some(true));
+        engine
+            .patch_format_for_ranges(
+                &id,
+                &[(0, 0, 599, 199)],
+                &CellFormat::default(),
+                &["bold".into()],
+            )
+            .unwrap();
+        assert_eq!(engine.get_resolved_format(&id, 7, 0).bold, Some(false));
+        assert_eq!(
+            engine.stores.storage.sheet_metadata[&id]
+                .cell_properties
+                .len(),
+            before
+        );
+    }
 }

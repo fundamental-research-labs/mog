@@ -1,4 +1,4 @@
-use super::super::YrsComputeEngine;
+use super::super::ComputeEngine;
 use cell_types::SheetId;
 use compute_document::hex::hex_to_id;
 use value_types::ComputeError;
@@ -31,10 +31,7 @@ pub fn validate_sheet_name(name: &str) -> Result<(), ComputeError> {
     Ok(())
 }
 
-pub fn validate_sheet_name_unique(
-    name: &str,
-    engine: &YrsComputeEngine,
-) -> Result<(), ComputeError> {
+pub fn validate_sheet_name_unique(name: &str, engine: &ComputeEngine) -> Result<(), ComputeError> {
     let name_lower = name.to_lowercase();
     for sid_hex in engine.get_all_sheet_ids() {
         let Some(raw) = hex_to_id(&sid_hex) else {
@@ -55,7 +52,7 @@ pub fn validate_sheet_name_unique(
 pub fn validate_sheet_name_unique_excluding(
     name: &str,
     exclude_id: &SheetId,
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
 ) -> Result<(), ComputeError> {
     let name_lower = name.to_lowercase();
     for sid_hex in engine.get_all_sheet_ids() {

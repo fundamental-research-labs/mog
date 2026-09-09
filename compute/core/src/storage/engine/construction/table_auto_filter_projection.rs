@@ -9,12 +9,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use cell_types::{SheetId, SheetPos};
 use compute_document::hex::id_to_hex;
-use compute_document::schema::KEY_TABLES;
-use compute_document::undo::ORIGIN_BOOTSTRAP;
 use domain_types::domain::table::{FilterSpec, TableCatalogEntry as CanonicalTable};
-use domain_types::yrs_schema;
 use value_types::CellValue;
-use yrs::{Map, Out, Transact};
 
 use crate::mirror::CellMirror;
 use crate::storage::engine::filter_import_diagnostics::{
@@ -26,12 +22,47 @@ use crate::storage::sheet::{filters, properties};
 pub(in crate::storage::engine) fn materialize_table_auto_filters_from_preserved_specs(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
+    import_report: Option<&mut domain_types::ImportReport>,
+    import_phase: domain_types::ImportPhase,
+) {
+    let tables = mirror.all_tables().to_vec();
+    materialize_preserved_tables(stores, mirror, tables, import_report, import_phase);
+}
+
+pub(in crate::storage::engine) fn materialize_table_auto_filters_for_sheets(
+    stores: &mut EngineStores,
+    mirror: &mut CellMirror,
+    sheet_ids: &[SheetId],
+) {
+    let tables = mirror
+        .all_tables()
+        .iter()
+        .filter(|table| {
+            SheetId::from_uuid_str(&table.sheet_id).is_ok_and(|sheet| sheet_ids.contains(&sheet))
+        })
+        .cloned()
+        .collect();
+    materialize_preserved_tables(
+        stores,
+        mirror,
+        tables,
+        None,
+        domain_types::ImportPhase::FullHydration,
+    );
+}
+
+fn materialize_preserved_tables(
+    stores: &mut EngineStores,
+    mirror: &mut CellMirror,
+    tables: Vec<CanonicalTable>,
     mut import_report: Option<&mut domain_types::ImportReport>,
     import_phase: domain_types::ImportPhase,
 ) {
-    let tables = read_preserved_tables(stores);
     for table in tables {
-        if table.auto_filter_ref.is_none() && table.filter_columns.is_empty() {
+        if !table.show_filter_buttons
+            && table.auto_filter_ref.is_none()
+            && table.filter_columns.is_empty()
+        {
             continue;
         }
 
@@ -52,23 +83,6 @@ pub(in crate::storage::engine) fn materialize_table_auto_filters_from_preserved_
             import_phase,
         );
     }
-}
-
-fn read_preserved_tables(stores: &EngineStores) -> Vec<CanonicalTable> {
-    let txn = stores.storage.doc().transact();
-    let Some(Out::YMap(tables_map)) = stores.storage.workbook_map().get(&txn, KEY_TABLES) else {
-        return Vec::new();
-    };
-
-    tables_map
-        .iter(&txn)
-        .filter_map(|(key, out)| match out {
-            Out::YMap(map) => {
-                yrs_schema::table::from_yrs_map_to_table(&map, &txn).filter(|table| table.id == key)
-            }
-            _ => None,
-        })
-        .collect()
 }
 
 fn materialize_table_auto_filter_from_preserved_spec(
@@ -149,12 +163,7 @@ fn materialize_table_auto_filter_from_preserved_spec(
         HashMap::new()
     };
 
-    let existing_filter = filters::get_table_filter(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        &table.id,
-    );
+    let existing_filter = filters::get_table_filter(&stores.storage, sheet_id, &table.id);
     let filter_id = existing_filter
         .as_ref()
         .map(|filter| filter.id.clone())
@@ -179,14 +188,7 @@ fn materialize_table_auto_filter_from_preserved_spec(
         end_col: None,
     };
 
-    if filters::upsert_import_filter_state(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        &filter_state,
-    )
-    .is_err()
-    {
+    if filters::upsert_filter_state(&mut stores.storage, sheet_id, &filter_state).is_err() {
         return;
     }
 
@@ -215,7 +217,7 @@ fn materialize_table_auto_filter_from_preserved_spec(
 }
 
 fn upsert_table_auto_filter_binding(
-    stores: &EngineStores,
+    stores: &mut EngineStores,
     sheet_id: &SheetId,
     table: &CanonicalTable,
     filter_state: &filters::FilterState,
@@ -266,19 +268,12 @@ fn upsert_table_auto_filter_binding(
         shell,
     };
 
-    filters::delete_stale_filter_metadata_bindings_for_source_key_with_origin(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        &binding,
-        ORIGIN_BOOTSTRAP,
-    );
-    filters::upsert_import_filter_metadata_binding(
-        stores.storage.doc(),
-        stores.storage.sheets(),
+    filters::delete_stale_filter_metadata_bindings_for_source_key(
+        &mut stores.storage,
         sheet_id,
         &binding,
     );
+    filters::upsert_filter_metadata_binding(&mut stores.storage, sheet_id, &binding);
     binding
 }
 
@@ -297,8 +292,7 @@ fn record_unsupported_table_filter_import_diagnostics(
         .iter()
         .position(|candidate| candidate == sheet_id)
         .map(|idx| idx as u32);
-    let sheet_name =
-        properties::get_sheet_name(stores.storage.doc(), stores.storage.sheets(), sheet_id);
+    let sheet_name = properties::get_sheet_name(&stores.storage, sheet_id);
     let source_key = serde_json::to_string(&binding.source_key).ok();
 
     if table.auto_filter_ext_lst_raw.is_some() {
@@ -591,7 +585,7 @@ fn is_known_dynamic_type(dynamic_type: &str) -> bool {
     )
 }
 
-fn table_filter_binding_fingerprint(
+pub(in crate::storage::engine) fn table_filter_binding_fingerprint(
     sheet_id: &str,
     table: &CanonicalTable,
     range_ref: &str,

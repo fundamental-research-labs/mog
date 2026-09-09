@@ -5,11 +5,9 @@
 
 mod dimensions;
 mod floating_bounds;
-mod formula_writeback;
 mod identity;
 mod merges;
 mod pre_delete_reanchor;
-mod range_virtual_cells;
 mod structure_change;
 
 pub(in crate::storage::engine) use self::dimensions::{

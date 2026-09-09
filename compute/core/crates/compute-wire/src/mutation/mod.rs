@@ -321,7 +321,7 @@ pub fn serialize_mutation_result_for_viewport(
 ///
 /// Used by callers that produce two or more patch blobs from the same
 /// mutation and want to stream them back to the runtime as a single
-/// payload (for example, cross-sheet `relocate_cells_yrs` returns the
+/// payload (for example, cross-sheet `relocate_cells` returns the
 /// incremental flush + a full-rebuild blob for each affected sheet).
 ///
 /// 2-byte buffers (the `viewport_count = 0` sentinel) contribute nothing.

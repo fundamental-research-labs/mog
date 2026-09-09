@@ -3,26 +3,18 @@ use crate::snapshot::{ChangeKind, MutationResult, PivotTableChange};
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::pivots;
 use cell_types::SheetId;
-use compute_document::undo::ORIGIN_USER_EDIT;
 use compute_pivot::PivotTableDefExt;
 use domain_types::CellFormat;
 use domain_types::domain::pivot::PivotTableConfig;
 use ooxml_types::styles::PatternType;
 use value_types::ComputeError;
-use yrs::{Origin, Transact};
 
 pub(in crate::storage::engine) fn pivot_create_with_sheet_inner(
     stores: &mut EngineStores,
     sheet_id: &SheetId,
     config: PivotTableConfig,
 ) -> Result<PivotTableConfig, ComputeError> {
-    pivots::create_pivot(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        config,
-        &stores.id_alloc,
-    )
+    pivots::create_pivot(&mut stores.storage, sheet_id, config, &stores.id_alloc)
 }
 
 // -------------------------------------------------------------------
@@ -34,13 +26,8 @@ pub(in crate::storage::engine) fn pivot_create(
     sheet_id: &SheetId,
     config: PivotTableConfig,
 ) -> Result<MutationResult, ComputeError> {
-    let pivot_config = pivots::create_pivot(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        config,
-        &stores.id_alloc,
-    )?;
+    let pivot_config =
+        pivots::create_pivot(&mut stores.storage, sheet_id, config, &stores.id_alloc)?;
     let mut result = MutationResult::empty();
     result.pivot_changes.push(PivotTableChange {
         sheet_id: sheet_id.to_uuid_string(),
@@ -56,13 +43,7 @@ pub(in crate::storage::engine) fn pivot_update(
     pivot_id: &str,
     config: PivotTableConfig,
 ) -> Result<MutationResult, ComputeError> {
-    let updated = pivots::update_pivot(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        pivot_id,
-        config,
-    );
+    let updated = pivots::update_pivot(&mut stores.storage, sheet_id, pivot_id, config);
     let mut result = MutationResult::empty();
     if updated.is_some() {
         result.pivot_changes.push(PivotTableChange {
@@ -79,17 +60,11 @@ pub(in crate::storage::engine) fn pivot_delete(
     sheet_id: &SheetId,
     pivot_id: &str,
 ) -> Result<MutationResult, ComputeError> {
-    let mut txn = stores
-        .storage
-        .doc()
-        .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let deleted =
-        pivots::delete_pivot_in_txn(&mut txn, stores.storage.sheets(), sheet_id, pivot_id);
+    let deleted = pivots::delete_pivot(&mut stores.storage, sheet_id, pivot_id);
     let mut result = MutationResult::empty();
     if deleted {
-        crate::storage::workbook::imported_pivots::mark_native_pivot_deleted_in_txn(
-            &mut txn,
-            stores.storage.workbook_map(),
+        crate::storage::workbook::imported_pivots::mark_native_pivot_deleted(
+            &mut stores.storage,
             pivot_id,
         );
         result.pivot_changes.push(PivotTableChange {
@@ -106,19 +81,14 @@ pub(in crate::storage::engine) fn pivot_get(
     sheet_id: &SheetId,
     pivot_id: &str,
 ) -> Option<PivotTableConfig> {
-    pivots::get_pivot(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        pivot_id,
-    )
+    pivots::get_pivot(&stores.storage, sheet_id, pivot_id)
 }
 
 pub(in crate::storage::engine) fn pivot_get_all(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> Vec<PivotTableConfig> {
-    pivots::get_all_pivots(stores.storage.doc(), stores.storage.sheets(), sheet_id)
+    pivots::get_all_pivots(&stores.storage, sheet_id)
 }
 
 pub(in crate::storage::engine) fn resolve_pivot_format_at_cell(
@@ -173,14 +143,10 @@ pub(in crate::storage::engine) fn pivot_register_def(
     first_data_row: u32,
     first_data_col: u32,
 ) -> Result<MutationResult, ComputeError> {
-    let config = pivots::get_pivot(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        pivot_id,
-    )
-    .ok_or_else(|| ComputeError::Eval {
-        message: format!("pivot_register_def: pivot {pivot_id} not found on sheet {sheet_id}"),
+    let config = pivots::get_pivot(&stores.storage, sheet_id, pivot_id).ok_or_else(|| {
+        ComputeError::Eval {
+            message: format!("pivot_register_def: pivot {pivot_id} not found on sheet {sheet_id}"),
+        }
     })?;
 
     let bounds = compute_pivot::PivotRenderedBounds {

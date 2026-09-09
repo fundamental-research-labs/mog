@@ -1,0 +1,623 @@
+{
+  "label": "yrs-history-baseline",
+  "revision": "f2edc322212d1e32edae1915892e406b33ca1d18",
+  "status": " M file-io/xlsx/parser/src/domain/controls/tests/writers.rs\n M file-io/xlsx/parser/src/domain/external/read/entry.rs\n M file-io/xlsx/parser/src/domain/vba/read/ole.rs\n M file-io/xlsx/parser/src/output/to_parse_output/pivot_convert/sort.rs\n M file-io/xlsx/parser/src/output/to_parse_output/pivot_convert/value_map.rs\n?? compute/core/examples/\n?? compute/officejs/examples/storage_bench_officejs.rs\n?? scripts/\n",
+  "tracked_diff_sha256": "1a7d2658328ba337d762b44afb45c9a44bd7a72d9a06e7c4327d1ea3d55b1a15",
+  "source_tree_sha256": "b6ac1e2eba2aa1c197bca537cb269d2c3375108730dd4099b45df6d0e683af3f",
+  "benchmark_binary_sha256": {
+    "storage_bench": "fb4d30750defe9cef508b9f3270181c01a736b1cc5abcc1b4d4d36225bc57eb4",
+    "storage_bench_officejs": "0de9f6e5c4d5bd4bffa6517c73fa6e41c6bb6d1781e42ca874631c229cc98aea"
+  },
+  "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+  "machine": {
+    "system": "Linux",
+    "release": "7.0.14-orbstack-00380-ga7e0a2dc9535",
+    "architecture": "aarch64"
+  },
+  "cpu_count": 18,
+  "mem_total": "MemTotal:       51374032 kB",
+  "build_command": [
+    "cargo",
+    "build",
+    "--release",
+    "--locked",
+    "-p",
+    "compute-core",
+    "--example",
+    "storage_bench",
+    "-p",
+    "mog",
+    "--example",
+    "storage_bench_officejs"
+  ],
+  "rayon_num_threads": 1,
+  "measurement": "GNU time child peak RSS; wait4 CPU and wall include the GNU time wrapper",
+  "runs": 5,
+  "warmups": 1,
+  "fixture_sha256": "41724da2e7d4a30d282611490d636e402120b00415eb71a38125f81cabb0e6c8",
+  "workloads": {
+    "blank_one": {
+      "command": [
+        "/tmp/mog-yrs-baseline/target-native/release/examples/storage_bench",
+        "blank_one"
+      ],
+      "samples": [
+        {
+          "wall_s": 0.0022186109563335776,
+          "user_s": 0.001188,
+          "system_s": 0.000945,
+          "cpu_s": 0.002133,
+          "peak_rss_kib": 23540,
+          "live_rss_kib": 23640,
+          "phases_s": {
+            "create": 0.001141764,
+            "write": 8.9918e-05
+          },
+          "log": "/tmp/mog-history-yrs-bench/blank_one-0.log"
+        },
+        {
+          "wall_s": 0.0022394430125132203,
+          "user_s": 0.00035,
+          "system_s": 0.001812,
+          "cpu_s": 0.002162,
+          "peak_rss_kib": 23532,
+          "live_rss_kib": 23632,
+          "phases_s": {
+            "create": 0.001049055,
+            "write": 8.7001e-05
+          },
+          "log": "/tmp/mog-history-yrs-bench/blank_one-1.log"
+        },
+        {
+          "wall_s": 0.002774534048512578,
+          "user_s": 0.0,
+          "system_s": 0.002678,
+          "cpu_s": 0.002678,
+          "peak_rss_kib": 23544,
+          "live_rss_kib": 23644,
+          "phases_s": {
+            "create": 0.001690353,
+            "write": 9.9334e-05
+          },
+          "log": "/tmp/mog-history-yrs-bench/blank_one-2.log"
+        },
+        {
+          "wall_s": 0.0032957899384200573,
+          "user_s": 0.00024599999999999996,
+          "system_s": 0.0029519999999999998,
+          "cpu_s": 0.003198,
+          "peak_rss_kib": 23548,
+          "live_rss_kib": 23648,
+          "phases_s": {
+            "create": 0.002228361,
+            "write": 6.6834e-05
+          },
+          "log": "/tmp/mog-history-yrs-bench/blank_one-3.log"
+        },
+        {
+          "wall_s": 0.0032557889353483915,
+          "user_s": 0.002218,
+          "system_s": 0.000978,
+          "cpu_s": 0.003196,
+          "peak_rss_kib": 23548,
+          "live_rss_kib": 23636,
+          "phases_s": {
+            "create": 0.002142734,
+            "write": 6.2209e-05
+          },
+          "log": "/tmp/mog-history-yrs-bench/blank_one-4.log"
+        }
+      ],
+      "median": {
+        "wall_s": 0.002774534048512578,
+        "user_s": 0.00035,
+        "system_s": 0.001812,
+        "cpu_s": 0.002678,
+        "peak_rss_kib": 23544,
+        "live_rss_kib": 23640,
+        "phases_s": {
+          "create": 0.001690353,
+          "write": 8.7001e-05
+        }
+      }
+    },
+    "numeric_100k": {
+      "command": [
+        "/tmp/mog-yrs-baseline/target-native/release/examples/storage_bench",
+        "numeric_100k"
+      ],
+      "samples": [
+        {
+          "wall_s": 1.9181693450082093,
+          "user_s": 1.8816410000000001,
+          "system_s": 0.036365999999999996,
+          "cpu_s": 1.918007,
+          "peak_rss_kib": 292756,
+          "live_rss_kib": 274232,
+          "phases_s": {
+            "hydrate": 1.882275246
+          },
+          "log": "/tmp/mog-history-yrs-bench/numeric_100k-0.log"
+        },
+        {
+          "wall_s": 1.941941090975888,
+          "user_s": 1.909761,
+          "system_s": 0.032007,
+          "cpu_s": 1.941768,
+          "peak_rss_kib": 292900,
+          "live_rss_kib": 274236,
+          "phases_s": {
+            "hydrate": 1.906530164
+          },
+          "log": "/tmp/mog-history-yrs-bench/numeric_100k-1.log"
+        },
+        {
+          "wall_s": 1.9206938759889454,
+          "user_s": 1.880544,
+          "system_s": 0.040003,
+          "cpu_s": 1.920547,
+          "peak_rss_kib": 292884,
+          "live_rss_kib": 274252,
+          "phases_s": {
+            "hydrate": 1.884888902
+          },
+          "log": "/tmp/mog-history-yrs-bench/numeric_100k-2.log"
+        },
+        {
+          "wall_s": 1.933179235085845,
+          "user_s": 1.8986139999999998,
+          "system_s": 0.034366,
+          "cpu_s": 1.9329799999999997,
+          "peak_rss_kib": 292892,
+          "live_rss_kib": 274244,
+          "phases_s": {
+            "hydrate": 1.896952714
+          },
+          "log": "/tmp/mog-history-yrs-bench/numeric_100k-3.log"
+        },
+        {
+          "wall_s": 1.8452595490962267,
+          "user_s": 1.800552,
+          "system_s": 0.040981,
+          "cpu_s": 1.8415329999999999,
+          "peak_rss_kib": 292896,
+          "live_rss_kib": 274248,
+          "phases_s": {
+            "hydrate": 1.801129768
+          },
+          "log": "/tmp/mog-history-yrs-bench/numeric_100k-4.log"
+        }
+      ],
+      "median": {
+        "wall_s": 1.9206938759889454,
+        "user_s": 1.8816410000000001,
+        "system_s": 0.036365999999999996,
+        "cpu_s": 1.920547,
+        "peak_rss_kib": 292892,
+        "live_rss_kib": 274244,
+        "phases_s": {
+          "hydrate": 1.884888902
+        }
+      }
+    },
+    "chain_10k": {
+      "command": [
+        "/tmp/mog-yrs-baseline/target-native/release/examples/storage_bench",
+        "chain_10k"
+      ],
+      "samples": [
+        {
+          "wall_s": 0.694152373005636,
+          "user_s": 0.6856559999999999,
+          "system_s": 0.007991999999999999,
+          "cpu_s": 0.6936479999999999,
+          "peak_rss_kib": 80512,
+          "live_rss_kib": 80780,
+          "phases_s": {
+            "hydrate_recalc": 0.053064848,
+            "recalc_10": 0.629899973
+          },
+          "log": "/tmp/mog-history-yrs-bench/chain_10k-0.log"
+        },
+        {
+          "wall_s": 0.7271441869670525,
+          "user_s": 0.714881,
+          "system_s": 0.011992,
+          "cpu_s": 0.726873,
+          "peak_rss_kib": 80536,
+          "live_rss_kib": 80804,
+          "phases_s": {
+            "hydrate_recalc": 0.053756065,
+            "recalc_10": 0.661449729
+          },
+          "log": "/tmp/mog-history-yrs-bench/chain_10k-1.log"
+        },
+        {
+          "wall_s": 0.6899976980639622,
+          "user_s": 0.676223,
+          "system_s": 0.012997,
+          "cpu_s": 0.68922,
+          "peak_rss_kib": 80532,
+          "live_rss_kib": 80800,
+          "phases_s": {
+            "hydrate_recalc": 0.053096849,
+            "recalc_10": 0.625318501
+          },
+          "log": "/tmp/mog-history-yrs-bench/chain_10k-2.log"
+        },
+        {
+          "wall_s": 0.8888860130682588,
+          "user_s": 0.878442,
+          "system_s": 0.010001,
+          "cpu_s": 0.888443,
+          "peak_rss_kib": 80520,
+          "live_rss_kib": 80788,
+          "phases_s": {
+            "hydrate_recalc": 0.053766982,
+            "recalc_10": 0.820229935
+          },
+          "log": "/tmp/mog-history-yrs-bench/chain_10k-3.log"
+        },
+        {
+          "wall_s": 0.741566737066023,
+          "user_s": 0.721268,
+          "system_s": 0.019872,
+          "cpu_s": 0.74114,
+          "peak_rss_kib": 80580,
+          "live_rss_kib": 80772,
+          "phases_s": {
+            "hydrate_recalc": 0.087132218,
+            "recalc_10": 0.642755337
+          },
+          "log": "/tmp/mog-history-yrs-bench/chain_10k-4.log"
+        }
+      ],
+      "median": {
+        "wall_s": 0.7271441869670525,
+        "user_s": 0.714881,
+        "system_s": 0.011992,
+        "cpu_s": 0.726873,
+        "peak_rss_kib": 80532,
+        "live_rss_kib": 80788,
+        "phases_s": {
+          "hydrate_recalc": 0.053756065,
+          "recalc_10": 0.642755337
+        }
+      }
+    },
+    "xlsx_100k": {
+      "command": [
+        "/tmp/mog-yrs-baseline/target-native/release/examples/storage_bench",
+        "xlsx_100k",
+        "/tmp/mog-history-yrs-bench/dense_100k.xlsx"
+      ],
+      "samples": [
+        {
+          "wall_s": 0.13995393796358258,
+          "user_s": 0.12646,
+          "system_s": 0.013375999999999999,
+          "cpu_s": 0.139836,
+          "peak_rss_kib": 152592,
+          "live_rss_kib": 67108,
+          "phases_s": {
+            "parse_hydrate": 0.129182766
+          },
+          "log": "/tmp/mog-history-yrs-bench/xlsx_100k-0.log"
+        },
+        {
+          "wall_s": 0.1375546179478988,
+          "user_s": 0.123442,
+          "system_s": 0.014013999999999999,
+          "cpu_s": 0.137456,
+          "peak_rss_kib": 152544,
+          "live_rss_kib": 67128,
+          "phases_s": {
+            "parse_hydrate": 0.126587694
+          },
+          "log": "/tmp/mog-history-yrs-bench/xlsx_100k-1.log"
+        },
+        {
+          "wall_s": 0.14006068999879062,
+          "user_s": 0.129916,
+          "system_s": 0.010045,
+          "cpu_s": 0.139961,
+          "peak_rss_kib": 152548,
+          "live_rss_kib": 67128,
+          "phases_s": {
+            "parse_hydrate": 0.129446853
+          },
+          "log": "/tmp/mog-history-yrs-bench/xlsx_100k-2.log"
+        },
+        {
+          "wall_s": 0.14022756600752473,
+          "user_s": 0.122642,
+          "system_s": 0.017426,
+          "cpu_s": 0.140068,
+          "peak_rss_kib": 152668,
+          "live_rss_kib": 67116,
+          "phases_s": {
+            "parse_hydrate": 0.128888971
+          },
+          "log": "/tmp/mog-history-yrs-bench/xlsx_100k-3.log"
+        },
+        {
+          "wall_s": 0.1417415429605171,
+          "user_s": 0.129689,
+          "system_s": 0.011941,
+          "cpu_s": 0.14163,
+          "peak_rss_kib": 152544,
+          "live_rss_kib": 67128,
+          "phases_s": {
+            "parse_hydrate": 0.129984652
+          },
+          "log": "/tmp/mog-history-yrs-bench/xlsx_100k-4.log"
+        }
+      ],
+      "median": {
+        "wall_s": 0.14006068999879062,
+        "user_s": 0.12646,
+        "system_s": 0.013375999999999999,
+        "cpu_s": 0.139961,
+        "peak_rss_kib": 152548,
+        "live_rss_kib": 67128,
+        "phases_s": {
+          "parse_hydrate": 0.129182766
+        }
+      }
+    },
+    "officejs_1k": {
+      "command": [
+        "/tmp/mog-yrs-baseline/target-native/release/examples/storage_bench_officejs"
+      ],
+      "samples": [
+        {
+          "wall_s": 0.015918816905468702,
+          "user_s": 0.012947,
+          "system_s": 0.0029159999999999998,
+          "cpu_s": 0.015863,
+          "peak_rss_kib": 29372,
+          "live_rss_kib": null,
+          "phases_s": {
+            "officejs_write_load": 0.014512884
+          },
+          "log": "/tmp/mog-history-yrs-bench/officejs_1k-0.log"
+        },
+        {
+          "wall_s": 0.015927316970191896,
+          "user_s": 0.013963999999999999,
+          "system_s": 0.001954,
+          "cpu_s": 0.015917999999999998,
+          "peak_rss_kib": 29576,
+          "live_rss_kib": null,
+          "phases_s": {
+            "officejs_write_load": 0.014601468
+          },
+          "log": "/tmp/mog-history-yrs-bench/officejs_1k-1.log"
+        },
+        {
+          "wall_s": 0.015863607986830175,
+          "user_s": 0.012921,
+          "system_s": 0.002915,
+          "cpu_s": 0.015836,
+          "peak_rss_kib": 29668,
+          "live_rss_kib": null,
+          "phases_s": {
+            "officejs_write_load": 0.014605468
+          },
+          "log": "/tmp/mog-history-yrs-bench/officejs_1k-2.log"
+        },
+        {
+          "wall_s": 0.015710397041402757,
+          "user_s": 0.012601,
+          "system_s": 0.003085,
+          "cpu_s": 0.015686,
+          "peak_rss_kib": 29556,
+          "live_rss_kib": null,
+          "phases_s": {
+            "officejs_write_load": 0.014439049
+          },
+          "log": "/tmp/mog-history-yrs-bench/officejs_1k-3.log"
+        },
+        {
+          "wall_s": 0.01597219309769571,
+          "user_s": 0.014013999999999999,
+          "system_s": 0.001956,
+          "cpu_s": 0.015969999999999998,
+          "peak_rss_kib": 29504,
+          "live_rss_kib": null,
+          "phases_s": {
+            "officejs_write_load": 0.014580801
+          },
+          "log": "/tmp/mog-history-yrs-bench/officejs_1k-4.log"
+        }
+      ],
+      "median": {
+        "wall_s": 0.015918816905468702,
+        "user_s": 0.012947,
+        "system_s": 0.002915,
+        "cpu_s": 0.015863,
+        "peak_rss_kib": 29556,
+        "live_rss_kib": null,
+        "phases_s": {
+          "officejs_write_load": 0.014580801
+        }
+      }
+    },
+    "sum_100k": {
+      "command": [
+        "/tmp/mog-yrs-baseline/target-native/release/examples/storage_bench",
+        "sum_100k"
+      ],
+      "samples": [
+        {
+          "wall_s": 2.160290098981932,
+          "user_s": 2.126675,
+          "system_s": 0.032019,
+          "cpu_s": 2.158694,
+          "peak_rss_kib": 293852,
+          "live_rss_kib": 285636,
+          "phases_s": {
+            "hydrate_recalc": 1.844439581,
+            "recalc_100": 0.282710952
+          },
+          "log": "/tmp/mog-history-yrs-bench/sum_100k-0.log"
+        },
+        {
+          "wall_s": 2.248983711004257,
+          "user_s": 2.219046,
+          "system_s": 0.028007999999999998,
+          "cpu_s": 2.247054,
+          "peak_rss_kib": 294000,
+          "live_rss_kib": 285656,
+          "phases_s": {
+            "hydrate_recalc": 1.934046037,
+            "recalc_100": 0.281696773
+          },
+          "log": "/tmp/mog-history-yrs-bench/sum_100k-1.log"
+        },
+        {
+          "wall_s": 2.149072880973108,
+          "user_s": 2.120179,
+          "system_s": 0.027998,
+          "cpu_s": 2.148177,
+          "peak_rss_kib": 294012,
+          "live_rss_kib": 285652,
+          "phases_s": {
+            "hydrate_recalc": 1.796931884,
+            "recalc_100": 0.27610358
+          },
+          "log": "/tmp/mog-history-yrs-bench/sum_100k-2.log"
+        },
+        {
+          "wall_s": 2.211771970964037,
+          "user_s": 2.177332,
+          "system_s": 0.032984,
+          "cpu_s": 2.2103159999999997,
+          "peak_rss_kib": 294020,
+          "live_rss_kib": 285660,
+          "phases_s": {
+            "hydrate_recalc": 1.885583203,
+            "recalc_100": 0.285557736
+          },
+          "log": "/tmp/mog-history-yrs-bench/sum_100k-3.log"
+        },
+        {
+          "wall_s": 2.2859408650547266,
+          "user_s": 2.254979,
+          "system_s": 0.029980999999999997,
+          "cpu_s": 2.28496,
+          "peak_rss_kib": 293992,
+          "live_rss_kib": 285664,
+          "phases_s": {
+            "hydrate_recalc": 1.972486709,
+            "recalc_100": 0.276719796
+          },
+          "log": "/tmp/mog-history-yrs-bench/sum_100k-4.log"
+        }
+      ],
+      "median": {
+        "wall_s": 2.211771970964037,
+        "user_s": 2.177332,
+        "system_s": 0.029980999999999997,
+        "cpu_s": 2.2103159999999997,
+        "peak_rss_kib": 294000,
+        "live_rss_kib": 285656,
+        "phases_s": {
+          "hydrate_recalc": 1.885583203,
+          "recalc_100": 0.281696773
+        }
+      }
+    },
+    "history_1k": {
+      "command": [
+        "/tmp/mog-yrs-baseline/target-native/release/examples/storage_bench",
+        "history_1k"
+      ],
+      "samples": [
+        {
+          "wall_s": 0.3127409800654277,
+          "user_s": 0.25285799999999997,
+          "system_s": 0.038079,
+          "cpu_s": 0.290937,
+          "peak_rss_kib": 30884,
+          "live_rss_kib": 31536,
+          "phases_s": {
+            "write_1000": 0.054290697,
+            "undo_1000": 0.142785472,
+            "redo_1000": 0.111992809
+          },
+          "log": "/tmp/mog-history-yrs-bench/history_1k-0.log"
+        },
+        {
+          "wall_s": 0.24175545701291412,
+          "user_s": 0.198739,
+          "system_s": 0.032396,
+          "cpu_s": 0.231135,
+          "peak_rss_kib": 33952,
+          "live_rss_kib": 34576,
+          "phases_s": {
+            "write_1000": 0.041170705,
+            "undo_1000": 0.09578178,
+            "redo_1000": 0.101287972
+          },
+          "log": "/tmp/mog-history-yrs-bench/history_1k-1.log"
+        },
+        {
+          "wall_s": 0.25052352203056216,
+          "user_s": 0.22074,
+          "system_s": 0.019767,
+          "cpu_s": 0.240507,
+          "peak_rss_kib": 30784,
+          "live_rss_kib": 31464,
+          "phases_s": {
+            "write_1000": 0.040095151,
+            "undo_1000": 0.106134697,
+            "redo_1000": 0.100672756
+          },
+          "log": "/tmp/mog-history-yrs-bench/history_1k-2.log"
+        },
+        {
+          "wall_s": 0.2474554009968415,
+          "user_s": 0.206918,
+          "system_s": 0.029082999999999998,
+          "cpu_s": 0.236001,
+          "peak_rss_kib": 33812,
+          "live_rss_kib": 34584,
+          "phases_s": {
+            "write_1000": 0.051929126,
+            "undo_1000": 0.090145921,
+            "redo_1000": 0.101818269
+          },
+          "log": "/tmp/mog-history-yrs-bench/history_1k-3.log"
+        },
+        {
+          "wall_s": 0.2380652470747009,
+          "user_s": 0.203729,
+          "system_s": 0.025425,
+          "cpu_s": 0.229154,
+          "peak_rss_kib": 31048,
+          "live_rss_kib": 31464,
+          "phases_s": {
+            "write_1000": 0.046522728,
+            "undo_1000": 0.090228296,
+            "redo_1000": 0.097912598
+          },
+          "log": "/tmp/mog-history-yrs-bench/history_1k-4.log"
+        }
+      ],
+      "median": {
+        "wall_s": 0.2474554009968415,
+        "user_s": 0.206918,
+        "system_s": 0.029082999999999998,
+        "cpu_s": 0.236001,
+        "peak_rss_kib": 31048,
+        "live_rss_kib": 31536,
+        "phases_s": {
+          "write_1000": 0.046522728,
+          "undo_1000": 0.09578178,
+          "redo_1000": 0.101287972
+        }
+      }
+    }
+  }
+}

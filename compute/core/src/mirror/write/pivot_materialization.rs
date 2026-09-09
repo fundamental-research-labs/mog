@@ -4,14 +4,14 @@ use value_types::CellValue;
 use crate::mirror::cell_mirror::CellMirror;
 
 impl CellMirror {
-    /// Clear a rectangular region in col_data, setting all cells to Null.
+    /// Clear a rectangular region in column_values, setting all cells to Null.
     /// Used to wipe previously materialized pivot output before re-rendering.
     ///
     /// Historical builds allowed user edits inside pivot output ranges. Those
-    /// authored cells are read before `col_data`, so clearing only `col_data`
+    /// authored cells are read before `column_values`, so clearing only `column_values`
     /// leaves stale values masking fresh pivot output after a sort or field
     /// change. Keep identity registrations in place, but clear their authored
-    /// values and formulas so regenerated `col_data` is visible again.
+    /// values and formulas so regenerated `column_values` is visible again.
     pub fn clear_pivot_region(
         &mut self,
         sheet: &SheetId,
@@ -26,14 +26,11 @@ impl CellMirror {
             for c in 0..total_cols {
                 let col = anchor_col + c;
                 let mut touched = false;
-                if let Some(col_vec) = sheet_mirror.col_data.get_mut(&col) {
-                    for r in 0..total_rows {
-                        let row = (anchor_row + r) as usize;
-                        if row < col_vec.len() {
-                            col_vec[row] = CellValue::Null;
-                        }
-                    }
-                    touched = true;
+                for r in 0..total_rows {
+                    touched |= sheet_mirror
+                        .generated_values
+                        .remove(&SheetPos::new(anchor_row + r, col))
+                        .is_some();
                 }
 
                 for r in 0..total_rows {
@@ -59,7 +56,7 @@ impl CellMirror {
         }
     }
 
-    /// Materialize a computed pivot table result into col_data cells.
+    /// Materialize a computed pivot table result into column_values cells.
     /// Writes column headers, row headers, data values, and grand totals.
     pub fn materialize_pivot(
         &mut self,
@@ -145,30 +142,19 @@ impl CellMirror {
         let mut cols_touched = Vec::new();
 
         if let Some(sheet_mirror) = self.sheets.get_mut(sheet) {
-            let num_rows = sheet_mirror.rows as usize;
-            let max_needed = (anchor_row + total_rows) as usize;
-            let target_len = std::cmp::max(num_rows, max_needed);
-
-            // Ensure all columns exist and are sized
             for c in 0..total_cols {
                 let col = anchor_col + c;
-                let col_vec = sheet_mirror
-                    .col_data
-                    .entry(col)
-                    .or_insert_with(|| vec![CellValue::Null; target_len]);
-                if col_vec.len() < target_len {
-                    col_vec.resize(target_len, CellValue::Null);
-                }
+                sheet_mirror.note_column_position(SheetPos::new(anchor_row + total_rows - 1, col));
                 cols_touched.push(col);
             }
 
             {
                 let mut write_cell = |col: u32, row: u32, value: CellValue| {
-                    let row_index = row as usize;
-                    if let Some(col_vec) = sheet_mirror.col_data.get_mut(&col) {
-                        if row_index < col_vec.len() {
-                            col_vec[row_index] = value;
-                        }
+                    let pos = SheetPos::new(row, col);
+                    if value.is_null() {
+                        sheet_mirror.generated_values.remove(&pos);
+                    } else {
+                        sheet_mirror.generated_values.insert(pos, value);
                     }
                 };
 
@@ -336,7 +322,7 @@ impl CellMirror {
 
     /// Materialize a pivot and register every rendered cell as identity-backed.
     ///
-    /// Pivot output values live in `col_data`, but formulas need a stable
+    /// Pivot output values live in `column_values`, but formulas need a stable
     /// `CellId` dependency target for references such as `=F3`. Identity-only
     /// registration gives those rendered cells referenceable identities without
     /// overwriting the materialized values.

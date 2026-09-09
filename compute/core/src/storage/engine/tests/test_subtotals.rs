@@ -31,7 +31,13 @@ fn subtotal_snapshot() -> WorkbookSnapshot {
     .collect();
 
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -61,7 +67,7 @@ fn subtotal_options(function: SubtotalFunction) -> SubtotalOptions {
     }
 }
 
-fn text_at(engine: &YrsComputeEngine, sheet_id: &SheetId, row: u32, col: u32) -> String {
+fn text_at(engine: &ComputeEngine, sheet_id: &SheetId, row: u32, col: u32) -> String {
     match engine.get_cell_value(sheet_id, row, col) {
         CellValue::Text(text) => text.to_string(),
         CellValue::Number(number) => f64::from(number).to_string(),
@@ -70,14 +76,14 @@ fn text_at(engine: &YrsComputeEngine, sheet_id: &SheetId, row: u32, col: u32) ->
     }
 }
 
-fn formula_at(engine: &YrsComputeEngine, sheet_id: &SheetId, row: u32, col: u32) -> Option<String> {
+fn formula_at(engine: &ComputeEngine, sheet_id: &SheetId, row: u32, col: u32) -> Option<String> {
     let cell_id = engine.grid_index(sheet_id)?.cell_id_at(row, col)?;
     engine.get_formula(&cell_id)
 }
 
 #[test]
 fn create_subtotals_replaces_existing_on_production_engine_path() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(subtotal_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(subtotal_snapshot()).unwrap();
     let sid = SheetId::from_uuid_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
     engine
         .register_viewport("main", &sid, 0, 0, 20, 10)

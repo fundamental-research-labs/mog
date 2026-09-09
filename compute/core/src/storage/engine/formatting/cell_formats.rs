@@ -1,7 +1,7 @@
 use super::*;
 
 pub(super) fn get_cell_format(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     cell_id: &CellId,
     row: u32,
@@ -22,7 +22,7 @@ pub(super) fn get_cell_format(
 }
 
 pub(super) fn get_cell_format_with_cf(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     cell_id: &CellId,
     row: u32,
@@ -41,14 +41,12 @@ pub(super) fn get_cell_format_with_cf(
 }
 
 fn get_transferable_cell_format(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
 ) -> (CellFormat, bool) {
-    // Use grid_indexes (the in-memory position→id allocator) to find cell IDs.
-    // This reflects the latest state including recent mutations from
-    // set_format_for_ranges, unlike the Yrs CRDT which may lag.
+    // Resolve eager identities first, then compact native range positions.
     let pos = SheetPos::new(row, col);
     let cell_id = engine
         .stores
@@ -88,7 +86,7 @@ fn get_transferable_cell_format(
 }
 
 pub(super) fn get_transferable_format(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -100,7 +98,7 @@ pub(super) fn get_transferable_format(
 }
 
 pub(super) fn get_resolved_format(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -122,7 +120,7 @@ pub(super) fn get_resolved_format(
 }
 
 pub(super) fn set_cell_format(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     cell_id: &CellId,
     format: &CellFormat,
@@ -137,7 +135,7 @@ pub(super) fn set_cell_format(
 }
 
 pub(super) fn clear_cell_format(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     cell_id: &CellId,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {

@@ -1,29 +1,4 @@
-//! Shared domain types for the XLSX pipeline.
-//!
-//! This crate is the single source of truth for domain types used across:
-//! - **Parser**: produces `ParseOutput` from XLSX bytes (position-keyed)
-//! - **Yrs storage**: stores domain objects as structured Y.Maps via `yrs_schema` modules
-//! - **XLSX writer**: consumes `ParseOutput` to produce XLSX bytes
-//! - **Compute-core**: consumes the subset it needs (CF evaluation, pivot computation)
-//!
-//! # Architecture
-//!
-//! ```text
-//! ParseOutput (position-keyed)  ─── parser produces, writer consumes
-//!     │
-//!     ├── SheetData
-//!     │   ├── cells: Vec<CellData>
-//!     │   ├── charts: Vec<ChartSpec>
-//!     │   ├── conditional_formats: Vec<ConditionalFormat>
-//!     │   └── ... (all domain objects)
-//!     │
-//!     └── style_palette: Vec<DocumentFormat>
-//!
-//! YrsSchema modules              ─── structured Yrs read/write per domain
-//!     ├── comment::to_yrs_prelim() / from_yrs_map()
-//!     ├── chart::to_yrs_prelim() / from_yrs_map()
-//!     └── ... (one module per domain)
-//! ```
+//! Shared native domain types for spreadsheet compute and XLSX parsing/export.
 
 // Canonical cell formatting types (CellFormat, FontSize, CellBorders, etc.)
 mod cell_format;
@@ -65,10 +40,6 @@ pub mod style_resolver;
 
 // OOXML ↔ pixel unit conversion (column widths, row heights)
 pub mod units;
-
-// Structured Yrs read/write modules (one per domain)
-#[cfg(feature = "yrs")]
-pub mod yrs_schema;
 
 /// Serde helper: returns true if `v` is false (for `skip_serializing_if`).
 pub fn is_false(v: &bool) -> bool {

@@ -1,5 +1,5 @@
 //! Function-call syntax must resolve lexical callable values before built-ins.
-use super::super::YrsComputeEngine;
+use super::super::ComputeEngine;
 use super::helpers::cell_value_at;
 use domain_types::{CellData, ParseOutput, SheetData};
 use value_types::{CellError, CellValue};
@@ -58,7 +58,7 @@ fn cases() -> Vec<(&'static str, CellValue)> {
     ]
 }
 
-fn assert_results(engine: &YrsComputeEngine) {
+fn assert_results(engine: &ComputeEngine) {
     let sheet = engine.storage().sheet_order()[0];
     for (row, (formula, expected)) in cases().into_iter().enumerate() {
         let actual = cell_value_at(engine, &sheet, row as u32, 0);
@@ -95,7 +95,7 @@ fn lexical_callable_bindings_work_in_formula_text_and_xlsx_lifecycle() {
         ..Default::default()
     };
     let bytes = xlsx_parser::write::write_xlsx_from_parse_output(&input).unwrap();
-    let (mut engine, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).unwrap();
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).unwrap();
     engine.recalculate().unwrap();
     assert_results(&engine);
     let sheet = engine.storage().sheet_order()[0];
@@ -112,7 +112,7 @@ fn lexical_callable_bindings_work_in_formula_text_and_xlsx_lifecycle() {
     engine.rebuild_compute_core().unwrap();
     assert_results(&engine);
     let (mut reloaded, _) =
-        YrsComputeEngine::from_xlsx_bytes(&engine.export_to_xlsx_bytes().unwrap()).unwrap();
+        ComputeEngine::from_xlsx_bytes(&engine.export_to_xlsx_bytes().unwrap()).unwrap();
     reloaded.recalculate().unwrap();
     assert_results(&reloaded);
 }

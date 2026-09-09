@@ -96,7 +96,9 @@ pub use visitor::AstVisitor;
 
 // Re-export parser entry point and error types
 pub use parser::{ParseError, ParseErrorKind, parse_formula};
-pub use reference_tokens::{ReferenceToken, ReferenceTokenClass, collect_reference_tokens};
+pub use reference_tokens::{
+    ReferenceToken, ReferenceTokenClass, collect_reference_tokens, rewrite_reference_tokens,
+};
 
 // Re-export transform functions
 pub use a1_display::{

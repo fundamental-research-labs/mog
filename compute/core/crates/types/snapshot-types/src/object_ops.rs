@@ -236,7 +236,7 @@ pub enum ZOrderAction {
 // ── Serialization types ─────────────────────────────────────────────────────
 
 /// Serialized floating object group.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SerializedFloatingObjectGroup {
     /// Unique group identifier.

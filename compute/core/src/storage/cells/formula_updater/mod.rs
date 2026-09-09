@@ -1,23 +1,14 @@
 //! Formula updater for sheet and named-range renames.
 //!
-//! This module updates identity formula templates and persisted A1 formula
-//! strings after sheet or named-range renames. The callable facade is kept
-//! stable while rewrite logic, storage traversal, and operations live in
-//! focused child modules.
+//! Rewrites authored formula text and native identity templates after renames.
 
 mod named_range_rename;
 mod named_refs;
 mod sheet_refs;
-mod sheet_rename;
-mod storage_scan;
 
-pub use named_range_rename::{
-    update_formula_templates_on_named_range_rename, update_mirror_formulas_on_named_range_rename,
-};
+pub use named_range_rename::update_mirror_formulas_on_named_range_rename;
+pub(crate) use named_refs::formula_identifier_candidates;
 pub(crate) use sheet_refs::replace_sheet_name_in_a1_formula;
-#[cfg(test)]
-pub use sheet_rename::update_formula_templates_on_sheet_rename;
-pub(crate) use sheet_rename::update_formula_templates_on_sheet_rename_in_txn;
 
 #[cfg(test)]
 mod tests;

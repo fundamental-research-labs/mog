@@ -1,5 +1,8 @@
 //! Workbook-level metadata: named ranges, tables, and dense cache access.
 
+use crate::storage::engine::history::metadata::{
+    CatalogKey, VectorPosition, capture_data_table, capture_pivot_def, capture_table,
+};
 use cell_types::SheetId;
 use domain_types::domain::table::TableCatalogEntry as CanonicalTable;
 use formula_types::{NamedRangeDef, Scope, TableDef};
@@ -80,6 +83,14 @@ impl CellMirror {
     /// Set (or replace) a canonical table (stable-ID first, name as lookup).
     /// Also updates the formula engine's TableDef cache.
     pub fn set_table(&mut self, table: CanonicalTable) {
+        if self.history.is_active() {
+            if let Some(existing) = self.tables.iter().find(|existing| {
+                existing.id == table.id || existing.name.eq_ignore_ascii_case(&table.name)
+            }) {
+                capture_table(self, &existing.id);
+            }
+            capture_table(self, &table.id);
+        }
         let table_def = crate::storage::table_format::table_to_table_def(&table);
 
         // Update canonical table
@@ -107,6 +118,16 @@ impl CellMirror {
 
     /// Remove a table by name (case-insensitive). Removes both canonical and TableDef.
     pub fn remove_table(&mut self, name: &str) {
+        if self.history.is_active() {
+            for table in self
+                .tables
+                .iter()
+                .rev()
+                .filter(|table| table.name.eq_ignore_ascii_case(name))
+            {
+                capture_table(self, &table.id);
+            }
+        }
         self.tables.retain(|t| !t.name.eq_ignore_ascii_case(name));
         self.table_defs
             .retain(|t| !t.name.eq_ignore_ascii_case(name));
@@ -175,6 +196,16 @@ impl CellMirror {
     /// If a def with the same stable pivot identity already exists, it is replaced.
     /// Otherwise, the new def is appended.
     pub fn upsert_pivot_table_def(&mut self, def: PivotTableDef) {
+        if self.history.is_active() {
+            if let Some(existing) = self
+                .pivot_tables
+                .iter()
+                .find(|existing| existing.same_identity(&def))
+            {
+                capture_pivot_def(self, existing);
+            }
+            capture_pivot_def(self, &def);
+        }
         if let Some(existing) = self
             .pivot_tables
             .iter_mut()
@@ -201,6 +232,16 @@ impl CellMirror {
     ///
     /// Returns `true` if a def was found and removed.
     pub fn remove_pivot_table_def(&mut self, name: &str, sheet_uuid: &str) -> bool {
+        if self.history.is_active() {
+            for def in self
+                .pivot_tables
+                .iter()
+                .rev()
+                .filter(|def| def.name == name && def.sheet == sheet_uuid)
+            {
+                capture_pivot_def(self, def);
+            }
+        }
         let before = self.pivot_tables.len();
         self.pivot_tables
             .retain(|pt| !(pt.name == name && pt.sheet == sheet_uuid));
@@ -209,6 +250,16 @@ impl CellMirror {
 
     /// Remove all pivot table definitions for a given sheet.
     pub fn remove_pivot_table_defs_for_sheet(&mut self, sheet_uuid: &str) {
+        if self.history.is_active() {
+            for def in self
+                .pivot_tables
+                .iter()
+                .rev()
+                .filter(|def| def.sheet == sheet_uuid)
+            {
+                capture_pivot_def(self, def);
+            }
+        }
         self.pivot_tables.retain(|pt| pt.sheet != sheet_uuid);
     }
 
@@ -236,6 +287,22 @@ impl CellMirror {
         })
     }
 
+    /// Remove authored data-table regions with their owning worksheet.
+    pub(crate) fn remove_data_table_regions_for_sheet(&mut self, sheet_uuid: &str) {
+        if self.history.is_active() {
+            for def in self
+                .data_table_regions
+                .iter()
+                .rev()
+                .filter(|def| def.sheet == sheet_uuid)
+            {
+                capture_data_table(self, def);
+            }
+        }
+        self.data_table_regions
+            .retain(|def| def.sheet != sheet_uuid);
+    }
+
     /// Get all data table region definitions.
     pub fn all_data_table_regions(&self) -> &[DataTableRegionDef] {
         &self.data_table_regions
@@ -243,6 +310,7 @@ impl CellMirror {
 
     /// Insert or replace a data table region definition.
     pub fn upsert_data_table_region(&mut self, def: DataTableRegionDef) {
+        capture_data_table(self, &def);
         if let Some(existing) = self.data_table_regions.iter_mut().find(|region| {
             region.sheet == def.sheet
                 && region.start_row == def.start_row
@@ -254,6 +322,50 @@ impl CellMirror {
         } else {
             self.data_table_regions.push(def);
         }
+    }
+
+    pub(crate) fn history_swap_table(
+        &mut self,
+        id: &str,
+        old: &mut Option<(VectorPosition<CatalogKey>, CanonicalTable)>,
+    ) {
+        swap_catalog_entry(
+            &mut self.tables,
+            |table| table.id == id,
+            |table| CatalogKey::Table(table.id.clone()),
+            old,
+        );
+        self.table_defs = self
+            .tables
+            .iter()
+            .map(crate::storage::table_format::table_to_table_def)
+            .collect();
+    }
+
+    pub(crate) fn history_swap_pivot_def(
+        &mut self,
+        key: &CatalogKey,
+        old: &mut Option<(VectorPosition<CatalogKey>, PivotTableDef)>,
+    ) {
+        swap_catalog_entry(
+            &mut self.pivot_tables,
+            |def| key.matches_pivot(def),
+            CatalogKey::pivot,
+            old,
+        );
+    }
+
+    pub(crate) fn history_swap_data_table(
+        &mut self,
+        key: &CatalogKey,
+        old: &mut Option<(VectorPosition<CatalogKey>, DataTableRegionDef)>,
+    ) {
+        swap_catalog_entry(
+            &mut self.data_table_regions,
+            |def| key.matches_data_table(def),
+            CatalogKey::data_table,
+            old,
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -269,6 +381,24 @@ impl CellMirror {
     pub fn dense_cache_mut(&mut self) -> &mut DenseColumnCache {
         &mut self.dense_cache
     }
+}
+
+fn swap_catalog_entry<T>(
+    entries: &mut Vec<T>,
+    matches: impl Fn(&T) -> bool,
+    identity: fn(&T) -> CatalogKey,
+    old: &mut Option<(VectorPosition<CatalogKey>, T)>,
+) {
+    let current = entries.iter().position(matches).map(|index| {
+        (
+            VectorPosition::capture(entries, index, identity),
+            entries.remove(index),
+        )
+    });
+    if let Some((position, value)) = old.take() {
+        entries.insert(position.resolve(entries, identity), value);
+    }
+    *old = current;
 }
 
 #[cfg(test)]

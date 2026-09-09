@@ -41,6 +41,10 @@ The assigning proxy caches the assigned value immediately. To read the engine's
 result, obtain a fresh proxy and call `load` plus `sync`, as above. Reading an
 unloaded property on a fresh proxy throws.
 
+All edits in one mutating `context.sync()` share one undo action. A Rust host
+can call `workbook.history().undo()` or `redo()` on the workbook used by the
+script. Read-only syncs do not add history. See [undo and redo](undo-redo.md).
+
 ## Tests
 
 ```bash

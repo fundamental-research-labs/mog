@@ -21,7 +21,7 @@ use cell_types::{
     CellId, ColId, PayloadEncoding, RangeAnchor, RangeId, RangeKind, RowId, SheetId, SheetPos,
 };
 use compute_core::bridge_types::{BridgeSortCriterion, BridgeSortMode, BridgeSortOptions};
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use domain_types::domain::filter::SortOrder;
 use formula_types::StructureChange;
 use snapshot_types::{CellData, RangeData, SheetSnapshot, WorkbookSnapshot};
@@ -73,6 +73,9 @@ fn formula_cell(sheet_idx: u32, row: u32, col: u32, formula: &str) -> CellData {
 
 fn sheet_snap(idx: u32, name: &str, cells: Vec<CellData>) -> SheetSnapshot {
     SheetSnapshot {
+        identities: Vec::new(),
+        row_axis: None,
+        col_axis: None,
         id: sheet_uuid(idx),
         name: name.to_string(),
         rows: 100,
@@ -82,7 +85,7 @@ fn sheet_snap(idx: u32, name: &str, cells: Vec<CellData>) -> SheetSnapshot {
     }
 }
 
-fn cell_at(engine: &YrsComputeEngine, sid: &SheetId, row: u32, col: u32) -> CellValue {
+fn cell_at(engine: &ComputeEngine, sid: &SheetId, row: u32, col: u32) -> CellValue {
     engine
         .mirror()
         .get_cell_value_at(sid, SheetPos::new(row, col))
@@ -123,7 +126,7 @@ fn workbook_with_ref() -> WorkbookSnapshot {
 
 #[test]
 fn virtual_id_formula_refs_cell_before_edit() {
-    let (engine, _) = YrsComputeEngine::from_snapshot(workbook_with_ref()).expect("from_snapshot");
+    let (engine, _) = ComputeEngine::from_snapshot(workbook_with_ref()).expect("from_snapshot");
     let sid = sheet_id(0);
 
     // B1 = A3 should evaluate to 30.
@@ -152,8 +155,7 @@ fn virtual_id_formula_refs_cell_before_edit() {
 
 #[test]
 fn virtual_id_formula_refs_cell_after_edit() {
-    let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(workbook_with_ref()).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(workbook_with_ref()).expect("from_snapshot");
     let sid = sheet_id(0);
     let a3_cell = cell_id(0, 2, 0);
 
@@ -199,7 +201,7 @@ fn virtual_id_formula_refs_cell_after_edit() {
 
 #[test]
 fn virtual_id_resolve_cell_id_for_position() {
-    let (engine, _) = YrsComputeEngine::from_snapshot(workbook_with_ref()).expect("from_snapshot");
+    let (engine, _) = ComputeEngine::from_snapshot(workbook_with_ref()).expect("from_snapshot");
     let sid = sheet_id(0);
 
     // Resolve position (2, 0) = A3 to its CellId.
@@ -224,7 +226,7 @@ fn virtual_id_resolve_cell_id_for_position() {
 
 #[test]
 fn virtual_id_resolve_position_returns_correct_pos() {
-    let (engine, _) = YrsComputeEngine::from_snapshot(workbook_with_ref()).expect("from_snapshot");
+    let (engine, _) = ComputeEngine::from_snapshot(workbook_with_ref()).expect("from_snapshot");
 
     // For each seeded cell, verify resolve_position returns the correct row/col.
     let cases: Vec<(u32, u32, f64)> = vec![
@@ -268,7 +270,7 @@ fn virtual_id_resolve_position_returns_correct_pos() {
 
 #[test]
 fn virtual_id_sheet_for_cell() {
-    let (engine, _) = YrsComputeEngine::from_snapshot(workbook_with_ref()).expect("from_snapshot");
+    let (engine, _) = ComputeEngine::from_snapshot(workbook_with_ref()).expect("from_snapshot");
     let expected_sid = sheet_id(0);
 
     for row in 0..5u32 {
@@ -302,8 +304,7 @@ fn virtual_id_sheet_for_cell() {
 
 #[test]
 fn virtual_id_get_cell_value_at_returns_correct_value() {
-    let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(workbook_with_ref()).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(workbook_with_ref()).expect("from_snapshot");
     let sid = sheet_id(0);
 
     // Before edit: get_cell_value_at(A3) returns the original value (30).
@@ -319,11 +320,6 @@ fn virtual_id_get_cell_value_at_returns_correct_value() {
     // After edit: get_cell_value_at(A3) returns the override (99).
     let post = cell_at(&engine, &sid, 2, 0);
     assert_eq!(as_f64(&post), 99.0, "A3 should be 99 after edit (override)");
-
-    // Undo: get_cell_value_at(A3) should return the original (30).
-    engine.undo().expect("undo");
-    let undo = cell_at(&engine, &sid, 2, 0);
-    assert_eq!(as_f64(&undo), 30.0, "A3 should be 30 after undo");
 }
 
 // ---------------------------------------------------------------------------
@@ -331,12 +327,12 @@ fn virtual_id_get_cell_value_at_returns_correct_value() {
 // ---------------------------------------------------------------------------
 
 /// Row ID matching IdAllocator::new() convention: row IDs start at 1.
-fn yrs_row_id(row_index: usize) -> RowId {
+fn snapshot_row_id(row_index: usize) -> RowId {
     RowId::from_raw((row_index + 1) as u128)
 }
 
 /// Col ID matching IdAllocator::new() convention: col IDs start after all rows.
-fn yrs_col_id(sheet_rows: usize, col_index: usize) -> ColId {
+fn snapshot_col_id(sheet_rows: usize, col_index: usize) -> ColId {
     ColId::from_raw((sheet_rows + col_index + 1) as u128)
 }
 
@@ -358,8 +354,8 @@ fn virtual_id_stable_across_compaction() {
     const SHEET_COLS: u32 = 5;
     const RANGE_ROWS: u32 = 4;
 
-    let row_ids: Vec<RowId> = (0..RANGE_ROWS as usize).map(yrs_row_id).collect();
-    let col_ids: Vec<ColId> = vec![yrs_col_id(SHEET_ROWS as usize, 0)];
+    let row_ids: Vec<RowId> = (0..RANGE_ROWS as usize).map(snapshot_row_id).collect();
+    let col_ids: Vec<ColId> = vec![snapshot_col_id(SHEET_ROWS as usize, 0)];
 
     let payload: Vec<u8> = [10.0_f64, 20.0, 30.0, 40.0]
         .iter()
@@ -385,6 +381,9 @@ fn virtual_id_stable_across_compaction() {
 
     let snap = WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_uuid(0),
             name: "Sheet1".to_string(),
             rows: SHEET_ROWS,
@@ -395,7 +394,7 @@ fn virtual_id_stable_across_compaction() {
         ..Default::default()
     };
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).expect("from_snapshot");
     let sid = sheet_id(0);
 
     // Capture CellIds for all 4 Range positions before overrides.
@@ -491,7 +490,7 @@ fn virtual_id_stable_across_sort() {
         ..Default::default()
     };
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).expect("from_snapshot");
     let sid = sheet_id(0);
 
     // Capture CellIds at each position before sort.
@@ -570,8 +569,7 @@ fn virtual_id_stable_across_sort() {
 
 #[test]
 fn virtual_id_stable_across_insert_delete() {
-    let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(workbook_with_ref()).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(workbook_with_ref()).expect("from_snapshot");
     let sid = sheet_id(0);
 
     // Capture the CellId for A3 (row 2, col 0) before insert.
@@ -683,7 +681,7 @@ fn virtual_id_stable_across_insert_delete() {
 
 #[test]
 fn virtual_id_resolve_roundtrip() {
-    let (engine, _) = YrsComputeEngine::from_snapshot(workbook_with_ref()).expect("from_snapshot");
+    let (engine, _) = ComputeEngine::from_snapshot(workbook_with_ref()).expect("from_snapshot");
     let sid = sheet_id(0);
 
     // For every cell in the snapshot, verify the resolve roundtrip:
@@ -736,7 +734,7 @@ fn virtual_id_multi_sheet_isolation() {
         ..Default::default()
     };
 
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).expect("from_snapshot");
+    let (engine, _) = ComputeEngine::from_snapshot(snap).expect("from_snapshot");
     let alpha_sid = sheet_id(0);
     let beta_sid = sheet_id(1);
 
@@ -780,80 +778,4 @@ fn virtual_id_multi_sheet_isolation() {
         .unwrap_or(CellValue::Null);
     assert_eq!(as_f64(&alpha_val), 1.0, "Alpha A1 should be 1");
     assert_eq!(as_f64(&beta_val), 2.0, "Beta A1 should be 2");
-}
-
-// ---------------------------------------------------------------------------
-// Additional: identity stability across undo/redo
-// ---------------------------------------------------------------------------
-
-#[test]
-fn virtual_id_stable_across_undo_redo() {
-    let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(workbook_with_ref()).expect("from_snapshot");
-    let sid = sheet_id(0);
-
-    // Capture CellId for A3.
-    let a3_cid = engine
-        .mirror()
-        .resolve_cell_id(&sid, SheetPos::new(2, 0))
-        .expect("A3 CellId");
-
-    // Edit A3.
-    engine
-        .set_cell(&sid, a3_cid, 2, 0, "99".into())
-        .expect("set_cell");
-
-    // After edit, CellId should still resolve.
-    let pos_after_edit = engine.mirror().resolve_position(&a3_cid);
-    assert_eq!(
-        pos_after_edit.map(|p| p.row()),
-        Some(2),
-        "A3 CellId should still be at row 2 after edit"
-    );
-
-    // Undo.
-    engine.undo().expect("undo");
-
-    // CellId should still resolve after undo.
-    let pos_after_undo = engine.mirror().resolve_position(&a3_cid);
-    assert_eq!(
-        pos_after_undo.map(|p| p.row()),
-        Some(2),
-        "A3 CellId should still be at row 2 after undo"
-    );
-
-    // Value should be back to 30.
-    let val = engine
-        .mirror()
-        .get_cell_value(&a3_cid)
-        .cloned()
-        .unwrap_or(CellValue::Null);
-    assert!(
-        (as_f64(&val) - 30.0).abs() < 1e-9,
-        "A3 should be 30 after undo, got {:?}",
-        val
-    );
-
-    // Redo.
-    engine.redo().expect("redo");
-
-    // CellId should still resolve after redo.
-    let pos_after_redo = engine.mirror().resolve_position(&a3_cid);
-    assert_eq!(
-        pos_after_redo.map(|p| p.row()),
-        Some(2),
-        "A3 CellId should still be at row 2 after redo"
-    );
-
-    // Value should be 99 again.
-    let val = engine
-        .mirror()
-        .get_cell_value(&a3_cid)
-        .cloned()
-        .unwrap_or(CellValue::Null);
-    assert!(
-        (as_f64(&val) - 99.0).abs() < 1e-9,
-        "A3 should be 99 after redo, got {:?}",
-        val
-    );
 }

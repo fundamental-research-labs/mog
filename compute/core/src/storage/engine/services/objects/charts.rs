@@ -29,8 +29,7 @@ pub(in crate::storage::engine) fn create_chart(
     config: &serde_json::Value,
 ) -> Result<MutationResult, ComputeError> {
     let object_json = floating_objects::create_chart_object(
-        stores.storage.doc(),
-        stores.storage.sheets(),
+        &mut stores.storage,
         sheet_id,
         config,
         stores.grid_indexes.get_mut(sheet_id),
@@ -62,25 +61,10 @@ pub(in crate::storage::engine) fn update_chart(
     updates: &serde_json::Value,
 ) -> Result<MutationResult, ComputeError> {
     require_chart(stores, sheet_id, chart_id)?;
-    floating_objects::update_floating_object(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        chart_id,
-        updates,
-    );
-    let data: Option<FloatingObject> = floating_objects::get_floating_object_typed(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        chart_id,
-    );
-    let obj_json = floating_objects::get_floating_object(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        chart_id,
-    );
+    floating_objects::update_floating_object(&mut stores.storage, sheet_id, chart_id, updates);
+    let data: Option<FloatingObject> =
+        floating_objects::get_floating_object_typed(&stores.storage, sheet_id, chart_id);
+    let obj_json = floating_objects::get_floating_object(&stores.storage, sheet_id, chart_id);
     let bounds = obj_json.and_then(|json| {
         compute_object_pixel_bounds(
             stores.grid_indexes.get(sheet_id),
@@ -112,12 +96,7 @@ pub(in crate::storage::engine) fn delete_chart(
     chart_id: &str,
 ) -> Result<MutationResult, ComputeError> {
     let pre_delete = require_chart(stores, sheet_id, chart_id)?;
-    let deleted = floating_objects::delete_floating_object(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        chart_id,
-    );
+    let deleted = floating_objects::delete_floating_object(&mut stores.storage, sheet_id, chart_id);
     if !deleted {
         return Err(chart_not_found(sheet_id, chart_id));
     }
@@ -138,12 +117,7 @@ pub(in crate::storage::engine) fn get_chart(
     sheet_id: &SheetId,
     chart_id: &str,
 ) -> Option<FloatingObject> {
-    let obj = floating_objects::get_floating_object_typed(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        chart_id,
-    )?;
+    let obj = floating_objects::get_floating_object_typed(&stores.storage, sheet_id, chart_id)?;
     if obj.object_type() != "chart" {
         return None;
     }
@@ -154,14 +128,10 @@ pub(in crate::storage::engine) fn get_all_charts(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> Vec<FloatingObject> {
-    floating_objects::get_all_floating_objects_typed(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-    )
-    .into_iter()
-    .filter(|obj| obj.object_type() == "chart")
-    .collect()
+    floating_objects::get_all_floating_objects_typed(&stores.storage, sheet_id)
+        .into_iter()
+        .filter(|obj| obj.object_type() == "chart")
+        .collect()
 }
 
 pub(in crate::storage::engine) fn bring_chart_to_front(
@@ -170,18 +140,8 @@ pub(in crate::storage::engine) fn bring_chart_to_front(
     chart_id: &str,
 ) -> Result<MutationResult, ComputeError> {
     require_chart(stores, sheet_id, chart_id)?;
-    floating_objects::bring_floating_object_to_front(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        chart_id,
-    );
-    let data = floating_objects::get_floating_object_typed(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        chart_id,
-    );
+    floating_objects::bring_floating_object_to_front(&mut stores.storage, sheet_id, chart_id);
+    let data = floating_objects::get_floating_object_typed(&stores.storage, sheet_id, chart_id);
     let mut result = MutationResult::empty();
     result.floating_object_changes.push(FloatingObjectChange {
         sheet_id: sheet_id.to_uuid_string(),
@@ -202,18 +162,8 @@ pub(in crate::storage::engine) fn send_chart_to_back(
     chart_id: &str,
 ) -> Result<MutationResult, ComputeError> {
     require_chart(stores, sheet_id, chart_id)?;
-    floating_objects::send_floating_object_to_back(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        chart_id,
-    );
-    let data = floating_objects::get_floating_object_typed(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        chart_id,
-    );
+    floating_objects::send_floating_object_to_back(&mut stores.storage, sheet_id, chart_id);
+    let data = floating_objects::get_floating_object_typed(&stores.storage, sheet_id, chart_id);
     let mut result = MutationResult::empty();
     result.floating_object_changes.push(FloatingObjectChange {
         sheet_id: sheet_id.to_uuid_string(),
@@ -234,18 +184,8 @@ pub(in crate::storage::engine) fn bring_chart_forward(
     chart_id: &str,
 ) -> Result<MutationResult, ComputeError> {
     require_chart(stores, sheet_id, chart_id)?;
-    floating_objects::bring_floating_object_forward(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        chart_id,
-    );
-    let data = floating_objects::get_floating_object_typed(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        chart_id,
-    );
+    floating_objects::bring_floating_object_forward(&mut stores.storage, sheet_id, chart_id);
+    let data = floating_objects::get_floating_object_typed(&stores.storage, sheet_id, chart_id);
     let mut result = MutationResult::empty();
     result.floating_object_changes.push(FloatingObjectChange {
         sheet_id: sheet_id.to_uuid_string(),
@@ -266,18 +206,8 @@ pub(in crate::storage::engine) fn send_chart_backward(
     chart_id: &str,
 ) -> Result<MutationResult, ComputeError> {
     require_chart(stores, sheet_id, chart_id)?;
-    floating_objects::send_floating_object_backward(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        chart_id,
-    );
-    let data = floating_objects::get_floating_object_typed(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        chart_id,
-    );
+    floating_objects::send_floating_object_backward(&mut stores.storage, sheet_id, chart_id);
+    let data = floating_objects::get_floating_object_typed(&stores.storage, sheet_id, chart_id);
     let mut result = MutationResult::empty();
     result.floating_object_changes.push(FloatingObjectChange {
         sheet_id: sheet_id.to_uuid_string(),
@@ -296,14 +226,7 @@ pub(in crate::storage::engine) fn get_charts_in_z_order(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> Vec<FloatingObject> {
-    let mut charts: Vec<FloatingObject> = floating_objects::get_all_floating_objects_typed(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-    )
-    .into_iter()
-    .filter(|obj| obj.object_type() == "chart")
-    .collect();
+    let mut charts = floating_objects::get_chart_objects(&stores.storage, sheet_id);
     charts.sort_by_key(|obj| obj.common.z_index);
     charts
 }
@@ -316,13 +239,7 @@ pub(in crate::storage::engine) fn link_chart_to_table(
 ) -> Result<MutationResult, ComputeError> {
     require_chart(stores, sheet_id, chart_id)?;
     let updates = serde_json::json!({ "sourceTableId": table_id });
-    floating_objects::update_floating_object(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        chart_id,
-        &updates,
-    );
+    floating_objects::update_floating_object(&mut stores.storage, sheet_id, chart_id, &updates);
     Ok(MutationResult::empty())
 }
 
@@ -333,13 +250,7 @@ pub(in crate::storage::engine) fn unlink_chart_from_table(
 ) -> Result<MutationResult, ComputeError> {
     require_chart(stores, sheet_id, chart_id)?;
     let updates = serde_json::json!({ "sourceTableId": null });
-    floating_objects::update_floating_object(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        chart_id,
-        &updates,
-    );
+    floating_objects::update_floating_object(&mut stores.storage, sheet_id, chart_id, &updates);
     Ok(MutationResult::empty())
 }
 
@@ -348,20 +259,15 @@ pub(in crate::storage::engine) fn is_chart_linked_to_table(
     sheet_id: &SheetId,
     chart_id: &str,
 ) -> bool {
-    floating_objects::get_floating_object_typed(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        chart_id,
-    )
-    .and_then(|obj| {
-        if let FloatingObjectData::Chart(ref c) = obj.data {
-            c.source_table_id.as_ref().map(|_| true)
-        } else {
-            None
-        }
-    })
-    .unwrap_or(false)
+    floating_objects::get_floating_object_typed(&stores.storage, sheet_id, chart_id)
+        .and_then(|obj| {
+            if let FloatingObjectData::Chart(ref c) = obj.data {
+                c.source_table_id.as_ref().map(|_| true)
+            } else {
+                None
+            }
+        })
+        .unwrap_or(false)
 }
 
 pub(in crate::storage::engine) fn get_charts_linked_to_table(
@@ -369,42 +275,21 @@ pub(in crate::storage::engine) fn get_charts_linked_to_table(
     sheet_id: &SheetId,
     table_id: &str,
 ) -> Vec<FloatingObject> {
-    floating_objects::get_all_floating_objects_typed(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-    )
-    .into_iter()
-    .filter(|obj| {
-        if let FloatingObjectData::Chart(ref c) = obj.data {
-            c.source_table_id.as_deref() == Some(table_id)
-        } else {
-            false
-        }
-    })
-    .collect()
+    floating_objects::get_charts_linked_to_table(&stores.storage, sheet_id, table_id)
 }
 
 pub(in crate::storage::engine) fn get_max_z_index(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> i32 {
-    floating_objects::get_floating_object_max_z_index(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-    )
+    floating_objects::get_floating_object_max_z_index(&stores.storage, sheet_id)
 }
 
 pub(in crate::storage::engine) fn get_min_z_index(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> i32 {
-    floating_objects::get_floating_object_min_z_index(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-    )
+    floating_objects::get_floating_object_min_z_index(&stores.storage, sheet_id)
 }
 
 // -------------------------------------------------------------------

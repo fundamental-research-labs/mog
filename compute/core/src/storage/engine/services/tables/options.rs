@@ -35,7 +35,6 @@ pub(in crate::storage::engine) fn set_table_bool_option(
 
     let updated = compute_table::table::set_table_option(&table, opt, value);
     stores.compute.set_table(mirror, updated.clone());
-    persist_table_to_yrs(stores, &updated);
     Ok(MutationResult::empty())
 }
 
@@ -59,7 +58,6 @@ pub(in crate::storage::engine) fn set_table_auto_expand(
 
     table.auto_expand = enabled;
     stores.compute.set_table(mirror, table.clone());
-    persist_table_to_yrs(stores, &table);
     Ok(MutationResult::empty())
 }
 
@@ -83,7 +81,6 @@ pub(in crate::storage::engine) fn set_table_auto_calculated_columns(
 
     table.auto_calculated_columns = enabled;
     stores.compute.set_table(mirror, table.clone());
-    persist_table_to_yrs(stores, &table);
     Ok(MutationResult::empty())
 }
 
@@ -104,7 +101,6 @@ pub(in crate::storage::engine) fn set_table_totals_function(
 
     let updated = compute_table::table::set_totals_function(&table, column_id, func);
     stores.compute.set_table(mirror, updated.clone());
-    persist_table_to_yrs(stores, &updated);
     Ok(MutationResult::empty())
 }
 
@@ -124,7 +120,6 @@ pub(in crate::storage::engine) fn add_table_data_row(
 
     let result = compute_table::operations::add_data_row(&table, relative_row);
     stores.compute.set_table(mirror, result.table.clone());
-    persist_table_to_yrs(stores, &result.table);
 
     // Return both the insert row and whether the caller needs to expand
     // the table range post-structural-change (see add_data_row docs).
@@ -159,6 +154,5 @@ pub(in crate::storage::engine) fn remove_table_data_row(
             }
         })?;
     stores.compute.set_table(mirror, result.table.clone());
-    persist_table_to_yrs(stores, &result.table);
     Ok(MutationResult::empty().with_data(&result.removed_row)?)
 }

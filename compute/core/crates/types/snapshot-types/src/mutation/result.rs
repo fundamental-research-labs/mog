@@ -17,7 +17,7 @@ use super::sheet_workbook::{
     SheetChange, SheetSettingsChange, SplitConfigChange, ViewSelectionChange,
     WorkbookSettingsChange,
 };
-use crate::recalc::{CellChange, RecalcResult};
+use crate::recalc::RecalcResult;
 use value_types::CellValue;
 
 /// Result of a mutation command — contains recalc changes plus domain-specific changes.
@@ -27,9 +27,6 @@ use value_types::CellValue;
 pub struct MutationResult {
     /// Cell value changes from recalculation.
     pub recalc: RecalcResult,
-    /// Direct authored cell content changes captured during remote sync apply.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub authored_cell_changes: Vec<CellChange>,
     /// Property/format changes.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub property_changes: Vec<PropertyChange>,
@@ -126,9 +123,6 @@ pub struct MutationResult {
     /// Runtime operation diagnostics emitted by this mutation.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub diagnostics: Vec<RuntimeOperationDiagnostic>,
-    /// Undo description for this mutation (displayed as "Undo: {description}").
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub undo_description: Option<String>,
     /// Optional domain-specific return data (serialized as JSON).
     /// Used by write methods that need to return domain objects
     /// alongside mutation metadata (e.g., create_named_range → DefinedName).
@@ -148,7 +142,6 @@ impl MutationResult {
     pub fn empty() -> Self {
         Self {
             recalc: RecalcResult::empty(),
-            authored_cell_changes: Vec::new(),
             property_changes: Vec::new(),
             dimension_changes: Vec::new(),
             merge_changes: Vec::new(),
@@ -181,7 +174,6 @@ impl MutationResult {
             policy_preserved_parse_outcomes: Vec::new(),
             policy_preserved_parse_summary: None,
             diagnostics: Vec::new(),
-            undo_description: None,
             data: None,
             old_values: HashMap::new(),
         }
@@ -244,7 +236,6 @@ mod tests {
     fn mutation_result_empty() {
         let mr = MutationResult::empty();
         assert!(mr.recalc.changed_cells.is_empty());
-        assert!(mr.authored_cell_changes.is_empty());
         assert!(mr.property_changes.is_empty());
         assert!(mr.sheet_lifecycle_runtime_hint.is_none());
         assert!(mr.dimension_changes.is_empty());
@@ -274,7 +265,6 @@ mod tests {
         assert!(mr.pivot_changes.is_empty());
         assert!(mr.range_changes.is_empty());
         assert!(mr.diagnostics.is_empty());
-        assert!(mr.undo_description.is_none());
         assert!(mr.data.is_none());
     }
 
@@ -307,7 +297,6 @@ mod tests {
         let mr = MutationResult::from_recalc(recalc);
         assert_eq!(mr.recalc.changed_cells.len(), 1);
         assert!(mr.property_changes.is_empty());
-        assert!(mr.undo_description.is_none());
     }
 
     #[test]
@@ -337,7 +326,6 @@ mod tests {
                 policy_preserved_parse_outcomes: Vec::new(),
                 policy_preserved_parse_summary: None,
             },
-            authored_cell_changes: vec![],
             property_changes: vec![PropertyChange {
                 sheet_id: "s1".into(),
                 cell_id: "c1".into(),
@@ -418,7 +406,6 @@ mod tests {
             policy_preserved_parse_outcomes: vec![],
             policy_preserved_parse_summary: None,
             diagnostics: vec![],
-            undo_description: Some("Set cell format".into()),
             data: None,
             old_values: HashMap::new(),
         };
@@ -437,7 +424,6 @@ mod tests {
         assert_eq!(mr2.slicer_changes[0].kind, SlicerChangeKind::Created);
         assert_eq!(mr2.named_range_changes.len(), 1);
         assert_eq!(mr2.named_range_changes[0].kind, ChangeKind::Removed);
-        assert_eq!(mr2.undo_description, Some("Set cell format".into()));
         // Empty vecs should not appear in JSON
         assert!(!json.contains("visibilityChanges"));
         assert!(!json.contains("commentChanges"));
@@ -503,7 +489,6 @@ mod tests {
         assert!(mr.pivot_changes.is_empty());
         assert!(mr.range_changes.is_empty());
         assert!(mr.diagnostics.is_empty());
-        assert!(mr.undo_description.is_none());
     }
 
     #[test]

@@ -223,7 +223,7 @@ pub(crate) fn compute_mean_stddev(values: &[f64]) -> (f64, f64) {
 /// Compute statistics for a slice of cell values.
 ///
 /// The caller is responsible for collecting cell values from whatever storage
-/// layer is in use (CellMirror, Yrs, etc.) and passing them here.
+/// layer is in use and passing them here.
 ///
 /// O(n) single pass for collection + O(n log n) sort for percentile support.
 /// Non-numeric cells (text, boolean, error, null) are skipped for numeric stats

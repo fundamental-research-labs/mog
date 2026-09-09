@@ -1,4 +1,4 @@
-//! Structural operations for YrsComputeEngine.
+//! Structural operations for ComputeEngine.
 //!
 //! Bridge-facing wrappers live here. Domain-specific orchestration for
 //! structure changes, dimensions, merges, identity, relocation, and partial
@@ -10,9 +10,8 @@ mod merges;
 mod partial_cell_shift;
 mod relocate_values;
 mod structure_change;
-mod yrs_position_persistence;
 
-use super::YrsComputeEngine;
+use super::ComputeEngine;
 use crate::snapshot::MutationResult;
 use bridge_core as bridge;
 use cell_types::SheetId;
@@ -20,13 +19,13 @@ use formula_types::StructureChange;
 use value_types::ComputeError;
 
 #[bridge::api(
-    service = "YrsComputeEngine",
+    service = "ComputeEngine",
     key = "doc_id",
     group = "structural",
     fn_prefix = "compute",
     crate_path = "compute_core"
 )]
-impl YrsComputeEngine {
+impl ComputeEngine {
     // -------------------------------------------------------------------
     // Structural changes
     // -------------------------------------------------------------------
@@ -39,7 +38,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         change: &StructureChange,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        self.apply_structure_change_bridge(sheet_id, change)
+        self.with_history(|engine| engine.apply_structure_change_bridge(sheet_id, change))
     }
 
     /// Move cell values from a source range to a target position (value-only move).
@@ -47,7 +46,7 @@ impl YrsComputeEngine {
     /// or update formula refs.
     #[bridge::write]
     #[allow(clippy::too_many_arguments)]
-    pub fn relocate_cells(
+    pub fn relocate_values(
         &mut self,
         sheet_id: &SheetId,
         src_start_row: u32,
@@ -57,15 +56,17 @@ impl YrsComputeEngine {
         target_row: u32,
         target_col: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        self.apply_relocate_cells_values(
-            sheet_id,
-            src_start_row,
-            src_start_col,
-            src_end_row,
-            src_end_col,
-            target_row,
-            target_col,
-        )
+        self.with_history(|engine| {
+            engine.apply_relocate_cells_values(
+                sheet_id,
+                src_start_row,
+                src_start_col,
+                src_end_row,
+                src_end_col,
+                target_row,
+                target_col,
+            )
+        })
     }
 
     /// Insert cells with shift (right or down) in a sub-range.
@@ -80,7 +81,16 @@ impl YrsComputeEngine {
         col_count: u32,
         shift_right: bool,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        self.apply_insert_cells_with_shift(sheet_id, row, col, row_count, col_count, shift_right)
+        self.with_history(|engine| {
+            engine.apply_insert_cells_with_shift(
+                sheet_id,
+                row,
+                col,
+                row_count,
+                col_count,
+                shift_right,
+            )
+        })
     }
 
     /// Delete cells with shift (left or up) in a sub-range.
@@ -94,7 +104,10 @@ impl YrsComputeEngine {
         col_count: u32,
         shift_left: bool,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        self.apply_delete_cells_with_shift(sheet_id, row, col, row_count, col_count, shift_left)
+        self.with_history(|engine| {
+            engine
+                .apply_delete_cells_with_shift(sheet_id, row, col, row_count, col_count, shift_left)
+        })
     }
 
     // -------------------------------------------------------------------
@@ -109,7 +122,7 @@ impl YrsComputeEngine {
         row: u32,
         height_px: f64,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        self.apply_set_row_height(sheet_id, row, height_px)
+        self.with_history(|engine| engine.apply_set_row_height(sheet_id, row, height_px))
     }
 
     /// Set column width (in pixels from UI).
@@ -120,7 +133,7 @@ impl YrsComputeEngine {
         col: u32,
         width_px: f64,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        self.apply_set_col_width(sheet_id, col, width_px)
+        self.with_history(|engine| engine.apply_set_col_width(sheet_id, col, width_px))
     }
 
     /// Set multiple column widths (in pixels from UI).
@@ -130,7 +143,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         widths: &[(u32, f64)],
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        self.apply_set_col_widths(sheet_id, widths)
+        self.with_history(|engine| engine.apply_set_col_widths(sheet_id, widths))
     }
 
     /// Set column width in character-width units (OOXML-native).
@@ -141,7 +154,7 @@ impl YrsComputeEngine {
         col: u32,
         width_chars: f64,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        self.apply_set_col_width_chars(sheet_id, col, width_chars)
+        self.with_history(|engine| engine.apply_set_col_width_chars(sheet_id, col, width_chars))
     }
 
     /// Set multiple column widths in character-width units (OOXML-native).
@@ -151,7 +164,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         widths: &[(u32, f64)],
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        self.apply_set_col_widths_chars(sheet_id, widths)
+        self.with_history(|engine| engine.apply_set_col_widths_chars(sheet_id, widths))
     }
 
     /// Hide rows.
@@ -161,7 +174,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         rows: &[u32],
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        self.apply_hide_rows(sheet_id, rows)
+        self.with_history(|engine| engine.apply_hide_rows(sheet_id, rows))
     }
 
     /// Unhide rows.
@@ -171,7 +184,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         rows: &[u32],
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        self.apply_unhide_rows(sheet_id, rows)
+        self.with_history(|engine| engine.apply_unhide_rows(sheet_id, rows))
     }
 
     /// Hide columns.
@@ -181,7 +194,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         cols: &[u32],
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        self.apply_hide_columns(sheet_id, cols)
+        self.with_history(|engine| engine.apply_hide_columns(sheet_id, cols))
     }
 
     /// Unhide columns.
@@ -191,7 +204,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         cols: &[u32],
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        self.apply_unhide_columns(sheet_id, cols)
+        self.with_history(|engine| engine.apply_unhide_columns(sheet_id, cols))
     }
 
     // -------------------------------------------------------------------
@@ -208,7 +221,9 @@ impl YrsComputeEngine {
         end_row: u32,
         end_col: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        self.apply_merge_range(sheet_id, start_row, start_col, end_row, end_col)
+        self.with_history(|engine| {
+            engine.apply_merge_range(sheet_id, start_row, start_col, end_row, end_col)
+        })
     }
 
     /// Unmerge a range.
@@ -221,7 +236,9 @@ impl YrsComputeEngine {
         end_row: u32,
         end_col: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        self.apply_unmerge_range(sheet_id, start_row, start_col, end_row, end_col)
+        self.with_history(|engine| {
+            engine.apply_unmerge_range(sheet_id, start_row, start_col, end_row, end_col)
+        })
     }
 
     /// Merge across: creates one merge per row in the range.
@@ -234,7 +251,9 @@ impl YrsComputeEngine {
         end_row: u32,
         end_col: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        self.apply_merge_across(sheet_id, start_row, start_col, end_row, end_col)
+        self.with_history(|engine| {
+            engine.apply_merge_across(sheet_id, start_row, start_col, end_row, end_col)
+        })
     }
 
     /// Merge and center: unmerge overlapping, then create a single merge.
@@ -247,7 +266,9 @@ impl YrsComputeEngine {
         end_row: u32,
         end_col: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        self.apply_merge_and_center(sheet_id, start_row, start_col, end_row, end_col)
+        self.with_history(|engine| {
+            engine.apply_merge_and_center(sheet_id, start_row, start_col, end_row, end_col)
+        })
     }
 
     /// Check whether merging a range would cause data loss.
@@ -275,7 +296,7 @@ impl YrsComputeEngine {
         &mut self,
         sheet_id: &SheetId,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        self.apply_clear_all_merges(sheet_id)
+        self.with_history(|engine| engine.apply_clear_all_merges(sheet_id))
     }
 
     /// Validate merges and remove any whose CellIds can no longer be resolved.
@@ -285,21 +306,16 @@ impl YrsComputeEngine {
         &mut self,
         sheet_id: &SheetId,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        self.apply_validate_and_clean_merges(sheet_id)
+        self.with_history(|engine| engine.apply_validate_and_clean_merges(sheet_id))
     }
 
     // -------------------------------------------------------------------
     // Cell identity and position mutations
     // -------------------------------------------------------------------
 
-    /// Get or create a CellId at a position in the Yrs document.
-    ///
-    /// If a cell already exists at (row, col), returns its CellId. Otherwise,
-    /// creates a new marker cell (null value) with a fresh UUID and returns it.
-    /// This writes to the Yrs CRDT document, establishing a stable identity
-    /// for the position.
-    ///
-    /// The CellId hex string is returned in `data`.
+    /// Resolve a CellId at a position, allocating a stable identity if absent.
+    /// Identity allocation leaves the authored value unchanged, including blanks.
+    /// Returns the CellId hex string in `data`.
     #[bridge::write]
     pub fn get_or_create_cell_id(
         &mut self,
@@ -307,14 +323,10 @@ impl YrsComputeEngine {
         row: u32,
         col: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        self.apply_get_or_create_cell_id(sheet_id, row, col)
+        self.without_history(|engine| engine.apply_get_or_create_cell_id(sheet_id, row, col))
     }
 
-    /// Update a cell's position in the Yrs document grid index.
-    ///
-    /// Moves the cell from its current position to (new_row, new_col) in the
-    /// Yrs CRDT's posToId/idToPos maps. Also updates the in-memory GridIndex.
-    /// The caller is responsible for ensuring the target position is available.
+    /// Move a stable cell identity to an available position in the native indexes.
     #[bridge::write]
     pub fn update_cell_position(
         &mut self,
@@ -323,7 +335,9 @@ impl YrsComputeEngine {
         new_row: u32,
         new_col: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        self.apply_update_cell_position(sheet_id, cell_id_hex, new_row, new_col)
+        self.without_history(|engine| {
+            engine.apply_update_cell_position(sheet_id, cell_id_hex, new_row, new_col)
+        })
     }
 
     /// Relocate cells from a source range to a target position with CellId preservation.
@@ -352,7 +366,7 @@ impl YrsComputeEngine {
     /// path no longer needs the kernel-side force-refresh.
     #[bridge::write]
     #[allow(clippy::too_many_arguments)]
-    pub fn relocate_cells_yrs(
+    pub fn relocate_cells(
         &mut self,
         source_sheet_id: &SheetId,
         src_start_row: u32,
@@ -363,15 +377,17 @@ impl YrsComputeEngine {
         target_row: u32,
         target_col: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        self.apply_relocate_cells_yrs(
-            source_sheet_id,
-            src_start_row,
-            src_start_col,
-            src_end_row,
-            src_end_col,
-            target_sheet_id,
-            target_row,
-            target_col,
-        )
+        self.with_history(|engine| {
+            engine.apply_relocate_cells(
+                source_sheet_id,
+                src_start_row,
+                src_start_col,
+                src_end_row,
+                src_end_col,
+                target_sheet_id,
+                target_row,
+                target_col,
+            )
+        })
     }
 }

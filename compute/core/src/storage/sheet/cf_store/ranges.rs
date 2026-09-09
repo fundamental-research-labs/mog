@@ -1,48 +1,32 @@
-use cell_types::SheetId;
-use compute_document::undo::ORIGIN_USER_EDIT;
-use yrs::{Doc, Map, MapRef, Origin, Out, Transact};
-
-use crate::storage::infra::grid_helpers::sheet_id_to_hex;
-
-use super::yrs_io::{get_cf_map, read_cf_from_yrs_map, write_cf_to_yrs};
 use crate::engine_types::cf::CFCellRange;
-
+use crate::storage::WorkbookStorage;
+use cell_types::SheetId;
 pub(super) fn cell_in_range(range: &CFCellRange, row: u32, col: u32) -> bool {
     range.contains(row, col)
 }
-
-// =============================================================================
-// Range Operations
-// =============================================================================
-
-/// Replace a format's ranges atomically. Empty ranges deletes the format.
 pub fn update_cf_ranges(
-    doc: &Doc,
-    sheets: &MapRef,
+    storage: &mut WorkbookStorage,
     format_id: &str,
     sheet_id: &SheetId,
     new_ranges: &[CFCellRange],
 ) -> bool {
-    let sheet_hex = sheet_id_to_hex(sheet_id);
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let cf_map = match get_cf_map(&txn, sheets, &sheet_hex) {
-        Some(m) => m,
-        None => return false,
+    crate::storage::engine::history::metadata::capture_sheet_entry!(
+        storage,
+        *sheet_id,
+        conditional_formats,
+        format_id
+    );
+
+    let Some(metadata) = storage.sheet_metadata.get_mut(sheet_id) else {
+        return false;
     };
-    let existing_map = match cf_map.get(&txn, format_id) {
-        Some(Out::YMap(m)) => m,
-        _ => return false,
-    };
-    let mut cf = match read_cf_from_yrs_map(&existing_map, &txn) {
-        Some(c) => c,
-        None => return false,
+    let Some(cf) = metadata.conditional_formats.get_mut(format_id) else {
+        return false;
     };
     if new_ranges.is_empty() {
-        cf_map.remove(&mut txn, format_id);
+        metadata.conditional_formats.remove(format_id);
     } else {
         cf.ranges = new_ranges.to_vec();
-        cf_map.remove(&mut txn, format_id);
-        write_cf_to_yrs(&mut txn, &cf_map, &cf);
     }
     true
 }

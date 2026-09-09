@@ -1,7 +1,7 @@
 //! Production XLSX import/apply/reapply contracts for conditional-format icon filters.
 use cell_types::{SheetId, SheetPos};
 use compute_core::bridge_types::CellInput;
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use domain_types::ColumnFilter;
 use value_types::CellValue;
 use xlsx_parser::write::ZipWriter;
@@ -66,8 +66,8 @@ fn fixture(
     zip.finish().unwrap()
 }
 
-fn loaded(bytes: &[u8]) -> (YrsComputeEngine, SheetId, String) {
-    let (engine, _) = YrsComputeEngine::from_xlsx_bytes(bytes).unwrap();
+fn loaded(bytes: &[u8]) -> (ComputeEngine, SheetId, String) {
+    let (engine, _) = ComputeEngine::from_xlsx_bytes(bytes).unwrap();
     let sheet = engine.mirror().sheet_by_name("Icons").unwrap();
     let filter = engine
         .get_filters_in_sheet(&sheet)
@@ -80,7 +80,7 @@ fn loaded(bytes: &[u8]) -> (YrsComputeEngine, SheetId, String) {
     );
     (engine, sheet, filter.id)
 }
-fn value(engine: &YrsComputeEngine, sheet: &SheetId, row: u32) -> CellValue {
+fn value(engine: &ComputeEngine, sheet: &SheetId, row: u32) -> CellValue {
     engine
         .mirror()
         .get_cell_value_at(sheet, SheetPos::new(row, 1))

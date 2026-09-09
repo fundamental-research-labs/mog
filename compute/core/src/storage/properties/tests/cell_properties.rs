@@ -3,8 +3,7 @@ use super::*;
 
 #[test]
 fn test_set_and_get_properties() {
-    let (mut storage, sid, gi) = storage_with_sheet();
-    let (doc, workbook, sheets) = (storage.doc(), storage.workbook_map(), storage.sheets());
+    let (mut storage, sid, _gi) = storage_with_sheet();
 
     let props = CellProperties {
         format: Some(CellFormat {
@@ -14,42 +13,50 @@ fn test_set_and_get_properties() {
         provenance: Some("ai".to_string()),
         ..Default::default()
     };
-    set_properties(doc, sheets, &sid, "cell-a", &props);
+    set_properties(
+        &mut storage,
+        &sid,
+        "00000000000000000000000000000017",
+        &props,
+    );
 
-    let got = get_properties(doc, workbook, sheets, &sid, "cell-a").unwrap();
+    let got = get_properties(&storage, &sid, "00000000000000000000000000000017").unwrap();
     assert_eq!(got.format.as_ref().unwrap().bold, Some(true));
     assert_eq!(got.provenance, Some("ai".to_string()));
 }
 
 #[test]
 fn test_clear_properties() {
-    let (mut storage, sid, gi) = storage_with_sheet();
-    let (doc, workbook, sheets) = (storage.doc(), storage.workbook_map(), storage.sheets());
+    let (mut storage, sid, _gi) = storage_with_sheet();
 
     let props = CellProperties {
         provenance: Some("user".to_string()),
         ..Default::default()
     };
-    set_properties(doc, sheets, &sid, "cell-b", &props);
-    assert!(get_properties(doc, workbook, sheets, &sid, "cell-b").is_some());
+    set_properties(
+        &mut storage,
+        &sid,
+        "00000000000000000000000000000018",
+        &props,
+    );
+    assert!(get_properties(&storage, &sid, "00000000000000000000000000000018").is_some());
 
-    clear_properties(doc, sheets, &sid, "cell-b");
-    assert!(get_properties(doc, workbook, sheets, &sid, "cell-b").is_none());
+    clear_properties(&mut storage, &sid, "00000000000000000000000000000018");
+    assert!(get_properties(&storage, &sid, "00000000000000000000000000000018").is_none());
 }
 
 #[test]
 fn test_set_and_get_cell_format() {
-    let (mut storage, sid, gi) = storage_with_sheet();
-    let (doc, workbook, sheets) = (storage.doc(), storage.workbook_map(), storage.sheets());
+    let (mut storage, sid, _gi) = storage_with_sheet();
 
     let fmt = CellFormat {
         font_size: Some(domain_types::FontSize::from_millipoints(14000)),
         bold: Some(true),
         ..Default::default()
     };
-    set_cell_format(doc, workbook, sheets, &sid, "cell-c", &fmt);
+    set_cell_format(&mut storage, &sid, "00000000000000000000000000000019", &fmt);
 
-    let got = get_cell_format(doc, workbook, sheets, &sid, "cell-c").unwrap();
+    let got = get_cell_format(&storage, &sid, "00000000000000000000000000000019").unwrap();
     assert_eq!(
         got.font_size,
         Some(domain_types::FontSize::from_millipoints(14000))
@@ -59,8 +66,7 @@ fn test_set_and_get_cell_format() {
 
 #[test]
 fn test_clear_cell_format_preserves_metadata() {
-    let (mut storage, sid, gi) = storage_with_sheet();
-    let (doc, workbook, sheets) = (storage.doc(), storage.workbook_map(), storage.sheets());
+    let (mut storage, sid, _gi) = storage_with_sheet();
 
     let props = CellProperties {
         format: Some(CellFormat {
@@ -70,19 +76,23 @@ fn test_clear_cell_format_preserves_metadata() {
         provenance: Some("import".to_string()),
         ..Default::default()
     };
-    set_properties(doc, sheets, &sid, "cell-d", &props);
+    set_properties(
+        &mut storage,
+        &sid,
+        "0000000000000000000000000000001a",
+        &props,
+    );
 
-    clear_cell_format(doc, workbook, sheets, &sid, "cell-d");
+    clear_cell_format(&mut storage, &sid, "0000000000000000000000000000001a");
 
-    let got = get_properties(doc, workbook, sheets, &sid, "cell-d").unwrap();
+    let got = get_properties(&storage, &sid, "0000000000000000000000000000001a").unwrap();
     assert!(got.format.is_none());
     assert_eq!(got.provenance, Some("import".to_string()));
 }
 
 #[test]
 fn test_clear_cell_format_deletes_when_empty() {
-    let (mut storage, sid, gi) = storage_with_sheet();
-    let (doc, workbook, sheets) = (storage.doc(), storage.workbook_map(), storage.sheets());
+    let (mut storage, sid, _gi) = storage_with_sheet();
 
     let props = CellProperties {
         format: Some(CellFormat {
@@ -91,72 +101,107 @@ fn test_clear_cell_format_deletes_when_empty() {
         }),
         ..Default::default()
     };
-    set_properties(doc, sheets, &sid, "cell-e", &props);
+    set_properties(
+        &mut storage,
+        &sid,
+        "0000000000000000000000000000001b",
+        &props,
+    );
 
-    clear_cell_format(doc, workbook, sheets, &sid, "cell-e");
-    assert!(get_properties(doc, workbook, sheets, &sid, "cell-e").is_none());
+    clear_cell_format(&mut storage, &sid, "0000000000000000000000000000001b");
+    assert!(get_properties(&storage, &sid, "0000000000000000000000000000001b").is_none());
 }
 
 #[test]
 fn test_batch_set_formats() {
-    let (mut storage, sid, gi) = storage_with_sheet();
-    let (doc, workbook, sheets) = (storage.doc(), storage.workbook_map(), storage.sheets());
+    let (mut storage, sid, _gi) = storage_with_sheet();
 
     let fmt = CellFormat {
         font_color: Some("#FF0000".to_string()),
         ..Default::default()
     };
-    set_cell_formats(doc, workbook, sheets, &sid, &["c1", "c2", "c3"], &fmt);
+    set_cell_formats(
+        &mut storage,
+        &sid,
+        &[
+            "00000000000000000000000000000014",
+            "00000000000000000000000000000015",
+            "00000000000000000000000000000016",
+        ],
+        &fmt,
+    );
 
-    for cid in &["c1", "c2", "c3"] {
-        let got = get_cell_format(doc, workbook, sheets, &sid, cid).unwrap();
+    for cid in &[
+        "00000000000000000000000000000014",
+        "00000000000000000000000000000015",
+        "00000000000000000000000000000016",
+    ] {
+        let got = get_cell_format(&storage, &sid, cid).unwrap();
         assert_eq!(got.font_color, Some("#FF0000".to_string()));
     }
 }
 
 #[test]
 fn test_batch_clear_formats() {
-    let (mut storage, sid, gi) = storage_with_sheet();
-    let (doc, workbook, sheets) = (storage.doc(), storage.workbook_map(), storage.sheets());
+    let (mut storage, sid, _gi) = storage_with_sheet();
 
     let fmt = CellFormat {
         bold: Some(true),
         ..Default::default()
     };
-    set_cell_formats(doc, workbook, sheets, &sid, &["c1", "c2"], &fmt);
+    set_cell_formats(
+        &mut storage,
+        &sid,
+        &[
+            "00000000000000000000000000000014",
+            "00000000000000000000000000000015",
+        ],
+        &fmt,
+    );
 
-    clear_cell_formats(doc, workbook, sheets, &sid, &["c1", "c2"]);
+    clear_cell_formats(
+        &mut storage,
+        &sid,
+        &[
+            "00000000000000000000000000000014",
+            "00000000000000000000000000000015",
+        ],
+    );
 
-    assert!(get_cell_format(doc, workbook, sheets, &sid, "c1").is_none());
-    assert!(get_cell_format(doc, workbook, sheets, &sid, "c2").is_none());
+    assert!(get_cell_format(&storage, &sid, "00000000000000000000000000000014").is_none());
+    assert!(get_cell_format(&storage, &sid, "00000000000000000000000000000015").is_none());
 }
 
 #[test]
 fn test_properties_nonexistent_sheet() {
-    let storage = YrsStorage::new();
-    let (doc, workbook, sheets) = (storage.doc(), storage.workbook_map(), storage.sheets());
+    let storage = WorkbookStorage::new();
     let sid = make_sheet_id(999);
 
-    assert!(get_properties(doc, workbook, sheets, &sid, "any").is_none());
-    assert!(get_cell_format(doc, workbook, sheets, &sid, "any").is_none());
+    assert!(get_properties(&storage, &sid, "00000000000000000000000000000013").is_none());
+    assert!(get_cell_format(&storage, &sid, "00000000000000000000000000000013").is_none());
     assert!(get_row_format(&storage, &sid, 0, None).is_none());
     assert!(get_col_format(&storage, &sid, 0, None).is_none());
-    assert!(is_cell_locked(doc, workbook, sheets, &sid, "any")); // default true
-    assert!(!is_formula_hidden(doc, workbook, sheets, &sid, "any")); // default false
+    assert!(is_cell_locked(
+        &storage,
+        &sid,
+        "00000000000000000000000000000013"
+    )); // default true
+    assert!(!is_formula_hidden(
+        &storage,
+        &sid,
+        "00000000000000000000000000000013"
+    )); // default false
 }
 
 #[test]
 fn test_set_cell_format_merges() {
-    let (mut storage, sid, gi) = storage_with_sheet();
-    let (doc, workbook, sheets) = (storage.doc(), storage.workbook_map(), storage.sheets());
+    let (mut storage, sid, _gi) = storage_with_sheet();
 
     // First set: bold
     set_cell_format(
-        storage.doc(),
-        storage.workbook_map(),
-        storage.sheets(),
+        &mut storage,
         &sid,
-        "merge-cell",
+        "0000000000000000000000000000001f",
         &CellFormat {
             bold: Some(true),
             ..Default::default()
@@ -165,32 +210,27 @@ fn test_set_cell_format_merges() {
 
     // Second set: italic (should merge, not replace)
     set_cell_format(
-        storage.doc(),
-        storage.workbook_map(),
-        storage.sheets(),
+        &mut storage,
         &sid,
-        "merge-cell",
+        "0000000000000000000000000000001f",
         &CellFormat {
             italic: Some(true),
             ..Default::default()
         },
     );
 
-    let got = get_cell_format(doc, workbook, sheets, &sid, "merge-cell").unwrap();
+    let got = get_cell_format(&storage, &sid, "0000000000000000000000000000001f").unwrap();
     assert_eq!(got.bold, Some(true));
     assert_eq!(got.italic, Some(true));
 }
 #[test]
 fn test_wrap_text_and_shrink_to_fit_are_exclusive_for_cell_formats() {
-    let (storage, sid, _gi) = storage_with_sheet();
-    let (doc, workbook, sheets) = (storage.doc(), storage.workbook_map(), storage.sheets());
+    let (mut storage, sid, _gi) = storage_with_sheet();
 
     set_cell_format(
-        doc,
-        workbook,
-        sheets,
+        &mut storage,
         &sid,
-        "cell-wrap-shrink",
+        "0000000000000000000000000000001c",
         &CellFormat {
             wrap_text: Some(true),
             ..Default::default()
@@ -198,34 +238,30 @@ fn test_wrap_text_and_shrink_to_fit_are_exclusive_for_cell_formats() {
     );
 
     set_cell_format(
-        doc,
-        workbook,
-        sheets,
+        &mut storage,
         &sid,
-        "cell-wrap-shrink",
+        "0000000000000000000000000000001c",
         &CellFormat {
             shrink_to_fit: Some(true),
             ..Default::default()
         },
     );
 
-    let got = get_cell_format(doc, workbook, sheets, &sid, "cell-wrap-shrink").unwrap();
+    let got = get_cell_format(&storage, &sid, "0000000000000000000000000000001c").unwrap();
     assert_eq!(got.wrap_text, Some(false));
     assert_eq!(got.shrink_to_fit, Some(true));
 
     set_cell_format(
-        doc,
-        workbook,
-        sheets,
+        &mut storage,
         &sid,
-        "cell-wrap-shrink",
+        "0000000000000000000000000000001c",
         &CellFormat {
             wrap_text: Some(true),
             ..Default::default()
         },
     );
 
-    let got = get_cell_format(doc, workbook, sheets, &sid, "cell-wrap-shrink").unwrap();
+    let got = get_cell_format(&storage, &sid, "0000000000000000000000000000001c").unwrap();
     assert_eq!(got.wrap_text, Some(true));
     assert_eq!(got.shrink_to_fit, Some(false));
 }
@@ -233,9 +269,6 @@ fn test_wrap_text_and_shrink_to_fit_are_exclusive_for_cell_formats() {
 #[test]
 fn test_set_cell_formats_preserves_compact_palette_format() {
     let (mut storage, sid, _gi) = storage_with_sheet();
-    let doc = storage.doc();
-    let workbook = storage.workbook_map().clone();
-    let sheets = storage.sheets().clone();
 
     // 1. Simulate xlsx hydration: write a style palette entry
     let fmt = CellFormat {
@@ -245,44 +278,12 @@ fn test_set_cell_formats_preserves_compact_palette_format() {
         number_format: Some("#,##0".to_string()),
         ..Default::default()
     };
-    let fmt_json = serde_json::to_string(&fmt).unwrap();
-    {
-        let mut txn = doc.transact_mut();
-        // Create stylePalette in workbook map
-        let palette_prelim: MapPrelim =
-            vec![("5", Any::String(std::sync::Arc::from(fmt_json.as_str())))]
-                .into_iter()
-                .collect();
-        workbook.insert(
-            &mut txn,
-            compute_document::schema::KEY_STYLE_PALETTE,
-            palette_prelim,
-        );
-    }
-
-    // 2. Write compact JSON to cellProperties (like hydrate_cell_styles does)
+    insert_style_palette_entry(&mut storage, 5, &fmt);
     let cell_hex = "deadbeef00000000deadbeef00000000";
-    {
-        let mut txn = doc.transact_mut();
-        let sheet_hex = id_to_hex(sid.as_u128());
-        let sheet_map = match sheets.get(&txn, &sheet_hex) {
-            Some(Out::YMap(m)) => m,
-            _ => panic!("sheet map not found"),
-        };
-        let props_map = match sheet_map.get(&txn, KEY_CELL_PROPERTIES) {
-            Some(Out::YMap(m)) => m,
-            _ => panic!("cellProperties map not found"),
-        };
-        // Compact format: {"s":5}
-        props_map.insert(
-            &mut txn,
-            cell_hex,
-            Any::String(std::sync::Arc::from(r#"{"s":5}"#)),
-        );
-    }
+    insert_compact_cell_properties(&mut storage, &sid, cell_hex, r#"{"s":5}"#);
 
     // 3. Verify get_properties reads the compact format correctly
-    let existing = get_properties(doc, &workbook, &sheets, &sid, cell_hex);
+    let existing = get_properties(&storage, &sid, cell_hex);
     assert!(
         existing.is_some(),
         "get_properties should return Some for compact format cell"
@@ -310,10 +311,10 @@ fn test_set_cell_formats_preserves_compact_palette_format() {
         }),
         ..Default::default()
     };
-    set_cell_formats(doc, &workbook, &sheets, &sid, &[cell_hex], &border_fmt);
+    set_cell_formats(&mut storage, &sid, &[cell_hex], &border_fmt);
 
     // 5. Read back and verify ALL format properties are preserved
-    let after = get_properties(doc, &workbook, &sheets, &sid, cell_hex);
+    let after = get_properties(&storage, &sid, cell_hex);
     assert!(
         after.is_some(),
         "properties should exist after set_cell_formats"
@@ -359,10 +360,7 @@ fn test_set_cell_formats_preserves_compact_palette_format() {
 fn preloaded_cell_format_layers_intern_compact_palette_styles_and_materialize_defaults() {
     use cell_types::CellId;
 
-    let (storage, sid, _gi) = storage_with_sheet();
-    let doc = storage.doc();
-    let workbook = storage.workbook_map().clone();
-    let sheets = storage.sheets().clone();
+    let (mut storage, sid, _gi) = storage_with_sheet();
     let first_id = CellId::from_raw(0xA1);
     let second_id = CellId::from_raw(0xB1);
 
@@ -371,46 +369,12 @@ fn preloaded_cell_format_layers_intern_compact_palette_styles_and_materialize_de
         font_family: Some("Calibri".to_string()),
         ..Default::default()
     };
-    let palette_json = serde_json::to_string(&palette_format).unwrap();
-    {
-        let mut txn = doc.transact_mut();
-        let palette_prelim: MapPrelim = vec![(
-            "7",
-            Any::String(std::sync::Arc::from(palette_json.as_str())),
-        )]
-        .into_iter()
-        .collect();
-        workbook.insert(
-            &mut txn,
-            compute_document::schema::KEY_STYLE_PALETTE,
-            palette_prelim,
-        );
-
-        let sheet_hex = id_to_hex(sid.as_u128());
-        let sheet_map = match sheets.get(&txn, &sheet_hex) {
-            Some(Out::YMap(map)) => map,
-            _ => panic!("sheet map not found"),
-        };
-        let props_map = match sheet_map.get(&txn, KEY_CELL_PROPERTIES) {
-            Some(Out::YMap(map)) => map,
-            _ => panic!("cell properties map not found"),
-        };
-        for cell_id in [first_id, second_id] {
-            props_map.insert(
-                &mut txn,
-                id_to_hex(cell_id.as_u128()),
-                Any::String(std::sync::Arc::from(r#"{"s":7}"#)),
-            );
-        }
+    insert_style_palette_entry(&mut storage, 7, &palette_format);
+    for id in [first_id, second_id] {
+        insert_compact_cell_properties(&mut storage, &sid, &id_to_hex(id.as_u128()), r#"{"s":7}"#);
     }
 
-    let layers = get_cell_format_layers_for_ids(
-        doc,
-        &workbook,
-        &sheets,
-        &sid,
-        &[second_id, first_id, second_id],
-    );
+    let layers = get_cell_format_layers_for_ids(&storage, &sid, &[second_id, first_id, second_id]);
     let first = layers.get(&first_id).expect("first compact style");
     let second = layers.get(&second_id).expect("second compact style");
     assert!(
@@ -433,8 +397,7 @@ fn preloaded_cell_format_layers_intern_compact_palette_styles_and_materialize_de
 
 #[test]
 fn test_clear_formula_cache_metadata_preserves_unrelated_properties() {
-    let (storage, sid, _gi) = storage_with_sheet();
-    let (doc, workbook, sheets) = (storage.doc(), storage.workbook_map(), storage.sheets());
+    let (mut storage, sid, _gi) = storage_with_sheet();
 
     let props = CellProperties {
         format: Some(CellFormat {
@@ -454,11 +417,16 @@ fn test_clear_formula_cache_metadata_preserves_unrelated_properties() {
         original_value: Some("cached".to_string()),
         ..Default::default()
     };
-    set_properties(doc, sheets, &sid, "formula-cell", &props);
+    set_properties(
+        &mut storage,
+        &sid,
+        "0000000000000000000000000000001d",
+        &props,
+    );
 
-    clear_formula_cache_metadata(doc, workbook, sheets, &sid, "formula-cell");
+    clear_formula_cache_metadata(&mut storage, &sid, "0000000000000000000000000000001d");
 
-    let got = get_properties(doc, workbook, sheets, &sid, "formula-cell").unwrap();
+    let got = get_properties(&storage, &sid, "0000000000000000000000000000001d").unwrap();
     assert_eq!(got.format.as_ref().unwrap().bold, Some(true));
     assert_eq!(got.provenance.as_deref(), Some("import"));
     assert_eq!(got.formula_result_type, None);
@@ -471,25 +439,28 @@ fn test_clear_formula_cache_metadata_preserves_unrelated_properties() {
 
 #[test]
 fn test_clear_formula_cache_metadata_deletes_entry_when_empty() {
-    let (storage, sid, _gi) = storage_with_sheet();
-    let (doc, workbook, sheets) = (storage.doc(), storage.workbook_map(), storage.sheets());
+    let (mut storage, sid, _gi) = storage_with_sheet();
 
     let props = CellProperties {
         formula_result_type: Some(1),
         has_empty_cached_value: true,
         ..Default::default()
     };
-    set_properties(doc, sheets, &sid, "formula-only", &props);
+    set_properties(
+        &mut storage,
+        &sid,
+        "0000000000000000000000000000001e",
+        &props,
+    );
 
-    clear_formula_cache_metadata(doc, workbook, sheets, &sid, "formula-only");
+    clear_formula_cache_metadata(&mut storage, &sid, "0000000000000000000000000000001e");
 
-    assert!(get_properties(doc, workbook, sheets, &sid, "formula-only").is_none());
+    assert!(get_properties(&storage, &sid, "0000000000000000000000000000001e").is_none());
 }
 
 #[test]
-fn test_clear_formula_cache_metadata_for_cell_ids_batches_one_transaction() {
-    let (storage, sid, _gi) = storage_with_sheet();
-    let (doc, workbook, sheets) = (storage.doc(), storage.workbook_map(), storage.sheets());
+fn test_clear_formula_cache_metadata_for_cell_ids_preserves_unrelated_properties() {
+    let (mut storage, sid, _gi) = storage_with_sheet();
     let keep_id = cell_types::CellId::from_raw(100);
     let delete_id = cell_types::CellId::from_raw(101);
     let keep_hex = compute_document::hex::id_to_hex(keep_id.as_u128());
@@ -509,47 +480,14 @@ fn test_clear_formula_cache_metadata_for_cell_ids_batches_one_transaction() {
         has_empty_cached_value: true,
         ..Default::default()
     };
-    set_properties(doc, sheets, &sid, &keep_hex, &keep_props);
-    set_properties(doc, sheets, &sid, &delete_hex, &delete_props);
+    set_properties(&mut storage, &sid, &keep_hex, &keep_props);
+    set_properties(&mut storage, &sid, &delete_hex, &delete_props);
 
-    let update_count = std::sync::Arc::new(std::sync::Mutex::new(0usize));
-    let subscription = {
-        let update_count = std::sync::Arc::clone(&update_count);
-        compute_collab::subscribe_update_v1(doc, move |_| {
-            *update_count.lock().expect("update count poisoned") += 1;
-        })
-    };
+    clear_formula_cache_metadata_for_cell_ids(&mut storage, &sid, &[keep_id, delete_id]);
 
-    clear_formula_cache_metadata_for_cell_ids(doc, workbook, sheets, &sid, &[keep_id, delete_id]);
-
-    assert_eq!(
-        *update_count.lock().expect("update count poisoned"),
-        1,
-        "batch metadata cleanup should emit one provider update"
-    );
-    drop(subscription);
-
-    let kept = get_properties(doc, workbook, sheets, &sid, &keep_hex).unwrap();
+    let kept = get_properties(&storage, &sid, &keep_hex).unwrap();
     assert_eq!(kept.format.as_ref().unwrap().bold, Some(true));
     assert_eq!(kept.formula_result_type, None);
     assert!(!kept.has_empty_cached_value);
-    assert!(get_properties(doc, workbook, sheets, &sid, &delete_hex).is_none());
-}
-
-/// Helper: create a storage with a sheet and get a mutable SheetMirror reference.
-fn storage_with_sheet_and_mirror() -> (
-    crate::storage::YrsStorage,
-    SheetId,
-    GridIndex,
-    crate::mirror::CellMirror,
-) {
-    let mut storage = crate::storage::YrsStorage::new();
-    let mut mirror = crate::mirror::CellMirror::new();
-    let sid = make_sheet_id(1);
-    storage
-        .add_sheet(&mut mirror, sid, "Sheet1", 100, 26)
-        .unwrap();
-    let id_alloc = std::sync::Arc::new(cell_types::IdAllocator::new());
-    let gi = GridIndex::new(sid, 100, 26, id_alloc);
-    (storage, sid, gi, mirror)
+    assert!(get_properties(&storage, &sid, &delete_hex).is_none());
 }

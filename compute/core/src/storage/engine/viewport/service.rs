@@ -23,7 +23,7 @@ pub(crate) struct ViewportRegistration {
 
 /// Groups viewport-specific state: named viewport registry and per-sheet format palettes.
 ///
-/// This is the first sub-struct extracted from `YrsComputeEngine` to reduce
+/// This is the first sub-struct extracted from `ComputeEngine` to reduce
 /// god-object field sprawl. Both fields are exclusively used by viewport
 /// rendering / patch production and have zero entanglement with the mutation
 /// pipeline or CellMirror.
@@ -58,7 +58,7 @@ impl ViewportService {
         }
     }
 
-    /// Clear all viewport state (used on document reload / undo-redo).
+    /// Clear all viewport state (used on document reload).
     pub fn clear(&self) {
         self.registered_viewports.borrow_mut().clear();
         self.format_palettes.borrow_mut().clear();
@@ -111,41 +111,5 @@ impl ViewportService {
             .filter(|(_, reg)| reg.sheet_id == *sheet_id)
             .map(|(id, reg)| (id.clone(), reg.bounds))
             .collect()
-    }
-
-    /// Merge two multi-viewport binary payloads into one.
-    ///
-    /// If either is empty (<=2 bytes = just viewport_count header), return the other.
-    /// Otherwise, concatenate the raw viewport entries from both.
-    pub(crate) fn merge_patch_binaries(a: &[u8], b: &[u8]) -> Vec<u8> {
-        let a_empty = a.len() <= 2;
-        let b_empty = b.len() <= 2;
-
-        if a_empty && b_empty {
-            return compute_wire::mutation::serialize_multi_viewport_patches(&[]);
-        }
-        if a_empty {
-            return b.to_vec();
-        }
-        if b_empty {
-            return a.to_vec();
-        }
-
-        if a.len() < 2 || b.len() < 2 {
-            return a.to_vec();
-        }
-        let count_a = u16::from_le_bytes([a[0], a[1]]);
-        let count_b = u16::from_le_bytes([b[0], b[1]]);
-        let total_count = count_a + count_b;
-
-        let mut out = Vec::with_capacity(a.len() + b.len());
-        out.extend_from_slice(&total_count.to_le_bytes());
-        if a.len() > 2 {
-            out.extend_from_slice(&a[2..]);
-        }
-        if b.len() > 2 {
-            out.extend_from_slice(&b[2..]);
-        }
-        out
     }
 }

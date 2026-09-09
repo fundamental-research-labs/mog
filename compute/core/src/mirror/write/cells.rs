@@ -2,7 +2,6 @@ use cell_types::{CellId, SheetId, SheetPos};
 use formula_types::IdentityFormula;
 use value_types::CellValue;
 
-use super::{clear_col_value, write_col_value};
 use crate::mirror::cell_mirror::CellMirror;
 use crate::mirror::types::{CellEdit, CellEntry};
 
@@ -13,15 +12,17 @@ impl CellMirror {
             Some(sid) => sid,
             None => return false,
         };
-        let mut invalidate_col: Option<u32> = None;
+        let mut updated_pos = None;
         if let Some(sheet) = self.sheets.get_mut(&sheet_id) {
             if sheet.cells.contains_key(cell_id) {
                 if let Some(&pos) = sheet.id_to_pos.get(cell_id) {
-                    let (_row, col) = (pos.row(), pos.col());
                     #[cfg(feature = "journal")]
-                    let old_val_for_journal = write_col_value(sheet, pos, value.clone());
-                    #[cfg(not(feature = "journal"))]
-                    write_col_value(sheet, pos, value.clone());
+                    let (row, col) = (pos.row(), pos.col());
+                    #[cfg(feature = "journal")]
+                    let old_val_for_journal =
+                        sheet.value_at(pos).cloned().unwrap_or(CellValue::Null);
+                    sheet.note_column_position(pos);
+                    sheet.consume_range_value(pos);
                     // Expand sheet dimensions so range materialisation sees the cells.
                     if pos.row() + 1 > sheet.rows {
                         sheet.rows = pos.row() + 1;
@@ -35,7 +36,7 @@ impl CellMirror {
                     if pos.col() + 1 > sheet.grid_cols {
                         sheet.grid_cols = pos.col() + 1;
                     }
-                    invalidate_col = Some(col);
+                    updated_pos = Some(pos);
                     #[cfg(feature = "journal")]
                     crate::journal_write!(
                         sheet_id,
@@ -58,39 +59,15 @@ impl CellMirror {
         } else {
             return false;
         }
-        if let Some(col) = invalidate_col {
-            self.dense_cache.invalidate(&sheet_id, col);
-            self.bump_col_version(&sheet_id, col);
+        if let Some(pos) = updated_pos {
+            let sheets = &self.sheets;
+            self.dense_cache
+                .update_cell(sheet_id, pos.col(), pos.row(), || {
+                    sheets[&sheet_id].value_at(pos)
+                });
+            self.bump_col_version(&sheet_id, pos.col());
         }
         true
-    }
-
-    /// Set the CellEntry.value without updating col_data.
-    ///
-    /// Used by dynamic array spill handling to store the full `CellValue::Array` in the
-    /// source cell's entry while col_data retains the top-left scalar for aggregation
-    /// reads. Normal writes should use `set_value_mut` which updates both.
-    pub fn set_entry_value_only(&mut self, cell_id: &CellId, value: CellValue) -> bool {
-        if let Some(sheet_id) = self.cell_to_sheet.get(cell_id)
-            && let Some(sheet) = self.sheets.get_mut(sheet_id)
-            && let Some(entry) = sheet.cells.get_mut(cell_id)
-        {
-            #[cfg(feature = "journal")]
-            {
-                let old_val = crate::journal::journal_fmt_value(&entry.value);
-                let new_val = crate::journal::journal_fmt_value(&value);
-                crate::journal::record(crate::journal::JournalEvent::EntryWrite {
-                    cell: *cell_id,
-                    field: "value",
-                    old_value: old_val,
-                    new_value: new_val,
-                    source: "set_entry_value_only",
-                });
-            }
-            entry.value = value;
-            return true;
-        }
-        false
     }
 
     /// Set the formula of an existing cell (across all sheets).
@@ -105,9 +82,7 @@ impl CellMirror {
         false
     }
 
-    /// Insert a cell into a specific sheet at the given position.
-    ///
-    /// Silently ignored if the sheet does not exist.
+    /// Insert or replace an identity-keyed cell, keeping both position indexes coherent.
     pub fn insert_cell(
         &mut self,
         sheet: &SheetId,
@@ -115,40 +90,122 @@ impl CellMirror {
         pos: SheetPos,
         entry: CellEntry,
     ) {
+        if !self.sheets.contains_key(sheet) {
+            return;
+        }
+        if let Some(old_sheet_id) = self
+            .cell_to_sheet
+            .get(&cell_id)
+            .copied()
+            .filter(|old| old != sheet)
+        {
+            let old_pos = if let Some(old_sheet) = self.sheets.get_mut(&old_sheet_id) {
+                old_sheet.cells.remove(&cell_id);
+                let old_pos = old_sheet.id_to_pos.remove(&cell_id);
+                if let Some(old_pos) = old_pos {
+                    if old_sheet.pos_to_id.get(&old_pos) == Some(&cell_id) {
+                        old_sheet.pos_to_id.remove(&old_pos);
+                    }
+                    old_sheet.generated_values.remove(&old_pos);
+                }
+                old_pos
+            } else {
+                None
+            };
+            if let Some(old_pos) = old_pos {
+                self.dense_cache.invalidate(&old_sheet_id, old_pos.col());
+                self.bump_col_version(&old_sheet_id, old_pos.col());
+            }
+        }
+        let mut previous_col = None;
         if let Some(s) = self.sheets.get_mut(sheet) {
-            write_col_value(s, pos, entry.value.clone());
+            if let Some(old_pos) = s.id_to_pos.get(&cell_id).copied().filter(|old| *old != pos) {
+                if s.pos_to_id.get(&old_pos) == Some(&cell_id) {
+                    s.pos_to_id.remove(&old_pos);
+                }
+                s.generated_values.remove(&old_pos);
+                previous_col = Some(old_pos.col());
+            }
+            if !entry.is_ghost() || cell_id.is_virtual() {
+                s.consume_range_value(pos);
+            }
             s.cells.insert(cell_id, entry);
             s.pos_to_id.insert(pos, cell_id);
             s.id_to_pos.insert(cell_id, pos);
             self.cell_to_sheet.insert(cell_id, *sheet);
+            s.note_column_position(pos);
             s.expand_extent(pos);
         }
-        // Invalidate dense column cache for the affected column.
-        self.dense_cache.invalidate(sheet, pos.col());
+        if let Some(col) = previous_col {
+            self.dense_cache.invalidate(sheet, col);
+            self.dense_cache.invalidate(sheet, pos.col());
+            if col != pos.col() {
+                self.bump_col_version(sheet, col);
+            }
+        } else {
+            let sheets = &self.sheets;
+            self.dense_cache
+                .update_cell(*sheet, pos.col(), pos.row(), || sheets[sheet].value_at(pos));
+        }
         self.bump_col_version(sheet, pos.col());
     }
 
-    /// Remove a cell by CellId (across all sheets).
-    pub fn remove_cell(&mut self, cell_id: &CellId) {
-        let mut invalidate_info: Option<(SheetId, u32)> = None;
-        for (sheet_id, sheet) in self.sheets.iter_mut() {
-            if sheet.cells.remove(cell_id).is_some() {
-                if let Some(pos) = sheet.id_to_pos.remove(cell_id) {
-                    sheet.pos_to_id.remove(&pos);
-                    clear_col_value(sheet, pos);
-                    // If this column has Range-backed data, rebuild col_data so
-                    // the payload value is restored instead of leaving Null.
-                    // For non-Range columns this returns early (no-op).
-                    sheet.rebuild_col_data(pos.col());
-                    invalidate_info = Some((*sheet_id, pos.col()));
-                }
-                break;
-            }
+    /// Move a cell identity and any authored entry without cloning its value or formula.
+    /// Returns false when the cell or destination sheet does not exist.
+    pub fn move_cell(
+        &mut self,
+        cell_id: &CellId,
+        destination_sheet: &SheetId,
+        pos: SheetPos,
+    ) -> bool {
+        if !self.sheets.contains_key(destination_sheet) {
+            return false;
         }
-        self.cell_to_sheet.remove(cell_id);
-        if let Some((sheet_id, col)) = invalidate_info {
-            self.dense_cache.invalidate(&sheet_id, col);
-            self.bump_col_version(&sheet_id, col);
+        let Some(source_sheet) = self.cell_to_sheet.get(cell_id).copied() else {
+            return false;
+        };
+        let entry = self
+            .sheets
+            .get_mut(&source_sheet)
+            .and_then(|sheet| sheet.cells.remove(cell_id));
+        if let Some(entry) = entry {
+            self.insert_cell(destination_sheet, *cell_id, pos, entry);
+        } else {
+            let Some(source) = self.sheets.get_mut(&source_sheet) else {
+                return false;
+            };
+            let Some(old_pos) = source.id_to_pos.remove(cell_id) else {
+                return false;
+            };
+            if source.pos_to_id.get(&old_pos) == Some(cell_id) {
+                source.pos_to_id.remove(&old_pos);
+            }
+            let destination = self.sheets.get_mut(destination_sheet).unwrap();
+            destination.id_to_pos.insert(*cell_id, pos);
+            destination.pos_to_id.insert(pos, *cell_id);
+            destination.expand_identity_extent(pos);
+            self.cell_to_sheet.insert(*cell_id, *destination_sheet);
+        }
+        true
+    }
+
+    /// Remove an authored entry; consumed imported values stay cleared.
+    pub fn remove_cell(&mut self, cell_id: &CellId) {
+        let Some(sheet_id) = self.cell_to_sheet.remove(cell_id) else {
+            return;
+        };
+        let Some(sheet) = self.sheets.get_mut(&sheet_id) else {
+            return;
+        };
+        sheet.cells.remove(cell_id);
+        let pos = sheet.id_to_pos.remove(cell_id);
+        if let Some(pos) = pos {
+            if sheet.pos_to_id.get(&pos) == Some(cell_id) {
+                sheet.pos_to_id.remove(&pos);
+            }
+            sheet.generated_values.remove(&pos);
+            self.dense_cache.invalidate(&sheet_id, pos.col());
+            self.bump_col_version(&sheet_id, pos.col());
         }
     }
 
@@ -163,39 +220,15 @@ impl CellMirror {
         value: CellValue,
         formula: Option<IdentityFormula>,
     ) {
-        let entry = CellEntry {
-            value: value.clone(),
-            formula: formula.map(Box::new),
-        };
-        if let Some(s) = self.sheets.get_mut(sheet_id) {
-            s.cells.insert(cell_id, entry);
-            s.pos_to_id.insert(pos, cell_id);
-            s.id_to_pos.insert(cell_id, pos);
-            self.cell_to_sheet.insert(cell_id, *sheet_id);
-            write_col_value(s, pos, value);
-            s.expand_extent(pos);
-
-            // If this position is inside a Range, track it as an override so
-            // the compaction threshold stays accurate.
-            let owning_range_id = s
-                .range_spatial_index
-                .query(pos.row(), pos.col())
-                .first()
-                .map(|ext| ext.range_id);
-            if let Some(range_id) = owning_range_id
-                && let (Some(row_id), Some(col_id)) = (
-                    s.index_to_row.get(&pos.row()).copied(),
-                    s.index_to_col.get(&pos.col()).copied(),
-                )
-                && let Some(rv) = s.range_views.get_mut(&range_id)
-            {
-                rv.overrides.insert((row_id, col_id), cell_id);
-                rv.override_count = rv.overrides.len() as u32;
-            }
-        }
-        // Invalidate dense column cache for the affected column.
-        self.dense_cache.invalidate(sheet_id, pos.col());
-        self.bump_col_version(sheet_id, pos.col());
+        self.insert_cell(
+            sheet_id,
+            cell_id,
+            pos,
+            CellEntry {
+                value,
+                formula: formula.map(Box::new),
+            },
+        );
     }
 
     /// Apply a batch of edits.

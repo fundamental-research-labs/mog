@@ -105,7 +105,7 @@ fn conditional_format_dxf_id_without_live_style_fields_is_not_exported() {
             sheet_id: "sheet-1".to_string(),
             pivot: None,
             ranges: vec![CFCellRange::single(0, 0)],
-            range_identities: None,
+
             rules: vec![CFRule::CellValue {
                 id: "rule-1".to_string(),
                 operator: ooxml_types::cond_format::CfOperator::GreaterThan,
@@ -164,7 +164,7 @@ fn conditional_format_live_style_overrides_stale_dxf_id() {
             sheet_id: "sheet-1".to_string(),
             pivot: None,
             ranges: vec![CFCellRange::single(0, 0)],
-            range_identities: None,
+
             rules: vec![CFRule::CellValue {
                 id: "rule-1".to_string(),
                 operator: ooxml_types::cond_format::CfOperator::GreaterThan,
@@ -251,7 +251,7 @@ fn live_conditional_format_styles_allocate_dxfs_and_parse_back() {
             sheet_id: "sheet-1".to_string(),
             pivot: None,
             ranges: vec![CFCellRange::single(0, 0)],
-            range_identities: None,
+
             rules: vec![CFRule::CellValue {
                 id: "rule-1".to_string(),
                 operator: ooxml_types::cond_format::CfOperator::GreaterThan,

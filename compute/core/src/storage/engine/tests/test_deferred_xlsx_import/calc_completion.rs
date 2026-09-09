@@ -5,7 +5,7 @@ use value_types::CellValue;
 #[test]
 fn deferred_xlsx_full_calc_on_load_recalculates_empty_formula_caches_on_completion() {
     let bytes = deferred_calc_fixture_xlsx(DeferredCalcFixtureMode::FullCalcOnLoad);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     engine
         .import_from_xlsx_bytes_deferred(&bytes)
         .expect("deferred XLSX import should succeed");
@@ -31,7 +31,7 @@ fn deferred_xlsx_full_calc_on_load_recalculates_empty_formula_caches_on_completi
 #[test]
 fn deferred_xlsx_force_full_calc_recalculates_even_when_manual() {
     let bytes = deferred_calc_fixture_xlsx(DeferredCalcFixtureMode::ForceFullCalcManual);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     engine
         .import_from_xlsx_bytes_deferred(&bytes)
         .expect("deferred XLSX import should succeed");
@@ -62,7 +62,7 @@ fn deferred_xlsx_force_full_calc_recalculates_even_when_manual() {
 #[test]
 fn deferred_xlsx_without_force_calc_keeps_empty_formula_caches_until_explicit_recalc() {
     let bytes = deferred_calc_fixture_xlsx(DeferredCalcFixtureMode::Control);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     engine
         .import_from_xlsx_bytes_deferred(&bytes)
         .expect("deferred XLSX import should succeed");
@@ -113,7 +113,7 @@ fn deferred_xlsx_without_force_calc_keeps_empty_formula_caches_until_explicit_re
 #[test]
 fn deferred_xlsx_default_calculation_options_perform_pending_first_calculation() {
     let bytes = deferred_calc_fixture_xlsx(DeferredCalcFixtureMode::Control);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     engine.import_from_xlsx_bytes_deferred(&bytes).unwrap();
     engine.complete_deferred_hydration().unwrap();
     let (first, second) = sheet_ids(&engine);

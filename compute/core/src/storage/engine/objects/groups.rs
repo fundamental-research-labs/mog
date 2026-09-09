@@ -1,20 +1,20 @@
 use super::shared;
 use crate::engine_types::SerializedFloatingObjectGroup;
 use crate::snapshot::MutationResult;
-use crate::storage::engine::YrsComputeEngine;
+use crate::storage::engine::ComputeEngine;
 use crate::storage::engine::services;
 use bridge_core as bridge;
 use cell_types::SheetId;
 use value_types::ComputeError;
 
 #[bridge::api(
-    service = "YrsComputeEngine",
+    service = "ComputeEngine",
     key = "doc_id",
     group = "objects_groups",
     fn_prefix = "compute",
     crate_path = "compute_core"
 )]
-impl YrsComputeEngine {
+impl ComputeEngine {
     #[bridge::write]
     pub fn set_floating_object_group(
         &mut self,
@@ -22,8 +22,15 @@ impl YrsComputeEngine {
         group_id: &str,
         json: serde_json::Value,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::set_floating_object_group(&mut self.stores, sheet_id, group_id, json)
+        self.with_history(|engine| {
+            services::objects::set_floating_object_group(
+                &mut engine.stores,
+                sheet_id,
+                group_id,
+                json,
+            )
             .map(shared::with_empty_patches)
+        })
     }
 
     #[bridge::read]
@@ -49,8 +56,10 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         group_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::delete_floating_object_group(&mut self.stores, sheet_id, group_id)
-            .map(shared::with_empty_patches)
+        self.with_history(|engine| {
+            services::objects::delete_floating_object_group(&mut engine.stores, sheet_id, group_id)
+                .map(shared::with_empty_patches)
+        })
     }
 
     // -------------------------------------------------------------------
@@ -60,8 +69,10 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         config: &serde_json::Value,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::create_floating_object_group(&mut self.stores, sheet_id, config)
-            .map(shared::with_empty_patches)
+        self.with_history(|engine| {
+            services::objects::create_floating_object_group(&mut engine.stores, sheet_id, config)
+                .map(shared::with_empty_patches)
+        })
     }
 
     /// Update a floating object group by merging partial JSON updates.
@@ -72,13 +83,15 @@ impl YrsComputeEngine {
         group_id: &str,
         updates: &serde_json::Value,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::update_floating_object_group(
-            &mut self.stores,
-            sheet_id,
-            group_id,
-            updates,
-        )
-        .map(shared::with_empty_patches)
+        self.with_history(|engine| {
+            services::objects::update_floating_object_group(
+                &mut engine.stores,
+                sheet_id,
+                group_id,
+                updates,
+            )
+            .map(shared::with_empty_patches)
+        })
     }
 
     /// Get a single floating object group by ID as a typed struct.

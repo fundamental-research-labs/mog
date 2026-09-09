@@ -12,7 +12,6 @@ const FOCUSED_MODULES: &[&str] = &[
     "format_inference.rs",
     "pivot_materialization.rs",
     "recalc.rs",
-    "sync_pipeline.rs",
     "mutation_dispatch.rs",
 ];
 
@@ -101,7 +100,7 @@ fn is_engine_impl(ty: &Type) -> bool {
         .path
         .segments
         .last()
-        .is_some_and(|segment| segment.ident == "YrsComputeEngine")
+        .is_some_and(|segment| segment.ident == "ComputeEngine")
 }
 
 fn has_bridge_attr(attrs: &[syn::Attribute]) -> bool {

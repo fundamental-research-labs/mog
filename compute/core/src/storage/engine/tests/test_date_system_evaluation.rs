@@ -1,5 +1,5 @@
 //! Workbook date-system metadata must reach production formula evaluation.
-use super::super::YrsComputeEngine;
+use super::super::ComputeEngine;
 use super::helpers::cell_value_at;
 use domain_types::{CellData, ParseOutput, SheetData, domain::workbook::WorkbookProperties};
 use value_types::CellValue;
@@ -48,7 +48,7 @@ fn workbook_bytes(date1904: bool) -> Vec<u8> {
     xlsx_parser::write::write_xlsx_from_parse_output(&input).unwrap()
 }
 
-fn assert_date(engine: &YrsComputeEngine, expected: &str) {
+fn assert_date(engine: &ComputeEngine, expected: &str) {
     let sheet_id = engine.stores.storage.sheet_order()[0];
     assert_eq!(
         cell_value_at(engine, &sheet_id, 0, 1),
@@ -69,16 +69,15 @@ fn assert_date(engine: &YrsComputeEngine, expected: &str) {
 }
 
 #[test]
-fn text_date_system_survives_xlsx_import_rebuild_and_yrs_replay() {
+fn text_date_system_survives_xlsx_import_rebuild_and_native_rebuild() {
     for (date1904, expected) in [(false, "1900-01-01"), (true, "1904-01-02")] {
         let bytes = workbook_bytes(date1904);
-        let (mut engine, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).unwrap();
+        let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).unwrap();
         engine.recalculate().unwrap();
         assert_date(&engine, expected);
         engine.rebuild_compute_core().unwrap();
         assert_date(&engine, expected);
-        let state = compute_collab::encode_full_state(engine.storage().doc());
-        let (replayed, _) = YrsComputeEngine::from_yrs_state(&state).unwrap();
+        let replayed = super::helpers::rebuild_native_engine(&engine);
         assert_date(&replayed, expected);
         // Import into an existing engine must install the date system before
         // its initial calculation (this constructor rebuilds the mirror).
@@ -90,20 +89,17 @@ fn text_date_system_survives_xlsx_import_rebuild_and_yrs_replay() {
 }
 
 #[test]
-fn text_date_system_settings_updates_invalidate_calculation_and_sync() {
-    let (mut engine, _) = YrsComputeEngine::from_xlsx_bytes(&workbook_bytes(false)).unwrap();
+fn text_date_system_settings_updates_invalidate_calculation_and_native_rebuild() {
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&workbook_bytes(false)).unwrap();
     engine.recalculate().unwrap();
     assert_date(&engine, "1900-01-01");
-    let state = compute_collab::encode_full_state(engine.storage().doc());
-    let (mut peer, _) = YrsComputeEngine::from_yrs_state(&state).unwrap();
 
     engine
         .set_workbook_setting("date1904", serde_json::json!(true))
         .unwrap();
     engine.recalculate().unwrap();
     assert_date(&engine, "1904-01-02");
-    let update = engine.encode_diff(&peer.encode_state_vector()).unwrap();
-    peer.apply_sync_update_legacy(&update).unwrap();
+    let peer = super::helpers::rebuild_native_engine(&engine);
     assert_date(&peer, "1904-01-02");
 
     engine

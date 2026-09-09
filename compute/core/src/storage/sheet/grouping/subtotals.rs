@@ -1,7 +1,5 @@
 use cell_types::{SheetId, col_to_letter};
-use yrs::{Doc, MapRef};
 
-use super::crud::{clear_row_grouping, group_rows};
 use super::types::{
     CellRange, GroupBoundary, SubtotalFunction, SubtotalOptions, SubtotalResult,
     SubtotalsCellAccessor,
@@ -145,8 +143,6 @@ fn subtotal_replacement_range(
 }
 
 pub fn create_subtotals(
-    doc: &Doc,
-    sheets: &MapRef,
     cell_accessor: &mut dyn SubtotalsCellAccessor,
     sheet_id: &SheetId,
     range: &CellRange,
@@ -155,7 +151,7 @@ pub fn create_subtotals(
     let sb = options.summary_below_data;
     let replacement_range = if options.replace_existing {
         let replacement_range = subtotal_replacement_range(cell_accessor, sheet_id, range);
-        remove_subtotals(doc, sheets, cell_accessor, sheet_id, &replacement_range);
+        remove_subtotals(cell_accessor, sheet_id, &replacement_range);
         replacement_range
     } else {
         *range
@@ -229,7 +225,10 @@ pub fn create_subtotals(
                 &build_subtotal_formula(options.function, col, formula_start, formula_end),
             );
         }
-        if group_rows(doc, sheets, sheet_id, formula_start, formula_end).is_ok() {
+        if cell_accessor
+            .group_rows(sheet_id, formula_start, formula_end)
+            .is_ok()
+        {
             gc += 1;
         }
         ri += 1;
@@ -268,8 +267,6 @@ pub fn create_subtotals(
 }
 
 pub fn remove_subtotals(
-    doc: &Doc,
-    sheets: &MapRef,
     cell_accessor: &mut dyn SubtotalsCellAccessor,
     sheet_id: &SheetId,
     range: &CellRange,
@@ -289,7 +286,7 @@ pub fn remove_subtotals(
     if sr.is_empty() {
         return 0;
     }
-    clear_row_grouping(doc, sheets, sheet_id, range.start_row(), range.end_row());
+    cell_accessor.clear_row_grouping(sheet_id, range.start_row(), range.end_row());
     let removed = sr.len() as u32;
     for row in &sr {
         cell_accessor.delete_rows(sheet_id, *row, 1);

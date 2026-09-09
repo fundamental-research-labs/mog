@@ -16,6 +16,9 @@ fn test_add_sheet_extends_sheet_order() {
     let initial_pos = *core.sheet_order.get(&sid(1)).expect("Sheet1 in order");
 
     let new_sheet = SheetSnapshot {
+        identities: Vec::new(),
+        row_axis: None,
+        col_axis: None,
         id: "00000000-0000-0000-0000-000000000002".to_string(),
         name: "Sheet2".to_string(),
         rows: 10,
@@ -95,6 +98,9 @@ fn test_drain_spill_blockers_for_region_keeps_merge_fallback_other_sheet() {
     // Add a second sheet with one cell so we can place a merge-fallback
     // entry whose source lives on Sheet2 but unmerge is on Sheet1.
     let new_sheet = SheetSnapshot {
+        identities: Vec::new(),
+        row_axis: None,
+        col_axis: None,
         id: "00000000-0000-0000-0000-000000000002".to_string(),
         name: "Sheet2".to_string(),
         rows: 10,
@@ -137,6 +143,9 @@ fn test_remove_sheet_clears_sheet_order_entry() {
 
     // Add a second sheet so removing leaves one behind.
     let new_sheet = SheetSnapshot {
+        identities: Vec::new(),
+        row_axis: None,
+        col_axis: None,
         id: "00000000-0000-0000-0000-000000000002".to_string(),
         name: "Sheet2".to_string(),
         rows: 10,

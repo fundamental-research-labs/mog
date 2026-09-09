@@ -1,7 +1,8 @@
 #![allow(unused_imports, unused_variables)]
 use super::*;
+use crate::storage::engine::history::metadata::capture_workbook_entry;
+use crate::storage::engine::mutation::CellInput;
 use crate::storage::engine::table_result_merge::merge_mutation_result;
-use crate::storage::engine::{mutation::CellInput, mutation_coordinator::MutationCoordinator};
 
 // -------------------------------------------------------------------
 // Table CRUD Mutations
@@ -117,7 +118,7 @@ pub(in crate::storage::engine) fn create_table(
     let data_end = id_to_hex(data_end_id.as_u128()).to_string();
 
     stores.compute.set_table(mirror, table.clone());
-    let filter_state = persist_table_to_yrs_with_table_filter(
+    let filter_state = create_table_filter(
         stores,
         &table,
         sheet_id,
@@ -127,6 +128,7 @@ pub(in crate::storage::engine) fn create_table(
     )?;
 
     // Re-parse formulas containing implicit structured refs now that the table exists.
+    crate::storage::engine::cell_metadata::refresh(&stores.storage, mirror, stores.layout_metrics);
     let recalc_result = stores
         .compute
         .reparse_implicit_structured_refs(mirror, sheet_id, start_row, start_col, end_row, end_col);
@@ -166,34 +168,27 @@ pub(in crate::storage::engine) fn delete_table(
     let table = mirror.get_table(table_name).cloned();
     let table_filter = table.as_ref().and_then(|table| {
         let sheet_id = SheetId::from_uuid_str(&table.sheet_id).ok()?;
-        filters::get_table_filter(
-            stores.storage.doc(),
-            stores.storage.sheets(),
-            &sheet_id,
-            &table.id,
-        )
-        .map(|filter| (sheet_id, filter.id))
+        filters::get_table_filter(&stores.storage, &sheet_id, &table.id)
+            .map(|filter| (sheet_id, filter.id))
     });
     let prepared_filter_delete = table_filter
         .as_ref()
         .map(|(sheet_id, filter_id)| prepare_table_filter_delete(stores, sheet_id, filter_id));
 
-    structured_ref_updater::propagate_ref_error_for_table_delete(
-        stores.storage.doc(),
-        stores.storage.workbook_map(),
-        stores.storage.sheets(),
-        table_name,
-    );
-
-    let mut result = MutationResult::empty();
     stores.compute.remove_table(mirror, table_name);
+    rewrite_table_formulas(
+        stores,
+        mirror,
+        TableReferenceEdit::DeleteTable { table: table_name },
+    );
+    crate::storage::engine::cell_metadata::refresh(&stores.storage, mirror, stores.layout_metrics);
+    let mut result = MutationResult::from_recalc(
+        stores
+            .compute
+            .structure_change_with_formula_refresh(mirror, None, &[])?,
+    );
     let visibility_transitions = if let Some(table) = table {
-        let visibility_transitions = remove_table_from_yrs_with_filter(
-            stores,
-            &table.name,
-            Some(table.id.as_str()),
-            table_filter.as_ref(),
-        );
+        let visibility_transitions = remove_table_filter(stores, table_filter.as_ref());
         result.table_changes.push(TableChange {
             name: table.name.clone(),
             table_id: Some(table.id),
@@ -202,7 +197,7 @@ pub(in crate::storage::engine) fn delete_table(
         });
         visibility_transitions
     } else {
-        remove_table_from_yrs_with_filter(stores, table_name, None, table_filter.as_ref())
+        remove_table_filter(stores, table_filter.as_ref())
     };
     if let (Some((sheet_id, _)), Some(prepared_filter_delete)) =
         (table_filter.as_ref(), prepared_filter_delete)
@@ -246,17 +241,21 @@ pub(in crate::storage::engine) fn rename_table(
 
     stores.compute.remove_table(mirror, old_name);
     stores.compute.set_table(mirror, renamed.clone());
-    rename_table_in_yrs(stores, &renamed);
 
-    structured_ref_updater::update_formulas_for_table_rename(
-        stores.storage.doc(),
-        stores.storage.workbook_map(),
-        stores.storage.sheets(),
-        old_name,
-        new_name,
+    rewrite_table_formulas(
+        stores,
+        mirror,
+        TableReferenceEdit::RenameTable {
+            old: old_name,
+            new: new_name,
+        },
     );
-
-    Ok(MutationResult::empty())
+    crate::storage::engine::cell_metadata::refresh(&stores.storage, mirror, stores.layout_metrics);
+    Ok(MutationResult::from_recalc(
+        stores
+            .compute
+            .structure_change_with_formula_refresh(mirror, None, &[])?,
+    ))
 }
 
 /// Resize a table's range.
@@ -313,8 +312,8 @@ pub(in crate::storage::engine) fn resize_table(
     resized.columns.truncate(new_col_count);
 
     stores.compute.set_table(mirror, resized.clone());
-    persist_table_to_yrs(stores, &resized);
 
+    crate::storage::engine::cell_metadata::refresh(&stores.storage, mirror, stores.layout_metrics);
     // Re-parse formulas with implicit structured refs in the new range.
     let _ = stores.compute.reparse_implicit_structured_refs(
         mirror,
@@ -361,7 +360,6 @@ pub(in crate::storage::engine) fn toggle_totals_row(
         );
     }
     stores.compute.set_table(mirror, updated.clone());
-    persist_table_to_yrs(stores, &updated);
     Ok(MutationResult::empty())
 }
 
@@ -380,7 +378,6 @@ pub(in crate::storage::engine) fn toggle_header_row(
     let mut updated = table;
     updated.has_header_row = !updated.has_header_row;
     stores.compute.set_table(mirror, updated.clone());
-    persist_table_to_yrs(stores, &updated);
     Ok(MutationResult::empty())
 }
 
@@ -388,7 +385,6 @@ pub(in crate::storage::engine) fn toggle_header_row(
 pub(in crate::storage::engine) fn add_table_column(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
-    mutation: &mut MutationCoordinator,
     table_name: &str,
     column_name: &str,
     position: u32,
@@ -440,7 +436,7 @@ pub(in crate::storage::engine) fn add_table_column(
             text: column_name.to_string(),
         };
         let recalc = super::super::cell_editing::set_cell(
-            stores, mirror, mutation, &sheet_id, cell_id, row, col, &input,
+            stores, mirror, &sheet_id, cell_id, row, col, &input,
         )?;
         MutationResult::from_recalc(recalc)
     } else {
@@ -448,7 +444,6 @@ pub(in crate::storage::engine) fn add_table_column(
     };
 
     stores.compute.set_table(mirror, updated.clone());
-    persist_table_to_yrs(stores, &updated);
     result.table_changes.push(TableChange {
         name: updated.name,
         table_id: Some(updated.id),
@@ -462,7 +457,6 @@ pub(in crate::storage::engine) fn add_table_column(
 pub(in crate::storage::engine) fn rename_table_column(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
-    mutation: &mut MutationCoordinator,
     table_name: &str,
     column_index: u32,
     new_column_name: &str,
@@ -512,7 +506,7 @@ pub(in crate::storage::engine) fn rename_table_column(
             text: new_column_name.to_string(),
         };
         let recalc = super::super::cell_editing::set_cell(
-            stores, mirror, mutation, &sheet_id, cell_id, row, col, &input,
+            stores, mirror, &sheet_id, cell_id, row, col, &input,
         )?;
         MutationResult::from_recalc(recalc)
     } else {
@@ -520,22 +514,20 @@ pub(in crate::storage::engine) fn rename_table_column(
     };
 
     stores.compute.set_table(mirror, updated.clone());
-    persist_table_to_yrs(stores, &updated);
 
-    structured_ref_updater::update_formulas_for_column_rename(
-        stores.storage.doc(),
-        stores.storage.workbook_map(),
-        stores.storage.sheets(),
-        table_name,
-        &old_column_name,
-        new_column_name,
-    );
-    let formula_recalc = stores.compute.rewrite_table_column_rename_formula_texts(
+    rewrite_table_formulas(
+        stores,
         mirror,
-        table_name,
-        &old_column_name,
-        new_column_name,
+        TableReferenceEdit::RenameColumn {
+            table: table_name,
+            old: &old_column_name,
+            new: new_column_name,
+        },
     );
+    crate::storage::engine::cell_metadata::refresh(&stores.storage, mirror, stores.layout_metrics);
+    let formula_recalc = stores
+        .compute
+        .structure_change_with_formula_refresh(mirror, None, &[])?;
     merge_mutation_result(&mut result, MutationResult::from_recalc(formula_recalc));
 
     result.table_changes.push(TableChange {
@@ -588,17 +580,21 @@ pub(in crate::storage::engine) fn remove_table_column(
         );
     }
     stores.compute.set_table(mirror, updated.clone());
-    persist_table_to_yrs(stores, &updated);
 
-    structured_ref_updater::propagate_ref_error_for_column_delete(
-        stores.storage.doc(),
-        stores.storage.workbook_map(),
-        stores.storage.sheets(),
-        table_name,
-        &deleted_col_name,
+    rewrite_table_formulas(
+        stores,
+        mirror,
+        TableReferenceEdit::DeleteColumn {
+            table: table_name,
+            column: &deleted_col_name,
+        },
     );
-
-    Ok(MutationResult::empty())
+    crate::storage::engine::cell_metadata::refresh(&stores.storage, mirror, stores.layout_metrics);
+    Ok(MutationResult::from_recalc(
+        stores
+            .compute
+            .structure_change_with_formula_refresh(mirror, None, &[])?,
+    ))
 }
 
 /// Add a calculated column to a table.
@@ -633,7 +629,6 @@ pub(in crate::storage::engine) fn add_calculated_column(
         updated.range.end_col().saturating_add(1),
     );
     stores.compute.set_table(mirror, updated.clone());
-    persist_table_to_yrs(stores, &updated);
     Ok(MutationResult::empty())
 }
 
@@ -663,7 +658,6 @@ pub(in crate::storage::engine) fn remove_calculated_column(
     }
     updated.columns[idx].calculated_formula = None;
     stores.compute.set_table(mirror, updated.clone());
-    persist_table_to_yrs(stores, &updated);
     Ok(MutationResult::empty())
 }
 
@@ -694,7 +688,6 @@ pub(in crate::storage::engine) fn update_calculated_column(
     }
     updated.columns[idx].calculated_formula = Some(formula.to_string());
     stores.compute.set_table(mirror, updated.clone());
-    persist_table_to_yrs(stores, &updated);
     Ok(MutationResult::empty())
 }
 
@@ -721,10 +714,12 @@ pub(in crate::storage::engine) fn create_custom_table_style(
     style: compute_table::custom_styles::CustomTableStyleConfig,
 ) -> Result<MutationResult, ComputeError> {
     let style_name = style.name.clone();
+    capture_workbook_entry!(stores.storage, custom_table_styles, style_name);
     stores
+        .storage
+        .metadata
         .custom_table_styles
         .insert(style_name.clone(), style.clone());
-    persist_custom_table_style(stores, &style_name, &style)?;
     let mut result = MutationResult::empty();
     result.table_changes.push(TableChange {
         name: style_name.clone(),
@@ -740,8 +735,12 @@ pub(in crate::storage::engine) fn delete_custom_table_style(
     stores: &mut EngineStores,
     style_name: &str,
 ) -> Result<MutationResult, ComputeError> {
-    stores.custom_table_styles.remove(style_name);
-    remove_custom_table_style(stores, style_name);
+    capture_workbook_entry!(stores.storage, custom_table_styles, style_name);
+    stores
+        .storage
+        .metadata
+        .custom_table_styles
+        .remove(style_name);
     Ok(MutationResult::empty())
 }
 
@@ -751,48 +750,13 @@ pub(in crate::storage::engine) fn update_custom_table_style(
     style_name: &str,
     style: compute_table::custom_styles::CustomTableStyleConfig,
 ) -> Result<MutationResult, ComputeError> {
+    capture_workbook_entry!(stores.storage, custom_table_styles, style_name);
     stores
+        .storage
+        .metadata
         .custom_table_styles
         .insert(style_name.to_string(), style.clone());
-    persist_custom_table_style(stores, style_name, &style)?;
     Ok(MutationResult::empty())
-}
-
-fn persist_custom_table_style(
-    stores: &mut EngineStores,
-    style_name: &str,
-    style: &compute_table::custom_styles::CustomTableStyleConfig,
-) -> Result<(), ComputeError> {
-    let json = serde_json::to_string(style).map_err(|e| ComputeError::Eval {
-        message: format!("Failed to serialize table style: {}", e),
-    })?;
-    let doc = stores.storage.doc();
-    let workbook = stores.storage.workbook_map();
-    let mut txn =
-        doc.transact_mut_with(yrs::Origin::from(compute_document::undo::ORIGIN_USER_EDIT));
-    let styles_map = crate::storage::ensure_workbook_child_map(
-        workbook,
-        &mut txn,
-        compute_document::schema::KEY_CUSTOM_TABLE_STYLES,
-    );
-    styles_map.insert(
-        &mut txn,
-        style_name,
-        yrs::Any::String(std::sync::Arc::from(json.as_str())),
-    );
-    Ok(())
-}
-
-fn remove_custom_table_style(stores: &mut EngineStores, style_name: &str) {
-    let doc = stores.storage.doc();
-    let workbook = stores.storage.workbook_map();
-    let mut txn =
-        doc.transact_mut_with(yrs::Origin::from(compute_document::undo::ORIGIN_USER_EDIT));
-    if let Some(yrs::Out::YMap(styles_map)) =
-        workbook.get(&txn, compute_document::schema::KEY_CUSTOM_TABLE_STYLES)
-    {
-        styles_map.remove(&mut txn, style_name);
-    }
 }
 
 /// Set a table definition from a `TableDef`.
@@ -855,14 +819,12 @@ pub(in crate::storage::engine) fn remove_table_def(
     mirror: &mut CellMirror,
     name: &str,
 ) {
-    structured_ref_updater::propagate_ref_error_for_table_delete(
-        stores.storage.doc(),
-        stores.storage.workbook_map(),
-        stores.storage.sheets(),
-        name,
-    );
-
     stores.compute.remove_table(mirror, name);
+    rewrite_table_formulas(
+        stores,
+        mirror,
+        TableReferenceEdit::DeleteTable { table: name },
+    );
 }
 
 /// Convert a table to a plain range.
@@ -882,51 +844,40 @@ pub(in crate::storage::engine) fn convert_table_to_range(
     let table_filter = SheetId::from_uuid_str(&table.sheet_id)
         .ok()
         .and_then(|sheet_id| {
-            filters::get_table_filter(
-                stores.storage.doc(),
-                stores.storage.sheets(),
-                &sheet_id,
-                &table.id,
-            )
-            .map(|filter| (sheet_id, filter.id))
+            filters::get_table_filter(&stores.storage, &sheet_id, &table.id)
+                .map(|filter| (sheet_id, filter.id))
         });
     let prepared_filter_delete = table_filter
         .as_ref()
         .map(|(sheet_id, filter_id)| prepare_table_filter_delete(stores, sheet_id, filter_id));
 
-    let table_info = structured_ref_updater::TableRangeInfo {
-        name: table.name.clone(),
-        start_row: table.range.start_row(),
-        start_col: table.range.start_col(),
-        end_row: table.range.end_row(),
-        end_col: table.range.end_col(),
-        columns: table
-            .columns
-            .iter()
-            .map(|c| (c.name.clone(), c.index))
-            .collect(),
-        has_header_row: table.has_header_row,
-        has_total_row: table.has_totals_row,
-    };
-
-    let converted_count = structured_ref_updater::convert_structured_refs_to_a1(
-        stores.storage.doc(),
-        stores.storage.workbook_map(),
-        stores.storage.sheets(),
-        &table_info,
-    );
-
-    let mut result = MutationResult::empty();
-    let materialized_format_result = materialize_table_visible_formats(stores, mirror, &table)?;
-    merge_mutation_result(&mut result, materialized_format_result);
-
+    let table_def = crate::storage::table_format::table_to_table_def(&table);
+    let sheet_name = SheetId::from_uuid_str(&table.sheet_id)
+        .ok()
+        .and_then(|id| mirror.get_sheet(&id).map(|sheet| sheet.name.clone()))
+        .ok_or_else(|| ComputeError::SheetNotFound {
+            sheet_id: table.sheet_id.clone(),
+        })?;
+    let mut result = materialize_table_visible_formats(stores, mirror, &table)?;
     stores.compute.remove_table(mirror, table_name);
-    let visibility_transitions = remove_table_from_yrs_with_filter(
+    let converted_count = rewrite_table_formulas(
         stores,
-        &table.name,
-        Some(table.id.as_str()),
-        table_filter.as_ref(),
+        mirror,
+        TableReferenceEdit::ConvertToRange {
+            table: &table_def,
+            sheet_name: &sheet_name,
+        },
     );
+    crate::storage::engine::cell_metadata::refresh(&stores.storage, mirror, stores.layout_metrics);
+    merge_mutation_result(
+        &mut result,
+        MutationResult::from_recalc(stores.compute.structure_change_with_formula_refresh(
+            mirror,
+            None,
+            &[],
+        )?),
+    );
+    let visibility_transitions = remove_table_filter(stores, table_filter.as_ref());
     if let (Some((sheet_id, _)), Some(prepared_filter_delete)) =
         (table_filter.as_ref(), prepared_filter_delete)
     {

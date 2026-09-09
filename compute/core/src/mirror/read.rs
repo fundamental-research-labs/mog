@@ -61,172 +61,46 @@ impl CellMirror {
     // Read API
     // -----------------------------------------------------------------------
 
-    /// Look up a cell value by CellId across all sheets.
-    ///
-    /// If the stored value is a `CellValue::Array` (a dynamic array source),
-    /// this returns the top-left element for backwards compatibility. Use
-    /// [`get_cell_value_raw`] to retrieve the full Array.
-    ///
-    /// For ghost cells (Null value, no formula) at projected positions, falls
-    /// back to `col_data` to read the materialized projection value. This
-    /// ensures that formulas like `=A2` correctly see spilled values.
+    /// Read a cell by identity; arrays expose their top-left scalar.
     pub fn get_cell_value(&self, cell_id: &CellId) -> Option<&CellValue> {
-        let sheet_id = self.cell_to_sheet.get(cell_id);
-        if let Some(sheet_id) = sheet_id {
-            let sheet = self.sheets.get(sheet_id)?;
-            if let Some(entry) = sheet.cells.get(cell_id) {
-                if let CellValue::Array(ref arr) = entry.value {
-                    return arr.get(0, 0);
-                }
-                // Virtual CellId with explicit Null override: return it as-is
-                // rather than falling through to col_data (which would return
-                // the Range payload value).
-                if cell_id.is_virtual() && entry.value.is_null() && entry.formula.is_none() {
-                    return Some(&entry.value);
-                }
-                if entry.value.is_null()
-                    && entry.formula.is_none()
-                    && let Some(pos) = sheet.id_to_pos.get(cell_id)
-                    && let Some(col_vec) = sheet.col_data.get(&pos.col())
-                    && let Some(val) = col_vec.get(pos.row() as usize)
-                    && !val.is_null()
-                {
-                    return Some(val);
-                }
-                return Some(&entry.value);
-            }
-            // Virtual CellId not in cells: read from Range payload via col_data
-            if cell_id.is_virtual()
-                && let Some(pos) = sheet.id_to_pos.get(cell_id)
-                && let Some(col_vec) = sheet.col_data.get(&pos.col())
-                && let Some(val) = col_vec.get(pos.row() as usize)
-                && !val.is_null()
-            {
-                return Some(val);
-            }
-        }
-        None
+        self.get_cell_value_in_sheet(self.cell_to_sheet.get(cell_id)?, cell_id)
     }
 
-    /// Look up the raw cell value by CellId (without Array unwrapping).
-    ///
-    /// Returns the stored `CellValue` as-is, including `CellValue::Array`
-    /// for dynamic array source cells. Used by ANCHORARRAY (#) to retrieve
-    /// the full array.
+    /// Read the original array value for an anchor, or the cell's scalar.
     pub fn get_cell_value_raw(&self, cell_id: &CellId) -> Option<&CellValue> {
-        let sheet_id = self.cell_to_sheet.get(cell_id)?;
-        let sheet = self.sheets.get(sheet_id)?;
+        let sheet = self.sheets.get(self.cell_to_sheet.get(cell_id)?)?;
         if let Some(entry) = sheet.cells.get(cell_id) {
             return Some(&entry.value);
         }
-        // Virtual CellId not in cells: fall back to col_data
-        if cell_id.is_virtual()
-            && let Some(pos) = sheet.id_to_pos.get(cell_id)
-            && let Some(col_vec) = sheet.col_data.get(&pos.col())
-            && let Some(val) = col_vec.get(pos.row() as usize)
-            && !val.is_null()
-        {
-            return Some(val);
-        }
-        None
+        sheet.value_at(*sheet.id_to_pos.get(cell_id)?)
     }
 
-    /// Look up a cell value by CellId within a specific sheet.
-    ///
-    /// Unwraps `CellValue::Array` to the top-left element (same as [`get_cell_value`]).
     pub fn get_cell_value_in_sheet(&self, sheet: &SheetId, cell_id: &CellId) -> Option<&CellValue> {
-        let s = self.sheets.get(sheet)?;
-        if let Some(entry) = s.cells.get(cell_id) {
-            if let CellValue::Array(ref arr) = entry.value {
-                return arr.get(0, 0);
-            }
-            // Virtual CellId with explicit Null override
-            if cell_id.is_virtual() && entry.value.is_null() && entry.formula.is_none() {
-                return Some(&entry.value);
-            }
-            if entry.value.is_null()
-                && entry.formula.is_none()
-                && let Some(pos) = s.id_to_pos.get(cell_id)
-                && let Some(col_vec) = s.col_data.get(&pos.col())
-                && let Some(val) = col_vec.get(pos.row() as usize)
-                && !val.is_null()
-            {
-                return Some(val);
-            }
-            return Some(&entry.value);
-        }
-        // Virtual CellId not in cells: read from col_data
-        if cell_id.is_virtual()
-            && let Some(pos) = s.id_to_pos.get(cell_id)
-            && let Some(col_vec) = s.col_data.get(&pos.col())
-            && let Some(val) = col_vec.get(pos.row() as usize)
-            && !val.is_null()
+        let sheet = self.sheets.get(sheet)?;
+        if let Some(entry) = sheet.cells.get(cell_id)
+            && (!entry.is_ghost() || cell_id.is_virtual())
         {
-            return Some(val);
+            return match &entry.value {
+                CellValue::Array(array) => array.get(0, 0),
+                value => Some(value),
+            };
         }
-        None
+        if let Some(pos) = sheet.id_to_pos.get(cell_id) {
+            return sheet.value_at(*pos);
+        }
+        sheet.cells.get(cell_id).map(|entry| &entry.value)
     }
 
-    /// Look up a cell value by position within a sheet.
-    ///
-    /// Checks both `pos_to_id` → `cells` (real cells) and `col_data` (which
-    /// includes materialized projection values from dynamic arrays). If a real
-    /// cell exists with a non-null value, returns it. Otherwise, falls back to
-    /// col_data which may have a projected value at that position.
-    ///
-    /// For dynamic array source cells, unwraps `CellValue::Array` to the
-    /// top-left element so normal positional reads see the scalar.
     pub fn get_cell_value_at(&self, sheet: &SheetId, pos: SheetPos) -> Option<&CellValue> {
-        let s = self.sheets.get(sheet)?;
-        // Step 1: sparse override or real cell with non-null value/formula
-        if let Some(cell_id) = s.pos_to_id.get(&pos)
-            && let Some(entry) = s.cells.get(cell_id)
-            && (!entry.value.is_null() || entry.formula.is_some())
-        {
-            if let CellValue::Array(ref arr) = entry.value {
-                return arr.get(0, 0);
-            }
-            return Some(&entry.value);
-        }
-        // Step 2: Range spatial index — payload value
-        if !s.range_spatial_index.is_empty() {
-            let hits = s.range_spatial_index.query(pos.row(), pos.col());
-            if !hits.is_empty()
-                && let Some(row_id) = s.index_to_row.get(&pos.row())
-                && let Some(col_id) = s.index_to_col.get(&pos.col())
-            {
-                for extent in &hits {
-                    if let Some(rv) = s.range_views.get(&extent.range_id)
-                        && let Some(val) = rv.decode_at(row_id, col_id)
-                        && !val.is_null()
-                    {
-                        // We can't return a reference to a decoded
-                        // value, so fall through to col_data which
-                        // should have the materialized value.
-                        break;
-                    }
-                }
-            }
-            // Range-resident values are materialized into col_data by
-            // rebuild_col_data; fall through to the col_data check.
-        }
-        // Step 3: col_data for materialized projection / Range values
-        if let Some(col_vec) = s.col_data.get(&pos.col())
-            && let Some(val) = col_vec.get(pos.row() as usize)
-            && !val.is_null()
-        {
-            return Some(val);
-        }
-        // Step 4: real-cell Null fallback
-        if let Some(cell_id) = s.pos_to_id.get(&pos) {
-            return s.cells.get(cell_id).map(|e| &e.value);
-        }
-        None
+        self.sheets.get(sheet)?.value_at(pos)
     }
 
-    /// Get a column's dense data as a slice, if available.
-    pub(crate) fn get_column_slice(&self, sheet: &SheetId, col: u32) -> Option<&[CellValue]> {
-        self.sheets.get(sheet)?.get_column_slice(col)
+    pub(crate) fn get_column_view(
+        &self,
+        sheet: &SheetId,
+        col: u32,
+    ) -> Option<value_types::ColumnView<'_>> {
+        self.sheets.get(sheet)?.get_column_view(col)
     }
 
     /// Get the identity formula for a cell (across all sheets).
@@ -250,8 +124,8 @@ impl CellMirror {
         if hits.is_empty() {
             return None;
         }
-        let row_id = s.index_to_row.get(&pos.row()).copied()?;
-        let col_id = s.index_to_col.get(&pos.col()).copied()?;
+        let row_id = s.row_id_at(pos.row())?;
+        let col_id = s.col_id_at(pos.col())?;
         Some(CellId::virtual_at(*sheet, row_id, col_id))
     }
 
@@ -305,10 +179,6 @@ impl CellMirror {
         self.cell_to_sheet.get(cell_id).copied()
     }
 
-    pub(crate) fn cell_to_sheet_entries(&self) -> impl Iterator<Item = (&CellId, &SheetId)> {
-        self.cell_to_sheet.iter()
-    }
-
     /// Check whether calculation is enabled for a given sheet.
     /// Returns `true` (calculation enabled) if the sheet does not exist.
     pub fn is_calculation_enabled(&self, sheet_id: &SheetId) -> bool {
@@ -351,7 +221,7 @@ impl CellMirror {
     pub fn is_row_hidden(&self, sheet_id: &SheetId, row: u32) -> bool {
         self.cell_metadata_provider
             .as_ref()
-            .and_then(|provider| provider.row_hidden(sheet_id, row))
+            .and_then(|provider| provider.row_hidden(self, sheet_id, row))
             .unwrap_or_else(|| {
                 self.sheets
                     .get(sheet_id)
@@ -377,46 +247,21 @@ impl CellMirror {
     // Projection resolution (Dynamic Array Architecture)
     // -----------------------------------------------------------------------
 
-    /// Resolve a projected value by checking the projection registry and reading from col_data.
-    ///
-    /// Projected values are materialized into col_data, so this method reads directly
-    /// from col_data rather than requiring the source cell to store the full CellValue::Array.
-    /// Falls back to reading from the source cell's CellEntry.value if it holds an Array
-    /// (for backward compatibility during the transition).
-    ///
-    /// Returns `Some(CellValue)` if the position falls within a registered projection.
-    /// Returns `None` if the position is not projected.
+    /// Resolve an element from the source array without a materialized copy.
     pub fn resolve_projected_value(
         &self,
         sheet: &SheetId,
         row: u32,
         col: u32,
     ) -> Option<CellValue> {
-        let (_source, _er, _ec) = self.projection_registry.resolve(sheet, row, col)?;
-
-        // Read directly from col_data (materialized by materialize_projection)
-        let sheet_mirror = self.sheets.get(sheet)?;
-        if let Some(col_vec) = sheet_mirror.col_data.get(&col)
-            && (row as usize) < col_vec.len()
-        {
-            let val = &col_vec[row as usize];
-            if !val.is_null() {
-                return Some(val.clone());
-            }
-        }
-
-        // Fallback: try reading from source cell's Array value (backward compat)
-        let source_sheet = self.cell_to_sheet.get(&_source).unwrap_or(sheet);
-        let sm = self.sheets.get(source_sheet)?;
-        let entry = sm.cells.get(&_source)?;
-        match &entry.value {
-            CellValue::Array(arr) => arr
-                .get(_er as usize, _ec as usize)
+        self.projection_registry.resolve(sheet, row, col)?;
+        Some(
+            self.sheets
+                .get(sheet)?
+                .value_at(SheetPos::new(row, col))
                 .cloned()
-                .or(Some(CellValue::Null)),
-            other if _er == 0 && _ec == 0 => Some(other.clone()),
-            _ => Some(CellValue::Null),
-        }
+                .unwrap_or(CellValue::Null),
+        )
     }
 
     /// Check if a cell has a sparkline.

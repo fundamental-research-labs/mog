@@ -1,4 +1,4 @@
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use domain_types::{CFRule, CFStyle};
 use xlsx_parser::write::{ZipWriter, write_xlsx_from_parse_output};
 
@@ -60,7 +60,7 @@ fn exported_dxfs(bytes: &[u8]) -> Vec<domain_types::DxfDef> {
 fn complete_differential_styles_survive_engine_roundtrip_and_property_edit() {
     let input = fixture(false);
     let originals = exported_dxfs(&input);
-    let (mut engine, _) = YrsComputeEngine::from_xlsx_bytes(&input).unwrap();
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&input).unwrap();
     let sheet_id = *engine.mirror().sheet_ids().next().unwrap();
     for _ in 0..2 {
         let saved = engine.export_to_xlsx_bytes().unwrap();
@@ -68,7 +68,7 @@ fn complete_differential_styles_survive_engine_roundtrip_and_property_edit() {
         for (expected, actual) in originals.iter().zip(&dxfs) {
             assert_eq!(actual.to_ooxml(), expected.to_ooxml());
         }
-        engine = YrsComputeEngine::from_xlsx_bytes(&saved).unwrap().0;
+        engine = ComputeEngine::from_xlsx_bytes(&saved).unwrap().0;
     }
     let sheet_id = engine
         .mirror()
@@ -110,7 +110,7 @@ fn imported_unified_border_edit_changes_all_four_sides_through_engine() {
         (false, None, "thin"),
     ] {
         let input = fixture(full_border);
-        let (mut engine, _) = YrsComputeEngine::from_xlsx_bytes(&input).unwrap();
+        let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&input).unwrap();
         let sheet_id = *engine.mirror().sheet_ids().next().unwrap();
         let format = engine.get_all_cf_rules(&sheet_id).remove(0);
         let mut edited = style(&format.rules[0]).clone();

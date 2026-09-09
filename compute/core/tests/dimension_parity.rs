@@ -11,7 +11,7 @@
 //! If the XLSX hydration path derives dims from a different source than the
 //! snapshot path, this test surfaces that divergence as a concrete failure.
 
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
 
@@ -30,6 +30,9 @@ fn value_cell(uuid_suffix: u32, row: u32, col: u32, n: f64) -> CellData {
 fn snapshot_30x15() -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: "DimTest".to_string(),
             rows: 30,
@@ -45,7 +48,7 @@ fn snapshot_30x15() -> WorkbookSnapshot {
     }
 }
 
-fn sheet_dims(engine: &YrsComputeEngine) -> (u32, u32) {
+fn sheet_dims(engine: &ComputeEngine) -> (u32, u32) {
     let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
     let sm = engine.mirror().get_sheet(&sid).expect("SheetMirror");
     (sm.rows, sm.cols)
@@ -54,15 +57,14 @@ fn sheet_dims(engine: &YrsComputeEngine) -> (u32, u32) {
 #[test]
 fn dimensions_match_across_snapshot_and_xlsx_hydration() {
     // Path 1: snapshot hydration.
-    let (engine_snap, _) =
-        YrsComputeEngine::from_snapshot(snapshot_30x15()).expect("from_snapshot");
+    let (engine_snap, _) = ComputeEngine::from_snapshot(snapshot_30x15()).expect("from_snapshot");
     let dims_snap = sheet_dims(&engine_snap);
 
     // Path 2: snapshot → xlsx bytes → xlsx hydration.
     let bytes = engine_snap
         .export_to_xlsx_bytes()
         .expect("export to xlsx bytes");
-    let (engine_xlsx, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
+    let (engine_xlsx, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
     let dims_xlsx = sheet_dims(&engine_xlsx);
 
     assert_eq!(
@@ -78,8 +80,7 @@ fn dimensions_match_source_declared_30x15() {
     // Stronger: the dims from both paths must also match what the source
     // snapshot declared (30 rows × 15 cols). XLSX writers sometimes pad or
     // compact — this pins the expectation.
-    let (engine_snap, _) =
-        YrsComputeEngine::from_snapshot(snapshot_30x15()).expect("from_snapshot");
+    let (engine_snap, _) = ComputeEngine::from_snapshot(snapshot_30x15()).expect("from_snapshot");
     assert_eq!(
         sheet_dims(&engine_snap),
         (30, 15),
@@ -89,7 +90,7 @@ fn dimensions_match_source_declared_30x15() {
     let bytes = engine_snap
         .export_to_xlsx_bytes()
         .expect("export to xlsx bytes");
-    let (engine_xlsx, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
+    let (engine_xlsx, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
     assert_eq!(
         sheet_dims(&engine_xlsx),
         (30, 15),

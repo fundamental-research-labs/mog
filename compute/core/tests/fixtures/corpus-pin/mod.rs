@@ -5,7 +5,7 @@
 //! Each fixture is a `Fixture { name, snapshot, oracle }` tuple produced
 //! by a pure function. The oracle is a hand-computed list of
 //! `(sheet_name, row, col, expected_value)`. The runner constructs a
-//! `YrsComputeEngine::from_snapshot`, walks the oracle, and counts
+//! `ComputeEngine::from_snapshot`, walks the oracle, and counts
 //! matches vs drift.
 //!
 //! Scope discipline (Class V):
@@ -132,6 +132,9 @@ pub fn build_workbook(sheets: Vec<(&str, u32, u32, Vec<CellData>)>) -> WorkbookS
         .into_iter()
         .enumerate()
         .map(|(si, (name, rows, cols, cells))| SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_uuid(si as u32),
             name: name.to_string(),
             rows,

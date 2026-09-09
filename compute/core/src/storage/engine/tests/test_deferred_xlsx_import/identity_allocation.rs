@@ -77,7 +77,7 @@ fn active_second_sheet_identity_collision_fixture_xlsx() -> Vec<u8> {
 fn deferred_full_hydration_does_not_reuse_active_sheet_cell_ids_for_earlier_sheets() {
     let bytes = active_second_sheet_identity_collision_fixture_xlsx();
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     engine
         .import_from_xlsx_bytes_deferred(&bytes)
         .expect("deferred XLSX import should succeed");

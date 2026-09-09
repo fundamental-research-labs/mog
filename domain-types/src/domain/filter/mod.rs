@@ -4,10 +4,10 @@
 //!
 //! 1. **OOXML types** (`AutoFilter`, `FilterColumn`, `OoxmlFilterType`, etc.) - faithfully
 //!    represent the ECMA-376 `<autoFilter>` XML element. Used by the XLSX parser for
-//!    input/output. NOT stored in Yrs.
+//!    input/output and retained as typed import metadata.
 //!
 //! 2. **Runtime types** (`FilterState`, `ColumnFilter`, `FilterKind`, etc.) - the canonical
-//!    representation stored in Yrs and used by the compute engine. XLSX import transforms
+//!    representation stored in native sheet metadata and used by the compute engine. XLSX import transforms
 //!    OOXML types into these; XLSX export reverses the transform.
 
 use std::sync::atomic::AtomicU64;

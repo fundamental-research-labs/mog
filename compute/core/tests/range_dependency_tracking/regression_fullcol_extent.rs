@@ -1,5 +1,5 @@
 use crate::helpers::*;
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use snapshot_types::WorkbookSnapshot;
 use value_types::CellValue;
 
@@ -50,7 +50,7 @@ pub(crate) fn regression_fullcol_bbox_extent_miss() {
         ..Default::default()
     };
 
-    let (mut engine, _init) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (mut engine, _init) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
     let source = sheet_id(0);
     let dependent = cell_id(1, 0, 0);
 

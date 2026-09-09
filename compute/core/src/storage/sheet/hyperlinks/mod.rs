@@ -1,12 +1,5 @@
-//! Sheet-level hyperlink storage facade.
-//!
-//! Hyperlinks are stored as cell metadata in per-sheet Yrs cell maps. The
-//! implementation is split into focused modules for serialized keys, decoding,
-//! read queries, and mutations. Existing callers should continue to use
-//! `crate::storage::sheet::hyperlinks::*`.
+//! Native hyperlink metadata anchored by stable cell identities.
 
-mod codec;
-mod keys;
 mod mutations;
 mod queries;
 
@@ -15,7 +8,15 @@ mod mutation_metadata_tests;
 #[cfg(test)]
 mod tests;
 
-pub use mutations::{remove_hyperlink, set_hyperlink};
-#[cfg(test)]
-pub use queries::get_hyperlink_full;
+pub(crate) use mutations::reanchor_before_delete;
+pub use mutations::{clear_hyperlinks_in_range, remove_hyperlink, set_hyperlink};
+pub(crate) use queries::hyperlink_formula_url;
 pub use queries::{get_all_hyperlinks, get_hyperlink};
+
+/// Authored order is the vector order. Only export derives an A1 reference.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct StoredHyperlink {
+    pub start_id: cell_types::CellId,
+    pub end_id: Option<cell_types::CellId>,
+    pub data: domain_types::domain::hyperlink::Hyperlink,
+}

@@ -2,7 +2,7 @@
 //!
 //! These zero-sized types exist solely to host `#[bridge::api]` / `#[bridge::pure]`
 //! annotations so that `bridge-wasm` and `bridge-tauri` can generate bindings for
-//! stateless functions that don't require a `YrsComputeEngine` instance.
+//! stateless functions that don't require a `ComputeEngine` instance.
 //!
 //! Each wrapper mirrors the public API surface already consumed by the WASM bindings
 //! in `compute-core-wasm/src/lib.rs`.

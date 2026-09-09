@@ -8,11 +8,10 @@ use value_types::{CellValue, FiniteF64};
 
 #[test]
 fn test_evaluate_filter_value() {
-    let (storage, sheet_id) = storage_with_sheet();
+    let (mut storage, sheet_id) = storage_with_sheet();
 
     let filter = create_filter(
-        storage.doc(),
-        storage.sheets(),
+        &mut storage,
         &sheet_id,
         "header-start",
         "header-end",
@@ -32,8 +31,7 @@ fn test_evaluate_filter_value() {
         include_blanks: false,
     };
     set_column_filter(
-        storage.doc(),
-        storage.sheets(),
+        &mut storage,
         &sheet_id,
         &filter.id,
         "col-header-0",
@@ -64,8 +62,7 @@ fn test_evaluate_filter_value() {
     };
 
     let results = evaluate_filter(
-        storage.doc(),
-        storage.sheets(),
+        &storage,
         &sheet_id,
         &filter.id,
         get_cell_value,
@@ -83,11 +80,10 @@ fn test_evaluate_filter_value() {
 
 #[test]
 fn test_evaluate_filter_condition() {
-    let (storage, sheet_id) = storage_with_sheet();
+    let (mut storage, sheet_id) = storage_with_sheet();
 
     let filter = create_filter(
-        storage.doc(),
-        storage.sheets(),
+        &mut storage,
         &sheet_id,
         "header-start",
         "header-end",
@@ -108,8 +104,7 @@ fn test_evaluate_filter_condition() {
         logic: FilterLogic::And,
     };
     set_column_filter(
-        storage.doc(),
-        storage.sheets(),
+        &mut storage,
         &sheet_id,
         &filter.id,
         "col-header-0",
@@ -138,8 +133,7 @@ fn test_evaluate_filter_condition() {
     };
 
     let results = evaluate_filter(
-        storage.doc(),
-        storage.sheets(),
+        &storage,
         &sheet_id,
         &filter.id,
         get_cell_value,
@@ -157,11 +151,10 @@ fn test_evaluate_filter_condition() {
 
 #[test]
 fn test_evaluate_filter_multi_column_and() {
-    let (storage, sheet_id) = storage_with_sheet();
+    let (mut storage, sheet_id) = storage_with_sheet();
 
     let filter = create_filter(
-        storage.doc(),
-        storage.sheets(),
+        &mut storage,
         &sheet_id,
         "header-start",
         "header-end",
@@ -188,16 +181,14 @@ fn test_evaluate_filter_multi_column_and() {
     };
 
     set_column_filter(
-        storage.doc(),
-        storage.sheets(),
+        &mut storage,
         &sheet_id,
         &filter.id,
         "col-header-0",
         criteria1,
     );
     set_column_filter(
-        storage.doc(),
-        storage.sheets(),
+        &mut storage,
         &sheet_id,
         &filter.id,
         "col-header-1",
@@ -232,8 +223,7 @@ fn test_evaluate_filter_multi_column_and() {
     };
 
     let results = evaluate_filter(
-        storage.doc(),
-        storage.sheets(),
+        &storage,
         &sheet_id,
         &filter.id,
         get_cell_value,
@@ -250,11 +240,10 @@ fn test_evaluate_filter_multi_column_and() {
 
 #[test]
 fn test_evaluate_no_filters_returns_empty() {
-    let (storage, sheet_id) = storage_with_sheet();
+    let (mut storage, sheet_id) = storage_with_sheet();
 
     let filter = create_filter(
-        storage.doc(),
-        storage.sheets(),
+        &mut storage,
         &sheet_id,
         "a",
         "b",
@@ -269,8 +258,7 @@ fn test_evaluate_no_filters_returns_empty() {
     let resolve = |_: &str| Some((0u32, 0u32));
 
     let results = evaluate_filter(
-        storage.doc(),
-        storage.sheets(),
+        &storage,
         &sheet_id,
         &filter.id,
         get_cell_value,
@@ -283,11 +271,10 @@ fn test_evaluate_no_filters_returns_empty() {
 
 #[test]
 fn test_get_unique_values() {
-    let (storage, sheet_id) = storage_with_sheet();
+    let (mut storage, sheet_id) = storage_with_sheet();
 
     let filter = create_filter(
-        storage.doc(),
-        storage.sheets(),
+        &mut storage,
         &sheet_id,
         "header-start",
         "header-end",
@@ -321,8 +308,7 @@ fn test_get_unique_values() {
     };
 
     let unique = get_unique_values(
-        storage.doc(),
-        storage.sheets(),
+        &storage,
         &sheet_id,
         &filter.id,
         "col-header-0",
@@ -340,11 +326,10 @@ fn test_get_unique_values() {
 
 #[test]
 fn test_get_filtered_record_count() {
-    let (storage, sheet_id) = storage_with_sheet();
+    let (mut storage, sheet_id) = storage_with_sheet();
 
     let filter = create_filter(
-        storage.doc(),
-        storage.sheets(),
+        &mut storage,
         &sheet_id,
         "header-start",
         "header-end",
@@ -360,8 +345,7 @@ fn test_get_filtered_record_count() {
         include_blanks: false,
     };
     set_column_filter(
-        storage.doc(),
-        storage.sheets(),
+        &mut storage,
         &sheet_id,
         &filter.id,
         "col-header-0",
@@ -388,8 +372,7 @@ fn test_get_filtered_record_count() {
     };
 
     let count = get_filtered_record_count(
-        storage.doc(),
-        storage.sheets(),
+        &storage,
         &sheet_id,
         &filter.id,
         get_cell_value,
@@ -406,11 +389,10 @@ fn test_get_filtered_record_count() {
 
 #[test]
 fn test_evaluate_deleted_header() {
-    let (storage, sheet_id) = storage_with_sheet();
+    let (mut storage, sheet_id) = storage_with_sheet();
 
     let filter = create_filter(
-        storage.doc(),
-        storage.sheets(),
+        &mut storage,
         &sheet_id,
         "header-start",
         "header-end",
@@ -426,8 +408,7 @@ fn test_evaluate_deleted_header() {
         include_blanks: false,
     };
     set_column_filter(
-        storage.doc(),
-        storage.sheets(),
+        &mut storage,
         &sheet_id,
         &filter.id,
         "deleted-header",
@@ -448,8 +429,7 @@ fn test_evaluate_deleted_header() {
     };
 
     let results = evaluate_filter(
-        storage.doc(),
-        storage.sheets(),
+        &storage,
         &sheet_id,
         &filter.id,
         get_cell_value,
@@ -464,11 +444,10 @@ fn test_evaluate_deleted_header() {
 
 #[test]
 fn test_evaluate_deleted_range_corners() {
-    let (storage, sheet_id) = storage_with_sheet();
+    let (mut storage, sheet_id) = storage_with_sheet();
 
     let filter = create_filter(
-        storage.doc(),
-        storage.sheets(),
+        &mut storage,
         &sheet_id,
         "header-start",
         "header-end",
@@ -483,14 +462,7 @@ fn test_evaluate_deleted_range_corners() {
         values: vec![serde_json::json!("X")],
         include_blanks: false,
     };
-    set_column_filter(
-        storage.doc(),
-        storage.sheets(),
-        &sheet_id,
-        &filter.id,
-        "col-1",
-        criteria,
-    );
+    set_column_filter(&mut storage, &sheet_id, &filter.id, "col-1", criteria);
 
     let get_cell_value = |_: u32, _: u32| CellValue::Null;
 
@@ -498,8 +470,7 @@ fn test_evaluate_deleted_range_corners() {
     let resolve = |_: &str| -> Option<(u32, u32)> { None };
 
     let results = evaluate_filter(
-        storage.doc(),
-        storage.sheets(),
+        &storage,
         &sheet_id,
         &filter.id,
         get_cell_value,
@@ -512,11 +483,10 @@ fn test_evaluate_deleted_range_corners() {
 
 #[test]
 fn test_unique_values_with_numbers() {
-    let (storage, sheet_id) = storage_with_sheet();
+    let (mut storage, sheet_id) = storage_with_sheet();
 
     let filter = create_filter(
-        storage.doc(),
-        storage.sheets(),
+        &mut storage,
         &sheet_id,
         "header-start",
         "header-end",
@@ -548,8 +518,7 @@ fn test_unique_values_with_numbers() {
     };
 
     let unique = get_unique_values(
-        storage.doc(),
-        storage.sheets(),
+        &storage,
         &sheet_id,
         &filter.id,
         "col-0",

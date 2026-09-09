@@ -290,8 +290,10 @@ impl<'a> EvalMetadata for OverrideContext<'a> {
         self.access.sheet_count()
     }
 
-    fn get_dense_column(&self, sheet: &SheetId, col: u32) -> Option<&DenseColumn> {
-        self.access.get_dense_column(sheet, col)
+    fn get_dense_column(&self, _sheet: &SheetId, _col: u32) -> Option<&DenseColumn> {
+        // Probe evaluation can recursively change formula values anywhere in a
+        // range, so native caches are never valid for this context.
+        None
     }
 
     fn cell_has_formula(&self, sheet: &SheetId, row: u32, col: u32) -> bool {

@@ -1,4 +1,4 @@
-//! Round-trip tests for the ParseOutput pipeline (parser-only, no Yrs).
+//! Round-trip tests for the ParseOutput pipeline (parser-only).
 //!
 //! Tests the cycle: ParseOutput -> write_xlsx_from_parse_output -> parse_xlsx_to_output -> compare.
 

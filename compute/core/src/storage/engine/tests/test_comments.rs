@@ -5,16 +5,12 @@ use super::helpers::*;
 use crate::snapshot::ChangeKind;
 use cell_types::CellId;
 use compute_document::hex::hex_to_id;
-use domain_types::{
-    ParseOutput, SheetData,
-    domain::comment::{Comment, CommentType, RichTextRun},
-};
-use value_types::CellValue;
+use domain_types::domain::comment::CommentType;
 
 #[test]
 fn set_thread_resolved_emits_comment_change_for_thread_cell() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -54,7 +50,7 @@ fn set_thread_resolved_emits_comment_change_for_thread_cell() {
 #[test]
 fn sdk_authored_threaded_comments_export_with_person_identity() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -144,7 +140,7 @@ fn sdk_authored_threaded_comments_export_with_person_identity() {
 #[test]
 fn sdk_authored_note_exports_as_legacy_note_without_person_identity() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -189,173 +185,9 @@ fn sdk_authored_note_exports_as_legacy_note_without_person_identity() {
 }
 
 #[test]
-fn imported_note_edit_stays_consistent_through_undo_and_redo() {
-    let input = ParseOutput {
-        sheets: vec![SheetData {
-            name: "Notes".to_string(),
-            rows: 1,
-            cols: 1,
-            cells: vec![domain_types::CellData {
-                row: 0,
-                col: 0,
-                value: CellValue::Text("note owner".into()),
-                ..Default::default()
-            }],
-            comments: vec![Comment {
-                cell_ref: "A1".to_string(),
-                author: "Imported Author".to_string(),
-                content: Some("Fixture note".to_string()),
-                runs: vec![RichTextRun {
-                    text: "Fixture note".to_string(),
-                    ..Default::default()
-                }],
-                comment_type: CommentType::Note,
-                ..Default::default()
-            }],
-            ..Default::default()
-        }],
-        ..Default::default()
-    };
-    let mut engine = engine_from_parse_output_normal(&input);
-    let sid =
-        SheetId::from_uuid_str(&engine.get_all_sheet_ids()[0]).expect("valid hydrated sheet id");
-    let note_id = engine
-        .get_comments_for_cell_by_position(&sid, 0, 0)
-        .into_iter()
-        .next()
-        .expect("imported note should exist")
-        .id;
-
-    engine
-        .update_comment(&sid, &note_id, "Edited note")
-        .expect("edit imported note");
-    let edited = engine
-        .get_comment(&sid, &note_id)
-        .expect("edited note should exist");
-    assert_eq!(edited.content.as_deref(), Some("Edited note"));
-    assert_eq!(edited.runs[0].text, "Edited note");
-
-    engine.undo().expect("undo imported note edit");
-    let undone = engine
-        .get_comment(&sid, &note_id)
-        .expect("undone note should exist");
-    assert_eq!(undone.content.as_deref(), Some("Fixture note"));
-    assert_eq!(undone.runs[0].text, "Fixture note");
-
-    engine.redo().expect("redo imported note edit");
-    let redone = engine
-        .get_comment(&sid, &note_id)
-        .expect("redone note should exist");
-    assert_eq!(redone.content.as_deref(), Some("Edited note"));
-    assert_eq!(redone.runs[0].text, "Edited note");
-}
-
-#[test]
-fn undo_comment_delete_emits_set_change_for_original_cell() {
-    let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
-    let sid = sheet_id();
-
-    engine
-        .add_comment_by_position(
-            &sid,
-            0,
-            0,
-            "Root thread",
-            "Alice",
-            None,
-            None,
-            CommentType::ThreadedComment,
-        )
-        .expect("add thread root");
-
-    let root = engine
-        .get_comments_for_cell_by_position(&sid, 0, 0)
-        .into_iter()
-        .next()
-        .expect("thread root should exist");
-
-    engine
-        .delete_comments_for_cell_by_position(&sid, 0, 0)
-        .expect("delete comment");
-
-    let (_patches, undo_result) = engine.undo().expect("undo delete comment");
-
-    assert!(engine.has_comments_by_position(&sid, 0, 0));
-    assert_eq!(undo_result.comment_changes.len(), 1);
-    let change = &undo_result.comment_changes[0];
-    assert_eq!(change.sheet_id, sid.to_uuid_string());
-    assert_eq!(change.cell_id, root.cell_ref);
-    assert_eq!(
-        change
-            .position
-            .as_ref()
-            .map(|position| (position.row, position.col)),
-        Some((0, 0))
-    );
-    assert_eq!(change.kind, ChangeKind::Set);
-}
-
-#[test]
-fn undo_value_edit_preserves_note_identity_on_blank_cell() {
-    let snap = empty_bulk_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
-    let sid = sheet_id();
-
-    engine
-        .add_comment_by_position(
-            &sid,
-            0,
-            0,
-            "Original note",
-            "User",
-            None,
-            None,
-            CommentType::Note,
-        )
-        .expect("add note");
-
-    assert!(engine.has_comments_by_position(&sid, 0, 0));
-    let note = engine
-        .get_comments_for_cell_by_position(&sid, 0, 0)
-        .into_iter()
-        .next()
-        .expect("note should be addressable before edit");
-
-    engine
-        .set_cell_value_parsed(&sid, 0, 0, "New value")
-        .expect("set value");
-
-    assert!(engine.has_comments_by_position(&sid, 0, 0));
-    let owner_before_undo = engine.stores.storage.read_cell_id_at_pos(&sid, 0, 0);
-    assert!(
-        owner_before_undo.is_some(),
-        "note-backed cell identity should be persisted before undo"
-    );
-
-    engine.undo().expect("undo value edit");
-
-    assert!(
-        engine.has_comments_by_position(&sid, 0, 0),
-        "undoing only the value edit must leave the note reachable by position"
-    );
-    let after_undo = engine.get_comments_for_cell_by_position(&sid, 0, 0);
-    assert_eq!(after_undo.len(), 1);
-    assert_eq!(after_undo[0].id, note.id);
-    assert_eq!(after_undo[0].comment_type, CommentType::Note);
-
-    engine.redo().expect("redo value edit");
-
-    let after_redo = engine.get_comments_for_cell_by_position(&sid, 0, 0);
-    assert_eq!(after_redo.len(), 1);
-    assert_eq!(after_redo[0].id, note.id);
-    assert_eq!(after_redo[0].comment_type, CommentType::Note);
-}
-
-#[test]
 fn direct_clear_preserves_note_identity_on_blank_cell() {
     let snap = empty_bulk_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -400,7 +232,7 @@ fn direct_clear_preserves_note_identity_on_blank_cell() {
 #[test]
 fn batch_clear_preserves_note_identity_on_blank_cell() {
     let snap = empty_bulk_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -434,4 +266,274 @@ fn batch_clear_preserves_note_identity_on_blank_cell() {
     assert_eq!(after_clear.len(), 1);
     assert_eq!(after_clear[0].id, note.id);
     assert_eq!(after_clear[0].comment_type, CommentType::Note);
+}
+
+#[test]
+fn native_comments_copy_preserves_threads_note_geometry_annotations_and_xlsx() {
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let sid = sheet_id();
+    engine
+        .add_comment_by_position(
+            &sid,
+            4,
+            4,
+            "Native note",
+            "Alice",
+            None,
+            None,
+            CommentType::Note,
+        )
+        .unwrap();
+    let note = engine
+        .get_comments_for_cell_by_position(&sid, 4, 4)
+        .remove(0);
+    let (_, geometry) = engine
+        .set_note_dimensions(&sid, &note.id, Some(105.0), Some(165.0))
+        .unwrap();
+    assert_eq!(geometry.comment_changes.len(), 1);
+    engine.set_note_visible(&sid, &note.id, true).unwrap();
+    engine
+        .set_cell_annotation_by_position(&sid, 4, 4, "Copied annotation")
+        .unwrap();
+    engine
+        .add_comment_by_position(
+            &sid,
+            1,
+            1,
+            "Thread root",
+            "Alice",
+            None,
+            None,
+            CommentType::ThreadedComment,
+        )
+        .unwrap();
+    let root = engine
+        .get_comments_for_cell_by_position(&sid, 1, 1)
+        .remove(0);
+    engine
+        .add_comment(
+            &sid,
+            &root.cell_ref,
+            "Reply",
+            "Bob",
+            None,
+            Some(root.id.clone()),
+            CommentType::ThreadedComment,
+        )
+        .unwrap();
+    engine.set_thread_resolved(&sid, &root.id, true).unwrap();
+    let (copy, _) = engine.copy_sheet(&sid, "Copied comments").unwrap();
+    let copy = cell_types::SheetId::from_uuid_str(&copy).unwrap();
+    let copied_note = engine
+        .get_comments_for_cell_by_position(&copy, 4, 4)
+        .remove(0);
+    assert_ne!(copied_note.cell_ref, note.cell_ref);
+    assert_ne!(copied_note.id, note.id);
+    assert_eq!(copied_note.note_height, Some(105.0));
+    assert_eq!(copied_note.note_width, Some(165.0));
+    assert_eq!(copied_note.visible, Some(true));
+    let thread = engine.get_comments_for_cell_by_position(&copy, 1, 1);
+    let copied_root = thread
+        .iter()
+        .find(|comment| comment.parent_id.is_none())
+        .unwrap();
+    let copied_reply = thread
+        .iter()
+        .find(|comment| comment.parent_id.is_some())
+        .unwrap();
+    assert_ne!(copied_root.id, root.id);
+    assert_eq!(
+        copied_reply.parent_id.as_deref(),
+        Some(copied_root.id.as_str())
+    );
+    assert!(thread.iter().all(|comment| comment.resolved == Some(true)));
+    let annotation = engine
+        .get_cell_annotation_by_position(&copy, 4, 4)
+        .unwrap()
+        .unwrap();
+    assert_eq!(annotation.text, "Copied annotation");
+    assert_eq!(
+        annotation.status,
+        crate::engine_types::AnnotationStatus::Fresh
+    );
+    let bytes = engine.export_to_xlsx_bytes().unwrap();
+    let (reloaded, _) = ComputeEngine::from_xlsx_bytes(&bytes).unwrap();
+    let copy = *reloaded
+        .mirror()
+        .sheet_ids()
+        .find(|id| reloaded.mirror().get_sheet(id).unwrap().name == "Copied comments")
+        .unwrap();
+    assert_eq!(reloaded.get_comment_count(&copy), 3);
+    let note = reloaded
+        .get_comments_for_cell_by_position(&copy, 4, 4)
+        .remove(0);
+    assert_eq!(note.visible, Some(true));
+    assert_eq!(note.note_height, Some(105.0));
+    assert_eq!(note.note_width, Some(165.0));
+    assert_eq!(
+        reloaded
+            .get_comments_for_cell_by_position(&copy, 1, 1)
+            .len(),
+        2
+    );
+}
+
+#[test]
+fn native_comments_and_annotations_follow_relocation_and_row_identity_deletion() {
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let sid = sheet_id();
+    engine
+        .add_comment_by_position(
+            &sid,
+            3,
+            3,
+            "Move me",
+            "Alice",
+            None,
+            None,
+            CommentType::Note,
+        )
+        .unwrap();
+    engine
+        .set_cell_annotation_by_position(&sid, 3, 3, "Move annotation")
+        .unwrap();
+    let original = engine
+        .get_comments_for_cell_by_position(&sid, 3, 3)
+        .remove(0);
+    let (target, _) = engine.copy_sheet(&sid, "Target comments").unwrap();
+    let target = cell_types::SheetId::from_uuid_str(&target).unwrap();
+    engine.clear_all_comments(&target).unwrap();
+    engine
+        .add_comment_by_position(
+            &target,
+            5,
+            5,
+            "Displaced note",
+            "Bob",
+            None,
+            None,
+            CommentType::Note,
+        )
+        .unwrap();
+    engine
+        .set_cell_annotation_by_position(&target, 5, 5, "Displaced annotation")
+        .unwrap();
+    engine
+        .relocate_cells(&sid, 3, 3, 3, 3, &target, 5, 5)
+        .unwrap();
+    assert!(
+        engine
+            .get_comments_for_cell_by_position(&sid, 3, 3)
+            .is_empty()
+    );
+    let moved = engine
+        .get_comments_for_cell_by_position(&target, 5, 5)
+        .remove(0);
+    assert_eq!(moved.id, original.id);
+    assert_eq!(moved.cell_ref, original.cell_ref);
+    assert_eq!(engine.get_comment_count(&target), 1);
+    let moved_id = CellId::from_uuid_str(&moved.cell_ref).unwrap();
+    assert!(engine.mirror().get_cell_value_raw(&moved_id).is_none());
+    assert_eq!(
+        engine
+            .get_cell_annotation_by_position(&target, 5, 5)
+            .unwrap()
+            .unwrap()
+            .text,
+        "Move annotation"
+    );
+    engine
+        .structure_change(
+            &target,
+            &formula_types::StructureChange::InsertRows {
+                at: 5,
+                count: 1,
+                new_row_ids: Vec::new(),
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        engine
+            .get_comments_for_cell_by_position(&target, 6, 5)
+            .remove(0)
+            .id,
+        original.id
+    );
+    engine
+        .structure_change(
+            &target,
+            &formula_types::StructureChange::DeleteRows {
+                at: 6,
+                count: 1,
+                deleted_cell_ids: Vec::new(),
+            },
+        )
+        .unwrap();
+    assert_eq!(engine.get_comment_count(&target), 0);
+    assert!(
+        engine
+            .get_cell_annotation_by_position(&target, 6, 5)
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[test]
+fn selected_sheet_comment_import_preserves_colliding_person_identities() {
+    let (mut source, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let sid = sheet_id();
+    source
+        .add_comment_by_position(
+            &sid,
+            2,
+            2,
+            "Imported thread",
+            "Imported author",
+            None,
+            None,
+            CommentType::ThreadedComment,
+        )
+        .unwrap();
+    let imported_person = source.stores.storage.metadata.persons[0].clone();
+    let source_name = source.mirror().get_sheet(&sid).unwrap().name.clone();
+    let bytes = source.export_to_xlsx_bytes().unwrap();
+    let (mut target, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let mut existing = imported_person.clone();
+    existing.display_name = "Existing author".into();
+    target
+        .stores
+        .storage
+        .metadata
+        .persons
+        .push(existing.clone());
+    let before = target.stores.storage.metadata.persons.clone();
+    assert!(
+        target
+            .import_sheets_from_xlsx(&bytes, vec!["Missing sheet".into()], None)
+            .is_err()
+    );
+    assert_eq!(target.stores.storage.metadata.persons, before);
+    let imported = target
+        .import_sheets_from_xlsx(&bytes, vec![source_name], None)
+        .unwrap();
+    let imported = *target
+        .mirror()
+        .sheet_ids()
+        .find(|id| target.mirror().get_sheet(id).unwrap().name == imported[0])
+        .unwrap();
+    let thread = target
+        .get_comments_for_cell_by_position(&imported, 2, 2)
+        .remove(0);
+    assert_ne!(thread.person_id.as_deref(), Some(existing.id.as_str()));
+    let parsed = xlsx_api::parse(&target.export_to_xlsx_bytes().unwrap())
+        .unwrap()
+        .output;
+    assert!(parsed.persons.iter().any(|person| person == &existing));
+    assert!(
+        parsed
+            .persons
+            .iter()
+            .any(|person| Some(&person.id) == thread.person_id.as_ref()
+                && person.display_name == imported_person.display_name)
+    );
 }

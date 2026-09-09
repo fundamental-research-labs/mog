@@ -1,21 +1,19 @@
-use super::super::KEY_STYLE_PALETTE;
 use super::cell::get_properties;
 use super::defaults::default_format;
 use super::merge::merge_formats;
 use super::row_col::{get_col_format, get_row_format};
 use crate::identity::GridIndex;
 use crate::mirror::SheetMirror;
-use crate::storage::YrsStorage;
+use crate::storage::WorkbookStorage;
 use crate::storage::properties::CellProperties;
 use cell_types::SheetId;
 use domain_types::{CellFormat, CellVerticalAlign};
 use ooxml_types::styles::{HorizontalAlign, PatternType};
-use yrs::{Any, Map, Out, Transact};
 
 /// Get the effective (computed) format for a cell.
 ///
 /// Merges from lowest to highest priority:
-/// `default -> workbook Normal -> column range default -> column -> row -> Format Range -> table -> cell`
+/// `default -> workbook Normal -> column range default -> column -> row -> inherited range -> table -> direct range -> cell`
 ///
 /// Each property is resolved independently -- a cell can inherit font
 /// from row, color from column, and alignment from default.
@@ -24,7 +22,7 @@ use yrs::{Any, Map, Out, Transact};
 /// in the mirror's spatial index are consulted. When `None`, the cascade
 /// skips the Format Range layer.
 pub fn get_effective_format(
-    storage: &YrsStorage,
+    storage: &WorkbookStorage,
     sheet_id: &SheetId,
     cell_id: &str,
     row: u32,
@@ -36,13 +34,7 @@ pub fn get_effective_format(
     let base = get_workbook_base_format(storage);
     let col_format = get_col_format(storage, sheet_id, col, grid_index);
     let row_format = get_row_format(storage, sheet_id, row, grid_index);
-    let cell_props = get_properties(
-        storage.doc(),
-        storage.workbook_map(),
-        storage.sheets(),
-        sheet_id,
-        cell_id,
-    );
+    let cell_props = get_properties(storage, sheet_id, cell_id);
     let cell_format = materialize_cell_layer_format(cell_props.as_ref());
     get_effective_format_from_preloaded_layers(
         &base,
@@ -58,10 +50,10 @@ pub fn get_effective_format(
 }
 
 /// Same cascade as `get_effective_format`, but accepts pre-fetched cell properties
-/// to avoid a redundant CRDT read when the caller already has them (e.g. for the
+/// to avoid a redundant property lookup when the caller already has them (e.g. for the
 /// skip-empty-cell check in `query_range`).
 pub fn get_effective_format_preloaded(
-    storage: &YrsStorage,
+    storage: &WorkbookStorage,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -94,7 +86,7 @@ pub fn get_effective_format_preloaded(
 /// table layers (which require a cell_id). Used by the viewport render pipeline
 /// for grid positions that have no allocated cell.
 pub fn get_positional_format(
-    storage: &YrsStorage,
+    storage: &WorkbookStorage,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -149,6 +141,7 @@ pub(crate) fn get_effective_format_from_preloaded_layers(
         Some(format) => merge_formats(&after_range, format),
         None => after_range,
     };
+    let after_table = apply_direct_format_range_layer(&after_table, row, col, sheet_mirror);
     let effective = match cell_format {
         Some(format) => merge_formats(&after_table, format),
         None => after_table,
@@ -160,7 +153,7 @@ pub(crate) fn get_effective_format_from_preloaded_layers(
 ///
 /// Bulk callers use this to avoid a spatial-index query and temporary match
 /// vector for every cell. `format_range` must already reflect ascending
-/// `RangeId` precedence, exactly like [`apply_format_range_layer`].
+/// range precedence, exactly like [`apply_format_range_layer`].
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn get_effective_format_from_preloaded_layers_with_range(
     base: &CellFormat,
@@ -168,6 +161,7 @@ pub(crate) fn get_effective_format_from_preloaded_layers_with_range(
     row_format: Option<&CellFormat>,
     col: u32,
     format_range: Option<&CellFormat>,
+    direct_range: Option<&CellFormat>,
     table_format: Option<&CellFormat>,
     cell_format: Option<&CellFormat>,
     sheet_mirror: Option<&SheetMirror>,
@@ -191,6 +185,9 @@ pub(crate) fn get_effective_format_from_preloaded_layers_with_range(
         Some(format) => merge_formats(&after_range, format),
         None => after_range,
     };
+    let after_table = direct_range
+        .map(|format| merge_formats(&after_table, format))
+        .unwrap_or(after_table);
     let effective = match cell_format {
         Some(format) => merge_formats(&after_table, format),
         None => after_table,
@@ -220,7 +217,7 @@ fn canonicalize_effective_fill(mut format: CellFormat) -> CellFormat {
 /// Workbook Normal style is stored as style palette entry 0 during XLSX
 /// hydration. It sits above Mog's built-in fallback defaults and below every
 /// positional or authored style layer.
-pub(crate) fn get_workbook_base_format(storage: &YrsStorage) -> CellFormat {
+pub(crate) fn get_workbook_base_format(storage: &WorkbookStorage) -> CellFormat {
     let base = default_format();
     let Some(normal) = workbook_normal_format(storage) else {
         return base;
@@ -228,18 +225,8 @@ pub(crate) fn get_workbook_base_format(storage: &YrsStorage) -> CellFormat {
     merge_formats(&base, &normal)
 }
 
-fn workbook_normal_format(storage: &YrsStorage) -> Option<CellFormat> {
-    let txn = storage.doc().transact();
-    let palette = match storage.workbook_map().get(&txn, KEY_STYLE_PALETTE) {
-        Some(Out::YMap(map)) => map,
-        _ => return None,
-    };
-    match palette.get(&txn, "0") {
-        Some(Out::Any(Any::String(ref fmt_json))) => {
-            serde_json::from_str::<CellFormat>(fmt_json).ok()
-        }
-        _ => None,
-    }
+fn workbook_normal_format(storage: &WorkbookStorage) -> Option<CellFormat> {
+    storage.metadata.style_palette.first().cloned()
 }
 
 pub(crate) fn materialize_cell_layer_format(
@@ -336,8 +323,7 @@ fn apply_col_format_range_layer(
 /// Apply the Format Range layer to the cascade.
 ///
 /// Queries the mirror's format range spatial index for all Format Ranges
-/// covering `(row, col)`, merges them field-by-field with higher `RangeId`
-/// winning on conflicts, and merges the result into `base`.
+/// covering `(row, col)`, merges them field-by-field in stable precedence order, and merges the result into `base`.
 ///
 /// When `sheet_mirror` is `None`, this is a no-op that returns `base` unchanged
 /// (backward-compatible with code paths that don't have a mirror reference).
@@ -352,13 +338,13 @@ pub(in crate::storage::properties) fn apply_format_range_layer(
         None => return base.clone(),
     };
 
-    let matching = mirror.format_ranges_at(row, col);
+    let matching =
+        mirror.format_ranges_at_layer(row, col, Some(crate::mirror::FormatRangeLayer::Inherited));
     if matching.is_empty() {
         return base.clone();
     }
 
-    // Merge overlapping Format Ranges: iterate in RangeId order (ascending)
-    // so that higher RangeId values override lower ones on per-property conflicts.
+    // Merge overlapping rectangles in their stable precedence order.
     let mut range_fmt = CellFormat::default();
     for (_id, fmt) in &matching {
         range_fmt = merge_formats(&range_fmt, fmt);
@@ -366,4 +352,21 @@ pub(in crate::storage::properties) fn apply_format_range_layer(
 
     // Merge into the cascade (Format Range overrides row).
     merge_formats(base, &range_fmt)
+}
+
+fn apply_direct_format_range_layer(
+    base: &CellFormat,
+    row: u32,
+    col: u32,
+    sheet: Option<&SheetMirror>,
+) -> CellFormat {
+    let Some(sheet) = sheet else {
+        return base.clone();
+    };
+    sheet
+        .format_ranges_at_layer(row, col, Some(crate::mirror::FormatRangeLayer::Direct))
+        .into_iter()
+        .fold(base.clone(), |format, (_, overlay)| {
+            merge_formats(&format, overlay)
+        })
 }

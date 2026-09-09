@@ -9,8 +9,8 @@ pub use bridge_delegate_macros::__expand;
 /// bridge_delegate::delegate!(
 ///     target = ComputeService,
 ///     dispatch = dispatch,
-///     compute_core::__bridge_descriptor_YrsComputeEngine_core,
-///     compute_core::__bridge_descriptor_YrsComputeEngine_features,
+///     compute_core::__bridge_descriptor_ComputeEngine_core,
+///     compute_core::__bridge_descriptor_ComputeEngine_features,
 /// );
 /// ```
 ///

@@ -6,7 +6,7 @@ use snapshot_types::versioning::{
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
 
-use crate::storage::engine::YrsComputeEngine;
+use crate::storage::engine::ComputeEngine;
 use crate::versioning::{
     NAMED_RANGES_DOMAIN, SemanticWorkbookStateReader, diff_semantic_workbook_states,
 };
@@ -15,7 +15,7 @@ use super::{cell, workbook};
 
 #[test]
 fn engine_semantic_reader_reports_named_range_create_update_and_delete() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(workbook(vec![
+    let (mut engine, _) = ComputeEngine::from_snapshot(workbook(vec![
         cell(1, 0, 0, CellValue::number(10.0)),
         cell(2, 1, 1, CellValue::number(20.0)),
     ]))
@@ -112,10 +112,16 @@ fn engine_semantic_reader_reports_named_range_create_update_and_delete() {
 #[test]
 fn engine_semantic_reader_named_range_digest_ignores_durable_id_allocation() {
     let (mut left, _) =
-        YrsComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::number(10.0))]))
+        ComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::number(10.0))]))
             .expect("left");
-    let (mut right, _) = YrsComputeEngine::from_snapshot(WorkbookSnapshot {
+    let (mut right, _) = ComputeEngine::from_snapshot(WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "660e8400-e29b-41d4-a716-446655440000".to_string(),
             name: "Sheet1".to_string(),
             rows: 10,

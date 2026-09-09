@@ -1,7 +1,7 @@
 use crate::helpers::*;
 use crate::matrix::Extent;
 use crate::summary::Summary;
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use snapshot_types::{CellData, WorkbookSnapshot};
 use value_types::CellValue;
 
@@ -49,7 +49,7 @@ pub(crate) fn indirect_workbook(extent: Extent, arg_in_cell: bool) -> WorkbookSn
 }
 
 pub(crate) fn run_indirect_case(extent: Extent) -> Result<(), String> {
-    let (mut engine, _init) = YrsComputeEngine::from_snapshot(indirect_workbook(extent, false))
+    let (mut engine, _init) = ComputeEngine::from_snapshot(indirect_workbook(extent, false))
         .map_err(|e| format!("from_snapshot err: {:?}", e))?;
     let source = sheet_id(0);
     let dependent = cell_id(1, 0, 0);
@@ -85,9 +85,8 @@ pub(crate) fn run_indirect_case(extent: Extent) -> Result<(), String> {
 /// 3. Change the arg to another column, then back.
 pub(crate) fn run_indirect_arg_revert_case(variant: u8) -> Result<(), String> {
     // Seed a small extent.
-    let (mut engine, _init) =
-        YrsComputeEngine::from_snapshot(indirect_workbook(Extent::A1Only, true))
-            .map_err(|e| format!("from_snapshot err: {:?}", e))?;
+    let (mut engine, _init) = ComputeEngine::from_snapshot(indirect_workbook(Extent::A1Only, true))
+        .map_err(|e| format!("from_snapshot err: {:?}", e))?;
     let dest = sheet_id(1);
     let arg_cell = cell_id(1, 0, 1);
     let dependent = cell_id(1, 0, 0);

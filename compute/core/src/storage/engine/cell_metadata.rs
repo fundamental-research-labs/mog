@@ -1,110 +1,148 @@
-//! Read-only adapter from formula metadata queries to the canonical live
-//! formatting cascade. Cloned Doc/MapRef handles share the engine document;
-//! no mutation methods escape through the provider interface. Each query
-//! releases its read transactions before evaluation continues.
+//! Immutable native metadata projection used by reference-aware evaluation.
+//!
+//! Engine mutation boundaries refresh this projection before evaluation. Only
+//! the formatting, visibility and formula declaration metadata used here is
+//! copied; cell values, history and unrelated workbook package data stay owned
+//! by their canonical stores. Unchanged metadata retains its revision.
 use crate::mirror::{
     CellMirror,
     cell_metadata::{CellMetadataProvider, CellReferenceMetadata, FormulaResultMode},
 };
-use crate::storage::{YrsStorage, properties, sheet::dimensions};
+use crate::storage::{WorkbookStorage, properties, sheet::dimensions};
 use cell_types::{CellId, SheetId, SheetPos};
 use compute_document::hex::id_to_hex;
+use rustc_hash::FxHashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use yrs::{Any, Map, Out, Transact};
 
+static NEXT_REVISION: AtomicU64 = AtomicU64::new(1);
+
+type FormulaDeclarations = FxHashMap<CellId, (Option<FormulaResultMode>, Option<String>)>;
+
+#[derive(Debug)]
 struct StorageCellMetadata {
-    storage: YrsStorage,
-    revision: Arc<AtomicU64>,
+    storage: WorkbookStorage,
+    formulas: FormulaDeclarations,
+    revision: u64,
+    source_revision: u64,
     layout_metrics: domain_types::units::LayoutMetrics,
-    _subscription: yrs::Subscription,
 }
 
-impl std::fmt::Debug for StorageCellMetadata {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("StorageCellMetadata")
-            .finish_non_exhaustive()
+fn has_formula_declaration(metadata: &crate::storage::CellMetadata) -> bool {
+    metadata.formula_result_mode.is_some() || metadata.array_ref.is_some()
+}
+
+impl StorageCellMetadata {
+    fn matches(
+        &self,
+        storage: &WorkbookStorage,
+        layout_metrics: domain_types::units::LayoutMetrics,
+    ) -> bool {
+        self.source_revision == storage.metadata_revision()
+            && self.layout_metrics.column_width_mdw == layout_metrics.column_width_mdw
     }
 }
 
 pub(crate) fn provider(
-    storage: &YrsStorage,
+    storage: &WorkbookStorage,
     layout_metrics: domain_types::units::LayoutMetrics,
 ) -> Arc<dyn CellMetadataProvider> {
-    let revision = Arc::new(AtomicU64::new(0));
-    let updates = Arc::clone(&revision);
-    let subscription = storage
-        .doc()
-        .observe_update_v1(move |_, _| {
-            updates.fetch_add(1, Ordering::Relaxed);
+    let mut projection = WorkbookStorage::new();
+    projection.metadata.style_palette = storage.metadata.style_palette.clone();
+    projection.sheet_metadata = storage
+        .sheet_metadata
+        .iter()
+        .map(|(id, metadata)| {
+            let mut sheet = crate::storage::sheet::SheetMetadata {
+                cell_properties: metadata.cell_properties.clone(),
+                dimensions: metadata.dimensions.clone(),
+                grouping: metadata.grouping.clone(),
+                ..Default::default()
+            };
+            sheet.format.default_col_width = metadata.format.default_col_width;
+            (*id, sheet)
         })
-        .expect("metadata observer installed outside transactions");
+        .collect();
+    let formulas = storage
+        .cell_metadata
+        .iter()
+        .filter(|(_, metadata)| has_formula_declaration(metadata))
+        .map(|(id, metadata)| {
+            (
+                *id,
+                (metadata.formula_result_mode, metadata.array_ref.clone()),
+            )
+        })
+        .collect();
     Arc::new(StorageCellMetadata {
-        revision,
+        storage: projection,
+        formulas,
+        revision: NEXT_REVISION.fetch_add(1, Ordering::Relaxed),
+        source_revision: storage.metadata_revision(),
         layout_metrics,
-        _subscription: subscription,
-        storage: YrsStorage {
-            doc: storage.doc().clone(),
-            workbook: storage.workbook_map().clone(),
-            sheets: storage.sheets().clone(),
-        },
     })
 }
 
-impl CellMetadataProvider for StorageCellMetadata {
-    fn formula_result_mode(&self, sheet: &SheetId, cell: &CellId) -> Option<FormulaResultMode> {
-        let txn = self.storage.doc().transact();
-        let cells = crate::storage::infra::grid_helpers::get_cells_map(
-            &txn,
-            self.storage.sheets(),
-            &id_to_hex(sheet.as_u128()),
-        )?;
-        let Out::YMap(map) = cells.get(&txn, &id_to_hex(cell.as_u128()))? else {
-            return None;
-        };
-        let Out::Any(Any::String(value)) =
-            map.get(&txn, compute_document::schema::KEY_FORMULA_RESULT_MODE)?
-        else {
-            return None;
-        };
-        serde_json::from_str(&value).ok()
+/// Refresh at mutation/evaluation boundaries, retaining the same provider and
+/// revision when relevant metadata has not changed. Native mutation capture
+/// advances the source revision even when history recording is inactive. The
+/// revision comparison is O(1); a replacement copies only metadata.
+pub(crate) fn refresh(
+    storage: &WorkbookStorage,
+    mirror: &mut CellMirror,
+    layout_metrics: domain_types::units::LayoutMetrics,
+) {
+    let unchanged = mirror
+        .cell_metadata_provider
+        .as_ref()
+        .and_then(|provider| provider.as_any())
+        .and_then(|provider| provider.downcast_ref::<StorageCellMetadata>())
+        .is_some_and(|provider| provider.matches(storage, layout_metrics));
+    if !unchanged {
+        mirror.install_cell_metadata_provider(provider(storage, layout_metrics));
     }
-    fn array_formula_ref(&self, sheet: &SheetId, cell: &CellId) -> Option<String> {
-        let txn = self.storage.doc().transact();
-        let cells = crate::storage::infra::grid_helpers::get_cells_map(
-            &txn,
-            self.storage.sheets(),
-            &id_to_hex(sheet.as_u128()),
-        )?;
-        let Out::YMap(map) = cells.get(&txn, &id_to_hex(cell.as_u128()))? else {
-            return None;
-        };
-        compute_document::cell_serde::read_array_ref_from_yrs(&map, &txn)
+}
+
+impl CellMetadataProvider for StorageCellMetadata {
+    fn as_any(&self) -> Option<&dyn std::any::Any> {
+        Some(self)
+    }
+
+    fn formula_result_mode(&self, _sheet: &SheetId, cell: &CellId) -> Option<FormulaResultMode> {
+        self.formulas.get(cell)?.0
+    }
+
+    fn array_formula_ref(&self, _sheet: &SheetId, cell: &CellId) -> Option<String> {
+        self.formulas.get(cell)?.1.clone()
     }
 
     fn revision(&self) -> u64 {
-        self.revision.load(Ordering::Relaxed)
+        self.revision
     }
-    fn row_hidden(&self, sheet: &SheetId, row: u32) -> Option<bool> {
+
+    fn row_hidden(&self, mirror: &CellMirror, sheet: &SheetId, row: u32) -> Option<bool> {
+        let metadata = self.storage.sheet_metadata.get(sheet)?;
+        let manually_or_filter_hidden = mirror
+            .row_id_lookup(sheet, row)
+            .is_some_and(|id| metadata.dimensions.row_hidden(&id));
         Some(
-            dimensions::get_row_visibility_ownership(
-                self.storage.doc(),
-                self.storage.sheets(),
-                sheet,
-                row,
-                None,
-            )
-            .effective_hidden,
+            manually_or_filter_hidden
+                || !crate::storage::sheet::grouping::is_row_visible_by_groups(
+                    &self.storage,
+                    sheet,
+                    row,
+                ),
         )
     }
+
     fn is_row_filtered(&self, mirror: &CellMirror, sheet: &SheetId, row: u32) -> bool {
         dimensions::is_row_hidden_by_any_filter_id(
-            self.storage.doc(),
-            self.storage.sheets(),
+            &self.storage,
             sheet,
             mirror.row_id_lookup(sheet, row),
         )
     }
+
     fn query(
         &self,
         mirror: &CellMirror,
@@ -123,16 +161,7 @@ impl CellMetadataProvider for StorageCellMetadata {
             .and_then(|id| properties::get_col_format_by_id(storage, sheet, id));
         let props = mirror
             .resolve_cell_id(sheet, SheetPos::new(row, col))
-            .or_else(|| storage.read_cell_id_at_pos(sheet, row, col))
-            .and_then(|id| {
-                properties::get_properties(
-                    storage.doc(),
-                    storage.workbook_map(),
-                    storage.sheets(),
-                    sheet,
-                    &id_to_hex(id.as_u128()),
-                )
-            });
+            .and_then(|id| properties::get_properties(storage, sheet, &id_to_hex(id.as_u128())));
         let cell_format = properties::materialize_cell_layer_format(props.as_ref());
         let structured =
             super::services::resolve_structured_format_at_cell(mirror, sheet, row, col);
@@ -147,30 +176,28 @@ impl CellMetadataProvider for StorageCellMetadata {
             Some(sheet_mirror),
             false,
         );
-        let explicit_width = mirror.col_id_lookup(sheet, col).and_then(|id| {
-            dimensions::get_col_width_by_id(storage.doc(), storage.sheets(), sheet, id)
-        });
-        let column_width =
-            if dimensions::is_column_hidden(storage.doc(), storage.sheets(), sheet, col)
-                || !crate::storage::sheet::grouping::is_column_visible_by_groups(
-                    storage.doc(),
-                    storage.sheets(),
-                    sheet,
-                    col,
-                )
-            {
-                0.0
-            } else {
-                explicit_width
-                    .unwrap_or_else(|| {
-                        dimensions::get_sheet_default_col_width(
-                            storage.doc(),
-                            storage.sheets(),
-                            sheet,
-                        )
-                    })
-                    .0
-            };
+        let column_id = mirror.col_id_lookup(sheet, col);
+        let explicit_width =
+            column_id.and_then(|id| dimensions::get_col_width_by_id(storage, sheet, id));
+        let hidden = column_id.is_some_and(|id| {
+            storage
+                .sheet_metadata
+                .get(sheet)
+                .is_some_and(|metadata| metadata.dimensions.hidden_columns.contains(&id))
+        }) || !crate::storage::sheet::grouping::is_column_visible_by_groups(
+            storage, sheet, col,
+        );
+        let column_width = if hidden {
+            0.0
+        } else {
+            explicit_width.map(|width| width.0).unwrap_or_else(|| {
+                storage
+                    .sheet_metadata
+                    .get(sheet)
+                    .and_then(|metadata| metadata.format.default_col_width)
+                    .unwrap_or(dimensions::DEFAULT_COL_WIDTH.0)
+            })
+        };
         Some(CellReferenceMetadata {
             format,
             column_width: display_character_width(
@@ -205,5 +232,241 @@ mod width_tests {
         assert_eq!(display_character_width(8.625, 8.0), 8.0);
         assert_eq!(display_character_width(8.7109375, 14.0), 8.36);
         assert_eq!(display_character_width(0.0, 7.0), 0.0);
+    }
+}
+
+#[cfg(test)]
+mod native_metadata_tests {
+    use super::*;
+    use crate::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
+    use crate::storage::engine::ComputeEngine;
+    use domain_types::CellFormat;
+    use value_types::CellValue;
+
+    #[test]
+    fn refresh_retains_revision_until_formula_metadata_changes() {
+        let mut storage = WorkbookStorage::new();
+        let mut mirror = CellMirror::new();
+        let metrics = domain_types::units::LayoutMetrics::from_column_width_mdw(7.0).unwrap();
+        refresh(&storage, &mut mirror, metrics);
+        let first = mirror.cell_metadata_provider.as_ref().unwrap().revision();
+        refresh(&storage, &mut mirror, metrics);
+        assert_eq!(
+            mirror.cell_metadata_provider.as_ref().unwrap().revision(),
+            first
+        );
+
+        let cell = CellId::from_raw(1);
+        storage.set_cell_metadata(
+            cell,
+            crate::storage::CellMetadata {
+                formula_result_mode: Some(FormulaResultMode::Dynamic),
+                array_ref: Some("A1:B2".into()),
+                ..Default::default()
+            },
+        );
+        refresh(&storage, &mut mirror, metrics);
+        let provider = mirror.cell_metadata_provider.as_ref().unwrap();
+        assert_ne!(provider.revision(), first);
+        assert_eq!(
+            provider.formula_result_mode(&SheetId::from_raw(1), &cell),
+            Some(FormulaResultMode::Dynamic)
+        );
+        assert_eq!(
+            provider
+                .array_formula_ref(&SheetId::from_raw(1), &cell)
+                .as_deref(),
+            Some("A1:B2")
+        );
+    }
+
+    #[test]
+    fn cell_metadata_is_live_after_format_edit_and_history_replay() {
+        let sheet = SheetId::from_raw(1);
+        let cell = CellId::from_raw(2);
+        let snapshot = WorkbookSnapshot {
+            sheets: vec![SheetSnapshot {
+                id: sheet.to_uuid_string(),
+                name: "Sheet1".into(),
+                rows: 10,
+                cols: 10,
+                cells: vec![CellData {
+                    cell_id: cell.to_uuid_string(),
+                    row: 0,
+                    col: 0,
+                    value: CellValue::from(12.0),
+                    formula: None,
+                    identity_formula: None,
+                    array_ref: None,
+                }],
+                identities: vec![],
+                row_axis: None,
+                col_axis: None,
+                ranges: vec![],
+            }],
+            ..Default::default()
+        };
+        let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
+        engine.recalculate().unwrap();
+        let revision = engine
+            .mirror
+            .cell_metadata_provider
+            .as_ref()
+            .unwrap()
+            .revision();
+        engine
+            .set_cell(
+                &sheet,
+                cell,
+                0,
+                0,
+                crate::bridge_types::CellInput::Parse { text: "15".into() },
+            )
+            .unwrap();
+        assert_eq!(
+            engine
+                .mirror
+                .cell_metadata_provider
+                .as_ref()
+                .unwrap()
+                .revision(),
+            revision,
+            "plain edits must retain the native metadata projection"
+        );
+        engine.undo().unwrap();
+        assert_eq!(
+            engine
+                .mirror
+                .cell_metadata_provider
+                .as_ref()
+                .unwrap()
+                .revision(),
+            revision,
+            "value-only undo must retain sparse native replay"
+        );
+        let formula = "CELL(\"format\",A1)";
+        engine
+            .set_cell(
+                &sheet,
+                CellId::from_raw(3),
+                0,
+                1,
+                crate::bridge_types::CellInput::Parse {
+                    text: format!("={formula}"),
+                },
+            )
+            .unwrap();
+        engine.recalculate().unwrap();
+        assert_eq!(
+            engine.evaluate_expression(&sheet, formula).unwrap(),
+            CellValue::from("G")
+        );
+        engine
+            .set_cell_format(
+                &sheet,
+                &cell,
+                &CellFormat {
+                    number_format: Some("0.00".into()),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            engine.evaluate_expression(&sheet, formula).unwrap(),
+            CellValue::from("F2")
+        );
+        engine.recalculate().unwrap();
+        assert_eq!(engine.get_cell_value(&sheet, 0, 1), CellValue::from("F2"));
+        engine.undo().unwrap();
+        assert_eq!(engine.get_cell_value(&sheet, 0, 1), CellValue::from("G"));
+        assert_eq!(
+            engine.evaluate_expression(&sheet, formula).unwrap(),
+            CellValue::from("G")
+        );
+        engine.redo().unwrap();
+        assert_eq!(engine.get_cell_value(&sheet, 0, 1), CellValue::from("F2"));
+        assert_eq!(
+            engine.evaluate_expression(&sheet, formula).unwrap(),
+            CellValue::from("F2")
+        );
+    }
+
+    #[test]
+    fn table_style_changes_refresh_structured_metadata_and_dirty_calculation() {
+        let sheet = SheetId::from_raw(1);
+        let snapshot = WorkbookSnapshot {
+            sheets: vec![SheetSnapshot {
+                id: sheet.to_uuid_string(),
+                name: "Sheet1".into(),
+                rows: 10,
+                cols: 10,
+                cells: vec![CellData {
+                    cell_id: CellId::from_raw(2).to_uuid_string(),
+                    row: 0,
+                    col: 2,
+                    value: CellValue::Null,
+                    formula: Some("=CELL(\"format\",A1)".into()),
+                    identity_formula: None,
+                    array_ref: None,
+                }],
+                identities: vec![],
+                row_axis: None,
+                col_axis: None,
+                ranges: vec![],
+            }],
+            ..Default::default()
+        };
+        let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
+        engine.recalculate().unwrap();
+        let header_format = |engine: &ComputeEngine| {
+            engine
+                .mirror
+                .cell_metadata_provider
+                .as_ref()
+                .unwrap()
+                .query(&engine.mirror, &sheet, 0, 0)
+                .unwrap()
+                .format
+        };
+        let before = header_format(&engine);
+        assert!(!engine.compute().is_dirty());
+        engine.set_table_def(formula_types::TableDef {
+            name: "Sales".into(),
+            sheet,
+            start_row: 0,
+            start_col: 0,
+            end_row: 2,
+            end_col: 0,
+            columns: vec!["Amount".into()],
+            has_headers: true,
+            has_totals: false,
+        });
+        assert!(engine.compute().is_dirty());
+        let styled = header_format(&engine);
+        assert_eq!(styled.bold, Some(true));
+        assert_ne!(styled, before);
+        engine.recalculate().unwrap();
+        assert!(!engine.compute().is_dirty());
+        assert_eq!(engine.get_cell_value(&sheet, 0, 2), CellValue::from("G"));
+
+        engine
+            .set_table_style("Sales", "TableStyleMedium4")
+            .unwrap();
+        assert!(engine.compute().is_dirty());
+        assert_ne!(
+            header_format(&engine).background_color,
+            styled.background_color
+        );
+        engine.recalculate().unwrap();
+        assert!(!engine.compute().is_dirty());
+
+        engine.remove_table_def("Sales");
+        assert!(engine.compute().is_dirty());
+        assert_eq!(header_format(&engine), before);
+        engine.recalculate().unwrap();
+        assert!(!engine.compute().is_dirty());
+        assert_eq!(engine.get_cell_value(&sheet, 0, 2), CellValue::from("G"));
+        engine.recalculate().unwrap();
+        assert!(!engine.compute().is_dirty());
     }
 }

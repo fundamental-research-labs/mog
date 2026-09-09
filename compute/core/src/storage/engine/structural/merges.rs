@@ -1,12 +1,12 @@
-use super::super::YrsComputeEngine;
+use super::super::ComputeEngine;
 use super::super::mutation::CellInput;
 use super::super::services;
 use crate::snapshot::{MutationResult, RecalcResult};
-use cell_types::{CellId, SheetId};
+use cell_types::SheetId;
 use compute_wire::mutation::serialize_multi_viewport_patches;
-use value_types::{CellValue, ComputeError};
+use value_types::ComputeError;
 
-impl YrsComputeEngine {
+impl ComputeEngine {
     fn merge_recalc_into(dst: &mut RecalcResult, src: RecalcResult) {
         dst.changed_cells.extend(src.changed_cells);
         dst.projection_changes.extend(src.projection_changes);
@@ -22,73 +22,28 @@ impl YrsComputeEngine {
         merge_ranges: &[(u32, u32, u32, u32)],
     ) -> Result<RecalcResult, ComputeError> {
         let mut edits = Vec::new();
-        let mut old_values = std::collections::HashMap::new();
-        let mut old_formulas = std::collections::HashMap::new();
         let mut seen = std::collections::HashSet::new();
-
-        {
-            let Some(grid) = self.stores.grid_indexes.get(sheet_id) else {
-                return Ok(RecalcResult::empty());
-            };
-
-            for &(start_row, start_col, end_row, end_col) in merge_ranges {
-                for row in start_row..=end_row {
-                    for col in start_col..=end_col {
-                        if row == start_row && col == start_col {
-                            continue;
-                        }
-                        let Some(cell_id) = grid.cell_id_at(row, col) else {
-                            continue;
-                        };
-                        if !seen.insert(cell_id) {
-                            continue;
-                        }
-
-                        let old_value = self
-                            .stores
-                            .compute
-                            .get_cell_value(&self.mirror, &cell_id)
-                            .cloned()
-                            .or_else(|| self.mirror.get_cell_value(&cell_id).cloned())
-                            .unwrap_or(CellValue::Null);
-                        let old_formula =
-                            self.stores.compute.get_formula(&cell_id).map(str::to_owned);
-                        let has_formula = old_formula.is_some();
-                        if matches!(old_value, CellValue::Null) && !has_formula {
-                            continue;
-                        }
-
-                        old_values.insert(cell_id, old_value);
-                        if let Some(old_formula) = old_formula {
-                            old_formulas.insert(cell_id, old_formula);
-                        }
-                        edits.push((*sheet_id, cell_id, row, col, CellInput::Clear));
-                    }
+        for &(start_row, start_col, end_row, end_col) in merge_ranges {
+            for (row, col, id) in services::mutation_handlers::collect_authored_cells_in_range(
+                &self.stores,
+                &self.mirror,
+                sheet_id,
+                start_row,
+                start_col,
+                end_row,
+                end_col,
+            ) {
+                if (row, col) != (start_row, start_col) && seen.insert(id) {
+                    edits.push((*sheet_id, id, row, col, CellInput::Clear));
                 }
             }
         }
-
-        if edits.is_empty() {
-            return Ok(RecalcResult::empty());
-        }
-
-        let mut result = self
-            .stores
-            .compute
-            .set_cells(&mut self.mirror, &edits, true)?;
-        for change in &mut result.changed_cells {
-            if let Ok(cell_id) = CellId::from_uuid_str(&change.cell_id) {
-                if let Some(old_value) = old_values.remove(&cell_id) {
-                    change.old_value = Some(old_value);
-                }
-                if change.old_formula.is_none()
-                    && let Some(old_formula) = old_formulas.remove(&cell_id)
-                {
-                    change.old_formula = Some(old_formula);
-                }
-            }
-        }
-        Ok(result)
+        services::mutation_handlers::mutation_set_cells(
+            &mut self.stores,
+            &mut self.mirror,
+            edits,
+            true,
+        )
     }
 
     fn merge_ranges_from_changes(result: &MutationResult) -> Vec<(u32, u32, u32, u32)> {
@@ -115,12 +70,11 @@ impl YrsComputeEngine {
         end_row: u32,
         end_col: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        self.mutation.undo_manager.begin_undo_group();
-        let operation = (|| -> Result<(Vec<u8>, MutationResult), ComputeError> {
+        let (patches, result) = {
             let mut result = {
-                let _guard = self.mutation.suppress_guard();
                 services::structural::merge_range(
                     &mut self.stores,
+                    &mut self.mirror,
                     sheet_id,
                     start_row,
                     start_col,
@@ -140,10 +94,8 @@ impl YrsComputeEngine {
                 Self::merge_recalc_into(&mut result.recalc, recalc);
                 self.flush_viewport_patches()
             };
-            Ok((patches, result))
-        })();
-        self.mutation.undo_manager.end_undo_group();
-        let (patches, result) = operation?;
+            (patches, result)
+        };
         services::mutation::sync_mirror_merge_regions(&self.stores, &mut self.mirror, sheet_id);
         Ok((patches, result))
     }
@@ -175,6 +127,11 @@ impl YrsComputeEngine {
             end_col,
         );
         if !unblocked.is_empty() {
+            crate::storage::engine::cell_metadata::refresh(
+                &self.stores.storage,
+                &mut self.mirror,
+                self.stores.layout_metrics,
+            );
             let extra = self.stores.compute.recalc(&mut self.mirror, &unblocked)?;
             result.recalc.changed_cells.extend(extra.changed_cells);
             result
@@ -195,12 +152,11 @@ impl YrsComputeEngine {
         end_row: u32,
         end_col: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        self.mutation.undo_manager.begin_undo_group();
-        let operation = (|| -> Result<(Vec<u8>, MutationResult), ComputeError> {
+        let (patches, result) = {
             let mut result = {
-                let _guard = self.mutation.suppress_guard();
                 services::structural::merge_across(
                     &mut self.stores,
+                    &mut self.mirror,
                     sheet_id,
                     start_row,
                     start_col,
@@ -220,10 +176,8 @@ impl YrsComputeEngine {
                 Self::merge_recalc_into(&mut result.recalc, recalc);
                 self.flush_viewport_patches()
             };
-            Ok((patches, result))
-        })();
-        self.mutation.undo_manager.end_undo_group();
-        let (patches, result) = operation?;
+            (patches, result)
+        };
         services::mutation::sync_mirror_merge_regions(&self.stores, &mut self.mirror, sheet_id);
         Ok((patches, result))
     }
@@ -236,12 +190,11 @@ impl YrsComputeEngine {
         end_row: u32,
         end_col: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        self.mutation.undo_manager.begin_undo_group();
-        let operation = (|| -> Result<MutationResult, ComputeError> {
+        let mut result = {
             let mut result = {
-                let _guard = self.mutation.suppress_guard();
                 services::structural::merge_and_center(
                     &mut self.stores,
+                    &mut self.mirror,
                     sheet_id,
                     start_row,
                     start_col,
@@ -258,10 +211,8 @@ impl YrsComputeEngine {
                 self.prepare_recalc_for_flush(&mut recalc);
                 Self::merge_recalc_into(&mut result.recalc, recalc);
             }
-            Ok(result)
-        })();
-        self.mutation.undo_manager.end_undo_group();
-        let mut result = operation?;
+            result
+        };
         services::mutation::sync_mirror_merge_regions(&self.stores, &mut self.mirror, sheet_id);
         // Drain spill blockers for the target region — merge_and_center first
         // unmerges any existing overlap before (re-)merging, so previously-blocked
@@ -275,6 +226,11 @@ impl YrsComputeEngine {
             end_col,
         );
         if !unblocked.is_empty() {
+            crate::storage::engine::cell_metadata::refresh(
+                &self.stores.storage,
+                &mut self.mirror,
+                self.stores.layout_metrics,
+            );
             let extra = self.stores.compute.recalc(&mut self.mirror, &unblocked)?;
             result.recalc.changed_cells.extend(extra.changed_cells);
             result
@@ -303,7 +259,7 @@ impl YrsComputeEngine {
         end_col: u32,
     ) -> (bool, u32) {
         services::structural::check_merge_data_loss(
-            &self.stores,
+            &self.mirror,
             sheet_id,
             start_row,
             start_col,
@@ -328,6 +284,11 @@ impl YrsComputeEngine {
             .compute
             .drain_spill_blockers_for_sheet(&self.mirror, sheet_id);
         if !unblocked.is_empty() {
+            crate::storage::engine::cell_metadata::refresh(
+                &self.stores.storage,
+                &mut self.mirror,
+                self.stores.layout_metrics,
+            );
             let extra = self.stores.compute.recalc(&mut self.mirror, &unblocked)?;
             result.recalc.changed_cells.extend(extra.changed_cells);
             result

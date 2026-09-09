@@ -155,11 +155,13 @@ fn odd_coupons_default_basis_truncation_and_date_system() {
             *date -= 1462.;
         }
         let values = args.iter().copied().map(num).collect::<Vec<_>>();
-        let result = registry
-            .get_by_name(name)
-            .unwrap()
-            .1
-            .call_with_context(&values, &FunctionContext { date1904: true });
+        let result = registry.get_by_name(name).unwrap().1.call_with_context(
+            &values,
+            &FunctionContext {
+                date1904: true,
+                ..FunctionContext::default()
+            },
+        );
         assert!(super::approx(&result, expected, 1e-9), "{name}: {result:?}");
     }
 }

@@ -8,6 +8,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use smallvec::SmallVec;
 
 use cell_types::{CellId, SheetId, SheetPos};
+use compute_functions::helpers::arithmetic::{is_formula_zero, normalize_formula_value};
 use compute_functions::helpers::criteria::parse_criteria;
 use compute_functions::helpers::frequency_cache::{NormalizedKey, is_exact_match_criteria};
 use compute_parser::{ASTNode, CellRefNode, RangeRef};
@@ -161,7 +162,7 @@ pub(super) fn apply_post_op(value: CellValue, post_op: &PostOp, mirror: &CellMir
     use compute_parser::BinOp;
     let result = match post_op.op {
         BinOp::Div => {
-            if operand_val == 0.0 {
+            if is_formula_zero(operand_val) {
                 return CellValue::Error(CellError::Div0, None);
             }
             raw / operand_val
@@ -171,7 +172,7 @@ pub(super) fn apply_post_op(value: CellValue, post_op: &PostOp, mirror: &CellMir
         BinOp::Sub => raw - operand_val,
         _ => return value, // unsupported op — pass through
     };
-    CellValue::number(result)
+    normalize_formula_value(CellValue::number(result))
 }
 
 // ---------------------------------------------------------------------------
@@ -365,6 +366,11 @@ impl super::ComputeCore {
         }
 
         tracing::info!(resolved_cells = resolved_count, "agg_prepass resolved");
+
+        let results = results
+            .into_iter()
+            .map(|(cell_id, value)| (cell_id, normalize_formula_value(value)))
+            .collect();
 
         (results, warm_data)
     }

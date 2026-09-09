@@ -256,6 +256,61 @@ impl Default for LayoutMetrics {
     }
 }
 
+/// The source used to resolve a sheet's effective default column width.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DefaultColumnWidthSource {
+    /// `sheetFormatPr@defaultColWidth` was explicitly supplied.
+    ExplicitDefault,
+    /// `sheetFormatPr@baseColWidth` supplied the character count because
+    /// `defaultColWidth` was absent.
+    BaseDerived,
+    /// Neither sheet-level width was supplied, so the active layout profile
+    /// supplied the fallback pixel width.
+    ProfileFallback,
+}
+
+/// A resolved sheet default column width and the metadata branch that won.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ResolvedDefaultColumnWidth {
+    pub pixels: Pixels,
+    pub source: DefaultColumnWidthSource,
+}
+
+/// Resolve the effective default column width for a sheet.
+///
+/// OOXML gives `defaultColWidth` precedence over `baseColWidth`. A base width
+/// is a count of Normal-style maximum-digit-width characters and excludes the
+/// cell margins and gridline; convert it with the active MDW so the resulting
+/// pixels use the same padding/quantization as an explicit column width.
+/// When neither value is present, retain the caller's profile fallback.
+pub fn resolve_default_column_width(
+    default_col_width: Option<CharWidth>,
+    base_col_width: Option<u32>,
+    layout_metrics: LayoutMetrics,
+) -> ResolvedDefaultColumnWidth {
+    if let Some(width) = default_col_width {
+        return ResolvedDefaultColumnWidth {
+            pixels: char_width_to_pixels(width, layout_metrics.column_width_mdw),
+            source: DefaultColumnWidthSource::ExplicitDefault,
+        };
+    }
+
+    if let Some(base_width) = base_col_width {
+        return ResolvedDefaultColumnWidth {
+            pixels: char_width_to_pixels(
+                CharWidth(base_width as f64),
+                layout_metrics.column_width_mdw,
+            ),
+            source: DefaultColumnWidthSource::BaseDerived,
+        };
+    }
+
+    ResolvedDefaultColumnWidth {
+        pixels: layout_metrics.default_column_width(),
+        source: DefaultColumnWidthSource::ProfileFallback,
+    }
+}
+
 // =============================================================================
 // Tests
 // =============================================================================
@@ -296,6 +351,51 @@ mod tests {
                 default_row_height_px: 20.0,
             })
         );
+    }
+
+    #[test]
+    fn resolve_default_column_width_prefers_explicit_default() {
+        let metrics = LayoutMetrics::from_column_width_mdw(MDW_CALIBRI_11_96DPI).unwrap();
+        let resolved = resolve_default_column_width(Some(CharWidth(9.25)), Some(10), metrics);
+
+        assert_eq!(
+            resolved,
+            ResolvedDefaultColumnWidth {
+                pixels: char_width_to_pixels(CharWidth(9.25), MDW_CALIBRI_11_96DPI),
+                source: DefaultColumnWidthSource::ExplicitDefault,
+            }
+        );
+    }
+
+    #[test]
+    fn resolve_default_column_width_derives_base_with_current_mdw() {
+        let windows = LayoutMetrics::from_column_width_mdw(MDW_CALIBRI_11_96DPI).unwrap();
+        let macos = LayoutMetrics::from_column_width_mdw(MDW_CALIBRI_11_MACOS).unwrap();
+
+        let windows_resolved = resolve_default_column_width(None, Some(10), windows);
+        let macos_resolved = resolve_default_column_width(None, Some(10), macos);
+
+        assert_eq!(windows_resolved.pixels, Pixels(75.0));
+        assert_eq!(macos_resolved.pixels, Pixels(85.0));
+        assert_eq!(
+            windows_resolved.source,
+            DefaultColumnWidthSource::BaseDerived
+        );
+        assert_eq!(macos_resolved.source, DefaultColumnWidthSource::BaseDerived);
+    }
+
+    #[test]
+    fn resolve_default_column_width_uses_profile_when_sheet_values_absent() {
+        let metrics = LayoutMetrics {
+            column_width_mdw: 9.0,
+            default_column_width_px: 123.0,
+            default_row_height_px: 20.0,
+        };
+
+        let resolved = resolve_default_column_width(None, None, metrics);
+
+        assert_eq!(resolved.pixels, Pixels(123.0));
+        assert_eq!(resolved.source, DefaultColumnWidthSource::ProfileFallback);
     }
 
     #[test]

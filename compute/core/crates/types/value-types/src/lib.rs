@@ -61,9 +61,9 @@ pub use cell_image::{CellImage, CellImageSizing};
 pub use cell_value::{CellControl, CellControlType, CellValue, format_number};
 pub use color::{Color, HexColorError};
 pub use date_serial::{
-    DateParseError, actual_days_between, add_months_to_serial, date_to_serial, days_in_month,
-    days_in_year_by_basis, days360_between, is_leap_year, serial_to_date, serial_to_ymd,
-    try_parse_date, try_parse_datetime, try_parse_time, year_frac, ymd_to_serial,
+    DateParseError, DateSystem, actual_days_between, add_months_to_serial, date_to_serial,
+    days_in_month, days_in_year_by_basis, days360_between, is_leap_year, serial_to_date,
+    serial_to_ymd, try_parse_date, try_parse_datetime, try_parse_time, year_frac, ymd_to_serial,
 };
 pub use dense::{DENSE_THRESHOLD, DenseBoolMask, DenseColumn};
 pub use errors::{CellError, ComputeError, ParseCellErrorError};

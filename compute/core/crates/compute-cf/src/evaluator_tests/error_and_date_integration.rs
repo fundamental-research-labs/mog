@@ -110,3 +110,27 @@ fn time_period_text_value_does_not_match() {
     );
     assert!(result.is_none());
 }
+
+#[test]
+fn time_period_context_preserves_legacy_defaults_and_resolves_1904_zero() {
+    use crate::evaluator::{CFEvaluationContext, evaluate_rules_with_context};
+    use value_types::DateSystem;
+
+    let now = NaiveDate::from_ymd_opt(1904, 1, 1).unwrap();
+    let rule = style_rule(
+        CFRuleKind::TimePeriod {
+            period: DatePeriod::Today,
+        },
+        1,
+        false,
+    );
+    let stats = default_stats();
+    assert!(evaluate_rule(&n(0.0), &rule, &stats, None, now).is_none());
+    assert!(evaluate_rule(&n(1462.0), &rule, &stats, None, now).is_some());
+    let context = CFEvaluationContext {
+        now,
+        date_system: DateSystem::Date1904,
+    };
+    assert!(evaluate_rules_with_context(&n(0.0), &[rule.clone()], &stats, &[], context).is_some());
+    assert!(evaluate_rules_with_context(&n(-1.0), &[rule], &stats, &[], context).is_none());
+}

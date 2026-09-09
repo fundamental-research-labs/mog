@@ -1,4 +1,5 @@
 pub(crate) mod annotations;
+pub(crate) mod data_tables;
 pub(crate) mod external_links;
 mod metadata;
 pub(crate) use metadata::WorkbookMetadata;

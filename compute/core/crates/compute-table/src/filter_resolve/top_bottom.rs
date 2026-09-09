@@ -45,12 +45,12 @@ pub(super) fn compute_top_bottom_cutoff(
     }
 }
 
-/// Evaluate a TableTopBottomFilter directly to a bitmap using index-based selection.
-/// This avoids the tie-breaking problem of resolving to ValueFilter.
+/// Evaluate a TableTopBottomFilter directly to a bitmap using a value cutoff.
 ///
-/// When resolving to a ValueFilter, duplicate values at the boundary cause ALL
-/// matching rows to be included. This function instead selects exactly the right
-/// number of rows by their sorted index.
+/// Excel's Top/Bottom filters include every row tied at the boundary value. The
+/// cutoff is still computed from the requested item/percent/sum target, but the
+/// final bitmap is selected by comparing values with that boundary rather than
+/// by selecting arbitrary sorted indices.
 pub fn evaluate_top_bottom_direct(
     spec: &TableTopBottomFilter,
     column_data: &[CellValue],
@@ -91,9 +91,23 @@ pub fn evaluate_top_bottom_direct(
     };
     let cutoff_count = compute_top_bottom_cutoff(&sorted_values, count, spec.by);
 
-    // Set selected rows to visible using their ORIGINAL indices
-    for i in 0..cutoff_count {
-        bitmap[numeric_entries[i].1] = 1;
+    if cutoff_count == 0 {
+        return bitmap;
+    }
+
+    let boundary = numeric_entries[cutoff_count - 1].0;
+
+    // Include every row tied at the cutoff, using ORIGINAL indices for the
+    // output bitmap. Non-numeric cells were omitted from numeric_entries and
+    // therefore remain hidden.
+    for (value, original_index) in numeric_entries {
+        let selected = match spec.direction {
+            TopBottomDirection::Top => value >= boundary,
+            TopBottomDirection::Bottom => value <= boundary,
+        };
+        if selected {
+            bitmap[original_index] = 1;
+        }
     }
 
     bitmap

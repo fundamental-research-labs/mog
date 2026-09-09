@@ -12,7 +12,7 @@ use chrono::{Datelike, Duration, NaiveDate};
 
 use crate::types::DatePeriod;
 use value_types::CellValue;
-use value_types::date_serial::serial_to_date;
+use value_types::date_serial::{DateSystem, serial_to_date};
 
 // =============================================================================
 // Excel Serial Date Helpers
@@ -213,20 +213,37 @@ pub fn get_date_period_range(
 ///
 /// Returns `true` if the cell value (Excel serial date) falls
 /// within the date period, `false` otherwise.
+#[cfg(test)]
 pub fn evaluate_time_period(value: &CellValue, period: &DatePeriod, now: NaiveDate) -> bool {
+    evaluate_time_period_with_date_system(value, period, now, DateSystem::Date1900)
+}
+
+/// Interpret only the calendar value in the workbook's date system. The
+/// reference date is already a calendar date, independent of serial epochs.
+pub fn evaluate_time_period_with_date_system(
+    value: &CellValue,
+    period: &DatePeriod,
+    now: NaiveDate,
+    date_system: DateSystem,
+) -> bool {
     // Extract numeric value from the cell.
     let serial = match value {
         CellValue::Number(n) => n.get(),
         _ => return false,
     };
 
-    // Must be a valid Excel serial date.
-    if !is_valid_excel_date(serial) {
+    // 1904 serial zero is January 1, 1904. The legacy 1900 rule retains
+    // its minimum serial of one; negative workbook dates are not supported.
+    if serial < 0.0 {
+        return false;
+    }
+    let canonical_serial = date_system.to_canonical_serial(serial);
+    if !is_valid_excel_date(canonical_serial) {
         return false;
     }
 
     // Convert to a NaiveDate.
-    let Some(cell_date) = excel_serial_to_date(serial) else {
+    let Some(cell_date) = excel_serial_to_date(canonical_serial) else {
         return false;
     };
 

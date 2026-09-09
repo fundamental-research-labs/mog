@@ -15,6 +15,14 @@ impl ComputeEngine {
         &mut self,
         recalc: &mut RecalcResult,
     ) {
+        self.prepare_recalc_for_flush_inner(recalc, true);
+    }
+
+    fn prepare_recalc_for_flush_inner(
+        &mut self,
+        recalc: &mut RecalcResult,
+        invalidate_chart_sources: bool,
+    ) {
         // A mutation reached this funnel: a subsequent full recalc must run.
         // This covers every Engine-level mutation entry point in one place:
         //   set_cell / set_cell_binary / set_cell_value_parsed /
@@ -24,6 +32,9 @@ impl ComputeEngine {
         //   RemoveDuplicates, ClearRange, ClearRangeAndReturnIds, DeleteSheet,
         //   CreateSubtotals, AutoFill, FlashFill, RelocateCells, CopyRange, …
         self.stores.compute.mark_dirty();
+        if invalidate_chart_sources {
+            self.invalidate_chart_source_replays(recalc);
+        }
 
         crate::storage::engine::cell_metadata::refresh(
             &self.stores.storage,
@@ -69,7 +80,10 @@ impl ComputeEngine {
         recalc: &mut RecalcResult,
     ) {
         let pending_calculation = self.stores.compute.is_dirty();
-        self.prepare_recalc_for_flush(recalc);
+        // The initial import recalc describes hydration, not a user edit. Its
+        // changed cells must not invalidate the imported chart package before
+        // the first export has a chance to replay it authoritatively.
+        self.prepare_recalc_for_flush_inner(recalc, false);
         self.enrich_metadata_flags(recalc);
         if !pending_calculation {
             self.stores.compute.clear_dirty();

@@ -1,6 +1,7 @@
 use value_types::{CellError, CellValue};
 
 use super::super::helpers::num_or_err_msg;
+use super::dated_cash_flows::solve_financial_root;
 use crate::PureFunction;
 use crate::helpers::coercion::flatten_values;
 
@@ -50,12 +51,16 @@ impl PureFunction for FnIrr {
             } else {
                 0.1
             };
+            if !guess.is_finite() || guess <= -1.0 {
+                return Err(CellValue::error_with_message(
+                    CellError::Num,
+                    format!("IRR: guess must be > -1, got {guess}"),
+                ));
+            }
 
-            let scale = cash_flows
-                .iter()
-                .map(|v| v.abs())
-                .fold(0.0_f64, f64::max)
-                .max(1.0);
+            // Sign validation above guarantees a positive scale. Do not clamp
+            // it to 1: tiny cash flows must remain scale-invariant.
+            let scale = cash_flows.iter().map(|v| v.abs()).fold(0.0_f64, f64::max);
 
             let npv_at = |rate: f64| -> f64 {
                 if rate <= -1.0 {
@@ -63,9 +68,13 @@ impl PureFunction for FnIrr {
                 }
                 let mut npv = 0.0;
                 for (i, &cf) in cash_flows.iter().enumerate() {
-                    npv += cf / (1.0 + rate).powi(i as i32);
+                    let discount = (1.0 + rate).powi(i as i32);
+                    if !discount.is_finite() || discount == 0.0 {
+                        return f64::NAN;
+                    }
+                    npv += (cf / scale) / discount;
                 }
-                npv
+                if npv.is_finite() { npv } else { f64::NAN }
             };
             let dnpv_at = |rate: f64| -> f64 {
                 if rate <= -1.0 {
@@ -74,36 +83,23 @@ impl PureFunction for FnIrr {
                 let mut d = 0.0;
                 for (i, &cf) in cash_flows.iter().enumerate() {
                     if i > 0 {
-                        d -= (i as f64) * cf / ((1.0 + rate).powi(i as i32) * (1.0 + rate));
+                        let discount = (1.0 + rate).powi(i as i32);
+                        if !discount.is_finite() || discount == 0.0 {
+                            return f64::NAN;
+                        }
+                        d -= (i as f64) * (cf / scale) / discount / (1.0 + rate);
                     }
                 }
-                d
+                if d.is_finite() { d } else { f64::NAN }
             };
 
-            let config = compute_solver::SolverConfig {
-                objective: compute_solver::Objective::Target(0.0),
-                x0: vec![guess],
-                bounds: vec![compute_solver::Bound::bounded(-0.99, 1e6)],
-                ftol: 1e-10 * scale,
-                xtol: 1e-14,
-                max_evals: 500,
-                max_time_ms: 0,
-                ..Default::default()
-            };
-
-            let result = compute_solver::solve_root_nr(
-                npv_at,
-                dnpv_at,
-                &config,
-                &[0.0, 0.5, -0.5, -0.9, 1.0],
-            );
-            if result.converged {
-                Ok(result.x[0])
-            } else {
-                Err(CellValue::error_with_message(
+            let result = solve_financial_root(npv_at, dnpv_at, guess, 20, 1e-12, 1e-7);
+            match result {
+                Some(rate) => Ok(rate),
+                None => Err(CellValue::error_with_message(
                     CellError::Num,
                     "IRR: failed to converge — check that cash flows have both positive and negative values",
-                ))
+                )),
             }
         })())
     }

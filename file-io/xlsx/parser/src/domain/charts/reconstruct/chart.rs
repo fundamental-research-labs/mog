@@ -1,15 +1,17 @@
 use domain_types::{
+    chart::{normalize_explicit_display_blanks_as, ChartSpec},
     ChartDefinition,
-    chart::{ChartSpec, normalize_explicit_display_blanks_as},
 };
-use ooxml_types::charts::{self, DisplayBlanksAs};
+use ooxml_types::charts::{self, ChartText, DisplayBlanksAs};
+use ooxml_types::drawings::TextRunContent;
 
 use super::{
     axes::build_axes,
-    chart_groups::build_chart_groups,
+    chart_groups::{build_chart_groups, reconcile_chart_group_axis_ids},
     chart_space::clean_chart_extensions,
+    chart_space::merge_imported_shape_properties,
     elements::{
-        TitleTextSource, build_data_table, build_legend, build_surface, build_title, build_view_3d,
+        build_data_table, build_legend, build_surface, build_title, build_view_3d, TitleTextSource,
     },
     formatting::build_shape_properties,
     text_body_fidelity::{
@@ -31,6 +33,7 @@ pub(super) fn build_chart(spec: &ChartSpec) -> charts::Chart {
         .title_layout
         .as_ref()
         .or(imported_title_layout.as_ref());
+    let imported_title = imported_chart.and_then(|chart| chart.title.as_ref());
     let mut title = build_title(
         TitleTextSource {
             text: spec.title.as_deref(),
@@ -43,11 +46,26 @@ pub(super) fn build_chart(spec: &ChartSpec) -> charts::Chart {
         spec.title_v_align.as_deref(),
         spec.title_show_shadow,
     );
+    if title.is_none()
+        && spec.title.is_none()
+        && spec.title_formula.is_none()
+        && spec.title_rich_text.is_none()
+        && spec.auto_title_deleted != Some(true)
+        && imported_title.is_some_and(|title| !title_has_visible_text(title))
+    {
+        let mut empty_title = charts::Title {
+            layout: title_layout.cloned().map(Into::into),
+            ..Default::default()
+        };
+        empty_title.tx = imported_title.and_then(|title| title.tx.clone());
+        title = Some(empty_title);
+    }
     if let Some(title) = title.as_mut() {
-        preserve_imported_title_text_properties(
-            title,
-            imported_chart.and_then(|chart| chart.title.as_ref()),
-        );
+        if let Some(imported_title) = imported_title {
+            preserve_imported_title_text_properties(title, Some(imported_title));
+            merge_imported_shape_properties(&mut title.sp_pr, imported_title.sp_pr.as_ref());
+            title.overlay = title.overlay.or(imported_title.overlay);
+        }
     }
     let mut legend = spec.legend.as_ref().and_then(build_legend);
     if let (Some(legend), Some(imported_legend)) = (
@@ -117,11 +135,37 @@ pub(super) fn build_chart(spec: &ChartSpec) -> charts::Chart {
     }
 }
 
+fn title_has_visible_text(title: &charts::Title) -> bool {
+    match title.tx.as_ref() {
+        Some(ChartText::Rich(body)) => body.paragraphs.iter().any(|paragraph| {
+            paragraph.runs.iter().any(|run| match run {
+                TextRunContent::Run(run) => !run.text.is_empty(),
+                TextRunContent::Field { text, .. } => {
+                    text.as_deref().is_some_and(|text| !text.is_empty())
+                }
+                TextRunContent::LineBreak { .. } => false,
+            })
+        }),
+        Some(ChartText::StrRef(str_ref)) => {
+            !str_ref.f.trim().is_empty()
+                || str_ref
+                    .str_cache
+                    .as_ref()
+                    .is_some_and(|cache| cache.pts.iter().any(|point| !point.v.is_empty()))
+        }
+        None => false,
+    }
+}
+
 pub(super) fn build_plot_area(spec: &ChartSpec) -> charts::PlotArea {
     let imported_plot_area = match spec.definition.as_ref() {
         Some(ChartDefinition::Chart(chart_space)) => Some(&chart_space.chart.plot_area),
         _ => None,
     };
+
+    let axes = build_axes(spec);
+    let mut chart_groups = build_chart_groups(spec);
+    reconcile_chart_group_axis_ids(&mut chart_groups, &axes, spec);
 
     charts::PlotArea {
         layout: spec
@@ -129,8 +173,8 @@ pub(super) fn build_plot_area(spec: &ChartSpec) -> charts::PlotArea {
             .clone()
             .map(Into::into)
             .or_else(|| imported_plot_area.and_then(|plot_area| plot_area.layout.clone())),
-        chart_groups: build_chart_groups(spec),
-        axes: build_axes(spec),
+        chart_groups,
+        axes,
         d_table: spec
             .data_table
             .as_ref()

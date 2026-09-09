@@ -154,6 +154,29 @@ pub trait EvalMetadata {
         false
     }
 
+    /// Imported rich shared-string state for a referenced cell, including
+    /// SpreadsheetML phonetic runs when present.
+    ///
+    /// The value is owned by the provider so evaluation does not retain a
+    /// storage transaction across async boundaries. Contexts without a
+    /// workbook metadata provider use the existing value-only fallback.
+    fn phonetic_shared_string(
+        &self,
+        _sheet: &SheetId,
+        _row: u32,
+        _col: u32,
+    ) -> Option<domain_types::RichSharedString> {
+        None
+    }
+
+    /// Code page used by legacy single-byte CHAR/CODE evaluation.
+    ///
+    /// Contexts that do not expose workbook runtime options retain the stable
+    /// Windows-1252 compatibility default.
+    fn char_code_page(&self) -> compute_functions::CharCodePage {
+        compute_functions::DEFAULT_CHAR_CODE_PAGE
+    }
+
     /// Imported legacy formulas implicitly intersect reference-valued results
     /// at the caller position. Computed value arrays have a separate scalar
     /// result policy and must not acquire reference geometry.
@@ -206,9 +229,11 @@ pub trait EvalMetadata {
         vec![*start]
     }
 
-    /// Get the current timestamp as an Excel serial date number.
+    /// Get the current timestamp as a workbook-relative Excel serial number.
+    /// Clock inputs are canonical 1900-system serials; concrete workbook
+    /// contexts convert them for the workbook's date system.
     fn current_timestamp(&self) -> f64 {
-        super::super::clock::get_current_serial_timestamp()
+        super::super::clock::RecalcClock::live().current_timestamp_for_workbook(self.date1904())
     }
 
     /// Get a dense column for fast aggregation over large ranges.
@@ -468,7 +493,51 @@ pub fn sync_block_on<T>(future: impl std::future::Future<Output = T>) -> T {
 
 #[cfg(test)]
 mod tests {
-    use super::sync_block_on;
+    use super::{EvalMetadata, sync_block_on};
+    use cell_types::{CellId, SheetId};
+    use formula_types::ResolvedName;
+    use value_types::CellError;
+
+    struct DefaultClockMetadata {
+        date1904: bool,
+    }
+
+    impl EvalMetadata for DefaultClockMetadata {
+        fn date1904(&self) -> bool {
+            self.date1904
+        }
+
+        fn current_cell(&self) -> CellId {
+            CellId::from_raw(0)
+        }
+
+        fn current_sheet(&self) -> SheetId {
+            SheetId::from_raw(0)
+        }
+
+        fn resolve_position(&self, _cell_id: &CellId) -> Option<(SheetId, u32, u32)> {
+            None
+        }
+
+        fn resolve_cell_id(&self, _sheet: &SheetId, _row: u32, _col: u32) -> Option<CellId> {
+            None
+        }
+
+        fn resolve_defined_name(&self, _name: &str) -> Option<ResolvedName> {
+            None
+        }
+
+        fn resolve_structured_ref(
+            &self,
+            _ref_: &crate::table::types::StructuredRef,
+        ) -> Result<super::ResolvedStructuredRef, CellError> {
+            panic!("structured references are not used by this clock test")
+        }
+
+        fn sheet_by_name(&self, _name: &str) -> Option<SheetId> {
+            None
+        }
+    }
 
     #[test]
     fn sync_block_on_ready_future_returns_value() {
@@ -482,5 +551,20 @@ mod tests {
         });
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn default_current_timestamp_converts_for_1904_workbooks() {
+        let result = std::panic::catch_unwind(|| {
+            crate::eval::clock::set_current_time(46_273.75);
+
+            let canonical = DefaultClockMetadata { date1904: false }.current_timestamp();
+            let date1904 = DefaultClockMetadata { date1904: true }.current_timestamp();
+
+            assert_eq!(canonical, 46_273.75);
+            assert_eq!(date1904, 44_811.75);
+        });
+        crate::eval::clock::set_current_time(0.0);
+        result.unwrap();
     }
 }

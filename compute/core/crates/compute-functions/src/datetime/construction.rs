@@ -5,9 +5,14 @@ use chrono::{Duration, NaiveDate};
 use value_types::{CellError, CellValue};
 
 use crate::datetime::array_lift::{array_get, broadcast_dims, has_any_array};
+use crate::datetime::date_context::is_valid_canonical_date_serial;
+#[cfg(test)]
+use crate::datetime::date_context::{
+    MAX_CANONICAL_DATE_SERIAL, MAX_CANONICAL_DATE_SERIAL_EXCLUSIVE,
+};
 use crate::helpers::coercion::check_error;
 use crate::helpers::date_serial::date_to_serial;
-use crate::{FunctionRegistry, PureFunction};
+use crate::{FunctionContext, FunctionRegistry, PureFunction};
 
 pub struct FnDate;
 
@@ -22,30 +27,84 @@ fn date_scalar(args: &[CellValue]) -> CellValue {
         return e;
     }
     let year = match args[0].coerce_to_number() {
-        Ok(n) => {
-            let y = n as i32;
+        Ok(n) if n.is_finite() => {
+            let y = n as i64;
             // Excel DATE function: year 0-1899 => year + 1900, 1900+ => literal.
             if (0..1900).contains(&y) { y + 1900 } else { y }
         }
+        Ok(_) => return CellValue::Error(CellError::Value, None),
         Err(e) => return CellValue::Error(e, None),
     };
     let month = match args[1].coerce_to_number() {
-        Ok(n) => n as i32,
+        Ok(n) if n.is_finite() => n as i64,
+        Ok(_) => return CellValue::Error(CellError::Value, None),
         Err(e) => return CellValue::Error(e, None),
     };
     let day = match args[2].coerce_to_number() {
-        Ok(n) => n as i32,
+        Ok(n) if n.is_finite() => n as i64,
+        Ok(_) => return CellValue::Error(CellError::Value, None),
         Err(e) => return CellValue::Error(e, None),
     };
 
     // Handle out-of-range months and days
-    let adjusted_year = year + (month - 1).div_euclid(12);
-    let adjusted_month = ((month - 1).rem_euclid(12) + 1) as u32;
+    let month_index = match month.checked_sub(1) {
+        Some(month) => month,
+        None => {
+            return CellValue::error_with_message(
+                CellError::Num,
+                "DATE: resulting date is out of range".to_string(),
+            );
+        }
+    };
+    let month_offset = month_index.div_euclid(12);
+    let adjusted_year = match year.checked_add(month_offset) {
+        Some(year) => year,
+        None => {
+            return CellValue::error_with_message(
+                CellError::Num,
+                "DATE: resulting date is out of range".to_string(),
+            );
+        }
+    };
+    let adjusted_year = match i32::try_from(adjusted_year) {
+        Ok(year) => year,
+        Err(_) => {
+            return CellValue::error_with_message(
+                CellError::Num,
+                "DATE: resulting date is out of range".to_string(),
+            );
+        }
+    };
+    let adjusted_month = (month_index.rem_euclid(12) + 1) as u32;
 
     match NaiveDate::from_ymd_opt(adjusted_year, adjusted_month, 1) {
         Some(base) => {
-            let final_date = base + Duration::days((day - 1) as i64);
+            let day_offset = match day.checked_sub(1).and_then(Duration::try_days) {
+                Some(offset) => offset,
+                None => {
+                    return CellValue::error_with_message(
+                        CellError::Num,
+                        "DATE: resulting date is out of range".to_string(),
+                    );
+                }
+            };
+            let final_date = match base.checked_add_signed(day_offset) {
+                Some(date) => date,
+                None => {
+                    return CellValue::error_with_message(
+                        CellError::Num,
+                        "DATE: resulting date is out of range".to_string(),
+                    );
+                }
+            };
             let serial = date_to_serial(&final_date);
+
+            if !is_valid_canonical_date_serial(serial) {
+                return CellValue::error_with_message(
+                    CellError::Num,
+                    "DATE: resulting date is out of range".to_string(),
+                );
+            }
 
             // Handle the Lotus 1-2-3 leap year bug
             let mar1_1900 =
@@ -60,6 +119,26 @@ fn date_scalar(args: &[CellValue]) -> CellValue {
             CellError::Num,
             "DATE: resulting date is out of range".to_string(),
         ),
+    }
+}
+
+fn workbook_date_result(value: CellValue, context: &FunctionContext) -> CellValue {
+    match value {
+        CellValue::Number(number) if is_valid_canonical_date_serial(number.get()) => {
+            CellValue::number(context.from_canonical_date_serial(number.get()))
+        }
+        CellValue::Number(_) => CellValue::Error(CellError::Num, None),
+        CellValue::Array(array) => {
+            let cols = array.cols();
+            let values = array
+                .data()
+                .iter()
+                .cloned()
+                .map(|value| workbook_date_result(value, context))
+                .collect();
+            CellValue::array(values, cols)
+        }
+        other => other,
     }
 }
 
@@ -93,6 +172,13 @@ impl PureFunction for FnDate {
             return CellValue::from_rows(result);
         }
         date_scalar(args)
+    }
+
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
+        if !context.date1904 {
+            return self.call(args);
+        }
+        workbook_date_result(self.call(args), context)
     }
 }
 
@@ -148,11 +234,18 @@ impl PureFunction for FnEpochToDate {
 
         let epoch = NaiveDate::from_ymd_opt(1970, 1, 1).expect("1970-01-01 is valid");
         let serial = millis / 86_400_000.0 + date_to_serial(&epoch);
-        if serial.is_finite() {
+        if is_valid_canonical_date_serial(serial) {
             CellValue::number(serial)
         } else {
             CellValue::Error(CellError::Num, None)
         }
+    }
+
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
+        if !context.date1904 {
+            return self.call(args);
+        }
+        workbook_date_result(self.call(args), context)
     }
 }
 
@@ -285,5 +378,40 @@ mod tests {
         assert_eq!(f.call(&[num(1900.0), num(2.0), num(30.0)]), num(61.0));
         // DATE(1900, 1, 60) should be serial 60 (the fake Feb 29)
         assert_eq!(f.call(&[num(1900.0), num(1.0), num(60.0)]), num(60.0));
+    }
+
+    #[test]
+    fn test_date_rejects_out_of_range_and_huge_components_promptly() {
+        let f = FnDate;
+        assert_eq!(
+            f.call(&[num(9999.0), num(12.0), num(31.0)]),
+            num(MAX_CANONICAL_DATE_SERIAL)
+        );
+        assert!(matches!(
+            f.call(&[num(9999.0), num(12.0), num(32.0)]),
+            CellValue::Error(CellError::Num, _)
+        ));
+        assert!(matches!(
+            f.call(&[num(1.0e300), num(1.0), num(1.0)]),
+            CellValue::Error(CellError::Num, _)
+        ));
+        assert!(matches!(
+            f.call(&[num(2024.0), num(1.0e300), num(1.0)]),
+            CellValue::Error(CellError::Num, _)
+        ));
+    }
+
+    #[test]
+    fn test_epoch_to_date_rejects_next_day_after_9999() {
+        let f = FnEpochToDate;
+        let timestamp = (MAX_CANONICAL_DATE_SERIAL_EXCLUSIVE - 25_569.0) * 86_400.0;
+        assert!(matches!(
+            f.call(&[num(timestamp)]),
+            CellValue::Error(CellError::Num, _)
+        ));
+        assert_eq!(
+            f.call(&[num((MAX_CANONICAL_DATE_SERIAL - 25_569.0) * 86_400.0)]),
+            num(MAX_CANONICAL_DATE_SERIAL)
+        );
     }
 }

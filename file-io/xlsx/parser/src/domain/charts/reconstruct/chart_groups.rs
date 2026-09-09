@@ -1,14 +1,16 @@
 use domain_types::{
-    ChartDefinition,
     chart::{
         ChartLineSettingsData, ChartSeriesData, ChartSeriesStockRoleData, ChartSpec, ChartSubType,
         ChartType as DomainChartType, DataLabelData, UpDownBarsData,
     },
+    ChartDefinition,
 };
 use ooxml_types::charts::{
     self, BarDirection, ChartGroup, ChartType as OoxmlChartType, ChartTypeConfig, ExtensionEntry,
     Grouping,
 };
+
+pub(super) use super::axis_topology::reconcile_chart_group_axis_ids;
 
 use super::{
     super::data_label_contract_ext::{
@@ -434,19 +436,22 @@ fn line_marker_for_sub_type(sub: Option<&ChartSubType>) -> Option<bool> {
 }
 
 fn line_marker_for_series(series: &[charts::ChartSeries]) -> Option<bool> {
-    let mut has_explicit_none = false;
     for series in series {
         let Some(marker) = series.marker.as_ref() else {
             continue;
         };
         match marker.symbol {
-            Some(charts::MarkerStyle::None) => has_explicit_none = true,
             Some(_) => return Some(true),
             None if marker.size.is_some() || marker.sp_pr.is_some() => return Some(true),
             None => {}
         }
     }
-    has_explicit_none.then_some(false)
+    // An explicit series-level `symbol=none` does not erase an explicit
+    // chart-group marker setting. Returning `Some(false)` here used to turn
+    // a preserved `<c:marker val="1"/>` into `val="0"` during any modeled
+    // reconstruction (e.g. a title edit). When no series requests markers,
+    // let the imported group configuration remain authoritative.
+    None
 }
 
 fn radar_style_for_sub_type(sub: Option<&ChartSubType>) -> Option<charts::RadarStyle> {

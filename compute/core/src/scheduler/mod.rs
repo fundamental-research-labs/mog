@@ -44,6 +44,7 @@
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
+use crate::eval::clock::RecalcClock;
 use crate::eval_bridge::MirrorCellRefResolver;
 use crate::formula_text::{FormulaTextDepIndex, FormulaTextDepTarget, FormulaTextProvider};
 use crate::graph::{DepTarget, DependencyGraph, GraphBuilder, RangeAccess};
@@ -206,15 +207,14 @@ pub struct ComputeCore {
     workbook_cache: crate::eval::cache::workbook_cache::WorkbookCache,
     /// Process-unique SUMIFS cache domain owned by this compute core.
     sumifs_cache_domain: SumifsCacheDomain,
-    /// Current recalc epoch for scheduler-owned SUMIFS thread-local cache keys.
     current_sumifs_cache_epoch: Option<SumifsCacheEpoch>,
+    recalc_clock: RecalcClock,
+    #[cfg(test)]
+    recalc_options_panic_before_full_recalc_for_tests: bool,
     /// Pre-computed per-cell range keys for materialization scheduling.
-    /// Populated during init/parse, consumed during recalc to avoid redundant AST walks.
     cell_range_keys: FxHashMap<CellId, Vec<crate::eval::cache::range_store::RangeKey>>,
-    /// Sheet ordering from the workbook snapshot (tab order). Used for cycle
-    /// evaluation to match Excel's declaration-order evaluation of circular refs.
+    /// Sheet ordering from the workbook snapshot (tab order) for cycle evaluation.
     sheet_order: FxHashMap<SheetId, usize>,
-    /// Cached sorted sheet list for 3-D reference evaluation. Rebuilt on sheet add/delete.
     ordered_sheets_cache: Vec<SheetId>,
     /// Guard against recursive data table prepass calls. When true,
     /// `run_data_table_prepass` returns empty (TABLE cells are skipped).
@@ -263,12 +263,14 @@ impl ComputeCore {
             workbook_cache: crate::eval::cache::workbook_cache::WorkbookCache::new(),
             sumifs_cache_domain: new_cache_domain(),
             current_sumifs_cache_epoch: None,
+            recalc_clock: RecalcClock::live(),
+            #[cfg(test)]
+            recalc_options_panic_before_full_recalc_for_tests: false,
             cell_range_keys: FxHashMap::default(),
             sheet_order: FxHashMap::default(),
             ordered_sheets_cache: Vec::new(),
             in_data_table_eval: false,
-            // Initial state requires a recalc: formula cells start with Null
-            // values from the mirror until `full_recalc` evaluates them.
+            // Initial state requires a recalc because formula cells start as Null.
             dirty_since_last_recalc: true,
             pending_manual_dirty_cells: FxHashSet::default(),
             spill_blockers: FxHashMap::default(),
@@ -303,6 +305,15 @@ impl ComputeCore {
 
     pub(super) fn current_sumifs_cache_epoch(&self) -> Option<SumifsCacheEpoch> {
         self.current_sumifs_cache_epoch
+    }
+    pub(crate) fn begin_recalc_clock(&mut self, explicit_timestamp: Option<f64>) {
+        self.recalc_clock = RecalcClock::for_recalc(explicit_timestamp);
+    }
+    pub(crate) fn restore_recalc_clock(&mut self, clock: RecalcClock) {
+        self.recalc_clock = clock;
+    }
+    pub(crate) fn recalc_clock(&self) -> RecalcClock {
+        self.recalc_clock
     }
 
     pub(crate) fn mark_formula_text_changed(
@@ -783,7 +794,7 @@ impl ComputeCore {
     // Time injection (for WASM / testing)
     // -----------------------------------------------------------------------
 
-    /// Set the current time for NOW()/TODAY() as an Excel serial date number.
+    /// Set canonical 1900-system time for NOW()/TODAY(); metadata converts 1904 workbooks.
     ///
     /// On WASM, this should be called from JavaScript before each recalc
     /// with the value from `Date.now()` converted to an Excel serial number.

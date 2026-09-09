@@ -1459,14 +1459,12 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                     if !auxiliary_paths.contains(path.trim_start_matches('/')) {
                         continue;
                     }
-                    if registered_chart_auxiliary_parts
-                        .insert(path.trim_start_matches('/').to_string())
-                    {
-                        crate::write::package_graph::register_chart_auxiliary_part(
-                            &mut package_graph_builder,
-                            path,
-                        )?;
-                    }
+                    chart_auxiliary_registration::register_imported_chart_auxiliary_part(
+                        &mut package_graph_builder,
+                        &mut registered_chart_auxiliary_parts,
+                        &aux,
+                        path,
+                    )?;
                 }
                 for rel in aux.chart_relationships {
                     let (Some(rel_type), Some(target)) =
@@ -1527,14 +1525,12 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                     if !auxiliary_paths.contains(path.trim_start_matches('/')) {
                         continue;
                     }
-                    if registered_chart_auxiliary_parts
-                        .insert(path.trim_start_matches('/').to_string())
-                    {
-                        crate::write::package_graph::register_chart_auxiliary_part(
-                            &mut package_graph_builder,
-                            path,
-                        )?;
-                    }
+                    chart_auxiliary_registration::register_imported_chart_auxiliary_part(
+                        &mut package_graph_builder,
+                        &mut registered_chart_auxiliary_parts,
+                        &aux,
+                        path,
+                    )?;
                 }
                 for rel in aux.chart_relationships {
                     let (Some(rel_type), Some(target)) =

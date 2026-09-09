@@ -12,13 +12,13 @@ use super::super::reader::raw::{
     relationship_ids_in_raw,
 };
 use super::super::types::{DrawingContent, SpreadsheetGraphicFrame};
-use super::connectors::parse_connector;
+use super::connectors::parse_connector_with_namespace_context;
 use super::graphic_frames::{
     parse_graphic_frame_nv, parse_graphic_frame_xfrm_with_presence, parse_smartart_graphic_frame,
 };
-use super::groups::parse_group_shape;
-use super::pictures::parse_picture;
-use super::shapes::parse_shape;
+use super::groups::parse_group_shape_with_namespace_context;
+use super::pictures::parse_picture_with_namespace_context;
+use super::shapes::parse_shape_with_namespace_context;
 use domain_types::domain::drawings::OpaqueDrawingContent;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -84,8 +84,17 @@ pub(crate) struct DispatchedContent {
 
 /// Parse drawing content using the contract dispatch precedence.
 pub(crate) fn dispatch_drawing_content(xml: &[u8]) -> DispatchedContent {
+    dispatch_drawing_content_with_namespace_context(xml, &[])
+}
+
+pub(crate) fn dispatch_drawing_content_with_namespace_context(
+    xml: &[u8],
+    inherited_namespaces: &[(String, String)],
+) -> DispatchedContent {
     if let Some(pic_child) = direct_child(xml, b"pic") {
-        if let Some(pic) = parse_picture(pic_child.full_slice(xml), 0) {
+        if let Some(pic) =
+            parse_picture_with_namespace_context(pic_child.full_slice(xml), 0, inherited_namespaces)
+        {
             return DispatchedContent {
                 content: DrawingContent::Picture(pic),
                 result: DrawingParseResult::typed(DispatchKind::Picture),
@@ -94,7 +103,11 @@ pub(crate) fn dispatch_drawing_content(xml: &[u8]) -> DispatchedContent {
     }
 
     if let Some(group_child) = direct_child(xml, b"grpSp") {
-        if let Some(group) = parse_group_shape(group_child.full_slice(xml), 0) {
+        if let Some(group) = parse_group_shape_with_namespace_context(
+            group_child.full_slice(xml),
+            0,
+            inherited_namespaces,
+        ) {
             return DispatchedContent {
                 content: DrawingContent::GroupShape(group),
                 result: DrawingParseResult::typed(DispatchKind::GroupShape),
@@ -129,7 +142,9 @@ pub(crate) fn dispatch_drawing_content(xml: &[u8]) -> DispatchedContent {
     }
 
     if let Some(shape_child) = direct_child(xml, b"sp") {
-        if let Some(shape) = parse_shape(shape_child.full_slice(xml), 0) {
+        if let Some(shape) =
+            parse_shape_with_namespace_context(shape_child.full_slice(xml), 0, inherited_namespaces)
+        {
             return DispatchedContent {
                 content: DrawingContent::Shape(shape),
                 result: DrawingParseResult::typed(DispatchKind::Shape),
@@ -138,7 +153,11 @@ pub(crate) fn dispatch_drawing_content(xml: &[u8]) -> DispatchedContent {
     }
 
     if let Some(connector_child) = direct_child(xml, b"cxnSp") {
-        if let Some(connector) = parse_connector(connector_child.full_slice(xml), 0) {
+        if let Some(connector) = parse_connector_with_namespace_context(
+            connector_child.full_slice(xml),
+            0,
+            inherited_namespaces,
+        ) {
             return DispatchedContent {
                 content: DrawingContent::Connector(connector),
                 result: DrawingParseResult::typed(DispatchKind::Connector),
@@ -210,7 +229,14 @@ pub(crate) fn dispatch_drawing_content(xml: &[u8]) -> DispatchedContent {
 }
 
 pub(crate) fn parse_drawing_content(xml: &[u8]) -> DrawingContent {
-    let dispatched = dispatch_drawing_content(xml);
+    parse_drawing_content_with_namespace_context(xml, &[])
+}
+
+pub(crate) fn parse_drawing_content_with_namespace_context(
+    xml: &[u8],
+    inherited_namespaces: &[(String, String)],
+) -> DrawingContent {
+    let dispatched = dispatch_drawing_content_with_namespace_context(xml, inherited_namespaces);
     let _diagnostics = &dispatched.result;
     dispatched.content
 }

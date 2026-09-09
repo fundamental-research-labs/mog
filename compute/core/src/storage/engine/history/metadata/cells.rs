@@ -28,7 +28,14 @@ pub(crate) fn capture_cell_metadata(storage: &WorkbookStorage, id: CellId) {
                     (metadata.formula_result_mode, metadata.array_ref.as_deref())
                 })
             }
-            if declaration(current.as_ref()) != declaration(old.as_ref()) {
+            if declaration(current.as_ref()) != declaration(old.as_ref())
+                || current
+                    .as_ref()
+                    .and_then(|metadata| metadata.rich_string.as_ref())
+                    != old
+                        .as_ref()
+                        .and_then(|metadata| metadata.rich_string.as_ref())
+            {
                 storage.invalidate_cell_metadata_projection();
             }
             if let Some(value) = old.take() {

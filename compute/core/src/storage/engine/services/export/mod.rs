@@ -11,6 +11,7 @@ mod pivot_cache_reconciliation;
 mod print_defined_names;
 mod sheet_metadata;
 mod slicers;
+mod table_filter_preservation;
 mod table_totals;
 mod workbook;
 mod workbook_views;

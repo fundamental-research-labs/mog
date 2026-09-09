@@ -81,6 +81,32 @@ fn test_condition_less_than_or_equal() {
 }
 
 #[test]
+fn test_numeric_text_criteria_use_numeric_comparisons() {
+    let data = vec![
+        cv_num(1.0),
+        cv_num(5.0),
+        cv_num(10.0),
+        cv_text("10"), // Text rows retain text-vs-text comparison semantics.
+        cv_null(),     // Blank rows retain the positive-operator false contract.
+    ];
+
+    let cases = [
+        (FilterOperator::Equals, vec![0, 1, 0, 0, 0]),
+        (FilterOperator::NotEquals, vec![1, 0, 1, 1, 1]),
+        (FilterOperator::GreaterThan, vec![0, 0, 1, 0, 0]),
+        (FilterOperator::GreaterThanOrEqual, vec![0, 1, 1, 0, 0]),
+        (FilterOperator::LessThan, vec![1, 0, 0, 1, 0]),
+        (FilterOperator::LessThanOrEqual, vec![1, 1, 0, 1, 0]),
+    ];
+
+    for (operator, expected) in cases {
+        let criteria =
+            make_condition_filter(vec![make_cond(operator, cv_text("5"))], FilterLogic::And);
+        assert_eq!(eval(&criteria, &data), expected, "operator: {operator:?}");
+    }
+}
+
+#[test]
 fn test_condition_begins_with() {
     let criteria = make_condition_filter(
         vec![make_cond(FilterOperator::BeginsWith, cv_text("he"))],

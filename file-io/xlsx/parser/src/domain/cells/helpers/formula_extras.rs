@@ -39,6 +39,9 @@ pub struct FormulaExtras<'a> {
     pub del2: bool,
     /// Formula text between `<f ...>` and `</f>`, if present
     pub formula_text: Option<&'a [u8]>,
+    /// The authored `<f>` element had no formula text. This includes both
+    /// self-closing elements and explicit empty `<f></f>` elements.
+    pub empty_formula: bool,
 
     // ── <v> element ──
     /// `<v/>` self-closing empty cached value
@@ -72,12 +75,15 @@ pub fn extract_formula_extras_fused(xml: &[u8]) -> FormulaExtras<'_> {
                 let text = &xml[f_tag.content_start..f_close.lt];
                 if !text.is_empty() {
                     result.formula_text = Some(text);
+                } else {
+                    result.empty_formula = true;
                 }
                 pos = f_close.end;
             } else {
                 pos = f_tag.content_start;
             }
         } else {
+            result.empty_formula = true;
             pos = f_tag.content_start;
         }
     }

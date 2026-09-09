@@ -150,6 +150,7 @@ fn time_to_fraction(hour: u32, minute: u32, second: u32) -> f64 {
 /// Supported formats (with 4-digit or 2-digit year):
 /// - `YYYY-MM-DD` (ISO)
 /// - `M/D/YYYY`, `M/D/YY` (US slash)
+/// - `YYYY/M/D` (year-first slash)
 /// - `M-D-YYYY`, `M-D-YY` (US dash)
 /// - `D-Mon-YYYY`, `D-Mon-YY` (European with month name)
 /// - `Month D, YYYY` / `Mon D, YYYY` (full/abbreviated month name)
@@ -197,6 +198,7 @@ fn try_parse_date_inner(text: &str) -> Option<f64> {
     if pos >= bytes.len() {
         return None;
     }
+    let first_component_len = pos;
 
     let sep = bytes[pos];
     match sep {
@@ -209,6 +211,15 @@ fn try_parse_date_inner(text: &str) -> Option<f64> {
             if pos != bytes.len() {
                 return None;
             }
+
+            // An exactly four-digit first component is an unambiguous
+            // year-first date.
+            // Keep shorter slash forms month/day/year so that adding this
+            // family does not reinterpret locale-sensitive D/M/YYYY input.
+            if first_component_len == 4 && (1900..=9999).contains(&first) {
+                return validated_ymd_to_serial(first as i32, second, third);
+            }
+
             let year = if third < 100 {
                 resolve_2digit_year(third)
             } else {
@@ -378,6 +389,44 @@ mod tests {
         assert_eq!(serial, ymd_to_serial(2024, 1, 15));
         let serial = try_parse_date("01/15/2024").unwrap();
         assert_eq!(serial, ymd_to_serial(2024, 1, 15));
+    }
+
+    #[test]
+    fn try_parse_date_year_first_slash() {
+        for (text, expected_day) in [("2025/06/15", 15), ("2025/6/15", 15), ("2025/06/5", 5)] {
+            assert_eq!(
+                try_parse_date(text).unwrap(),
+                ymd_to_serial(2025, 6, expected_day),
+                "failed for {text}"
+            );
+        }
+        assert_eq!(try_parse_date("1900/02/29").unwrap(), 60.0);
+        assert_eq!(
+            try_parse_date("9999/12/31").unwrap(),
+            ymd_to_serial(9999, 12, 31)
+        );
+    }
+
+    #[test]
+    fn try_parse_date_year_first_slash_rejects_invalid_boundaries() {
+        for text in [
+            "1899/12/31",
+            "10000/01/01",
+            "02025/06/15",
+            "2025/00/01",
+            "2025/13/01",
+            "2025/02/29",
+            "2025/04/31",
+            "1900/02/30",
+        ] {
+            assert!(try_parse_date(text).is_err(), "unexpectedly parsed {text}");
+        }
+
+        // A short first component remains the existing month/day/year form;
+        // this parser must not add a locale-general D/M/YYYY fallback.
+        for text in ["15/1/2024", "25/11/2024", "31/12/2024"] {
+            assert!(try_parse_date(text).is_err(), "unexpectedly parsed {text}");
+        }
     }
 
     #[test]

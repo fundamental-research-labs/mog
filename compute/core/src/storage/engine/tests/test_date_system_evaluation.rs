@@ -118,3 +118,87 @@ fn text_date_system_settings_updates_invalidate_calculation_and_native_rebuild()
     engine.recalculate().unwrap();
     assert_date(&engine, "1900-01-01");
 }
+
+#[test]
+fn cf_literal_dates_refresh_on_date_system_settings_changes() {
+    use super::helpers::{sheet_id, simple_snapshot};
+    use snapshot_types::RecalcOptions;
+    use value_types::FiniteF64;
+
+    let mut snapshot = simple_snapshot();
+    snapshot.sheets[0].cells.truncate(1);
+    // January 1, 1904 in the 1900 system; January 2, 1908 in 1904.
+    snapshot.sheets[0].cells[0].value = CellValue::number(1462.0);
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
+    let sid = sheet_id();
+    engine
+        .recalculate_with_options(&RecalcOptions {
+            timestamp_serial: Some(FiniteF64::must(1462.75)),
+            ..Default::default()
+        })
+        .unwrap();
+    engine
+        .add_cf_rule(
+            &sid,
+            serde_json::json!({
+                "id": "calendar-format", "sheetId": sid.to_uuid_string(),
+                "ranges": [{"startRow": 0, "startCol": 0, "endRow": 0, "endCol": 0}],
+                "rules": [{"id": "calendar-today", "type": "timePeriod", "priority": 1,
+                    "timePeriod": "today", "style": {"bold": true}}]
+            }),
+        )
+        .unwrap();
+    assert_eq!(
+        engine.get_displayed_cell_properties(&sid, 0, 0).bold,
+        Some(true)
+    );
+
+    // Displayed properties resolve the non-CF font default to false.
+    engine
+        .set_workbook_setting("date1904", serde_json::json!(true))
+        .unwrap();
+    assert_eq!(
+        engine.get_displayed_cell_properties(&sid, 0, 0).bold,
+        Some(false)
+    );
+    assert_eq!(
+        cell_value_at(&engine, &sid, 0, 0),
+        CellValue::number(1462.0)
+    );
+
+    engine
+        .patch_workbook_settings(
+            serde_json::from_value(serde_json::json!({"date1904": false})).unwrap(),
+        )
+        .unwrap();
+    assert_eq!(
+        engine.get_displayed_cell_properties(&sid, 0, 0).bold,
+        Some(true)
+    );
+
+    let mut settings = engine.get_workbook_settings();
+    settings.date1904 = true;
+    engine.set_workbook_settings(settings).unwrap();
+    assert_eq!(
+        engine.get_displayed_cell_properties(&sid, 0, 0).bold,
+        Some(false)
+    );
+    engine.reset_workbook_settings().unwrap();
+    assert_eq!(
+        engine.get_displayed_cell_properties(&sid, 0, 0).bold,
+        Some(true)
+    );
+
+    // Explicit recalculation must preserve the same cache result with no
+    // formula cells and no numeric changes to drive CF invalidation.
+    engine
+        .recalculate_with_options(&RecalcOptions {
+            timestamp_serial: Some(FiniteF64::must(1462.75)),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(
+        engine.get_displayed_cell_properties(&sid, 0, 0).bold,
+        Some(true)
+    );
+}

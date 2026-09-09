@@ -9,17 +9,29 @@ use super::super::types::{
     BlackWhiteMode, DrawingContent, GroupLocking, GroupShape, GroupTransform2D,
     SpreadsheetGraphicFrame,
 };
-use super::connectors::parse_connector;
+use super::connectors::parse_connector_with_namespace_context;
 use super::content::opaque_content_from_element;
 use super::graphic_frames::{parse_graphic_frame_nv, parse_graphic_frame_xfrm_with_presence};
 use super::non_visual::parse_nv_props;
-use super::pictures::parse_picture;
-use super::shapes::parse_shape;
-use super::styling::{parse_effect_list, parse_fill};
+use super::pictures::{
+    merge_namespace_declarations, namespace_declarations, parse_picture_with_namespace_context,
+};
+use super::shapes::parse_shape_with_namespace_context;
+use super::styling::{parse_effect_list, parse_fill_with_namespace_context};
 
 /// Parse a group shape element (CT_GroupShape).
 pub fn parse_group_shape(xml: &[u8], start: usize) -> Option<GroupShape> {
+    parse_group_shape_with_namespace_context(xml, start, &[])
+}
+
+pub(crate) fn parse_group_shape_with_namespace_context(
+    xml: &[u8],
+    start: usize,
+    inherited_namespaces: &[(String, String)],
+) -> Option<GroupShape> {
     let element = document_element_slice(&xml[start..])?;
+    let mut namespaces = inherited_namespaces.to_vec();
+    merge_namespace_declarations(&mut namespaces, namespace_declarations(element));
 
     let mut group = GroupShape::default();
 
@@ -46,7 +58,7 @@ pub fn parse_group_shape(xml: &[u8], start: usize) -> Option<GroupShape> {
             group.grp_sp_pr.xfrm = parse_group_transform_2d(xfrm_element);
         }
 
-        group.grp_sp_pr.fill = parse_fill(grp_element);
+        group.grp_sp_pr.fill = parse_fill_with_namespace_context(grp_element, &namespaces);
 
         if let Some(effect_list) = direct_child_slice(grp_element, b"effectLst") {
             group.grp_sp_pr.effects = parse_effect_list(effect_list)
@@ -67,17 +79,19 @@ pub fn parse_group_shape(xml: &[u8], start: usize) -> Option<GroupShape> {
         match child.local_name {
             b"nvGrpSpPr" | b"grpSpPr" => {}
             b"pic" => {
-                if let Some(pic) = parse_picture(child_xml, 0) {
+                if let Some(pic) = parse_picture_with_namespace_context(child_xml, 0, &namespaces) {
                     group.children.push(DrawingContent::Picture(pic));
                 }
             }
             b"sp" => {
-                if let Some(shape) = parse_shape(child_xml, 0) {
+                if let Some(shape) = parse_shape_with_namespace_context(child_xml, 0, &namespaces) {
                     group.children.push(DrawingContent::Shape(shape));
                 }
             }
             b"cxnSp" => {
-                if let Some(connector) = parse_connector(child_xml, 0) {
+                if let Some(connector) =
+                    parse_connector_with_namespace_context(child_xml, 0, &namespaces)
+                {
                     group.children.push(DrawingContent::Connector(connector));
                 }
             }
@@ -93,7 +107,9 @@ pub fn parse_group_shape(xml: &[u8], start: usize) -> Option<GroupShape> {
                 }
             }
             b"grpSp" => {
-                if let Some(nested_group) = parse_group_shape(child_xml, 0) {
+                if let Some(nested_group) =
+                    parse_group_shape_with_namespace_context(child_xml, 0, &namespaces)
+                {
                     group
                         .children
                         .push(DrawingContent::GroupShape(nested_group));

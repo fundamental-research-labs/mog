@@ -419,9 +419,10 @@ pub struct SourceRect {
 
 /// Blip-level image effect (ECMA-376 EG_EffectExtension children of CT_Blip).
 ///
-/// Covers all 17 effect elements that can appear as children of `<a:blip>`.
-/// Complex effects with child structures store simplified representations;
-/// full fidelity is deferred for `ColorChange` and `AlphaModulate`.
+/// Covers the schema effect elements that can appear as children of
+/// `<a:blip>`. Complex effects are typed where the model carries their
+/// required fields; otherwise an individual authored child is retained as
+/// `RawXml` in sequence.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum BlipEffect {
     /// Fixed alpha modulation (`a:alphaModFix`). `amt` is 0-100000 (100000 = fully opaque).
@@ -452,6 +453,12 @@ pub enum BlipEffect {
         use_alpha: bool,
         raw_xml: Option<String>,
     },
+    /// One authored direct child whose nested schema is not modeled yet.
+    ///
+    /// This is intentionally an individual ordered child rather than a
+    /// `BlipFill` extension-list payload: CT_Blip effects may be interleaved
+    /// with typed effects and must remain in their original sequence.
+    RawXml(String),
     /// Color replacement (`a:clrRepl`). Replaces all colors with given color.
     ColorReplace { color: Option<DrawingColor> },
     /// Duotone effect (`a:duotone`). Two colors define the mapping.

@@ -6,7 +6,7 @@ use compute_document::hex::{hex_to_id, id_to_hex};
 use domain_types::domain::filter::{
     AutoFilter, FilterColumn, OoxmlFilterType, column_filter_to_ooxml_filter_type,
 };
-use value_types::CellValue;
+use value_types::{CellValue, DateSystem};
 
 use crate::mirror::CellMirror;
 use crate::storage::engine::filter_import_diagnostics::{
@@ -105,6 +105,20 @@ pub(in crate::storage::engine) fn normalize_imported_auto_filter_visibility_for_
             }
         }
 
+        let mut filter = filter;
+        if filter.filter_kind == filters::FilterKind::AutoFilter
+            && materialize_imported_date_group_filters(
+                &mut filter,
+                binding.as_ref(),
+                imported_auto_filter.as_ref(),
+                DateSystem::from_date1904(mirror.date1904),
+            )
+        {
+            if filters::upsert_filter_state(&mut stores.storage, sheet_id, &filter).is_err() {
+                continue;
+            }
+        }
+
         let results = {
             let mut eval_profile =
                 crate::xlsx_profile::PhaseTimer::new("import", "evaluate_imported_filter");
@@ -160,6 +174,55 @@ pub(in crate::storage::engine) fn normalize_imported_auto_filter_visibility_for_
         sync_mirror_rows_from_effective_hidden(stores, mirror, sheet_id, &rows_excluded);
         sync_mirror_rows_from_effective_hidden(stores, mirror, sheet_id, &rows_included);
     }
+}
+
+/// The generic OOXML-to-runtime conversion intentionally keeps value filters
+/// lossless as strings. Date-group items need one additional runtime pass so
+/// their calendar intervals can be evaluated against numeric worksheet serials;
+/// the typed AutoFilter metadata remains untouched for export.
+fn materialize_imported_date_group_filters(
+    filter: &mut filters::FilterState,
+    binding: Option<&filters::FilterMetadataBinding>,
+    imported_auto_filter: Option<&AutoFilter>,
+    date_system: DateSystem,
+) -> bool {
+    let Some(binding) = binding else {
+        return false;
+    };
+    let Some(imported_auto_filter) = imported_auto_filter else {
+        return false;
+    };
+
+    let mut changed = false;
+    for column in &imported_auto_filter.columns {
+        let Some(OoxmlFilterType::Values {
+            values,
+            blanks,
+            date_group_items,
+            ..
+        }) = column.filter_type.as_ref()
+        else {
+            continue;
+        };
+        if date_group_items.is_empty() {
+            continue;
+        }
+        let Some(header_cell_id) = binding.col_id_to_header_cell_id.get(&column.col_index) else {
+            continue;
+        };
+        let Some(column_filter) =
+            filters::values_filter_to_column_filter(values, *blanks, date_group_items, date_system)
+        else {
+            continue;
+        };
+        if filter.column_filters.get(header_cell_id) != Some(&column_filter) {
+            filter
+                .column_filters
+                .insert(header_cell_id.clone(), column_filter);
+            changed = true;
+        }
+    }
+    changed
 }
 
 fn remove_filter_only_rows_from_explicit_hidden_metadata(
@@ -235,6 +298,9 @@ pub(in crate::storage::engine) fn sync_imported_auto_filter_metadata_after_set_c
         header_col,
         ColumnMetadataSync::ReplaceFromRuntime,
     );
+    super::imported_filter_runtime::clear_imported_table_date_group_metadata_after_column_edit(
+        stores, mirror, sheet_id, filter_id, header_col,
+    );
 }
 
 pub(in crate::storage::engine) fn sync_imported_auto_filter_metadata_after_clear_column(
@@ -251,6 +317,9 @@ pub(in crate::storage::engine) fn sync_imported_auto_filter_metadata_after_clear
         filter_id,
         header_col,
         ColumnMetadataSync::Clear,
+    );
+    super::imported_filter_runtime::clear_imported_table_date_group_metadata_after_column_edit(
+        stores, mirror, sheet_id, filter_id, header_col,
     );
 }
 
@@ -435,6 +504,7 @@ pub(in crate::storage::engine) fn upsert_sheet_auto_filter_binding(
     let shell = super::imported_filter_shell::build_filter_shell_metadata(
         imported_auto_filter,
         button_metadata,
+        DateSystem::from_date1904(mirror.date1904),
     );
     let fingerprint = super::imported_filter_shell::filter_binding_fingerprint(
         &sheet_id_text,
@@ -519,7 +589,10 @@ fn record_unsupported_filter_import_diagnostics(
         }
         if let Some(filter_type) = &column.filter_type {
             reasons.extend(
-                super::imported_filter_shell::unsupported_reasons_for_filter_type(filter_type),
+                super::imported_filter_shell::unsupported_reasons_for_filter_type(
+                    filter_type,
+                    DateSystem::from_date1904(mirror.date1904),
+                ),
             );
         }
         if reasons.is_empty() {
@@ -710,13 +783,16 @@ fn evaluate_runtime_filter(
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> Vec<filters::FilterEvaluationResult> {
+    let filter = super::imported_filter_runtime::project_imported_date_group_filters_for_evaluation(
+        stores, mirror, sheet_id, filter_id,
+    );
     let sid = *sheet_id;
     let grid_index = stores.grid_indexes.get(&sid);
-    let icons = crate::storage::engine::services::cf_cache::evaluate_filter_icons(stores, mirror, sheet_id, filter_id);
-    filters::evaluate_filter(
-        &stores.storage,
-        sheet_id,
-        filter_id,
+    let icons = crate::storage::engine::services::cf_cache::evaluate_filter_icons(
+        stores, mirror, sheet_id, filter_id,
+    );
+    filters::evaluate_filter_state_with_date_system(
+        filter.as_ref(),
         |row, col| {
             if let Some(col_slice) = mirror.get_column_view(&sid, col) {
                 return col_slice
@@ -767,6 +843,7 @@ fn evaluate_runtime_filter(
             }
             grid_index.and_then(|grid| grid.cell_position(&cell_id))
         },
+        DateSystem::from_date1904(mirror.date1904),
     )
 }
 

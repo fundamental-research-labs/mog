@@ -1,9 +1,9 @@
 use value_types::{CellError, CellValue, KahanSum};
 
 use super::super::helpers::{err_val, num_or_err_msg};
-use super::dated_cash_flows::collect_value_date_pairs;
-use crate::PureFunction;
+use super::dated_cash_flows::{collect_value_date_pairs_with_context, solve_financial_root};
 use crate::helpers::coercion::flatten_values;
+use crate::{FunctionContext, PureFunction};
 
 pub(super) struct FnXirr;
 
@@ -18,11 +18,15 @@ impl PureFunction for FnXirr {
         Some(3)
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
+        self.call_with_context(args, &FunctionContext::default())
+    }
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
             let flat_vals = flatten_values(&[args[0].clone()]);
             let flat_dates = flatten_values(&[args[1].clone()]);
             let (values, dates) =
-                collect_value_date_pairs(&flat_vals, &flat_dates).map_err(err_val)?;
+                collect_value_date_pairs_with_context(&flat_vals, &flat_dates, context)
+                    .map_err(err_val)?;
             if values.len() < 2 {
                 return Err(CellValue::error_with_message(
                     CellError::Num,
@@ -46,8 +50,17 @@ impl PureFunction for FnXirr {
             } else {
                 0.1
             };
+            if !guess.is_finite() || guess <= -1.0 {
+                return Err(CellValue::error_with_message(
+                    CellError::Num,
+                    format!("XIRR: guess must be > -1, got {guess}"),
+                ));
+            }
 
             let base_date = dates[0];
+            // Sign validation above guarantees a positive scale. Do not clamp
+            // it to 1: tiny cash flows must remain scale-invariant.
+            let scale = values.iter().map(|v| v.abs()).fold(0.0_f64, f64::max);
 
             let xnpv = |rate: f64| -> f64 {
                 let base = 1.0 + rate;
@@ -61,9 +74,10 @@ impl PureFunction for FnXirr {
                     if discount == 0.0 || !discount.is_finite() {
                         return f64::NAN;
                     }
-                    acc.add(values[i] / discount);
+                    acc.add((values[i] / scale) / discount);
                 }
-                acc.total()
+                let total = acc.total();
+                if total.is_finite() { total } else { f64::NAN }
             };
 
             let xnpv_deriv = |rate: f64| -> f64 {
@@ -76,42 +90,22 @@ impl PureFunction for FnXirr {
                     let y = (dates[i] - base_date) / 365.0;
                     let discount = base.powf(y);
                     if discount != 0.0 && discount.is_finite() {
-                        acc.add(-(y * values[i] / (discount * base)));
+                        acc.add(-y * (values[i] / scale) / discount / base);
+                    } else {
+                        return f64::NAN;
                     }
                 }
-                acc.total()
+                let total = acc.total();
+                if total.is_finite() { total } else { f64::NAN }
             };
-            let scale = values
-                .iter()
-                .map(|v| v.abs())
-                .fold(0.0_f64, f64::max)
-                .max(1.0);
+            let result = solve_financial_root(xnpv, xnpv_deriv, guess, 100, 1e-12, 1e-8);
 
-            let config = compute_solver::SolverConfig {
-                objective: compute_solver::Objective::Target(0.0),
-                x0: vec![guess],
-                bounds: vec![compute_solver::Bound::lower(-1.0 + 1e-10)],
-                ftol: 1e-10 * scale,
-                xtol: 1e-14,
-                max_evals: 2000,
-                max_time_ms: 0,
-                ..Default::default()
-            };
-
-            let extra_guesses: &[f64] = &[
-                0.0, 0.01, 0.05, 0.1, 0.15, 0.2, 0.25, 0.5, -0.1, -0.3, -0.5, -0.7, -0.9, -0.95,
-                -0.99, 1.0, 2.0, 5.0, 10.0,
-            ];
-
-            let result = compute_solver::solve_root_nr(xnpv, xnpv_deriv, &config, extra_guesses);
-
-            if result.converged {
-                Ok(result.x[0])
-            } else {
-                Err(CellValue::error_with_message(
+            match result {
+                Some(rate) => Ok(rate),
+                None => Err(CellValue::error_with_message(
                     CellError::Num,
                     "XIRR: failed to converge — check that cash flows have both positive and negative values",
-                ))
+                )),
             }
         })())
     }

@@ -93,7 +93,7 @@ fn test_all_non_numeric_hidden() {
 }
 
 #[test]
-fn test_duplicate_boundary_selects_exactly_n() {
+fn test_top_duplicate_boundary_includes_all_ties() {
     let spec = TableTopBottomFilter {
         direction: TopBottomDirection::Top,
         count: 2.0,
@@ -102,7 +102,31 @@ fn test_duplicate_boundary_selects_exactly_n() {
     let data = vec![cv_num(10.0), cv_num(10.0), cv_num(10.0)];
     let bitmap = evaluate_top_bottom_direct(&spec, &data);
     let visible_count: u8 = bitmap.iter().sum();
-    assert_eq!(visible_count, 2);
+    assert_eq!(visible_count, 3);
+}
+
+#[test]
+fn test_bottom_duplicate_boundary_includes_all_ties() {
+    let spec = TableTopBottomFilter {
+        direction: TopBottomDirection::Bottom,
+        count: 2.0,
+        by: TopBottomBy::Items,
+    };
+    let data = vec![cv_num(10.0), cv_num(10.0), cv_num(10.0), cv_num(20.0)];
+    let bitmap = evaluate_top_bottom_direct(&spec, &data);
+    assert_eq!(bitmap, vec![1, 1, 1, 0]);
+}
+
+#[test]
+fn test_percent_duplicate_boundary_includes_all_ties() {
+    let spec = TableTopBottomFilter {
+        direction: TopBottomDirection::Top,
+        count: 50.0,
+        by: TopBottomBy::Percent,
+    };
+    let data = vec![cv_num(30.0), cv_num(20.0), cv_num(20.0), cv_num(20.0)];
+    let bitmap = evaluate_top_bottom_direct(&spec, &data);
+    assert_eq!(bitmap, vec![1, 1, 1, 1]);
 }
 
 #[test]

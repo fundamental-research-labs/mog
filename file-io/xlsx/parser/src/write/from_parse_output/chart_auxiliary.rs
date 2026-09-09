@@ -161,10 +161,6 @@ pub(super) fn should_generate_chart_color_style(
         )
 }
 
-pub(super) fn standard_chart_number(aux: &ChartAuxiliaryDataRef<'_>) -> Option<usize> {
-    original_chart_number(&aux.original_path, "chart")
-}
-
 pub(super) fn chart_ex_number(aux: &ChartAuxiliaryDataRef<'_>) -> Option<usize> {
     original_chart_number(&aux.original_path, "chartEx")
 }
@@ -211,6 +207,11 @@ pub(super) fn auxiliary_file_paths_for_export(
             Some(AuxiliaryKind::Style) => true,
             Some(AuxiliaryKind::ColorStyle) => !generated_color_style,
             Some(AuxiliaryKind::UserShapes) | None => false,
+            // A modeled chart edit reconstructs the chart XML, but imported
+            // chart-space picture fills are retained on the typed definition.
+            // Keep their media owners in the package graph so the emitted
+            // a:blip r:embed remains resolvable after reconstruction.
+            Some(AuxiliaryKind::Image) => true,
         })
         .collect()
 }
@@ -249,6 +250,7 @@ pub(super) fn is_supported_auxiliary_relationship(rel_type: &str, target_path: &
         Some(AuxiliaryKind::Style) => rel_type == REL_CHART_STYLE,
         Some(AuxiliaryKind::ColorStyle) => rel_type == REL_CHART_COLOR_STYLE,
         Some(AuxiliaryKind::UserShapes) => rel_type == REL_CHART_USER_SHAPES,
+        Some(AuxiliaryKind::Image) => rel_type == crate::infra::opc::REL_IMAGE,
         None => false,
     }
 }
@@ -355,6 +357,7 @@ enum AuxiliaryKind {
     Style,
     ColorStyle,
     UserShapes,
+    Image,
 }
 
 fn auxiliary_kind(path: &str) -> Option<AuxiliaryKind> {
@@ -371,6 +374,8 @@ fn auxiliary_kind(path: &str) -> Option<AuxiliaryKind> {
         Some(AuxiliaryKind::ColorStyle)
     } else if path.starts_with("xl/drawings/") && file_name.ends_with(".xml") {
         Some(AuxiliaryKind::UserShapes)
+    } else if path.starts_with("xl/media/") {
+        Some(AuxiliaryKind::Image)
     } else {
         None
     }

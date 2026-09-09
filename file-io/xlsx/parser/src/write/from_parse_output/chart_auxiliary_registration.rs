@@ -3,6 +3,34 @@ use super::{chart_auxiliary, chart_replay};
 use crate::write::package_graph::PackageGraphBuilder;
 use crate::write::write_error::WriteError;
 
+pub(super) fn register_imported_chart_auxiliary_part(
+    package_graph_builder: &mut PackageGraphBuilder,
+    registered_chart_auxiliary_parts: &mut std::collections::BTreeSet<String>,
+    aux: &chart_auxiliary::ChartAuxiliaryDataRef<'_>,
+    path: &str,
+) -> Result<(), WriteError> {
+    let normalized_path = path.trim_start_matches('/');
+    if !registered_chart_auxiliary_parts.insert(normalized_path.to_string()) {
+        return Ok(());
+    }
+    if normalized_path.starts_with("xl/media/") {
+        if let Some((_, bytes)) = aux
+            .auxiliary_files
+            .iter()
+            .find(|(candidate, _)| candidate.trim_start_matches('/') == normalized_path)
+        {
+            crate::write::package_graph::register_media_part_with_bytes(
+                package_graph_builder,
+                path,
+                bytes,
+            )?;
+        }
+    } else {
+        crate::write::package_graph::register_chart_auxiliary_part(package_graph_builder, path)?;
+    }
+    Ok(())
+}
+
 pub(super) fn register_generated_chart_color_style(
     package_graph_builder: &mut PackageGraphBuilder,
     registered_chart_auxiliary_parts: &mut std::collections::BTreeSet<String>,

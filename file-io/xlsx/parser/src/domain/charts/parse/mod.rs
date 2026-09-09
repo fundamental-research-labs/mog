@@ -18,6 +18,9 @@ mod bar3d_regression_tests;
 #[cfg(test)]
 mod surface_regression_tests;
 
+#[cfg(test)]
+mod signed_dpi_tests;
+
 use crate::infra::scanner::{find_closing_tag, find_element_end, find_gt_simd, find_tag_simd};
 
 use super::*;

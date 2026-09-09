@@ -2,7 +2,7 @@
 
 use crate::storage::WorkbookStorage;
 use cell_types::SheetId;
-use value_types::CellValue;
+use value_types::{CellValue, DateSystem};
 
 use super::bridge::column_filter_to_table_criteria;
 use super::crud::get_filter;
@@ -13,8 +13,9 @@ use super::{ColumnFilter, FilterEvaluationResult, FilterRecordCount};
 
 /// Evaluate filter criteria and return which rows match.
 ///
-/// Delegates per-column evaluation to `compute_table::filter::evaluate_column_filter`,
-/// which handles Values, Condition, TopBottom, Dynamic, and Color filter types.
+/// Delegates per-column evaluation to the date-system-aware compute-table
+/// evaluator, which handles Values, Condition, TopBottom, Dynamic, and Color
+/// filter types.
 ///
 /// The `get_cell_value` callback provides cell values for a given (row, col).
 /// The `resolve_cell_id_to_pos` callback resolves a CellId string to (row, col).
@@ -36,9 +37,67 @@ where
     I: Fn(u32, u32) -> Option<domain_types::FilterIconIdentity>,
     R: Fn(&str) -> Option<(u32, u32)>,
 {
+    evaluate_filter_with_date_system(
+        storage,
+        sheet_id,
+        filter_id,
+        get_cell_value,
+        get_cell_format,
+        get_cell_icon,
+        resolve_cell_id_to_pos,
+        DateSystem::Date1900,
+    )
+}
+
+/// Evaluate filter criteria with the workbook's date serial system.
+pub fn evaluate_filter_with_date_system<F, G, I, R>(
+    storage: &WorkbookStorage,
+    sheet_id: &SheetId,
+    filter_id: &str,
+    get_cell_value: F,
+    get_cell_format: G,
+    get_cell_icon: I,
+    resolve_cell_id_to_pos: R,
+    date_system: DateSystem,
+) -> Vec<FilterEvaluationResult>
+where
+    F: Fn(u32, u32) -> CellValue,
+    G: Fn(u32, u32) -> domain_types::CellFormat,
+    I: Fn(u32, u32) -> Option<domain_types::FilterIconIdentity>,
+    R: Fn(&str) -> Option<(u32, u32)>,
+{
     let filter = match get_filter(storage, sheet_id, filter_id) {
         Some(f) => f,
         None => return vec![],
+    };
+
+    evaluate_filter_state_with_date_system(
+        Some(&filter),
+        get_cell_value,
+        get_cell_format,
+        get_cell_icon,
+        resolve_cell_id_to_pos,
+        date_system,
+    )
+}
+
+/// Evaluate an executable projection without changing persisted filter state.
+pub fn evaluate_filter_state_with_date_system<F, G, I, R>(
+    filter: Option<&super::FilterState>,
+    get_cell_value: F,
+    get_cell_format: G,
+    get_cell_icon: I,
+    resolve_cell_id_to_pos: R,
+    date_system: DateSystem,
+) -> Vec<FilterEvaluationResult>
+where
+    F: Fn(u32, u32) -> CellValue,
+    G: Fn(u32, u32) -> domain_types::CellFormat,
+    I: Fn(u32, u32) -> Option<domain_types::FilterIconIdentity>,
+    R: Fn(&str) -> Option<(u32, u32)>,
+{
+    let Some(filter) = filter else {
+        return vec![];
     };
 
     // Resolve filter range corners to current positions
@@ -112,13 +171,14 @@ where
                 .collect::<Vec<_>>()
         });
         // Delegate evaluation to compute-table
-        let bitmap = compute_table::filter::evaluate_column_filter_with_icons(
+        let bitmap = compute_table::filter::evaluate_column_filter_with_icons_and_date_system(
             &table_criteria,
             &column_data,
             column_formats.as_deref(),
             column_icons.as_deref(),
             now,
             None, // week_start_day — defaults to Sunday inside compute-table
+            date_system,
         );
 
         bitmaps.push(bitmap);
@@ -249,7 +309,7 @@ where
     I: Fn(u32, u32) -> Option<domain_types::FilterIconIdentity>,
     R: Fn(&str) -> Option<(u32, u32)>,
 {
-    let results = evaluate_filter(
+    get_filtered_record_count_with_date_system(
         storage,
         sheet_id,
         filter_id,
@@ -257,6 +317,36 @@ where
         get_cell_format,
         get_cell_icon,
         resolve_cell_id_to_pos,
+        DateSystem::Date1900,
+    )
+}
+
+/// Get filtered vs total record count using the workbook's date serial system.
+pub fn get_filtered_record_count_with_date_system<F, G, I, R>(
+    storage: &WorkbookStorage,
+    sheet_id: &SheetId,
+    filter_id: &str,
+    get_cell_value: F,
+    get_cell_format: G,
+    get_cell_icon: I,
+    resolve_cell_id_to_pos: R,
+    date_system: DateSystem,
+) -> Option<FilterRecordCount>
+where
+    F: Fn(u32, u32) -> CellValue,
+    G: Fn(u32, u32) -> domain_types::CellFormat,
+    I: Fn(u32, u32) -> Option<domain_types::FilterIconIdentity>,
+    R: Fn(&str) -> Option<(u32, u32)>,
+{
+    let results = evaluate_filter_with_date_system(
+        storage,
+        sheet_id,
+        filter_id,
+        get_cell_value,
+        get_cell_format,
+        get_cell_icon,
+        resolve_cell_id_to_pos,
+        date_system,
     );
     if results.is_empty() {
         return None;

@@ -7,6 +7,14 @@ use crate::helpers::coercion::{check_error, extract_numbers, flatten_values};
 use crate::{FunctionRegistry, PureFunction};
 
 // ===========================================================================
+// TVM stability fallbacks
+// ===========================================================================
+
+#[path = "time_value_stability.rs"]
+mod time_value_stability;
+use self::time_value_stability::pv_with_stable_fallback;
+
+// ===========================================================================
 // PV
 // ===========================================================================
 
@@ -38,13 +46,7 @@ impl PureFunction for FnPv {
                     format!("PV: type must be 0 or 1, got {type_}"),
                 ));
             }
-            if rate == 0.0 {
-                return Ok(-(fv + pmt * nper));
-            }
-            let pow = (1.0 + rate).powf(nper);
-            let type_adj = if type_ != 0.0 { 1.0 + rate } else { 1.0 };
-            let af = (pow - 1.0) / rate;
-            Ok(-(fv / pow + (pmt * af * type_adj) / pow))
+            Ok(pv_with_stable_fallback(rate, nper, pmt, fv, type_))
         })())
     }
 }

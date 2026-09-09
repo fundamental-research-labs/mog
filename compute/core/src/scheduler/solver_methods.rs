@@ -51,6 +51,7 @@ impl ComputeCore {
         let ast_cache_ref = &self.ast_cache;
         let eval_cache = RefCell::new(FxHashMap::default());
         let evaluating = RefCell::new(FxHashSet::default());
+        let clock = crate::eval::clock::RecalcClock::for_recalc(None);
 
         let evaluate = move |x: &[f64]| -> f64 {
             let mut overrides = FxHashMap::default();
@@ -67,7 +68,8 @@ impl ComputeCore {
                 &eval_cache,
                 &evaluating,
                 self.formula_text_provider(),
-            );
+            )
+            .with_recalc_clock(clock);
             match crate::eval::sync_block_on(crate::eval::Evaluator::evaluate(&ast, &ctx, &ctx)) {
                 Ok(val) => val.coerce_to_number().unwrap_or(f64::NAN),
                 Err(_) => f64::NAN,
@@ -114,6 +116,7 @@ impl ComputeCore {
         let ast_cache_ref = &self.ast_cache;
         let eval_cache = RefCell::new(FxHashMap::default());
         let evaluating = RefCell::new(FxHashSet::default());
+        let clock = crate::eval::clock::RecalcClock::for_recalc(None);
 
         let evaluate = |input_value: f64| -> f64 {
             let mut overrides = FxHashMap::default();
@@ -128,7 +131,8 @@ impl ComputeCore {
                 &eval_cache,
                 &evaluating,
                 self.formula_text_provider(),
-            );
+            )
+            .with_recalc_clock(clock);
             match crate::eval::sync_block_on(crate::eval::Evaluator::evaluate(&ast, &ctx, &ctx)) {
                 Ok(val) => val.coerce_to_number().unwrap_or(f64::NAN),
                 Err(_) => f64::NAN,
@@ -202,6 +206,7 @@ impl ComputeCore {
         let ast_cache_ref = &self.ast_cache;
         let eval_cache = RefCell::new(FxHashMap::default());
         let evaluating = RefCell::new(FxHashSet::default());
+        let clock = crate::eval::clock::RecalcClock::for_recalc(None);
 
         let evaluate = |overrides: &FxHashMap<CellId, CellValue>| -> CellValue {
             eval_cache.borrow_mut().clear();
@@ -214,7 +219,8 @@ impl ComputeCore {
                 &eval_cache,
                 &evaluating,
                 self.formula_text_provider(),
-            );
+            )
+            .with_recalc_clock(clock);
             match crate::eval::sync_block_on(crate::eval::Evaluator::evaluate(&ast, &ctx, &ctx)) {
                 Ok(v) => v,
                 Err(_) => CellValue::Error(CellError::Value, None),

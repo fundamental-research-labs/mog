@@ -55,14 +55,20 @@ impl PureFunction for FnIpmt {
             }
 
             let pmt = pmt_core(rate, nper, pv, fv, type_);
-            // For type=1, adjust period
-            let actual_per = if type_ != 0.0 { per - 1.0 } else { per };
-            if actual_per == 0.0 {
+            if type_ != 0.0 && per == 1.0 {
                 return Ok(0.0);
             }
-            // Balance at start of actual_per: FV after (actual_per - 1) periods
-            let fv_at_per = fv_core(rate, actual_per - 1.0, pmt, pv, type_);
-            Ok(fv_at_per * rate)
+            // FV with the requested timing includes beginning-of-period
+            // payments through the start of `per`.  For a type-1 period after
+            // the first, remove that period's beginning payment before
+            // charging interest on the remaining balance.
+            let fv_at_per = fv_core(rate, per - 1.0, pmt, pv, type_);
+            let balance_before_interest = if type_ != 0.0 {
+                fv_at_per - pmt
+            } else {
+                fv_at_per
+            };
+            Ok(balance_before_interest * rate)
         })())
     }
 }
@@ -531,6 +537,111 @@ mod tests {
                     );
                 }
                 _ => panic!("Expected numbers for period {}", per),
+            }
+        }
+    }
+
+    #[test]
+    fn test_payment_callers_cover_64_large_power_ipmt_ppmt_rows() {
+        // These eight rate/nper pairs are from the independent caller audit:
+        // the old pmt_core direct formula produced a non-finite intermediate
+        // for each pair.  Two timing modes and two requested periods make 32
+        // input rows; IPMT and PPMT cover 64 caller outputs.
+        let cases = [
+            (0.1, 10_000.0, -800.0, -800.0 / 1.1),
+            (0.5, 10_000.0, -4_000.0, -4_000.0 / 1.5),
+            (1.0, 1_000.0, -8_000.0, -8_000.0 / 2.0),
+            (1.0, 10_000.0, -8_000.0, -8_000.0 / 2.0),
+            (2.0, 1_000.0, -16_000.0, -16_000.0 / 3.0),
+            (10.0, 360.0, -80_000.0, -80_000.0 / 11.0),
+            (10.0, 1_000.0, -80_000.0, -80_000.0 / 11.0),
+            (10.0, 10_000.0, -80_000.0, -80_000.0 / 11.0),
+        ];
+        for (rate, nper, expected_end, expected_begin) in cases {
+            for (type_, expected_pmt) in [(0.0, expected_end), (1.0, expected_begin)] {
+                for per in [1.0, 2.0] {
+                    let args = [
+                        num(rate),
+                        num(per),
+                        num(nper),
+                        num(8_000.0),
+                        num(0.0),
+                        num(type_),
+                    ];
+                    let expected_interest = if type_ == 1.0 {
+                        if per == 1.0 { 0.0 } else { expected_pmt }
+                    } else {
+                        -8_000.0 * rate
+                    };
+                    let ipmt = FnIpmt.call(&args);
+                    let ppmt = FnPpmt.call(&args);
+                    assert!(
+                        approx(
+                            &ipmt,
+                            expected_interest,
+                            expected_interest.abs() * 1e-12 + 1e-8
+                        ),
+                        "IPMT({rate}, {per}, {nper}, 8000, 0, {type_}) = {ipmt:?}, expected {expected_interest}"
+                    );
+                    assert!(
+                        approx(
+                            &ppmt,
+                            expected_pmt - expected_interest,
+                            expected_pmt.abs() * 1e-12 + 1e-8,
+                        ),
+                        "PPMT({rate}, {per}, {nper}, 8000, 0, {type_}) = {ppmt:?}, expected {}",
+                        expected_pmt - expected_interest
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_payment_callers_cover_12_large_power_cumulative_rows() {
+        // Six rate/nper pairs and both timing modes give the 12 cumulative
+        // rows identified by the caller audit.  Each row exercises both
+        // CUMIPMT and CUMPRINC over the first period, which avoids introducing
+        // a separate long-loop approximation into this helper contract test.
+        let cases = [
+            (0.1, 10_000.0, -800.0, -800.0 / 1.1),
+            (0.5, 10_000.0, -4_000.0, -4_000.0 / 1.5),
+            (1.0, 1_000.0, -8_000.0, -8_000.0 / 2.0),
+            (1.0, 10_000.0, -8_000.0, -8_000.0 / 2.0),
+            (2.0, 1_000.0, -16_000.0, -16_000.0 / 3.0),
+            (10.0, 360.0, -80_000.0, -80_000.0 / 11.0),
+        ];
+        for (rate, nper, expected_end, expected_begin) in cases {
+            for (type_, expected_pmt) in [(0.0, expected_end), (1.0, expected_begin)] {
+                let args = [
+                    num(rate),
+                    num(nper),
+                    num(8_000.0),
+                    num(1.0),
+                    num(1.0),
+                    num(type_),
+                ];
+                let expected_interest = if type_ == 0.0 { 8_000.0 * rate } else { 0.0 };
+                let expected_cum_interest = -expected_interest;
+                let expected_principal = expected_pmt + expected_interest;
+                let cum_interest = FnCumipmt.call(&args);
+                let cum_principal = FnCumprinc.call(&args);
+                assert!(
+                    approx(
+                        &cum_interest,
+                        expected_cum_interest,
+                        expected_interest.abs() * 1e-12 + 1e-8,
+                    ),
+                    "CUMIPMT({rate}, {nper}, 8000, 1, 1, {type_}) = {cum_interest:?}, expected {expected_cum_interest}"
+                );
+                assert!(
+                    approx(
+                        &cum_principal,
+                        expected_principal,
+                        expected_pmt.abs() * 1e-12 + 1e-8,
+                    ),
+                    "CUMPRINC({rate}, {nper}, 8000, 1, 1, {type_}) = {cum_principal:?}, expected {expected_principal}"
+                );
             }
         }
     }

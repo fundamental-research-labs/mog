@@ -2,7 +2,8 @@
 
 use super::*;
 use crate::domain::print::{
-    CellComments, Orientation, PageMargins, PageOrder, PaperSize, PrintErrors,
+    CellComments, Orientation, PageMargins, PageOrder, PageSetup, PaperSize, PrintErrors,
+    PrintOptions,
 };
 use crate::write::xml_writer::XmlWriter;
 use ooxml_types::print::hf_codes;
@@ -206,8 +207,37 @@ fn test_page_setup_scale_clamping() {
     writer.scale(5); // Below minimum
     assert_eq!(writer.page_setup.as_ref().unwrap().scale, Some(10));
 
+    writer.scale(0); // Excel automatic scaling; distinct from explicit 10%
+    assert_eq!(writer.page_setup.as_ref().unwrap().scale, Some(0));
+
     writer.scale(500); // Above maximum
     assert_eq!(writer.page_setup.as_ref().unwrap().scale, Some(400));
+}
+
+#[test]
+fn test_page_setup_scale_zero_automatic_roundtrip_is_distinct_from_ten() {
+    let automatic = PageSetup::parse(br#"<worksheet><pageSetup scale="0"/></worksheet>"#)
+        .expect("automatic scale page setup");
+    let explicit = PageSetup::parse(br#"<worksheet><pageSetup scale="10"/></worksheet>"#)
+        .expect("explicit scale page setup");
+
+    let mut automatic_writer = PrintWriter::new();
+    automatic_writer.set_page_setup(automatic);
+    let automatic_xml = String::from_utf8(automatic_writer.page_setup_xml().unwrap()).unwrap();
+    assert!(automatic_xml.contains("scale=\"0\""));
+    let automatic_roundtrip =
+        PageSetup::parse(automatic_xml.as_bytes()).expect("automatic roundtrip page setup");
+
+    let mut explicit_writer = PrintWriter::new();
+    explicit_writer.set_page_setup(explicit);
+    let explicit_xml = String::from_utf8(explicit_writer.page_setup_xml().unwrap()).unwrap();
+    assert!(explicit_xml.contains("scale=\"10\""));
+    let explicit_roundtrip =
+        PageSetup::parse(explicit_xml.as_bytes()).expect("explicit roundtrip page setup");
+
+    assert_eq!(automatic_roundtrip.scale, Some(0));
+    assert_eq!(explicit_roundtrip.scale, Some(10));
+    assert_ne!(automatic_roundtrip.scale, explicit_roundtrip.scale);
 }
 
 #[test]
@@ -220,6 +250,17 @@ fn test_page_setup_fit_to_page() {
     assert!(xml.contains("fitToWidth=\"1\""));
     assert!(xml.contains("fitToHeight=\"2\""));
     assert!(!xml.contains("scale=")); // Scale should be cleared
+}
+
+#[test]
+fn test_page_setup_fit_to_page_preserves_unsigned_int_width() {
+    let mut writer = PrintWriter::new();
+    writer.fit_to_page(65_536, u32::MAX);
+
+    let xml = String::from_utf8(writer.page_setup_xml().unwrap()).unwrap();
+
+    assert!(xml.contains("fitToWidth=\"65536\""));
+    assert!(xml.contains("fitToHeight=\"4294967295\""));
 }
 
 #[test]
@@ -326,6 +367,46 @@ fn test_page_setup_default_values() {
     assert!(xml.contains("paperSize=\"1\""));
     // orientation=default is still omitted
     assert!(!xml.contains("orientation="));
+}
+
+#[test]
+fn test_domain_page_setup_unsigned_ints_reach_xml_without_narrowing() {
+    let mut settings = domain_types::PrintSettings::default();
+    settings.has_page_setup = true;
+    settings.paper_size = Some(u32::MAX);
+    // The bridge must apply the nonzero scale contract without first
+    // narrowing the domain's u32 value to u16. Zero remains automatic mode.
+    settings.scale = Some(u32::MAX);
+    settings.fit_to_width = Some(u32::MAX);
+    settings.fit_to_height = Some(65_536);
+    settings.first_page_number = Some(u32::MAX);
+    settings.horizontal_dpi = Some(u32::MAX);
+    settings.vertical_dpi = Some(65_536);
+    settings.copies = Some(u32::MAX);
+
+    let writer = print_writer_from_domain(&settings);
+    let xml = String::from_utf8(writer.page_setup_xml().unwrap()).unwrap();
+
+    assert!(xml.contains("paperSize=\"4294967295\""));
+    assert!(xml.contains("scale=\"400\""));
+    assert!(xml.contains("fitToWidth=\"4294967295\""));
+    assert!(xml.contains("fitToHeight=\"65536\""));
+    assert!(xml.contains("firstPageNumber=\"4294967295\""));
+    assert!(xml.contains("horizontalDpi=\"4294967295\""));
+    assert!(xml.contains("verticalDpi=\"65536\""));
+    assert!(xml.contains("copies=\"4294967295\""));
+}
+
+#[test]
+fn test_domain_page_setup_scale_zero_remains_automatic() {
+    let mut settings = domain_types::PrintSettings::default();
+    settings.has_page_setup = true;
+    settings.scale = Some(0);
+
+    let writer = print_writer_from_domain(&settings);
+    let xml = String::from_utf8(writer.page_setup_xml().unwrap()).unwrap();
+
+    assert!(xml.contains("scale=\"0\""));
 }
 
 // -------------------------------------------------------------------------
@@ -462,6 +543,38 @@ fn test_header_footer_different_first() {
 }
 
 #[test]
+fn test_header_footer_incomplete_attributes_roundtrip() {
+    let source = br#"<worksheet><headerFooter differentOddEven="1" differentFirst="1" scaleWithDoc="0" alignWithMargins="0"/></worksheet>"#;
+    let parsed = crate::domain::print::HeaderFooter::parse(source)
+        .expect("incomplete header/footer should parse");
+
+    let mut hf = HeaderFooter::default();
+    hf.different_odd_even = parsed.different_odd_even;
+    hf.different_first = parsed.different_first;
+    hf.scale_with_doc = parsed.scale_with_doc;
+    hf.align_with_margins = parsed.align_with_margins;
+
+    let mut writer = PrintWriter::new();
+    writer.set_header_footer(hf);
+    let xml = String::from_utf8(writer.header_footer_xml().unwrap()).unwrap();
+
+    assert!(xml.contains("differentOddEven=\"1\""));
+    assert!(xml.contains("differentFirst=\"1\""));
+    assert!(xml.contains("scaleWithDoc=\"0\""));
+    assert!(xml.contains("alignWithMargins=\"0\""));
+    assert!(xml.ends_with("/>"));
+
+    let roundtripped = crate::domain::print::HeaderFooter::parse(xml.as_bytes())
+        .expect("incomplete header/footer export should parse");
+    assert!(roundtripped.different_odd_even);
+    assert!(roundtripped.different_first);
+    assert_eq!(roundtripped.scale_with_doc, Some(false));
+    assert_eq!(roundtripped.align_with_margins, Some(false));
+    assert!(roundtripped.odd_header.is_none());
+    assert!(roundtripped.odd_footer.is_none());
+}
+
+#[test]
 fn test_header_footer_scale_with_doc() {
     let mut hf = HeaderFooter::new();
     hf.scale_with_doc = Some(false);
@@ -530,6 +643,28 @@ fn test_print_options_gridlines() {
     assert!(xml.contains("gridLines=\"1\""));
     // gridLinesSet defaults to true; true is omitted from XML output
     assert!(!xml.contains("gridLinesSet="));
+}
+
+#[test]
+fn test_print_options_gridlines_set_roundtrip_controls_effective_setting() {
+    let source = br#"<worksheet><printOptions gridLines="1" gridLinesSet="0"/></worksheet>"#;
+    let options = PrintOptions::parse(source).expect("printOptions should parse");
+
+    let mut writer = PrintWriter::new();
+    writer.set_print_options(options);
+
+    let mut xml_writer = XmlWriter::new();
+    writer.write_to(&mut xml_writer);
+    let xml = String::from_utf8(xml_writer.finish()).unwrap();
+
+    // OOXML's effective print setting requires both gridLines and
+    // gridLinesSet. The import/export path must retain the disabling flag.
+    assert!(xml.contains("gridLines=\"1\""));
+    assert!(xml.contains("gridLinesSet=\"0\""));
+
+    let roundtripped = PrintOptions::parse(xml.as_bytes()).expect("export should parse");
+    assert!(roundtripped.grid_lines);
+    assert!(!roundtripped.grid_lines_set);
 }
 
 #[test]

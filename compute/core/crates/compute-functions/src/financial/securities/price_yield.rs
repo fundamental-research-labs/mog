@@ -2,8 +2,9 @@
 
 use value_types::{CellError, CellValue};
 
+use super::super::date_context::canonical_date_arg;
 use super::super::helpers::{arg_num, err_val, num_or_err_msg, price_core, req_num};
-use crate::PureFunction;
+use crate::{FunctionContext, PureFunction};
 
 pub(super) struct FnPrice;
 impl PureFunction for FnPrice {
@@ -20,9 +21,12 @@ impl PureFunction for FnPrice {
         Some(7)
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
+        self.call_with_context(args, &FunctionContext::default())
+    }
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
-            let settlement = req_num(args, 0).map_err(err_val)?;
-            let maturity = req_num(args, 1).map_err(err_val)?;
+            let settlement = canonical_date_arg(args, 0, context).map_err(err_val)?;
+            let maturity = canonical_date_arg(args, 1, context).map_err(err_val)?;
             let rate = req_num(args, 2).map_err(err_val)?;
             let yld = req_num(args, 3).map_err(err_val)?;
             let redemption = req_num(args, 4).map_err(err_val)?;
@@ -87,9 +91,12 @@ impl PureFunction for FnYield {
         Some(7)
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
+        self.call_with_context(args, &FunctionContext::default())
+    }
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
-            let settlement = req_num(args, 0).map_err(err_val)?;
-            let maturity = req_num(args, 1).map_err(err_val)?;
+            let settlement = canonical_date_arg(args, 0, context).map_err(err_val)?;
+            let maturity = canonical_date_arg(args, 1, context).map_err(err_val)?;
             let rate = req_num(args, 2).map_err(err_val)?;
             let pr = req_num(args, 3).map_err(err_val)?;
             let redemption = req_num(args, 4).map_err(err_val)?;

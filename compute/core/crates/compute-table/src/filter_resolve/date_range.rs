@@ -4,7 +4,7 @@ use crate::types::{
     ConditionFilter, DynamicFilterRule, FilterLogic, FilterOperator, TableFilterCondition,
 };
 use chrono::{Datelike, Duration, NaiveDate, Weekday};
-use value_types::{CellValue, date_to_serial};
+use value_types::{CellValue, DateSystem, date_to_serial};
 
 /// Compute date range (start, end) for a dynamic date rule, then create
 /// a ConditionFilter with a `between` condition using millisecond timestamps.
@@ -38,6 +38,41 @@ pub(super) fn resolve_date_range_filter_for_rule(
             value: CellValue::number(start_ms as f64),
             value2: Some(CellValue::number(end_ms as f64)),
         }],
+        logic: FilterLogic::And,
+    })
+}
+
+/// Resolve a dynamic date rule into workbook-relative serial comparisons.
+///
+/// The worksheet stores numeric dates as serial days, so the evaluator must
+/// compare against serials in the workbook's date system.  The upper bound is
+/// exclusive at the start of the following day; that keeps fractional times
+/// on the final calendar day in the result without relying on a guessed
+/// floating-point "end of day" value.
+pub(super) fn resolve_date_range_filter_for_rule_with_date_system(
+    rule: &DynamicFilterRule,
+    now: NaiveDate,
+    week_start_day: Weekday,
+    date_system: DateSystem,
+) -> Option<ConditionFilter> {
+    let (start, end) = compute_date_range(rule, now, week_start_day)?;
+    let end_exclusive = end.checked_add_signed(Duration::days(1))?;
+    let start_serial = date_system.from_canonical_serial(date_to_serial(&start));
+    let end_exclusive_serial = date_system.from_canonical_serial(date_to_serial(&end_exclusive));
+
+    Some(ConditionFilter {
+        conditions: vec![
+            TableFilterCondition {
+                operator: FilterOperator::GreaterThanOrEqual,
+                value: CellValue::number(start_serial),
+                value2: None,
+            },
+            TableFilterCondition {
+                operator: FilterOperator::LessThan,
+                value: CellValue::number(end_exclusive_serial),
+                value2: None,
+            },
+        ],
         logic: FilterLogic::And,
     })
 }
@@ -173,11 +208,10 @@ pub fn compute_date_range(
 /// inclusive on both ends.  Returns `None` for non-date rules
 /// (`AboveAverage` / `BelowAverage`) which are not date-based.
 ///
-/// This is the canonical conversion used by both:
-///   * the kernel TS filter API (constructs a Between condition over Excel
-///     serials, which is how date cells are stored), and
-///   * the Rust `evaluate_column_filter` path when it needs to compare a
-///     dynamic-rule range to cell values that are themselves Excel serials.
+/// This is the canonical 1900-system conversion used by callers that need a
+/// whole-day serial range.  Production worksheet evaluation uses the explicit
+/// date-system-aware resolver so workbook-relative serials and fractional
+/// times are handled together.
 ///
 /// Cell date columns are stored as Excel serials (days since 1899-12-30 with
 /// the Lotus 1900 leap-year compatibility offset), so range bounds must be
@@ -189,11 +223,28 @@ pub fn compute_date_range_serial(
     now: NaiveDate,
     week_start_day: Weekday,
 ) -> Option<(f64, f64)> {
+    compute_date_range_serial_with_date_system(rule, now, week_start_day, DateSystem::Date1900)
+}
+
+/// Compute an inclusive Excel-serial range in a specific workbook date
+/// system.  The endpoint dates are whole-day serials; the production
+/// evaluator uses `resolve_date_range_filter_for_rule_with_date_system` when
+/// it must include fractional times on the final day.
+#[must_use]
+pub fn compute_date_range_serial_with_date_system(
+    rule: &DynamicFilterRule,
+    now: NaiveDate,
+    week_start_day: Weekday,
+    date_system: DateSystem,
+) -> Option<(f64, f64)> {
     match rule {
         DynamicFilterRule::AboveAverage | DynamicFilterRule::BelowAverage => None,
         _ => {
             let (start, end) = compute_date_range(rule, now, week_start_day)?;
-            Some((date_to_serial(&start), date_to_serial(&end)))
+            Some((
+                date_system.from_canonical_serial(date_to_serial(&start)),
+                date_system.from_canonical_serial(date_to_serial(&end)),
+            ))
         }
     }
 }

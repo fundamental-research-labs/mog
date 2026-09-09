@@ -1,6 +1,6 @@
 use super::super::{FnPrice, FnYield};
 use super::{approx, num, ymd_to_serial};
-use crate::PureFunction;
+use crate::{FunctionContext, PureFunction};
 use value_types::{CellError, CellValue};
 
 #[test]
@@ -125,6 +125,71 @@ fn test_price_par_bond() {
         "PRICE par bond = {:?}, expected ~100",
         r
     );
+}
+
+#[test]
+fn price_and_yield_are_date_system_invariant() {
+    let settlement = ymd_to_serial(2020, 1, 15);
+    let maturity = ymd_to_serial(2030, 1, 15);
+    let offset = value_types::DateSystem::DATE_SYSTEM_1904_OFFSET;
+    let context = FunctionContext {
+        date1904: true,
+        ..FunctionContext::default()
+    };
+    let args_1900 = [
+        num(settlement),
+        num(maturity),
+        num(0.05),
+        num(0.065),
+        num(100.0),
+        num(2.0),
+        num(0.0),
+    ];
+    let args_1904 = [
+        num(settlement - offset),
+        CellValue::Text("1/15/2030".into()),
+        num(0.05),
+        num(0.065),
+        num(100.0),
+        num(2.0),
+        num(0.0),
+    ];
+    let price_1900 = FnPrice.call(&args_1900);
+    let price_1904 = FnPrice.call_with_context(&args_1904, &context);
+    match (price_1900, price_1904) {
+        (CellValue::Number(canonical), CellValue::Number(workbook)) => {
+            assert!((canonical.get() - workbook.get()).abs() < 1e-10);
+        }
+        other => panic!("Expected numeric PRICE results, got {other:?}"),
+    }
+
+    let yield_1900 = FnYield.call(&[
+        num(settlement),
+        num(maturity),
+        num(0.05),
+        num(94.5),
+        num(100.0),
+        num(2.0),
+        num(0.0),
+    ]);
+    let yield_1904 = FnYield.call_with_context(
+        &[
+            num(settlement - offset),
+            num(maturity - offset),
+            num(0.05),
+            num(94.5),
+            num(100.0),
+            num(2.0),
+            num(0.0),
+        ],
+        &context,
+    );
+    match (yield_1900, yield_1904) {
+        (CellValue::Number(canonical), CellValue::Number(workbook)) => {
+            assert!((canonical.get() - workbook.get()).abs() < 1e-8);
+        }
+        other => panic!("Expected numeric YIELD results, got {other:?}"),
+    }
 }
 
 #[test]

@@ -269,6 +269,11 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
     );
     engine.mirror.finalize_range_hydration();
 
+    // Filter hydration lowers calendar criteria to workbook serials, so install
+    // the epoch before normalizing the critical sheet's imported filters.
+    engine.mirror.date1904 =
+        crate::storage::workbook::settings::get_settings(&engine.stores.storage.metadata).date1904;
+
     crate::storage::engine::services::imported_filters::normalize_imported_auto_filter_visibility(
         &mut engine.stores,
         &mut engine.mirror,
@@ -276,8 +281,11 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
         domain_types::ImportPhase::CriticalSheet,
     );
 
-    crate::storage::engine::cell_metadata::refresh(&engine.stores.storage, &mut engine.mirror, engine.stores.layout_metrics);
-    engine.mirror.date1904 = crate::storage::workbook::settings::get_settings(&engine.stores.storage.metadata).date1904;
+    crate::storage::engine::cell_metadata::refresh(
+        &engine.stores.storage,
+        &mut engine.mirror,
+        engine.stores.layout_metrics,
+    );
     engine.settings = derive_settings(&engine.stores.storage);
     engine.viewport.clear();
 

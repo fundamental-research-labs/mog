@@ -45,6 +45,8 @@ impl ComputeEngine {
                 && !engine.metadata_requires_recalc()
                 && !engine.stores.compute.has_volatile_cells()
             {
+                // A no-op calculation still refreshes the retained clock for CF reads.
+                engine.stores.compute.begin_recalc_clock(None);
                 return Ok(crate::snapshot::RecalcResult::empty());
             }
             engine.materialize_all_pivots();
@@ -83,12 +85,18 @@ impl ComputeEngine {
             // compute store is clean. Same audit as `recalculate()` above.
             let has_explicit_overrides = options.iterative.is_some()
                 || options.max_iterations.is_some()
-                || options.max_change.is_some();
+                || options.max_change.is_some()
+                || options.timestamp_serial.is_some();
             if !engine.stores.compute.is_dirty()
                 && !engine.metadata_requires_recalc()
                 && !has_explicit_overrides
                 && !engine.stores.compute.has_volatile_cells()
             {
+                // Establish the caller's clock boundary even when formulas are clean.
+                engine
+                    .stores
+                    .compute
+                    .begin_recalc_clock(options.timestamp_serial.map(|timestamp| timestamp.get()));
                 return Ok(crate::snapshot::RecalcResult::empty());
             }
             engine.materialize_all_pivots();
@@ -112,12 +120,14 @@ impl ComputeEngine {
     pub fn rebuild_compute_core(&mut self) -> Result<crate::snapshot::RecalcResult, ComputeError> {
         self.without_history(|engine| {
             let snapshot = construction::build_workbook_snapshot(&engine.stores, &engine.mirror);
+            let char_code_page = engine.mirror.char_code_page;
             let mut rebuilt_mirror = construction::build_finalized_mirror_from_snapshot(
                 &engine.stores.storage,
                 &snapshot,
                 &engine.stores.grid_indexes,
                 engine.stores.layout_metrics,
             )?;
+            rebuilt_mirror.char_code_page = char_code_page;
             engine.stores.compute = ComputeCore::new();
             let recalc = engine
                 .stores

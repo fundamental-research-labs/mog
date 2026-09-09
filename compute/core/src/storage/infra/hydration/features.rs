@@ -77,6 +77,7 @@ pub(super) fn hydrate_cells_with_ids(
             || cell.vm.is_some()
             || cell.formula_result_type.is_some()
             || cell.has_empty_cached_value
+            || cell.cell_formula.is_some()
             || !cell.formula_cache_provenance.is_absent_or_unknown()
             || cell.original_sst_index.is_some()
             || cell.original_value.is_some()

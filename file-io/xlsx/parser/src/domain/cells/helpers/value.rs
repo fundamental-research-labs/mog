@@ -16,7 +16,7 @@ use crate::domain::strings::read::decode_xml_entities_full;
 /// Handles:
 /// - `<v>` (value) elements for numbers and shared string indices
 /// - `<f>` (formula) elements (simple and with attributes like t="shared")
-/// - `<f/>` or `<f .../>` (self-closing formula - shared formula reference)
+/// - `<f/>` or `<f .../>` (empty formula element; often a shared reference)
 /// - `<is><t>` (inline string) elements
 pub fn extract_cell_value_fast<'a>(xml: &'a [u8], shared_strings: &'a [&'a str]) -> (u8, &'a [u8]) {
     // Check for formula element (<f> or <prefix:f>).
@@ -45,8 +45,8 @@ pub fn extract_cell_value_fast<'a>(xml: &'a [u8], shared_strings: &'a [&'a str])
 
 /// Extract formula value, scanning forward from the `<f` position.
 ///
-/// Handles `<f>formula</f>`, `<f ...>formula</f>`, and `<f .../>` (self-closing
-/// shared formula reference with cached `<v>` value).
+/// Handles `<f>formula</f>`, `<f ...>formula</f>`, and `<f .../>` (an empty
+/// formula element with an optional cached `<v>` value).
 #[inline]
 pub(super) fn extract_formula_forward<'a>(
     xml: &'a [u8],
@@ -59,7 +59,8 @@ pub(super) fn extract_formula_forward<'a>(
     };
 
     if f_tag.is_self_closing {
-        // Self-closing <f .../> — shared formula reference
+        // Self-closing <f .../> — the caller preserves its formula metadata;
+        // this scanner only extracts the cached value.
         // Extract the cached <v> value that follows within the same cell. The
         // fast worksheet scanner passes the whole worksheet buffer here, so the
         // search must be bounded to this `<c>` element rather than the next

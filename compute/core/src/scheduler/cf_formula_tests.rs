@@ -775,3 +775,42 @@ fn test_cf_formula_mixed_with_value_rules() {
     let a5 = results.iter().find(|r| r.row == 4).unwrap();
     assert_eq!(a5.style.as_ref().unwrap().italic, Some(true));
 }
+
+#[test]
+fn cf_formula_uses_recalc_clock_context_for_today() {
+    use snapshot_types::RecalcOptions;
+
+    for date1904 in [false, true] {
+        let mut core = ComputeCore::new();
+        let mut mirror = CellMirror::new();
+        core.init_from_snapshot(&mut mirror, make_cf_snapshot())
+            .expect("CF snapshot should initialize");
+        mirror.date1904 = date1904;
+
+        core.full_recalc_with_options(
+            &mut mirror,
+            &RecalcOptions {
+                iterative: None,
+                max_iterations: None,
+                max_change: None,
+                timestamp_serial: Some(value_types::FiniteF64::must(46_273.75)),
+            },
+        )
+        .expect("fixed-clock recalc should succeed");
+
+        let expected_today = if date1904 {
+            "=TODAY()=44811"
+        } else {
+            "=TODAY()=46273"
+        };
+        let results = core.eval_cf(
+            &mirror,
+            &sheet_id(),
+            &[make_formula_rule(expected_today, 1)],
+        );
+        assert_eq!(results.len(), 5);
+    }
+}
+
+#[path = "cf_date_system_tests.rs"]
+mod date_system;

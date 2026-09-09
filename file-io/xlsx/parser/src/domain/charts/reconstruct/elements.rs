@@ -9,11 +9,15 @@ use ooxml_types::charts::{
 use ooxml_types::drawings::{
     ColorTransform, DrawingColor, EffectList, EffectProperties, OuterShadow, Paragraph,
     ParagraphProperties, ShapeProperties, StAngle, StPositiveCoordinate, TextAlign, TextAnchor,
-    TextBody, TextRun, TextRunContent,
+    TextBody, TextRunContent,
 };
 
 use super::formatting::{
     build_outline, build_run_properties, build_shape_properties, build_text_body,
+};
+pub(super) use super::title_text::build_chart_text_rich;
+use super::title_text::{
+    build_chart_text_rich_runs, build_chart_text_rich_runs_with_text, rich_text_visible_text,
 };
 use crate::domain::charts::data_label_contract_ext::build_data_label_contract_extension;
 
@@ -54,8 +58,22 @@ pub(super) fn build_title(
             format
         });
         let rich_format = stripped_format.as_ref().or(format);
+        let tx = source
+            .text
+            .filter(|text| is_valid_title_text(text))
+            .filter(|text| rich_text_visible_text(runs) != *text)
+            .map(|text| {
+                build_chart_text_rich_runs_with_text(
+                    runs,
+                    text,
+                    rich_format.and_then(|f| f.font.as_ref()),
+                )
+            })
+            .unwrap_or_else(|| {
+                build_chart_text_rich_runs(runs, rich_format.and_then(|f| f.font.as_ref()))
+            });
         return Some(build_title_with_text(
-            build_chart_text_rich_runs(runs, rich_format.and_then(|f| f.font.as_ref())),
+            tx,
             rich_format,
             layout,
             horizontal_alignment,
@@ -220,77 +238,6 @@ fn title_vertical_alignment_to_ooxml(value: &str) -> Option<TextAnchor> {
 
 fn angle_degrees_to_ooxml(value: f64) -> StAngle {
     StAngle::new((value * 60_000.0).round() as i32)
-}
-
-/// Build a ChartText::Rich from a plain string and optional font.
-pub(super) fn build_chart_text_rich(text: &str, font: Option<&ChartFontData>) -> ChartText {
-    let def_rpr = font.map(|f| Box::new(build_run_properties(f)));
-
-    let run = TextRunContent::Run(TextRun {
-        text: text.to_string(),
-        props: font.map(build_run_properties).unwrap_or_default(),
-    });
-
-    let para = Paragraph {
-        props: ParagraphProperties {
-            def_run_props: def_rpr,
-            ..Default::default()
-        },
-        runs: vec![run],
-        end_para_rpr: None,
-    };
-
-    ChartText::Rich(TextBody {
-        body_props: Default::default(),
-        list_style: None,
-        paragraphs: vec![para],
-    })
-}
-
-/// Build a ChartText::Rich from already segmented rich-text runs.
-pub(super) fn build_chart_text_rich_runs(
-    runs: &[ChartFormatStringData],
-    default_font: Option<&ChartFontData>,
-) -> ChartText {
-    let def_rpr = default_font.map(|f| Box::new(build_run_properties(f)));
-
-    let runs = runs
-        .iter()
-        .filter(|run| !run.text.is_empty())
-        .flat_map(|run| {
-            let font = run.font.as_ref().or(default_font);
-            run.text
-                .split('\n')
-                .enumerate()
-                .flat_map(move |(index, text)| {
-                    let line_break = (index > 0).then(|| TextRunContent::LineBreak {
-                        props: font.map(build_run_properties),
-                    });
-                    let text_run = (!text.is_empty()).then(|| {
-                        TextRunContent::Run(TextRun {
-                            text: text.to_string(),
-                            props: font.map(build_run_properties).unwrap_or_default(),
-                        })
-                    });
-                    line_break.into_iter().chain(text_run)
-                })
-        })
-        .collect();
-
-    let para = Paragraph {
-        props: ParagraphProperties {
-            def_run_props: def_rpr,
-            ..Default::default()
-        },
-        runs,
-        end_para_rpr: None,
-    };
-
-    ChartText::Rich(TextBody {
-        body_props: Default::default(),
-        list_style: None,
-        paragraphs: vec![para],
-    })
 }
 
 pub(super) fn build_legend(ld: &LegendData) -> Option<charts::Legend> {

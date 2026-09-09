@@ -10,6 +10,7 @@
 //! - `..Default::default()` is used extensively to avoid listing every optional field.
 
 mod axes;
+mod axis_topology;
 mod chart;
 mod chart_groups;
 mod chart_space;
@@ -18,6 +19,7 @@ mod formatting;
 mod ranges;
 mod series;
 mod text_body_fidelity;
+mod title_text;
 
 use domain_types::chart::ChartSpec;
 use ooxml_types::charts::ChartSpace;

@@ -419,6 +419,7 @@ impl super::ComputeCore {
 
                 let ast_clone = ast.clone();
                 let sumifs_epoch = self.current_sumifs_cache_epoch();
+                let recalc_clock = self.recalc_clock();
 
                 // 3f: Build evaluator closure — mutate-recalc-restore approach.
                 // The closure mutates the mirror directly instead of using OverrideContext.
@@ -460,7 +461,8 @@ impl super::ComputeCore {
                                 chain_cell,
                                 chain_sheet_id,
                             )
-                            .with_sumifs_cache_epoch(sumifs_epoch);
+                            .with_sumifs_cache_epoch(sumifs_epoch)
+                            .with_recalc_clock(recalc_clock);
                             let result = match crate::eval::sync_block_on(
                                 crate::eval::Evaluator::evaluate(chain_ast, &ctx, &ctx),
                             ) {
@@ -476,7 +478,8 @@ impl super::ComputeCore {
                     // 4. Read result — re-evaluate result formula directly
                     let result_ctx =
                         crate::eval_bridge::MirrorContext::new(mirror, formula_cell_id, sheet_id)
-                            .with_sumifs_cache_epoch(sumifs_epoch);
+                            .with_sumifs_cache_epoch(sumifs_epoch)
+                            .with_recalc_clock(recalc_clock);
                     let result = match crate::eval::sync_block_on(crate::eval::Evaluator::evaluate(
                         &ast_clone,
                         &result_ctx,

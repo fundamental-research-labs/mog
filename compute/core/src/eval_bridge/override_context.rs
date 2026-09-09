@@ -11,6 +11,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use super::mirror_access::MirrorAccess;
 use super::mirror_context::root_ast_produces_dynamic_array;
 use crate::eval::Evaluator;
+use crate::eval::clock::RecalcClock;
 use crate::eval::context::traits::{EvalDataAccess, EvalMetadata};
 use crate::eval::sync_block_on;
 use crate::formula_text::{FormulaTextLookup, FormulaTextProvider};
@@ -32,6 +33,8 @@ pub struct OverrideContext<'a> {
     pub ast_cache: &'a FxHashMap<CellId, AstEntry>,
     pub eval_cache: &'a RefCell<FxHashMap<CellId, CellValue>>,
     pub evaluating: &'a RefCell<FxHashSet<CellId>>,
+    /// Immutable clock input for the current evaluation scope.
+    pub(crate) clock: RecalcClock,
 }
 
 impl<'a> OverrideContext<'a> {
@@ -50,6 +53,7 @@ impl<'a> OverrideContext<'a> {
             ast_cache,
             eval_cache,
             evaluating,
+            clock: RecalcClock::live(),
         }
     }
 
@@ -74,7 +78,14 @@ impl<'a> OverrideContext<'a> {
             ast_cache,
             eval_cache,
             evaluating,
+            clock: RecalcClock::live(),
         }
+    }
+
+    /// Attach the immutable clock captured for the enclosing recalc/evaluation.
+    pub(crate) fn with_recalc_clock(mut self, clock: RecalcClock) -> Self {
+        self.clock = clock;
+        self
     }
 
     /// Resolve a cell's value, recursively evaluating formulas with current overrides.
@@ -238,6 +249,23 @@ impl<'a> EvalMetadata for OverrideContext<'a> {
     }
     fn date1904(&self) -> bool {
         self.access.mirror.date1904
+    }
+
+    fn phonetic_shared_string(
+        &self,
+        sheet: &SheetId,
+        row: u32,
+        col: u32,
+    ) -> Option<domain_types::RichSharedString> {
+        self.access.mirror.phonetic_shared_string(sheet, row, col)
+    }
+
+    fn char_code_page(&self) -> compute_functions::CharCodePage {
+        self.access.mirror.char_code_page
+    }
+
+    fn current_timestamp(&self) -> f64 {
+        self.clock.current_timestamp_for_workbook(self.date1904())
     }
 
     fn legacy_reference_result(&self) -> bool {

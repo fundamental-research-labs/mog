@@ -1,4 +1,5 @@
 use crate::array_lift;
+use crate::helpers::arithmetic::normalize_formula_value;
 use crate::{ExcelFunction, FunctionContext, PureFunction};
 use value_types::CellValue;
 
@@ -16,6 +17,19 @@ impl RegisteredFunction {
     }
 
     pub fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
+        normalize_formula_value(self.call_with_context_raw(args, context))
+    }
+
+    /// Execute without applying the formula-result boundary.
+    ///
+    /// The evaluator uses this exactly once before its shared result boundary;
+    /// public registry callers should use [`Self::call_with_context`] instead.
+    #[doc(hidden)]
+    pub fn call_with_context_raw(
+        &self,
+        args: &[CellValue],
+        context: &FunctionContext,
+    ) -> CellValue {
         if !self.returns_array()
             && let Some(result) = array_lift::try_array_lift(self, args, context)
         {

@@ -5,8 +5,9 @@ use value_types::{CellValue, ComputeError};
 use crate::mirror::CellMirror;
 use crate::snapshot::{CellChange, CellPosition, RecalcResult};
 use crate::snapshot::{ChangeKind, PivotTableChange, TableChange};
-use crate::storage::engine::services::metadata_shift;
+use crate::storage::engine::services::{metadata_shift, mutation};
 use crate::storage::engine::stores::EngineStores;
+use crate::storage::workbook::data_tables;
 
 use super::patches::{merge_recalc_results, synthetic_null_change};
 
@@ -127,6 +128,22 @@ pub(in crate::storage::engine) fn mutation_relocate_cells(
         result
     };
 
+    let region_mutation = if result.moved_cell_ids.is_empty() {
+        data_tables::DataTableRegionMutation::default()
+    } else {
+        data_tables::relocate_regions(
+            mirror,
+            source_sheet_id,
+            src_start_row,
+            src_start_col,
+            src_end_row,
+            src_end_col,
+            target_sheet_id,
+            target_row,
+            target_col,
+        )
+    };
+
     metadata_shift::relocate_validation_ranges(
         stores,
         source_sheet_id,
@@ -199,6 +216,11 @@ pub(in crate::storage::engine) fn mutation_relocate_cells(
         {
             let value = mirror.get_cell_value_raw(&cell_id).cloned();
             mirror.move_cell(&cell_id, target_sheet_id, SheetPos::new(new_row, new_col));
+            let array_ref = stores
+                .storage
+                .cell_metadata(&cell_id)
+                .and_then(|metadata| metadata.array_ref.as_deref());
+            mutation::reconcile_persisted_array_ref(mirror, target_sheet_id, &cell_id, array_ref);
             if let Some(value) = value {
                 moved_validation_edits.push((
                     *target_sheet_id,
@@ -212,6 +234,8 @@ pub(in crate::storage::engine) fn mutation_relocate_cells(
             moved_cell_ids.push(cell_id);
         }
     }
+
+    let stale_table_recalc = reconcile_data_table_cells(stores, mirror, &region_mutation)?;
 
     // filter viewport R5.3: emit clear-patches for the target-cleared range.
     // The clear pass populates `recalc.changed_cells` with `Null` entries
@@ -246,6 +270,8 @@ pub(in crate::storage::engine) fn mutation_relocate_cells(
         merge_recalc_results(&mut moved_recalc, clear_recalc);
         moved_recalc
     };
+
+    merge_recalc_results(&mut recalc, stale_table_recalc);
 
     // 3. Source-position clear pass.
     //
@@ -461,4 +487,59 @@ fn relocate_whole_tables(
     }
 
     changes
+}
+
+/// Remove orphan TABLE dependencies and preserve their current cached values.
+pub(super) fn reconcile_data_table_cells(
+    stores: &mut EngineStores,
+    mirror: &mut CellMirror,
+    mutation: &data_tables::DataTableRegionMutation,
+) -> Result<RecalcResult, ComputeError> {
+    let mut edits = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for (sheet, sr, sc, er, ec) in &mutation.formula_ranges {
+        let ids: Vec<_> = stores
+            .grid_indexes
+            .get(sheet)
+            .map(|grid| {
+                grid.cells_in_range(*sr, *sc, *er, *ec)
+                    .map(|(id, _, _)| id)
+                    .collect()
+            })
+            .unwrap_or_default();
+        for id in &ids {
+            if let Some(pos) = mirror.resolve_position(id) {
+                crate::storage::engine::history::cells::capture_cell(
+                    stores,
+                    mirror,
+                    *sheet,
+                    *id,
+                    pos.row(),
+                    pos.col(),
+                );
+            }
+        }
+        for id in data_tables::clear_table_formula_cells(&mut stores.storage, mirror, sheet, &ids) {
+            if !seen.insert(id) {
+                continue;
+            }
+            if let Some(pos) = mirror.resolve_position(&id) {
+                let value = mirror
+                    .get_cell_value_raw(&id)
+                    .cloned()
+                    .unwrap_or(CellValue::Null);
+                edits.push((*sheet, id, pos.row(), pos.col(), value, None));
+            }
+        }
+    }
+    if edits.is_empty() {
+        return Ok(RecalcResult::empty());
+    }
+    crate::storage::engine::cell_metadata::refresh(&stores.storage, mirror, stores.layout_metrics);
+    stores.compute.set_cells_raw_with_trust(
+        mirror,
+        &edits,
+        true,
+        crate::scheduler::WriteTrust::TrustedReplay,
+    )
 }

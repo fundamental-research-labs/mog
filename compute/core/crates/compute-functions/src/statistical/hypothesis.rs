@@ -6,7 +6,9 @@ use value_types::{CellError, CellValue};
 use crate::helpers::coercion::{extract_numbers_strict, flatten_values};
 use crate::{FunctionRegistry, PureFunction};
 
-use statrs::distribution::{ChiSquared, ContinuousCDF, FisherSnedecor, Normal, StudentsT};
+use statrs::distribution::{ChiSquared, ContinuousCDF, FisherSnedecor, StudentsT};
+
+use crate::statistical::distributions::standard_normal_survival;
 
 /// Helper macro to construct a distribution, returning a #NUM! error with diagnostic message
 /// if construction fails (e.g. due to NaN or other invalid parameters).
@@ -355,8 +357,7 @@ impl PureFunction for FnZTest {
             );
         }
         let z = (mean - x) / (sigma / n.sqrt());
-        let dist = try_dist!(Normal::new(0.0, 1.0), self.name());
-        CellValue::number(1.0 - dist.cdf(z))
+        CellValue::number(standard_normal_survival(z))
     }
 }
 

@@ -118,6 +118,47 @@ fn test_condition_between() {
 }
 
 #[test]
+fn test_numeric_text_criteria_follow_sheet_filter_bridge() {
+    let data = vec![
+        CellValue::Number(FiniteF64::must(1.0)),
+        CellValue::Number(FiniteF64::must(5.0)),
+        CellValue::Number(FiniteF64::must(10.0)),
+    ];
+
+    let values = ColumnFilter::Values {
+        values: vec![serde_json::json!("5")],
+        include_blanks: false,
+    };
+    assert_eq!(eval_column_filter(&values, &data), vec![false, true, false]);
+
+    let greater_than = ColumnFilter::Condition {
+        conditions: vec![FilterCondition {
+            operator: FilterOperator::GreaterThan,
+            value: Some(CellValue::Text("5".into())),
+            value2: None,
+        }],
+        logic: FilterLogic::And,
+    };
+    assert_eq!(
+        eval_column_filter(&greater_than, &data),
+        vec![false, false, true]
+    );
+
+    let between = ColumnFilter::Condition {
+        conditions: vec![FilterCondition {
+            operator: FilterOperator::Between,
+            value: Some(CellValue::Text("2".into())),
+            value2: Some(CellValue::Text("8".into())),
+        }],
+        logic: FilterLogic::And,
+    };
+    assert_eq!(
+        eval_column_filter(&between, &data),
+        vec![false, true, false]
+    );
+}
+
+#[test]
 fn test_value_filter_case_insensitive() {
     let data = vec![CellValue::Text("Apple".into())];
 

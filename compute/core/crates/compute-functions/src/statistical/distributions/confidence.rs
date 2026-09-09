@@ -2,8 +2,9 @@ use value_types::{CellError, CellValue};
 
 use crate::{FunctionRegistry, PureFunction};
 
-use statrs::distribution::{ContinuousCDF, Normal, StudentsT};
+use statrs::distribution::{ContinuousCDF, StudentsT};
 
+use super::normal::standard_normal_inverse;
 use super::support::try_dist;
 
 // --- Confidence intervals ---
@@ -50,8 +51,7 @@ impl PureFunction for FnConfidenceNorm {
                 ),
             );
         }
-        let dist = try_dist!(Normal::new(0.0, 1.0), self.name());
-        let z = dist.inverse_cdf(1.0 - alpha / 2.0);
+        let z = standard_normal_inverse(1.0 - alpha / 2.0);
         CellValue::number(z * std_dev / size.sqrt())
     }
 }

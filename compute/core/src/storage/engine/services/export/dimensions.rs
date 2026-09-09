@@ -26,6 +26,7 @@ use crate::storage::engine::services::queries;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::filters as sheet_filters;
 
+use super::table_filter_preservation::imported_table_filter_runtime_matches_spec;
 use super::table_totals::apply_runtime_table_totals_to_spec;
 
 // -------------------------------------------------------------------
@@ -457,6 +458,17 @@ fn apply_runtime_table_filter_to_spec(
     if filter.column_filters.is_empty() && filter.sort_state.is_none() {
         return;
     }
+
+    let imported_filter_is_unchanged = imported_table_filter_runtime_matches_spec(
+        stores, mirror, sheet_id, table_id, spec, &filter,
+    );
+    if imported_filter_is_unchanged && filter.sort_state.is_none() {
+        // The catalog already contains the typed table AutoFilter imported
+        // from OOXML. Keeping it avoids replacing dateGroupItem/calendarType
+        // and dynamic val/max/ISO metadata with the lossy runtime projection.
+        return;
+    }
+
     let pos_resolver =
         |cell_id: &str| resolve_filter_cell_position(stores, mirror, sheet_id, cell_id);
     let Some(auto_filter) = filter_state_to_auto_filter(&filter, &pos_resolver) else {
@@ -471,7 +483,9 @@ fn apply_runtime_table_filter_to_spec(
         .iter()
         .filter_map(table_filter_column_spec_from_ooxml)
         .collect();
-    if !filter_columns.is_empty() || !filter.column_filters.is_empty() {
+    if !imported_filter_is_unchanged
+        && (!filter_columns.is_empty() || !filter.column_filters.is_empty())
+    {
         spec.filter_columns = filter_columns;
     }
     if let Some(sort) = auto_filter.sort {

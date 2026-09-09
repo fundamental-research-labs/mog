@@ -82,7 +82,11 @@ pub(super) fn build_cell_data_for_cell_id(
         .cloned();
 
     let rich_string = rich_strings.get(cell_id).cloned();
-    let is_empty = value.is_null() && formula.is_none() && rich_string.is_none();
+    // An authored empty `<f>` has no executable formula text, but its typed
+    // CellFormula metadata must keep the cell alive through Yrs/export.
+    let has_formula_metadata = formula_metadata.contains_key(cell_id);
+    let is_empty =
+        value.is_null() && formula.is_none() && rich_string.is_none() && !has_formula_metadata;
     if is_empty
         && style_id.is_none()
         && cell_metadata_index.is_none()

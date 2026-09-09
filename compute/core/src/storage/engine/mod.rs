@@ -26,6 +26,7 @@ mod bridge_imports;
 mod cell_bridge;
 pub(crate) mod cell_metadata;
 mod cell_semantics;
+mod chart_invalidation;
 mod table_result_merge;
 #[doc(hidden)]
 pub mod versioning;

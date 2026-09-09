@@ -950,7 +950,9 @@ pub struct ClockBridge;
 
 #[bridge::api(group = "clock", fn_prefix = "compute", crate_path = "compute_core")]
 impl ClockBridge {
-    /// Set the global "current time" for NOW()/TODAY() as an Excel serial date number.
+    /// Set the global "current time" for NOW()/TODAY() as a canonical
+    /// 1900-system Excel serial date number. Evaluator metadata converts it
+    /// for 1904 workbooks.
     ///
     /// On WASM, this should be called from JavaScript before each recalc.
     /// On native targets, this overrides the system clock (useful for testing).

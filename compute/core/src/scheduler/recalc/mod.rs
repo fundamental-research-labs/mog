@@ -18,9 +18,6 @@ mod session;
 
 pub(super) use session::{Deadline, clear_thread_local_caches, make_deadline, past_deadline};
 
-#[cfg(test)]
-pub(super) use entrypoints::set_recalc_options_panic_before_full_recalc_for_tests;
-
 /// Result tuple from topo evaluation: (changes, projections, errors, projection_deltas, deferred_cells).
 type TopoEvalResult = (
     Vec<CellChange>,

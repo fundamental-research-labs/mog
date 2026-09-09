@@ -3,7 +3,7 @@
 use value_types::{CellError, CellValue};
 
 use crate::helpers::coercion::check_error;
-use crate::helpers::power::try_negative_base_pow;
+use crate::helpers::power::{normalize_power_result, try_negative_base_pow};
 use crate::{FunctionRegistry, PureFunction};
 
 pub(super) struct FnLog;
@@ -270,7 +270,7 @@ impl PureFunction for FnPower {
                         )
                     }
                 } else {
-                    CellValue::number(r)
+                    CellValue::number(normalize_power_result(r))
                 }
             }
             (Err(e), _) | (_, Err(e)) => CellValue::Error(e, None),

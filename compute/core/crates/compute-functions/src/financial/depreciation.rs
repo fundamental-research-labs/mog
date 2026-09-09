@@ -2,8 +2,9 @@
 
 use value_types::{CellError, CellValue};
 
+use super::date_context::canonical_date_arg;
 use super::helpers::{arg_num, err_val, num_or_err_msg, req_num, year_frac};
-use crate::{FunctionRegistry, PureFunction};
+use crate::{FunctionContext, FunctionRegistry, PureFunction};
 
 // ===========================================================================
 // SLN
@@ -383,10 +384,13 @@ impl PureFunction for FnAmorlinc {
         Some(7)
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
+        self.call_with_context(args, &FunctionContext::default())
+    }
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
             let cost = req_num(args, 0).map_err(err_val)?;
-            let date_purchased = req_num(args, 1).map_err(err_val)?;
-            let first_period = req_num(args, 2).map_err(err_val)?;
+            let date_purchased = canonical_date_arg(args, 1, context).map_err(err_val)?;
+            let first_period = canonical_date_arg(args, 2, context).map_err(err_val)?;
             let salvage = req_num(args, 3).map_err(err_val)?;
             let period = req_num(args, 4).map_err(err_val)?;
             let rate = req_num(args, 5).map_err(err_val)?;
@@ -457,10 +461,13 @@ impl PureFunction for FnAmordegrc {
         Some(7)
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
+        self.call_with_context(args, &FunctionContext::default())
+    }
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
             let cost = req_num(args, 0).map_err(err_val)?;
-            let date_purchased = req_num(args, 1).map_err(err_val)?;
-            let first_period = req_num(args, 2).map_err(err_val)?;
+            let date_purchased = canonical_date_arg(args, 1, context).map_err(err_val)?;
+            let first_period = canonical_date_arg(args, 2, context).map_err(err_val)?;
             let salvage = req_num(args, 3).map_err(err_val)?;
             let period = req_num(args, 4).map_err(err_val)?;
             let rate = req_num(args, 5).map_err(err_val)?;
@@ -590,7 +597,7 @@ pub(super) fn register(registry: &mut FunctionRegistry) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::PureFunction;
+    use crate::{FunctionContext, PureFunction};
     use value_types::{CellError, CellValue};
 
     fn num(n: f64) -> CellValue {
@@ -835,6 +842,51 @@ mod tests {
                 );
             }
             _ => panic!("Expected number, got {:?}", r),
+        }
+    }
+
+    #[test]
+    fn amortized_depreciation_is_date_system_invariant() {
+        let purchased = super::super::helpers::ymd_to_serial(2023, 1, 1);
+        let first_period = super::super::helpers::ymd_to_serial(2023, 12, 31);
+        let offset = value_types::DateSystem::DATE_SYSTEM_1904_OFFSET;
+        let context = FunctionContext {
+            date1904: true,
+            ..FunctionContext::default()
+        };
+        let args_1900 = [
+            num(2400.0),
+            num(purchased),
+            num(first_period),
+            num(300.0),
+            num(1.0),
+            num(0.15),
+            num(1.0),
+        ];
+        let args_1904 = [
+            num(2400.0),
+            num(purchased - offset),
+            CellValue::Text("12/31/2023".into()),
+            num(300.0),
+            num(1.0),
+            num(0.15),
+            num(1.0),
+        ];
+        let amorlinc_1900 = FnAmorlinc.call(&args_1900);
+        let amorlinc_1904 = FnAmorlinc.call_with_context(&args_1904, &context);
+        let amordegrc_1900 = FnAmordegrc.call(&args_1900);
+        let amordegrc_1904 = FnAmordegrc.call_with_context(&args_1904, &context);
+        match (amorlinc_1900, amorlinc_1904, amordegrc_1900, amordegrc_1904) {
+            (
+                CellValue::Number(amorlinc_1900),
+                CellValue::Number(amorlinc_1904),
+                CellValue::Number(amordegrc_1900),
+                CellValue::Number(amordegrc_1904),
+            ) => {
+                assert_eq!(amorlinc_1900, amorlinc_1904);
+                assert_eq!(amordegrc_1900, amordegrc_1904);
+            }
+            other => panic!("Expected numeric amortized depreciation, got {other:?}"),
         }
     }
 }

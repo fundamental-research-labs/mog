@@ -99,6 +99,20 @@ impl From<CellValue> for EvalValue {
 // ---------------------------------------------------------------------------
 
 impl EvalValue {
+    /// Apply the formula-result numeric boundary while preserving evaluator
+    /// control values such as lambdas and omitted arguments. This is applied to
+    /// values leaving an AST node; it does not rewrite CellMirror storage or
+    /// imported CellValue constructors.
+    #[inline]
+    pub(in crate::eval) fn normalize_formula_value(self) -> Self {
+        match self {
+            EvalValue::Cell(value) => EvalValue::Cell(
+                compute_functions::helpers::arithmetic::normalize_formula_value(value),
+            ),
+            other => other,
+        }
+    }
+
     /// Convert to `CellValue`, collapsing evaluator-only values to `#CALC!`.
     /// This is the **only** way lambda values leave the evaluator.
     #[inline]

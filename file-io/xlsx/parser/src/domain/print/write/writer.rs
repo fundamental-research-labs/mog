@@ -4,6 +4,7 @@
 //! configuring print settings and writing them to XML.
 
 use super::header_footer::HeaderFooter;
+use crate::domain::print::page_setup::normalize_scale;
 use crate::domain::print::{
     CellComments, Orientation, PageMargins, PageOrder, PageSetup, PaperSize, PrintErrors,
     PrintOptions,
@@ -79,6 +80,9 @@ impl PrintWriter {
 
     /// Set page setup settings.
     pub fn set_page_setup(&mut self, setup: PageSetup) -> &mut Self {
+        let mut setup = setup;
+        setup.scale = setup.scale.map(normalize_scale);
+        setup.copies = setup.copies.map(|count| count.max(1));
         self.page_setup = Some(setup);
         self
     }
@@ -95,11 +99,12 @@ impl PrintWriter {
         self
     }
 
-    /// Set scale percentage (10-400).
+    /// Set scale percentage. Use `0` for Excel automatic scaling; unsupported
+    /// nonzero values are clamped to the standard 10..=400 range.
     pub fn scale(&mut self, percent: u32) -> &mut Self {
-        let clamped = percent.clamp(10, 400) as u16;
+        let normalized = normalize_scale(percent);
         let setup = self.ensure_page_setup();
-        setup.scale = Some(clamped);
+        setup.scale = Some(normalized);
         // Clear fit-to-page when setting scale
         setup.fit_to_width = None;
         setup.fit_to_height = None;
@@ -112,8 +117,8 @@ impl PrintWriter {
     /// Use 0 for automatic sizing in either dimension.
     pub fn fit_to_page(&mut self, width: u32, height: u32) -> &mut Self {
         let setup = self.ensure_page_setup();
-        setup.fit_to_width = Some(width as u16);
-        setup.fit_to_height = Some(height as u16);
+        setup.fit_to_width = Some(width);
+        setup.fit_to_height = Some(height);
         setup.scale = None; // Clear scale when using fit-to-page
         self
     }
@@ -532,7 +537,7 @@ impl PrintWriter {
 
             // Scale — only emit when present in original
             if let Some(s) = setup.scale {
-                writer.attr_num("scale", s as u32);
+                writer.attr_num("scale", s);
             }
 
             // First page number — only emit when present in original
@@ -543,10 +548,10 @@ impl PrintWriter {
             // Fit to page — write each attribute only when present in the original.
             // None means the attribute was absent; Some(0) means explicitly set to 0 (auto/unlimited).
             if let Some(w) = setup.fit_to_width {
-                writer.attr_num("fitToWidth", w as u32);
+                writer.attr_num("fitToWidth", w);
             }
             if let Some(h) = setup.fit_to_height {
-                writer.attr_num("fitToHeight", h as u32);
+                writer.attr_num("fitToHeight", h);
             }
 
             // Page order — only emit when explicitly set in the original

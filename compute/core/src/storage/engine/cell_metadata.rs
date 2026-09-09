@@ -11,6 +11,7 @@ use crate::mirror::{
 use crate::storage::{WorkbookStorage, properties, sheet::dimensions};
 use cell_types::{CellId, SheetId, SheetPos};
 use compute_document::hex::id_to_hex;
+use domain_types::RichSharedString;
 use rustc_hash::FxHashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -23,6 +24,7 @@ type FormulaDeclarations = FxHashMap<CellId, (Option<FormulaResultMode>, Option<
 struct StorageCellMetadata {
     storage: WorkbookStorage,
     formulas: FormulaDeclarations,
+    rich_strings: FxHashMap<CellId, RichSharedString>,
     revision: u64,
     source_revision: u64,
     layout_metrics: domain_types::units::LayoutMetrics,
@@ -77,6 +79,11 @@ pub(crate) fn provider(
     Arc::new(StorageCellMetadata {
         storage: projection,
         formulas,
+        rich_strings: storage
+            .cell_metadata
+            .iter()
+            .filter_map(|(id, metadata)| metadata.rich_string.clone().map(|rich| (*id, rich)))
+            .collect(),
         revision: NEXT_REVISION.fetch_add(1, Ordering::Relaxed),
         source_revision: storage.metadata_revision(),
         layout_metrics,
@@ -141,6 +148,17 @@ impl CellMetadataProvider for StorageCellMetadata {
             sheet,
             mirror.row_id_lookup(sheet, row),
         )
+    }
+
+    fn rich_shared_string(
+        &self,
+        mirror: &CellMirror,
+        sheet: &SheetId,
+        row: u32,
+        col: u32,
+    ) -> Option<RichSharedString> {
+        let cell = mirror.resolve_cell_id(sheet, SheetPos::new(row, col))?;
+        self.rich_strings.get(&cell).cloned()
     }
 
     fn query(
@@ -278,6 +296,48 @@ mod native_metadata_tests {
                 .as_deref(),
             Some("A1:B2")
         );
+    }
+
+    #[test]
+    fn rich_string_projection_refreshes_after_replacement_and_clear() {
+        let mut storage = WorkbookStorage::new();
+        let mut mirror = CellMirror::new();
+        let sheet = SheetId::from_raw(1);
+        let cell = CellId::from_raw(2);
+        storage
+            .add_sheet(&mut mirror, sheet, "Sheet1", 10, 10)
+            .unwrap();
+        mirror.apply_edit(
+            &sheet,
+            cell,
+            SheetPos::new(0, 0),
+            CellValue::from("text"),
+            None,
+        );
+        let metrics = domain_types::units::LayoutMetrics::from_column_width_mdw(7.0).unwrap();
+        for text in ["first", "second"] {
+            storage.set_cell_metadata(
+                cell,
+                crate::storage::CellMetadata {
+                    rich_string: Some(RichSharedString {
+                        plain_text: text.into(),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+            );
+            refresh(&storage, &mut mirror, metrics);
+            assert_eq!(
+                mirror
+                    .phonetic_shared_string(&sheet, 0, 0)
+                    .unwrap()
+                    .plain_text,
+                text
+            );
+        }
+        storage.clear_cell_metadata(cell);
+        refresh(&storage, &mut mirror, metrics);
+        assert!(mirror.phonetic_shared_string(&sheet, 0, 0).is_none());
     }
 
     #[test]

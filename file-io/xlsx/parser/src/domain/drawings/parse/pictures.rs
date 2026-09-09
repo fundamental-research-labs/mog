@@ -14,7 +14,11 @@ use super::super::types::{
     SpreadsheetPicture, TileFill, TileFlipMode,
 };
 use super::non_visual::parse_nv_props;
-use super::styling::{parse_shape_properties, parse_shape_style};
+use super::styling::{
+    parse_color, parse_fill, parse_fill_with_namespace_context,
+    parse_shape_properties_with_namespace_context, parse_shape_style,
+};
+use crate::infra::xml_namespaces::NamespaceMap;
 use ooxml_types::drawings::{
     BlurEffect, FillOverlayEffect, StCoordinate, StPercentage, StPositiveCoordinate,
     StPositiveFixedPercentageDecimal,
@@ -22,7 +26,19 @@ use ooxml_types::drawings::{
 
 /// Parse a picture element
 pub fn parse_picture(xml: &[u8], start: usize) -> Option<SpreadsheetPicture> {
+    parse_picture_with_namespace_context(xml, start, &[])
+}
+
+/// Parse a picture while retaining namespace declarations inherited from the
+/// containing drawing part.
+pub(crate) fn parse_picture_with_namespace_context(
+    xml: &[u8],
+    start: usize,
+    inherited_namespaces: &[(String, String)],
+) -> Option<SpreadsheetPicture> {
     let element = document_element_slice(&xml[start..])?;
+    let mut namespaces = inherited_namespaces.to_vec();
+    merge_namespace_declarations(&mut namespaces, namespace_declarations(element));
 
     let mut pic = SpreadsheetPicture::default();
 
@@ -58,12 +74,12 @@ pub fn parse_picture(xml: &[u8], start: usize) -> Option<SpreadsheetPicture> {
 
     // Parse blip fill
     if let Some(blip_fill) = direct_child_slice(element, b"blipFill") {
-        pic.blip_fill = parse_blip_fill(blip_fill);
+        pic.blip_fill = parse_blip_fill_with_namespace_context(blip_fill, &namespaces);
     }
 
     // Parse shape properties — scope to just the spPr element
     if let Some(sp_pr) = direct_child_slice(element, b"spPr") {
-        pic.sp_pr = parse_shape_properties(sp_pr);
+        pic.sp_pr = parse_shape_properties_with_namespace_context(sp_pr, &namespaces);
     }
 
     // Parse shape style (can appear as <xdr:style> or <a:style>)
@@ -76,6 +92,16 @@ pub fn parse_picture(xml: &[u8], start: usize) -> Option<SpreadsheetPicture> {
 
 /// Parse blip fill
 pub fn parse_blip_fill(xml: &[u8]) -> BlipFill {
+    parse_blip_fill_with_namespace_context(xml, &[])
+}
+
+/// Parse a blip fill while carrying namespace declarations inherited from the
+/// containing shape-properties element. Raw effect children are made
+/// self-contained before they cross into the typed model.
+pub(crate) fn parse_blip_fill_with_namespace_context(
+    xml: &[u8],
+    inherited_namespaces: &[(String, String)],
+) -> BlipFill {
     let Some(root) = document_element(xml) else {
         return BlipFill::default();
     };
@@ -88,6 +114,8 @@ pub fn parse_blip_fill(xml: &[u8]) -> BlipFill {
     };
 
     let mut fill = BlipFill::default();
+    let mut namespaces = inherited_namespaces.to_vec();
+    merge_namespace_declarations(&mut namespaces, namespace_declarations(xml));
 
     // 1. Parse attributes on the blipFill element itself (dpi, rotWithShape).
     //    The xml slice starts at the '<' of the blipFill opening tag.
@@ -116,7 +144,12 @@ pub fn parse_blip_fill(xml: &[u8]) -> BlipFill {
         fill.compression = extract_attr_value_in_element(blip, b"cstate=\"")
             .and_then(|v| parse_compression_state(v));
 
-        fill.effects = parse_blip_effects(blip);
+        merge_namespace_declarations(&mut namespaces, namespace_declarations(blip));
+        fill.effects = parse_blip_effects(blip, &namespaces);
+
+        // `ext_lst` is reserved for the actual extension-list child. Effects
+        // with unmodeled nested content remain ordered `RawXml` variants in
+        // `fill.effects`, rather than being smuggled through this field.
         fill.ext_lst = extract_ext_lst_raw(blip);
     }
 
@@ -201,9 +234,12 @@ fn parse_source_rect(xml: &[u8]) -> (SourceRect, u8) {
 }
 
 /// Parse direct blip child effects from a scoped `<a:blip>` element.
-fn parse_blip_effects(xml: &[u8]) -> Vec<BlipEffect> {
+fn parse_blip_effects(xml: &[u8], namespaces: &[(String, String)]) -> Vec<BlipEffect> {
     let mut effects = Vec::new();
     for child in direct_child_elements(xml) {
+        if child.local_name == b"extLst" {
+            continue;
+        }
         let tag_elem = child.full_slice(xml);
 
         let effect = match child.local_name {
@@ -237,8 +273,16 @@ fn parse_blip_effects(xml: &[u8]) -> Vec<BlipEffect> {
             }
             b"alphaCeiling" => Some(BlipEffect::AlphaCeiling),
             b"alphaFloor" => Some(BlipEffect::AlphaFloor),
-            b"alphaInv" => Some(BlipEffect::AlphaInverse { color: None }),
-            b"alphaMod" => Some(BlipEffect::AlphaModulate),
+            b"alphaInv" => match direct_effect_colors(tag_elem) {
+                Some(mut colors) if colors.len() <= 1 => Some(BlipEffect::AlphaInverse {
+                    color: colors.pop(),
+                }),
+                _ => raw_effect(tag_elem, namespaces),
+            },
+            // CT_AlphaModulateEffect requires a `<a:cont>` child, which the
+            // compact model does not carry. Keep this authored element as an
+            // ordered raw child instead of manufacturing an empty one.
+            b"alphaMod" => raw_effect(tag_elem, namespaces),
             b"alphaRepl" => {
                 let alpha = extract_attr_value_in_element(tag_elem, b"a=\"")
                     .and_then(|v| parse_u32(v))
@@ -261,23 +305,44 @@ fn parse_blip_effects(xml: &[u8]) -> Vec<BlipEffect> {
                 let use_alpha = extract_attr_value_in_element(tag_elem, b"useA=\"")
                     .map(|v| v == b"1" || v == b"true")
                     .unwrap_or(false);
-                let raw_xml = inner_xml_string(tag_elem);
-                Some(BlipEffect::ColorChange { use_alpha, raw_xml })
+                match inner_xml_string(tag_elem) {
+                    Some(raw_xml) => Some(BlipEffect::ColorChange {
+                        use_alpha,
+                        raw_xml: Some(raw_xml),
+                    }),
+                    None => raw_effect(tag_elem, namespaces),
+                }
             }
-            b"clrRepl" => Some(BlipEffect::ColorReplace { color: None }),
-            b"duotone" => Some(BlipEffect::Duotone {
-                color1: None,
-                color2: None,
-            }),
+            b"clrRepl" => direct_effect_colors(tag_elem)
+                .filter(|colors| colors.len() == 1)
+                .and_then(|mut colors| colors.pop())
+                .map(|color| BlipEffect::ColorReplace { color: Some(color) })
+                .or_else(|| raw_effect(tag_elem, namespaces)),
+            b"duotone" => {
+                if let Some(colors) =
+                    direct_effect_colors(tag_elem).filter(|colors| colors.len() == 2)
+                {
+                    Some(BlipEffect::Duotone {
+                        color1: colors.first().cloned(),
+                        color2: colors.get(1).cloned(),
+                    })
+                } else {
+                    raw_effect(tag_elem, namespaces)
+                }
+            }
             b"fillOverlay" => {
                 let blend = extract_attr_value_in_element(tag_elem, b"blend=\"")
                     .and_then(|v| std::str::from_utf8(v).ok())
                     .map(ooxml_types::drawings::BlendMode::from_ooxml)
                     .unwrap_or_default();
-                Some(BlipEffect::FillOverlay(FillOverlayEffect {
-                    blend,
-                    fill: None,
-                }))
+                parse_direct_effect_fill(tag_elem, namespaces)
+                    .map(|fill| {
+                        BlipEffect::FillOverlay(FillOverlayEffect {
+                            blend,
+                            fill: Some(fill),
+                        })
+                    })
+                    .or_else(|| raw_effect(tag_elem, namespaces))
             }
             b"hsl" => {
                 let hue = extract_attr_value_in_element(tag_elem, b"hue=\"")
@@ -300,7 +365,7 @@ fn parse_blip_effects(xml: &[u8]) -> Vec<BlipEffect> {
                     .unwrap_or(0);
                 Some(BlipEffect::Tint { hue, amt })
             }
-            _ => None,
+            _ => raw_effect(tag_elem, namespaces),
         };
 
         if let Some(e) = effect {
@@ -309,6 +374,115 @@ fn parse_blip_effects(xml: &[u8]) -> Vec<BlipEffect> {
     }
 
     effects
+}
+
+/// Return all direct colour children of a complex blip effect as typed
+/// DrawingML colours. The local-name filter stays scoped to the effect
+/// element, so a nested colour from a sibling effect cannot leak into the
+/// projection.
+fn direct_effect_colors(xml: &[u8]) -> Option<Vec<ooxml_types::drawings::DrawingColor>> {
+    let children: Vec<_> = direct_child_elements(xml).collect();
+    if children
+        .iter()
+        .any(|child| !is_drawing_color_name(child.local_name))
+    {
+        return None;
+    }
+    Some(
+        children
+            .into_iter()
+            .map(|child| parse_color(child.full_slice(xml)))
+            .collect(),
+    )
+}
+
+fn parse_direct_effect_fill(
+    xml: &[u8],
+    inherited_namespaces: &[(String, String)],
+) -> Option<ooxml_types::drawings::DrawingFill> {
+    let mut children = direct_child_elements(xml);
+    let child = children.next()?;
+    if children.next().is_some()
+        || !matches!(
+            child.local_name,
+            b"noFill" | b"solidFill" | b"gradFill" | b"pattFill" | b"blipFill"
+        )
+    {
+        return None;
+    }
+    parse_fill_with_namespace_context(child.full_slice(xml), inherited_namespaces)
+}
+
+fn is_drawing_color_name(local_name: &[u8]) -> bool {
+    matches!(
+        local_name,
+        b"srgbClr" | b"scrgbClr" | b"hslClr" | b"sysClr" | b"schemeClr" | b"prstClr"
+    )
+}
+
+fn raw_effect(xml: &[u8], namespaces: &[(String, String)]) -> Option<BlipEffect> {
+    let xml = String::from_utf8_lossy(xml).into_owned();
+    Some(BlipEffect::RawXml(
+        with_namespace_scope(&xml, namespaces).unwrap_or(xml),
+    ))
+}
+
+pub(crate) fn namespace_declarations(xml: &[u8]) -> Vec<(String, String)> {
+    let Some(root) = document_element(xml) else {
+        return Vec::new();
+    };
+    let start_tag = &xml[..=root.open_end];
+    let mut map = NamespaceMap::new();
+    map.capture_from_element(start_tag);
+    map.all()
+        .iter()
+        .map(|declaration| (declaration.attr_name(), declaration.uri.clone()))
+        .collect()
+}
+
+pub(crate) fn merge_namespace_declarations(
+    target: &mut Vec<(String, String)>,
+    declarations: Vec<(String, String)>,
+) {
+    for (name, uri) in declarations {
+        target.retain(|(existing, _)| existing != &name);
+        target.push((name, uri));
+    }
+}
+
+/// Add the source element's in-scope namespace declarations to the raw
+/// element's opening tag. This matters for custom prefixes inherited from a
+/// chart/shape root: a detached `<foo:effect/>` must remain valid when the
+/// canonical writer places it back under a newly generated chart root.
+fn with_namespace_scope(xml: &str, namespaces: &[(String, String)]) -> Option<String> {
+    let element = document_element(xml.as_bytes())?;
+    let open_end = element.open_end;
+    let opening = &xml.as_bytes()[..=open_end];
+    let insertion = opening[..opening.len() - 1]
+        .iter()
+        .rposition(|byte| !byte.is_ascii_whitespace() && *byte != b'/')
+        .map(|pos| pos + 1)
+        .unwrap_or(opening.len() - 1);
+    let mut local_namespaces = NamespaceMap::new();
+    local_namespaces.capture_from_element(opening);
+    let mut result = String::with_capacity(xml.len() + namespaces.len() * 24);
+    result.push_str(std::str::from_utf8(&opening[..insertion]).ok()?);
+    for (name, value) in namespaces {
+        if !local_namespaces
+            .all()
+            .iter()
+            .any(|declaration| declaration.attr_name() == *name)
+        {
+            result.push(' ');
+            result.push_str(name);
+            result.push_str("=\"");
+            result.push_str(value);
+            result.push('"');
+        }
+    }
+    result.push_str(std::str::from_utf8(&opening[insertion..]).ok()?);
+    result.push_str(std::str::from_utf8(&xml.as_bytes()[open_end + 1..]).ok()?);
+    Some(result)
 }
 
 fn inner_xml_string(xml: &[u8]) -> Option<String> {
@@ -451,7 +625,7 @@ mod tests {
             <a:clrChange useA="1"><a:clrFrom><a:srgbClr val="000000"/></a:clrFrom><a:clrTo><a:srgbClr val="FFFFFF"/></a:clrTo></a:clrChange>
         </a:blip>"#;
 
-        let effects = parse_blip_effects(xml);
+        let effects = parse_blip_effects(xml, &[]);
 
         assert_eq!(effects.len(), 1);
         let BlipEffect::ColorChange {
@@ -464,5 +638,91 @@ mod tests {
         assert!(*use_alpha);
         assert!(raw_xml.contains("<a:clrFrom>"));
         assert!(raw_xml.contains("<a:clrTo>"));
+    }
+
+    #[test]
+    fn blip_effects_parse_required_complex_children() {
+        let xml = br#"<a:blip>
+            <a:clrRepl><a:srgbClr val="112233"/></a:clrRepl>
+            <a:duotone><a:srgbClr val="000000"/><a:schemeClr val="accent1"/></a:duotone>
+            <a:fillOverlay blend="mult"><a:solidFill><a:srgbClr val="ABCDEF"/></a:solidFill></a:fillOverlay>
+        </a:blip>"#;
+
+        let fill = parse_blip_fill(
+            br#"<a:blipFill><a:blip>
+                <a:clrRepl><a:srgbClr val="112233"/></a:clrRepl>
+                <a:duotone><a:srgbClr val="000000"/><a:schemeClr val="accent1"/></a:duotone>
+                <a:fillOverlay blend="mult"><a:solidFill><a:srgbClr val="ABCDEF"/></a:solidFill></a:fillOverlay>
+            </a:blip></a:blipFill>"#,
+        );
+
+        assert!(
+            fill.ext_lst.is_none(),
+            "fully typed effects need no raw fallback"
+        );
+        assert_eq!(fill.effects.len(), 3);
+        assert!(matches!(
+            &fill.effects[0],
+            BlipEffect::ColorReplace {
+                color: Some(ooxml_types::drawings::DrawingColor::SrgbClr { val, .. })
+            } if val == "112233"
+        ));
+        assert!(matches!(
+            &fill.effects[1],
+            BlipEffect::Duotone {
+                color1: Some(_),
+                color2: Some(_)
+            }
+        ));
+        assert!(matches!(
+            &fill.effects[2],
+            BlipEffect::FillOverlay(ooxml_types::drawings::FillOverlayEffect {
+                fill: Some(ooxml_types::drawings::DrawingFill::Solid(_)),
+                ..
+            })
+        ));
+
+        // Keep the standalone source above exercised as well: the helper
+        // remains scoped to direct effect children, not nested fills.
+        assert_eq!(parse_blip_effects(xml, &[]).len(), 3);
+    }
+
+    #[test]
+    fn incomplete_blip_effects_stay_raw_instead_of_empty_complex_elements() {
+        let fill = parse_blip_fill(
+            br#"<a:blipFill><a:blip>
+                <a:lum bright="1000" contrast="2000"/>
+                <a:alphaMod><a:cont val="50000"/></a:alphaMod>
+                <a:futureEffect><a:payload/></a:futureEffect>
+            </a:blip></a:blipFill>"#,
+        );
+
+        assert_eq!(fill.effects.len(), 3, "raw effects keep source ordering");
+        assert!(matches!(
+            &fill.effects[0],
+            BlipEffect::Luminance {
+                bright: 1000,
+                contrast: 2000
+            }
+        ));
+        assert!(matches!(&fill.effects[1], BlipEffect::RawXml(xml) if xml.contains("alphaMod")));
+        assert!(
+            matches!(&fill.effects[2], BlipEffect::RawXml(xml) if xml.contains("futureEffect"))
+        );
+        assert!(fill.ext_lst.is_none());
+    }
+
+    #[test]
+    fn raw_effect_carries_inherited_custom_namespace_binding() {
+        let fill = parse_blip_fill_with_namespace_context(
+            br#"<a:blipFill><a:blip><vendor:futureEffect><vendor:payload/></vendor:futureEffect></a:blip></a:blipFill>"#,
+            &[("xmlns:vendor".to_string(), "urn:vendor".to_string())],
+        );
+
+        let BlipEffect::RawXml(raw) = &fill.effects[0] else {
+            panic!("expected unknown effect to remain raw");
+        };
+        assert!(raw.contains(r#"<vendor:futureEffect xmlns:vendor="urn:vendor">"#));
+        assert!(raw.contains("<vendor:payload/>"));
     }
 }

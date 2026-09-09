@@ -43,6 +43,7 @@ pub(crate) fn collect_anchored_positions(
     }
 
     anchors_from_formulas(sheet_data, &mut anchored);
+    anchors_from_authored_empty_formula_markers(sheet_data, &mut anchored);
     anchors_from_rich_strings(sheet_data, &mut anchored);
     anchors_from_hyperlinks(sheet_data, &mut anchored);
     anchors_from_merges(sheet_data, &mut anchored);
@@ -99,6 +100,26 @@ pub(crate) fn collect_identity_required_anchors(
 fn anchors_from_formulas(sheet_data: &SheetData, out: &mut FxHashSet<(u32, u32)>) {
     for cell in &sheet_data.cells {
         if cell.formula.is_some() {
+            out.insert((cell.row, cell.col));
+        }
+    }
+}
+
+/// Authored textless `<f>` elements are formula metadata even though they do
+/// not carry executable formula text.  The snapshot cell contract currently
+/// carries value/formula but not `cell_formula`, so these positions must be
+/// anchored before range classification; otherwise a long numeric/mixed run
+/// removes them from the per-cell hydration path and drops their metadata.
+fn anchors_from_authored_empty_formula_markers(
+    sheet_data: &SheetData,
+    out: &mut FxHashSet<(u32, u32)>,
+) {
+    for cell in &sheet_data.cells {
+        if cell.formula.is_none()
+            && cell.cell_formula.as_ref().is_some_and(|formula| {
+                formula.t == CellFormulaType::Normal && formula.text.is_empty()
+            })
+        {
             out.insert((cell.row, cell.col));
         }
     }
@@ -448,6 +469,27 @@ mod tests {
             }),
             ..make_cell(row, col)
         }
+    }
+
+    #[test]
+    fn authored_empty_formula_markers_are_anchored() {
+        let sheet_data = SheetData {
+            cells: vec![domain_types::CellData {
+                row: 12,
+                col: 4,
+                cell_formula: Some(CellFormula {
+                    t: CellFormulaType::Normal,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let result =
+            collect_anchored_positions(&sheet_data, SHEET_UUID, &WorkbookSnapshot::default(), None);
+
+        assert!(result.contains(&(12, 4)));
     }
 
     fn build_fixture() -> (SheetData, WorkbookSnapshot, FxHashMap<String, (u32, u32)>) {

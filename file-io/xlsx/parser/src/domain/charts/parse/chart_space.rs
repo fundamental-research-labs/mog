@@ -258,10 +258,8 @@ pub(super) fn parse_chart_space_post_chart_props(xml: &[u8], start: usize, chart
             setup.use_first_page_number =
                 attrs::parse_string_attr(psu_xml, b"useFirstPageNumber=\"")
                     .map(|s| s == "1" || s == "true");
-            setup.horizontal_dpi =
-                attrs::parse_u32_attr(psu_xml, b"horizontalDpi=\"").map(|v| v as i32);
-            setup.vertical_dpi =
-                attrs::parse_u32_attr(psu_xml, b"verticalDpi=\"").map(|v| v as i32);
+            setup.horizontal_dpi = attrs::parse_i32_attr(psu_xml, b"horizontalDpi=\"");
+            setup.vertical_dpi = attrs::parse_i32_attr(psu_xml, b"verticalDpi=\"");
             setup.copies = attrs::parse_u32_attr(psu_xml, b"copies=\"");
             ps.page_setup = Some(setup);
         }
@@ -281,7 +279,13 @@ pub(super) fn parse_chart_space_post_chart_props(xml: &[u8], start: usize, chart
     // Parse chartSpace-level spPr (after </c:chart>)
     if let Some(sp_start) = find_tag_simd(xml, b"spPr", start) {
         let sp_end = find_closing_tag(xml, b"spPr", sp_start).unwrap_or(xml.len());
-        chart.sp_pr = Some(parse_shape_properties(&xml[sp_start..sp_end]));
+        let namespaces = crate::domain::drawings::namespace_declarations(xml);
+        chart.sp_pr = Some(
+            crate::domain::drawings::parse_shape_properties_with_namespace_context(
+                &xml[sp_start..sp_end],
+                &namespaces,
+            ),
+        );
     }
 
     // Parse chartSpace-level txPr (after </c:chart>)

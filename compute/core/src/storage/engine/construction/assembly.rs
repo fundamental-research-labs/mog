@@ -183,6 +183,7 @@ pub(in crate::storage::engine) fn rebuild_engine_from_snapshot(
     workbook_snap: WorkbookSnapshot,
     do_recalc: bool,
 ) -> Result<RecalcResult, ComputeError> {
+    let char_code_page = engine.mirror.char_code_page;
     engine.stores.storage = new_storage;
 
     // CellMirror is built inside init_from_snapshot / init_from_snapshot_minimal.
@@ -198,6 +199,7 @@ pub(in crate::storage::engine) fn rebuild_engine_from_snapshot(
                 &workbook_snap,
                 engine.stores.layout_metrics,
             )?;
+            engine.mirror.char_code_page = char_code_page;
             engine.mirror.date1904 = date1904;
             engine
                 .stores
@@ -222,6 +224,10 @@ pub(in crate::storage::engine) fn rebuild_engine_from_snapshot(
                     .init_from_snapshot_no_recalc(&mut engine.mirror, workbook_snap.clone())?
             }
         };
+        // The no-recalc/minimal branches replace the mirror inside the
+        // scheduler initializer. Reapply the runtime-only calculation option
+        // after either branch; the recalc branch also set it before parsing.
+        engine.mirror.char_code_page = char_code_page;
         engine.mirror.date1904 = date1904;
         engine.mirror.install_cell_metadata_provider(
             crate::storage::engine::cell_metadata::provider(

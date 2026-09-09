@@ -54,7 +54,9 @@ impl ComputeCore {
 
         // 1. Populate the cell mirror from snapshot.
         let total_cell_count: usize = snapshot.sheets.iter().map(|s| s.cells.len()).sum();
+        let char_code_page = mirror.char_code_page;
         *mirror = CellMirror::from_snapshot(snapshot)?;
+        mirror.char_code_page = char_code_page;
         self.normalize_raw_named_ranges_for_graph(mirror);
         let formula_count = formula_cells.len();
         // Pre-size graph: `precedents` needs formula_count entries, `dependents` needs
@@ -193,7 +195,9 @@ impl ComputeCore {
         }
 
         let total_cell_count: usize = snapshot.sheets.iter().map(|s| s.cells.len()).sum();
+        let char_code_page = mirror.char_code_page;
         *mirror = CellMirror::from_snapshot(snapshot)?;
+        mirror.char_code_page = char_code_page;
         self.normalize_raw_named_ranges_for_graph(mirror);
         let formula_count = formula_cells.len();
         self.graph = DependencyGraph::with_capacity_full(formula_count, total_cell_count);
@@ -254,7 +258,9 @@ impl ComputeCore {
                 ));
         }
 
+        let char_code_page = mirror.char_code_page;
         *mirror = CellMirror::from_snapshot(snapshot)?;
+        mirror.char_code_page = char_code_page;
         self.normalize_raw_named_ranges_for_graph(mirror);
 
         // Formula text is document identity, not graph output. Seed it before
@@ -334,7 +340,9 @@ impl ComputeCore {
         // Readback does not depend on this marker.
         self.workbook_load_pending = true;
 
+        let char_code_page = mirror.char_code_page;
         *mirror = CellMirror::from_snapshot(snapshot)?;
+        mirror.char_code_page = char_code_page;
 
         Ok(RecalcResult::empty())
     }

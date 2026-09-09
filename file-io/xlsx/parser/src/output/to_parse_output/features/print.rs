@@ -47,9 +47,9 @@ pub(crate) fn convert_print_settings(
     ) = if ps.has_page_setup {
         (
             non_empty(&ps.orientation),
-            ps.scale.map(|s| s as u32),
-            ps.fit_to_width.map(|f| f as u32),
-            ps.fit_to_height.map(|f| f as u32),
+            ps.scale,
+            ps.fit_to_width,
+            ps.fit_to_height,
             ps.black_and_white,
             ps.draft,
             ps.first_page_number,

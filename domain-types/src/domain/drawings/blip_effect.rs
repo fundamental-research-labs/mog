@@ -13,6 +13,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::color::DomainDrawingColor;
+use super::drawing_fill::DrawingFill;
 
 /// A single blip-level image effect.
 ///
@@ -62,6 +63,9 @@ pub enum BlipEffect {
         #[serde(skip_serializing_if = "Option::is_none")]
         raw_xml: Option<String>,
     },
+    /// One authored direct `<a:blip>` child whose nested schema is not
+    /// modeled yet. Kept in sequence with typed effects for lossless replay.
+    RawXml { xml: String },
     /// `<a:clrRepl>` with optional color.
     ColorReplace {
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -121,10 +125,9 @@ impl Default for BlurEffect {
 
 /// Fill-overlay effect parameters — `<a:fillOverlay blend="...">…</a:fillOverlay>`.
 ///
-/// The fill content itself re-uses the existing domain `ObjectFill` path via
-/// an owned raw-xml fallback for the inner fill (kept deliberately minimal
-/// here: the current blip-level use case is screen preview color washes;
-/// widening this to the full fill-properties union is deferred).
+/// The fill content uses the shared domain DrawingFill union when it parses
+/// as a known choice, with the legacy raw-xml field retained for callers that
+/// already supplied opaque content.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(default)]
@@ -132,10 +135,12 @@ pub struct FillOverlayEffect {
     /// Blend mode token: `"over"`, `"mult"`, `"screen"`, `"darken"`, `"lighten"`.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub blend: String,
-    /// Inner fill element preserved as raw XML — kept opaque until the
-    /// domain fill union lands.
+    /// Legacy opaque inner fill fallback.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fill_raw_xml: Option<String>,
+    /// Typed inner fill when the authored EG_FillProperties choice is known.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fill: Option<DrawingFill>,
 }
 
 // ===========================================================================
@@ -175,6 +180,7 @@ impl From<&OFillOverlayEffect> for FillOverlayEffect {
         Self {
             blend: o.blend.to_ooxml().to_string(),
             fill_raw_xml: None,
+            fill: o.fill.as_ref().map(Into::into),
         }
     }
 }
@@ -187,7 +193,7 @@ impl From<FillOverlayEffect> for OFillOverlayEffect {
             } else {
                 OBlendMode::from_ooxml(&d.blend)
             },
-            fill: None,
+            fill: d.fill.map(Into::into),
         }
     }
 }
@@ -215,6 +221,7 @@ impl From<&OBlipEffect> for BlipEffect {
                 use_alpha: *use_alpha,
                 raw_xml: raw_xml.clone(),
             },
+            OBlipEffect::RawXml(xml) => Self::RawXml { xml: xml.clone() },
             OBlipEffect::ColorReplace { color } => Self::ColorReplace {
                 color: color.as_ref().map(Into::into),
             },
@@ -255,6 +262,7 @@ impl From<BlipEffect> for OBlipEffect {
             BlipEffect::ColorChange { use_alpha, raw_xml } => {
                 Self::ColorChange { use_alpha, raw_xml }
             }
+            BlipEffect::RawXml { xml } => Self::RawXml(xml),
             BlipEffect::ColorReplace { color } => Self::ColorReplace {
                 color: color.map(Into::into),
             },
@@ -342,7 +350,14 @@ mod tests {
     fn round_trip_fill_overlay() {
         round_trip(OBlipEffect::FillOverlay(OFillOverlayEffect {
             blend: OBlendMode::Mult,
-            fill: None,
+            fill: Some(ooxml_types::drawings::DrawingFill::Solid(
+                ooxml_types::drawings::SolidFill {
+                    color: ooxml_types::drawings::DrawingColor::SrgbClr {
+                        val: "ABCDEF".into(),
+                        transforms: Vec::new(),
+                    },
+                },
+            )),
         }));
     }
 
@@ -352,6 +367,9 @@ mod tests {
             use_alpha: true,
             raw_xml: Some("<a:clrFrom><a:srgbClr val=\"FF0000\"/></a:clrFrom>".into()),
         });
+        round_trip(OBlipEffect::RawXml(
+            "<a:alphaMod><a:cont val=\"50000\"/></a:alphaMod>".into(),
+        ));
     }
 
     #[test]

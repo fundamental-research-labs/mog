@@ -25,7 +25,9 @@ mod tests;
 
 use average::resolve_average_filter;
 use chrono::{NaiveDate, Weekday};
-use date_range::resolve_date_range_filter_for_rule;
+use date_range::{
+    resolve_date_range_filter_for_rule, resolve_date_range_filter_for_rule_with_date_system,
+};
 
 #[cfg(test)]
 use average::resolve_average_filter as test_resolve_average_filter;
@@ -41,9 +43,11 @@ use top_bottom::compute_top_bottom_cutoff as test_compute_top_bottom_cutoff;
 use crate::types::{
     ConditionFilter, DynamicFilter, DynamicFilterRule, FilterCriteria, FilterLogic, FilterOperator,
 };
-use value_types::CellValue;
+use value_types::{CellValue, DateSystem};
 
-pub use date_range::{compute_date_range, compute_date_range_serial};
+pub use date_range::{
+    compute_date_range, compute_date_range_serial, compute_date_range_serial_with_date_system,
+};
 pub use top_bottom::evaluate_top_bottom_direct;
 
 /// Resolve a DynamicFilter to a concrete FilterCriteria.
@@ -59,6 +63,30 @@ pub fn resolve_dynamic_filter(
     now: Option<NaiveDate>,
     week_start_day: Weekday,
 ) -> FilterCriteria {
+    resolve_dynamic_filter_internal(filter, column_data, now, week_start_day, None)
+}
+
+/// Resolve a dynamic filter using workbook-relative Excel serials for date
+/// rules.  This is the production worksheet path: numeric date cells retain
+/// their stored serials, including the workbook's 1904 offset, so the bounds
+/// must be emitted in the same number system.
+pub fn resolve_dynamic_filter_with_date_system(
+    filter: &DynamicFilter,
+    column_data: &[CellValue],
+    now: Option<NaiveDate>,
+    week_start_day: Weekday,
+    date_system: DateSystem,
+) -> FilterCriteria {
+    resolve_dynamic_filter_internal(filter, column_data, now, week_start_day, Some(date_system))
+}
+
+fn resolve_dynamic_filter_internal(
+    filter: &DynamicFilter,
+    column_data: &[CellValue],
+    now: Option<NaiveDate>,
+    week_start_day: Weekday,
+    date_system: Option<DateSystem>,
+) -> FilterCriteria {
     match filter.rule {
         DynamicFilterRule::AboveAverage => FilterCriteria::Condition(resolve_average_filter(
             column_data,
@@ -71,7 +99,16 @@ pub fn resolve_dynamic_filter(
         // All date rules require a `now` date
         _ => {
             let now_date = now.expect("Date-based dynamic filter requires a `now` date parameter");
-            match resolve_date_range_filter_for_rule(&filter.rule, now_date, week_start_day) {
+            let condition = match date_system {
+                Some(date_system) => resolve_date_range_filter_for_rule_with_date_system(
+                    &filter.rule,
+                    now_date,
+                    week_start_day,
+                    date_system,
+                ),
+                None => resolve_date_range_filter_for_rule(&filter.rule, now_date, week_start_day),
+            };
+            match condition {
                 Some(condition) => FilterCriteria::Condition(condition),
                 None => {
                     // Invalid date construction (e.g. year overflow); return a filter that matches nothing.

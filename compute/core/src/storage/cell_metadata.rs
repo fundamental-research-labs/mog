@@ -54,21 +54,6 @@ impl From<&ooxml_types::worksheet::CellFormula> for FormulaMetadata {
 }
 
 impl FormulaMetadata {
-    fn is_empty(&self) -> bool {
-        self.t == ooxml_types::worksheet::CellFormulaType::Normal
-            && self.si.is_none()
-            && self.r#ref.is_none()
-            && !self.aca
-            && !self.dt2d
-            && !self.del1
-            && !self.del2
-            && self.r1.is_none()
-            && self.r2.is_none()
-            && !self.ca
-            && !self.bx
-            && !self.dtr
-    }
-
     pub(crate) fn to_ooxml(&self, current_formula: &str) -> ooxml_types::worksheet::CellFormula {
         ooxml_types::worksheet::CellFormula {
             text: current_formula
@@ -114,11 +99,7 @@ impl CellMetadata {
                     FormulaResultMode::LegacyScalar
                 }
             }),
-            formula: cell
-                .cell_formula
-                .as_ref()
-                .map(FormulaMetadata::from)
-                .filter(|metadata| !metadata.is_empty()),
+            formula: cell.cell_formula.as_ref().map(FormulaMetadata::from),
             rich_string: cell.rich_string.clone(),
         }
     }
@@ -141,6 +122,8 @@ impl WorkbookStorage {
         if previous.and_then(|value| value.formula_result_mode) != metadata.formula_result_mode
             || previous.and_then(|value| value.array_ref.as_deref())
                 != metadata.array_ref.as_deref()
+            || previous.and_then(|value| value.rich_string.as_ref())
+                != metadata.rich_string.as_ref()
         {
             self.invalidate_cell_metadata_projection();
         }
@@ -156,7 +139,10 @@ impl WorkbookStorage {
     /// annotations and rich runs. Metadata is reattached explicitly for CSE entry.
     pub(crate) fn clear_cell_metadata(&mut self, cell_id: CellId) {
         if let Some(metadata) = self.cell_metadata.get(&cell_id) {
-            if metadata.formula_result_mode.is_some() || metadata.array_ref.is_some() {
+            if metadata.formula_result_mode.is_some()
+                || metadata.array_ref.is_some()
+                || metadata.rich_string.is_some()
+            {
                 self.invalidate_cell_metadata_projection();
             }
             crate::storage::engine::history::metadata::capture_cell_metadata(self, cell_id);

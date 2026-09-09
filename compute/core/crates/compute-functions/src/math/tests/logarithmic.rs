@@ -97,9 +97,71 @@ fn test_power_negative_base_non_integer_exp_returns_num() {
 fn test_power_normal_cases_unaffected() {
     // Normal POWER cases should still work
     assert_eq!(FnPower.call(&[num(2.0), num(10.0)]), num(1024.0));
+    assert_eq!(
+        FnPower.call(&[num(f64::MIN_POSITIVE), num(1.0)]),
+        num(f64::MIN_POSITIVE)
+    );
+    assert_eq!(
+        FnPower.call(&[num(-f64::MIN_POSITIVE), num(1.0)]),
+        num(-f64::MIN_POSITIVE)
+    );
     assert_eq!(FnPower.call(&[num(0.0), num(0.0)]), err(CellError::Num)); // 0^0 = #NUM!
     assert_eq!(FnPower.call(&[num(0.0), num(5.0)]), num(0.0)); // 0^5 = 0
     assert_eq!(FnPower.call(&[num(0.0), num(-1.0)]), err(CellError::Div0)); // 0^(-1) = #DIV/0!
+}
+
+#[test]
+fn test_power_negative_base_rational_domain_remains_real() {
+    let check = |exponent: f64, expected: f64| {
+        let result = FnPower.call(&[num(-8.0), num(exponent)]);
+        let CellValue::Number(result) = result else {
+            panic!("POWER(-8, {exponent}) must return a real number");
+        };
+        assert!(
+            (result.get() - expected).abs() < 1e-12,
+            "POWER(-8, {exponent}) = {}, expected {expected}",
+            result.get()
+        );
+    };
+    check(1.0 / 3.0, -2.0);
+    check(2.0 / 3.0, 4.0);
+    check(-1.0 / 3.0, -0.5);
+}
+
+#[test]
+fn test_power_integer_exponents_use_coherent_signed_path() {
+    // This is the invariant of Mog's real-number POWER contract: for a
+    // nonzero base, (-x)^n has the same magnitude as x^n and changes sign only
+    // when n is odd. Excel's committed cache may contain asymmetric last-bit
+    // results from its host implementation; those values do not justify an
+    // input-specific correction.
+    for exponent in [-307.0, -3.0, -1.0, 0.0, 1.0, 2.0, 3.0, 307.0] {
+        let positive = FnPower.call(&[num(10.0), num(exponent)]);
+        let negative = FnPower.call(&[num(-10.0), num(exponent)]);
+        let (CellValue::Number(positive), CellValue::Number(negative)) = (positive, negative)
+        else {
+            panic!("POWER(±10, {exponent}) must remain in the finite integer domain");
+        };
+        let expected_negative = if (exponent as i64) % 2 == 0 {
+            positive.get()
+        } else {
+            -positive.get()
+        };
+        assert_eq!(negative.get(), expected_negative, "POWER(-10, {exponent})");
+    }
+}
+
+#[test]
+fn test_power_subnormal_result_flushes_to_zero() {
+    // Office's formula value space excludes denormalized IEC 60559 values.
+    // MAX^-1 is finite but subnormal; both signs therefore underflow to zero.
+    let max = f64::MAX;
+    assert_eq!(FnPower.call(&[num(max), num(-1.0)]), num(0.0));
+    assert_eq!(FnPower.call(&[num(-max), num(-1.0)]), num(0.0));
+
+    // The same boundary applies through the supported odd-denominator real
+    // root path for negative bases.
+    assert_eq!(FnPower.call(&[num(-1e-132), num(7.0 / 3.0)]), num(0.0));
 }
 
 // ---- POWER edge cases: huge exponents and tiny bases ----

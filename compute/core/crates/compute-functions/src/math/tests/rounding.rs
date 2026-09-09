@@ -682,4 +682,66 @@ fn test_trunc_with_digits() {
     assert_eq!(r.call("TRUNC", &[num(-1.236), num(2.0)]), num(-1.23));
 }
 
-// -- INT: floor toward negative infinity ------------------------------
+// -- ECMA.CEILING: standardized sign-sensitive rounding ----------------
+
+#[test]
+fn ecma_ceiling_registry_signed_and_zero_contract() {
+    // ECMA-376 Part 1, 5th ed. (2016), §18.17.7.104, p.2194.
+    // These four signed examples are specified independently of our CEILING.
+    let registry = reg();
+    for (number, significance, expected) in [
+        (4.3, 2.0, num(6.0)),
+        (4.3, -2.0, err(CellError::Num)),
+        (-4.3, 2.0, num(-4.0)),
+        (-4.3, -2.0, num(-6.0)),
+        // Actual stress Math!B17: ECMA.CEILING(B2,2), with B2=2.
+        (2.0, 2.0, num(2.0)),
+        (-4.0, -2.0, num(-4.0)),
+        (0.0, 2.0, num(0.0)),
+        (0.0, -2.0, num(0.0)),
+        (0.0, 0.0, num(0.0)),
+        (4.3, 0.0, num(0.0)),
+        (-4.3, 0.0, num(0.0)),
+    ] {
+        assert_eq!(
+            registry.call("ECMA.CEILING", &[num(number), num(significance)]),
+            expected,
+            "ECMA.CEILING({number},{significance})"
+        );
+    }
+    assert_eq!(
+        registry.call("ecma.ceiling", &[num(2.0), num(2.0)]),
+        num(2.0)
+    );
+}
+
+#[test]
+fn ecma_ceiling_registry_arity_coercion_and_errors() {
+    let registry = reg();
+    for args in [vec![], vec![num(1.0)], vec![num(1.0), num(2.0), num(3.0)]] {
+        assert_is_err(registry.call("ECMA.CEILING", &args), CellError::Value);
+    }
+    for args in [
+        [text("not a number"), num(2.0)],
+        [num(2.0), text("not a number")],
+    ] {
+        assert_is_err(registry.call("ECMA.CEILING", &args), CellError::Value);
+    }
+    for args in [
+        [err(CellError::Na), num(2.0)],
+        [num(2.0), err(CellError::Na)],
+    ] {
+        assert_is_err(registry.call("ECMA.CEILING", &args), CellError::Na);
+    }
+}
+
+#[test]
+fn ecma_ceiling_registry_broadcasts_both_numeric_arguments() {
+    let registry = reg();
+    let numbers = CellValue::row_array(vec![num(4.3), num(-4.3)]);
+    let significance = CellValue::array(vec![num(2.0), num(-2.0)], 1);
+    assert_eq!(
+        registry.call("ECMA.CEILING", &[numbers, significance]),
+        CellValue::array(vec![num(6.0), num(-4.0), err(CellError::Num), num(-6.0)], 2)
+    );
+}

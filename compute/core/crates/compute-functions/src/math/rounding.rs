@@ -1,5 +1,5 @@
 //! Rounding functions: ROUND, ROUNDUP, ROUNDDOWN, TRUNC, MROUND, INT, EVEN, ODD,
-//! CEILING, CEILING.MATH, CEILING.PRECISE, ISO.CEILING, FLOOR, FLOOR.MATH, FLOOR.PRECISE
+//! CEILING, ECMA.CEILING, CEILING.MATH, CEILING.PRECISE, ISO.CEILING, FLOOR, FLOOR.MATH, FLOOR.PRECISE
 
 use value_types::precision::{excel_round, snap_to_15_significant_digits as snap_to_15_digits};
 use value_types::{CellError, CellValue};
@@ -394,6 +394,27 @@ impl PureFunction for FnCeiling {
     }
 }
 
+/// ECMA-376 Part 1 (5th ed.), §18.17.7.104: the two-argument,
+/// sign-sensitive CEILING contract, distinct from ISO.CEILING.
+pub(super) struct FnEcmaCeiling;
+impl PureFunction for FnEcmaCeiling {
+    fn is_scalar_arg(&self, _index: usize) -> bool {
+        true
+    }
+    fn name(&self) -> &'static str {
+        "ECMA.CEILING"
+    }
+    fn min_args(&self) -> usize {
+        2
+    }
+    fn max_args(&self) -> Option<usize> {
+        Some(2)
+    }
+    fn call(&self, args: &[CellValue]) -> CellValue {
+        FnCeiling.call(args)
+    }
+}
+
 pub(super) struct FnCeilingMath;
 impl PureFunction for FnCeilingMath {
     fn is_scalar_arg(&self, _index: usize) -> bool {
@@ -773,6 +794,7 @@ pub(super) fn register(registry: &mut FunctionRegistry) {
     registry.register(Box::new(FnEven));
     registry.register(Box::new(FnOdd));
     registry.register(Box::new(FnCeiling));
+    registry.register(Box::new(FnEcmaCeiling));
     registry.register(Box::new(FnCeilingMath));
     registry.register(Box::new(FnCeilingPrecise));
     registry.register(Box::new(FnIsoCeiling));

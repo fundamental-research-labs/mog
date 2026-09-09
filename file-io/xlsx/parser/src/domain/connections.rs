@@ -1,13 +1,13 @@
 //! Typed read/write support for workbook connections and table-owned query tables.
 
 use domain_types::domain::connections::*;
+use quick_xml::events::Event;
+use quick_xml::name::{Namespace, ResolveResult};
+use quick_xml::reader::NsReader;
 
 use crate::infra::opc::{PackageOwner, parse_owned_relationships};
 use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
-use crate::infra::xml::{
-    extract_direct_child_element_xml, parse_bool_attr_opt, parse_i32_attr, parse_string_attr,
-    parse_u32_attr,
-};
+use crate::infra::xml::{extract_direct_child_element_xml, parse_string_attr};
 use crate::zip::XlsxArchive;
 
 pub const REL_CONNECTIONS: &str =
@@ -18,6 +18,7 @@ pub const CT_CONNECTIONS: &str =
     "application/vnd.openxmlformats-officedocument.spreadsheetml.connections+xml";
 pub const CT_QUERY_TABLE: &str =
     "application/vnd.openxmlformats-officedocument.spreadsheetml.queryTable+xml";
+mod preservation;
 
 pub fn parse_connections(archive: &XlsxArchive) -> WorkbookConnectionSet {
     archive
@@ -29,24 +30,170 @@ pub fn parse_connections(archive: &XlsxArchive) -> WorkbookConnectionSet {
 
 pub fn parse_connections_xml(xml: &[u8]) -> WorkbookConnectionSet {
     let mut connections = Vec::new();
-    let mut pos = 0;
-    while let Some(start) = find_tag_simd(xml, b"connection", pos) {
-        let Some(tag_end) = find_gt_simd(xml, start) else {
-            break;
-        };
-        let end = if xml[tag_end.saturating_sub(1)] == b'/' {
-            tag_end + 1
-        } else {
-            find_closing_tag(xml, b"connection", tag_end)
-                .map(|end| end + b"</connection>".len())
-                .unwrap_or(tag_end + 1)
-        };
-        if let Some(connection) = parse_connection(&xml[start..end]) {
-            connections.push(connection);
+    if let Some(root) = parse_xml_root(xml)
+        .filter(|root| root.local == b"connections" && root.namespace == XmlNamespace::Main)
+    {
+        for (source_index, child) in root
+            .children
+            .iter()
+            .filter(|child| child.namespace == XmlNamespace::Main && child.local == b"connection")
+            .enumerate()
+        {
+            if let Some(mut connection) = parse_connection(xml, child) {
+                connection.raw_source_index = Some(source_index);
+                connections.push(connection);
+            }
         }
-        pos = end;
     }
-    WorkbookConnectionSet { connections }
+    WorkbookConnectionSet::from_imported_xml(connections, xml)
+}
+
+const MAIN_NS: &[u8] = b"http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum XmlNamespace {
+    Main,
+    Other,
+    Unbound,
+}
+
+#[derive(Clone, Debug)]
+struct XmlElement {
+    name: Vec<u8>,
+    local: Vec<u8>,
+    namespace: XmlNamespace,
+    start: usize,
+    start_tag_end: usize,
+    end: usize,
+    children: Vec<XmlElement>,
+}
+
+/// Parse the document into a small element tree so typed projections can
+/// resolve inherited namespace declarations and inspect direct children only.
+/// The raw source remains owned by the preservation layer; this tree is only a
+/// read-side projection and is deliberately conservative on malformed XML.
+fn parse_xml_root(xml: &[u8]) -> Option<XmlElement> {
+    let mut reader = NsReader::from_reader(xml);
+    reader.config_mut().trim_text(false);
+    reader.config_mut().expand_empty_elements = false;
+    let mut buf = Vec::new();
+    let mut stack = Vec::<XmlElement>::new();
+    let mut root = None;
+
+    loop {
+        let start = usize::try_from(reader.buffer_position()).ok()?;
+        let (namespace, event) = reader.read_resolved_event_into(&mut buf).ok()?;
+        // Resolve the namespace before asking the reader for its post-event
+        // position because `ResolveResult` borrows the reader's state.
+        let namespace = xml_namespace(&namespace);
+        let end = usize::try_from(reader.buffer_position()).ok()?;
+        match event {
+            Event::Start(element) => {
+                stack.push(XmlElement {
+                    name: element.name().as_ref().to_vec(),
+                    local: element.local_name().as_ref().to_vec(),
+                    namespace,
+                    start,
+                    start_tag_end: end,
+                    end: 0,
+                    children: Vec::new(),
+                });
+            }
+            Event::Empty(element) => {
+                append_xml_element(
+                    XmlElement {
+                        name: element.name().as_ref().to_vec(),
+                        local: element.local_name().as_ref().to_vec(),
+                        namespace,
+                        start,
+                        start_tag_end: end,
+                        end,
+                        children: Vec::new(),
+                    },
+                    &mut stack,
+                    &mut root,
+                )?;
+            }
+            Event::End(element) => {
+                let end_name = element.name().as_ref().to_vec();
+                let mut node = stack.pop()?;
+                if node.name != end_name {
+                    return None;
+                }
+                node.end = end;
+                append_xml_element(node, &mut stack, &mut root)?;
+            }
+            Event::Eof => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+
+    if !stack.is_empty() {
+        return None;
+    }
+    root
+}
+
+fn append_xml_element(
+    element: XmlElement,
+    stack: &mut [XmlElement],
+    root: &mut Option<XmlElement>,
+) -> Option<()> {
+    if let Some(parent) = stack.last_mut() {
+        parent.children.push(element);
+        return Some(());
+    }
+    if root.is_some() {
+        return None;
+    }
+    *root = Some(element);
+    Some(())
+}
+
+fn xml_namespace(namespace: &ResolveResult<'_>) -> XmlNamespace {
+    match namespace {
+        ResolveResult::Bound(Namespace(uri)) if *uri == MAIN_NS => XmlNamespace::Main,
+        ResolveResult::Bound(_) | ResolveResult::Unknown(_) => XmlNamespace::Other,
+        // An unbound element is not a SpreadsheetML element. In particular it
+        // must not acquire source provenance that the preservation tree cannot
+        // resolve back to the main namespace.
+        ResolveResult::Unbound => XmlNamespace::Unbound,
+    }
+}
+
+impl XmlElement {
+    fn direct_main_child(&self, local: &[u8]) -> Option<&XmlElement> {
+        self.children
+            .iter()
+            .find(|child| child.namespace == XmlNamespace::Main && child.local == local)
+    }
+}
+
+fn element_xml(xml: &[u8], node: &XmlElement) -> Option<String> {
+    std::str::from_utf8(&xml[node.start..node.end])
+        .ok()
+        .map(ToOwned::to_owned)
+}
+
+fn parse_u32_attr_decoded(xml: &[u8], attr: &[u8]) -> Option<u32> {
+    parse_string_attr(xml, attr)?.trim().parse().ok()
+}
+
+fn parse_i32_attr_decoded(xml: &[u8], attr: &[u8]) -> Option<i32> {
+    parse_string_attr(xml, attr)?.trim().parse().ok()
+}
+
+fn parse_f64_attr_decoded(xml: &[u8], attr: &[u8]) -> Option<f64> {
+    parse_string_attr(xml, attr)?.trim().parse().ok()
+}
+
+fn parse_bool_attr_decoded(xml: &[u8], attr: &[u8]) -> Option<bool> {
+    match parse_string_attr(xml, attr)?.trim() {
+        "true" | "1" => Some(true),
+        "false" | "0" => Some(false),
+        _ => None,
+    }
 }
 
 pub fn parse_query_table_for_path(
@@ -116,13 +263,14 @@ pub fn parse_query_table_xml(xml: &[u8]) -> Option<QueryTable> {
             };
             let field_tag = &field_xml[..e - s];
             fields.push(QueryTableField {
-                id: parse_u32_attr(field_tag, b"id=\"").unwrap_or(0),
+                id: parse_u32_attr_decoded(field_tag, b"id=\"").unwrap_or(0),
                 name: parse_string_attr(field_tag, b"name=\""),
-                table_column_id: parse_u32_attr(field_tag, b"tableColumnId=\""),
-                data_bound: parse_bool_attr_opt(field_tag, b"dataBound=\"").unwrap_or(false),
-                row_numbers: parse_bool_attr_opt(field_tag, b"rowNumbers=\"").unwrap_or(false),
-                fill_formulas: parse_bool_attr_opt(field_tag, b"fillFormulas=\"").unwrap_or(false),
-                clipped: parse_bool_attr_opt(field_tag, b"clipped=\"").unwrap_or(false),
+                table_column_id: parse_u32_attr_decoded(field_tag, b"tableColumnId=\""),
+                data_bound: parse_bool_attr_decoded(field_tag, b"dataBound=\"").unwrap_or(false),
+                row_numbers: parse_bool_attr_decoded(field_tag, b"rowNumbers=\"").unwrap_or(false),
+                fill_formulas: parse_bool_attr_decoded(field_tag, b"fillFormulas=\"")
+                    .unwrap_or(false),
+                clipped: parse_bool_attr_decoded(field_tag, b"clipped=\"").unwrap_or(false),
                 ext_lst_xml: extract_direct_child_element_xml(
                     field_xml,
                     b"queryTableField",
@@ -151,48 +299,54 @@ pub fn parse_query_table_xml(xml: &[u8]) -> Option<QueryTable> {
     }
 
     Some(QueryTable {
-        connection_id: parse_u32_attr(tag, b"connectionId=\""),
+        connection_id: parse_u32_attr_decoded(tag, b"connectionId=\""),
         name: parse_string_attr(tag, b"name=\""),
-        auto_format_id: parse_u32_attr(tag, b"autoFormatId=\""),
-        apply_number_formats: parse_bool_attr_opt(tag, b"applyNumberFormats=\"").unwrap_or(false),
-        apply_border_formats: parse_bool_attr_opt(tag, b"applyBorderFormats=\"").unwrap_or(false),
-        apply_font_formats: parse_bool_attr_opt(tag, b"applyFontFormats=\"").unwrap_or(false),
-        apply_pattern_formats: parse_bool_attr_opt(tag, b"applyPatternFormats=\"").unwrap_or(false),
-        apply_alignment_formats: parse_bool_attr_opt(tag, b"applyAlignmentFormats=\"")
+        auto_format_id: parse_u32_attr_decoded(tag, b"autoFormatId=\""),
+        apply_number_formats: parse_bool_attr_decoded(tag, b"applyNumberFormats=\"")
             .unwrap_or(false),
-        apply_width_height_formats: parse_bool_attr_opt(tag, b"applyWidthHeightFormats=\"")
+        apply_border_formats: parse_bool_attr_decoded(tag, b"applyBorderFormats=\"")
             .unwrap_or(false),
-        refresh_on_load: parse_bool_attr_opt(tag, b"refreshOnLoad=\"").unwrap_or(false),
+        apply_font_formats: parse_bool_attr_decoded(tag, b"applyFontFormats=\"").unwrap_or(false),
+        apply_pattern_formats: parse_bool_attr_decoded(tag, b"applyPatternFormats=\"")
+            .unwrap_or(false),
+        apply_alignment_formats: parse_bool_attr_decoded(tag, b"applyAlignmentFormats=\"")
+            .unwrap_or(false),
+        apply_width_height_formats: parse_bool_attr_decoded(tag, b"applyWidthHeightFormats=\"")
+            .unwrap_or(false),
+        refresh_on_load: parse_bool_attr_decoded(tag, b"refreshOnLoad=\"").unwrap_or(false),
         grow_shrink_type: parse_string_attr(tag, b"growShrinkType=\""),
-        fill_formulas: parse_bool_attr_opt(tag, b"fillFormulas=\"").unwrap_or(false),
-        remove_data_on_save: parse_bool_attr_opt(tag, b"removeDataOnSave=\"").unwrap_or(false),
-        disable_edit: parse_bool_attr_opt(tag, b"disableEdit=\"").unwrap_or(false),
-        preserve_formatting: parse_bool_attr_opt(tag, b"preserveFormatting=\"").unwrap_or(false),
-        adjust_column_width: parse_bool_attr_opt(tag, b"adjustColumnWidth=\"").unwrap_or(false),
-        intermediate: parse_bool_attr_opt(tag, b"intermediate=\"").unwrap_or(false),
-        connection_id_deleted: parse_bool_attr_opt(tag, b"connectionIdDeleted=\"").unwrap_or(false),
-        headers: parse_bool_attr_opt(tag, b"headers=\"").unwrap_or(true),
-        row_numbers: parse_bool_attr_opt(tag, b"rowNumbers=\"").unwrap_or(false),
-        disable_refresh: parse_bool_attr_opt(tag, b"disableRefresh=\"").unwrap_or(false),
-        background_refresh: parse_bool_attr_opt(tag, b"backgroundRefresh=\"").unwrap_or(false),
-        first_background_refresh: parse_bool_attr_opt(tag, b"firstBackgroundRefresh=\"")
+        fill_formulas: parse_bool_attr_decoded(tag, b"fillFormulas=\"").unwrap_or(false),
+        remove_data_on_save: parse_bool_attr_decoded(tag, b"removeDataOnSave=\"").unwrap_or(false),
+        disable_edit: parse_bool_attr_decoded(tag, b"disableEdit=\"").unwrap_or(false),
+        preserve_formatting: parse_bool_attr_decoded(tag, b"preserveFormatting=\"")
             .unwrap_or(false),
-        next_id: parse_u32_attr(tag, b"nextId=\"")
-            .or_else(|| refresh_tag.and_then(|t| parse_u32_attr(t, b"nextId=\""))),
-        minimum_version: refresh_tag.and_then(|t| parse_u32_attr(t, b"minimumVersion=\"")),
+        adjust_column_width: parse_bool_attr_decoded(tag, b"adjustColumnWidth=\"").unwrap_or(false),
+        intermediate: parse_bool_attr_decoded(tag, b"intermediate=\"").unwrap_or(false),
+        connection_id_deleted: parse_bool_attr_decoded(tag, b"connectionIdDeleted=\"")
+            .unwrap_or(false),
+        headers: parse_bool_attr_decoded(tag, b"headers=\"").unwrap_or(true),
+        row_numbers: parse_bool_attr_decoded(tag, b"rowNumbers=\"").unwrap_or(false),
+        disable_refresh: parse_bool_attr_decoded(tag, b"disableRefresh=\"").unwrap_or(false),
+        background_refresh: parse_bool_attr_decoded(tag, b"backgroundRefresh=\"").unwrap_or(false),
+        first_background_refresh: parse_bool_attr_decoded(tag, b"firstBackgroundRefresh=\"")
+            .unwrap_or(false),
+        next_id: parse_u32_attr_decoded(tag, b"nextId=\"")
+            .or_else(|| refresh_tag.and_then(|t| parse_u32_attr_decoded(t, b"nextId=\""))),
+        minimum_version: refresh_tag.and_then(|t| parse_u32_attr_decoded(t, b"minimumVersion=\"")),
         refresh_present: refresh_bytes.is_some(),
         preserve_sort_filter_layout: refresh_tag
-            .and_then(|t| parse_bool_attr_opt(t, b"preserveSortFilterLayout=\""))
+            .and_then(|t| parse_bool_attr_decoded(t, b"preserveSortFilterLayout=\""))
             .unwrap_or(false),
         field_id_wrapped: refresh_tag
-            .and_then(|t| parse_bool_attr_opt(t, b"fieldIdWrapped=\""))
+            .and_then(|t| parse_bool_attr_decoded(t, b"fieldIdWrapped=\""))
             .unwrap_or(false),
         headers_in_last_refresh: refresh_tag
-            .and_then(|t| parse_bool_attr_opt(t, b"headersInLastRefresh=\""))
+            .and_then(|t| parse_bool_attr_decoded(t, b"headersInLastRefresh=\""))
             .unwrap_or(false),
-        unbound_columns_left: refresh_tag.and_then(|t| parse_u32_attr(t, b"unboundColumnsLeft=\"")),
+        unbound_columns_left: refresh_tag
+            .and_then(|t| parse_u32_attr_decoded(t, b"unboundColumnsLeft=\"")),
         unbound_columns_right: refresh_tag
-            .and_then(|t| parse_u32_attr(t, b"unboundColumnsRight=\"")),
+            .and_then(|t| parse_u32_attr_decoded(t, b"unboundColumnsRight=\"")),
         sort_state_xml: refresh_bytes.and_then(|refresh| {
             extract_direct_child_element_xml(refresh, b"queryTableRefresh", b"sortState")
         }),
@@ -239,9 +393,6 @@ pub fn write_connections_xml(connections: &[WorkbookConnection]) -> Vec<u8> {
         xml.push('>');
         if let Some(db) = &c.db_pr {
             write_db_pr(&mut xml, "dbPr", db);
-        }
-        if let Some(db) = &c.oledb_pr {
-            write_db_pr(&mut xml, "oledbPr", db);
         }
         if let Some(olap) = &c.olap_pr {
             xml.push_str("<olapPr");
@@ -297,6 +448,11 @@ pub fn write_connections_xml(connections: &[WorkbookConnection]) -> Vec<u8> {
     }
     xml.push_str("</connections>");
     xml.into_bytes()
+}
+
+/// Serialize a workbook connection set, preserving authored XML metadata across typed edits.
+pub fn write_connection_set_xml(connections: &WorkbookConnectionSet) -> Vec<u8> {
+    preservation::write_connection_set_xml(connections)
 }
 
 pub fn write_query_table_xml(query_table: &QueryTable) -> Vec<u8> {
@@ -469,219 +625,191 @@ pub fn write_query_table_xml(query_table: &QueryTable) -> Vec<u8> {
     xml.into_bytes()
 }
 
-fn parse_connection(xml: &[u8]) -> Option<WorkbookConnection> {
-    let tag_end = find_gt_simd(xml, 0)?;
-    let tag = &xml[..tag_end];
+fn parse_connection(xml: &[u8], node: &XmlElement) -> Option<WorkbookConnection> {
+    let tag = &xml[node.start..node.start_tag_end];
     let mut connection = WorkbookConnection {
-        id: parse_u32_attr(tag, b"id=\"").unwrap_or(0),
+        id: parse_u32_attr_decoded(tag, b"id=\"").unwrap_or(0),
         name: parse_string_attr(tag, b"name=\""),
         description: parse_string_attr(tag, b"description=\""),
-        connection_type: parse_u32_attr(tag, b"type=\""),
-        refreshed_version: parse_u32_attr(tag, b"refreshedVersion=\""),
-        min_refreshable_version: parse_u32_attr(tag, b"minRefreshableVersion=\""),
-        save_data: parse_bool_attr_opt(tag, b"saveData=\"").unwrap_or(false),
+        connection_type: parse_u32_attr_decoded(tag, b"type=\""),
+        refreshed_version: parse_u32_attr_decoded(tag, b"refreshedVersion=\""),
+        min_refreshable_version: parse_u32_attr_decoded(tag, b"minRefreshableVersion=\""),
+        save_data: parse_bool_attr_decoded(tag, b"saveData=\"").unwrap_or(false),
         credentials: parse_string_attr(tag, b"credentials=\""),
         single_sign_on_id: parse_string_attr(tag, b"singleSignOnId=\""),
-        background: parse_bool_attr_opt(tag, b"background=\"").unwrap_or(false),
-        deleted: parse_bool_attr_opt(tag, b"deleted=\"").unwrap_or(false),
-        keep_alive: parse_bool_attr_opt(tag, b"keepAlive=\"").unwrap_or(false),
-        new_connection: parse_bool_attr_opt(tag, b"new=\"").unwrap_or(false),
+        background: parse_bool_attr_decoded(tag, b"background=\"").unwrap_or(false),
+        deleted: parse_bool_attr_decoded(tag, b"deleted=\"").unwrap_or(false),
+        keep_alive: parse_bool_attr_decoded(tag, b"keepAlive=\"").unwrap_or(false),
+        new_connection: parse_bool_attr_decoded(tag, b"new=\"").unwrap_or(false),
         odc_file: parse_string_attr(tag, b"odcFile=\""),
-        only_use_connection_file: parse_bool_attr_opt(tag, b"onlyUseConnectionFile=\"")
+        only_use_connection_file: parse_bool_attr_decoded(tag, b"onlyUseConnectionFile=\"")
             .unwrap_or(false),
-        reconnection_method: parse_u32_attr(tag, b"reconnectionMethod=\""),
-        refresh_on_load: parse_bool_attr_opt(tag, b"refreshOnLoad=\"").unwrap_or(false),
-        save_password: parse_bool_attr_opt(tag, b"savePassword=\"").unwrap_or(false),
+        reconnection_method: parse_u32_attr_decoded(tag, b"reconnectionMethod=\""),
+        refresh_on_load: parse_bool_attr_decoded(tag, b"refreshOnLoad=\"").unwrap_or(false),
+        save_password: parse_bool_attr_decoded(tag, b"savePassword=\"").unwrap_or(false),
         source_file: parse_string_attr(tag, b"sourceFile=\""),
-        interval: parse_u32_attr(tag, b"interval=\""),
-        ext_lst_xml: parse_ext_lst(xml),
+        interval: parse_u32_attr_decoded(tag, b"interval=\""),
+        ext_lst_xml: node
+            .direct_main_child(b"extLst")
+            .filter(|child| child.name.as_slice() == b"extLst")
+            .and_then(|child| element_xml(xml, child)),
         ..Default::default()
     };
-    connection.db_pr = parse_db_pr(xml, b"dbPr");
-    connection.oledb_pr = parse_db_pr(xml, b"oledbPr");
-    connection.olap_pr = parse_olap_pr(xml);
-    connection.web_pr = parse_web_pr(xml);
-    connection.text_pr = parse_text_pr(xml);
-    connection.parameters = parse_parameters(xml);
+    connection.db_pr = node
+        .direct_main_child(b"dbPr")
+        .and_then(|child| parse_db_pr(xml, child));
+    connection.oledb_pr = node
+        .direct_main_child(b"oledbPr")
+        .and_then(|child| parse_db_pr(xml, child));
+    connection.olap_pr = node
+        .direct_main_child(b"olapPr")
+        .and_then(|child| parse_olap_pr(xml, child));
+    connection.web_pr = node
+        .direct_main_child(b"webPr")
+        .and_then(|child| parse_web_pr(xml, child));
+    connection.text_pr = node
+        .direct_main_child(b"textPr")
+        .and_then(|child| parse_text_pr(xml, child));
+    connection.parameters = node
+        .direct_main_child(b"parameters")
+        .map(|child| parse_parameters(xml, child))
+        .unwrap_or_default();
     Some(connection)
 }
 
-fn parse_db_pr(xml: &[u8], tag_name: &[u8]) -> Option<DbConnectionProperties> {
-    let start = find_tag_simd(xml, tag_name, 0)?;
-    let end = find_gt_simd(xml, start)?;
-    let tag = &xml[start..end];
+fn parse_db_pr(xml: &[u8], node: &XmlElement) -> Option<DbConnectionProperties> {
+    let tag = &xml[node.start..node.start_tag_end];
     Some(DbConnectionProperties {
         connection: parse_string_attr(tag, b"connection=\""),
         command: parse_string_attr(tag, b"command=\""),
         server_command: parse_string_attr(tag, b"serverCommand=\""),
-        command_type: parse_u32_attr(tag, b"commandType=\""),
+        command_type: parse_u32_attr_decoded(tag, b"commandType=\""),
     })
 }
 
-fn parse_olap_pr(xml: &[u8]) -> Option<OlapConnectionProperties> {
-    let start = find_tag_simd(xml, b"olapPr", 0)?;
-    let end = find_gt_simd(xml, start)?;
-    let tag = &xml[start..end];
+fn parse_olap_pr(xml: &[u8], node: &XmlElement) -> Option<OlapConnectionProperties> {
+    let tag = &xml[node.start..node.start_tag_end];
     Some(OlapConnectionProperties {
-        local: parse_bool_attr_opt(tag, b"local=\"").unwrap_or(false),
+        local: parse_bool_attr_decoded(tag, b"local=\"").unwrap_or(false),
         local_connection: parse_string_attr(tag, b"localConnection=\""),
-        local_refresh: parse_bool_attr_opt(tag, b"localRefresh=\"").unwrap_or(false),
-        send_locale: parse_bool_attr_opt(tag, b"sendLocale=\"").unwrap_or(false),
-        row_drill_count: parse_u32_attr(tag, b"rowDrillCount=\""),
-        server_fill: parse_bool_attr_opt(tag, b"serverFill=\""),
-        server_number_format: parse_bool_attr_opt(tag, b"serverNumberFormat=\""),
-        server_font: parse_bool_attr_opt(tag, b"serverFont=\""),
-        server_font_color: parse_bool_attr_opt(tag, b"serverFontColor=\""),
+        local_refresh: parse_bool_attr_decoded(tag, b"localRefresh=\"").unwrap_or(false),
+        send_locale: parse_bool_attr_decoded(tag, b"sendLocale=\"").unwrap_or(false),
+        row_drill_count: parse_u32_attr_decoded(tag, b"rowDrillCount=\""),
+        server_fill: parse_bool_attr_decoded(tag, b"serverFill=\""),
+        server_number_format: parse_bool_attr_decoded(tag, b"serverNumberFormat=\""),
+        server_font: parse_bool_attr_decoded(tag, b"serverFont=\""),
+        server_font_color: parse_bool_attr_decoded(tag, b"serverFontColor=\""),
     })
 }
 
-fn parse_web_pr(xml: &[u8]) -> Option<WebConnectionProperties> {
-    let start = find_tag_simd(xml, b"webPr", 0)?;
-    let end = find_gt_simd(xml, start)?;
-    let tag = &xml[start..end];
-    let web_xml = element_slice(xml, b"webPr", start, end).unwrap_or(&xml[start..end + 1]);
+fn parse_web_pr(xml: &[u8], node: &XmlElement) -> Option<WebConnectionProperties> {
+    let tag = &xml[node.start..node.start_tag_end];
     Some(WebConnectionProperties {
-        xml: parse_bool_attr_opt(tag, b"xml=\"").unwrap_or(false),
-        source_data: parse_bool_attr_opt(tag, b"sourceData=\"").unwrap_or(false),
-        parse_pre: parse_bool_attr_opt(tag, b"parsePre=\"").unwrap_or(false),
-        consecutive: parse_bool_attr_opt(tag, b"consecutive=\"").unwrap_or(false),
-        first_row: parse_bool_attr_opt(tag, b"firstRow=\"").unwrap_or(false),
-        xl97: parse_bool_attr_opt(tag, b"xl97=\"").unwrap_or(false),
-        text_dates: parse_bool_attr_opt(tag, b"textDates=\"").unwrap_or(false),
-        xl2000: parse_bool_attr_opt(tag, b"xl2000=\"").unwrap_or(false),
+        xml: parse_bool_attr_decoded(tag, b"xml=\"").unwrap_or(false),
+        source_data: parse_bool_attr_decoded(tag, b"sourceData=\"").unwrap_or(false),
+        parse_pre: parse_bool_attr_decoded(tag, b"parsePre=\"").unwrap_or(false),
+        consecutive: parse_bool_attr_decoded(tag, b"consecutive=\"").unwrap_or(false),
+        first_row: parse_bool_attr_decoded(tag, b"firstRow=\"").unwrap_or(false),
+        xl97: parse_bool_attr_decoded(tag, b"xl97=\"").unwrap_or(false),
+        text_dates: parse_bool_attr_decoded(tag, b"textDates=\"").unwrap_or(false),
+        xl2000: parse_bool_attr_decoded(tag, b"xl2000=\"").unwrap_or(false),
         url: parse_string_attr(tag, b"url=\""),
         post: parse_string_attr(tag, b"post=\""),
-        html_tables: parse_bool_attr_opt(tag, b"htmlTables=\"").unwrap_or(false),
+        html_tables: parse_bool_attr_decoded(tag, b"htmlTables=\"").unwrap_or(false),
         html_format: parse_string_attr(tag, b"htmlFormat=\""),
         edit_page: parse_string_attr(tag, b"editPage=\""),
-        tables: parse_connection_tables(web_xml),
+        tables: parse_connection_tables(xml, node),
     })
 }
 
-fn parse_text_pr(xml: &[u8]) -> Option<TextConnectionProperties> {
-    let start = find_tag_simd(xml, b"textPr", 0)?;
-    let end = find_gt_simd(xml, start)?;
-    let tag = &xml[start..end];
-    let text_xml = element_slice(xml, b"textPr", start, end).unwrap_or(&xml[start..end + 1]);
+fn parse_text_pr(xml: &[u8], node: &XmlElement) -> Option<TextConnectionProperties> {
+    let tag = &xml[node.start..node.start_tag_end];
     Some(TextConnectionProperties {
-        prompt: parse_bool_attr_opt(tag, b"prompt=\"").unwrap_or(false),
+        prompt: parse_bool_attr_decoded(tag, b"prompt=\"").unwrap_or(false),
         file_type: parse_string_attr(tag, b"fileType=\""),
-        code_page: parse_u32_attr(tag, b"codePage=\""),
+        code_page: parse_u32_attr_decoded(tag, b"codePage=\""),
         character_set: parse_string_attr(tag, b"characterSet=\""),
-        first_row: parse_u32_attr(tag, b"firstRow=\""),
+        first_row: parse_u32_attr_decoded(tag, b"firstRow=\""),
         source_file: parse_string_attr(tag, b"sourceFile=\""),
-        delimited: parse_bool_attr_opt(tag, b"delimited=\""),
+        delimited: parse_bool_attr_decoded(tag, b"delimited=\""),
         delimiter: parse_string_attr(tag, b"delimiter=\""),
         decimal: parse_string_attr(tag, b"decimal=\""),
         thousands: parse_string_attr(tag, b"thousands=\""),
-        tab: parse_bool_attr_opt(tag, b"tab=\"").unwrap_or(false),
-        space: parse_bool_attr_opt(tag, b"space=\"").unwrap_or(false),
-        comma: parse_bool_attr_opt(tag, b"comma=\"").unwrap_or(false),
-        semicolon: parse_bool_attr_opt(tag, b"semicolon=\"").unwrap_or(false),
-        consecutive: parse_bool_attr_opt(tag, b"consecutive=\"").unwrap_or(false),
+        tab: parse_bool_attr_decoded(tag, b"tab=\"").unwrap_or(false),
+        space: parse_bool_attr_decoded(tag, b"space=\"").unwrap_or(false),
+        comma: parse_bool_attr_decoded(tag, b"comma=\"").unwrap_or(false),
+        semicolon: parse_bool_attr_decoded(tag, b"semicolon=\"").unwrap_or(false),
+        consecutive: parse_bool_attr_decoded(tag, b"consecutive=\"").unwrap_or(false),
         qualifier: parse_string_attr(tag, b"qualifier=\""),
-        fields: parse_text_fields(text_xml),
+        fields: parse_text_fields(xml, node),
     })
 }
 
-fn parse_parameters(xml: &[u8]) -> Vec<ConnectionParameter> {
-    let Some(start) = find_tag_simd(xml, b"parameters", 0) else {
-        return Vec::new();
-    };
-    let Some(end) = find_gt_simd(xml, start) else {
-        return Vec::new();
-    };
-    let Some(close) = find_closing_tag(xml, b"parameters", end) else {
-        return Vec::new();
-    };
-    let content = &xml[end + 1..close];
-    let mut parameters = Vec::new();
-    let mut pos = 0;
-    while let Some(s) = find_tag_simd(content, b"parameter", pos) {
-        let Some(e) = find_gt_simd(content, s) else {
-            break;
-        };
-        let tag = &content[s..e];
-        parameters.push(ConnectionParameter {
-            name: parse_string_attr(tag, b"name=\""),
-            sql_type: parse_i32_attr(tag, b"sqlType=\""),
-            parameter_type: parse_string_attr(tag, b"parameterType=\""),
-            refresh_on_change: parse_bool_attr_opt(tag, b"refreshOnChange=\"").unwrap_or(false),
-            prompt: parse_string_attr(tag, b"prompt=\""),
-            boolean: parse_bool_attr_opt(tag, b"boolean=\""),
-            double: parse_string_attr(tag, b"double=\"").and_then(|v| v.parse().ok()),
-            integer: parse_string_attr(tag, b"integer=\"").and_then(|v| v.parse().ok()),
-            string: parse_string_attr(tag, b"string=\""),
-            cell: parse_string_attr(tag, b"cell=\""),
-        });
-        pos = e + 1;
-    }
-    parameters
+fn parse_parameters(xml: &[u8], node: &XmlElement) -> Vec<ConnectionParameter> {
+    let mut source_index = 0;
+    node.children
+        .iter()
+        .filter_map(|child| {
+            if child.namespace != XmlNamespace::Main || child.local != b"parameter" {
+                return None;
+            }
+            let raw_source_index = source_index;
+            source_index += 1;
+            let tag = &xml[child.start..child.start_tag_end];
+            Some(ConnectionParameter {
+                raw_source_index: Some(raw_source_index),
+                name: parse_string_attr(tag, b"name=\""),
+                sql_type: parse_i32_attr_decoded(tag, b"sqlType=\""),
+                parameter_type: parse_string_attr(tag, b"parameterType=\""),
+                refresh_on_change: parse_bool_attr_decoded(tag, b"refreshOnChange=\"")
+                    .unwrap_or(false),
+                prompt: parse_string_attr(tag, b"prompt=\""),
+                boolean: parse_bool_attr_decoded(tag, b"boolean=\""),
+                double: parse_f64_attr_decoded(tag, b"double=\""),
+                integer: parse_i32_attr_decoded(tag, b"integer=\""),
+                string: parse_string_attr(tag, b"string=\""),
+                cell: parse_string_attr(tag, b"cell=\""),
+            })
+        })
+        .collect()
 }
 
-fn parse_connection_tables(web_xml: &[u8]) -> Vec<ConnectionTableRef> {
-    let Some(tables_xml) = extract_direct_child_element_xml(web_xml, b"webPr", b"tables") else {
+fn parse_connection_tables(xml: &[u8], web_node: &XmlElement) -> Vec<ConnectionTableRef> {
+    let Some(tables) = web_node.direct_main_child(b"tables") else {
         return Vec::new();
     };
-    let xml = tables_xml.as_bytes();
-    let start = find_gt_simd(xml, 0).map_or(0, |end| end + 1);
-    let end = find_closing_tag(xml, b"tables", start).unwrap_or(xml.len());
-    let content = &xml[start..end];
-    let mut tables = Vec::new();
-    let mut pos = 0;
-    while let Some(s) = next_child_tag(content, pos) {
-        let Some(e) = find_gt_simd(content, s) else {
-            break;
-        };
-        let tag = &content[s..e];
-        match child_local_name(tag) {
-            Some(name) if name == b"m" => tables.push(ConnectionTableRef::Missing),
-            Some(name) if name == b"s" => {
-                if let Some(value) = parse_string_attr(tag, b"v=\"") {
-                    tables.push(ConnectionTableRef::Name(value));
-                }
-            }
-            Some(name) if name == b"x" => {
-                if let Some(value) = parse_u32_attr(tag, b"v=\"") {
-                    tables.push(ConnectionTableRef::Index(value));
-                }
-            }
-            _ => {}
-        }
-        pos = element_end(content, s, e).unwrap_or(e + 1);
-    }
     tables
+        .children
+        .iter()
+        .filter(|child| child.namespace == XmlNamespace::Main)
+        .filter_map(|child| {
+            let tag = &xml[child.start..child.start_tag_end];
+            match child.local.as_slice() {
+                b"m" => Some(ConnectionTableRef::Missing),
+                b"s" => parse_string_attr(tag, b"v=\"").map(ConnectionTableRef::Name),
+                b"x" => parse_u32_attr_decoded(tag, b"v=\"").map(ConnectionTableRef::Index),
+                _ => None,
+            }
+        })
+        .collect()
 }
 
-fn parse_text_fields(text_xml: &[u8]) -> Vec<TextConnectionField> {
-    let Some(fields_xml) = extract_direct_child_element_xml(text_xml, b"textPr", b"textFields")
-    else {
+fn parse_text_fields(xml: &[u8], text_node: &XmlElement) -> Vec<TextConnectionField> {
+    let Some(fields) = text_node.direct_main_child(b"textFields") else {
         return Vec::new();
     };
-    let xml = fields_xml.as_bytes();
-    let start = find_gt_simd(xml, 0).map_or(0, |end| end + 1);
-    let end = find_closing_tag(xml, b"textFields", start).unwrap_or(xml.len());
-    let content = &xml[start..end];
-    let mut fields = Vec::new();
-    let mut pos = 0;
-    while let Some(s) = find_tag_simd(content, b"textField", pos) {
-        let Some(e) = find_gt_simd(content, s) else {
-            break;
-        };
-        let tag = &content[s..e];
-        fields.push(TextConnectionField {
-            field_type: parse_string_attr(tag, b"type=\""),
-            position: parse_u32_attr(tag, b"position=\""),
-        });
-        pos = e + 1;
-    }
     fields
-}
-
-fn parse_ext_lst(xml: &[u8]) -> Option<String> {
-    let start = find_tag_simd(xml, b"extLst", 0)?;
-    let end = find_closing_tag(xml, b"extLst", start)?;
-    String::from_utf8(xml[start..end + b"</extLst>".len()].to_vec()).ok()
+        .children
+        .iter()
+        .filter(|child| child.namespace == XmlNamespace::Main && child.local == b"textField")
+        .map(|child| {
+            let tag = &xml[child.start..child.start_tag_end];
+            TextConnectionField {
+                field_type: parse_string_attr(tag, b"type=\""),
+                position: parse_u32_attr_decoded(tag, b"position=\""),
+            }
+        })
+        .collect()
 }
 
 fn element_slice<'a>(
@@ -705,34 +833,6 @@ fn element_end(xml: &[u8], start: usize, tag_end: usize) -> Option<usize> {
     let name_end = tag_name_end(xml, name_start);
     let close_start = find_closing_tag(xml, &xml[name_start..name_end], tag_end)?;
     find_gt_simd(xml, close_start).map(|end| end + 1)
-}
-
-fn next_child_tag(xml: &[u8], mut pos: usize) -> Option<usize> {
-    while pos < xml.len() {
-        let start = memchr::memchr(b'<', &xml[pos..])? + pos;
-        if start + 1 >= xml.len() {
-            return None;
-        }
-        if matches!(xml[start + 1], b'/' | b'!' | b'?') {
-            pos = find_gt_simd(xml, start).map_or(xml.len(), |end| end + 1);
-            continue;
-        }
-        return Some(start);
-    }
-    None
-}
-
-fn child_local_name(tag: &[u8]) -> Option<&[u8]> {
-    if tag.len() < 2 || tag[0] != b'<' {
-        return None;
-    }
-    let name_end = tag_name_end(tag, 1);
-    let name = &tag[1..name_end];
-    Some(
-        name.iter()
-            .rposition(|b| *b == b':')
-            .map_or(name, |idx| &name[idx + 1..]),
-    )
 }
 
 fn tag_name_end(xml: &[u8], mut pos: usize) -> usize {
@@ -883,3 +983,9 @@ fn attr_text(xml: &mut String, value: &str) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;
+
+#[cfg(test)]
+mod namespace_tests;

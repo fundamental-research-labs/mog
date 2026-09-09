@@ -5,18 +5,62 @@ use serde::{Deserialize, Serialize};
 pub struct WorkbookConnectionSet {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub connections: Vec<WorkbookConnection>,
+    /// Original `xl/connections.xml` bytes, decoded as UTF-8, when the
+    /// connection projection was imported from a valid package part.
+    ///
+    /// The typed fields cover the editable connection surface. The source
+    /// document remains the authority for namespace declarations, extension
+    /// attributes, and future children while the typed projection is current.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_xml: Option<String>,
+    /// Stable serialization of the typed projection at import time. This
+    /// prevents a stale source document from being replayed after a caller
+    /// edits a modeled connection field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_connections_fingerprint: Option<String>,
 }
 
 impl WorkbookConnectionSet {
     #[must_use]
+    pub fn from_imported_xml(connections: Vec<WorkbookConnection>, xml: &[u8]) -> Self {
+        let raw_xml = String::from_utf8(xml.to_vec()).ok();
+        let raw_connections_fingerprint = raw_xml
+            .as_ref()
+            .and_then(|_| Self::fingerprint_connections(&connections));
+        Self {
+            connections,
+            raw_xml,
+            raw_connections_fingerprint,
+        }
+    }
+
+    #[must_use]
+    pub fn raw_xml_if_current(&self) -> Option<&str> {
+        let raw_xml = self.raw_xml.as_deref()?;
+        let expected = self.raw_connections_fingerprint.as_deref()?;
+        let actual = Self::fingerprint_connections(&self.connections)?;
+        (expected == actual.as_str()).then_some(raw_xml)
+    }
+
+    fn fingerprint_connections(connections: &[WorkbookConnection]) -> Option<String> {
+        serde_json::to_string(connections).ok()
+    }
+
+    #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.connections.is_empty()
+        self.connections.is_empty() && self.raw_xml.is_none()
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkbookConnection {
+    /// Ordinal of the authored `connection` element in the imported XML
+    /// document. This is source provenance, not an OOXML field: it lets the
+    /// preservation writer keep each connection's unknown authored metadata
+    /// attached across typed edits, reordering, and deletion.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_source_index: Option<usize>,
     pub id: u32,
     pub name: Option<String>,
     pub description: Option<String>,
@@ -39,6 +83,11 @@ pub struct WorkbookConnection {
     pub interval: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub db_pr: Option<DbConnectionProperties>,
+    /// Legacy compatibility projection for authored `<oledbPr>` content.
+    ///
+    /// `<oledbPr>` is not a child of SpreadsheetML `CT_Connection`; imported
+    /// instances remain source-owned opaque XML and newly constructed values
+    /// are not serialized by the connection writer.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub oledb_pr: Option<DbConnectionProperties>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -143,6 +192,12 @@ pub struct TextConnectionField {
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConnectionParameter {
+    /// Ordinal of the authored direct `<parameter>` element in its imported
+    /// connection. This is source provenance, not an OOXML field: it keeps
+    /// unknown authored attributes and children attached to the same
+    /// parameter when callers reorder, insert, delete, or rename parameters.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_source_index: Option<usize>,
     pub name: Option<String>,
     pub sql_type: Option<i32>,
     pub parameter_type: Option<String>,

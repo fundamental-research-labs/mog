@@ -8,6 +8,8 @@
 
 #![allow(dead_code)]
 
+#[path = "range_lifecycle_regression/aggregate_materialization.rs"]
+mod aggregate_materialization;
 #[path = "range_lifecycle_regression/basic_lifecycle.rs"]
 mod basic_lifecycle;
 #[path = "range_lifecycle_regression/copy_sheet_lifecycle.rs"]

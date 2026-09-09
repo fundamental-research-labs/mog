@@ -5,6 +5,10 @@ against `2a2f34cf48d99570c517b56033322692268586f6`, the native-storage baseline.
 Memory and speed are separate measurements: reducing resident memory does not
 guarantee faster reads or recalculation.
 
+The [SUM follow-up](sum-aggregation-bench.md) evaluates range preparation and
+streaming improvements against the same original baseline. The results below
+remain the historical comparison before those changes.
+
 ## Results
 
 Retained memory decreased in all seven workloads. End-to-end timings improved

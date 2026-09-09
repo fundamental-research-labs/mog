@@ -10,4 +10,5 @@ Office.js Excel API, evaluated inside the engine.
 - [Storage model review](guides/storage-model-review.md)
 - [Storage model plan](guides/storage-model-plan.md)
 - [Storage model memory and speed comparison](guides/storage-model-bench.md)
+- [SUM range preparation and streaming benchmarks](guides/sum-aggregation-bench.md)
 - [Trademark notices](../TRADEMARKS.md)

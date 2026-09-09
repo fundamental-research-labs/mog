@@ -185,18 +185,24 @@ fn main() {
             });
             engine
         }
-        "sum_100k" => {
+        "sum_100k" | "mixed_sum_100k" => {
             let mut cells: Vec<_> = (0..100_000)
                 .map(|row| cell(row, 0, f64::from(row + 1), None))
                 .collect();
+            let expected_sum = if workload == "mixed_sum_100k" {
+                // A text input makes SUM use its mixed-value aggregate path.
+                cells.last_mut().unwrap().value = CellValue::Text("ignored".into());
+                5_000_050_000.0 - 100_000.0
+            } else {
+                5_000_050_000.0
+            };
             cells.push(cell(0, 1, 0.0, Some("SUM(A1:A100000)".to_owned())));
             let mut engine = measured("hydrate_recalc", || {
                 Engine::from_snapshot(snapshot(100_000, 2, cells))
                     .unwrap()
                     .0
             });
-            const SUM: f64 = 5_000_050_000.0;
-            assert_number(&engine, &sid, 0, 1, SUM);
+            assert_number(&engine, &sid, 0, 1, expected_sum);
             measured("recalc_100", || {
                 for iteration in 0..100 {
                     let value = if iteration % 2 == 0 { "2" } else { "1" };
@@ -206,7 +212,7 @@ fn main() {
                         &sid,
                         0,
                         1,
-                        SUM - 1.0 + value.parse::<f64>().unwrap(),
+                        expected_sum - 1.0 + value.parse::<f64>().unwrap(),
                     );
                 }
             });

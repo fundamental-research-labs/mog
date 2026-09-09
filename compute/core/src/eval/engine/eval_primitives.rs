@@ -21,7 +21,7 @@ use super::super::GLOBAL_REGISTRY;
 use super::evaluator::Evaluator;
 use crate::eval::context::traits::{EvalDataAccess, EvalMetadata};
 
-use super::super::{agg_average, agg_count, agg_counta, agg_countblank, agg_max, agg_min, agg_sum};
+use crate::eval::functions::dense_aggregate::AggregateOp;
 
 use crate::eval::eval_value::EvalValue;
 use compute_parser::ASTNode;
@@ -65,6 +65,9 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
         if let Some(result) = self.eval_operator_function_alias(upper, args).await? {
             return Ok(result);
         }
+        if let Some(op) = AggregateOp::from_function_name(upper) {
+            return self.eval_aggregate(args, op).await;
+        }
 
         match upper {
             "ARRAYFORMULA" => {
@@ -75,15 +78,6 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
             }
 
             "FORMULATEXT" => self.eval_formulatext(args),
-
-            // -- Aggregates --
-            "SUM" => self.eval_aggregate(args, agg_sum).await,
-            "AVERAGE" => self.eval_aggregate(args, agg_average).await,
-            "COUNT" => self.eval_aggregate(args, agg_count).await,
-            "COUNTA" => self.eval_aggregate(args, agg_counta).await,
-            "COUNTBLANK" => self.eval_aggregate(args, agg_countblank).await,
-            "MIN" => self.eval_aggregate(args, agg_min).await,
-            "MAX" => self.eval_aggregate(args, agg_max).await,
 
             // -- Logical --
             "IF" => self.eval_if(args).await,

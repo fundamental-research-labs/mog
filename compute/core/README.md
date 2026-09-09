@@ -129,7 +129,7 @@ Located under `crates/`. Pure computation modules, each independently testable.
 | **compute-charts** | `crates/compute-charts` | compute-stats | Chart data transforms: statistics, regression, density, binning, stacking, grouping |
 | **compute-solver** | `crates/compute-solver` | none | Numerical optimization: Nelder-Mead, BFGS, L-BFGS-B, Differential Evolution, root finding (bisection/Brent/Newton), auto dispatch |
 | **compute-document** | `crates/compute-document` | formula-types, cell-types | Native row/column axes, sparse cell identity indexes, compact axis runs, and range metadata |
-| **compute-wire** | `crates/compute-wire` | formula-types, value-types, cell-types, snapshot-types, compute-cf, compute-security | Binary wire protocol: viewport serialization, mutation patches, FormatPalette interning, TS codegen |
+| **compute-wire** | `crates/compute-wire` | domain-types, ooxml-types, value-types, compute-security | Explicit viewport serialization, binary format palettes, and access filtering |
 | **compute-fill** | `crates/compute-fill` | value-types, cell-types, formula-types | Autofill engine: pattern detection, series generation, formula reference adjustment |
 | **compute-relational** | `crates/compute-relational` | value-types, cell-types, compute-stats, pivot-types | Relational compute engine: GROUP BY, aggregation, window functions over tabular data |
 | **compute-layout-index** | `crates/compute-layout-index` | none | Sparse pixel layout: O(k) dimension prefixes for on-demand cell-to-pixel mapping |

@@ -105,8 +105,6 @@ fn sparse_queries_and_relocation_use_the_same_identity_owner() {
     let col_id = store.get_sheet(&sheet).unwrap().col_id_at(8).unwrap();
     assert_eq!(store.row_index_lookup(&row_id), Some((sheet, 7)));
     assert_eq!(store.col_index_lookup(&col_id), Some((sheet, 8)));
-    assert_eq!(store.cells_at_or_after_row(&sheet, 7), vec![(b, 7, 8)]);
-    assert_eq!(store.cells_at_or_after_col(&sheet, 8), vec![(b, 7, 8)]);
     store.apply_structure_change(
         &sheet,
         &StructureChange::RemapPositions {

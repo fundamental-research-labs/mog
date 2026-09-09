@@ -8,7 +8,7 @@ use super::super::wildcard::{compile_wildcard, wildcard_match};
 
 /// Row-oriented lookup index for O(log n) HLOOKUP.
 ///
-/// This is the horizontal cell_store of `LookupIndex`. Instead of indexing a
+/// This is the horizontal counterpart of `LookupIndex`. Instead of indexing a
 /// column's values by row, it indexes a row's values by column. The search
 /// methods return **column numbers** instead of row numbers.
 pub struct HorizontalLookupIndex {

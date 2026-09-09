@@ -350,17 +350,6 @@ impl ComputeEngine {
     /// Routes through `apply_mutation()` for recalculation and complete mutation results.
     /// Returns a `MutationResult` with `RelocateResult` in `data`.
     ///
-    /// Viewport patches (filter viewport R5.3): the relocation pipeline emits
-    /// (a) clear-patches for source cells (via `clear_cells` inside
-    /// `mutation_relocate_cells`), and (b) write-patches for every target
-    /// position (via `set_cells_raw`). Previously this method returned
-    /// empty patches because patches were stashed in
-    /// `pending_recalc` but never flushed — same-sheet cut-paste in the
-    /// kernel had to fall back to `executePaste` (creates new CellIds)
-    /// or call `forceRefreshAllViewports` cross-sheet to mask the gap.
-    /// Whenever the source and target sheets differ we additionally
-    /// rebuild full viewport binaries on both sheets so the cross-sheet
-    /// path no longer needs the kernel-side force-refresh.
     #[bridge::write(scope = "sheet")]
     #[allow(clippy::too_many_arguments)]
     pub fn relocate_cells(

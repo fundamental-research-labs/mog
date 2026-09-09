@@ -17,20 +17,14 @@ use rustc_hash::{FxHashMap, FxHashSet};
 /// After a recalculation pass, refresh the CF cache for every sheet that
 /// both (a) has conditional formatting rules and (b) had at least one cell
 /// change in the recalc result.
-///
-/// Returns, per sheet, the `(row, col)` pairs of cells whose CF result
-/// changed but were **not** already in `recalc.changed_cells`. These are
-/// "sibling" cells — e.g. the other member of a Duplicate-Values pair, or
-/// the previous Top-N entry that got displaced — whose viewport entries
-/// must be patched even though their cell value didn't change.
 pub(in crate::storage::engine) fn refresh_cf_caches_after_recalc(
     stores: &mut EngineStores,
     cell_store: &CellStore,
     theme_palette: &HashMap<String, String>,
     recalc: &RecalcResult,
-) -> FxHashMap<SheetId, Vec<(u32, u32)>> {
+) {
     if stores.cf_cache.is_empty() {
-        return FxHashMap::default();
+        return;
     }
 
     // Collect unique sheet IDs from changed cells that have CF rules
@@ -52,67 +46,9 @@ pub(in crate::storage::engine) fn refresh_cf_caches_after_recalc(
         }
     }
 
-    if affected_sheets.is_empty() {
-        return FxHashMap::default();
-    }
-
-    // Build a set of positions that are already covered by recalc.changed_cells
-    // so we don't double-patch them.
-    let mut already_changed: FxHashSet<(SheetId, u32, u32)> = FxHashSet::default();
-    for change in &recalc.changed_cells {
-        if let (Ok(sid), Some(pos)) = (SheetId::from_uuid_str(&change.sheet_id), &change.position) {
-            already_changed.insert((sid, pos.row, pos.col));
-        }
-    }
-
-    let mut cf_only_changes: FxHashMap<SheetId, Vec<(u32, u32)>> = FxHashMap::default();
-
     for sheet_id in &affected_sheets {
-        // Snapshot the old CF results before the refresh so we can diff them.
-        let old_results: FxHashMap<(u32, u32), crate::cf::types::CellCFResult> = stores
-            .cf_cache
-            .get(sheet_id)
-            .map(|e| e.results.clone())
-            .unwrap_or_default();
-
         refresh_cf_cache(stores, cell_store, theme_palette, sheet_id);
-
-        // Snapshot new results (clone to avoid borrow overlap).
-        let new_results: FxHashMap<(u32, u32), crate::cf::types::CellCFResult> = stores
-            .cf_cache
-            .get(sheet_id)
-            .map(|e| e.results.clone())
-            .unwrap_or_default();
-
-        let mut changed: Vec<(u32, u32)> = Vec::new();
-
-        // Cells that were in old CF but their result changed or they left CF.
-        for (&pos, old_result) in &old_results {
-            if already_changed.contains(&(*sheet_id, pos.0, pos.1)) {
-                continue;
-            }
-            match new_results.get(&pos) {
-                Some(new_result) if new_result == old_result => {} // unchanged
-                _ => changed.push(pos),                            // lost or changed
-            }
-        }
-
-        // Cells that are newly in the CF results (gained CF coloring).
-        for &pos in new_results.keys() {
-            if already_changed.contains(&(*sheet_id, pos.0, pos.1)) {
-                continue;
-            }
-            if !old_results.contains_key(&pos) {
-                changed.push(pos);
-            }
-        }
-
-        if !changed.is_empty() {
-            cf_only_changes.insert(*sheet_id, changed);
-        }
     }
-
-    cf_only_changes
 }
 
 /// Re-evaluate all conditional formatting rules for a sheet and update the cache.
@@ -151,7 +87,6 @@ pub(in crate::storage::engine) fn refresh_cf_cache(
         *sheet_id,
         CFCacheEntry {
             results: result_map,
-            dirty: false,
         },
     );
 }

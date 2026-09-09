@@ -1,12 +1,10 @@
-//! Viewport module — consolidated viewport rendering, registration, patches,
-//! and service logic for `ComputeEngine`.
+//! Explicit viewport rendering, registration, and query services for `ComputeEngine`.
 
 mod functions;
 mod registry;
 mod render;
 pub(crate) mod service;
 
-// Re-export render helper used by other engine modules
 // Re-export CF merge helpers used by formatting endpoints and the viewport pipeline.
 pub(crate) use functions::{apply_cf_to_format, apply_number_format_color, merge_cf_into_format};
 

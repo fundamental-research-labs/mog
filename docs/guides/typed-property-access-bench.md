@@ -6,6 +6,11 @@ range addresses once at the scripting boundary.
 
 ## Results
 
+These measurements were captured at `f1b06b113`, before the subsequent PR
+cleanup of unused mutation serializers and helpers. Raw samples and measured
+binary/source hashes remain unchanged; this table is not a new timing run of
+that cleanup.
+
 Memory is live RSS in MiB; wall time is milliseconds. Before is the original
 baseline, rerun under the same conditions. After includes the typed internal
 calls and both SUM changes. The Properties row compares the original string-ID
@@ -145,3 +150,11 @@ bulk format mutation. The API test checks formatting a blank cell and undo/redo
 without changing its value. Existing formatting, copy/fill, protection, import,
 history, and scripting regressions also ran. Changed Rust files pass rustfmt,
 and `git diff --check` is clean.
+
+The subsequent PR cleanup also passed
+`cargo check --workspace --all-targets --locked` and
+`cargo test -p compute-core -p compute-api -p mog -p compute-wire --locked --no-fail-fast -j 4`:
+**4,161 passed, zero failed, 3 ignored**, across 154 targets. This includes
+the retained viewport/CF coverage and malformed-ID validation through the
+string adapters. The retired mutation protocol's tests and benchmarks were
+removed with its implementation; no removal-only regression tests were added.

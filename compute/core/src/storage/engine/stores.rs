@@ -25,8 +25,6 @@ use super::merge_index::MergeSpatialItem;
 /// Per-sheet cache of conditional formatting evaluation results.
 pub(crate) struct CFCacheEntry {
     pub results: FxHashMap<(u32, u32), CellCFResult>,
-    #[allow(dead_code)]
-    pub dirty: bool,
 }
 
 /// Shared data layer for all engine services.

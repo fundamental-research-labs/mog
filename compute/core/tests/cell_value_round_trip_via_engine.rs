@@ -1,4 +1,4 @@
-//! Class IV — integration cell_store of the parse/render round-trip.
+//! Class IV — integration coverage of the parse/render round-trip.
 //!
 //! Shares the case table from `compute_core::test_support::class_iv` and
 //! exercises the full engine surface:

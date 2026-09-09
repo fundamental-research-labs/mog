@@ -23,7 +23,7 @@ pub struct SheetRange {
     end_col: u32,
 }
 
-/// Deserialization helper — fields cell_store `SheetRange` but are public for serde.
+/// Deserialization helper — fields match `SheetRange` but are public for serde.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SheetRangeRaw {

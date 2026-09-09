@@ -1,6 +1,6 @@
 //! Chart transform specification types.
 //!
-//! These cell_store the TypeScript `Transform` discriminated union from
+//! These match the TypeScript `Transform` discriminated union from
 //! `charts/src/grammar/spec.ts` and are designed for zero-copy
 //! deserialization from the JS side via `serde_json`.
 

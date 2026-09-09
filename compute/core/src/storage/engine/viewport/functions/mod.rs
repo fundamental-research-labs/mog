@@ -1,6 +1,6 @@
 //! Focused viewport service free functions.
 //!
-//! The child modules keep registry, formatting, patch, active-cell, and binary
+//! The child modules keep registry, formatting, active-cell, and binary
 //! render assembly paths separate while preserving the existing viewport facade.
 
 mod active_cell;

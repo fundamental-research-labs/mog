@@ -23,12 +23,6 @@ pub(super) fn create_filter(
     sheet_id: &SheetId,
     config: serde_json::Value,
 ) -> Result<MutationResult, ComputeError> {
-    // Filter creation can register the filter range on existing rows
-    // (ghost-cell identity allocation). Row visibility for those rows
-    // is unchanged at this step, but the viewport buffer must observe
-    // the new filter shape (header arrows, criteria, etc.) — emit a
-    // full viewport rebuild via the same path used by
-    // `produce_cf_viewport_patches`. filter viewport R5.
     let result =
         filter_svc::create_filter(&mut engine.stores, &mut engine.cell_store, sheet_id, config)?;
 

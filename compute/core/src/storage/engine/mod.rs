@@ -14,7 +14,6 @@ mod settings;
 mod stores;
 mod viewport;
 // Wire format types and serialization — now in compute-wire crate
-pub use compute_wire::mutation as mutation_binary;
 pub use compute_wire::palette as format_palette;
 pub use compute_wire::types as viewport_render_types;
 pub use compute_wire::viewport as viewport_binary;

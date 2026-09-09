@@ -491,7 +491,7 @@ pub(super) fn build_render_cell_materials(
                         // No runtime formula format inheritance: a formula cell
                         // uses its OWN format. Excel applies operand-format
                         // inheritance at edit time, not display time, so the
-                        // viewport-patch path here intentionally does not walk
+                        // viewport rendering path here intentionally does not walk
                         // referenced cells. Keeping the stored format authoritative
                         // also makes `format_idx` and `display_text` agree on the
                         // wire (see fix-009 history).

@@ -71,6 +71,20 @@ fn typed_bulk_format_patch_validates_before_mutating_and_keeps_metadata() {
             .is_err()
     );
     assert_eq!(get_all_properties(&storage, &sid), before);
+    let invalid_fields = ["invalidField".into()];
+    assert!(patch_cell_formats(&mut storage, &sid, &[], &format, &invalid_fields).is_ok());
+    for string_ids in [vec!["invalid-id"], vec!["1", "invalid-id"]] {
+        assert!(
+            patch_cell_formats(&mut storage, &sid, &string_ids, &format, &invalid_fields).is_err()
+        );
+        assert_eq!(get_all_properties(&storage, &sid), before);
+    }
+    patch_cell_formats(&mut storage, &sid, &["invalid-id", "1"], &format, &[]).unwrap();
+    assert_eq!(
+        get_cell_format_by_id(&storage, &sid, &ids[0]).unwrap().bold,
+        Some(true)
+    );
+    assert!(get_cell_format_by_id(&storage, &sid, &ids[1]).is_none());
     patch_cell_formats_by_id(&mut storage, &sid, &ids, &format, &[]).unwrap();
     for id in &ids {
         let props = get_properties_by_id(&storage, &sid, id).unwrap();

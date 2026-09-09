@@ -342,7 +342,6 @@ fn transferable_format_read_patch_preserves_fidelity_clears_target_and_excludes_
         sid,
         super::super::stores::CFCacheEntry {
             results: cf_results,
-            dirty: false,
         },
     );
 

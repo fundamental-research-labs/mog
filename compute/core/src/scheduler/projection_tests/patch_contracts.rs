@@ -47,7 +47,7 @@ fn test_clear_anchor_surfaces_cleared_spill_targets_in_recalc() {
     assert!(created_targets.contains(&(3, 0)), "A4 patched on create");
 
     // Step 2: Clear A1 (the anchor). The spilled values at A2:A4 must be
-    // surfaced in the RecalcResult so the viewport patches them to empty.
+    // surfaced in the RecalcResult so consumers observe those cells becoming empty.
     let clear_result = core.clear_cells(&mut cell_store, &[a1_id]).unwrap();
 
     // Verify col_data was cleared (engine-level invariant — already known to work).

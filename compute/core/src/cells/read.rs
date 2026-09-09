@@ -82,14 +82,6 @@ impl CellStore {
         })
     }
 
-    pub fn cells_at_or_after_row(&self, sheet: &SheetId, at: u32) -> Vec<(CellId, u32, u32)> {
-        self.cells(sheet).filter(|(_, row, _)| *row >= at).collect()
-    }
-
-    pub fn cells_at_or_after_col(&self, sheet: &SheetId, at: u32) -> Vec<(CellId, u32, u32)> {
-        self.cells(sheet).filter(|(_, _, col)| *col >= at).collect()
-    }
-
     pub fn cells_in_row_range(
         &self,
         sheet: &SheetId,

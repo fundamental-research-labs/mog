@@ -7,8 +7,7 @@
 //! ## Old-value snapshots
 //!
 //! Before recalc writes new results to the cell store, `snapshot_old_value` captures
-//! the pre-recalc value for each dirty cell. These old values enable incremental
-//! incremental cache maintenance: instead of a full rebuild, caches can apply
+//! the pre-recalc value for each dirty cell. These old values enable incremental cache maintenance: instead of a full rebuild, caches can apply
 //! O(delta) updates by comparing old vs new values.
 //!
 //! ## Tier 2 caches (epoch-scoped)
@@ -19,7 +18,7 @@
 //!   goes through thread-local in `subexpr_cache.rs` for zero-refactor ergonomics;
 //!   `EpochCache::new()` clears it, and `stats()` reports hit/miss counts.
 //! - **sheet_names**: Sheet name normalization cache. Actual access still goes
-//!   through thread-local in `cell_store/mod.rs`; `EpochCache::new()` clears it.
+//!   through thread-local in `cells/sheet_key.rs`; `EpochCache::new()` clears it.
 //!
 //! ## Future consolidation
 //!
@@ -31,7 +30,7 @@
 //!
 //! When the evaluator is refactored to pass `&EpochCache` through the evaluation
 //! call stack (touches evaluator.rs, eval_primitives.rs, and all call sites),
-//! the thread-local backing stores in `subexpr_cache.rs` and `cell_store/mod.rs`
+//! the thread-local backing stores in `subexpr_cache.rs` and `cells/sheet_key.rs`
 //! can be replaced with direct field access on this struct.
 
 use cell_types::CellId;
@@ -72,7 +71,7 @@ pub(crate) struct SubexprEntry {
 /// - **sheet_names**: Sheet name normalization (NFC + lowercase) cache.
 ///
 /// These fields represent the canonical ownership of epoch-scoped cache data.
-/// The thread-local accessors in `subexpr_cache.rs` and `cell_store/mod.rs` remain
+/// The thread-local accessors in `subexpr_cache.rs` and `cells/sheet_key.rs` remain
 /// the actual access path during evaluation; `EpochCache` clears them at epoch
 /// boundaries and collects stats at epoch end.
 pub struct EpochCache {
@@ -96,7 +95,7 @@ pub struct EpochCache {
     /// Tier 2: sheet name normalization cache (raw name -> NFC+lowercase).
     ///
     /// Canonical data container. During evaluation, the thread-local in
-    /// `cell_store/mod.rs` is the actual access path. This field is populated
+    /// `cells/sheet_key.rs` is the actual access path. This field is populated
     /// at epoch end via `capture_stats()` for diagnostics.
     ///
     /// TODO(full-migration): When the evaluator threads `&EpochCache` through

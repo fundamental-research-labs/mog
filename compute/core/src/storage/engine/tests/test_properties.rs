@@ -326,7 +326,6 @@ fn test_get_displayed_cell_properties_with_cf() {
         sid,
         super::super::stores::CFCacheEntry {
             results: cf_results,
-            dirty: false,
         },
     );
 
@@ -386,7 +385,6 @@ fn test_get_displayed_cell_properties_cf_overrides_cell() {
         sid,
         super::super::stores::CFCacheEntry {
             results: cf_results,
-            dirty: false,
         },
     );
 
@@ -456,7 +454,6 @@ fn test_get_displayed_cell_properties_with_cf_on_truly_blank_cell() {
         sid,
         super::super::stores::CFCacheEntry {
             results: cf_results,
-            dirty: false,
         },
     );
 
@@ -568,7 +565,6 @@ fn test_get_displayed_range_properties_with_cf() {
         sid,
         super::super::stores::CFCacheEntry {
             results: cf_results,
-            dirty: false,
         },
     );
 
@@ -588,7 +584,7 @@ fn test_get_displayed_range_properties_with_cf() {
     );
 }
 
-// Range-flavored cell_store of test_get_displayed_cell_properties_with_cf_on_truly_blank_cell:
+// Range variant of test_get_displayed_cell_properties_with_cf_on_truly_blank_cell:
 // a `containsBlanks` rule's painted cells must surface in the batch
 // (`getDisplayedRangeProperties`) read path that the harness's
 // `readDisplayedFormatsViaBridge` prefers. Regression for `cf-blanks`.
@@ -625,7 +621,6 @@ fn test_get_displayed_range_properties_with_cf_on_truly_blank_cells() {
         sid,
         super::super::stores::CFCacheEntry {
             results: cf_results,
-            dirty: false,
         },
     );
 
@@ -746,7 +741,6 @@ fn displayed_format_projection_preserves_order_duplicates_and_scalar_semantics()
         sid,
         super::super::stores::CFCacheEntry {
             results: cf_results,
-            dirty: false,
         },
     );
 

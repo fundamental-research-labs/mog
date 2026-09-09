@@ -107,19 +107,12 @@ impl ComputeEngine {
     }
 
     /// Evaluate a filter and atomically hide/unhide rows.
-    /// Eliminates 5+ IPC round-trips from the TS domain module.
     ///
     /// After updating row visibility, triggers a full recalculation so that
     /// SUBTOTAL(101-111) and AGGREGATE formulas immediately reflect the new
     /// hidden-row state without requiring a separate `calculate()` call.
     ///
-    /// `apply_filter` updates native row visibility and the layout index. The incremental
-    /// `serialize_mutation_result` wire format only carries cell-value
-    /// patches, not row dimensions. Returning empty patches forced the TS
-    /// kernel to call `forceRefreshAllViewports()` after every filter
-    /// op. Now we rebuild the full viewport binary on the affected sheet
-    /// (same pattern T8/sort_range used for CF-overlap rebuilds), which
-    /// re-renders against the up-to-date hidden-row state.
+    /// Visibility changes invalidate derived geometry for subsequent reads.
     #[bridge::write(scope = "sheet")]
     pub fn apply_filter(
         &mut self,
@@ -176,14 +169,8 @@ impl ComputeEngine {
 
     /// Sort cells while updating native identities, metadata, and dependencies.
     ///
-    /// **CF natively re-evaluated.** When the sort range overlaps a CF format
-    /// on the same sheet, top-N / above-average / data-bar / color-scale rules
-    /// produce different colors for cells outside the changed-cells set
-    /// (e.g. a top-N rule re-ranks across the entire CF range). The
-    /// incremental viewport-patch path only emits CF colors for cells in
-    /// `recalc.changed_cells`, so we instead rebuild the full viewport
-    /// binary on a CF-overlap sort. This obsoletes the kernel-side
-    /// `forceRefreshAllViewports` workaround that used to follow every sort.
+    /// Conditional formats are re-evaluated after sorting so subsequent format
+    /// and viewport queries include changes outside the sorted cells.
     #[bridge::write(scope = "range")]
     pub fn sort_range(
         &mut self,
@@ -255,12 +242,6 @@ impl ComputeEngine {
     ///
     /// Maps to OfficeJS `Range.copyFrom()`.
     ///
-    /// Cross-sheet patches (filter viewport R5.3 generalization): when the source
-    /// and target sheets differ, the incremental flush only carries
-    /// patches for the *source* sheet's viewport (where the recalc was
-    /// driven). Rebuild the target sheet's viewport binary too so the
-    /// kernel's `copyRangeToSheet` no longer needs the band-aid
-    /// `forceRefreshAllViewports`.
     #[bridge::write(scope = "sheet")]
     #[allow(clippy::too_many_arguments)]
     pub fn copy_range(

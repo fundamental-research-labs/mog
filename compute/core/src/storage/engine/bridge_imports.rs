@@ -213,15 +213,8 @@ impl ComputeEngine {
     /// lifecycle only calls this on the *pure replay* path to avoid
     /// double work.
     ///
-    /// Same shape as `import_from_xlsx_bytes`'s second return slot —
-    /// returns `(empty_viewport_patches, mutation_result)` so the bridge
-    /// transport's `BYTES_TUPLE_COMMANDS` plumbing matches the import path
-    /// and the auto-generated TS shim wraps the call with `core.mutate(...)`,
-    /// feeding the result through `MutationResultHandler.applyAndNotify`.
-    /// Tagged `bridge::write` (rather than `bridge::read`) only because the
-    /// TS code generator uses `MethodAccess::Write` + `(Uint8Array,
-    /// MutationResult)` return shape as the trigger for the mutate-wrapping
-    /// codegen path; this method does not actually mutate Rust state.
+    /// Returns hydration metadata directly as a `MutationResult` without
+    /// recording a history action.
     #[bridge::write(scope = "workbook")]
     #[tracing::instrument(name = "engine_settle_for_store", skip_all)]
     pub fn settle_for_store(&mut self) -> Result<MutationResult, ComputeError> {

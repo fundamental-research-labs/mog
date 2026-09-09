@@ -54,16 +54,13 @@ impl ComputeEngine {
 
     /// Post-process an import-open recalc for the direct hydration return path.
     ///
-    /// This needs the same observable enrichment as mutation flushes, but it
-    /// must not leave compute dirty or seed a pending viewport recalc because
-    /// the enriched payload is returned by `complete_deferred_hydration`
-    /// itself.
+    /// Apply the mutation enrichment without leaving compute dirty; the payload
+    /// is returned directly by `complete_deferred_hydration`.
     pub(in crate::storage::engine) fn postprocess_import_open_recalc(
         &mut self,
         recalc: &mut RecalcResult,
     ) {
         self.postprocess_mutation_recalc(recalc);
-        self.enrich_metadata_flags(recalc);
         self.stores.compute.clear_dirty();
     }
 

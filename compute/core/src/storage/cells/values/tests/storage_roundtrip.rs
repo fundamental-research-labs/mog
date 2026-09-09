@@ -3,7 +3,7 @@ use super::*;
 
 #[test]
 fn test_set_cell_value_number() {
-    let (mut storage, mut cell_store, sheet_id) = storage_with_sheet();
+    let (_, mut cell_store, sheet_id) = storage_with_sheet();
     // Use the low-level set_cell to write, then use get_cell_count
     cell_store.apply_edit(
         &sheet_id,
@@ -25,7 +25,7 @@ fn test_set_cell_value_number() {
 
 #[test]
 fn test_get_effective_value_number() {
-    let (mut storage, mut cell_store, sheet_id) = storage_with_sheet();
+    let (_, mut cell_store, sheet_id) = storage_with_sheet();
     cell_store.apply_edit(
         &sheet_id,
         make_cell_id(300),
@@ -41,7 +41,7 @@ fn test_get_effective_value_number() {
 
 #[test]
 fn test_get_effective_value_empty() {
-    let (storage, cell_store, sheet_id) = storage_with_sheet();
+    let (_, cell_store, sheet_id) = storage_with_sheet();
     let eff = get_effective_value(&cell_store, &sheet_id, 5, 5);
     assert!(eff.is_none());
 }
@@ -52,13 +52,13 @@ fn test_get_effective_value_empty() {
 
 #[test]
 fn test_get_cell_count_empty() {
-    let (storage, cell_store, sheet_id) = storage_with_sheet();
+    let (_, cell_store, sheet_id) = storage_with_sheet();
     assert_eq!(get_cell_count(&cell_store, &sheet_id), 0);
 }
 
 #[test]
 fn test_get_cell_count_with_cells() {
-    let (mut storage, mut cell_store, sheet_id) = storage_with_sheet();
+    let (_, mut cell_store, sheet_id) = storage_with_sheet();
     cell_store.apply_edit(
         &sheet_id,
         make_cell_id(400),
@@ -86,6 +86,5 @@ fn test_get_cell_count_with_cells() {
 
 #[test]
 fn test_get_cell_count_nonexistent_sheet() {
-    let storage = WorkbookStorage::new();
     assert_eq!(get_cell_count(&CellStore::new(), &make_sheet_id(999)), 0);
 }

@@ -98,7 +98,7 @@ pub(in crate::storage::engine) fn enrich_metadata_flags(
         // --- HAS_FORMULA ---
         // Check three sources:
         // 1. Compute store has a formula for this cell's CellId (anchor cells).
-        // 2. Mirror has a formula for the cell at this position (legacy CellId path).
+        // 2. The cell store has a formula for the cell at this position (legacy CellId path).
         // 3. Projection registry: CSE members own the legacy array formula.
         //    Dynamic-array spill members are associated projected values, not
         //    formula owners, and are marked through IS_SPILL_MEMBER patches.

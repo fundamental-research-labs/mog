@@ -1,7 +1,7 @@
 //! pivot framing sub-scope C.4 — direct cell-readback tests for `materialize_pivot`.
 //!
 //! Before this round there were zero tests for `materialize_pivot` anywhere
-//! under `compute/core/src/cell_store/`. The four `frame_survives_*` tests below
+//! under `compute/core/src/cells/`. The four `frame_survives_*` tests below
 //! lock in the structural framing the materializer must emit (Bugs A, B, C,
 //! D from pivot framing) by hand-building `PivotTableResult` values and reading
 //! cells back from `column_values`. The three `#[should_panic]` tests exercise

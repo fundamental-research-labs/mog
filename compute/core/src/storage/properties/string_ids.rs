@@ -2,7 +2,6 @@
 //! Engine callers use the typed property functions directly.
 
 use super::cell::*;
-use super::merge::{merge_formats, normalize_format_patch};
 use crate::border_patch::BorderPatchField;
 use crate::storage::WorkbookStorage;
 use cell_types::SheetId;
@@ -62,13 +61,9 @@ pub fn set_cell_format(
     cell_id: &str,
     format: &CellFormat,
 ) {
-    let mut props = get_properties(storage, sheet_id, cell_id).unwrap_or_default();
-    props.format = Some(props.format.as_ref().map_or_else(
-        || normalize_format_patch(format),
-        |existing| merge_formats(existing, format),
-    ));
-    props.style_id = None;
-    set_properties(storage, sheet_id, cell_id, &props);
+    if let Some(id) = parse_cell_id(cell_id) {
+        set_cell_format_by_id(storage, sheet_id, &id, format);
+    }
 }
 
 pub fn patch_cell_format(
@@ -87,17 +82,14 @@ pub fn replace_cell_format(
     cell_id: &str,
     format: &CellFormat,
 ) {
-    let mut props = get_properties(storage, sheet_id, cell_id).unwrap_or_default();
-    props.format = Some(normalize_format_patch(format));
-    props.style_id = None;
-    set_properties(storage, sheet_id, cell_id, &props);
+    if let Some(id) = parse_cell_id(cell_id) {
+        replace_cell_format_by_id(storage, sheet_id, &id, format);
+    }
 }
 
 pub fn clear_cell_format(storage: &mut WorkbookStorage, sheet_id: &SheetId, cell_id: &str) {
-    if let Some(mut props) = get_properties(storage, sheet_id, cell_id) {
-        props.format = None;
-        props.style_id = None;
-        set_properties(storage, sheet_id, cell_id, &props);
+    if let Some(id) = parse_cell_id(cell_id) {
+        clear_cell_format_by_id(storage, sheet_id, &id);
     }
 }
 
@@ -119,25 +111,13 @@ pub fn patch_cell_formats(
     format: &CellFormat,
     clear_fields: &[String],
 ) -> Result<(), value_types::ComputeError> {
-    // Validate every patch before writing any part of the batch.
-    let patched: Vec<_> = cell_ids
-        .iter()
-        .map(|id| {
-            let mut props = get_properties(storage, sheet_id, id).unwrap_or_default();
-            let patched = super::apply_format_patch(
-                &props.format.clone().unwrap_or_default(),
-                format,
-                clear_fields,
-            )?;
-            props.format = (patched != CellFormat::default()).then_some(patched);
-            props.style_id = None;
-            Ok(props)
-        })
-        .collect::<Result<_, value_types::ComputeError>>()?;
-    for (id, props) in cell_ids.iter().zip(patched) {
-        set_properties(storage, sheet_id, id, &props);
+    let ids: Vec<_> = cell_ids.iter().filter_map(|id| parse_cell_id(id)).collect();
+    // A nonempty batch still validates the patch when every ID is malformed.
+    // Otherwise the native batch validates before mutating any valid cell.
+    if ids.is_empty() && !cell_ids.is_empty() {
+        super::apply_format_patch(&CellFormat::default(), format, clear_fields)?;
     }
-    Ok(())
+    patch_cell_formats_by_id(storage, sheet_id, &ids, format, clear_fields)
 }
 
 pub fn patch_cell_borders(
@@ -147,15 +127,8 @@ pub fn patch_cell_borders(
     borders: &CellBorders,
     clear_fields: &[BorderPatchField],
 ) -> Result<(), value_types::ComputeError> {
-    for id in cell_ids {
-        let mut props = get_properties(storage, sheet_id, id).unwrap_or_default();
-        let mut format = props.format.take().unwrap_or_default();
-        format.borders = super::apply_borders_patch(format.borders.as_ref(), borders, clear_fields);
-        props.format = (format != CellFormat::default()).then_some(format);
-        props.style_id = None;
-        set_properties(storage, sheet_id, id, &props);
-    }
-    Ok(())
+    let ids: Vec<_> = cell_ids.iter().filter_map(|id| parse_cell_id(id)).collect();
+    patch_cell_borders_by_id(storage, sheet_id, &ids, borders, clear_fields)
 }
 
 pub fn clear_cell_formats(storage: &mut WorkbookStorage, sheet_id: &SheetId, cell_ids: &[&str]) {

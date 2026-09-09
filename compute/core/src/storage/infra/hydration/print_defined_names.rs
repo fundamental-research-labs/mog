@@ -18,10 +18,12 @@ pub(super) fn hydrate_workbook_print_defined_names(
     sheets: &MapRef,
     named_ranges: &[NamedRange],
     sheet_ids: &[SheetId],
+    inventory: &[domain_types::WorkbookSheetPackageInfo],
     txn: &mut yrs::TransactionMut,
 ) {
     for nr in named_ranges {
-        let Some((sheet_idx, parsed)) = parse_representable_print_defined_name(nr, sheet_ids.len())
+        let Some((sheet_idx, parsed)) =
+            parse_representable_print_defined_name(nr, sheet_ids.len(), inventory)
         else {
             continue;
         };
@@ -49,8 +51,9 @@ enum ParsedPrintDefinedName {
 fn parse_representable_print_defined_name(
     nr: &NamedRange,
     sheet_count: usize,
+    inventory: &[domain_types::WorkbookSheetPackageInfo],
 ) -> Option<(usize, ParsedPrintDefinedName)> {
-    let sheet_idx = nr.local_sheet_id? as usize;
+    let sheet_idx = super::workbook::editable_sheet_index(inventory, nr.local_sheet_id?)?;
     if sheet_idx >= sheet_count {
         return None;
     }

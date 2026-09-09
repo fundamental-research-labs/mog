@@ -191,12 +191,14 @@ impl YrsStorage {
             &self.sheets,
             &output.named_ranges,
             &id_map.sheet_ids,
+            &output.workbook_sheet_inventory,
             &mut txn,
         );
         hydrate_workbook_named_ranges(
             &self.workbook,
             &output.named_ranges,
             &id_map.sheet_ids,
+            &output.workbook_sheet_inventory,
             allocator,
             &mut txn,
         );
@@ -273,6 +275,7 @@ impl YrsStorage {
             &self.workbook,
             &output.workbook_views,
             &id_map.sheet_ids,
+            &output.workbook_sheet_inventory,
             &mut txn,
         );
         hydrate_custom_workbook_views_xml(
@@ -289,6 +292,12 @@ impl YrsStorage {
         );
         hydrate_shared_string_hints(&self.workbook, &output.shared_string_hints, &mut txn);
         hydrate_package_fidelity_metadata(&self.workbook, &output.package_fidelity, &mut txn);
+        crate::storage::workbook::sheet_inventory::hydrate(
+            &self.workbook,
+            output,
+            &id_map.sheet_ids,
+            &mut txn,
+        );
         hydrate_volatile_dependency_part(
             &self.workbook,
             &output.volatile_dependency_part,
@@ -470,12 +479,14 @@ impl YrsStorage {
             &self.sheets,
             &output.named_ranges,
             &id_map.sheet_ids,
+            &output.workbook_sheet_inventory,
             &mut txn,
         );
         hydrate_workbook_named_ranges(
             &self.workbook,
             &output.named_ranges,
             &id_map.sheet_ids,
+            &output.workbook_sheet_inventory,
             allocator,
             &mut txn,
         );
@@ -544,6 +555,7 @@ impl YrsStorage {
             &self.workbook,
             &output.workbook_views,
             &id_map.sheet_ids,
+            &output.workbook_sheet_inventory,
             &mut txn,
         );
         hydrate_custom_workbook_views_xml(
@@ -560,6 +572,12 @@ impl YrsStorage {
         );
         hydrate_shared_string_hints(&self.workbook, &output.shared_string_hints, &mut txn);
         hydrate_package_fidelity_metadata(&self.workbook, &output.package_fidelity, &mut txn);
+        crate::storage::workbook::sheet_inventory::hydrate(
+            &self.workbook,
+            output,
+            &id_map.sheet_ids,
+            &mut txn,
+        );
         hydrate_volatile_dependency_part(
             &self.workbook,
             &output.volatile_dependency_part,

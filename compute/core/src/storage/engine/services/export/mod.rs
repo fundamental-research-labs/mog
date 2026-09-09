@@ -816,7 +816,20 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
     let table_projection: TableExportProjection =
         finalize_table_export_projection(&mut output_sheets, &table_projection_inputs);
 
-    let named_ranges = export_workbook_named_ranges(stores, mirror, &sheet_ids);
+    let (workbook_sheet_inventory, parsed_workbook_sheet_indices, imported_order_to_export_order) =
+        crate::storage::workbook::sheet_inventory::export(
+            stores.storage.doc(),
+            stores.storage.workbook_map(),
+            &sheet_ids,
+            &mut output_sheets,
+        );
+    let named_ranges = export_workbook_named_ranges(
+        stores,
+        mirror,
+        &sheet_ids,
+        &workbook_sheet_inventory,
+        &imported_order_to_export_order,
+    );
 
     let theme = export_workbook_theme(stores);
     let wb_protection = export_workbook_protection(stores);
@@ -830,7 +843,13 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
     }
     let data_table_regions = export_data_table_regions(stores, &sheet_ids);
     let connections = workbook::export_workbook_connections(stores);
-    let workbook_views = export_workbook_views_for_sheets(stores, &sheet_ids, &mut output_sheets);
+    let workbook_views = export_workbook_views_for_sheets(
+        stores,
+        &sheet_ids,
+        &mut output_sheets,
+        &workbook_sheet_inventory,
+        &imported_order_to_export_order,
+    );
 
     let persons = export_workbook_threaded_comment_persons(stores);
     let has_persons_part = !persons.is_empty()
@@ -840,8 +859,8 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
 
     let output = ParseOutput {
         sheets: output_sheets,
-        workbook_sheet_inventory: Vec::new(),
-        parsed_workbook_sheet_indices: Default::default(),
+        workbook_sheet_inventory,
+        parsed_workbook_sheet_indices,
         workbook_root_namespaces: workbook::export_workbook_root_namespaces(stores),
         workbook_conformance: None,
         style_palette,

@@ -120,6 +120,7 @@ pub(super) fn hydrate_workbook_named_ranges(
     workbook: &MapRef,
     named_ranges: &[NamedRange],
     sheet_ids: &[SheetId],
+    inventory: &[domain_types::WorkbookSheetPackageInfo],
     allocator: &mut impl IdAllocator,
     txn: &mut yrs::TransactionMut,
 ) {
@@ -133,13 +134,21 @@ pub(super) fn hydrate_workbook_named_ranges(
     // _xlchart.v*) and workbook-scoped broken names — so they survive the L2
     // round-trip. API/UI consumers can filter stale names at query boundaries;
     // hydration must preserve workbook state for export fidelity.
+    let mut inert_named_ranges = Vec::new();
     for (idx, nr) in named_ranges.iter().enumerate() {
-        // Resolve local_sheet_id (index) to a SheetId hex string for scope
+        // OOXML localSheetId counts all workbook tabs, including inert ones.
         let scope: Option<String> = nr.local_sheet_id.and_then(|idx| {
             sheet_ids
-                .get(idx as usize)
+                .get(editable_sheet_index(inventory, idx)?)
                 .map(|sid| id_to_hex(sid.as_u128()).to_string())
         });
+
+        if nr.local_sheet_id.is_some() && scope.is_none() {
+            // Inert tab names have no evaluator sheet scope. Preserve their full
+            // OOXML record separately instead of turning them into global names.
+            inert_named_ranges.push(nr.clone());
+            continue;
+        }
 
         // Generate a unique ID for this defined name (reuse cell ID allocator for
         // monotonic uniqueness — the ID just needs to be a unique hex string)
@@ -184,6 +193,24 @@ pub(super) fn hydrate_workbook_named_ranges(
         let prelim: MapPrelim = entries.into_iter().collect();
         nr_map.insert(txn, &*key, prelim);
     }
+    if !inert_named_ranges.is_empty() {
+        let json = serde_json::to_string(&inert_named_ranges)
+            .expect("inert defined names are serializable");
+        workbook.insert(txn, "inertTabDefinedNames", Any::String(Arc::from(json)));
+    }
+}
+
+pub(super) fn editable_sheet_index(
+    inventory: &[domain_types::WorkbookSheetPackageInfo],
+    workbook_order: u32,
+) -> Option<usize> {
+    if inventory.is_empty() {
+        return Some(workbook_order as usize);
+    }
+    inventory
+        .iter()
+        .find(|entry| entry.workbook_order == workbook_order)?
+        .editable_sheet_index
 }
 
 fn should_preserve_defined_name_ref_opaque(name: &str, refers_to: &str) -> bool {
@@ -258,6 +285,7 @@ mod tests {
                 storage.workbook_map(),
                 &workbook_views,
                 &sheet_ids,
+                &[],
                 &mut txn,
             );
         }
@@ -446,6 +474,7 @@ pub(super) fn hydrate_workbook_views(
     workbook: &MapRef,
     workbook_views: &[domain_types::domain::workbook::WorkbookView],
     sheet_ids: &[SheetId],
+    inventory: &[domain_types::WorkbookSheetPackageInfo],
     txn: &mut yrs::TransactionMut,
 ) {
     if workbook_views.is_empty() {
@@ -459,7 +488,7 @@ pub(super) fn hydrate_workbook_views(
     }
     if let Some(active_sheet_id) = workbook_views
         .first()
-        .and_then(|view| sheet_ids.get(view.active_tab as usize))
+        .and_then(|view| sheet_ids.get(editable_sheet_index(inventory, view.active_tab)?))
     {
         let selected_sheet_ids = [active_sheet_id.to_uuid_string()];
         if let Ok(json) = serde_json::to_string(&selected_sheet_ids) {

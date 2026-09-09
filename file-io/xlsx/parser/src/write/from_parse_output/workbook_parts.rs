@@ -283,7 +283,15 @@ fn add_inventory_sheet_defs(
         ) {
             continue;
         }
-        let Some(part_path) = entry.normalized_part_path.as_deref() else {
+        // Editable parts are generated in editable-sheet order. Their imported
+        // package path is provenance, not the current export target.
+        let generated_path = entry
+            .editable_sheet_index
+            .map(|index| format!("xl/worksheets/sheet{}.xml", index + 1));
+        let Some(part_path) = generated_path
+            .as_deref()
+            .or(entry.normalized_part_path.as_deref())
+        else {
             continue;
         };
         if !matches!(entry.kind, WorkbookSheetKind::Worksheet)
@@ -291,7 +299,11 @@ fn add_inventory_sheet_defs(
         {
             continue;
         }
-        let relationship_type = entry.relationship_type.as_deref().unwrap_or(REL_WORKSHEET);
+        let relationship_type = if entry.editable_sheet_index.is_some() {
+            REL_WORKSHEET
+        } else {
+            entry.relationship_type.as_deref().unwrap_or(REL_WORKSHEET)
+        };
         let target = workbook_relative_target(part_path);
         let r_id = package_graph
             .relationship_id(&PackageOwner::Workbook, relationship_type, &target)

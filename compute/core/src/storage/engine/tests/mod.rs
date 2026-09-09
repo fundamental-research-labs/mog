@@ -60,6 +60,7 @@ mod test_viewport;
 mod test_workbook_settings;
 mod test_xlsx_col_style_ranges;
 mod test_xlsx_export;
+mod test_xlsx_export_sheet_inventory;
 mod test_xlsx_export_charts;
 mod test_xlsx_export_comments;
 mod test_xlsx_export_form_controls;

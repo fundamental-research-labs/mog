@@ -72,3 +72,23 @@ fn test_sign() {
     assert_eq!(f.call(&[num(-5.0)]), num(-1.0));
     assert_eq!(f.call(&[num(0.0)]), num(0.0));
 }
+
+#[test]
+fn quotient_truncates_unequal_tiny_operands_at_integer_boundaries() {
+    // Independently Excel-evaluated tiny operands around a truncation boundary.
+    // Literal inputs isolate QUOTIENT from upstream POWER evaluation.
+    let positive = 1.0000000000000001e-307;
+    let negative = -9.999999999999995e-308;
+    for (numerator, denominator, expected) in [
+        (positive, positive, 1.0),
+        (positive, negative, -1.0),
+        (negative, positive, 0.0),
+        (negative, negative, 1.0),
+    ] {
+        assert_eq!(
+            FnQuotient.call(&[num(numerator), num(denominator)]),
+            num(expected),
+            "QUOTIENT({numerator}, {denominator})",
+        );
+    }
+}

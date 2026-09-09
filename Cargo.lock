@@ -107,17 +107,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-trait"
-version = "0.1.89"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9035ad2d096bed7955a320ee7e2230574d28fd3c3a0f186cbea1ff3c7eed5dbb"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -412,14 +401,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "compute-collab"
-version = "0.1.0"
-dependencies = [
- "thiserror",
- "yrs",
-]
-
-[[package]]
 name = "compute-core"
 version = "0.1.0"
 dependencies = [
@@ -432,7 +413,6 @@ dependencies = [
  "chrono",
  "compute-cf",
  "compute-charts",
- "compute-collab",
  "compute-document",
  "compute-fill",
  "compute-formats",
@@ -481,7 +461,6 @@ dependencies = [
  "workbook-types",
  "xlsx-api",
  "xlsx-parser",
- "yrs",
 ]
 
 [[package]]
@@ -489,17 +468,11 @@ name = "compute-document"
 version = "0.1.0"
 dependencies = [
  "cell-types",
- "compute-security",
- "domain-types",
- "formula-types",
  "rustc-hash",
  "serde",
  "serde_json",
- "thiserror",
  "uuid",
  "value-types",
- "workbook-types",
- "yrs",
 ]
 
 [[package]]
@@ -897,7 +870,6 @@ dependencies = [
  "tracing",
  "uuid",
  "value-types",
- "yrs",
 ]
 
 [[package]]
@@ -938,7 +910,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e13b66accf52311f30a0db42147dadea9850cb48cd070028831ae5f5d4b856ab"
 dependencies = [
  "concurrent-queue",
- "parking",
  "pin-project-lite",
 ]
 
@@ -963,9 +934,6 @@ name = "fastrand"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f1f227452a390804cdb637b74a86990f2a7d7ba4b7d5693aac9b4dd6defd8d6"
-dependencies = [
- "getrandom 0.3.4",
-]
 
 [[package]]
 name = "fdeflate"
@@ -1092,11 +1060,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "899def5c37c4fd7b2664648c28120ecec138e4d395b459e5ca34f9cce2dd77fd"
 dependencies = [
  "cfg-if",
- "js-sys",
  "libc",
  "r-efi 5.3.0",
  "wasip2",
- "wasm-bindgen",
 ]
 
 [[package]]
@@ -1459,12 +1425,6 @@ checksum = "7bb71e1b3fa6ca1c61f383464aaf2bb0e2f8e772a1f01d486832464de363b951"
 dependencies = [
  "num-traits",
 ]
-
-[[package]]
-name = "parking"
-version = "2.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f38d5652c16fde515bb1ecef450ab0f6a219d619a7274976324d5e377f7dceba"
 
 [[package]]
 name = "parking_lot"
@@ -2085,15 +2045,6 @@ name = "slab"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
-
-[[package]]
-name = "smallstr"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "862077b1e764f04c251fe82a2ef562fd78d7cadaeb072ca7c2bcaf7217b1ff3b"
-dependencies = [
- "smallvec",
-]
 
 [[package]]
 name = "smallvec"
@@ -2869,24 +2820,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "yrs"
-version = "0.21.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81de5913bca29f43a1d12ca92a7b39a2945e9420e01602a7563917c7bfc60f70"
-dependencies = [
- "arc-swap",
- "async-lock",
- "async-trait",
- "dashmap",
- "fastrand",
- "serde",
- "serde_json",
- "smallstr",
- "smallvec",
- "thiserror",
 ]
 
 [[package]]

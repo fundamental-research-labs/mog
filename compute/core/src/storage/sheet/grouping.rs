@@ -1,8 +1,7 @@
 //! Sheet-level row/column grouping (outline) storage API.
 //!
-//! This facade preserves the historical `storage::sheet::grouping` API while
-//! keeping Yrs storage, CRUD, query, rendering, auto-outline, and subtotal
-//! behavior in focused submodules.
+//! Native grouping metadata, queries, rendering, automatic outlines, and
+//! subtotals are organized into focused submodules.
 
 mod auto_outline;
 mod collapse;
@@ -13,9 +12,9 @@ mod outline;
 mod queries;
 mod render;
 mod settings;
+mod store;
 mod subtotals;
 mod types;
-mod yrs_io;
 
 pub use auto_outline::auto_outline;
 pub use collapse::{
@@ -41,6 +40,8 @@ pub use render::{
     get_outline_symbols, should_render_outlines,
 };
 pub use settings::set_outline_settings;
+pub use store::get_sheet_grouping_config;
+pub(crate) use store::{GroupingState, set_sheet_grouping_config};
 pub use subtotals::{
     build_subtotal_formula, create_subtotals, find_group_boundaries, is_subtotal_row,
     remove_subtotals,
@@ -51,8 +52,6 @@ pub use types::{
     SheetGroupingConfig, SubtotalFunction, SubtotalOptions, SubtotalResult, SubtotalsCellAccessor,
     Viewport,
 };
-pub use yrs_io::get_sheet_grouping_config;
-pub(crate) use yrs_io::{config_to_yrs_map, set_sheet_grouping_config};
 
 #[cfg(test)]
 mod tests;

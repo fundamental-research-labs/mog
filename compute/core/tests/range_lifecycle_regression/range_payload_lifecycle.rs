@@ -1,12 +1,12 @@
 use super::support::{as_f64, cell_at, range_backed_workbook, sheet_id};
 use cell_types::SheetPos;
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use formula_types::StructureChange;
 
 #[test]
 fn lifecycle_compaction() {
     let snap = range_backed_workbook(10, 5, 4, 1, |r, _| (r + 1) as f64, vec![]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).expect("from_snapshot");
     let sid = sheet_id(0);
 
     for r in 0..4u32 {
@@ -65,7 +65,7 @@ fn lifecycle_compaction() {
 #[test]
 fn lifecycle_range_deletion() {
     let snap = range_backed_workbook(10, 5, 5, 1, |r, _| ((r + 1) * 10) as f64, vec![]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).expect("from_snapshot");
     let sid = sheet_id(0);
 
     for r in 0..5u32 {
@@ -127,7 +127,7 @@ fn lifecycle_range_deletion() {
 #[test]
 fn lifecycle_data_range_overlap_rejection() {
     let snap = range_backed_workbook(10, 5, 4, 2, |r, c| ((r + 1) * 10 + c + 1) as f64, vec![]);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).expect("from_snapshot");
     let sid = sheet_id(0);
 
     // Row-major layout: (r, c) -> (r+1)*10 + c+1.

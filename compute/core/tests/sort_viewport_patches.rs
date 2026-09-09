@@ -11,7 +11,7 @@ use cell_types::{
     ColId, PayloadEncoding, RangeAnchor, RangeId, RangeKind, RowId, SheetId, SheetPos,
 };
 use compute_core::bridge_types::{BridgeSortCriterion, BridgeSortMode, BridgeSortOptions};
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use domain_types::domain::filter::SortOrder;
 use snapshot_types::{CellData, RangeData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
@@ -74,6 +74,9 @@ fn mixed_range_snapshot() -> WorkbookSnapshot {
 
     WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET_UUID.to_string(),
             name: "Sheet1".to_string(),
             rows: NUM_ROWS,
@@ -113,7 +116,7 @@ fn ascending_sort_options(col: u32) -> BridgeSortOptions {
     }
 }
 
-fn as_f64(engine: &YrsComputeEngine, sheet_id: &SheetId, row: u32, col: u32) -> f64 {
+fn as_f64(engine: &ComputeEngine, sheet_id: &SheetId, row: u32, col: u32) -> f64 {
     match engine
         .mirror()
         .get_cell_value_at(sheet_id, SheetPos::new(row, col))
@@ -160,7 +163,7 @@ fn is_full_viewport_binary(payload: &[u8]) -> bool {
 #[test]
 fn range_backed_sort_returns_full_viewport_patch_for_mixed_rows() {
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(mixed_range_snapshot()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(mixed_range_snapshot()).expect("from_snapshot");
     let sid = test_sheet_id();
     engine
         .register_viewport("main", &sid, 0, 0, 4, 2)

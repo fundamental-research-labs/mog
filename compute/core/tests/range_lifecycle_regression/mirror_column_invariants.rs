@@ -1,5 +1,5 @@
 use super::support::{as_f64, cell_at, formula_cell, sheet_id, sheet_snap, value_cell};
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use snapshot_types::WorkbookSnapshot;
 
 #[test]
@@ -18,7 +18,7 @@ fn lifecycle_col_data_partial_invariant() {
         ..Default::default()
     };
 
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).expect("from_snapshot");
+    let (engine, _) = ComputeEngine::from_snapshot(snap).expect("from_snapshot");
     let sid = sheet_id(0);
 
     assert_eq!(as_f64(&cell_at(&engine, &sid, 0, 0)), 1.0);
@@ -39,7 +39,7 @@ fn lifecycle_col_data_partial_invariant() {
     );
 
     let sheet = engine.mirror().get_sheet(&sid).expect("sheet mirror");
-    if let Some(col_slice) = sheet.get_column_slice(0) {
+    if let Some(col_slice) = sheet.get_column_view(0) {
         assert!(
             col_slice.len() >= 10,
             "col_data for column A should cover at least rows 0-9, got len {}",

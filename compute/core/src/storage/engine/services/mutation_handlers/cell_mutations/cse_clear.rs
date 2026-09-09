@@ -6,23 +6,50 @@ use value_types::{CellValue, ComputeError};
 use crate::mirror::CellMirror;
 use crate::storage::engine::stores::EngineStores;
 
-pub(super) fn collect_materialized_cells_in_range(
+pub(in crate::storage::engine) fn collect_authored_cells_in_range(
     stores: &EngineStores,
+    mirror: &CellMirror,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,
     end_row: u32,
     end_col: u32,
 ) -> Vec<(u32, u32, CellId)> {
-    stores
+    let mut result: Vec<_> = stores
         .grid_indexes
         .get(sheet_id)
-        .map(|grid| {
-            grid.cells_in_range(start_row, start_col, end_row, end_col)
-                .map(|(cell_id, row, col)| (row, col, cell_id))
-                .collect()
-        })
-        .unwrap_or_default()
+        .into_iter()
+        .flat_map(|grid| grid.cells_in_range(start_row, start_col, end_row, end_col))
+        .map(|(id, row, col)| (row, col, id))
+        .collect();
+    let mut seen: HashSet<_> = result.iter().map(|(row, col, _)| (*row, *col)).collect();
+    if let Some(sheet) = mirror.get_sheet(sheet_id) {
+        for extent in sheet
+            .range_spatial_index
+            .query_range(start_row, start_col, end_row, end_col)
+        {
+            if extent.kind != cell_types::RangeKind::Data {
+                continue;
+            }
+            for row in start_row.max(extent.start_row)..=end_row.min(extent.end_row) {
+                for col in start_col.max(extent.start_col)..=end_col.min(extent.end_col) {
+                    let pos = cell_types::SheetPos::new(row, col);
+                    if sheet
+                        .value_at(pos)
+                        .is_none_or(|value| matches!(value, CellValue::Null))
+                    {
+                        continue;
+                    }
+                    if let Some(id) = sheet.cell_id_at(pos)
+                        && seen.insert((row, col))
+                    {
+                        result.push((row, col, id));
+                    }
+                }
+            }
+        }
+    }
+    result
 }
 
 pub(super) fn push_resolved_clear_target(

@@ -57,7 +57,13 @@ fn sort_filter_snapshot() -> WorkbookSnapshot {
         .collect();
 
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET_UUID.to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -76,7 +82,7 @@ fn sort_filter_snapshot() -> WorkbookSnapshot {
     }
 }
 
-fn text_at(engine: &YrsComputeEngine, row: u32, col: u32) -> String {
+fn text_at(engine: &ComputeEngine, row: u32, col: u32) -> String {
     match engine
         .mirror()
         .get_cell_value_at(&sid(), SheetPos::new(row, col))
@@ -87,7 +93,7 @@ fn text_at(engine: &YrsComputeEngine, row: u32, col: u32) -> String {
     }
 }
 
-fn add_score_highlight_cf(engine: &mut YrsComputeEngine, sheet_id: &SheetId, fill: &str) {
+fn add_score_highlight_cf(engine: &mut ComputeEngine, sheet_id: &SheetId, fill: &str) {
     engine
         .add_cf_rule(
             sheet_id,
@@ -117,7 +123,7 @@ fn add_score_highlight_cf(engine: &mut YrsComputeEngine, sheet_id: &SheetId, fil
 
 #[test]
 fn sort_range_visible_rows_only_preserves_hidden_slots() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(sort_filter_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(sort_filter_snapshot()).unwrap();
     let sheet_id = sid();
 
     engine
@@ -167,7 +173,13 @@ fn headered_sort_resolves_blank_header_column_from_body_cells() {
         cell(3, 1, num(20.0)),
     ];
     let snapshot = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET_UUID.to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -184,7 +196,7 @@ fn headered_sort_resolves_blank_header_column_from_body_cells() {
         max_change: FiniteF64::must(0.001),
         calculation_settings: None,
     };
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
     let sheet_id = sid();
 
     let options = mutation::BridgeSortOptions {
@@ -212,7 +224,7 @@ fn headered_sort_resolves_blank_header_column_from_body_cells() {
 fn color_filter_matches_conditional_format_fill() {
     use crate::storage::sheet::filters::ColumnFilter;
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(sort_filter_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(sort_filter_snapshot()).unwrap();
     let sheet_id = sid();
     let fill = "#ffde59";
 
@@ -268,7 +280,7 @@ fn color_filter_matches_conditional_format_fill() {
 fn multiple_filters_on_empty_interior_headers_keep_distinct_criteria() {
     use crate::storage::sheet::filters::ColumnFilter;
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(sort_filter_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(sort_filter_snapshot()).unwrap();
     let sheet_id = sid();
 
     engine
@@ -321,7 +333,7 @@ fn multiple_filters_on_empty_interior_headers_keep_distinct_criteria() {
 
 #[test]
 fn color_sort_matches_conditional_format_fill() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(sort_filter_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(sort_filter_snapshot()).unwrap();
     let sheet_id = sid();
     let fill = "#ffde59";
 
@@ -358,7 +370,7 @@ fn sort_preserves_filter_range_for_later_criteria() {
         ColumnFilter, FilterCondition, FilterLogic, FilterOperator,
     };
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(sort_filter_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(sort_filter_snapshot()).unwrap();
     let sheet_id = sid();
 
     engine

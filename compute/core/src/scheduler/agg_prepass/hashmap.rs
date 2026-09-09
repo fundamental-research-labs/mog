@@ -2,6 +2,7 @@ use super::*;
 use compute_functions::helpers::sumifs_result_cache::{
     SumifsCacheEpoch, SumifsCacheKey, SumifsRangeIdentity,
 };
+use value_types::ColumnView;
 
 // ---------------------------------------------------------------------------
 // warm_sumifs_result_cache — pre-populate the eval-time SUMIFS result cache
@@ -77,14 +78,14 @@ pub fn warm_sumifs_result_cache(
         }
 
         // Get column slices
-        let mut criteria_slices: Vec<&[CellValue]> = Vec::new();
+        let mut criteria_slices: Vec<ColumnView<'_>> = Vec::new();
         let mut ok = true;
         for pair in &pattern.pairs {
             let Some(sheet) = mirror.get_sheet(&pair.data_sheet) else {
                 ok = false;
                 break;
             };
-            let Some(slice) = sheet.get_column_slice(pair.data_col) else {
+            let Some(slice) = sheet.get_column_view(pair.data_col) else {
                 ok = false;
                 break;
             };
@@ -97,7 +98,7 @@ pub fn warm_sumifs_result_cache(
         let Some(sum_sheet) = mirror.get_sheet(&vs) else {
             continue;
         };
-        let Some(sum_slice) = sum_sheet.get_column_slice(vc) else {
+        let Some(sum_slice) = sum_sheet.get_column_view(vc) else {
             continue;
         };
 
@@ -122,14 +123,14 @@ pub fn warm_sumifs_result_cache(
 
         // Slice the criteria and sum columns to the actual range
         // (for full-column ranges, start=0, so slicing is a no-op)
-        let sliced_criteria: Vec<&[CellValue]> = criteria_slices
+        let sliced_criteria: Vec<ColumnView<'_>> = criteria_slices
             .iter()
             .map(|s| {
                 let end = actual_end.min(s.len());
                 if actual_start < end {
-                    &s[actual_start..end]
+                    s.slice(actual_start..end)
                 } else {
-                    &[] as &[CellValue]
+                    ColumnView::empty()
                 }
             })
             .collect();
@@ -137,9 +138,9 @@ pub fn warm_sumifs_result_cache(
         let sliced_sum = {
             let end = actual_end.min(sum_slice.len());
             if actual_start < end {
-                &sum_slice[actual_start..end]
+                sum_slice.slice(actual_start..end)
             } else {
-                &[] as &[CellValue]
+                ColumnView::empty()
             }
         };
 
@@ -157,7 +158,7 @@ pub fn warm_sumifs_result_cache(
         let _ = compute_functions::helpers::sumifs_result_cache::sumifs_lookup(
             &cache_key,
             &sliced_criteria,
-            sliced_sum,
+            &sliced_sum,
             total_rows,
             &dummy_keys,
         );
@@ -173,7 +174,7 @@ fn sumifs_cache_key_for_pattern(
     epoch: SumifsCacheEpoch,
     total_rows: usize,
     sum_effective_len: usize,
-    criteria_slices: &[&[CellValue]],
+    criteria_slices: &[ColumnView<'_>],
 ) -> SumifsCacheKey {
     let (sum_sheet, sum_col, sum_start_row, sum_end_row) = pattern
         .value_range
@@ -232,20 +233,20 @@ pub fn build_agg_map(
     // Read column slices for each criteria dimension.
     // Missing columns (not in col_data) are treated as empty — all rows read
     // as CellValue::Null via `.get(row).unwrap_or(&CellValue::Null)`.
-    let empty_col: &[CellValue] = &[];
-    let mut criteria_slices: SmallVec<[&[CellValue]; 4]> = SmallVec::new();
+    let empty_col = ColumnView::empty();
+    let mut criteria_slices: SmallVec<[ColumnView<'_>; 4]> = SmallVec::new();
     for pair in &pattern.pairs {
         let sheet = mirror.get_sheet(&pair.data_sheet)?;
-        let slice = sheet.get_column_slice(pair.data_col).unwrap_or(empty_col);
+        let slice = sheet.get_column_view(pair.data_col).unwrap_or(empty_col);
         criteria_slices.push(slice);
     }
 
     // Read value column slice if needed (before computing actual_end so we
     // can include it in the length calculation).
     // Missing column → empty slice (all values treated as Null).
-    let value_slice: Option<&[CellValue]> = if let Some((vs, vc, _, _)) = &pattern.value_range {
+    let value_slice: Option<ColumnView<'_>> = if let Some((vs, vc, _, _)) = &pattern.value_range {
         let sheet = mirror.get_sheet(vs)?;
-        Some(sheet.get_column_slice(*vc).unwrap_or(empty_col))
+        Some(sheet.get_column_view(*vc).unwrap_or(empty_col))
     } else {
         None
     };
@@ -546,7 +547,7 @@ pub fn execute_agg_group(
 
     // Pre-load dynamic criteria column slices for output lookup.
     struct DynCol<'a> {
-        slice: &'a [CellValue],
+        slice: ColumnView<'a>,
     }
 
     let mut dyn_cols: SmallVec<[Option<DynCol<'_>>; 4]> = SmallVec::new();
@@ -554,7 +555,7 @@ pub fn execute_agg_group(
         match &pair.criteria {
             CriteriaSource::Dynamic { sheet, col } => {
                 let sm = mirror.get_sheet(sheet)?;
-                let slice = sm.get_column_slice(*col)?;
+                let slice = sm.get_column_view(*col)?;
                 dyn_cols.push(Some(DynCol { slice }));
             }
             _ => {

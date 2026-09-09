@@ -11,13 +11,16 @@
 // TODO R49: no separate `set_cell_formula` public API — `set_cell_value_parsed`
 // handles both `=formula` and bare values, which is the production path.
 
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
 
 fn one_sheet_snapshot(name: &str, rows: u32, cols: u32, cells: Vec<CellData>) -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: name.to_string(),
             rows,
@@ -42,7 +45,7 @@ fn value_cell(uuid_suffix: u32, row: u32, col: u32, n: f64) -> CellData {
 }
 
 fn xlsx_bytes_for(snapshot: WorkbookSnapshot) -> Vec<u8> {
-    let (engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (engine, _) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
     engine.export_to_xlsx_bytes().expect("export_to_xlsx_bytes")
 }
 
@@ -59,7 +62,7 @@ fn two_value_fixture() -> WorkbookSnapshot {
 #[test]
 fn xlsx_set_cell_value_writes_through_to_export() {
     let bytes = xlsx_bytes_for(two_value_fixture());
-    let (mut engine, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
     let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
 
     engine
@@ -85,7 +88,7 @@ fn xlsx_set_cell_value_writes_through_to_export() {
 #[test]
 fn xlsx_set_cell_formula_writes_through_to_export() {
     let bytes = xlsx_bytes_for(two_value_fixture());
-    let (mut engine, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
     let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
 
     // set_cell_value_parsed treats a "=..." prefix as a formula.
@@ -117,7 +120,7 @@ fn xlsx_overwrite_existing_cell_replaces_value() {
     // Replace an existing XLSX-hydrated cell's value and verify the old value
     // doesn't leak through on export.
     let bytes = xlsx_bytes_for(two_value_fixture());
-    let (mut engine, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
     let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
 
     engine

@@ -2,15 +2,9 @@ use crate::snapshot::{
     Scenario, ScenarioCreateInput, ScenarioCreateResult, ScenarioRemoveResult, ScenarioUpdateInput,
     ScenarioUpdateResult, ScenarioValidationError,
 };
-use crate::storage::YrsStorage;
-use value_types::ComputeError;
-use yrs::{Array, Transact};
+use crate::storage::WorkbookStorage;
 
 use super::query::{get_all, is_at_limit};
-use super::storage::{
-    get_or_create_items_array, get_or_create_scenarios_map, remove_legacy_active_scenario_id,
-    scenario_yrs,
-};
 use super::types::MAX_SCENARIOS;
 use super::validation::validate_scenario_input;
 
@@ -21,7 +15,7 @@ fn generate_scenario_id(id_alloc: &cell_types::IdAllocator) -> String {
 
 /// Current timestamp in milliseconds (epoch).
 fn now_millis() -> f64 {
-    crate::storage::infra::yrs_helpers::now_millis() as f64
+    crate::storage::infra::time::now_millis() as f64
 }
 
 // =============================================================================
@@ -33,7 +27,7 @@ fn now_millis() -> f64 {
 /// Returns `ScenarioCreateResult` with the new scenario ID on success, or
 /// validation errors on failure.
 pub fn create(
-    storage: &YrsStorage,
+    storage: &mut WorkbookStorage,
     input: ScenarioCreateInput,
     id_alloc: &cell_types::IdAllocator,
 ) -> ScenarioCreateResult {
@@ -76,14 +70,7 @@ pub fn create(
 
     let scenario_id = scenario.id.clone();
 
-    // Store as structured Y.Map (new path)
-    let workbook = storage.workbook_map();
-    let mut txn = storage.doc().transact_mut();
-    let scenarios_map = get_or_create_scenarios_map(workbook, &mut txn);
-    remove_legacy_active_scenario_id(&scenarios_map, &mut txn);
-    let items_arr = get_or_create_items_array(&scenarios_map, &mut txn);
-    let prelim: yrs::MapPrelim = scenario_yrs::to_yrs_prelim(&scenario).into_iter().collect();
-    items_arr.push_back(&mut txn, prelim);
+    storage.metadata.scenarios.push(scenario);
 
     ScenarioCreateResult {
         success: true,
@@ -96,7 +83,7 @@ pub fn create(
 ///
 /// Returns `ScenarioUpdateResult` with success or validation errors.
 pub fn update(
-    storage: &YrsStorage,
+    storage: &mut WorkbookStorage,
     scenario_id: &str,
     updates: ScenarioUpdateInput,
 ) -> ScenarioUpdateResult {
@@ -159,17 +146,7 @@ pub fn update(
         modified_at: Some(now),
     };
 
-    // Replace in Yrs array as structured Y.Map
-    let workbook = storage.workbook_map();
-    let mut txn = storage.doc().transact_mut();
-    let scenarios_map = get_or_create_scenarios_map(workbook, &mut txn);
-    remove_legacy_active_scenario_id(&scenarios_map, &mut txn);
-    let items_arr = get_or_create_items_array(&scenarios_map, &mut txn);
-    items_arr.remove(&mut txn, index as u32);
-    let prelim: yrs::MapPrelim = scenario_yrs::to_yrs_prelim(&updated_scenario)
-        .into_iter()
-        .collect();
-    items_arr.insert(&mut txn, index as u32, prelim);
+    storage.metadata.scenarios[index] = updated_scenario;
 
     ScenarioUpdateResult {
         success: true,
@@ -181,7 +158,7 @@ pub fn update(
 ///
 /// Returns a structured result so bridge/kernel callers can distinguish success
 /// from not-found instead of treating every mutation as successful.
-pub fn remove(storage: &YrsStorage, scenario_id: &str) -> ScenarioRemoveResult {
+pub fn remove(storage: &mut WorkbookStorage, scenario_id: &str) -> ScenarioRemoveResult {
     let scenarios = get_all(storage);
     let index = match scenarios.iter().position(|s| s.id == scenario_id) {
         Some(idx) => idx,
@@ -197,32 +174,11 @@ pub fn remove(storage: &YrsStorage, scenario_id: &str) -> ScenarioRemoveResult {
         }
     };
 
-    let workbook = storage.workbook_map();
-    let mut txn = storage.doc().transact_mut();
-    let scenarios_map = get_or_create_scenarios_map(workbook, &mut txn);
-    let items_arr = get_or_create_items_array(&scenarios_map, &mut txn);
-    items_arr.remove(&mut txn, index as u32);
-    remove_legacy_active_scenario_id(&scenarios_map, &mut txn);
+    storage.metadata.scenarios.remove(index);
 
     ScenarioRemoveResult {
         success: true,
         scenario_id: Some(scenario_id.to_string()),
         errors: None,
     }
-}
-
-// =============================================================================
-// Active Scenario Management
-// =============================================================================
-
-/// Reject legacy direct active-scenario writes.
-pub fn set_active_scenario_id(
-    storage: &YrsStorage,
-    scenario_id: Option<&str>,
-) -> Result<(), ComputeError> {
-    let _ = storage;
-    let _ = scenario_id;
-    Err(ComputeError::InvalidInput {
-        message: "SCENARIO_ACTIVE_STATE_READ_ONLY: scenario active state is session-scoped; use Rust-owned apply/restore".to_string(),
-    })
 }

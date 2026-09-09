@@ -3,15 +3,12 @@ use super::helpers::*;
 
 #[test]
 fn test_validate_and_clean_orphaned_comments() {
-    let (storage, sheet_id) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = &storage.sheets_ref();
-    add_cell_to_sheet(&storage, &sheet_id, "existing-cell");
+    let (mut storage, sheet_id) = storage_with_sheet();
+    let grid = native_grid_with_cell(sheet_id, "00000000000000000000000000000001");
     add_comment(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
-        "existing-cell",
+        "00000000000000000000000000000001",
         simple_runs("Valid comment"),
         "Alice",
         AddCommentOptions::default(),
@@ -19,8 +16,7 @@ fn test_validate_and_clean_orphaned_comments() {
     )
     .unwrap();
     add_comment(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         "orphaned-cell",
         simple_runs("Orphaned comment"),
@@ -29,47 +25,45 @@ fn test_validate_and_clean_orphaned_comments() {
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
-    assert_eq!(get_comment_count(doc, sheets, &sheet_id), 2);
-    let removed = validate_and_clean_comments(doc, sheets, &sheet_id);
+    assert_eq!(get_comment_count(&storage, &sheet_id), 2);
+    let removed = validate_and_clean_comments(&mut storage, &sheet_id, &grid);
     assert_eq!(removed, 1);
-    assert_eq!(get_comment_count(doc, sheets, &sheet_id), 1);
-    assert!(has_comments(doc, sheets, &sheet_id, "existing-cell"));
-    assert!(!has_comments(doc, sheets, &sheet_id, "orphaned-cell"));
+    assert_eq!(get_comment_count(&storage, &sheet_id), 1);
+    assert!(has_comments(
+        &storage,
+        &sheet_id,
+        "00000000000000000000000000000001"
+    ));
+    assert!(!has_comments(&storage, &sheet_id, "orphaned-cell"));
 }
 
 #[test]
 fn test_validate_and_clean_no_orphans() {
-    let (storage, sheet_id) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = &storage.sheets_ref();
-    add_cell_to_sheet(&storage, &sheet_id, "cell-001");
+    let (mut storage, sheet_id) = storage_with_sheet();
+    let grid = native_grid_with_cell(sheet_id, "00000000000000000000000000000001");
     add_comment(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
-        "cell-001",
+        "00000000000000000000000000000001",
         simple_runs("Valid"),
         "Alice",
         AddCommentOptions::default(),
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
-    let removed = validate_and_clean_comments(doc, sheets, &sheet_id);
+    let removed = validate_and_clean_comments(&mut storage, &sheet_id, &grid);
     assert_eq!(removed, 0);
-    assert_eq!(get_comment_count(doc, sheets, &sheet_id), 1);
+    assert_eq!(get_comment_count(&storage, &sheet_id), 1);
 }
 
 #[test]
 fn test_validate_and_clean_preserves_cell_from_grid_index() {
-    let (storage, sheet_id) = storage_with_sheet();
-    let doc = storage.doc();
-    let sheets = &storage.sheets_ref();
-    add_grid_index_cell(&storage, &sheet_id, "grid-index-cell");
+    let (mut storage, sheet_id) = storage_with_sheet();
+    let grid = native_grid_with_cell(sheet_id, "00000000000000000000000000000001");
     add_comment(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
-        "grid-index-cell",
+        "00000000000000000000000000000001",
         simple_runs("Valid through grid index"),
         "Alice",
         AddCommentOptions::default(),
@@ -77,8 +71,7 @@ fn test_validate_and_clean_preserves_cell_from_grid_index() {
     )
     .unwrap();
     add_comment(
-        doc,
-        sheets,
+        &mut storage,
         &sheet_id,
         "orphaned-cell",
         simple_runs("Orphan"),
@@ -88,8 +81,12 @@ fn test_validate_and_clean_preserves_cell_from_grid_index() {
     )
     .unwrap();
 
-    let removed = validate_and_clean_comments(doc, sheets, &sheet_id);
+    let removed = validate_and_clean_comments(&mut storage, &sheet_id, &grid);
     assert_eq!(removed, 1);
-    assert!(has_comments(doc, sheets, &sheet_id, "grid-index-cell"));
-    assert!(!has_comments(doc, sheets, &sheet_id, "orphaned-cell"));
+    assert!(has_comments(
+        &storage,
+        &sheet_id,
+        "00000000000000000000000000000001"
+    ));
+    assert!(!has_comments(&storage, &sheet_id, "orphaned-cell"));
 }

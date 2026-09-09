@@ -1,7 +1,7 @@
 //! Integration tests for old_value tracking across full mutation flows.
 //!
 //! These tests verify that `CellChange.old_value` is correctly populated when
-//! cells are edited, cleared, sorted, batch-set, or undone.
+//! cells are edited, cleared, sorted, or batch-set.
 
 use super::*;
 use crate::engine_types::queries::FindInRangeOptions;
@@ -31,7 +31,13 @@ fn cell_id_a2() -> CellId {
 /// Snapshot with A1=10 (literal), B1=20 (literal), A2=A1+B1 (formula, computes to 30).
 fn simple_snapshot() -> WorkbookSnapshot {
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -82,7 +88,13 @@ fn simple_snapshot() -> WorkbookSnapshot {
 /// A1=1, B1=A1+1, C1=B1+1, D1=C1+1
 fn chain_snapshot() -> WorkbookSnapshot {
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -141,7 +153,13 @@ fn chain_snapshot() -> WorkbookSnapshot {
 /// Snapshot with A1=10, B1=A1*2 (formula), C1=B1+1 (formula).
 fn formula_deps_snapshot() -> WorkbookSnapshot {
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -242,7 +260,7 @@ fn num(v: f64) -> CellValue {
 #[test]
 fn test_integration_set_cell_with_formula_deps() {
     let snap = formula_deps_snapshot();
-    let (mut engine, initial_recalc) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, initial_recalc) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // After initial recalc: A1=10, B1=A1*2=20, C1=B1+1=21
     assert_eq!(
@@ -288,7 +306,7 @@ fn test_integration_set_cell_with_formula_deps() {
 #[test]
 fn test_integration_change_records_include_display_formula_and_number_format() {
     let snap = formula_deps_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     assert_eq!(
         *engine.mirror().get_cell_value(&cell_id_b1()).unwrap(),
         num(20.0)
@@ -322,7 +340,7 @@ fn test_integration_change_records_include_display_formula_and_number_format() {
 #[test]
 fn test_integration_parsed_formula_overwrite_includes_before_snapshots() {
     let snap = formula_deps_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let (_patches, mutation_result) = engine
         .set_cell_value_parsed(&sheet_id(), 0, 1, "=A1*3")
@@ -342,7 +360,7 @@ fn test_integration_parsed_formula_overwrite_includes_before_snapshots() {
 #[test]
 fn test_integration_parsed_value_to_formula_has_no_old_formula() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let (_patches, mutation_result) = engine
         .set_cell_value_parsed(&sheet_id(), 0, 1, "=A1*3")
@@ -360,7 +378,7 @@ fn test_integration_parsed_value_to_formula_has_no_old_formula() {
 #[test]
 fn test_integration_set_cells_by_position_formula_overwrite_includes_before_snapshots() {
     let snap = formula_deps_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let output = engine
         .apply_mutation(EngineMutation::SetCellsByPosition {
@@ -398,7 +416,7 @@ fn test_integration_set_cells_by_position_formula_overwrite_includes_before_snap
 #[test]
 fn test_integration_batch_set_cells() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // Initial: A1=10, B1=20
     assert_eq!(
@@ -436,7 +454,7 @@ fn test_integration_batch_set_cells() {
 #[test]
 fn test_integration_clear_cells_old_value() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // Initial: A1=10
     assert_eq!(
@@ -477,7 +495,13 @@ fn test_integration_sort_preserves_old_values() {
     // Build a snapshot with a column of unsorted values:
     // A1=30, A2=10, A3=20
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -523,7 +547,7 @@ fn test_integration_sort_preserves_old_values() {
         calculation_settings: None,
     };
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // Sort ascending on column A, rows 0-2
     let options = mutation::BridgeSortOptions {
@@ -577,82 +601,13 @@ fn test_integration_sort_preserves_old_values() {
 }
 
 // ===================================================================
-// Test 5: undo produces old_values
-// ===================================================================
-
-#[test]
-fn test_integration_undo_produces_old_values() {
-    let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
-
-    // Initial: A1=10
-    assert_eq!(
-        *engine.mirror().get_cell_value(&cell_id_a1()).unwrap(),
-        num(10.0)
-    );
-
-    // Edit A1 to 50
-    engine
-        .set_cell(
-            &sheet_id(),
-            cell_id_a1(),
-            0,
-            0,
-            crate::bridge_types::CellInput::Parse { text: "50".into() },
-        )
-        .unwrap();
-    assert_eq!(
-        *engine.mirror().get_cell_value(&cell_id_a1()).unwrap(),
-        num(50.0)
-    );
-
-    // Undo — should revert A1 from 50 back to 10
-    assert!(engine.can_undo());
-    let (_patches, undo_result) = engine.undo().unwrap();
-
-    let changes = &undo_result.recalc.changed_cells;
-    assert!(!changes.is_empty(), "undo should produce CellChanges");
-
-    // The undo's CellChange for A1 should ideally have old_value=50, but the undo
-    // codepath does not currently populate old_value (it goes through the yrs observer
-    // which produces CellChanges without read-before-write snapshots).
-    // We verify the new value is correct and document the old_value gap.
-    let a1_change = find_change(changes, 0, 0);
-    if let Some(change) = a1_change {
-        assert_eq!(
-            change.value,
-            num(10.0),
-            "undo should restore original value (10)"
-        );
-        // NOTE: old_value is None for undo-produced changes as of this writing.
-        // If/when undo gains old_value support, uncomment the assertion below:
-        // assert_eq!(change.old_value, Some(num(50.0)),
-        //     "undo should record old_value as the pre-undo value (50)");
-        if change.old_value.is_none() {
-            eprintln!(
-                "NOTE: undo does not populate old_value on CellChanges. \
-                 This is a known gap in old_value tracking."
-            );
-        }
-    } else {
-        // A1 might appear at a different position if undo changes row/col mapping.
-        // Verify at least that the mirror has the correct restored value.
-        assert_eq!(
-            *engine.mirror().get_cell_value(&cell_id_a1()).unwrap(),
-            num(10.0),
-            "A1 should be restored to 10 after undo"
-        );
-    }
-}
-
-// ===================================================================
 // Test 6: full cascade chain — 4-cell dependency chain old_values
 // ===================================================================
 
 #[test]
 fn test_integration_full_cascade_chain_old_values() {
     let snap = chain_snapshot();
-    let (mut engine, _initial_recalc) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _initial_recalc) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let cell_id_c1 = cell_id_a2(); // col=2, row=0
     let cell_id_d1 = CellId::from_uuid_str("550e8400-e29b-41d4-a716-446655440004").unwrap();
@@ -713,7 +668,13 @@ fn test_integration_full_cascade_chain_old_values() {
 fn test_integration_mixed_formula_and_literal_edits() {
     // Snapshot: A1=10, B1=A1*2 (=20 after recalc)
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -750,7 +711,7 @@ fn test_integration_mixed_formula_and_literal_edits() {
         calculation_settings: None,
     };
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // Initial: A1=10, B1=20
     assert_eq!(
@@ -827,7 +788,7 @@ fn test_integration_mixed_formula_and_literal_edits() {
 #[test]
 fn test_integration_clear_range_old_values() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // Initial: A1=10, B1=20, A2=30 (formula =A1+B1)
     assert_eq!(
@@ -898,7 +859,7 @@ fn test_integration_clear_range_old_values() {
 #[test]
 fn test_integration_replace_all_returns_changed_cells_and_count() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let (_patches, mutation_result) = engine
         .replace_all_in_range(

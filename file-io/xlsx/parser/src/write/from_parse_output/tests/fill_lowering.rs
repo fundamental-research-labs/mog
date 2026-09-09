@@ -50,8 +50,8 @@ fn explicit_solid_maps_domain_background_to_ooxml_foreground() {
         pattern_type: Some("solid".to_string()),
         background_color: Some("#112233".to_string()),
         background_color_tint: Some(-0.2),
-        // This field belongs only to patterned fills and must not displace the
-        // visible solid background color.
+        // The foreground fallback must not displace the visible solid
+        // background color.
         pattern_foreground_color: Some("#AABBCC".to_string()),
         pattern_foreground_color_tint: Some(0.4),
         ..Default::default()
@@ -63,6 +63,26 @@ fn explicit_solid_maps_domain_background_to_ooxml_foreground() {
             fg_color: ColorDef::Rgb {
                 val: "FF112233".to_string(),
                 tint: Some("-0.2".to_string()),
+            },
+        }
+    );
+}
+
+#[test]
+fn explicit_solid_preserves_foreground_when_background_is_absent() {
+    let fill = lowered_fill(FillFormat {
+        pattern_type: Some("solid".to_string()),
+        pattern_foreground_color: Some("#00CC99".to_string()),
+        pattern_foreground_color_tint: Some(0.4),
+        ..Default::default()
+    });
+
+    assert_eq!(
+        fill,
+        FillDef::Solid {
+            fg_color: ColorDef::Rgb {
+                val: "FF00CC99".to_string(),
+                tint: Some("0.4".to_string()),
             },
         }
     );

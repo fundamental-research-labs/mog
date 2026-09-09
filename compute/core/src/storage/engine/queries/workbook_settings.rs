@@ -1,7 +1,5 @@
 #![allow(unused_imports, unused_variables)]
-use super::helpers::{
-    diff_top_level_keys, intended_patch_changed_keys, workbook_settings_origin_for_change,
-};
+use super::helpers::diff_top_level_keys;
 use crate::diagnostics::formula_references::{
     FormulaReferenceDiagnosticsOptions, FormulaReferenceDiagnosticsPage,
 };
@@ -22,14 +20,14 @@ use crate::snapshot::{
     WorkbookSettings, WorkbookSettingsChange,
 };
 use crate::storage::cells::values as cell_values;
-use crate::storage::engine::YrsComputeEngine;
+use crate::storage::engine::ComputeEngine;
+use crate::storage::engine::history::metadata::capture_workbook_settings;
 use crate::storage::engine::query_serialization::{cell_value_to_json, region_json};
 use crate::storage::engine::{data_table_formula, services};
 use crate::storage::sheet::{hyperlinks, merges, properties as sheets};
 use crate::storage::workbook::settings as workbook;
 use cell_types::{CellId, SheetId, SheetPos};
 use compute_document::hex::{hex_to_id, id_to_hex};
-use compute_document::undo::{ORIGIN_UI_STATE, ORIGIN_USER_EDIT};
 use compute_wire::mutation::serialize_multi_viewport_patches;
 use domain_types::domain::merge::{CellMergeInfo, MergeRegion, ResolvedMergedRegion};
 use domain_types::domain::sheet::{FrozenPanes, SheetMeta, SheetScrollPosition, SheetViewOptions};
@@ -40,13 +38,13 @@ use value_types::CellValue;
 use value_types::ComputeError;
 
 pub(in crate::storage::engine) fn get_workbook_settings(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
 ) -> WorkbookSettings {
     services::queries::get_workbook_settings(&engine.stores)
 }
 
 pub(in crate::storage::engine) fn get_formula_reference_diagnostics(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     options: FormulaReferenceDiagnosticsOptions,
 ) -> Result<FormulaReferenceDiagnosticsPage, ComputeError> {
     crate::diagnostics::formula_references::collect_formula_reference_diagnostics(
@@ -57,31 +55,16 @@ pub(in crate::storage::engine) fn get_formula_reference_diagnostics(
 }
 
 pub(in crate::storage::engine) fn set_workbook_settings(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     settings: WorkbookSettings,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    let pre = workbook::get_settings(
-        engine.stores.storage.doc(),
-        engine.stores.storage.workbook_map(),
-    );
-    let desired_json = serde_json::to_value(&settings).expect("WorkbookSettings must serialize");
+    let pre = workbook::get_settings(&engine.stores.storage.metadata);
     let pre_json = serde_json::to_value(&pre).expect("WorkbookSettings must serialize");
-    let intended_changed_keys = diff_top_level_keys(&pre_json, &desired_json);
-    let origin = workbook_settings_origin_for_change(&intended_changed_keys);
 
-    workbook::set_settings_with_origin(
-        engine.stores.storage.doc(),
-        engine.stores.storage.workbook_map(),
-        &settings,
-        origin,
-    );
-    let post = workbook::get_settings(
-        engine.stores.storage.doc(),
-        engine.stores.storage.workbook_map(),
-    );
-    let pre_calc = pre.calculation_settings.clone().unwrap_or_default();
-    let post_calc = post.calculation_settings.clone().unwrap_or_default();
-    engine.sync_runtime_calculation_settings(&pre_calc, &post_calc);
+    capture_workbook_settings(&engine.stores.storage);
+    workbook::set_settings(&mut engine.stores.storage.metadata, &settings);
+    let post = workbook::get_settings(&engine.stores.storage.metadata);
+    engine.sync_runtime_workbook_settings(&pre, &post);
 
     let post_json = serde_json::to_value(&post).expect("WorkbookSettings must serialize");
     let changed_keys = diff_top_level_keys(&pre_json, &post_json);
@@ -97,23 +80,14 @@ pub(in crate::storage::engine) fn set_workbook_settings(
 }
 
 pub(in crate::storage::engine) fn patch_workbook_settings(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     patch: RustWorkbookSettingsPatch,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    let pre = workbook::get_settings(
-        engine.stores.storage.doc(),
-        engine.stores.storage.workbook_map(),
-    );
+    let pre = workbook::get_settings(&engine.stores.storage.metadata);
     let pre_json = serde_json::to_value(&pre).expect("WorkbookSettings must serialize");
-    let intended_changed_keys = intended_patch_changed_keys(&patch);
-    let origin = workbook_settings_origin_for_change(&intended_changed_keys);
 
-    let changed = workbook::patch_settings_with_origin(
-        engine.stores.storage.doc(),
-        engine.stores.storage.workbook_map(),
-        &patch,
-        origin,
-    );
+    capture_workbook_settings(&engine.stores.storage);
+    let changed = workbook::patch_settings(&mut engine.stores.storage.metadata, &patch);
     if !changed {
         return Ok((
             serialize_multi_viewport_patches(&[]),
@@ -121,13 +95,8 @@ pub(in crate::storage::engine) fn patch_workbook_settings(
         ));
     }
 
-    let post = workbook::get_settings(
-        engine.stores.storage.doc(),
-        engine.stores.storage.workbook_map(),
-    );
-    let pre_calc = pre.calculation_settings.clone().unwrap_or_default();
-    let post_calc = post.calculation_settings.clone().unwrap_or_default();
-    engine.sync_runtime_calculation_settings(&pre_calc, &post_calc);
+    let post = workbook::get_settings(&engine.stores.storage.metadata);
+    engine.sync_runtime_workbook_settings(&pre, &post);
 
     let post_json = serde_json::to_value(&post).expect("WorkbookSettings must serialize");
     let changed_keys = diff_top_level_keys(&pre_json, &post_json);

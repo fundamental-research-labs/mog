@@ -20,7 +20,7 @@
 //!   cargo test -p compute-core --test named_range_display -- --nocapture
 
 use cell_types::SheetId;
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::CellValue;
 
@@ -45,6 +45,9 @@ fn make_cell(row: u32, col: u32, value: CellValue) -> CellData {
 fn make_snapshot() -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET_UUID.to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -67,7 +70,7 @@ fn make_snapshot() -> WorkbookSnapshot {
 /// case where the sheet-scope `to_a1_display` would strip the prefix).
 #[test]
 fn qualified_display_keeps_sheet_prefix_when_context_matches() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(make_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(make_snapshot()).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     let identity = engine
@@ -100,7 +103,7 @@ fn qualified_display_keeps_sheet_prefix_when_context_matches() {
 /// existing in the workbook.
 #[test]
 fn qualified_display_with_nil_sheet_context_is_qualified() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(make_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(make_snapshot()).unwrap();
     let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
 
     let identity = engine

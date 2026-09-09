@@ -125,7 +125,10 @@ pub(crate) fn prepare_data_table_creation(
         col_input_ref: row_input_pos.map(cell_ref_from_pos),
         ooxml_flags: None,
     };
-    let region_id = crate::storage::workbook::data_tables::data_table_region_id(&region);
+    let region_id = format!(
+        "{}:{}:{}:{}:{}",
+        region.sheet, region.start_row, region.start_col, region.end_row, region.end_col
+    );
     let body_range = range_string(body);
     let rows = body.end_row - body.start_row + 1;
     let cols = body.end_col - body.start_col + 1;

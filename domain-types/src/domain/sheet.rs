@@ -146,7 +146,7 @@ impl Default for SheetProtectionOptions {
     }
 }
 
-/// Convert from the full CRDT-stored SheetProtection to the runtime permission view.
+/// Convert from the full stored SheetProtection to the runtime permission view.
 /// Maps domain-types field names to SheetProtectionOptions field names.
 impl From<&SheetProtection> for SheetProtectionOptions {
     fn from(p: &SheetProtection) -> Self {

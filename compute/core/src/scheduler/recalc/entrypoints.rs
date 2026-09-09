@@ -25,7 +25,7 @@ impl ComputeCore {
     /// This ensures downstream consumers (e.g. viewport buffer patching) see the
     /// complete set of cell changes without callers needing manual fixup.
     ///
-    /// Visibility: `pub` so the engine layer (`YrsComputeEngine`) can drive
+    /// Visibility: `pub` so the engine layer (`ComputeEngine`) can drive
     /// incremental recalcs from non-cell mutation entry points (named-range
     /// CRUD, etc.). Within the scheduler, prefer `set_cell` / `apply_changes`
     /// which combine the mirror write with the recalc call.

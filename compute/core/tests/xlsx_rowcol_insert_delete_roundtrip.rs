@@ -5,7 +5,7 @@
 //! Exercises whatever internal counter tracks sheet dimensions after
 //! structural changes.
 
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use formula_types::StructureChange;
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
@@ -25,6 +25,9 @@ fn value_cell(uuid_suffix: u32, row: u32, col: u32, n: f64) -> CellData {
 fn fixture() -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: "Dim".to_string(),
             rows: 20,
@@ -41,11 +44,11 @@ fn fixture() -> WorkbookSnapshot {
 }
 
 fn xlsx_bytes_for(snapshot: WorkbookSnapshot) -> Vec<u8> {
-    let (engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (engine, _) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
     engine.export_to_xlsx_bytes().expect("export_to_xlsx_bytes")
 }
 
-fn sheet_dims(engine: &YrsComputeEngine, sid: &cell_types::SheetId) -> (u32, u32) {
+fn sheet_dims(engine: &ComputeEngine, sid: &cell_types::SheetId) -> (u32, u32) {
     let sm = engine.mirror().get_sheet(sid).expect("SheetMirror");
     (sm.rows, sm.cols)
 }
@@ -53,7 +56,7 @@ fn sheet_dims(engine: &YrsComputeEngine, sid: &cell_types::SheetId) -> (u32, u32
 #[test]
 fn xlsx_insert_row_grows_row_count_by_delta() {
     let bytes = xlsx_bytes_for(fixture());
-    let (mut engine, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
     let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
 
     let (pre_rows, pre_cols) = sheet_dims(&engine, &sid);
@@ -87,7 +90,7 @@ fn xlsx_insert_row_grows_row_count_by_delta() {
 #[test]
 fn xlsx_delete_row_shrinks_row_count_by_delta() {
     let bytes = xlsx_bytes_for(fixture());
-    let (mut engine, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
     let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
 
     let (pre_rows, pre_cols) = sheet_dims(&engine, &sid);
@@ -121,7 +124,7 @@ fn xlsx_delete_row_shrinks_row_count_by_delta() {
 #[test]
 fn xlsx_insert_col_grows_col_count_by_delta() {
     let bytes = xlsx_bytes_for(fixture());
-    let (mut engine, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
     let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
 
     let (pre_rows, pre_cols) = sheet_dims(&engine, &sid);
@@ -155,7 +158,7 @@ fn xlsx_insert_col_grows_col_count_by_delta() {
 #[test]
 fn xlsx_delete_col_shrinks_col_count_by_delta() {
     let bytes = xlsx_bytes_for(fixture());
-    let (mut engine, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
     let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
 
     let (pre_rows, pre_cols) = sheet_dims(&engine, &sid);

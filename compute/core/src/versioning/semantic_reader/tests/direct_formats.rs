@@ -5,7 +5,7 @@ use snapshot_types::versioning::{
 };
 use value_types::CellValue;
 
-use crate::storage::engine::YrsComputeEngine;
+use crate::storage::engine::ComputeEngine;
 use crate::versioning::{
     CELL_VALUES_DOMAIN, DIRECT_FORMATS_DOMAIN, SemanticWorkbookStateReader,
     diff_semantic_workbook_states,
@@ -16,10 +16,10 @@ use super::{cell, workbook};
 #[test]
 fn engine_semantic_reader_reads_direct_cell_format() {
     let (before, _) =
-        YrsComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::from("alpha"))]))
+        ComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::from("alpha"))]))
             .expect("before");
     let (mut after, _) =
-        YrsComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::from("alpha"))]))
+        ComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::from("alpha"))]))
             .expect("after");
 
     let sheet_id = after.storage().sheet_order()[0];
@@ -72,8 +72,8 @@ fn engine_semantic_reader_reads_direct_cell_format() {
 
 #[test]
 fn engine_semantic_reader_reads_format_only_cell() {
-    let (before, _) = YrsComputeEngine::from_snapshot(workbook(vec![])).expect("before");
-    let (mut after, _) = YrsComputeEngine::from_snapshot(workbook(vec![])).expect("after");
+    let (before, _) = ComputeEngine::from_snapshot(workbook(vec![])).expect("before");
+    let (mut after, _) = ComputeEngine::from_snapshot(workbook(vec![])).expect("after");
 
     let sheet_id = after.storage().sheet_order()[0];
     after

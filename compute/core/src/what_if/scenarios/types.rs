@@ -29,9 +29,8 @@ pub(super) const SESSION_DOCUMENT_ID: &str = "local-compute-session";
 
 /// Scenario apply/restore state owned by one live compute engine session.
 ///
-/// This deliberately does not serialize to Yrs. A scenario apply captures a
-/// baseline in memory, writes scenario values through a single engine mutation,
-/// and restore consumes that baseline through another engine mutation.
+/// Applying a scenario captures a baseline and writes its values through one
+/// engine mutation. Restoring consumes that baseline through another mutation.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ScenarioSessionState {
     pub active: Option<ScenarioActiveState>,

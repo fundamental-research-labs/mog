@@ -3,7 +3,7 @@ use crate::engine_types::floating_objects::{
     CreateShapeConfig, FlipAxis, MoveTarget, ResizeConfig, ShapeStyleUpdate,
 };
 use crate::snapshot::{FloatingObjectBounds, MutationResult};
-use crate::storage::engine::YrsComputeEngine;
+use crate::storage::engine::ComputeEngine;
 use crate::storage::engine::services;
 use bridge_core as bridge;
 use cell_types::SheetId;
@@ -11,13 +11,13 @@ use domain_types::domain::floating_object::FloatingObject;
 use value_types::ComputeError;
 
 #[bridge::api(
-    service = "YrsComputeEngine",
+    service = "ComputeEngine",
     key = "doc_id",
     group = "objects_floating",
     fn_prefix = "compute",
     crate_path = "compute_core"
 )]
-impl YrsComputeEngine {
+impl ComputeEngine {
     #[bridge::write(scope = "sheet")]
     pub fn set_floating_object(
         &mut self,
@@ -25,8 +25,22 @@ impl YrsComputeEngine {
         object_id: &str,
         json: serde_json::Value,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::set_floating_object(&mut self.stores, sheet_id, object_id, json)
-            .map(shared::with_empty_patches)
+        self.with_history(|engine| {
+            let mut result = services::objects::set_floating_object(
+                &mut engine.stores,
+                sheet_id,
+                object_id,
+                json,
+            )?;
+            shared::sync_floating_anchors(
+                &mut engine.stores,
+                &mut engine.mirror,
+                sheet_id,
+                &mut result,
+                true,
+            )?;
+            Ok(shared::with_empty_patches(result))
+        })
     }
 
     #[bridge::read(scope = "sheet")]
@@ -52,8 +66,10 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         object_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::delete_floating_object(&mut self.stores, sheet_id, object_id)
-            .map(shared::with_empty_patches)
+        self.with_history(|engine| {
+            services::objects::delete_floating_object(&mut engine.stores, sheet_id, object_id)
+                .map(shared::with_empty_patches)
+        })
     }
 
     // -------------------------------------------------------------------
@@ -64,8 +80,18 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         config: &serde_json::Value,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::create_floating_object(&mut self.stores, sheet_id, config)
-            .map(shared::with_empty_patches)
+        self.with_history(|engine| {
+            let mut result =
+                services::objects::create_floating_object(&mut engine.stores, sheet_id, config)?;
+            shared::sync_floating_anchors(
+                &mut engine.stores,
+                &mut engine.mirror,
+                sheet_id,
+                &mut result,
+                true,
+            )?;
+            Ok(shared::with_empty_patches(result))
+        })
     }
 
     /// Update a floating object by merging partial JSON updates.
@@ -76,8 +102,22 @@ impl YrsComputeEngine {
         object_id: &str,
         updates: &serde_json::Value,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::update_floating_object(&mut self.stores, sheet_id, object_id, updates)
-            .map(shared::with_empty_patches)
+        self.with_history(|engine| {
+            let mut result = services::objects::update_floating_object(
+                &mut engine.stores,
+                sheet_id,
+                object_id,
+                updates,
+            )?;
+            shared::sync_floating_anchors(
+                &mut engine.stores,
+                &mut engine.mirror,
+                sheet_id,
+                &mut result,
+                shared::changes_anchor(updates),
+            )?;
+            Ok(shared::with_empty_patches(result))
+        })
     }
 
     /// Create a shape from a typed config. Rust owns ID gen, z-index, timestamps, defaults.
@@ -87,8 +127,17 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         config: CreateShapeConfig,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::create_shape(&mut self.stores, sheet_id, config)
-            .map(shared::with_empty_patches)
+        self.with_history(|engine| {
+            let mut result = services::objects::create_shape(&mut engine.stores, sheet_id, config)?;
+            shared::sync_floating_anchors(
+                &mut engine.stores,
+                &mut engine.mirror,
+                sheet_id,
+                &mut result,
+                true,
+            )?;
+            Ok(shared::with_empty_patches(result))
+        })
     }
 
     /// Move a floating object to a new position.
@@ -99,8 +148,22 @@ impl YrsComputeEngine {
         object_id: &str,
         target: MoveTarget,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::move_floating_object_typed(&mut self.stores, sheet_id, object_id, target)
-            .map(shared::with_empty_patches)
+        self.with_history(|engine| {
+            let mut result = services::objects::move_floating_object_typed(
+                &mut engine.stores,
+                sheet_id,
+                object_id,
+                target,
+            )?;
+            shared::sync_floating_anchors(
+                &mut engine.stores,
+                &mut engine.mirror,
+                sheet_id,
+                &mut result,
+                true,
+            )?;
+            Ok(shared::with_empty_patches(result))
+        })
     }
 
     /// Resize a floating object.
@@ -111,13 +174,15 @@ impl YrsComputeEngine {
         object_id: &str,
         config: ResizeConfig,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::resize_floating_object_typed(
-            &mut self.stores,
-            sheet_id,
-            object_id,
-            config,
-        )
-        .map(shared::with_empty_patches)
+        self.with_history(|engine| {
+            services::objects::resize_floating_object_typed(
+                &mut engine.stores,
+                sheet_id,
+                object_id,
+                config,
+            )
+            .map(shared::with_empty_patches)
+        })
     }
 
     /// Rotate a floating object to a given angle in degrees.
@@ -128,13 +193,15 @@ impl YrsComputeEngine {
         object_id: &str,
         rotation: f64,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::rotate_floating_object_typed(
-            &mut self.stores,
-            sheet_id,
-            object_id,
-            rotation,
-        )
-        .map(shared::with_empty_patches)
+        self.with_history(|engine| {
+            services::objects::rotate_floating_object_typed(
+                &mut engine.stores,
+                sheet_id,
+                object_id,
+                rotation,
+            )
+            .map(shared::with_empty_patches)
+        })
     }
 
     /// Update the style properties of a shape.
@@ -145,8 +212,10 @@ impl YrsComputeEngine {
         object_id: &str,
         style: ShapeStyleUpdate,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::update_shape_style(&mut self.stores, sheet_id, object_id, style)
-            .map(shared::with_empty_patches)
+        self.with_history(|engine| {
+            services::objects::update_shape_style(&mut engine.stores, sheet_id, object_id, style)
+                .map(shared::with_empty_patches)
+        })
     }
 
     /// Flip a floating object along an axis.
@@ -157,8 +226,15 @@ impl YrsComputeEngine {
         object_id: &str,
         axis: FlipAxis,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::flip_floating_object_typed(&mut self.stores, sheet_id, object_id, axis)
+        self.with_history(|engine| {
+            services::objects::flip_floating_object_typed(
+                &mut engine.stores,
+                sheet_id,
+                object_id,
+                axis,
+            )
             .map(shared::with_empty_patches)
+        })
     }
 
     /// Duplicate a floating object with pixel offsets.
@@ -170,14 +246,16 @@ impl YrsComputeEngine {
         offset_x: f64,
         offset_y: f64,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        services::objects::duplicate_floating_object_typed(
-            &mut self.stores,
-            sheet_id,
-            object_id,
-            offset_x,
-            offset_y,
-        )
-        .map(shared::with_empty_patches)
+        self.with_history(|engine| {
+            services::objects::duplicate_floating_object_typed(
+                &mut engine.stores,
+                sheet_id,
+                object_id,
+                offset_x,
+                offset_y,
+            )
+            .map(shared::with_empty_patches)
+        })
     }
 
     /// Find all connectors in a sheet that reference a given shape via

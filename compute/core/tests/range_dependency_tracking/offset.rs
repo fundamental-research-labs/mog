@@ -1,6 +1,6 @@
 use crate::helpers::*;
 use crate::summary::Summary;
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use snapshot_types::WorkbookSnapshot;
 use value_types::{CellValue, FiniteF64};
 
@@ -32,7 +32,7 @@ pub(crate) fn offset_workbook(n_initial: f64) -> WorkbookSnapshot {
 /// the currently-sized window.
 pub(crate) fn run_offset_case(variant: u8) -> Result<(), String> {
     let n_initial = 10.0;
-    let (mut engine, _init) = YrsComputeEngine::from_snapshot(offset_workbook(n_initial))
+    let (mut engine, _init) = ComputeEngine::from_snapshot(offset_workbook(n_initial))
         .map_err(|e| format!("from_snapshot err: {:?}", e))?;
     let dest = sheet_id(1);
     let source = sheet_id(0);

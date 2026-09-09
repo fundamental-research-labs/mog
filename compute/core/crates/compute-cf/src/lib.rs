@@ -1,7 +1,7 @@
 //! Conditional formatting visual rule engine.
 //!
 //! Pure computation crate: cell values + rules → visual properties.
-//! No storage dependency (CellMirror, Yrs). Caller provides values.
+//! No storage dependency. The caller provides values.
 //!
 //! Three conceptual layers:
 //! - **Rule predicates** (`rules/`): cell value, text, date, top-N, duplicate, etc.

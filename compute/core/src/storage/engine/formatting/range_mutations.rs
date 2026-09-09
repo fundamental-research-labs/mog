@@ -1,7 +1,7 @@
 use super::*;
 
 pub(super) fn toggle_format_property(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     ranges: &[(u32, u32, u32, u32)],
     property: &str,
@@ -9,10 +9,9 @@ pub(super) fn toggle_format_property(
     active_col: u32,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
     let (affected_cells, result) = {
-        let _guard = engine.mutation.suppress_guard();
         services::formatting::toggle_format_property(
             &mut engine.stores,
-            &engine.mirror,
+            &mut engine.mirror,
             sheet_id,
             ranges,
             property,
@@ -20,50 +19,32 @@ pub(super) fn toggle_format_property(
             active_col,
         )?
     };
-    let patches = engine.produce_format_change_patches(sheet_id, &affected_cells);
+    let patches = range_format_patches(engine, sheet_id, &affected_cells, &result);
     Ok((patches, result))
 }
 
 pub(super) fn set_format_for_ranges(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     ranges: &[(u32, u32, u32, u32)],
     format: &CellFormat,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    set_format_for_ranges_with_origin(
-        engine,
-        sheet_id,
-        ranges,
-        format,
-        compute_document::undo::ORIGIN_USER_EDIT,
-    )
-}
-
-pub(super) fn set_format_for_ranges_with_origin(
-    engine: &mut YrsComputeEngine,
-    sheet_id: &SheetId,
-    ranges: &[(u32, u32, u32, u32)],
-    format: &CellFormat,
-    origin: &'static [u8],
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
     validation::format::validate_cell_format(format)?;
     let (affected_cells, result) = {
-        let _guard = engine.mutation.suppress_guard();
-        services::formatting::set_format_for_ranges_with_origin(
+        services::formatting::set_format_for_ranges(
             &mut engine.stores,
-            &engine.mirror,
+            &mut engine.mirror,
             sheet_id,
             ranges,
             format,
-            origin,
         )?
     };
-    let patches = engine.produce_format_change_patches(sheet_id, &affected_cells);
+    let patches = range_format_patches(engine, sheet_id, &affected_cells, &result);
     Ok((patches, result))
 }
 
 pub(super) fn patch_format_for_ranges(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     ranges: &[(u32, u32, u32, u32)],
     format: &CellFormat,
@@ -72,22 +53,21 @@ pub(super) fn patch_format_for_ranges(
     validation::format::validate_cell_format(format)?;
     properties::apply_format_patch(&CellFormat::default(), format, clear_fields)?;
     let (affected_cells, result) = {
-        let _guard = engine.mutation.suppress_guard();
         services::formatting::patch_format_for_ranges(
             &mut engine.stores,
-            &engine.mirror,
+            &mut engine.mirror,
             sheet_id,
             ranges,
             format,
             clear_fields,
         )?
     };
-    let patches = engine.produce_format_change_patches(sheet_id, &affected_cells);
+    let patches = range_format_patches(engine, sheet_id, &affected_cells, &result);
     Ok((patches, result))
 }
 
 pub(super) fn patch_borders(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     operations: Vec<crate::bridge_types::BorderPatchOperation>,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
@@ -176,7 +156,7 @@ pub(super) fn patch_borders(
         }
     }
 
-    engine.with_undo_group_if(true, |engine| {
+    {
         let mut result = MutationResult::empty();
         let mut affected_cells = Vec::new();
         let mut affected_rows = Vec::new();
@@ -191,10 +171,9 @@ pub(super) fn patch_borders(
                     end_col,
                 } => {
                     let (cells, operation_result) = {
-                        let _guard = engine.mutation.suppress_guard();
                         services::formatting::patch_borders_for_ranges(
                             &mut engine.stores,
-                            &engine.mirror,
+                            &mut engine.mirror,
                             sheet_id,
                             &[(start_row, start_col, end_row, end_col)],
                             &operation.borders,
@@ -229,7 +208,13 @@ pub(super) fn patch_borders(
             }
         }
 
-        let patches = if affected_rows.is_empty() && affected_cols.is_empty() {
+        let patches = if result
+            .property_changes
+            .iter()
+            .any(|change| change.cell_id.is_empty())
+        {
+            engine.produce_full_viewport_patches(sheet_id)
+        } else if affected_rows.is_empty() && affected_cols.is_empty() {
             engine.produce_format_change_patches(sheet_id, &affected_cells)
         } else if affected_cells.is_empty() {
             engine.produce_row_col_format_viewport_patches(sheet_id, &affected_rows, &affected_cols)
@@ -241,24 +226,28 @@ pub(super) fn patch_borders(
         };
 
         Ok((patches, result))
-    })
+    }
 }
 
 pub(super) fn clear_format_for_ranges(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     ranges: &[(u32, u32, u32, u32)],
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
     let (affected_cells, result) = {
-        let _guard = engine.mutation.suppress_guard();
-        services::formatting::clear_format_for_ranges(&mut engine.stores, sheet_id, ranges)?
+        services::formatting::clear_format_for_ranges(
+            &mut engine.stores,
+            &mut engine.mirror,
+            sheet_id,
+            ranges,
+        )?
     };
-    let patches = engine.produce_format_change_patches(sheet_id, &affected_cells);
+    let patches = range_format_patches(engine, sheet_id, &affected_cells, &result);
     Ok((patches, result))
 }
 
 pub(super) fn set_cell_properties_batch(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     updates: Vec<(u32, u32, CellFormat)>,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
@@ -293,7 +282,7 @@ pub(super) fn set_cell_properties_batch(
 }
 
 pub(super) fn patch_cell_properties_batch(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     updates: Vec<(u32, u32, CellFormat, Vec<String>)>,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
@@ -333,4 +322,22 @@ pub(super) fn patch_cell_properties_batch(
         serialize_multi_viewport_patches(&[]),
         MutationResult::empty(),
     ))
+}
+
+/// Range-level changes also affect virtual cells absent from the eager cell list.
+fn range_format_patches(
+    engine: &mut ComputeEngine,
+    sheet_id: &SheetId,
+    cells: &[(u128, u32, u32)],
+    result: &MutationResult,
+) -> Vec<u8> {
+    if result
+        .property_changes
+        .iter()
+        .any(|change| change.cell_id.is_empty())
+    {
+        engine.produce_full_viewport_patches(sheet_id)
+    } else {
+        engine.produce_format_change_patches(sheet_id, cells)
+    }
 }

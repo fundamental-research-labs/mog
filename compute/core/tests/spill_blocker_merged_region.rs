@@ -46,7 +46,13 @@ fn sid_str(suffix: u128) -> String {
 /// Build a single-sheet workbook with no cells. Sheet id = `sid(1)`.
 fn empty_snapshot() -> WorkbookSnapshot {
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sid_str(1),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -148,7 +154,7 @@ fn sequence_spill_blocked_by_merged_region() {
     let sheet_mirror = mirror
         .get_sheet(&sheet_id)
         .expect("Sheet1 should exist in mirror");
-    if let Some(col_a) = sheet_mirror.get_column_slice(0) {
+    if let Some(col_a) = sheet_mirror.get_column_view(0) {
         // It's fine for the column to be too short to address row 1 — that
         // also means "A2 was not written". Treat that as Null.
         let a2_val = col_a.get(1).cloned().unwrap_or(CellValue::Null);
@@ -187,7 +193,7 @@ fn sequence_spill_blocked_by_merged_region() {
 
     let sheet_mirror = mirror.get_sheet(&sheet_id).unwrap();
     let col_a = sheet_mirror
-        .get_column_slice(0)
+        .get_column_view(0)
         .expect("col A should exist after successful spill");
     for row in 0..5u32 {
         assert_eq!(

@@ -16,7 +16,8 @@
 //! ## Eviction policy (Tier 1)
 //!
 //! Each Tier 1 cache has a max capacity of 10K entries. When inserting into a
-//! full cache, the oldest 10% by generation counter are evicted (lazy eviction).
+//! full cache, a batch of entries is evicted. The bitmask tier also enforces
+//! a 32 MiB retained-memory budget, including mask words and criterion text.
 
 use crate::eval::lookup::index_cache::LookupIndexCache;
 
@@ -35,6 +36,10 @@ use crate::eval::context::traits::DataSource;
 use cell_types::SheetId;
 #[cfg(feature = "native")]
 use compute_functions::helpers::bitmask_cache::{CachedBitmask, build_bitmask, update_bitmask_row};
+#[cfg(feature = "native")]
+use compute_functions::helpers::column_bitset::ColumnBitset;
+#[cfg(feature = "native")]
+use compute_functions::helpers::conditional_aggregate::ValueSlice;
 #[cfg(feature = "native")]
 use compute_functions::helpers::frequency_cache::{
     CountFrequencyMap, SumFrequencyMap, build_count_map, build_sum_map,
@@ -161,6 +166,26 @@ pub(crate) type BitmaskCacheKey = (SheetId, u32, u32, u32, u64);
 #[cfg(feature = "native")]
 const BITMASK_CACHE_MAX: usize = 10_000;
 
+/// Retained mask words, criteria text, and conservatively estimated entry overhead.
+#[cfg(feature = "native")]
+const BITMASK_CACHE_BYTES: usize = 32 * 1024 * 1024;
+
+#[cfg(feature = "native")]
+fn bitmask_entry_bytes(rows: u32, criteria: &CellValue) -> Option<usize> {
+    let criteria_bytes = match criteria {
+        CellValue::Number(_) | CellValue::Boolean(_) | CellValue::Null => 0,
+        CellValue::Text(text) => text.len(),
+        CellValue::Error(_, message) => message.as_ref().map_or(0, |text| text.len()),
+        // Complex criterion objects can retain unrelated payloads. They keep
+        // the ordinary predicate scan instead of entering this bounded cache.
+        _ => return None,
+    };
+    let entry_overhead = std::mem::size_of::<BitmaskCacheKey>()
+        + std::mem::size_of::<VersionedEntry<CachedBitmask>>()
+        + 128;
+    Some(entry_overhead + criteria_bytes + (rows as usize).div_ceil(64) * 8)
+}
+
 /// Persistent cache that lives on `ComputeCore` across recalc epochs.
 ///
 /// On native targets, provides thread-safe (`DashMap`-backed) caches.
@@ -184,6 +209,9 @@ pub struct WorkbookCache {
     // === Tier 1: Bitmask Cache ===
     #[cfg(feature = "native")]
     pub(crate) bitmask_cache: DashMap<BitmaskCacheKey, VersionedEntry<CachedBitmask>>,
+    // Serializes admission/eviction only; valid cache hits never acquire it.
+    #[cfg(feature = "native")]
+    bitmask_bytes: std::sync::Mutex<usize>,
 
     // === Cache observability ===
     #[cfg(feature = "native")]
@@ -205,16 +233,20 @@ impl WorkbookCache {
             #[cfg(feature = "native")]
             bitmask_cache: DashMap::with_capacity(256),
             #[cfg(feature = "native")]
+            bitmask_bytes: std::sync::Mutex::new(0),
+            #[cfg(feature = "native")]
             stats: WorkbookCacheStats::default(),
         }
     }
 
-    /// Invalidate all Tier 0 caches.
+    /// Invalidate position-dependent lookup indexes and criteria masks.
     ///
     /// Called on structural changes (insert/delete row/col) that may shift
     /// cell positions, invalidating all column-keyed lookup indexes.
     pub fn invalidate_structure(&self) {
         self.lookup_cache.clear();
+        #[cfg(feature = "native")]
+        self.clear_bitmasks();
     }
 
     /// Clear all caches (Tier 0 and Tier 1).
@@ -229,7 +261,17 @@ impl WorkbookCache {
         #[cfg(feature = "native")]
         self.sum_frequency_cache.clear();
         #[cfg(feature = "native")]
+        self.clear_bitmasks();
+    }
+
+    #[cfg(feature = "native")]
+    fn clear_bitmasks(&self) {
+        let mut bytes = self
+            .bitmask_bytes
+            .lock()
+            .expect("bitmask admission lock poisoned");
         self.bitmask_cache.clear();
+        *bytes = 0;
     }
 
     // === Tier 1: Sorted Cache — accessors ===
@@ -473,8 +515,8 @@ impl WorkbookCache {
     ///
     /// Returns `Some(ColumnBitset)` if a valid cached entry exists for the key,
     /// `None` otherwise. Used by the borrowed multi-criteria path where building
-    /// on miss is wasteful — dynamic criteria (e.g., `">="&$CY109`) produce
-    /// unique keys per cell, causing OOM from unbounded `to_vec()` allocations.
+    /// on miss is wasteful for dynamic criteria (e.g., `">="&$CY109`) that
+    /// produce unique keys per cell with little opportunity for reuse.
     #[cfg(feature = "native")]
     pub(crate) fn try_get_bitmask(
         &self,
@@ -493,85 +535,90 @@ impl WorkbookCache {
         None
     }
 
-    /// Get or build a `CachedBitmask` for the given range + criterion.
+    /// Build a versioned mask from borrowed native values on a cache miss.
     ///
-    /// If a valid cached entry exists (column versions match AND criteria
-    /// value equals — guarding against hash collisions), returns the cached
-    /// bitmask. Otherwise builds a new bitmask via `build_bitmask()`, wraps
-    /// it in a `VersionedEntry`, and inserts it.
-    ///
-    /// `key`: (sheet_id, col, row_start, row_end, criteria_hash).
-    /// `mirror`: current cell mirror for version validation.
-    /// `sheet`: sheet containing the range.
-    /// `col_start`/`col_end`: column span for `RangeVersion` capture.
-    /// `criteria`: the raw criteria `CellValue` for collision verification.
-    /// `range_values`: lazy provider of cell values to build the bitmask from.
+    /// Retains only match bits and the criterion used for collision checking.
+    /// Oversized masks or complex criterion objects bypass cache admission.
     #[cfg(feature = "native")]
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn get_or_build_bitmask(
+    pub(crate) fn get_or_build_bitmask<V: ValueSlice + ?Sized>(
         &self,
         key: BitmaskCacheKey,
         source: &dyn DataSource,
-        sheet: &SheetId,
-        col_start: u32,
-        col_end: u32,
         criteria: &CellValue,
-        range_values: impl FnOnce() -> Vec<CellValue>,
-    ) -> dashmap::mapref::one::Ref<'_, BitmaskCacheKey, VersionedEntry<CachedBitmask>> {
-        // Fast path: check for a valid cached entry with collision verification.
+        range_values: &V,
+    ) -> Option<ColumnBitset> {
         if let Some(entry) = self.bitmask_cache.get(&key)
             && entry.is_valid(source)
             && entry.value.criteria == *criteria
         {
             self.stats.bitmask.hits.fetch_add(1, Ordering::Relaxed);
-            return entry;
+            return Some(entry.value.bitmask.clone());
+        }
+        self.stats.bitmask.misses.fetch_add(1, Ordering::Relaxed);
+        let rows = u32::try_from(range_values.len()).ok()?;
+        let entry_bytes = bitmask_entry_bytes(rows, criteria)?;
+        if entry_bytes > BITMASK_CACHE_BYTES {
+            return None;
         }
 
-        // Miss, stale, or hash collision — build and insert.
-        self.stats.bitmask.misses.fetch_add(1, Ordering::Relaxed);
+        // Build outside the admission lock so distinct cold masks can be
+        // computed concurrently. No generic value buffer is created.
+        let bitmask = build_bitmask(range_values, criteria);
         self.stats.bitmask.rebuilds.fetch_add(1, Ordering::Relaxed);
-        let vals = range_values();
-        let bitmask = build_bitmask(&vals, criteria);
+        let result = bitmask.clone();
         let cached = CachedBitmask {
-            _arc_ref: None, // Arc pinning not needed for WorkbookCache (version-validated)
+            _arc_ref: None,
             criteria: criteria.clone(),
             bitmask,
         };
-        let range_version = RangeVersion::capture(source, sheet, col_start, col_end);
+        let range_version = RangeVersion::capture(source, &key.0, key.1, key.1);
         let versioned = VersionedEntry::new(cached, range_version);
 
-        // Evict if at capacity.
-        if self.bitmask_cache.len() >= BITMASK_CACHE_MAX {
-            self.evict_bitmask();
-        }
-
-        match self.bitmask_cache.entry(key) {
-            dashmap::mapref::entry::Entry::Occupied(mut e) => {
-                e.insert(versioned);
-                e.into_ref().downgrade()
-            }
-            dashmap::mapref::entry::Entry::Vacant(e) => e.insert(versioned).downgrade(),
-        }
+        self.insert_bitmask(key, versioned, entry_bytes);
+        Some(result)
     }
 
-    /// Evict ~10% of bitmask cache entries (oldest by insertion order).
     #[cfg(feature = "native")]
-    fn evict_bitmask(&self) {
-        let to_remove = BITMASK_CACHE_MAX / 10;
+    fn insert_bitmask(
+        &self,
+        key: BitmaskCacheKey,
+        versioned: VersionedEntry<CachedBitmask>,
+        entry_bytes: usize,
+    ) {
+        let mut bytes = self
+            .bitmask_bytes
+            .lock()
+            .expect("bitmask admission lock poisoned");
+        if let Some((_, previous)) = self.bitmask_cache.remove(&key) {
+            *bytes -= bitmask_entry_bytes(previous.value.bitmask.len(), &previous.value.criteria)
+                .expect("only supported criteria enter the bitmask cache");
+        }
+        while self.bitmask_cache.len() >= BITMASK_CACHE_MAX
+            || *bytes + entry_bytes > BITMASK_CACHE_BYTES
+        {
+            self.evict_bitmasks(&mut bytes);
+        }
+        self.bitmask_cache.insert(key, versioned);
+        *bytes += entry_bytes;
+    }
+
+    /// Evict a small batch while the caller holds the admission lock.
+    #[cfg(feature = "native")]
+    fn evict_bitmasks(&self, bytes: &mut usize) {
+        let to_remove = (self.bitmask_cache.len() / 10).max(1);
         let keys: Vec<_> = self
             .bitmask_cache
             .iter()
             .take(to_remove)
             .map(|entry| *entry.key())
             .collect();
-        let evicted = keys.len() as u64;
-        for k in keys {
-            self.bitmask_cache.remove(&k);
+        for key in keys {
+            if let Some((_, entry)) = self.bitmask_cache.remove(&key) {
+                *bytes -= bitmask_entry_bytes(entry.value.bitmask.len(), &entry.value.criteria)
+                    .expect("only supported criteria enter the bitmask cache");
+                self.stats.bitmask.evictions.fetch_add(1, Ordering::Relaxed);
+            }
         }
-        self.stats
-            .bitmask
-            .evictions
-            .fetch_add(evicted, Ordering::Relaxed);
     }
 
     // === Incremental update methods ===
@@ -746,10 +793,10 @@ impl WorkbookCache {
         let sum_freq_count = self.sum_frequency_cache.len();
         total += sum_freq_count * (56 + 64 + 4096);
 
-        // Bitmask cache: key (~36B, includes u64 hash) + VersionedEntry (~64B)
-        //   + CachedBitmask (CellValue ~32B + ColumnBitset ~avg 128B for 1K rows)
-        let bitmask_count = self.bitmask_cache.len();
-        total += bitmask_count * (36 + 64 + 32 + 128);
+        total += *self
+            .bitmask_bytes
+            .lock()
+            .expect("bitmask admission lock poisoned");
 
         // Lookup cache: not directly accessible (no len() method on LookupIndexCache).
         // Memory estimation for lookup indexes deferred to when LookupIndexCache
@@ -776,7 +823,10 @@ impl WorkbookCache {
         let sorted_mem = sorted_entries * (28 + 64 + 24 + 4000);
         let count_freq_mem = count_freq_entries * (28 + 64 + 3072);
         let sum_freq_mem = sum_freq_entries * (56 + 64 + 4096);
-        let bitmask_mem = bitmask_entries * (36 + 64 + 32 + 128);
+        let bitmask_mem = *self
+            .bitmask_bytes
+            .lock()
+            .expect("bitmask admission lock poisoned");
 
         WorkbookCacheStatsSnapshot {
             sorted: self.stats.sorted.snapshot(),
@@ -804,3 +854,7 @@ impl Default for WorkbookCache {
         Self::new()
     }
 }
+
+#[cfg(all(test, feature = "native"))]
+#[path = "workbook_cache_tests.rs"]
+mod tests;

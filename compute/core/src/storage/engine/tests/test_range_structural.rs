@@ -4,12 +4,7 @@
 //! and Strict Range anchors, preserving payload values, cleaning overrides,
 //! and updating dependent formulas.
 //!
-//! **ID alignment note:** `YrsStorage::populate_yrs_doc` uses a fresh
-//! `IdAllocator::new()` (starting at 1) to generate sequential row/col IDs
-//! for the Yrs `rowOrder`/`colOrder` arrays. For a sheet with `rows: R,
-//! cols: C`, row IDs are `1..=R` and col IDs are `(R+1)..=(R+C)`. The
-//! Range's `row_ids`/`col_ids` must reference these same identities so the
-//! spatial index maps them to display positions.
+//! Fixtures share native axis UUIDs with their compact range payloads.
 
 use super::super::*;
 use super::helpers::*;
@@ -34,12 +29,12 @@ const RANGE_UUID: &str = "b0000000-0000-4000-8000-000000000001";
 ///   row IDs: [1, 2, 3, 4, 5]
 ///   col IDs: [11, 12]
 
-fn yrs_row_id(i: usize) -> RowId {
+fn fixture_row_id(i: usize) -> RowId {
     // IdAllocator starts at 1, rows are allocated first
     RowId::from_raw((i + 1) as u128)
 }
 
-fn yrs_col_id(sheet_rows: usize, i: usize) -> ColId {
+fn fixture_col_id(sheet_rows: usize, i: usize) -> ColId {
     // Cols are allocated after all rows
     ColId::from_raw((sheet_rows + i + 1) as u128)
 }
@@ -82,11 +77,19 @@ fn range_backed_snapshot() -> WorkbookSnapshot {
         }
     }
 
-    let row_ids: Vec<RowId> = (0..RANGE_ROWS).map(yrs_row_id).collect();
-    let col_ids: Vec<ColId> = (0..RANGE_COLS).map(|i| yrs_col_id(SHEET_ROWS, i)).collect();
+    let row_ids: Vec<RowId> = (0..RANGE_ROWS).map(fixture_row_id).collect();
+    let col_ids: Vec<ColId> = (0..RANGE_COLS)
+        .map(|i| fixture_col_id(SHEET_ROWS, i))
+        .collect();
 
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET_UUID.to_string(),
             name: "Sheet1".to_string(),
             rows: SHEET_ROWS as u32,
@@ -126,11 +129,17 @@ fn single_row_range_snapshot() -> WorkbookSnapshot {
     const SHEET_COLS: usize = 3;
 
     let payload = 42.0_f64.to_le_bytes().to_vec();
-    let rid = yrs_row_id(0);
-    let cid = yrs_col_id(SHEET_ROWS, 0);
+    let rid = fixture_row_id(0);
+    let cid = fixture_col_id(SHEET_ROWS, 0);
 
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET_UUID.to_string(),
             name: "Sheet1".to_string(),
             rows: SHEET_ROWS as u32,
@@ -174,11 +183,17 @@ fn strict_range_snapshot() -> WorkbookSnapshot {
         payload.extend_from_slice(&v.to_le_bytes());
     }
 
-    let rids: Vec<RowId> = (0..3).map(yrs_row_id).collect();
-    let cids = vec![yrs_col_id(SHEET_ROWS, 0)];
+    let rids: Vec<RowId> = (0..3).map(fixture_row_id).collect();
+    let cids = vec![fixture_col_id(SHEET_ROWS, 0)];
 
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET_UUID.to_string(),
             name: "Sheet1".to_string(),
             rows: SHEET_ROWS as u32,
@@ -225,7 +240,7 @@ fn as_f64(val: Option<&CellValue>) -> Option<f64> {
 #[test]
 fn range_elastic_insert_grows() {
     let snap = range_backed_snapshot();
-    let (mut engine, _recalc) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _recalc) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = test_sheet_id();
 
     // Before: rows 0..4 have col-0 values [1,2,3,4,5]
@@ -315,7 +330,7 @@ fn range_elastic_insert_grows() {
 #[test]
 fn range_elastic_anchor_reassignment() {
     let snap = range_backed_snapshot();
-    let (mut engine, _recalc) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _recalc) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = test_sheet_id();
 
     // Verify initial 5 values in col 0
@@ -392,7 +407,7 @@ fn range_elastic_anchor_reassignment() {
 #[test]
 fn range_elastic_single_row_delete() {
     let snap = single_row_range_snapshot();
-    let (mut engine, _recalc) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _recalc) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = test_sheet_id();
 
     // Verify the single value exists
@@ -425,7 +440,7 @@ fn range_elastic_single_row_delete() {
 #[test]
 fn range_strict_insert_unchanged() {
     let snap = strict_range_snapshot();
-    let (mut engine, _recalc) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _recalc) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = test_sheet_id();
 
     // Before: rows 0,1,2 have values [100, 200, 300]
@@ -481,7 +496,7 @@ fn range_strict_insert_unchanged() {
 #[test]
 fn range_delete_cleans_overrides() {
     let snap = range_backed_snapshot();
-    let (mut engine, _recalc) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _recalc) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = test_sheet_id();
 
     // Override row 2, col 0 (original Range value = 3.0) with a per-cell edit.
@@ -525,7 +540,7 @@ fn range_delete_cleans_overrides() {
 #[test]
 fn range_formula_survives_structural() {
     let snap = range_backed_snapshot();
-    let (mut engine, _recalc) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _recalc) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = test_sheet_id();
 
     // Set a formula cell at (0, 2) = =A1+A2 AFTER engine creation so that
@@ -577,7 +592,7 @@ fn range_formula_survives_structural() {
 #[test]
 fn range_elastic_insert_dep_reexpansion() {
     let snap = range_backed_snapshot();
-    let (mut engine, _recalc) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _recalc) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = test_sheet_id();
 
     // Set SUM formula at (6, 0) AFTER engine creation so Range values are
@@ -629,7 +644,7 @@ fn range_elastic_insert_dep_reexpansion() {
 #[test]
 fn xlsx_structural_roundtrip() {
     let snap = range_backed_snapshot();
-    let (mut engine, _recalc) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _recalc) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = test_sheet_id();
 
     // Insert 1 row at position 1.
@@ -691,7 +706,7 @@ fn xlsx_structural_roundtrip() {
 #[test]
 fn xlsx_rowcol_insert_delete_roundtrip() {
     let snap = range_backed_snapshot();
-    let (mut engine, _recalc) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _recalc) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = test_sheet_id();
 
     // Verify initial 2-col extent: col 0 and col 1

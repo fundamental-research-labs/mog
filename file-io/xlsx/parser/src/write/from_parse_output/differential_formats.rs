@@ -697,7 +697,7 @@ mod tests {
                     sheet_id: "sheet-1".to_string(),
                     pivot: None,
                     ranges: vec![cell_types::SheetRange::single(0, 0)],
-                    range_identities: None,
+
                     rules: vec![CFRule::CellValue {
                         id: "rule-1".to_string(),
                         priority: 1,
@@ -749,7 +749,7 @@ mod tests {
                     sheet_id: "sheet-1".to_string(),
                     pivot: None,
                     ranges: vec![cell_types::SheetRange::single(0, 0)],
-                    range_identities: None,
+
                     rules: vec![CFRule::CellValue {
                         id: "rule-1".to_string(),
                         priority: 1,

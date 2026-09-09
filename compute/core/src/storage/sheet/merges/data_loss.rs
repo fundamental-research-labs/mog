@@ -1,61 +1,68 @@
-use crate::storage::infra::grid_helpers::get_cells_map;
-
+use crate::mirror::CellMirror;
 use cell_types::SheetId;
-use compute_document::hex::id_to_hex;
-use compute_document::identity::GridIndex;
-use compute_document::schema::KEY_VALUE;
-use yrs::{Any, Doc, Map, MapRef, Out, Transact};
 
-pub(super) fn read_cell_value<T: yrs::ReadTxn>(
-    txn: &T,
-    cells_map: &MapRef,
-    cell_id_hex: &str,
-) -> Option<String> {
-    let cell_map = match cells_map.get(txn, cell_id_hex) {
-        Some(Out::YMap(m)) => m,
-        _ => return None,
-    };
-    match cell_map.get(txn, KEY_VALUE) {
-        Some(Out::Any(Any::Null)) | Some(Out::Any(Any::Undefined)) | None => None,
-        Some(Out::Any(Any::String(s))) if s.is_empty() => None,
-        Some(Out::Any(Any::String(s))) => Some(s.to_string()),
-        Some(Out::Any(Any::Number(n))) => Some(n.to_string()),
-        Some(Out::Any(Any::Bool(b))) => Some(b.to_string()),
-        _ => None,
-    }
-}
-
-/// Check whether merging a range would clear data from non-origin cells.
-///
-/// Returns `(has_data_loss, cells_with_data)`.
+/// Count nonempty native values and formulas that a merge would clear.
 pub fn check_merge_data_loss(
-    doc: &Doc,
-    sheets: &MapRef,
+    mirror: &CellMirror,
     sheet_id: SheetId,
-    grid: &GridIndex,
-    start_row: u32,
-    start_col: u32,
-    end_row: u32,
-    end_col: u32,
+    sr: u32,
+    sc: u32,
+    er: u32,
+    ec: u32,
 ) -> (bool, u32) {
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let txn = doc.transact();
-
-    let cells_map = match get_cells_map(&txn, sheets, &sheet_hex) {
-        Some(m) => m,
-        None => return (false, 0),
+    let Some(sheet) = mirror.get_sheet(&sheet_id) else {
+        return (false, 0);
     };
-
-    let mut count: u32 = 0;
-    for (cell_id, r, c) in grid.cells_in_range(start_row, start_col, end_row, end_col) {
-        if r == start_row && c == start_col {
-            continue; // skip origin
+    let mut occupied = std::collections::HashSet::new();
+    for (id, entry) in sheet.cells_iter() {
+        if entry.is_ghost() {
+            continue;
         }
-        let cell_hex = id_to_hex(cell_id.as_u128());
-        if read_cell_value(&txn, &cells_map, &cell_hex).is_some() {
-            count += 1;
+        let Some(pos) = sheet.position_of(id) else {
+            continue;
+        };
+        if pos.row() < sr
+            || pos.row() > er
+            || pos.col() < sc
+            || pos.col() > ec
+            || (pos.row() == sr && pos.col() == sc)
+        {
+            continue;
+        }
+        if mirror
+            .get_cell_value_at(&sheet_id, pos)
+            .is_some_and(|value| {
+                !value.is_null()
+                    && !matches!(value, value_types::CellValue::Text(text) if text.is_empty())
+            })
+            || mirror.get_formula(id).is_some()
+        {
+            occupied.insert((pos.row(), pos.col()));
         }
     }
-
-    (count > 0, count)
+    let max_col = ec.min(sheet.cols.saturating_sub(1));
+    if sc <= max_col {
+        for col in sc..=max_col {
+            if let Some(values) = sheet.get_column_view(col) {
+                for (row, value) in values
+                    .iter()
+                    .enumerate()
+                    .skip(sr as usize)
+                    .take(er.saturating_sub(sr) as usize + 1)
+                {
+                    let row = row as u32;
+                    if row == sr && col == sc {
+                        continue;
+                    }
+                    if !value.is_null()
+                        && !matches!(value, value_types::CellValue::Text(text) if text.is_empty())
+                    {
+                        occupied.insert((row, col));
+                    }
+                }
+            }
+        }
+    }
+    let count = occupied.len().min(u32::MAX as usize) as u32;
+    (count != 0, count)
 }

@@ -2,12 +2,12 @@
 //!
 //! These tests complement `dev/formula-eval`: they encode small, durable
 //! product contracts without depending on XLSX cached values. Workbook cases
-//! must hydrate through `YrsComputeEngine::from_snapshot` so they exercise the
+//! must hydrate through `ComputeEngine::from_snapshot` so they exercise the
 //! same storage/mirror/recalc path used by production engine initialization.
 
 use cell_types::{SheetId, SheetPos};
 use compute_core::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use value_types::{CellValue, FiniteF64};
 
 #[derive(Debug, Clone, Copy)]
@@ -85,6 +85,9 @@ fn workbook(sheets: Vec<(&'static str, u32, u32, Vec<CellData>)>) -> WorkbookSna
             .into_iter()
             .enumerate()
             .map(|(idx, (name, rows, cols, cells))| SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: sheet_uuid(idx as u32),
                 name: name.to_string(),
                 rows,
@@ -656,7 +659,7 @@ fn run_case(case: FormulaContractCase) {
         })
         .collect();
 
-    let (engine, _initial_recalc) = YrsComputeEngine::from_snapshot(snapshot)
+    let (engine, _initial_recalc) = ComputeEngine::from_snapshot(snapshot)
         .unwrap_or_else(|err| panic!("[{} {:?}] from_snapshot failed: {:?}", id, kind, err));
 
     for expected in &expected {

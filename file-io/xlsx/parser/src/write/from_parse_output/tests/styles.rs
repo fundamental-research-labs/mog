@@ -105,7 +105,7 @@ fn conditional_format_dxf_id_without_live_style_fields_is_not_exported() {
             sheet_id: "sheet-1".to_string(),
             pivot: None,
             ranges: vec![CFCellRange::single(0, 0)],
-            range_identities: None,
+
             rules: vec![CFRule::CellValue {
                 id: "rule-1".to_string(),
                 operator: ooxml_types::cond_format::CfOperator::GreaterThan,
@@ -164,7 +164,7 @@ fn conditional_format_live_style_overrides_stale_dxf_id() {
             sheet_id: "sheet-1".to_string(),
             pivot: None,
             ranges: vec![CFCellRange::single(0, 0)],
-            range_identities: None,
+
             rules: vec![CFRule::CellValue {
                 id: "rule-1".to_string(),
                 operator: ooxml_types::cond_format::CfOperator::GreaterThan,
@@ -251,7 +251,7 @@ fn live_conditional_format_styles_allocate_dxfs_and_parse_back() {
             sheet_id: "sheet-1".to_string(),
             pivot: None,
             ranges: vec![CFCellRange::single(0, 0)],
-            range_identities: None,
+
             rules: vec![CFRule::CellValue {
                 id: "rule-1".to_string(),
                 operator: ooxml_types::cond_format::CfOperator::GreaterThan,
@@ -812,8 +812,7 @@ fn test_col_styles_roundtrip() {
     let mut shared_strings = SharedStringsWriter::new();
     let no_dt_bodies: std::collections::HashSet<(u32, u32)> = std::collections::HashSet::new();
     let no_dt_regions = Vec::new();
-    let style_remapper =
-        super::super::style_remap::StyleExportRemapper::palette_projection(u32::MAX);
+    let style_remapper = super::super::style_remap::StyleExportRemapper::palette_projection(16);
     let writer = build_sheet(
         &sheet_data,
         &mut shared_strings,
@@ -848,8 +847,7 @@ fn test_sparse_col_style_ranges_export_as_col_metadata() {
     let mut shared_strings = SharedStringsWriter::new();
     let no_dt_bodies: std::collections::HashSet<(u32, u32)> = std::collections::HashSet::new();
     let no_dt_regions = Vec::new();
-    let style_remapper =
-        super::super::style_remap::StyleExportRemapper::palette_projection(u32::MAX);
+    let style_remapper = super::super::style_remap::StyleExportRemapper::palette_projection(16);
     let writer = build_sheet(
         &sheet_data,
         &mut shared_strings,

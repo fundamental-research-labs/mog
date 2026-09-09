@@ -4,11 +4,10 @@ use super::super::{
     FilterButtonMetadata, FilterCapability, FilterKind, FilterMetadataBinding,
     FilterMetadataOwnerPath, FilterMetadataSourceKey, FilterShellMetadata,
     clear_filter_metadata_bindings, delete_filter_metadata_binding,
-    delete_stale_filter_metadata_bindings_for_source_key_with_origin, get_filter_metadata_binding,
+    delete_stale_filter_metadata_bindings_for_source_key, get_filter_metadata_binding,
     get_filter_metadata_bindings_in_sheet, upsert_filter_metadata_binding,
 };
 use super::helpers::storage_with_sheet;
-use compute_document::undo::ORIGIN_BOOTSTRAP;
 
 fn binding(filter_id: &str) -> FilterMetadataBinding {
     let mut col_id_to_header_cell_id = BTreeMap::new();
@@ -57,60 +56,42 @@ fn binding(filter_id: &str) -> FilterMetadataBinding {
 
 #[test]
 fn filter_metadata_binding_storage_round_trips_and_deletes_by_filter_id() {
-    let (storage, sheet_id) = storage_with_sheet();
+    let (mut storage, sheet_id) = storage_with_sheet();
     let binding = binding("filter-1");
 
-    upsert_filter_metadata_binding(storage.doc(), storage.sheets(), &sheet_id, &binding);
+    upsert_filter_metadata_binding(&mut storage, &sheet_id, &binding);
 
-    let stored =
-        get_filter_metadata_binding(storage.doc(), storage.sheets(), &sheet_id, "filter-1")
-            .expect("binding should round-trip");
+    let stored = get_filter_metadata_binding(&storage, &sheet_id, "filter-1")
+        .expect("binding should round-trip");
     assert_eq!(stored, binding);
     assert_eq!(
-        get_filter_metadata_bindings_in_sheet(storage.doc(), storage.sheets(), &sheet_id).len(),
+        get_filter_metadata_bindings_in_sheet(&storage, &sheet_id).len(),
         1
     );
 
     assert!(delete_filter_metadata_binding(
-        storage.doc(),
-        storage.sheets(),
+        &mut storage,
         &sheet_id,
         "filter-1"
     ));
-    assert!(
-        get_filter_metadata_binding(storage.doc(), storage.sheets(), &sheet_id, "filter-1")
-            .is_none()
-    );
+    assert!(get_filter_metadata_binding(&storage, &sheet_id, "filter-1").is_none());
 }
 
 #[test]
 fn clear_filter_metadata_bindings_only_removes_binding_entries() {
-    let (storage, sheet_id) = storage_with_sheet();
+    let (mut storage, sheet_id) = storage_with_sheet();
 
-    upsert_filter_metadata_binding(
-        storage.doc(),
-        storage.sheets(),
-        &sheet_id,
-        &binding("filter-1"),
-    );
-    upsert_filter_metadata_binding(
-        storage.doc(),
-        storage.sheets(),
-        &sheet_id,
-        &binding("filter-2"),
-    );
+    upsert_filter_metadata_binding(&mut storage, &sheet_id, &binding("filter-1"));
+    upsert_filter_metadata_binding(&mut storage, &sheet_id, &binding("filter-2"));
 
-    clear_filter_metadata_bindings(storage.doc(), storage.sheets(), &sheet_id);
+    clear_filter_metadata_bindings(&mut storage, &sheet_id);
 
-    assert!(
-        get_filter_metadata_bindings_in_sheet(storage.doc(), storage.sheets(), &sheet_id)
-            .is_empty()
-    );
+    assert!(get_filter_metadata_bindings_in_sheet(&storage, &sheet_id).is_empty());
 }
 
 #[test]
 fn stale_filter_metadata_bindings_are_reconciled_by_source_key() {
-    let (storage, sheet_id) = storage_with_sheet();
+    let (mut storage, sheet_id) = storage_with_sheet();
     let stale = binding("filter-old");
     let replacement = binding("filter-new");
     let mut unrelated = binding("filter-unrelated");
@@ -120,29 +101,13 @@ fn stale_filter_metadata_bindings_are_reconciled_by_source_key() {
     };
     unrelated.range_ref = "F1:H10".to_string();
 
-    upsert_filter_metadata_binding(storage.doc(), storage.sheets(), &sheet_id, &stale);
-    upsert_filter_metadata_binding(storage.doc(), storage.sheets(), &sheet_id, &unrelated);
+    upsert_filter_metadata_binding(&mut storage, &sheet_id, &stale);
+    upsert_filter_metadata_binding(&mut storage, &sheet_id, &unrelated);
 
-    let deleted = delete_stale_filter_metadata_bindings_for_source_key_with_origin(
-        storage.doc(),
-        storage.sheets(),
-        &sheet_id,
-        &replacement,
-        ORIGIN_BOOTSTRAP,
-    );
+    let deleted =
+        delete_stale_filter_metadata_bindings_for_source_key(&mut storage, &sheet_id, &replacement);
 
     assert_eq!(deleted, 1);
-    assert!(
-        get_filter_metadata_binding(storage.doc(), storage.sheets(), &sheet_id, "filter-old")
-            .is_none()
-    );
-    assert!(
-        get_filter_metadata_binding(
-            storage.doc(),
-            storage.sheets(),
-            &sheet_id,
-            "filter-unrelated"
-        )
-        .is_some()
-    );
+    assert!(get_filter_metadata_binding(&storage, &sheet_id, "filter-old").is_none());
+    assert!(get_filter_metadata_binding(&storage, &sheet_id, "filter-unrelated").is_some());
 }

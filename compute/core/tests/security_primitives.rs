@@ -1,4 +1,4 @@
-//! R3.1 — stateless gate primitives on `YrsComputeEngine`.
+//! R3.1 — stateless gate primitives on `ComputeEngine`.
 //!
 //! These tests exercise the engine-side primitives that the
 //! bridge-delegate macro calls on every gated read/write:
@@ -9,27 +9,27 @@
 //! - `check_write(&principal, target, required)` — sheet/workbook-scope
 //!   write pre-check.
 //!
-//! The tests operate directly on a `YrsComputeEngine` — no dispatch,
+//! The tests operate directly on a `ComputeEngine` — no dispatch,
 //! no ComputeService. That mirrors the macro's engine-thread-only call
 //! pattern and keeps the assertions shape-focused.
 
 use std::sync::Arc;
 
-use compute_core::storage::engine::YrsComputeEngine;
-use compute_document::SecurityStore;
-use compute_document::schema::{KEY_SECURITY, init_canonical_schema};
+use compute_core::storage::engine::ComputeEngine;
 use compute_security::{
     AccessLevel, AccessPolicy, AccessTarget, PolicyId, PolicyMetadata, PrincipalPool, PrincipalTag,
     SecurityError, TagMatcher,
 };
 use snapshot_types::{SheetSnapshot, WorkbookSnapshot};
-use yrs::{ReadTxn, Transact};
 
 const SHEET1_UUID: &str = "11111111-1111-1111-1111-111111111111";
 
-fn fresh_engine() -> YrsComputeEngine {
+fn fresh_engine() -> ComputeEngine {
     let snapshot = WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET1_UUID.to_string(),
             name: "Sheet1".to_string(),
             rows: 10,
@@ -39,7 +39,7 @@ fn fresh_engine() -> YrsComputeEngine {
         }],
         ..Default::default()
     };
-    let (engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (engine, _) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
     engine
 }
 
@@ -59,23 +59,11 @@ fn workbook_policy(tag: &str, level: AccessLevel) -> AccessPolicy {
     }
 }
 
-/// Add a policy by poking it directly into the Yrs `security` map via
-/// `SecurityStore`. The engine's Yrs observer fires on the write, so
-/// we then manually call `reload_policies_from_yrs` if needed — but
-/// with `observe_deep` registered, the reload is automatic before the
-/// transaction returns.
-fn add_policy_to_engine(engine: &YrsComputeEngine, policy: &AccessPolicy) {
-    let doc = engine.storage().doc().clone();
-    let _ = init_canonical_schema(&doc);
-    let sec_map = {
-        let txn = doc.transact();
-        txn.get_map(KEY_SECURITY).expect("security map")
-    };
-    let mut txn = doc.transact_mut();
-    let store = SecurityStore::new(&sec_map, &doc, &txn);
-    store.add_policy(&mut txn, policy);
-    drop(txn);
-    // Observer fires on commit — state should be active now.
+fn add_policy_to_engine(engine: &mut ComputeEngine, policy: &AccessPolicy) {
+    let owner = compute_security::Principal::from_tags(["mog:owner"]);
+    engine
+        .wb_security_add_policy(policy.clone(), &owner)
+        .expect("add policy");
 }
 
 #[test]
@@ -94,12 +82,12 @@ fn active_matrix_returns_admin_for_owner_on_policy_free_sheet() {
 
 #[test]
 fn active_matrix_respects_workbook_policy_for_non_owner() {
-    let engine = fresh_engine();
+    let mut engine = fresh_engine();
     let sheet = engine.storage().sheet_order()[0];
     let pool = PrincipalPool::new();
     let p = pool.intern(std::iter::once(PrincipalTag::from("agent:copilot")));
 
-    add_policy_to_engine(&engine, &workbook_policy("agent:*", AccessLevel::Read));
+    add_policy_to_engine(&mut engine, &workbook_policy("agent:*", AccessLevel::Read));
     let matrix = engine.active_matrix(&p, sheet);
     assert_eq!(matrix.sheet_default(), AccessLevel::Read);
 }
@@ -121,13 +109,13 @@ fn active_matrix_cache_hit_returns_same_arc_pointer() {
 
 #[test]
 fn active_matrix_cache_invalidates_on_policy_version_bump() {
-    let engine = fresh_engine();
+    let mut engine = fresh_engine();
     let sheet = engine.storage().sheet_order()[0];
     let pool = PrincipalPool::new();
     let p = pool.intern(std::iter::once(PrincipalTag::from("agent:copilot")));
 
     let m1 = engine.active_matrix(&p, sheet);
-    add_policy_to_engine(&engine, &workbook_policy("agent:*", AccessLevel::Read));
+    add_policy_to_engine(&mut engine, &workbook_policy("agent:*", AccessLevel::Read));
     let m2 = engine.active_matrix(&p, sheet);
     assert!(
         !Arc::ptr_eq(&m1, &m2),
@@ -156,12 +144,12 @@ fn effective_access_workbook_mirrors_matrix_default() {
     // ARCHITECTURE.md §6.2 invariant:
     // `effective_access(Workbook) == active_matrix(...).sheet_default()`.
     // R5.1's attenuation relies on this equality — this test pins it.
-    let engine = fresh_engine();
+    let mut engine = fresh_engine();
     let sheet = engine.storage().sheet_order()[0];
     let pool = PrincipalPool::new();
     let p = pool.intern(std::iter::once(PrincipalTag::from("agent:copilot")));
 
-    add_policy_to_engine(&engine, &workbook_policy("agent:*", AccessLevel::Read));
+    add_policy_to_engine(&mut engine, &workbook_policy("agent:*", AccessLevel::Read));
 
     let eff = engine.effective_access(&p, &AccessTarget::Workbook);
     let matrix = engine.active_matrix(&p, sheet);
@@ -172,10 +160,10 @@ fn effective_access_workbook_mirrors_matrix_default() {
 #[test]
 fn check_write_read_level_denied() {
     // A principal with only Read cannot satisfy a Write check.
-    let engine = fresh_engine();
+    let mut engine = fresh_engine();
     let pool = PrincipalPool::new();
     let p = pool.intern(std::iter::once(PrincipalTag::from("agent:copilot")));
-    add_policy_to_engine(&engine, &workbook_policy("agent:*", AccessLevel::Read));
+    add_policy_to_engine(&mut engine, &workbook_policy("agent:*", AccessLevel::Read));
 
     let r = engine.check_write(&p, &AccessTarget::Workbook, AccessLevel::Write, "test");
     match r {
@@ -201,10 +189,10 @@ fn check_write_admin_level_allowed_for_owner() {
 
 #[test]
 fn check_write_write_level_allowed_for_write_principal() {
-    let engine = fresh_engine();
+    let mut engine = fresh_engine();
     let pool = PrincipalPool::new();
     let p = pool.intern(std::iter::once(PrincipalTag::from("agent:copilot")));
-    add_policy_to_engine(&engine, &workbook_policy("agent:*", AccessLevel::Write));
+    add_policy_to_engine(&mut engine, &workbook_policy("agent:*", AccessLevel::Write));
     let r = engine.check_write(&p, &AccessTarget::Workbook, AccessLevel::Write, "test");
     assert!(r.is_ok());
 }
@@ -224,11 +212,14 @@ fn redact_cell_value_structure_returns_type_placeholder() {
     use compute_security::redact_scalar;
     use value_types::{CellValue, FiniteF64};
 
-    let engine = fresh_engine();
+    let mut engine = fresh_engine();
     let sheet = engine.storage().sheet_order()[0];
     let pool = PrincipalPool::new();
     let agent = pool.intern(std::iter::once(PrincipalTag::from("agent:copilot")));
-    add_policy_to_engine(&engine, &workbook_policy("agent:*", AccessLevel::Structure));
+    add_policy_to_engine(
+        &mut engine,
+        &workbook_policy("agent:*", AccessLevel::Structure),
+    );
 
     let matrix = engine.active_matrix(&agent, sheet);
     // Evaluate a cell's level the same way the delegate does.
@@ -251,11 +242,11 @@ fn redact_cell_value_none_returns_null() {
     use compute_security::redact_scalar;
     use value_types::{CellValue, FiniteF64};
 
-    let engine = fresh_engine();
+    let mut engine = fresh_engine();
     let sheet = engine.storage().sheet_order()[0];
     let pool = PrincipalPool::new();
     let agent = pool.intern(std::iter::once(PrincipalTag::from("agent:copilot")));
-    add_policy_to_engine(&engine, &workbook_policy("agent:*", AccessLevel::None));
+    add_policy_to_engine(&mut engine, &workbook_policy("agent:*", AccessLevel::None));
 
     let matrix = engine.active_matrix(&agent, sheet);
     let level = matrix.get(0, 0);
@@ -275,11 +266,11 @@ fn redact_cell_value_read_is_identity() {
     use compute_security::redact_scalar;
     use value_types::{CellValue, FiniteF64};
 
-    let engine = fresh_engine();
+    let mut engine = fresh_engine();
     let sheet = engine.storage().sheet_order()[0];
     let pool = PrincipalPool::new();
     let agent = pool.intern(std::iter::once(PrincipalTag::from("agent:copilot")));
-    add_policy_to_engine(&engine, &workbook_policy("agent:*", AccessLevel::Read));
+    add_policy_to_engine(&mut engine, &workbook_policy("agent:*", AccessLevel::Read));
 
     let matrix = engine.active_matrix(&agent, sheet);
     let level = matrix.get(0, 0);

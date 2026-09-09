@@ -17,13 +17,7 @@ pub(in crate::storage::engine) fn set_floating_object(
     object_id: &str,
     json: serde_json::Value,
 ) -> Result<MutationResult, ComputeError> {
-    floating_objects::set_floating_object(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        object_id,
-        &json,
-    )?;
+    floating_objects::set_floating_object(&mut stores.storage, sheet_id, object_id, &json)?;
     let mut result = MutationResult::empty();
     result.floating_object_changes.push(FloatingObjectChange {
         sheet_id: sheet_id.to_uuid_string(),
@@ -44,8 +38,7 @@ pub(in crate::storage::engine) fn get_floating_object(
     object_id: &str,
 ) -> Result<Option<serde_json::Value>, ComputeError> {
     Ok(floating_objects::get_floating_object(
-        stores.storage.doc(),
-        stores.storage.sheets(),
+        &stores.storage,
         sheet_id,
         object_id,
     ))
@@ -56,8 +49,7 @@ pub(in crate::storage::engine) fn get_floating_objects_in_sheet(
     sheet_id: &SheetId,
 ) -> Result<Vec<(String, serde_json::Value)>, ComputeError> {
     Ok(floating_objects::get_all_floating_objects(
-        stores.storage.doc(),
-        stores.storage.sheets(),
+        &stores.storage,
         sheet_id,
     ))
 }
@@ -67,21 +59,13 @@ pub(in crate::storage::engine) fn delete_floating_object(
     sheet_id: &SheetId,
     object_id: &str,
 ) -> Result<MutationResult, ComputeError> {
-    let pre_delete = floating_objects::get_floating_object_typed(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        object_id,
-    )
-    .ok_or_else(|| ComputeError::InvalidInput {
-        message: format!("floating object '{object_id}' not found"),
-    })?;
-    let deleted = floating_objects::delete_floating_object(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        object_id,
-    );
+    let pre_delete =
+        floating_objects::get_floating_object_typed(&stores.storage, sheet_id, object_id)
+            .ok_or_else(|| ComputeError::InvalidInput {
+                message: format!("floating object '{object_id}' not found"),
+            })?;
+    let deleted =
+        floating_objects::delete_floating_object(&mut stores.storage, sheet_id, object_id);
     if !deleted {
         return Err(ComputeError::InvalidInput {
             message: format!("floating object '{object_id}' disappeared before deletion"),
@@ -109,18 +93,12 @@ pub(in crate::storage::engine) fn create_floating_object(
     config: &serde_json::Value,
 ) -> Result<MutationResult, ComputeError> {
     let object_id = floating_objects::create_floating_object(
-        stores.storage.doc(),
-        stores.storage.sheets(),
+        &mut stores.storage,
         sheet_id,
         config,
         &stores.id_alloc,
     )?;
-    let data = floating_objects::get_floating_object_typed(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        &object_id,
-    );
+    let data = floating_objects::get_floating_object_typed(&stores.storage, sheet_id, &object_id);
     // Bounds must travel with the create patch — the renderer skips objects
     // whose `FloatingObjectPatch.bounds` is None (parity with create_shape /
     // move/resize paths). Without this the typed-API picture/textbox flows
@@ -153,13 +131,7 @@ pub(in crate::storage::engine) fn update_floating_object(
     object_id: &str,
     updates: &serde_json::Value,
 ) -> Result<MutationResult, ComputeError> {
-    floating_objects::update_floating_object(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        object_id,
-        updates,
-    );
+    floating_objects::update_floating_object(&mut stores.storage, sheet_id, object_id, updates);
     let mut result = MutationResult::empty();
     result.floating_object_changes.push(FloatingObjectChange {
         sheet_id: sheet_id.to_uuid_string(),
@@ -208,8 +180,7 @@ pub(in crate::storage::engine) fn create_shape(
         config.y_offset = value_types::FiniteF64::must(py - row_pos);
     }
     let object_json = floating_objects::create_shape_from_config(
-        stores.storage.doc(),
-        stores.storage.sheets(),
+        &mut stores.storage,
         sheet_id,
         &config,
         stores.grid_indexes.get_mut(sheet_id),
@@ -242,8 +213,7 @@ pub(in crate::storage::engine) fn move_floating_object_typed(
     target: MoveTarget,
 ) -> Result<MutationResult, ComputeError> {
     let updated = floating_objects::move_floating_object_typed(
-        stores.storage.doc(),
-        stores.storage.sheets(),
+        &mut stores.storage,
         sheet_id,
         object_id,
         &target,
@@ -282,8 +252,7 @@ pub(in crate::storage::engine) fn resize_floating_object_typed(
     config: ResizeConfig,
 ) -> Result<MutationResult, ComputeError> {
     let updated = floating_objects::resize_floating_object_typed(
-        stores.storage.doc(),
-        stores.storage.sheets(),
+        &mut stores.storage,
         sheet_id,
         object_id,
         &config,
@@ -316,8 +285,7 @@ pub(in crate::storage::engine) fn rotate_floating_object_typed(
     rotation: f64,
 ) -> Result<MutationResult, ComputeError> {
     let updated = floating_objects::rotate_floating_object_typed(
-        stores.storage.doc(),
-        stores.storage.sheets(),
+        &mut stores.storage,
         sheet_id,
         object_id,
         rotation,
@@ -349,13 +317,8 @@ pub(in crate::storage::engine) fn update_shape_style(
     object_id: &str,
     style: ShapeStyleUpdate,
 ) -> Result<MutationResult, ComputeError> {
-    let updated = floating_objects::update_shape_style(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        object_id,
-        &style,
-    );
+    let updated =
+        floating_objects::update_shape_style(&mut stores.storage, sheet_id, object_id, &style);
     let mut result = MutationResult::empty();
     result.floating_object_changes.push(FloatingObjectChange {
         sheet_id: sheet_id.to_uuid_string(),
@@ -377,8 +340,7 @@ pub(in crate::storage::engine) fn flip_floating_object_typed(
     axis: FlipAxis,
 ) -> Result<MutationResult, ComputeError> {
     let updated = floating_objects::flip_floating_object_typed(
-        stores.storage.doc(),
-        stores.storage.sheets(),
+        &mut stores.storage,
         sheet_id,
         object_id,
         &axis,
@@ -412,8 +374,7 @@ pub(in crate::storage::engine) fn duplicate_floating_object_typed(
     offset_y: f64,
 ) -> Result<MutationResult, ComputeError> {
     let new_object_json = floating_objects::duplicate_floating_object_typed(
-        stores.storage.doc(),
-        stores.storage.sheets(),
+        &mut stores.storage,
         sheet_id,
         object_id,
         offset_x,
@@ -448,12 +409,7 @@ pub(in crate::storage::engine) fn find_connectors_for_shape(
     sheet_id: &SheetId,
     shape_id: &str,
 ) -> Vec<FloatingObject> {
-    let pairs = floating_objects::find_connectors_for_shape(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        shape_id,
-    );
+    let pairs = floating_objects::find_connectors_for_shape(&stores.storage, sheet_id, shape_id);
     pairs
         .into_iter()
         .filter_map(|(_key, json)| serde_json::from_value(json).ok())
@@ -465,23 +421,14 @@ pub(in crate::storage::engine) fn get_floating_object_typed(
     sheet_id: &SheetId,
     object_id: &str,
 ) -> Option<FloatingObject> {
-    floating_objects::get_floating_object_typed(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        object_id,
-    )
+    floating_objects::get_floating_object_typed(&stores.storage, sheet_id, object_id)
 }
 
 pub(in crate::storage::engine) fn get_all_floating_objects_typed(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> Vec<FloatingObject> {
-    floating_objects::get_all_floating_objects_typed(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-    )
+    floating_objects::get_all_floating_objects_typed(&stores.storage, sheet_id)
 }
 
 pub(in crate::storage::engine) fn compute_all_object_bounds(
@@ -490,11 +437,7 @@ pub(in crate::storage::engine) fn compute_all_object_bounds(
 ) -> Vec<(String, FloatingObjectBounds)> {
     let grid = stores.grid_indexes.get(sheet_id);
     let layout = stores.layout_indexes.get(sheet_id);
-    let all_objects = floating_objects::get_all_floating_objects(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-    );
+    let all_objects = floating_objects::get_all_floating_objects(&stores.storage, sheet_id);
     let mut results = Vec::with_capacity(all_objects.len());
     for (object_id, obj_json) in &all_objects {
         if let Some(bounds) = compute_object_pixel_bounds(grid, layout, obj_json) {

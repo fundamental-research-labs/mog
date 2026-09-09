@@ -936,8 +936,45 @@ impl From<ooxml_types::shared::OpcRelationship> for PackageRelationshipHint {
 }
 
 impl ParseOutput {
+    /// Resolve positive, unique OOXML worksheet IDs while preserving imported IDs.
+    /// Writers and references to generated sheets must use the same allocation.
+    pub fn resolved_worksheet_ids(&self) -> Result<Vec<u32>, String> {
+        let mut used = std::collections::BTreeSet::new();
+        for sheet in &self.sheets {
+            let Some(sheet_id) = sheet.sheet_id else {
+                continue;
+            };
+            if sheet_id == 0 {
+                return Err(format!("worksheet {:?} has invalid sheetId 0", sheet.name));
+            }
+            if !used.insert(sheet_id) {
+                return Err(format!("duplicate worksheet sheetId {sheet_id}"));
+            }
+        }
+
+        let mut allocated = Vec::with_capacity(self.sheets.len());
+        for sheet in &self.sheets {
+            if let Some(sheet_id) = sheet.sheet_id {
+                allocated.push(sheet_id);
+                continue;
+            }
+
+            let sheet_id = used
+                .last()
+                .copied()
+                .unwrap_or(0)
+                .checked_add(1)
+                .or_else(|| (1..=u32::MAX).find(|id| !used.contains(id)))
+                .ok_or_else(|| "cannot allocate a positive worksheet sheetId".to_string())?;
+            used.insert(sheet_id);
+            allocated.push(sheet_id);
+        }
+
+        Ok(allocated)
+    }
+
     /// Build the Round 9 workbook data-feature aggregate from the compatibility
-    /// fields that still back parser, Yrs, and writer paths.
+    /// fields used by parser, engine, and writer paths.
     #[must_use]
     pub fn workbook_data_features(&self) -> WorkbookDataFeatures {
         WorkbookDataFeatures::from_compat_fields(
@@ -1045,7 +1082,7 @@ pub fn normalize_package_path(path: &str) -> String {
 #[serde(rename_all = "camelCase")]
 pub struct WorkbookStylesheet {
     /// Legacy in-memory scaffold for tests/migration callers that still build a
-    /// whole OOXML stylesheet. Production parser/Yrs/export paths lower into
+    /// whole OOXML stylesheet. Production parser/storage/export paths lower into
     /// the explicit registries below instead of serializing this blob.
     #[serde(default, skip)]
     pub stylesheet: ooxml_types::styles::Stylesheet,
@@ -1846,7 +1883,7 @@ pub struct ColDimension {
 /// In OOXML, `<col max="16384">` means "apply this style/width to all columns
 /// from `min` through XFD (the last column)". These ranges cannot be stored as
 /// individual ColDimension entries because no ColIds are allocated beyond the
-/// data region. Instead they are stored as opaque metadata through Yrs.
+/// data region. Instead they remain typed range metadata on the worksheet.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TrailingColRange {

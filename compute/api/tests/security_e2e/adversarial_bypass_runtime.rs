@@ -402,31 +402,14 @@ fn adversarial_comment_redacts_under_none_id_form() {
     );
 }
 
-/// R10.5 — `bypass-via-undo-reveal`.
-///
-/// The current security contract withdraws the previous rationale that
-/// `composition_policy_change_takes_effect_immediately` covers this
-/// case — that test exercises policy-version swap, not undo. This test
-/// authors the real invariant: after a sequence of edits, a policy
-/// add, and an owner-initiated undo, reading through the gated
-/// delegate as the agent still redacts. The Yrs undo manager mutates
-/// state; the next `get_cell_value` re-enters the gated path and
-/// `redact_scalar` runs against the post-undo value.
-///
-/// If this test becomes trivially architectural (coverage_audit
-/// already proves get_cell_value is gated + undo writes through the
-/// engine's mutation path + reads re-enter the gated delegate), the
-/// scenario can be promoted to Group A with the specific
-/// coverage_audit row as citation. For now we keep an explicit test
-/// because the interaction spans two otherwise-independent subsystems
-/// (undo manager + security matrix).
+/// Reads stay redacted after the owner edits a cell protected by a None policy.
 #[test]
-fn adversarial_undo_does_not_reveal_redacted_cell() {
+fn adversarial_owner_edit_does_not_reveal_redacted_cell() {
     let (mut service, sheet_id) = fresh_service();
     let owner = service.make_principal(vec!["mog:owner".into()]);
     let agent = service.make_principal(vec!["agent:copilot".into()]);
 
-    // Owner performs a sequence of edits that undo can reach.
+    // Owner seeds a cell and updates its value.
     service.set_active_principal(Some(owner.clone()));
     service
         .set_cell_value_parsed(&sheet_id, 0, 0, "secret")
@@ -440,15 +423,17 @@ fn adversarial_undo_does_not_reveal_redacted_cell() {
         .wb_security_add_policy(workbook_policy("agent:*", AccessLevel::None))
         .expect("policy add");
 
-    // Owner undoes the last edit — yrs reverts A1 to "secret".
-    service.undo().expect("owner undo");
+    // Owner edits A1 again after the policy is installed.
+    service
+        .set_cell_value_parsed(&sheet_id, 0, 0, "secret-v3")
+        .expect("owner edit after policy add");
 
     // Agent reads A1 under the None policy; must return Null.
     service.set_active_principal(Some(agent));
     let v = service.get_cell_value(&sheet_id, 0, 0);
     assert!(
         matches!(v, CellValue::Null),
-        "post-undo agent read must still redact under None, got {v:?}"
+        "post-edit agent read must still redact under None, got {v:?}"
     );
 
     // Drain events — once R9 merges, an AccessDenied event IS NOT
@@ -456,4 +441,46 @@ fn adversarial_undo_does_not_reveal_redacted_cell() {
     // should still be present. We assert only that draining succeeds;
     // the event-contents assertion lives with the R9 tests.
     let _events = service.wb_security_drain_events();
+}
+
+/// Undo and redo must retain current policy and re-enter gated reads.
+#[test]
+fn adversarial_undo_does_not_reveal_redacted_cell() {
+    let (mut service, sheet_id) = fresh_service();
+    let owner = service.make_principal(vec!["mog:owner".into()]);
+    let agent = service.make_principal(vec!["agent:copilot".into()]);
+
+    service.set_active_principal(Some(owner.clone()));
+    service
+        .set_cell_value_parsed(&sheet_id, 0, 0, "secret")
+        .expect("owner seeds original value");
+    service
+        .set_cell_value_parsed(&sheet_id, 0, 0, "secret-v2")
+        .expect("owner changes value");
+    service
+        .wb_security_add_policy(workbook_policy("agent:*", AccessLevel::None))
+        .expect("policy add");
+
+    service.undo().expect("owner undo");
+    assert!(matches!(
+        service.get_cell_value(&sheet_id, 0, 0),
+        CellValue::Text(ref text) if text.as_ref() == "secret"
+    ));
+    service.set_active_principal(Some(agent.clone()));
+    assert!(matches!(
+        service.get_cell_value(&sheet_id, 0, 0),
+        CellValue::Null
+    ));
+
+    service.set_active_principal(Some(owner));
+    service.redo().expect("owner redo");
+    assert!(matches!(
+        service.get_cell_value(&sheet_id, 0, 0),
+        CellValue::Text(ref text) if text.as_ref() == "secret-v2"
+    ));
+    service.set_active_principal(Some(agent));
+    assert!(matches!(
+        service.get_cell_value(&sheet_id, 0, 0),
+        CellValue::Null
+    ));
 }

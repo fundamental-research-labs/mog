@@ -29,8 +29,8 @@ pub use ooxml_types::cond_format::{
 // (so the hazard is observable) and fall back to the default variant, on
 // the theory that Excel forward-compat occasionally emits tokens newer
 // than our vocabulary and rejecting the whole document would be worse
-// than reading it with a default. For *internal* read paths (Yrs,
-// palette, domain conversions), use the strict `from_ooxml_token` on the
+// than reading it with a default. For *internal* read paths (palette,
+// domain conversions), use the strict `from_ooxml_token` on the
 // enum itself — unknowns there mean bugs, not forward-compat.
 // =============================================================================
 

@@ -1,9 +1,8 @@
 //! Policy resolution engine (§4 of ARCHITECTURE.md).
 //!
-//! Pure: holds only the policy list. No Yrs, no cache, no principal pool
-//! awareness. The `SecurityState` in `compute-core` (R2.3) swaps fresh
-//! `PolicyEngine` instances into an `ArcSwap` on every Yrs change; the
-//! cache keyed on `PrincipalIdentity` + version numbers lives there.
+//! Holds an immutable native policy list. `SecurityState` in `compute-core`
+//! owns the current engine and caches access matrices by policy and structure
+//! versions.
 
 use std::sync::Arc;
 

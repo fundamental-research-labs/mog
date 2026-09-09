@@ -179,7 +179,13 @@ fn test_mirror() -> CellMirror {
     }
 
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sid.to_string(),
             name: "Data".to_string(),
             rows: 5,
@@ -297,7 +303,13 @@ fn sorted_range_mirror() -> CellMirror {
     }
 
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sid.to_string(),
             name: "Data".to_string(),
             rows: 10,

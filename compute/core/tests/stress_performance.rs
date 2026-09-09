@@ -50,7 +50,13 @@ fn test_deep_500_cell_chain() {
     }
 
     let snapshot = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_uuid(0),
             name: "Sheet1".to_string(),
             rows: 1000,
@@ -177,7 +183,13 @@ fn test_cycle_recalc_scope_isolation() {
     });
 
     let snapshot = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_uuid(0),
             name: "Sheet1".to_string(),
             rows: 1000,
@@ -261,7 +273,13 @@ fn test_100_cell_convergent_ring() {
     }
 
     let snapshot = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_uuid(0),
             name: "Sheet1".to_string(),
             rows: 1000,

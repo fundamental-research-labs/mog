@@ -7,7 +7,7 @@
 //! at the crate root — it is **not** part of the stable public API.
 
 pub mod class_iv;
-pub mod yrs_canonical;
+pub mod native_canonical;
 
 /// Re-export of the XLSX-import snapshot builder for integration tests that
 /// need to drive the engine through the real parse → snapshot → from_snapshot

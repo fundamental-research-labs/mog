@@ -12,7 +12,7 @@ High-performance XLSX parser in Rust.
 
 Mog never exports `xl/calcChain.xml`. The calculation chain is an Excel engine
 cache, not authoritative workbook state. Import counts an existing calcChain
-only for diagnostics; it is not represented in `ParseOutput`, Yrs state, or
+only for diagnostics; it is not represented in `ParseOutput`, native workbook state, or
 package sidecars. Export emits formula cached results from modeled cell values
 and preserves modeled workbook calculation settings; omitting calcChain does not
 force `fullCalcOnLoad`, `calcCompleted`, or `forceFullCalc` changes.

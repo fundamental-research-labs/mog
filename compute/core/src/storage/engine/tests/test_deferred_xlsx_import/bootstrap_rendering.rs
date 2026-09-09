@@ -9,7 +9,7 @@ fn deferred_xlsx_import_exposes_first_sheet_formatting_before_full_hydration() {
         .join("../../file-io/xlsx/parser/test-corpus/parity/cells/basic-formatting.xlsx");
     let bytes = std::fs::read(fixture).expect("basic-formatting fixture should be readable");
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     engine
         .import_from_xlsx_bytes_deferred(&bytes)
         .expect("deferred XLSX import should succeed");
@@ -60,7 +60,7 @@ fn deferred_xlsx_import_exposes_first_sheet_formatting_before_full_hydration() {
 #[test]
 fn deferred_xlsx_replacement_clears_runtime_diagnostics() {
     let bytes = active_visible_deferred_fixture_xlsx();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let mut diagnostics = vec![RuntimeOperationDiagnostic {
         id: "runtime-diagnostic-pending".to_string(),
         sequence: "0".to_string(),
@@ -102,7 +102,7 @@ fn deferred_xlsx_replacement_clears_runtime_diagnostics() {
 fn deferred_xlsx_import_materializes_active_visible_sheet_before_full_hydration() {
     let bytes = active_visible_deferred_fixture_xlsx();
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let (_, import_result) = engine
         .import_from_xlsx_bytes_deferred(&bytes)
         .expect("deferred XLSX import should succeed");
@@ -204,63 +204,10 @@ fn deferred_xlsx_import_materializes_active_visible_sheet_before_full_hydration(
 }
 
 #[test]
-fn deferred_xlsx_completion_then_grouped_paste_undo_preserves_redo_stack() {
-    let bytes = active_visible_deferred_fixture_xlsx();
-
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
-    engine
-        .import_from_xlsx_bytes_deferred(&bytes)
-        .expect("deferred XLSX import should succeed");
-    engine
-        .complete_deferred_hydration()
-        .expect("full deferred hydration should succeed");
-
-    let (_, active_visible) = sheet_ids(&engine);
-    engine.begin_undo_group().unwrap();
-    engine
-        .batch_set_cells_by_position(
-            vec![(
-                active_visible,
-                17,
-                0,
-                crate::storage::engine::mutation::CellInput::Parse {
-                    text: "atlas91 paste alpha".into(),
-                },
-            )],
-            true,
-        )
-        .unwrap();
-    engine.end_undo_group().unwrap();
-
-    assert_eq!(
-        cell_value_at(&engine, &active_visible, 17, 0),
-        CellValue::Text("atlas91 paste alpha".into())
-    );
-    assert_eq!(engine.get_undo_state().undo_depth, 1);
-
-    engine.undo().unwrap();
-    assert_eq!(
-        cell_value_at(&engine, &active_visible, 17, 0),
-        CellValue::Null
-    );
-    assert_eq!(
-        engine.get_undo_state().redo_depth,
-        1,
-        "undoing a post-materialization paste must leave the paste redoable"
-    );
-
-    engine.redo().unwrap();
-    assert_eq!(
-        cell_value_at(&engine, &active_visible, 17, 0),
-        CellValue::Text("atlas91 paste alpha".into())
-    );
-}
-
-#[test]
 fn deferred_xlsx_import_exposes_metadata_only_sheet_outlines_before_full_hydration() {
     let bytes = metadata_outline_deferred_fixture_xlsx();
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     engine
         .import_from_xlsx_bytes_deferred(&bytes)
         .expect("deferred XLSX import should succeed");
@@ -328,7 +275,7 @@ fn deferred_xlsx_import_exposes_metadata_only_sheet_outlines_before_full_hydrati
 fn deferred_xlsx_import_emits_saved_view_before_full_hydration() {
     let bytes = saved_view_deferred_fixture_xlsx();
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let (_, import_result) = engine
         .import_from_xlsx_bytes_deferred(&bytes)
         .expect("deferred XLSX import should succeed");
@@ -365,7 +312,7 @@ fn deferred_xlsx_import_emits_saved_view_before_full_hydration() {
 fn deferred_xlsx_import_emits_active_second_sheet_view_state_before_full_hydration() {
     let bytes = active_second_saved_view_deferred_fixture_xlsx();
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let (_, import_result) = engine
         .import_from_xlsx_bytes_deferred(&bytes)
         .expect("deferred XLSX import should succeed");
@@ -404,7 +351,7 @@ fn deferred_xlsx_import_emits_active_second_sheet_view_state_before_full_hydrati
 fn deferred_xlsx_filter_clear_rejects_before_hydration_without_partial_mutation() {
     let bytes = active_visible_deferred_fixture_xlsx();
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     engine
         .import_from_xlsx_bytes_deferred(&bytes)
         .expect("deferred XLSX import should succeed");
@@ -450,7 +397,7 @@ fn deferred_xlsx_filter_clear_rejects_before_hydration_without_partial_mutation(
 
 #[test]
 fn deferred_xlsx_import_emits_picture_floating_objects_before_full_hydration() {
-    let (mut source, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut source, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let source_sheet_id = sheet_id();
     let picture_config = serde_json::json!({
         "type": "picture",
@@ -487,7 +434,7 @@ fn deferred_xlsx_import_emits_picture_floating_objects_before_full_hydration() {
         "exported XLSX should contain one parsed picture floating object"
     );
 
-    let (mut imported, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut imported, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let (_patches, result) = imported
         .import_from_xlsx_bytes_deferred(&exported)
         .expect("deferred XLSX import should succeed");

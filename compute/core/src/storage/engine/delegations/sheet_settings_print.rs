@@ -1,58 +1,41 @@
-#![allow(unused_imports, unused_variables)]
-use crate::identity::GridIndex;
 use crate::snapshot::{
-    CellEdit, ChangeKind, MutationResult, NamedRangeChange, PageBreakChange, PrintAreaChange,
-    PrintSettingsChange, PrintTitlesChange, RecalcResult, Scenario, ScenarioCreateInput,
-    ScenarioUpdateInput, ScrollPositionChange, SheetChange, SheetChangeField,
-    SheetLifecycleRuntimeHint, SheetSettingsChange, SheetSnapshot,
+    ChangeKind, MutationResult, PageBreakChange, PrintAreaChange, PrintTitlesChange,
+    SheetSettingsChange,
 };
-use crate::storage::engine::YrsComputeEngine;
-use crate::storage::engine::mutation::{EngineMutation, MutationOutput};
-use crate::storage::engine::mutation_coordinator::SheetLifecycleHistoryHint;
-use crate::storage::engine::{construction, mutation, services};
-use crate::storage::sheet::bindings;
-use crate::storage::sheet::{
-    order, print, properties, protection, settings, split_view, view, visibility,
-};
-use crate::storage::workbook::named_ranges;
-use crate::what_if::scenarios;
-use cell_types::{CellId, SheetId};
-use compute_collab as sync;
-use compute_document::hex::id_to_hex;
-use compute_formats;
+use crate::storage::engine::ComputeEngine;
+use crate::storage::engine::{construction, services};
+use crate::storage::sheet::{print, protection, settings, split_view};
+use cell_types::SheetId;
 use compute_wire::mutation::serialize_multi_viewport_patches;
 use domain_types::domain::print::PageBreaks;
 use domain_types::domain::sheet::{
     PrintRange, PrintTitles, SheetProtectionOptions, SheetSettings, SplitViewConfig,
 };
-use formula_types::{IdentityFormula, NamedRangeDef};
 use value_types::ComputeError;
 
 pub(in crate::storage::engine) fn get_sheet_settings(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> SheetSettings {
     sheet_settings_for_engine(engine, sheet_id)
 }
 
-fn sheet_settings_for_engine(engine: &YrsComputeEngine, sheet_id: &SheetId) -> SheetSettings {
+fn sheet_settings_for_engine(engine: &ComputeEngine, sheet_id: &SheetId) -> SheetSettings {
     settings::get_sheet_settings_with_layout_metrics(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
+        &engine.stores.storage,
         sheet_id,
         engine.stores.layout_metrics,
     )
 }
 
 pub(in crate::storage::engine) fn set_sheet_setting(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     key: &str,
     value: &str,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
     settings::set_sheet_setting_with_layout_metrics(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
+        &mut engine.stores.storage,
         sheet_id,
         key,
         value,
@@ -71,7 +54,7 @@ pub(in crate::storage::engine) fn set_sheet_setting(
 }
 
 fn rebuild_layout_index_if_dimension_default_changed(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     key: &str,
 ) {
@@ -79,11 +62,10 @@ fn rebuild_layout_index_if_dimension_default_changed(
         return;
     }
 
-    let (rows, cols) = properties::get_sheet_dimensions(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
-        sheet_id,
-    );
+    let Some(grid) = engine.stores.grid_indexes.get(sheet_id) else {
+        return;
+    };
+    let (rows, cols) = (grid.row_count(), grid.col_count());
     let layout = construction::build_layout_index_for_sheet(
         &engine.stores.storage,
         sheet_id,
@@ -96,13 +78,12 @@ fn rebuild_layout_index_if_dimension_default_changed(
 }
 
 pub(in crate::storage::engine) fn protect_sheet(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     password_hash: Option<String>,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
     protection::protect_sheet(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
+        &mut engine.stores.storage,
         sheet_id,
         password_hash.as_deref(),
     );
@@ -118,14 +99,13 @@ pub(in crate::storage::engine) fn protect_sheet(
 }
 
 pub(in crate::storage::engine) fn protect_sheet_with_options(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     password_hash: Option<String>,
     options: SheetProtectionOptions,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
     protection::protect_sheet_with_options(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
+        &mut engine.stores.storage,
         sheet_id,
         password_hash.as_deref(),
         &options,
@@ -142,16 +122,11 @@ pub(in crate::storage::engine) fn protect_sheet_with_options(
 }
 
 pub(in crate::storage::engine) fn set_sheet_protection_options(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     options: SheetProtectionOptions,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    protection::set_sheet_protection_options(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
-        sheet_id,
-        &options,
-    );
+    protection::set_sheet_protection_options(&mut engine.stores.storage, sheet_id, &options);
     let settings = sheet_settings_for_engine(engine, sheet_id);
     let mut result = MutationResult::empty();
     result.settings_changes.push(SheetSettingsChange {
@@ -164,13 +139,12 @@ pub(in crate::storage::engine) fn set_sheet_protection_options(
 }
 
 pub(in crate::storage::engine) fn unprotect_sheet(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     password_hash: Option<String>,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
     let success = protection::unprotect_sheet(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
+        &mut engine.stores.storage,
         sheet_id,
         password_hash.as_deref(),
     );
@@ -191,32 +165,19 @@ pub(in crate::storage::engine) fn unprotect_sheet(
 }
 
 pub(in crate::storage::engine) fn get_page_breaks(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> PageBreaks {
-    print::get_page_breaks(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
-        sheet_id,
-    )
+    print::get_page_breaks(&engine.stores.storage, sheet_id)
 }
 
 pub(in crate::storage::engine) fn add_horizontal_page_break(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    print::add_horizontal_page_break(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
-        sheet_id,
-        row,
-    );
-    let breaks = print::get_page_breaks(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
-        sheet_id,
-    );
+    print::add_horizontal_page_break(&mut engine.stores.storage, sheet_id, row);
+    let breaks = print::get_page_breaks(&engine.stores.storage, sheet_id);
     let mut result = MutationResult::empty();
     result.page_break_changes.push(PageBreakChange {
         sheet_id: sheet_id.to_uuid_string(),
@@ -226,21 +187,12 @@ pub(in crate::storage::engine) fn add_horizontal_page_break(
 }
 
 pub(in crate::storage::engine) fn remove_horizontal_page_break(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    print::remove_horizontal_page_break(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
-        sheet_id,
-        row,
-    );
-    let breaks = print::get_page_breaks(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
-        sheet_id,
-    );
+    print::remove_horizontal_page_break(&mut engine.stores.storage, sheet_id, row);
+    let breaks = print::get_page_breaks(&engine.stores.storage, sheet_id);
     let mut result = MutationResult::empty();
     result.page_break_changes.push(PageBreakChange {
         sheet_id: sheet_id.to_uuid_string(),
@@ -250,21 +202,12 @@ pub(in crate::storage::engine) fn remove_horizontal_page_break(
 }
 
 pub(in crate::storage::engine) fn add_vertical_page_break(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     col: u32,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    print::add_vertical_page_break(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
-        sheet_id,
-        col,
-    );
-    let breaks = print::get_page_breaks(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
-        sheet_id,
-    );
+    print::add_vertical_page_break(&mut engine.stores.storage, sheet_id, col);
+    let breaks = print::get_page_breaks(&engine.stores.storage, sheet_id);
     let mut result = MutationResult::empty();
     result.page_break_changes.push(PageBreakChange {
         sheet_id: sheet_id.to_uuid_string(),
@@ -274,21 +217,12 @@ pub(in crate::storage::engine) fn add_vertical_page_break(
 }
 
 pub(in crate::storage::engine) fn remove_vertical_page_break(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     col: u32,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    print::remove_vertical_page_break(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
-        sheet_id,
-        col,
-    );
-    let breaks = print::get_page_breaks(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
-        sheet_id,
-    );
+    print::remove_vertical_page_break(&mut engine.stores.storage, sheet_id, col);
+    let breaks = print::get_page_breaks(&engine.stores.storage, sheet_id);
     let mut result = MutationResult::empty();
     result.page_break_changes.push(PageBreakChange {
         sheet_id: sheet_id.to_uuid_string(),
@@ -298,19 +232,11 @@ pub(in crate::storage::engine) fn remove_vertical_page_break(
 }
 
 pub(in crate::storage::engine) fn clear_all_page_breaks(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    print::clear_all_page_breaks(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
-        sheet_id,
-    );
-    let breaks = print::get_page_breaks(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
-        sheet_id,
-    );
+    print::clear_all_page_breaks(&mut engine.stores.storage, sheet_id);
+    let breaks = print::get_page_breaks(&engine.stores.storage, sheet_id);
     let mut result = MutationResult::empty();
     result.page_break_changes.push(PageBreakChange {
         sheet_id: sheet_id.to_uuid_string(),
@@ -320,27 +246,18 @@ pub(in crate::storage::engine) fn clear_all_page_breaks(
 }
 
 pub(in crate::storage::engine) fn get_print_area(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> Option<PrintRange> {
-    print::get_print_area(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
-        sheet_id,
-    )
+    print::get_print_area(&engine.stores.storage, sheet_id)
 }
 
 pub(in crate::storage::engine) fn set_print_area(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     area: Option<PrintRange>,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    print::set_print_area(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
-        sheet_id,
-        area.as_ref(),
-    );
+    print::set_print_area(&mut engine.stores.storage, sheet_id, area.as_ref());
     let kind = if area.is_some() {
         ChangeKind::Set
     } else {
@@ -356,27 +273,18 @@ pub(in crate::storage::engine) fn set_print_area(
 }
 
 pub(in crate::storage::engine) fn get_print_titles(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> PrintTitles {
-    print::get_print_titles(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
-        sheet_id,
-    )
+    print::get_print_titles(&engine.stores.storage, sheet_id)
 }
 
 pub(in crate::storage::engine) fn set_print_titles(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     titles: PrintTitles,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    print::set_print_titles(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
-        sheet_id,
-        &titles,
-    );
+    print::set_print_titles(&mut engine.stores.storage, sheet_id, &titles);
     let mut result = MutationResult::empty();
     result.print_titles_changes.push(PrintTitlesChange {
         sheet_id: sheet_id.to_uuid_string(),
@@ -386,18 +294,14 @@ pub(in crate::storage::engine) fn set_print_titles(
 }
 
 pub(in crate::storage::engine) fn get_split_config(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> Option<SplitViewConfig> {
-    split_view::get_split_config(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
-        sheet_id,
-    )
+    split_view::get_split_config(&engine.stores.storage, sheet_id)
 }
 
 pub(in crate::storage::engine) fn set_split_config(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     config: Option<SplitViewConfig>,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {

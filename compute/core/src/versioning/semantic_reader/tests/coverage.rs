@@ -1,75 +1,29 @@
 use std::collections::BTreeSet;
 
-use cell_types::CellId;
-use compute_document::hex::id_to_hex;
-use snapshot_types::versioning::{
-    SemanticDiagnosticSeverity, SemanticDomainCoverageStatus, VersionDomainCapabilityState,
-};
+use snapshot_types::versioning::VersionDomainCapabilityState;
 use value_types::CellValue;
-use yrs::{Any, Map, MapPrelim, Out, Transact};
 
-use crate::storage::engine::YrsComputeEngine;
-use crate::versioning::{SemanticWorkbookStateReader, coverage_for_states};
+use crate::storage::engine::ComputeEngine;
+use crate::versioning::SemanticWorkbookStateReader;
 
 use super::{cell, workbook};
 
-fn unclassified_schema_object_ids(engine: &YrsComputeEngine) -> Vec<String> {
-    let state = engine.read_semantic_workbook_state().expect("state");
-    let domain = state
-        .domains
-        .get("unclassified-schema-keys")
-        .expect("unclassified schema domain");
-    assert_eq!(
-        domain.capability_state,
-        VersionDomainCapabilityState::OpaqueBlocking
-    );
-
-    let coverage = coverage_for_states(&state, &state);
-    let domain_coverage = coverage
-        .iter()
-        .find(|coverage| coverage.domain_id == "unclassified-schema-keys")
-        .expect("unclassified schema coverage");
-    assert_eq!(
-        domain_coverage.status,
-        SemanticDomainCoverageStatus::OpaqueBlocking
-    );
-    assert_eq!(domain_coverage.diagnostics.len(), 1);
-    assert_eq!(
-        domain_coverage.diagnostics[0].severity,
-        SemanticDiagnosticSeverity::Error
-    );
-    assert_eq!(
-        domain_coverage.diagnostics[0].code,
-        "VERSIONING_OPAQUE_BLOCKING_DOMAIN"
-    );
-    domain_coverage.diagnostics[0].object_ids.clone()
-}
-
 #[test]
-fn engine_semantic_reader_emits_schema_coverage_rows_for_all_scopes() {
+fn engine_semantic_reader_emits_native_coverage_rows_for_all_scopes() {
     let (engine, _) =
-        YrsComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::from("alpha"))]))
-            .expect("engine");
-
-    let state = engine.read_semantic_workbook_state().expect("state");
-    let coverage_domain = state
-        .domains
-        .get("schema-coverage")
-        .expect("schema coverage domain");
+        ComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::from("alpha"))]))
+            .unwrap();
+    let state = engine.read_semantic_workbook_state().unwrap();
+    let coverage = &state.domains["schema-coverage"];
     assert_eq!(
-        coverage_domain.capability_state,
+        coverage.capability_state,
         VersionDomainCapabilityState::Supported
     );
-    assert!(
-        !state.domains.contains_key("unclassified-schema-keys"),
-        "known schema keys must not produce fail-closed diagnostics"
-    );
-
-    let scopes: BTreeSet<_> = coverage_domain
+    let scopes: BTreeSet<_> = coverage
         .objects
         .keys()
-        .filter_map(|object_id| object_id.strip_prefix("semantic-coverage:"))
-        .filter_map(|suffix| suffix.split(':').next())
+        .filter_map(|id| id.strip_prefix("semantic-coverage:"))
+        .filter_map(|id| id.split(':').next())
         .collect();
     assert_eq!(
         scopes,
@@ -82,86 +36,41 @@ fn engine_semantic_reader_emits_schema_coverage_rows_for_all_scopes() {
             "rowColumn",
             "range",
             "metadata",
-            "bridgeOnly",
+            "identity"
         ])
     );
-}
-
-#[test]
-fn engine_semantic_reader_marks_unclassified_workbook_schema_key_blocking() {
-    let (engine, _) =
-        YrsComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::from("alpha"))]))
-            .expect("engine");
-
-    {
-        let mut txn = engine.storage().doc().transact_mut();
-        engine
-            .storage()
-            .workbook_map()
-            .insert(&mut txn, "vc03UnknownWorkbookKey", Any::Bool(true));
-    }
-
-    assert_eq!(
-        unclassified_schema_object_ids(&engine),
-        vec!["unclassified-schema-key:workbook:/workbook/vc03UnknownWorkbookKey"]
-    );
-}
-
-#[test]
-fn engine_semantic_reader_marks_unclassified_sheet_schema_key_blocking() {
-    let (engine, _) =
-        YrsComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::from("alpha"))]))
-            .expect("engine");
-    let sheet_hex = id_to_hex(engine.storage().sheet_order()[0].as_u128());
-
-    {
-        let mut txn = engine.storage().doc().transact_mut();
-        let Some(Out::YMap(sheet_map)) = engine.storage().sheets().get(&txn, sheet_hex.as_str())
-        else {
-            panic!("sheet map");
-        };
-        sheet_map.insert(
-            &mut txn,
-            "vc03UnknownSheetKey",
-            MapPrelim::from([] as [(&str, Any); 0]),
+    for path in [
+        "/workbook/metadata/external_links",
+        "/workbook/metadata/named_ranges",
+        "/sheets/{sheetId}/metadata/comments",
+        "/sheets/{sheetId}/metadata/cell_annotations",
+        "/sheets/{sheetId}/metadata/conditional_formats",
+    ] {
+        assert!(
+            coverage.objects.keys().any(|id| id.contains(path)),
+            "unclassified native authority: {path}"
         );
     }
-
-    assert_eq!(
-        unclassified_schema_object_ids(&engine),
-        vec!["unclassified-schema-key:sheet:/sheets/{sheetId}/vc03UnknownSheetKey"]
-    );
+    assert!(!coverage.objects.keys().any(|id| id.contains("gridIndex")
+        || id.contains("rangePayloads")
+        || id.contains("bridgeOnly")));
 }
 
 #[test]
-fn engine_semantic_reader_marks_unclassified_cell_schema_key_blocking() {
-    let (engine, _) =
-        YrsComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::from("alpha"))]))
-            .expect("engine");
-    let sheet_hex = id_to_hex(engine.storage().sheet_order()[0].as_u128());
-    let cell_hex = id_to_hex(
-        CellId::from_uuid_str("550e8400-e29b-41d4-a716-446655440001")
-            .expect("cell id")
-            .as_u128(),
-    );
-
-    {
-        let mut txn = engine.storage().doc().transact_mut();
-        let Some(Out::YMap(sheet_map)) = engine.storage().sheets().get(&txn, sheet_hex.as_str())
-        else {
-            panic!("sheet map");
-        };
-        let Some(Out::YMap(cells_map)) = sheet_map.get(&txn, "cells") else {
-            panic!("cells map");
-        };
-        let Some(Out::YMap(cell_map)) = cells_map.get(&txn, cell_hex.as_str()) else {
-            panic!("cell map");
-        };
-        cell_map.insert(&mut txn, "vc03UnknownCellKey", Any::Bool(true));
-    }
-
+fn native_coverage_inventory_is_stable_while_authored_value_digest_changes() {
+    let (mut engine, _) =
+        ComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::from("alpha"))]))
+            .unwrap();
+    let before = engine.read_semantic_workbook_state().unwrap();
+    let sheet = engine.storage().sheet_order()[0];
+    engine.set_cell_value_parsed(&sheet, 0, 0, "beta").unwrap();
+    let after = engine.read_semantic_workbook_state().unwrap();
     assert_eq!(
-        unclassified_schema_object_ids(&engine),
-        vec!["unclassified-schema-key:cell:/sheets/{sheetId}/cells/{cellId}/vc03UnknownCellKey"]
+        before.domains["schema-coverage"].objects,
+        after.domains["schema-coverage"].objects
+    );
+    assert_ne!(
+        snapshot_types::versioning::canonical_digest(&before.sheets).unwrap(),
+        snapshot_types::versioning::canonical_digest(&after.sheets).unwrap()
     );
 }

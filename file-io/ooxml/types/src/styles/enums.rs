@@ -380,7 +380,7 @@ impl HorizontalAlign {
     /// Byte-level parse for the XLSX streaming byte-parser. This is the
     /// external-format read path — Excel occasionally emits tokens newer
     /// than our vocabulary, so a lenient fallback keeps existing
-    /// workbooks openable. For *internal* read paths (Yrs, palette,
+    /// workbooks openable. For *internal* read paths (palette,
     /// domain→CellFormat), use [`Self::from_ooxml_token`] which surfaces
     /// unknowns loudly.
     #[must_use]

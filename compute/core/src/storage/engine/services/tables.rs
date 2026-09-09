@@ -2,7 +2,7 @@
 //!
 //! Read-only queries take `&CellMirror` (and optionally `&EngineStores`).
 //! Mutations take `(&mut EngineStores, &mut CellMirror)`.
-//! Bridge methods on `YrsComputeEngine` delegate to these with one-line calls.
+//! Bridge methods on `ComputeEngine` delegate to these with one-line calls.
 
 use cell_types::{SheetId, SheetPos};
 use compute_document::hex::id_to_hex;
@@ -12,17 +12,18 @@ use domain_types::domain::table::{
 };
 use formula_types::TableDef;
 use value_types::ComputeError;
-use yrs::{Map, Origin, Out, Transact};
 
 use crate::engine_types::{AutoExpansionResult, TableHitRegion};
 use crate::mirror::CellMirror;
 use crate::snapshot::{ChangeKind, FilterChange, MutationResult, TableChange};
-use crate::storage::cells::structured_ref_updater;
+use crate::storage::cells::structured_ref_updater::TableReferenceEdit;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::filters;
 
+mod copy;
 mod filter_delete;
 mod format_materialization;
+mod formula_updates;
 mod mutations;
 mod options;
 mod persistence;
@@ -30,8 +31,10 @@ mod queries;
 #[cfg(test)]
 mod tests;
 
+pub(in crate::storage::engine) use copy::copy_sheet_tables;
 pub(in crate::storage::engine) use filter_delete::*;
 pub(in crate::storage::engine) use format_materialization::*;
+use formula_updates::rewrite_table_formulas;
 pub(in crate::storage::engine) use mutations::*;
 pub(in crate::storage::engine) use options::*;
 pub(in crate::storage::engine) use persistence::*;
@@ -54,7 +57,11 @@ pub(in crate::storage::engine) fn normalize_table_style_id(
 
     let canonical = canonical_builtin_style_id(trimmed).unwrap_or_else(|| trimmed.to_string());
     if compute_table::styles::get_built_in_style(&canonical).is_some()
-        || stores.custom_table_styles.contains_key(&canonical)
+        || stores
+            .storage
+            .metadata
+            .custom_table_styles
+            .contains_key(&canonical)
     {
         return Ok(canonical);
     }

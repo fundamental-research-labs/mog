@@ -1,12 +1,12 @@
 //! Behavioral regression tests for GETPIVOTDATA / pivot-materialization ordering.
 //!
-//! `YrsComputeEngine::recalculate*()` must materialize stored pivot output before
+//! `ComputeEngine::recalculate*()` must materialize stored pivot output before
 //! full formula recalculation. GETPIVOTDATA reads the rendered pivot region
 //! through the cell mirror, so stale or absent pivot output would make the
 //! formula evaluate to the wrong value.
 
 use cell_types::{SheetId, SheetPos};
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use serde_json::json;
 use snapshot_types::{CellData, RecalcOptions, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
@@ -58,6 +58,9 @@ fn workbook_with_getpivotdata_formula() -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: DATA_SHEET_ID.to_string(),
                 name: "Data".to_string(),
                 rows: 100,
@@ -75,6 +78,9 @@ fn workbook_with_getpivotdata_formula() -> WorkbookSnapshot {
                 ranges: vec![],
             },
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: PIVOT_SHEET_ID.to_string(),
                 name: "Pivot".to_string(),
                 rows: 100,
@@ -92,7 +98,7 @@ fn workbook_with_getpivotdata_formula() -> WorkbookSnapshot {
     }
 }
 
-fn create_pivot(engine: &mut YrsComputeEngine) {
+fn create_pivot(engine: &mut ComputeEngine) {
     let config = json!({
         "id": "pivot-getpivotdata-ordering",
         "name": "PivotForGetPivotData",
@@ -119,7 +125,7 @@ fn pivot_sheet_id() -> SheetId {
     SheetId::from_uuid_str(PIVOT_SHEET_ID).unwrap()
 }
 
-fn getpivotdata_value(engine: &YrsComputeEngine) -> f64 {
+fn getpivotdata_value(engine: &ComputeEngine) -> f64 {
     match engine
         .mirror()
         .get_cell_value_at(&pivot_sheet_id(), SheetPos::new(0, 6))
@@ -149,7 +155,7 @@ fn getpivotdata_value(engine: &YrsComputeEngine) -> f64 {
 #[test]
 fn recalculate_materializes_pivots_before_full_recalc() {
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(workbook_with_getpivotdata_formula()).unwrap();
+        ComputeEngine::from_snapshot(workbook_with_getpivotdata_formula()).unwrap();
     create_pivot(&mut engine);
 
     engine.recalculate().expect("recalculate");
@@ -160,7 +166,7 @@ fn recalculate_materializes_pivots_before_full_recalc() {
 #[test]
 fn recalculate_with_options_materializes_pivots_before_full_recalc() {
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(workbook_with_getpivotdata_formula()).unwrap();
+        ComputeEngine::from_snapshot(workbook_with_getpivotdata_formula()).unwrap();
     create_pivot(&mut engine);
 
     engine

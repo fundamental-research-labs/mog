@@ -12,7 +12,7 @@ use super::types::{
     ScenarioRestorePlan, ScenarioSessionState,
 };
 use super::validation::{scenario_error, validate_scenario_input};
-use crate::storage::YrsStorage;
+use crate::storage::WorkbookStorage;
 
 // =============================================================================
 // Apply / Restore Planning
@@ -95,7 +95,7 @@ fn validate_scenario_target(
 
 /// Return the session-scoped active scenario state.
 pub(crate) fn active_state(
-    storage: &YrsStorage,
+    storage: &WorkbookStorage,
     session: &ScenarioSessionState,
 ) -> Option<ScenarioActiveState> {
     let mut active = session.active.clone()?;
@@ -113,7 +113,7 @@ pub(crate) fn active_state(
 /// `apply_mutation()` and installs the returned baseline only after that write
 /// succeeds.
 pub(crate) fn prepare_apply(
-    storage: &YrsStorage,
+    storage: &WorkbookStorage,
     mirror: &CellMirror,
     compute: &crate::scheduler::ComputeCore,
     session: &ScenarioSessionState,

@@ -6,7 +6,7 @@ pub use xlsx_parser::write::ExportReport;
 
 /// Export from a `ParseOutput` — the unified export path.
 ///
-/// This is the primary path: Yrs → `ParseOutput` → `write_xlsx_from_parse_output` → bytes.
+/// This is the primary path: Native workbook state → `ParseOutput` → `write_xlsx_from_parse_output` → bytes.
 /// Uses the same `ParseOutput` type that the XLSX parser emits, enabling both
 /// round-trip and clean export through a single writer.
 pub fn export_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, XlsxApiError> {

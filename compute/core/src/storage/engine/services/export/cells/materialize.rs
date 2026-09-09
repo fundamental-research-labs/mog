@@ -20,13 +20,13 @@ pub(super) fn build_cell_data_for_cell_id(
     col: u32,
     all_props: &FxHashMap<CellId, CellProperties>,
     array_refs: &FxHashMap<CellId, String>,
-    formula_metadata: &FxHashMap<CellId, ooxml_types::worksheet::CellFormula>,
+    formula_metadata: &FxHashMap<CellId, crate::storage::FormulaMetadata>,
     rich_strings: &FxHashMap<CellId, domain_types::RichSharedString>,
     palette: &impl PaletteOps,
     preserve_blank: bool,
 ) -> Option<CellData> {
     // Export explicit cells from their stored value, not the effective value.
-    // Effective reads fall back to range/projection col_data for Null ghost
+    // Effective reads fall back to imported range or projected values for Null ghost
     // cells; that is correct for formulas and viewport reads, but it would turn
     // authored blank/style-only cells into real XLSX value cells on save.
     let value = mirror
@@ -88,6 +88,7 @@ pub(super) fn build_cell_data_for_cell_id(
         return None;
     }
     if is_empty
+        && !preserve_blank
         && is_imported_style_only_blank(
             style_id,
             cell_props,
@@ -115,7 +116,9 @@ pub(super) fn build_cell_data_for_cell_id(
             .map(|f| f.strip_prefix('=').unwrap_or(f).to_string()),
         array_ref: array_refs.get(cell_id).cloned(),
         style_id,
-        cell_formula: formula_metadata.get(cell_id).cloned(),
+        cell_formula: formula_metadata
+            .get(cell_id)
+            .map(|metadata| metadata.to_ooxml(formula.as_deref().unwrap_or(""))),
         cell_metadata_index,
         formula_result_type,
         has_empty_cached_value,
@@ -229,45 +232,4 @@ pub(super) fn range_payload_cell(row: u32, col: u32, value: CellValue) -> CellDa
         original_value: None,
         projection_role: ImportedCellProjectionRole::Normal,
     }
-}
-
-pub(super) fn is_plain_blank_cell(cell: &CellData) -> bool {
-    cell.value.is_null()
-        && cell.formula.is_none()
-        && cell.rich_string.is_none()
-        && cell.style_id.is_none()
-        && cell.cell_formula.is_none()
-        && cell.cell_metadata_index.is_none()
-        && cell.formula_result_type.is_none()
-        && !cell.has_empty_cached_value
-        && cell.formula_cache_provenance.is_absent_or_unknown()
-        && cell.vm.is_none()
-        && !cell.phonetic
-        && cell.date_lexical_value.is_none()
-        && cell.original_sst_index.is_none()
-        && cell
-            .original_value
-            .as_ref()
-            .is_none_or(|value| value.is_empty())
-}
-
-pub(super) fn is_imported_style_only_blank_cell(cell: &CellData) -> bool {
-    cell.value.is_null()
-        && cell.formula.is_none()
-        && cell.rich_string.is_none()
-        && cell.style_id.is_some()
-        && cell.cell_formula.is_none()
-        && cell.cell_metadata_index.is_none()
-        && cell.formula_result_type.is_none()
-        && !cell.has_empty_cached_value
-        && cell.vm.is_none()
-        && cell.original_sst_index.is_none()
-        && cell
-            .original_value
-            .as_ref()
-            .is_none_or(|value| value.is_empty())
-}
-
-pub(super) fn explicit_blank_cell(row: u32, col: u32) -> CellData {
-    range_payload_cell(row, col, CellValue::Null)
 }

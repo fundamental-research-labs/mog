@@ -50,3 +50,5 @@ mod pratt;
 mod range_ops;
 
 pub use pratt::parse_expression;
+#[cfg(test)]
+pub(crate) use range_ops::is_range_like;

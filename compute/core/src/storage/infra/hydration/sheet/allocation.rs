@@ -1,14 +1,13 @@
-use cell_types::SheetId;
+use cell_types::{AxisIdentityId, AxisIdentityStore, SheetId};
 use compute_document::hex::id_to_hex;
 use domain_types::SheetData;
 
 use super::identity::{SheetIdAllocation, allocate_anchored_identities, sheet_identity_extent};
 use crate::storage::infra::hydration::IdAllocator;
 
-/// Allocate all IDs for a sheet without performing any Yrs writes.
+/// Allocate all IDs for a sheet for native hydration.
 ///
-/// Allocation order is deterministic: SheetId, then RowIds (one per row),
-/// then ColIds (one per col), then CellIds (one per cell in `sheet.cells`).
+/// Allocation order is deterministic: SheetId, then compact row and column axes, then CellIds (one per cell in `sheet.cells`).
 /// This matches the allocation order in `hydrate_sheet` so that the same
 /// allocator seed produces identical IDs.
 pub(crate) fn allocate_sheet_ids(
@@ -19,15 +18,9 @@ pub(crate) fn allocate_sheet_ids(
     allocate_sheet_ids_after_sheet_id(sheet, allocator, sheet_id)
 }
 
-/// Like `allocate_sheet_ids`, but reuses IDs from an earlier allocation where
-/// possible while still consuming allocator slots for the current sheet shape.
-///
-/// Deferred XLSX import first hydrates one critical worksheet and later reparses
-/// the whole workbook. If the critical worksheet is not sheet 0, earlier sheets
-/// gain cells during the full parse and would otherwise shift the critical
-/// sheet's row/column/cell IDs. This helper preserves any previously allocated
-/// IDs by positional contract and consumes new slots for missing positions so
-/// later allocations remain collision-free.
+/// Extend preallocated sheet identities when its deferred payload is loaded.
+/// Existing axes retain their UUIDs and only missing positions allocate IDs.
+/// The caller remaps value-free metadata anchors by their native positions.
 pub(crate) fn allocate_sheet_ids_with_previous_allocation(
     sheet: &SheetData,
     allocator: &mut impl IdAllocator,
@@ -40,27 +33,18 @@ pub(crate) fn allocate_sheet_ids_with_previous_allocation(
     let sheet_hex = id_to_hex(sheet_id.as_u128());
     let (identity_rows, identity_cols) = sheet_identity_extent(sheet);
 
-    let mut row_ids = Vec::with_capacity(identity_rows as usize);
-    let mut row_id_hexes = Vec::with_capacity(identity_rows as usize);
-    for row_idx in 0..identity_rows as usize {
-        let allocated = allocator.alloc_row_id();
-        let rid = previous
-            .and_then(|allocation| allocation.row_ids.get(row_idx).copied())
-            .unwrap_or(allocated);
-        row_id_hexes.push(id_to_hex(rid.as_u128()));
-        row_ids.push(rid);
-    }
-
-    let mut col_ids = Vec::with_capacity(identity_cols as usize);
-    let mut col_id_hexes = Vec::with_capacity(identity_cols as usize);
-    for col_idx in 0..identity_cols as usize {
-        let allocated = allocator.alloc_col_id();
-        let cid = previous
-            .and_then(|allocation| allocation.col_ids.get(col_idx).copied())
-            .unwrap_or(allocated);
-        col_id_hexes.push(id_to_hex(cid.as_u128()));
-        col_ids.push(cid);
-    }
+    let row_axis = reuse_axis(
+        sheet_id,
+        previous.map(|a| &a.row_axis),
+        identity_rows,
+        |len| allocator.alloc_row_axis(len),
+    );
+    let col_axis = reuse_axis(
+        sheet_id,
+        previous.map(|a| &a.col_axis),
+        identity_cols,
+        |len| allocator.alloc_col_axis(len),
+    );
 
     let mut cell_ids = Vec::with_capacity(sheet.cells.len());
     for cell_idx in 0..sheet.cells.len() {
@@ -89,10 +73,8 @@ pub(crate) fn allocate_sheet_ids_with_previous_allocation(
     SheetIdAllocation {
         sheet_id,
         sheet_hex,
-        row_ids,
-        row_id_hexes,
-        col_ids,
-        col_id_hexes,
+        row_axis,
+        col_axis,
         cell_ids,
         identity_only_cells,
     }
@@ -106,21 +88,8 @@ fn allocate_sheet_ids_after_sheet_id(
     let sheet_hex = id_to_hex(sheet_id.as_u128());
     let (identity_rows, identity_cols) = sheet_identity_extent(sheet);
 
-    let mut row_ids = Vec::with_capacity(identity_rows as usize);
-    let mut row_id_hexes = Vec::with_capacity(identity_rows as usize);
-    for _ in 0..identity_rows {
-        let rid = allocator.alloc_row_id();
-        row_id_hexes.push(id_to_hex(rid.as_u128()));
-        row_ids.push(rid);
-    }
-
-    let mut col_ids = Vec::with_capacity(identity_cols as usize);
-    let mut col_id_hexes = Vec::with_capacity(identity_cols as usize);
-    for _ in 0..identity_cols {
-        let cid = allocator.alloc_col_id();
-        col_id_hexes.push(id_to_hex(cid.as_u128()));
-        col_ids.push(cid);
-    }
+    let row_axis = allocator.alloc_row_axis(identity_rows);
+    let col_axis = allocator.alloc_col_axis(identity_cols);
 
     let mut cell_ids = Vec::with_capacity(sheet.cells.len());
     for _ in &sheet.cells {
@@ -132,11 +101,120 @@ fn allocate_sheet_ids_after_sheet_id(
     SheetIdAllocation {
         sheet_id,
         sheet_hex,
-        row_ids,
-        row_id_hexes,
-        col_ids,
-        col_id_hexes,
+        row_axis,
+        col_axis,
         cell_ids,
         identity_only_cells,
+    }
+}
+
+fn reuse_axis<Id: AxisIdentityId>(
+    sheet_id: SheetId,
+    previous: Option<&AxisIdentityStore<Id>>,
+    len: u32,
+    allocate: impl FnOnce(u32) -> AxisIdentityStore<Id>,
+) -> AxisIdentityStore<Id> {
+    let Some(previous) = previous else {
+        return allocate(len);
+    };
+    let mut axis = previous.clone();
+    let old_len = axis.len();
+    if len <= old_len {
+        axis.delete_range(len, old_len - len);
+        return axis;
+    }
+    match allocate(len - old_len) {
+        AxisIdentityStore::Runs(compact) => {
+            for segment in compact.segments() {
+                axis.insert_run(sheet_id, axis.len(), segment.run);
+            }
+        }
+        AxisIdentityStore::Explicit(new_ids) => {
+            let mut ids: Vec<_> = axis.identities_in(sheet_id, 0, old_len).collect();
+            ids.extend(new_ids);
+            axis = AxisIdentityStore::Explicit(ids);
+        }
+    }
+    axis
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::storage::infra::hydration::DefaultIdAllocator;
+
+    #[test]
+    fn sparse_import_allocates_two_compact_axes_for_a_million_rows() {
+        let sheet = SheetData {
+            rows: 1_000_000,
+            cols: 16_384,
+            ..Default::default()
+        };
+        let mut allocator = DefaultIdAllocator::new();
+        let allocation = allocate_sheet_ids(&sheet, &mut allocator);
+        let AxisIdentityStore::Runs(rows) = &allocation.row_axis else {
+            panic!("expanded row identities");
+        };
+        let AxisIdentityStore::Runs(cols) = &allocation.col_axis else {
+            panic!("expanded column identities");
+        };
+        assert_eq!(rows.segments().len(), 1);
+        assert_eq!(cols.segments().len(), 1);
+        assert_eq!(allocation.row_axis.len(), 1_000_000);
+        assert_eq!(allocation.col_axis.len(), 16_384);
+        assert!(allocation.cell_ids.is_empty());
+        assert!(allocation.identity_only_cells.is_empty());
+        assert_eq!(
+            allocator.alloc_cell_id().as_u128(),
+            allocation.sheet_id.as_u128() + 1
+        );
+    }
+
+    #[test]
+    fn deferred_axis_growth_keeps_previous_identities_and_reserves_all_runs() {
+        let mut original = DefaultIdAllocator::new();
+        let sheet = SheetData {
+            rows: 100,
+            cols: 10,
+            ..Default::default()
+        };
+        let first = allocate_sheet_ids(&sheet, &mut original);
+        let second = allocate_sheet_ids(&sheet, &mut original);
+        let old_last = first.row_axis.identity_at(first.sheet_id, 99).unwrap();
+        let second_first = second.row_axis.identity_at(second.sheet_id, 0).unwrap();
+        let mut continuation = DefaultIdAllocator::with_seed(100);
+        for allocation in [&first, &second] {
+            continuation.reserve_axis(&allocation.row_axis);
+            continuation.reserve_axis(&allocation.col_axis);
+        }
+        let grown = allocate_sheet_ids_with_previous_allocation(
+            &SheetData {
+                rows: 1_000_000,
+                cols: 12,
+                ..Default::default()
+            },
+            &mut continuation,
+            Some(&first),
+        );
+        assert_eq!(grown.sheet_id, first.sheet_id);
+        assert_eq!(
+            grown.row_axis.identity_at(first.sheet_id, 99),
+            Some(old_last)
+        );
+        let AxisIdentityStore::Runs(rows) = &grown.row_axis else {
+            panic!("expanded row identities");
+        };
+        assert_eq!(rows.segments().len(), 2);
+        assert!(
+            rows.segments()[1].run.run_id > second_first.compact_axis_identity().unwrap().run_id
+        );
+        assert_ne!(
+            grown.row_axis.identity_at(first.sheet_id, 100),
+            Some(old_last)
+        );
+        let shrunk =
+            allocate_sheet_ids_with_previous_allocation(&sheet, &mut continuation, Some(&grown));
+        assert_eq!(shrunk.row_axis, first.row_axis);
+        assert_eq!(shrunk.col_axis, first.col_axis);
     }
 }

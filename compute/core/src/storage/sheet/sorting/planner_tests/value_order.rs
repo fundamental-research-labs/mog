@@ -2,20 +2,20 @@ use domain_types::CellFormat;
 use domain_types::domain::filter::SortOrder;
 use value_types::{CellValue, FiniteF64};
 
-use super::super::planner::compute_sorted_row_order;
-use super::super::test_helpers::{make_cell_id, place_cell, storage_with_sheet};
+use super::super::test_helpers::compute_sorted_row_order;
+use super::super::test_helpers::{make_cell_id, place_cell, planner_fixture as storage_with_sheet};
 use super::super::types::{CellRange, SortCriterion, SortMode, SortOptions};
 
 #[test]
 fn test_compute_sorted_row_order_single_asc() {
-    let (storage, sheet_id, mut grid) = storage_with_sheet();
+    let (mut storage, sheet_id, mut grid) = storage_with_sheet();
     let c1 = make_cell_id(101);
     let c2 = make_cell_id(102);
     let c3 = make_cell_id(103);
 
     // Row 0: value 30
     place_cell(
-        &storage,
+        &mut storage,
         &mut grid,
         sheet_id,
         c1,
@@ -25,7 +25,7 @@ fn test_compute_sorted_row_order_single_asc() {
     );
     // Row 1: value 10
     place_cell(
-        &storage,
+        &mut storage,
         &mut grid,
         sheet_id,
         c2,
@@ -35,7 +35,7 @@ fn test_compute_sorted_row_order_single_asc() {
     );
     // Row 2: value 20
     place_cell(
-        &storage,
+        &mut storage,
         &mut grid,
         sheet_id,
         c3,
@@ -56,15 +56,9 @@ fn test_compute_sorted_row_order_single_asc() {
         has_headers: false,
     };
 
-    let result = compute_sorted_row_order(
-        storage.doc(),
-        &storage.sheets_ref(),
-        sheet_id,
-        &range,
-        &options,
-        &grid,
-        |_r, _c| CellFormat::default(),
-    );
+    let result = compute_sorted_row_order(&storage, &range, &options, &grid, |_r, _c| {
+        CellFormat::default()
+    });
     // Sorted: 10(row1), 20(row2), 30(row0)
     assert_eq!(result.sorted_indices, vec![1, 2, 0]);
     assert_eq!(result.rows_moved, 3); // all three rows moved
@@ -73,7 +67,7 @@ fn test_compute_sorted_row_order_single_asc() {
 
 #[test]
 fn test_compute_sorted_row_order_blanks_last_ascending() {
-    let (storage, sheet_id, mut grid) = storage_with_sheet();
+    let (mut storage, sheet_id, mut grid) = storage_with_sheet();
     let c1 = make_cell_id(1201);
     let c2 = make_cell_id(1202);
     let c3 = make_cell_id(1203);
@@ -81,7 +75,7 @@ fn test_compute_sorted_row_order_blanks_last_ascending() {
     let c5 = make_cell_id(1205);
 
     place_cell(
-        &storage,
+        &mut storage,
         &mut grid,
         sheet_id,
         c1,
@@ -91,7 +85,7 @@ fn test_compute_sorted_row_order_blanks_last_ascending() {
     );
     grid.register_cell(c2, 1, 0);
     place_cell(
-        &storage,
+        &mut storage,
         &mut grid,
         sheet_id,
         c3,
@@ -101,7 +95,7 @@ fn test_compute_sorted_row_order_blanks_last_ascending() {
     );
     grid.register_cell(c4, 3, 0);
     place_cell(
-        &storage,
+        &mut storage,
         &mut grid,
         sheet_id,
         c5,
@@ -121,15 +115,9 @@ fn test_compute_sorted_row_order_blanks_last_ascending() {
         has_headers: false,
     };
 
-    let result = compute_sorted_row_order(
-        storage.doc(),
-        &storage.sheets_ref(),
-        sheet_id,
-        &range,
-        &options,
-        &grid,
-        |_r, _c| CellFormat::default(),
-    );
+    let result = compute_sorted_row_order(&storage, &range, &options, &grid, |_r, _c| {
+        CellFormat::default()
+    });
 
     assert_eq!(result.sorted_indices, vec![2, 4, 0, 1, 3]);
 }
@@ -140,13 +128,13 @@ fn test_compute_sorted_row_order_blanks_last_ascending() {
 
 #[test]
 fn test_compute_sorted_row_order_desc() {
-    let (storage, sheet_id, mut grid) = storage_with_sheet();
+    let (mut storage, sheet_id, mut grid) = storage_with_sheet();
     let c1 = make_cell_id(201);
     let c2 = make_cell_id(202);
     let c3 = make_cell_id(203);
 
     place_cell(
-        &storage,
+        &mut storage,
         &mut grid,
         sheet_id,
         c1,
@@ -155,7 +143,7 @@ fn test_compute_sorted_row_order_desc() {
         &CellValue::Number(FiniteF64::must(10.0)),
     );
     place_cell(
-        &storage,
+        &mut storage,
         &mut grid,
         sheet_id,
         c2,
@@ -164,7 +152,7 @@ fn test_compute_sorted_row_order_desc() {
         &CellValue::Number(FiniteF64::must(30.0)),
     );
     place_cell(
-        &storage,
+        &mut storage,
         &mut grid,
         sheet_id,
         c3,
@@ -185,15 +173,9 @@ fn test_compute_sorted_row_order_desc() {
         has_headers: false,
     };
 
-    let result = compute_sorted_row_order(
-        storage.doc(),
-        &storage.sheets_ref(),
-        sheet_id,
-        &range,
-        &options,
-        &grid,
-        |_r, _c| CellFormat::default(),
-    );
+    let result = compute_sorted_row_order(&storage, &range, &options, &grid, |_r, _c| {
+        CellFormat::default()
+    });
     // Sorted desc: 30(row1), 20(row2), 10(row0)
     assert_eq!(result.sorted_indices, vec![1, 2, 0]);
 }
@@ -204,7 +186,7 @@ fn test_compute_sorted_row_order_desc() {
 
 #[test]
 fn test_sort_mixed_types() {
-    let (storage, sheet_id, mut grid) = storage_with_sheet();
+    let (mut storage, sheet_id, mut grid) = storage_with_sheet();
     let c1 = make_cell_id(901);
     let c2 = make_cell_id(902);
     let c3 = make_cell_id(903);
@@ -212,7 +194,7 @@ fn test_sort_mixed_types() {
 
     // Row 0: "Hello"
     place_cell(
-        &storage,
+        &mut storage,
         &mut grid,
         sheet_id,
         c1,
@@ -222,7 +204,7 @@ fn test_sort_mixed_types() {
     );
     // Row 1: 42
     place_cell(
-        &storage,
+        &mut storage,
         &mut grid,
         sheet_id,
         c2,
@@ -231,10 +213,18 @@ fn test_sort_mixed_types() {
         &CellValue::Number(FiniteF64::must(42.0)),
     );
     // Row 2: null
-    place_cell(&storage, &mut grid, sheet_id, c3, 2, 0, &CellValue::Null);
+    place_cell(
+        &mut storage,
+        &mut grid,
+        sheet_id,
+        c3,
+        2,
+        0,
+        &CellValue::Null,
+    );
     // Row 3: true
     place_cell(
-        &storage,
+        &mut storage,
         &mut grid,
         sheet_id,
         c4,
@@ -255,15 +245,9 @@ fn test_sort_mixed_types() {
         has_headers: false,
     };
 
-    let result = compute_sorted_row_order(
-        storage.doc(),
-        &storage.sheets_ref(),
-        sheet_id,
-        &range,
-        &options,
-        &grid,
-        |_r, _c| CellFormat::default(),
-    );
+    let result = compute_sorted_row_order(&storage, &range, &options, &grid, |_r, _c| {
+        CellFormat::default()
+    });
     // Production range sort keeps blanks last, then applies type priority:
     // bool(row3) < number(row1) < string(row0) < null(row2).
     assert_eq!(result.sorted_indices, vec![3, 1, 0, 2]);
@@ -275,13 +259,13 @@ fn test_sort_mixed_types() {
 
 #[test]
 fn test_sort_strings_natural() {
-    let (storage, sheet_id, mut grid) = storage_with_sheet();
+    let (mut storage, sheet_id, mut grid) = storage_with_sheet();
     let c1 = make_cell_id(1101);
     let c2 = make_cell_id(1102);
     let c3 = make_cell_id(1103);
 
     place_cell(
-        &storage,
+        &mut storage,
         &mut grid,
         sheet_id,
         c1,
@@ -290,7 +274,7 @@ fn test_sort_strings_natural() {
         &CellValue::Text("Item 10".into()),
     );
     place_cell(
-        &storage,
+        &mut storage,
         &mut grid,
         sheet_id,
         c2,
@@ -299,7 +283,7 @@ fn test_sort_strings_natural() {
         &CellValue::Text("Item 2".into()),
     );
     place_cell(
-        &storage,
+        &mut storage,
         &mut grid,
         sheet_id,
         c3,
@@ -320,15 +304,9 @@ fn test_sort_strings_natural() {
         has_headers: false,
     };
 
-    let result = compute_sorted_row_order(
-        storage.doc(),
-        &storage.sheets_ref(),
-        sheet_id,
-        &range,
-        &options,
-        &grid,
-        |_r, _c| CellFormat::default(),
-    );
+    let result = compute_sorted_row_order(&storage, &range, &options, &grid, |_r, _c| {
+        CellFormat::default()
+    });
     // Natural sort: "Item 1" < "Item 2" < "Item 10"
     assert_eq!(result.sorted_indices, vec![2, 1, 0]);
 }

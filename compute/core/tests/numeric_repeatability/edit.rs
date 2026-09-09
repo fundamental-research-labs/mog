@@ -1,5 +1,5 @@
 use cell_types::{SheetId, SheetPos};
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use value_types::{CellValue, FiniteF64};
 
 use crate::support::fixtures::SHEET1_UUID;
@@ -11,7 +11,7 @@ pub(crate) fn sheet_id() -> SheetId {
 /// Overwrite a value cell via the raw `import_values` path, bypassing string
 /// input parsing for numeric seeds.
 pub(crate) fn overwrite_number(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sid: &SheetId,
     row: u32,
     col: u32,
@@ -24,11 +24,7 @@ pub(crate) fn overwrite_number(
     Ok(())
 }
 
-pub(crate) fn read_number_at(
-    engine: &YrsComputeEngine,
-    sid: &SheetId,
-    pos: SheetPos,
-) -> Option<f64> {
+pub(crate) fn read_number_at(engine: &ComputeEngine, sid: &SheetId, pos: SheetPos) -> Option<f64> {
     engine
         .mirror()
         .get_cell_value_at(sid, pos)
@@ -36,7 +32,7 @@ pub(crate) fn read_number_at(
 }
 
 pub(crate) fn read_value_at(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sid: &SheetId,
     pos: SheetPos,
 ) -> Option<CellValue> {
@@ -46,7 +42,7 @@ pub(crate) fn read_value_at(
 /// Apply one forward/inverse pair on (row, col) and compare the dependent
 /// value before and after the inverse. Numeric values use exact `to_bits()`.
 pub(crate) fn op_inverse_pair(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sid: &SheetId,
     root_row: u32,
     root_col: u32,

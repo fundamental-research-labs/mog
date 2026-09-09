@@ -36,10 +36,8 @@ mod protect_sheet {
 
     #[test]
     fn id_is_populated_by_the_template_generator() {
-        // Legacy TS deferred ID assignment to the store. Rust Rust
-        // generates the ID at template construction because policies are
-        // stored by ID in Yrs — no separate assignment step. Just confirm
-        // distinct IDs on distinct calls.
+        // Templates allocate policy identities at construction. Distinct
+        // template instances must produce distinct policy IDs.
         let tpl = Template::ProtectSheet { sheet_id: sheet() };
         let a = tpl.generate();
         let b = tpl.generate();

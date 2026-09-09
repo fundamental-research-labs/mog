@@ -49,7 +49,7 @@ fn make_rich_baseline() -> domain_types::ParseOutput {
         sheet_id: String::new(),
         pivot: None,
         ranges: vec![CFCellRange::new(1, 1, 2, 1)], // B2:B3
-        range_identities: None,
+
         rules: vec![
             CFRule::CellValue {
                 id: "test-rule-rich-1".to_string(),

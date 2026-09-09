@@ -82,7 +82,7 @@ mod dep_extract;
 mod edit;
 mod formula_reg;
 mod init;
-pub(crate) mod input;
+mod history;
 mod level_eval;
 mod recalc;
 mod region_guard;
@@ -172,7 +172,7 @@ pub struct ComputeCore {
     graph: DependencyGraph,
     /// Monotonic ID allocator — generates unique CellIds without syscalls.
     /// Wrapped in `Arc` so it can be shared with `EngineStores.grid_id_alloc`
-    /// in collaborative mode, preventing CellId collisions between ghost cells
+    /// to prevent CellId collisions between ghost cells
     /// (allocated here during formula resolution) and real cells (allocated via
     /// the grid allocator in mutation handlers).
     id_alloc: std::sync::Arc<IdAllocator>,
@@ -233,7 +233,8 @@ pub struct ComputeCore {
     /// graph hasn't been built yet — `ensure_graph_built()` must be called
     /// before any recalc or mutation that depends on the graph.
     deferred_formula_cells: Option<Vec<(CellId, SheetId, String)>>,
-    deferred_snapshot: Option<WorkbookSnapshot>,
+    /// Some worksheet payloads are still unloaded; graph construction must wait.
+    workbook_load_pending: bool,
 }
 
 impl Default for ComputeCore {
@@ -271,11 +272,11 @@ impl ComputeCore {
             pending_manual_dirty_cells: FxHashSet::default(),
             spill_blockers: FxHashMap::default(),
             deferred_formula_cells: None,
-            deferred_snapshot: None,
+            workbook_load_pending: false,
         }
     }
 
-    /// Replace the ID allocator (used for collaborative mode to partition by client_id).
+    /// Share the native grid allocator with formula identity resolution.
     pub fn set_id_alloc(&mut self, alloc: std::sync::Arc<IdAllocator>) {
         self.id_alloc = alloc;
     }
@@ -446,7 +447,7 @@ impl ComputeCore {
     ) -> Result<(), ComputeError> {
         // Extract formula cells before adding (need the data)
         let sheet_id = SheetId::from_uuid_str(&snapshot.id)?;
-        let formula_cells: Vec<(CellId, SheetId, String)> = snapshot
+        let formula_cells: Vec<(CellId, String)> = snapshot
             .cells
             .iter()
             .filter_map(|cd| {
@@ -458,12 +459,23 @@ impl ComputeCore {
                         return None;
                     }
                 };
-                Some((cell_id, sheet_id, f.clone()))
+                Some((cell_id, f.clone()))
             })
             .collect();
 
         mirror.add_sheet(snapshot)?;
 
+        self.register_sheet_formulas(mirror, sheet_id, formula_cells);
+        Ok(())
+    }
+
+    /// Register formulas for an already installed native sheet.
+    pub(crate) fn register_sheet_formulas(
+        &mut self,
+        mirror: &mut CellMirror,
+        sheet_id: SheetId,
+        formula_cells: impl IntoIterator<Item = (CellId, String)>,
+    ) {
         // Maintain sheet_order — initialized at init_from_snapshot but
         // never updated for dynamically added sheets, so without this the
         // newly added sheet has no entry and any code that iterates
@@ -484,11 +496,9 @@ impl ComputeCore {
         // the graph with the formulas it was handed. A live sheet add must
         // append edges for the new sheet without dropping existing sheets'
         // dependency edges.
-        for (cell_id, sheet_id, formula) in formula_cells {
+        for (cell_id, formula) in formula_cells {
             self.parse_and_register_formula(mirror, cell_id, sheet_id, formula, true);
         }
-
-        Ok(())
     }
 
     /// Remove a sheet. Cleans up all cells in that sheet from the graph.
@@ -588,7 +598,7 @@ impl ComputeCore {
     }
 
     /// Iterate over all (CellId, formula_string) pairs.
-    /// Used to sync regenerated formula strings back to Yrs after structural changes.
+    /// Exposes regenerated formula text after structural changes.
     pub fn formula_strings_iter(&self) -> impl Iterator<Item = (&CellId, &str)> {
         self.formula_strings.iter().map(|(k, v)| (k, v.as_str()))
     }

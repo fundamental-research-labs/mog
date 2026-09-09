@@ -1,230 +1,5 @@
-use super::support::{make_cell_id, make_sheet_id};
+use super::support::make_cell_id;
 use super::*;
-
-#[test]
-fn test_identity_formula_yrs_roundtrip() {
-    use formula_types::{IdentityCellRef, IdentityRangeRef};
-
-    let mut storage = YrsStorage::new();
-    let mut mirror = CellMirror::new();
-    let sheet_id = make_sheet_id(1);
-    let cell_id = make_cell_id(2100);
-    storage
-        .add_sheet(&mut mirror, sheet_id, "Sheet1", 10, 5)
-        .unwrap();
-
-    let idf = IdentityFormula {
-        template: "SUM({0})+{1}*2".to_string(),
-        refs: vec![
-            IdentityFormulaRef::Range(IdentityRangeRef {
-                start_id: make_cell_id(10),
-                end_id: make_cell_id(20),
-                start_row_absolute: false,
-                start_col_absolute: false,
-                end_row_absolute: false,
-                end_col_absolute: false,
-            }),
-            IdentityFormulaRef::Cell(IdentityCellRef {
-                id: make_cell_id(30),
-                row_absolute: false,
-                col_absolute: false,
-            }),
-        ],
-        is_dynamic_array: false,
-        is_volatile: false,
-        is_aggregate: false,
-    };
-
-    storage.set_cell(
-        &mut mirror,
-        &sheet_id,
-        cell_id,
-        0,
-        0,
-        CellValue::Number(FiniteF64::must(42.0)),
-        Some("=SUM(A1:B10)+C1*2".to_string()),
-        Some(idf.clone()),
-    );
-
-    let (yrs_val, yrs_formula, yrs_idf) = storage
-        .read_cell_from_yrs(&sheet_id, &cell_id)
-        .expect("cell should exist in yrs");
-
-    assert_eq!(yrs_val, CellValue::Number(FiniteF64::must(42.0)));
-    assert_eq!(yrs_formula, Some("=SUM(A1:B10)+C1*2".to_string()));
-    let yrs_idf = yrs_idf.expect("identity formula should be present in yrs");
-    assert_eq!(yrs_idf, idf);
-
-    let mirror_formula = mirror.get_formula(&cell_id);
-    assert!(mirror_formula.is_some());
-    assert_eq!(*mirror_formula.unwrap(), idf);
-}
-
-#[test]
-fn test_identity_formula_yrs_keys_exist() {
-    use formula_types::IdentityCellRef;
-
-    let mut storage = YrsStorage::new();
-    let mut mirror = CellMirror::new();
-    let sheet_id = make_sheet_id(1);
-    let cell_id = make_cell_id(2200);
-    storage
-        .add_sheet(&mut mirror, sheet_id, "Sheet1", 10, 5)
-        .unwrap();
-
-    let idf = IdentityFormula {
-        template: "{0}+1".to_string(),
-        refs: vec![IdentityFormulaRef::Cell(IdentityCellRef {
-            id: make_cell_id(50),
-            row_absolute: true,
-            col_absolute: false,
-        })],
-        is_dynamic_array: false,
-        is_volatile: false,
-        is_aggregate: false,
-    };
-
-    storage.set_cell(
-        &mut mirror,
-        &sheet_id,
-        cell_id,
-        0,
-        0,
-        CellValue::Number(FiniteF64::must(1.0)),
-        Some("=A1+1".to_string()),
-        Some(idf),
-    );
-
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let cell_hex = id_to_hex(cell_id.as_u128());
-    let txn = storage.doc.transact();
-
-    let sheet_map = match storage.sheets.get(&txn, &sheet_hex) {
-        Some(Out::YMap(m)) => m,
-        _ => panic!("sheet map not found"),
-    };
-    let cells_map = match sheet_map.get(&txn, KEY_CELLS) {
-        Some(Out::YMap(m)) => m,
-        _ => panic!("cells map not found"),
-    };
-    let cell_map = match cells_map.get(&txn, &cell_hex) {
-        Some(Out::YMap(m)) => m,
-        _ => panic!("cell map not found"),
-    };
-
-    assert!(matches!(
-        cell_map.get(&txn, KEY_FORMULA_TEMPLATE),
-        Some(Out::Any(Any::String(_)))
-    ));
-
-    assert!(matches!(
-        cell_map.get(&txn, KEY_FORMULA_REFS),
-        Some(Out::Any(Any::String(_)))
-    ));
-
-    assert!(cell_map.get(&txn, KEY_FORMULA_DYNAMIC_ARRAY).is_none());
-    assert!(cell_map.get(&txn, KEY_FORMULA_VOLATILE).is_none());
-}
-
-#[test]
-fn test_backward_compat_legacy_formula_only() {
-    let mut storage = YrsStorage::new();
-    let mut mirror = CellMirror::new();
-    let sheet_id = make_sheet_id(1);
-    let cell_id = make_cell_id(2300);
-    storage
-        .add_sheet(&mut mirror, sheet_id, "Sheet1", 10, 5)
-        .unwrap();
-
-    storage.set_cell(
-        &mut mirror,
-        &sheet_id,
-        cell_id,
-        0,
-        0,
-        CellValue::Number(FiniteF64::must(10.0)),
-        Some("=A1+A2".to_string()),
-        None,
-    );
-
-    let (yrs_val, yrs_formula, yrs_idf) = storage
-        .read_cell_from_yrs(&sheet_id, &cell_id)
-        .expect("cell should exist");
-    assert_eq!(yrs_val, CellValue::Number(FiniteF64::must(10.0)));
-    assert_eq!(yrs_formula, Some("=A1+A2".to_string()));
-    assert!(
-        yrs_idf.is_none(),
-        "identity formula should be None for legacy cell"
-    );
-}
-
-#[test]
-fn test_identity_formula_flags_roundtrip() {
-    use formula_types::IdentityCellRef;
-
-    let mut storage = YrsStorage::new();
-    let mut mirror = CellMirror::new();
-    let sheet_id = make_sheet_id(1);
-    storage
-        .add_sheet(&mut mirror, sheet_id, "Sheet1", 10, 5)
-        .unwrap();
-
-    let cell_da = make_cell_id(2401);
-    let idf_da = IdentityFormula {
-        template: "SEQUENCE({0})".to_string(),
-        refs: vec![IdentityFormulaRef::Cell(IdentityCellRef {
-            id: make_cell_id(60),
-            row_absolute: false,
-            col_absolute: false,
-        })],
-        is_dynamic_array: true,
-        is_volatile: false,
-        is_aggregate: false,
-    };
-
-    storage.set_cell(
-        &mut mirror,
-        &sheet_id,
-        cell_da,
-        0,
-        0,
-        CellValue::Null,
-        Some("=SEQUENCE(A1)".to_string()),
-        Some(idf_da.clone()),
-    );
-
-    let (_, _, yrs_idf) = storage.read_cell_from_yrs(&sheet_id, &cell_da).unwrap();
-    let yrs_idf = yrs_idf.unwrap();
-    assert!(yrs_idf.is_dynamic_array);
-    assert!(!yrs_idf.is_volatile);
-    assert_eq!(yrs_idf, idf_da);
-
-    let cell_vol = make_cell_id(2402);
-    let idf_vol = IdentityFormula {
-        template: "NOW()".to_string(),
-        refs: vec![],
-        is_dynamic_array: false,
-        is_volatile: true,
-        is_aggregate: false,
-    };
-
-    storage.set_cell(
-        &mut mirror,
-        &sheet_id,
-        cell_vol,
-        1,
-        0,
-        CellValue::Number(FiniteF64::must(45678.0)),
-        Some("=NOW()".to_string()),
-        Some(idf_vol.clone()),
-    );
-
-    let (_, _, yrs_idf) = storage.read_cell_from_yrs(&sheet_id, &cell_vol).unwrap();
-    let yrs_idf = yrs_idf.unwrap();
-    assert!(!yrs_idf.is_dynamic_array);
-    assert!(yrs_idf.is_volatile);
-    assert_eq!(yrs_idf, idf_vol);
-}
 
 #[test]
 fn test_identity_refs_json_roundtrip_all_variants() {
@@ -270,8 +45,9 @@ fn test_identity_refs_json_roundtrip_all_variants() {
         }),
     ];
 
-    let json = identity_refs_to_json(&refs).unwrap();
-    let parsed = identity_refs_from_json(&json).expect("JSON deserialization should succeed");
+    let json = serde_json::to_string(&refs).unwrap();
+    let parsed: Vec<IdentityFormulaRef> =
+        serde_json::from_str(&json).expect("JSON deserialization should succeed");
     assert_eq!(refs, parsed);
 }
 
@@ -292,7 +68,13 @@ fn test_identity_formula_from_snapshot() {
     };
 
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -318,16 +100,8 @@ fn test_identity_formula_from_snapshot() {
         calculation_settings: None,
     };
 
-    let storage = YrsStorage::from_snapshot(snap.clone()).expect("from_snapshot should succeed");
     let mirror = CellMirror::from_snapshot(snap).unwrap();
-    let sheet_id = SheetId::from_uuid_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
     let cell_id = CellId::from_uuid_str("550e8400-e29b-41d4-a716-446655440003").unwrap();
-
-    let (_, _, yrs_idf) = storage
-        .read_cell_from_yrs(&sheet_id, &cell_id)
-        .expect("cell should exist");
-    let yrs_idf = yrs_idf.expect("identity formula should be present");
-    assert_eq!(yrs_idf, idf);
 
     let mirror_formula = mirror.get_formula(&cell_id);
     assert!(mirror_formula.is_some());

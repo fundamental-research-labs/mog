@@ -3,9 +3,9 @@ use super::test_support::*;
 
 #[test]
 fn test_row_outline_levels() {
-    let (s, id) = storage_with_sheet();
-    group_rows(s.doc(), &s.sheets_ref(), &id, 2, 5).unwrap();
-    let l = get_row_outline_levels(s.doc(), &s.sheets_ref(), &id, 0, 7);
+    let (mut s, id) = storage_with_sheet();
+    group_rows(&mut s, &id, 2, 5).unwrap();
+    let l = get_row_outline_levels(&s, &id, 0, 7);
     assert_eq!(l[0].level, 0);
     assert_eq!(l[2].level, 1);
     assert!(l[6].is_summary);
@@ -14,10 +14,10 @@ fn test_row_outline_levels() {
 
 #[test]
 fn test_row_visibility_collapsed() {
-    let (s, id) = storage_with_sheet();
-    let g = group_rows(s.doc(), &s.sheets_ref(), &id, 2, 5).unwrap();
-    set_group_collapsed(s.doc(), &s.sheets_ref(), &id, &g.id, true);
-    let l = get_row_outline_levels(s.doc(), &s.sheets_ref(), &id, 2, 5);
+    let (mut s, id) = storage_with_sheet();
+    let g = group_rows(&mut s, &id, 2, 5).unwrap();
+    set_group_collapsed(&mut s, &id, &g.id, true);
+    let l = get_row_outline_levels(&s, &id, 2, 5);
     assert!(!l[0].visible);
     assert!(!l[1].visible);
     assert!(!l[3].visible);
@@ -25,9 +25,9 @@ fn test_row_visibility_collapsed() {
 
 #[test]
 fn test_column_outline_levels() {
-    let (s, id) = storage_with_sheet();
-    group_columns(s.doc(), &s.sheets_ref(), &id, 1, 3).unwrap();
-    let l = get_column_outline_levels(s.doc(), &s.sheets_ref(), &id, 0, 4);
+    let (mut s, id) = storage_with_sheet();
+    group_columns(&mut s, &id, 1, 3).unwrap();
+    let l = get_column_outline_levels(&s, &id, 0, 4);
     assert_eq!(l[0].level, 0);
     assert_eq!(l[1].level, 1);
     assert!(l[4].is_summary);
@@ -35,30 +35,20 @@ fn test_column_outline_levels() {
 
 #[test]
 fn test_is_row_visible() {
-    let (s, id) = storage_with_sheet();
-    let g = group_rows(s.doc(), &s.sheets_ref(), &id, 2, 5).unwrap();
-    assert!(is_row_visible_by_groups(s.doc(), &s.sheets_ref(), &id, 3));
-    set_group_collapsed(s.doc(), &s.sheets_ref(), &id, &g.id, true);
-    assert!(!is_row_visible_by_groups(s.doc(), &s.sheets_ref(), &id, 3));
-    assert!(!is_row_visible_by_groups(s.doc(), &s.sheets_ref(), &id, 5));
-    assert!(is_row_visible_by_groups(s.doc(), &s.sheets_ref(), &id, 6));
+    let (mut s, id) = storage_with_sheet();
+    let g = group_rows(&mut s, &id, 2, 5).unwrap();
+    assert!(is_row_visible_by_groups(&s, &id, 3));
+    set_group_collapsed(&mut s, &id, &g.id, true);
+    assert!(!is_row_visible_by_groups(&s, &id, 3));
+    assert!(!is_row_visible_by_groups(&s, &id, 5));
+    assert!(is_row_visible_by_groups(&s, &id, 6));
 }
 
 #[test]
 fn test_is_col_visible() {
-    let (s, id) = storage_with_sheet();
-    let g = group_columns(s.doc(), &s.sheets_ref(), &id, 1, 3).unwrap();
-    set_group_collapsed(s.doc(), &s.sheets_ref(), &id, &g.id, true);
-    assert!(!is_column_visible_by_groups(
-        s.doc(),
-        &s.sheets_ref(),
-        &id,
-        2
-    ));
-    assert!(is_column_visible_by_groups(
-        s.doc(),
-        &s.sheets_ref(),
-        &id,
-        4
-    ));
+    let (mut s, id) = storage_with_sheet();
+    let g = group_columns(&mut s, &id, 1, 3).unwrap();
+    set_group_collapsed(&mut s, &id, &g.id, true);
+    assert!(!is_column_visible_by_groups(&s, &id, 2));
+    assert!(is_column_visible_by_groups(&s, &id, 4));
 }

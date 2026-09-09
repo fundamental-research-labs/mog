@@ -109,7 +109,10 @@ pub(super) fn convert_cell(
     cell: &DomainCellData,
     shared_strings: &mut SharedStringsWriter,
 ) -> CellData {
-    let style_remapper = StyleExportRemapper::palette_projection(u32::MAX);
+    let style_count = cell.style_id.map_or(0, |id| {
+        id.checked_add(1).expect("test style ID must fit a palette")
+    });
+    let style_remapper = StyleExportRemapper::palette_projection(style_count);
     convert_cell_with_metadata_refs(cell, shared_strings, true, &style_remapper)
 }
 

@@ -6,7 +6,7 @@ use value_types::CellValue;
 #[test]
 fn typed_number_in_percent_cell_is_not_reparsed_as_user_text() {
     let snap = simple_snapshot();
-    let (mut engine, _) = crate::storage::engine::YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = crate::storage::engine::ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     let percent_format = CellFormat {

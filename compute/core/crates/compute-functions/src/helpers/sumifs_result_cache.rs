@@ -21,6 +21,7 @@ use std::cell::RefCell;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use super::conditional_aggregate::ValueSlice;
 use rustc_hash::FxHashMap;
 use value_types::{CellError, CellValue, KahanSum};
 
@@ -35,16 +36,17 @@ use super::frequency_cache::NormalizedKey;
 /// Built in a single O(rows × criteria_count) pass over the data.
 /// Each unique combination of criteria values across the criteria columns
 /// maps to a Kahan-accumulated sum (or a poisoning error).
+#[derive(Clone)]
 pub struct SumifsResultMap {
-    results: FxHashMap<Vec<NormalizedKey>, SumEntry>,
+    results: ResultEntries,
 }
 
-impl Clone for SumifsResultMap {
-    fn clone(&self) -> Self {
-        SumifsResultMap {
-            results: self.results.clone(),
-        }
-    }
+#[derive(Clone)]
+enum ResultEntries {
+    Normalized(FxHashMap<Vec<NormalizedKey>, SumEntry>),
+    // Exact comparable numbers in ascending order. Each entry accumulates its
+    // matching rows in source order; no source CellValue is retained.
+    Numeric(Vec<(f64, SumEntry)>),
 }
 
 /// Sum entry: accumulated Kahan sum or a poisoning error.
@@ -54,43 +56,130 @@ enum SumEntry {
     Error(CellError),
 }
 
+impl SumEntry {
+    fn add(&mut self, value: Option<&CellValue>) {
+        if let Self::Sum(acc) = self {
+            match value {
+                Some(CellValue::Number(number)) => acc.add(number.get()),
+                Some(CellValue::Error(error, _)) => *self = Self::Error(*error),
+                _ => {}
+            }
+        }
+    }
+
+    fn result(&self) -> Result<f64, CellError> {
+        match self {
+            Self::Sum(acc) => Ok(acc.total()),
+            Self::Error(error) => Err(*error),
+        }
+    }
+}
+
 impl SumifsResultMap {
     /// Build a result map from criteria column slices and a sum column slice.
     ///
     /// Iterates all rows once, normalizing each row's criteria values into a
     /// composite key and accumulating the corresponding sum value.
-    pub fn build(
-        criteria_slices: &[&[CellValue]],
-        sum_slice: &[CellValue],
+    pub fn build<CR: ValueSlice, SR: ValueSlice + ?Sized>(
+        criteria_slices: &[CR],
+        sum_slice: &SR,
         total_rows: usize,
+    ) -> Self {
+        Self::build_with_mode(criteria_slices, sum_slice, total_rows, false)
+    }
+
+    fn build_with_mode<CR: ValueSlice, SR: ValueSlice + ?Sized>(
+        criteria_slices: &[CR],
+        sum_slice: &SR,
+        total_rows: usize,
+        text_criteria: bool,
     ) -> Self {
         let ncrit = criteria_slices.len();
         let mut results: FxHashMap<Vec<NormalizedKey>, SumEntry> = FxHashMap::default();
 
-        for row in 0..total_rows {
+        'rows: for row in 0..total_rows {
             // Build the composite key for this row
             let mut key = Vec::with_capacity(ncrit);
             for crit_slice in criteria_slices {
-                let val = crit_slice.get(row).unwrap_or(&CellValue::Null);
-                key.push(NormalizedKey::from_cell_value(val));
+                let val = crit_slice.get_value(row).unwrap_or(&CellValue::Null);
+                let normalized = if text_criteria {
+                    let Ok(text) = val.coerce_to_string() else {
+                        continue 'rows;
+                    };
+                    NormalizedKey::Text(text.to_ascii_lowercase())
+                } else {
+                    NormalizedKey::from_cell_value(val)
+                };
+                key.push(normalized);
             }
 
             // Accumulate the sum value
-            let sum_val = sum_slice.get(row).unwrap_or(&CellValue::Null);
             let entry = results
                 .entry(key)
                 .or_insert_with(|| SumEntry::Sum(KahanSum::new()));
 
-            if let SumEntry::Sum(acc) = entry {
-                match sum_val {
-                    CellValue::Number(n) => acc.add(n.get()),
-                    CellValue::Error(e, _) => *entry = SumEntry::Error(*e),
-                    _ => {} // Non-numeric, non-error: skip (matches SUMIFS behavior)
-                }
-            }
+            entry.add(sum_slice.get_value(row));
         }
 
-        SumifsResultMap { results }
+        SumifsResultMap {
+            results: ResultEntries::Normalized(results),
+        }
+    }
+
+    fn build_numeric<CR: ValueSlice, SR: ValueSlice + ?Sized>(
+        criteria_slice: &CR,
+        sum_slice: &SR,
+        total_rows: usize,
+    ) -> Self {
+        let mut groups: FxHashMap<u64, SumEntry> = FxHashMap::default();
+        for row in 0..total_rows {
+            let Some(number) = criteria_slice
+                .get_value(row)
+                .and_then(CellValue::as_comparable_number)
+            else {
+                continue;
+            };
+            // The predicate treats both signs of zero alike. All comparable
+            // numbers are finite, so every other value has one exact bit key.
+            let bits = if number == 0.0 { 0 } else { number.to_bits() };
+            let entry = groups
+                .entry(bits)
+                .or_insert_with(|| SumEntry::Sum(KahanSum::new()));
+            entry.add(sum_slice.get_value(row));
+        }
+        let mut groups: Vec<_> = groups
+            .into_iter()
+            .map(|(bits, entry)| (f64::from_bits(bits), entry))
+            .collect();
+        groups.sort_unstable_by(|left, right| left.0.total_cmp(&right.0));
+        Self {
+            results: ResultEntries::Numeric(groups),
+        }
+    }
+
+    fn lookup_numeric(&self, criterion: f64) -> Option<Result<f64, CellError>> {
+        let ResultEntries::Numeric(groups) = &self.results else {
+            return None;
+        };
+        let matches = |index: usize| {
+            groups
+                .get(index)
+                .is_some_and(|(number, _)| (number - criterion).abs() < 1e-10)
+        };
+        let insertion = groups.partition_point(|(number, _)| *number < criterion);
+        let candidate = if matches(insertion) {
+            insertion
+        } else if insertion > 0 && matches(insertion - 1) {
+            insertion - 1
+        } else {
+            return Some(Ok(0.0));
+        };
+        // Combining distinct groups would change Kahan accumulation and error
+        // order. Preserve the original scan whenever tolerance spans groups.
+        if (candidate > 0 && matches(candidate - 1)) || matches(candidate + 1) {
+            return None;
+        }
+        Some(groups[candidate].1.result())
     }
 
     /// Look up the sum for a given combination of criteria values.
@@ -99,9 +188,11 @@ impl SumifsResultMap {
     /// or `Ok(0.0)` if no rows matched.
     #[inline]
     pub fn lookup(&self, criteria_keys: &[NormalizedKey]) -> Result<f64, CellError> {
-        match self.results.get(criteria_keys) {
-            Some(SumEntry::Sum(acc)) => Ok(acc.total()),
-            Some(SumEntry::Error(e)) => Err(*e),
+        let ResultEntries::Normalized(results) = &self.results else {
+            unreachable!("numeric SUMIF maps require tolerance-aware lookup");
+        };
+        match results.get(criteria_keys) {
+            Some(entry) => entry.result(),
             None => Ok(0.0),
         }
     }
@@ -202,6 +293,20 @@ pub struct SumifsCacheKey {
     build_row_count: usize,
     sum_range: SumifsRangeIdentity,
     criteria_ranges: Vec<SumifsRangeIdentity>,
+    criteria_mode: CriteriaMode,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum CriteriaMode {
+    Normalized,
+    Text {
+        criteria_version: u64,
+        sum_version: u64,
+    },
+    Numeric {
+        criteria_version: u64,
+        sum_version: u64,
+    },
 }
 
 impl SumifsCacheKey {
@@ -226,7 +331,30 @@ impl SumifsCacheKey {
             build_row_count,
             sum_range,
             criteria_ranges,
+            criteria_mode: CriteriaMode::Normalized,
         }
+    }
+
+    /// Match plain text via string coercion and ASCII case folding, preserving
+    /// SUMIF predicate semantics and separating these maps from normalized keys.
+    /// Column versions also prevent reuse after a dependent formula changes
+    /// a source column within the same recalculation epoch.
+    pub fn with_text_criteria(mut self, criteria_version: u64, sum_version: u64) -> Self {
+        self.criteria_mode = CriteriaMode::Text {
+            criteria_version,
+            sum_version,
+        };
+        self
+    }
+
+    /// Match numeric criteria with the SUMIF predicate's exact comparison
+    /// conversion and tolerance. Source versions isolate edits within an epoch.
+    pub fn with_numeric_criteria(mut self, criteria_version: u64, sum_version: u64) -> Self {
+        self.criteria_mode = CriteriaMode::Numeric {
+            criteria_version,
+            sum_version,
+        };
+        self
     }
 
     pub fn epoch(&self) -> SumifsCacheEpoch {
@@ -404,29 +532,68 @@ pub fn seed_warm_data(epoch: SumifsCacheEpoch, warm: &SumifsWarmData) {
 /// `criteria_keys`: normalized keys for the current formula's criteria values.
 ///
 /// Returns `Ok(sum)` on success, `Err(CellError)` if poisoned.
-pub fn sumifs_lookup(
+pub fn sumifs_lookup<CR: ValueSlice, SR: ValueSlice + ?Sized>(
     cache_key: &SumifsCacheKey,
-    criteria_slices: &[&[CellValue]],
-    sum_slice: &[CellValue],
+    criteria_slices: &[CR],
+    sum_slice: &SR,
     total_rows: usize,
     criteria_keys: &[NormalizedKey],
 ) -> Result<f64, CellError> {
+    with_cached_map(
+        cache_key,
+        || {
+            SumifsResultMap::build_with_mode(
+                criteria_slices,
+                sum_slice,
+                total_rows,
+                matches!(cache_key.criteria_mode, CriteriaMode::Text { .. }),
+            )
+        },
+        |map| map.lookup(criteria_keys),
+    )
+}
+
+/// Look up a numeric single-criteria SUMIF, grouping exact comparable numbers
+/// on the first call and using a binary search on subsequent calls.
+///
+/// Returns `None` when more than one distinct numeric group matches the
+/// predicate's tolerance, so the caller can preserve source-order accumulation
+/// and error propagation with its ordinary scan. A missing match is `Some(Ok(0))`.
+/// The key must use [`SumifsCacheKey::with_numeric_criteria`].
+pub fn sumif_numeric_lookup<CR: ValueSlice, SR: ValueSlice + ?Sized>(
+    cache_key: &SumifsCacheKey,
+    criteria_slices: &[CR],
+    sum_slice: &SR,
+    total_rows: usize,
+    criterion: f64,
+) -> Option<Result<f64, CellError>> {
+    if !matches!(cache_key.criteria_mode, CriteriaMode::Numeric { .. })
+        || criteria_slices.len() != 1
+        || !criterion.is_finite()
+    {
+        return None;
+    }
+    with_cached_map(
+        cache_key,
+        || SumifsResultMap::build_numeric(&criteria_slices[0], sum_slice, total_rows),
+        |map| map.lookup_numeric(criterion),
+    )
+}
+
+fn with_cached_map<R>(
+    cache_key: &SumifsCacheKey,
+    build: impl FnOnce() -> SumifsResultMap,
+    lookup: impl FnOnce(&SumifsResultMap) -> R,
+) -> R {
     SUMIFS_CACHE.with(|cache| {
         let mut cache = cache.borrow_mut();
-
         if let Some(entry) = cache.get(cache_key) {
             CACHE_HITS.fetch_add(1, Ordering::Relaxed);
-            return entry.map.lookup(criteria_keys);
+            return lookup(&entry.map);
         }
         CACHE_MISSES.fetch_add(1, Ordering::Relaxed);
-
-        // Build the result map
-        let map = Arc::new(SumifsResultMap::build(
-            criteria_slices,
-            sum_slice,
-            total_rows,
-        ));
-        let result = map.lookup(criteria_keys);
+        let map = Arc::new(build());
+        let result = lookup(&map);
         cache.insert(cache_key.clone(), CacheEntry { map });
         CACHE_BUILDS.fetch_add(1, Ordering::Relaxed);
         result
@@ -477,6 +644,452 @@ mod tests {
             })
             .collect();
         SumifsCacheKey::new(epoch, total_rows, sum, criteria)
+    }
+
+    #[test]
+    fn text_criteria_cache_matches_predicate_and_never_rescans_hits() {
+        use super::super::conditional_aggregate::{AggregateOp, scan_single_criteria};
+        use super::super::criteria::{parse_criteria, plain_text_criteria};
+        use std::cell::Cell;
+
+        struct Counted<'a> {
+            values: &'a [CellValue],
+            reads: Cell<usize>,
+        }
+        impl ValueSlice for Counted<'_> {
+            fn get_value(&self, row: usize) -> Option<&CellValue> {
+                self.reads.set(self.reads.get() + 1);
+                self.values.get(row)
+            }
+            fn len(&self) -> usize {
+                self.values.len()
+            }
+        }
+
+        let _guard = cache_test_guard();
+        clear();
+        let categories = [
+            text("Alpha"),
+            text("ALPHA"),
+            text("Key"),
+            text("key"),
+            text("É"),
+            text("é"),
+            CellValue::Null,
+            text(""),
+            CellValue::Boolean(true),
+            text("TRUE"),
+            text("bad"),
+            text("bad"),
+        ];
+        let sums = [
+            num(1.0),
+            num(2.0),
+            num(4.0),
+            num(8.0),
+            num(16.0),
+            num(32.0),
+            num(64.0),
+            num(128.0),
+            num(256.0),
+            num(512.0),
+            CellValue::Error(CellError::Div0, None),
+            num(1024.0),
+        ];
+        let counted = Counted {
+            values: &categories,
+            reads: Cell::new(0),
+        };
+        let plain_key = cache_key(
+            test_epoch(),
+            categories.len(),
+            (1, 1, 0, 12, 12),
+            &[(1, 0, 0, 12, 12)],
+        )
+        .with_text_criteria(0, 0);
+
+        for needle in [
+            "alpha", "key", "Key", "É", "é", "", "true", "missing", "bad",
+        ] {
+            let criterion = text(needle);
+            assert_eq!(plain_text_criteria(&criterion), Some(needle));
+            let expected = scan_single_criteria(
+                &categories,
+                &*parse_criteria(&criterion),
+                Some(&sums),
+                categories.len(),
+                AggregateOp::Sum,
+            );
+            let result = sumifs_lookup(
+                &plain_key,
+                &[&counted],
+                &sums,
+                categories.len(),
+                &[NormalizedKey::Text(needle.to_ascii_lowercase())],
+            );
+            let actual = match result {
+                Ok(sum) => num(sum),
+                Err(error) => CellValue::Error(error, None),
+            };
+            assert_eq!(actual, expected, "criterion {needle:?}");
+            assert_eq!(
+                counted.reads.get(),
+                categories.len(),
+                "cache hit rescanned its column"
+            );
+        }
+        for needle in ["1", "10%", ">0", "=Alpha", "Al*", "Al?", "Al~*"] {
+            assert!(plain_text_criteria(&text(needle)).is_none(), "{needle}");
+        }
+        let normalized_key = cache_key(
+            plain_key.epoch(),
+            categories.len(),
+            (1, 1, 0, 12, 12),
+            &[(1, 0, 0, 12, 12)],
+        );
+        assert_ne!(
+            plain_key, normalized_key,
+            "normalization belongs in cache identity"
+        );
+        let changed_key = normalized_key.with_text_criteria(0, 1);
+        let changed_sums = [num(10.0), num(20.0)];
+        assert_eq!(
+            sumifs_lookup(
+                &changed_key,
+                &[&counted],
+                &changed_sums,
+                categories.len(),
+                &[NormalizedKey::Text("alpha".into())]
+            ),
+            Ok(30.0)
+        );
+        assert_eq!(
+            counted.reads.get(),
+            categories.len() * 2,
+            "column version changes must rebuild within the same epoch"
+        );
+    }
+
+    fn numeric_scan(criteria: &[CellValue], sums: &[CellValue], needle: f64) -> CellValue {
+        use super::super::conditional_aggregate::{AggregateOp, scan_single_criteria};
+        use super::super::criteria::parse_criteria;
+        scan_single_criteria(
+            criteria,
+            &*parse_criteria(&num(needle)),
+            Some(sums),
+            criteria.len(),
+            AggregateOp::Sum,
+        )
+    }
+
+    fn numeric_result(result: Result<f64, CellError>) -> CellValue {
+        match result {
+            Ok(sum) => num(sum),
+            Err(error) => CellValue::Error(error, None),
+        }
+    }
+
+    #[test]
+    fn numeric_criteria_cache_matches_predicate_and_never_rescans_hits() {
+        use std::cell::Cell;
+
+        struct Counted<'a> {
+            values: &'a [CellValue],
+            reads: Cell<usize>,
+        }
+        impl ValueSlice for Counted<'_> {
+            fn get_value(&self, row: usize) -> Option<&CellValue> {
+                self.reads.set(self.reads.get() + 1);
+                self.values.get(row)
+            }
+            fn len(&self) -> usize {
+                self.values.len()
+            }
+        }
+
+        let _guard = cache_test_guard();
+        clear();
+        let categories = [
+            text("header"),
+            num(1.0),
+            text("1"),
+            text(" 1.0 "),
+            num(0.0),
+            num(-0.0),
+            text("-0"),
+            CellValue::Boolean(true),
+            CellValue::Null,
+            CellValue::Error(CellError::Value, None),
+            num(2.0),
+            num(2.0),
+            num(2.0),
+            text("2024-01-01"),
+            text("1e3"),
+            num(f64::MAX),
+            num(-f64::MAX),
+        ];
+        let sums = [
+            num(99.0),
+            num(1e16),
+            num(1.0),
+            num(-1e16),
+            num(1.0),
+            num(2.0),
+            num(4.0),
+            CellValue::Error(CellError::Num, None),
+            CellValue::Error(CellError::Num, None),
+            CellValue::Error(CellError::Num, None),
+            num(10.0),
+            CellValue::Error(CellError::Div0, None),
+            CellValue::Error(CellError::Value, None),
+            num(20.0),
+            text("ignored"),
+            num(30.0),
+            CellValue::Boolean(true),
+        ];
+        let criteria = Counted {
+            values: &categories,
+            reads: Cell::new(0),
+        };
+        let values = Counted {
+            values: &sums,
+            reads: Cell::new(0),
+        };
+        let key = cache_key(
+            test_epoch(),
+            categories.len(),
+            (1, 1, 0, 17, 17),
+            &[(1, 0, 0, 17, 17)],
+        )
+        .with_numeric_criteria(0, 0);
+        let date = categories[13].as_comparable_number().unwrap();
+        let mut sum_reads = None;
+        for needle in [
+            1.0,
+            0.0,
+            -0.0,
+            2.0,
+            date,
+            1000.0,
+            999.0,
+            f64::MAX,
+            -f64::MAX,
+        ] {
+            let expected = numeric_scan(&categories, &sums, needle);
+            let actual =
+                sumif_numeric_lookup(&key, &[&criteria], &values, categories.len(), needle)
+                    .expect("distinct numeric keys permit cached lookup");
+            assert_eq!(numeric_result(actual), expected, "criterion {needle}");
+            assert_eq!(
+                criteria.reads.get(),
+                categories.len(),
+                "hit rescanned criteria"
+            );
+            assert_eq!(
+                *sum_reads.get_or_insert(values.reads.get()),
+                values.reads.get(),
+                "hit rescanned sums"
+            );
+        }
+    }
+
+    #[test]
+    fn numeric_criteria_cache_preserves_tolerance_boundaries_and_ambiguous_scan_order() {
+        let categories = [num(0.0)];
+        let sums = [num(7.0)];
+        let map = SumifsResultMap::build_numeric(&&categories, &sums, 1);
+        let tolerance = 1e-10_f64;
+        for needle in [
+            0.0,
+            -0.0,
+            f64::from_bits(1),
+            tolerance,
+            -tolerance,
+            f64::from_bits(tolerance.to_bits() - 1),
+            f64::from_bits(tolerance.to_bits() + 1),
+        ] {
+            assert_eq!(
+                numeric_result(map.lookup_numeric(needle).unwrap()),
+                numeric_scan(&categories, &sums, needle)
+            );
+        }
+
+        // Interleaved exact groups cannot be combined without changing the
+        // source accumulation order or which error is returned first.
+        let categories = [num(0.0), num(0.5e-10), num(0.0), num(0.5e-10)];
+        let sums = [num(1e16), num(1.0), num(-1e16), num(1.0)];
+        let map = SumifsResultMap::build_numeric(&&categories, &sums, 4);
+        for needle in [0.0, 0.25e-10, 0.5e-10] {
+            assert_eq!(map.lookup_numeric(needle), None);
+        }
+        let errors = [
+            CellValue::Error(CellError::Div0, None),
+            CellValue::Error(CellError::Value, None),
+            num(1.0),
+            num(2.0),
+        ];
+        let map = SumifsResultMap::build_numeric(&&categories, &errors, 4);
+        assert_eq!(map.lookup_numeric(0.25e-10), None);
+        assert_eq!(
+            numeric_scan(&categories, &errors, 0.25e-10),
+            CellValue::Error(CellError::Div0, None)
+        );
+
+        // Search both sides of the insertion point; a lone group may match
+        // from either side even when the criterion is not an exact group key.
+        for needle in [-0.9e-10, 1.4e-10, 2e-10] {
+            assert_eq!(
+                numeric_result(map.lookup_numeric(needle).unwrap()),
+                numeric_scan(&categories, &errors, needle)
+            );
+        }
+    }
+
+    #[test]
+    fn numeric_criteria_cache_helper_preserves_text_operator_and_percent_boundaries() {
+        use super::super::conditional_aggregate::{AggregateOp, scan_single_criteria};
+        use super::super::criteria::{numeric_equality_criteria, parse_criteria};
+        let categories = [
+            num(1.0),
+            text("1"),
+            text(" 1 "),
+            num(0.1),
+            text("0.1"),
+            text("10%"),
+            num(1000.0),
+        ];
+        let sums = [
+            num(1.0),
+            num(2.0),
+            num(4.0),
+            num(8.0),
+            num(16.0),
+            num(32.0),
+            num(64.0),
+        ];
+        let map = SumifsResultMap::build_numeric(&&categories, &sums, categories.len());
+        for criterion in [
+            num(1.0),
+            text("1"),
+            text("=1"),
+            text(" = 1 "),
+            text("10%"),
+            text("=10%"),
+            text("1e3"),
+            CellValue::Array(Arc::new(value_types::CellArray::new(vec![num(1.0)], 1))),
+        ] {
+            let needle = numeric_equality_criteria(&criterion).expect("numeric equality criterion");
+            let expected = scan_single_criteria(
+                &categories,
+                &*parse_criteria(&criterion),
+                Some(&sums),
+                categories.len(),
+                AggregateOp::Sum,
+            );
+            assert_eq!(
+                numeric_result(map.lookup_numeric(needle).unwrap()),
+                expected,
+                "criterion {criterion:?}"
+            );
+        }
+        for criterion in [
+            text(" 1 "),
+            text(" 10% "),
+            text(">1"),
+            text(">=1"),
+            text("<>1"),
+            text("<1"),
+            text("1*"),
+            text("=name"),
+            CellValue::Boolean(true),
+            CellValue::Null,
+        ] {
+            assert_eq!(
+                numeric_equality_criteria(&criterion),
+                None,
+                "criterion {criterion:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn numeric_criteria_cache_isolates_modes_versions_and_warm_epochs() {
+        let _guard = cache_test_guard();
+        clear();
+        let epoch = test_epoch();
+        let base = cache_key(epoch, 2, (1, 1, 0, 2, 2), &[(1, 0, 0, 2, 2)]);
+        let numeric = base.clone().with_numeric_criteria(0, 0);
+        let text_key = base.clone().with_text_criteria(0, 0);
+        let criteria = [num(1.0), num(2.0)];
+        let sums = [num(10.0), num(20.0)];
+        assert_ne!(numeric, base);
+        assert_ne!(numeric, text_key);
+        assert_eq!(
+            sumifs_lookup(
+                &base,
+                &[&criteria],
+                &sums,
+                2,
+                &[NormalizedKey::from_cell_value(&num(1.0))]
+            ),
+            Ok(10.0)
+        );
+        assert_eq!(
+            sumifs_lookup(
+                &text_key,
+                &[&criteria],
+                &sums,
+                2,
+                &[NormalizedKey::Text("1".into())]
+            ),
+            Ok(10.0)
+        );
+        assert_eq!(
+            sumif_numeric_lookup(&numeric, &[&criteria], &sums, 2, 1.0),
+            Some(Ok(10.0))
+        );
+        let changed_sums = [num(30.0), num(40.0)];
+        assert_eq!(
+            sumif_numeric_lookup(
+                &base.clone().with_numeric_criteria(0, 1),
+                &[&criteria],
+                &changed_sums,
+                2,
+                1.0
+            ),
+            Some(Ok(30.0))
+        );
+        let changed_criteria = [text("header"), num(1.0)];
+        assert_eq!(
+            sumif_numeric_lookup(
+                &base.clone().with_numeric_criteria(1, 1),
+                &[&changed_criteria],
+                &changed_sums,
+                2,
+                1.0
+            ),
+            Some(Ok(40.0))
+        );
+
+        let warm = extract_warm_data(epoch).unwrap();
+        std::thread::spawn(move || {
+            struct NoReads;
+            impl ValueSlice for NoReads {
+                fn get_value(&self, _: usize) -> Option<&CellValue> {
+                    panic!("warm hit rescanned source")
+                }
+                fn len(&self) -> usize {
+                    2
+                }
+            }
+            seed_warm_data(epoch, &warm);
+            assert_eq!(
+                sumif_numeric_lookup(&numeric, &[NoReads], &NoReads, 2, 2.0),
+                Some(Ok(20.0))
+            );
+        })
+        .join()
+        .unwrap();
     }
 
     #[test]

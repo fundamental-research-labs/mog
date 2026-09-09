@@ -145,7 +145,7 @@ fn data_table_minimal_fixture_xlsx() -> Vec<u8> {
 }
 
 fn assert_deferred_data_table_readback(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -217,7 +217,7 @@ fn assert_deferred_data_table_readback(
 fn deferred_xlsx_import_exposes_first_sheet_formula_text_before_graph_build() {
     let bytes = formula_text_fixture_xlsx();
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     engine
         .import_from_xlsx_bytes_deferred(&bytes)
         .expect("deferred XLSX import should succeed");
@@ -285,7 +285,7 @@ fn deferred_xlsx_import_exposes_first_sheet_formula_text_before_graph_build() {
 fn deferred_xlsx_import_exposes_data_table_region_metadata_before_full_hydration() {
     let bytes = data_table_minimal_fixture_xlsx();
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     engine
         .import_from_xlsx_bytes_deferred(&bytes)
         .expect("deferred XLSX import should succeed");
@@ -316,7 +316,7 @@ fn deferred_xlsx_import_exposes_data_table_region_metadata_before_full_hydration
 fn deferred_xlsx_import_recalculates_sheets_type_conversion_functions() {
     let bytes = sheets_type_conversion_fixture_xlsx();
 
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     engine
         .import_from_xlsx_bytes_deferred(&bytes)
         .expect("deferred XLSX import should succeed");

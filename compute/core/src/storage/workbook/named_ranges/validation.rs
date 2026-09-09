@@ -1,4 +1,4 @@
-use yrs::{Doc, Map, MapRef, Transact};
+use crate::storage::workbook::WorkbookMetadata;
 
 use domain_types::domain::named_range::{NameValidationError, NameValidationResult};
 
@@ -6,7 +6,6 @@ use super::keys::{
     MAX_NAME_LENGTH, RESERVED_WORDS, get_defined_name_key, is_single_letter, is_valid_first_char,
     is_valid_name_char, looks_like_cell_reference, looks_like_r1c1_reference,
 };
-use super::yrs_codec::{get_named_ranges_map, read_defined_name_from_out};
 
 /// Validate a potential defined name.
 ///
@@ -19,9 +18,8 @@ use super::yrs_codec::{get_named_ranges_map, read_defined_name_from_out};
 /// - Cannot be an R1C1 reference
 /// - Cannot be reserved (TRUE, FALSE, NULL, single letter A-Z)
 /// - Cannot duplicate an existing name in the same scope
-pub fn validate_name(
-    doc: &Doc,
-    workbook: &MapRef,
+pub(crate) fn validate_name(
+    metadata: &WorkbookMetadata,
     name: &str,
     scope: Option<&str>,
     exclude_id: Option<&str>,
@@ -98,12 +96,7 @@ pub fn validate_name(
 
     // Check for duplicates
     let key = get_defined_name_key(name, scope);
-    let txn = doc.transact();
-    if let Some(nr_map) = get_named_ranges_map(workbook, &txn)
-        && let Some(existing) = nr_map
-            .get(&txn, &key)
-            .and_then(|out| read_defined_name_from_out(out, &txn))
-    {
+    if let Some(existing) = metadata.named_ranges.get(&key) {
         // If exclude_id is provided, skip the check for that ID (update case)
         let is_self = exclude_id.is_some_and(|eid| eid == existing.id);
         if !is_self {

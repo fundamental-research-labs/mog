@@ -3,7 +3,7 @@ use std::sync::Arc;
 use cell_types::SheetId;
 use compute_api::ComputeService;
 use compute_api::dispatch::Dispatch;
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use compute_security::{
     AccessLevel, AccessPolicy, AccessTarget, PolicyId, PolicyMetadata, TagMatcher,
 };
@@ -23,6 +23,9 @@ pub(super) const SHEET1_UUID: &str = "44444444-4444-4444-4444-444444444444";
 pub(super) fn snapshot_with_sheet(sheet_id: &str) -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_id.to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -36,7 +39,7 @@ pub(super) fn snapshot_with_sheet(sheet_id: &str) -> WorkbookSnapshot {
 
 pub(super) fn fresh_service() -> (ComputeService, SheetId) {
     let snapshot = snapshot_with_sheet(SHEET1_UUID);
-    let (engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (engine, _) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
     let dispatch = Dispatch::from_engine(engine).expect("dispatch");
     let service = ComputeService::new(dispatch);
     let sheet_id = SheetId::from_uuid_str(SHEET1_UUID).expect("parse sheet id");
@@ -45,7 +48,7 @@ pub(super) fn fresh_service() -> (ComputeService, SheetId) {
 
 pub(super) fn fresh_service_uuid(uuid: &str) -> (ComputeService, SheetId) {
     let snapshot = snapshot_with_sheet(uuid);
-    let (engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (engine, _) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
     let dispatch = Dispatch::from_engine(engine).expect("dispatch");
     let service = ComputeService::new(dispatch);
     let sheet_id = SheetId::from_uuid_str(uuid).expect("parse sheet id");

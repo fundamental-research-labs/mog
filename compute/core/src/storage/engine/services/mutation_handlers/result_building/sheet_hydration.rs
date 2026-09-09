@@ -53,8 +53,6 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
     result: &mut MutationResult,
 ) {
     let sid = sheet_id;
-    let doc = stores.storage.doc();
-    let sheets = stores.storage.sheets();
     let sheet_id_str = sid.to_uuid_string();
     let grid = stores.grid_indexes.get(sid);
     let layout = stores.layout_indexes.get(sid);
@@ -66,7 +64,7 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
     // separately invoke the typed reader for the structured payload,
     // matching the live mutation handler's `data` field.
     let all_objects_json =
-        crate::storage::sheet::floating_objects::get_all_floating_objects(doc, sheets, sid);
+        crate::storage::sheet::floating_objects::get_all_floating_objects(&stores.storage, sid);
     if !all_objects_json.is_empty() {
         let mut bounds_map = std::collections::HashMap::with_capacity(all_objects_json.len());
         for (object_id, obj_json) in &all_objects_json {
@@ -77,13 +75,9 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
             }
         }
 
-        // Read the typed view with the SAME txn-scope semantics as the
-        // JSON-shape read above (each call opens and drops its own txn).
-        // Yrs allows concurrent read txns within a thread, so this is
-        // safe; the panic that would occur is on `transact_mut()` while
-        // a read is held — neither read here triggers that.
         let typed_objects = crate::storage::sheet::floating_objects::get_all_floating_objects_typed(
-            doc, sheets, sid,
+            &stores.storage,
+            sid,
         );
         for obj in typed_objects {
             let object_id = obj.common.id.clone();
@@ -100,7 +94,7 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
         }
     }
 
-    // ----- Tables (mirror-backed, no Yrs txn) -----
+    // ----- Native tables -----
     let tables = crate::storage::engine::services::tables::get_all_tables_in_sheet(mirror, sid);
     for table in tables {
         result.table_changes.push(TableChange {
@@ -112,7 +106,7 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
     }
 
     // ----- Filters -----
-    let sheet_filters = filters::get_filters_in_sheet(doc, sheets, sid);
+    let sheet_filters = filters::get_filters_in_sheet(&stores.storage, sid);
     for filter in sheet_filters {
         result.filter_changes.push(FilterChange {
             sheet_id: sheet_id_str.clone(),
@@ -139,9 +133,9 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
     }
 
     // ----- Comments -----
-    let sheet_comments = comments::get_all_comments(doc, sheets, sid);
+    let sheet_comments = comments::get_all_comments(&stores.storage, sid);
     for comment in sheet_comments {
-        // `comment.cell_ref` is the cell_id hex (Yrs storage key); resolve to a
+        // `comment.cell_ref` is the native CellId hex; resolve to a
         // (row, col) position via grid_indexes when possible. Mirrors the live
         // mutation handler's CommentChange shape.
         let cell_id_hex = comment.cell_ref.clone();
@@ -158,7 +152,7 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
     }
 
     // ----- Sparklines -----
-    let sheet_sparklines = sparklines::get_sparklines_in_sheet(doc, sheets, sid);
+    let sheet_sparklines = sparklines::get_sparklines_in_sheet(&stores.storage, sid);
     for sparkline in sheet_sparklines {
         // Resolve the (row, col) position to a CellId hex when the grid index
         // has a cell at that position; otherwise emit empty cell_id (the
@@ -188,7 +182,7 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
     }
 
     // ----- Grouping (row + col) -----
-    let row_groups = grouping::get_groups(doc, sheets, sid, grouping::GroupAxis::Row);
+    let row_groups = grouping::get_groups(&stores.storage, sid, grouping::GroupAxis::Row);
     if !row_groups.is_empty() {
         result.grouping_changes.push(GroupingChange {
             sheet_id: sheet_id_str.clone(),
@@ -196,7 +190,7 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
             kind: ChangeKind::Set,
         });
     }
-    let col_groups = grouping::get_groups(doc, sheets, sid, grouping::GroupAxis::Column);
+    let col_groups = grouping::get_groups(&stores.storage, sid, grouping::GroupAxis::Column);
     if !col_groups.is_empty() {
         result.grouping_changes.push(GroupingChange {
             sheet_id: sheet_id_str.clone(),
@@ -206,7 +200,7 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
     }
 
     // ----- Pivot tables -----
-    let pivots_in_sheet = pivots::get_all_pivots(doc, sheets, sid);
+    let pivots_in_sheet = pivots::get_all_pivots(&stores.storage, sid);
     for pivot in pivots_in_sheet {
         result.pivot_changes.push(PivotTableChange {
             sheet_id: sheet_id_str.clone(),
@@ -267,7 +261,7 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
         .iter()
         .position(|id| id == sid)
         .map(|i| i as i32);
-    let sheet_name = properties::get_sheet_name(doc, sheets, sid);
+    let sheet_name = properties::get_sheet_name(&stores.storage, sid);
     let source_sheet_id_str = source_sheet_id.map(|s| s.to_uuid_string());
 
     // Canonical creation event: `field:Sheet, kind:Set` is what the
@@ -336,8 +330,8 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
         });
     }
 
-    let is_hidden = visibility::is_sheet_hidden(doc, sheets, sid);
-    let visibility_state = visibility::get_sheet_visibility(doc, sheets, sid);
+    let is_hidden = visibility::is_sheet_hidden(&stores.storage, sid);
+    let visibility_state = visibility::get_sheet_visibility(&stores.storage, sid);
     if is_hidden || visibility_state == "veryHidden" {
         // Only emit when non-default (visible). The kernel mirror's
         // sheet-meta default is `visibility: "visible"`, so emitting
@@ -361,7 +355,7 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
         });
     }
 
-    if let Some(meta) = properties::get_sheet_meta(doc, sheets, sid)
+    if let Some(meta) = properties::get_sheet_meta(&stores.storage, sid)
         && let Some(color) = meta.tab_color
     {
         result.sheet_changes.push(SheetChange {
@@ -383,7 +377,7 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
         });
     }
 
-    let frozen = view::get_frozen_panes(doc, sheets, sid);
+    let frozen = view::get_frozen_panes(&stores.storage, sid);
     if frozen.rows != 0 || frozen.cols != 0 {
         result.sheet_changes.push(SheetChange {
             sheet_id: sheet_id_str.clone(),
@@ -411,8 +405,11 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
     // a single-key update. The mirror replaces its full settings
     // payload from `settings` rather than diffing against the prior
     // state (which is empty on hydration).
-    let sheet_settings =
-        settings::get_sheet_settings_with_layout_metrics(doc, sheets, sid, stores.layout_metrics);
+    let sheet_settings = settings::get_sheet_settings_with_layout_metrics(
+        &stores.storage,
+        sid,
+        stores.layout_metrics,
+    );
     let settings_value =
         serde_json::to_value(&sheet_settings).expect("SheetSettings must serialize to JSON");
     result.settings_changes.push(SheetSettingsChange {
@@ -423,7 +420,7 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
     });
 
     // ----- Page breaks (skip if empty — kernel mirror has empty default) -----
-    let page_breaks = print::get_page_breaks(doc, sheets, sid);
+    let page_breaks = print::get_page_breaks(&stores.storage, sid);
     if !page_breaks.row_breaks.is_empty() || !page_breaks.col_breaks.is_empty() {
         result.page_break_changes.push(PageBreakChange {
             sheet_id: sheet_id_str.clone(),
@@ -432,7 +429,7 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
     }
 
     // ----- Print area (only when set) -----
-    if let Some(area) = print::get_print_area(doc, sheets, sid) {
+    if let Some(area) = print::get_print_area(&stores.storage, sid) {
         result.print_area_changes.push(PrintAreaChange {
             sheet_id: sheet_id_str.clone(),
             kind: ChangeKind::Set,
@@ -441,7 +438,7 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
     }
 
     // ----- Print titles (only when set) -----
-    let print_titles = print::get_print_titles(doc, sheets, sid);
+    let print_titles = print::get_print_titles(&stores.storage, sid);
     let has_print_titles = print_titles.repeat_rows.is_some() || print_titles.repeat_cols.is_some();
     if has_print_titles {
         result.print_titles_changes.push(PrintTitlesChange {
@@ -451,14 +448,14 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
     }
 
     // ----- Print settings (always emit — defaults populate the mirror) -----
-    let print_settings = print::get_print_settings(doc, sheets, sid);
+    let print_settings = print::get_print_settings(&stores.storage, sid);
     result.print_settings_changes.push(PrintSettingsChange {
         sheet_id: sheet_id_str.clone(),
         settings: print_settings,
     });
 
     // ----- Split config (only when set) -----
-    if let Some(config) = split_view::get_split_config(doc, sheets, sid) {
+    if let Some(config) = split_view::get_split_config(&stores.storage, sid) {
         result.split_config_changes.push(SplitConfigChange {
             sheet_id: sheet_id_str.clone(),
             kind: ChangeKind::Set,
@@ -466,7 +463,7 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
         });
     }
 
-    let roundtrip_meta = settings::get_roundtrip_meta(doc, sheets, sid);
+    let roundtrip_meta = settings::get_roundtrip_meta(&stores.storage, sid);
     if let Some((active_cell, ranges)) = parse_saved_view_selection(
         roundtrip_meta.active_cell.as_deref(),
         roundtrip_meta.sqref.as_deref(),
@@ -479,7 +476,7 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
     }
 
     // ----- Scroll position (always emit — defaults populate the mirror) -----
-    let scroll = view::get_scroll_position(doc, sheets, sid);
+    let scroll = view::get_scroll_position(&stores.storage, sid);
     result.scroll_position_changes.push(ScrollPositionChange {
         sheet_id: sheet_id_str,
         top_row: scroll.top_row,

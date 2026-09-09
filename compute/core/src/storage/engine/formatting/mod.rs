@@ -1,6 +1,6 @@
-//! Formatting methods (cell format, CF rules, schemas, row/col format) for YrsComputeEngine.
+//! Formatting methods (cell format, CF rules, schemas, row/col format) for ComputeEngine.
 
-use super::YrsComputeEngine;
+use super::ComputeEngine;
 use super::services;
 use super::validation;
 use crate::bridge_types::BorderPatchOperation;
@@ -11,7 +11,6 @@ use crate::storage::sheet::schemas::{CellValidationResult, ColumnSchema, RangeSc
 use bridge_core as bridge;
 use cell_types::{CellId, SheetId, SheetPos};
 use compute_document::hex::id_to_hex;
-use compute_document::undo::ORIGIN_UI_STATE;
 use compute_wire::mutation::serialize_multi_viewport_patches;
 use domain_types::CellFormat;
 use domain_types::ResolvedCellFormat;
@@ -31,20 +30,20 @@ mod schema_map;
 mod schemas;
 
 #[bridge::api(
-    service = "YrsComputeEngine",
+    service = "ComputeEngine",
     key = "doc_id",
     group = "formatting",
     fn_prefix = "compute",
     crate_path = "compute_core"
 )]
-impl YrsComputeEngine {
+impl ComputeEngine {
     #[bridge::write(scope = "workbook")]
     pub fn set_schema_map(
         &mut self,
         entries: Vec<crate::bridge_types::SchemaMapEntryWire>,
         version: f64,
     ) {
-        schema_map::set_schema_map(self, entries, version)
+        self.without_history(|engine| schema_map::set_schema_map(engine, entries, version))
     }
 
     #[bridge::write(scope = "workbook")]
@@ -55,17 +54,19 @@ impl YrsComputeEngine {
         schema: crate::schema::types::ColumnSchema,
         version: f64,
     ) -> bool {
-        schema_map::update_schema(self, sheet_id, column, schema, version)
+        self.without_history(|engine| {
+            schema_map::update_schema(engine, sheet_id, column, schema, version)
+        })
     }
 
     #[bridge::write(scope = "workbook")]
     pub fn remove_schema(&mut self, sheet_id: String, column: u32, version: f64) -> bool {
-        schema_map::remove_schema(self, sheet_id, column, version)
+        self.without_history(|engine| schema_map::remove_schema(engine, sheet_id, column, version))
     }
 
     #[bridge::write(scope = "workbook")]
     pub fn clear_schemas(&mut self) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        schema_map::clear_schemas(self)
+        self.without_history(|engine| schema_map::clear_schemas(engine))
     }
 
     #[bridge::read(scope = "cell")]
@@ -117,7 +118,7 @@ impl YrsComputeEngine {
         cell_id: &CellId,
         format: &CellFormat,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        cell_formats::set_cell_format(self, sheet_id, cell_id, format)
+        self.with_history(|engine| cell_formats::set_cell_format(engine, sheet_id, cell_id, format))
     }
 
     #[bridge::write(scope = "sheet")]
@@ -126,7 +127,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         cell_id: &CellId,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        cell_formats::clear_cell_format(self, sheet_id, cell_id)
+        self.with_history(|engine| cell_formats::clear_cell_format(engine, sheet_id, cell_id))
     }
 
     #[bridge::write(scope = "sheet")]
@@ -138,9 +139,11 @@ impl YrsComputeEngine {
         active_row: u32,
         active_col: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        range_mutations::toggle_format_property(
-            self, sheet_id, ranges, property, active_row, active_col,
-        )
+        self.with_history(|engine| {
+            range_mutations::toggle_format_property(
+                engine, sheet_id, ranges, property, active_row, active_col,
+            )
+        })
     }
 
     #[bridge::write(scope = "sheet")]
@@ -150,7 +153,25 @@ impl YrsComputeEngine {
         ranges: &[(u32, u32, u32, u32)],
         format: &CellFormat,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        range_mutations::set_format_for_ranges(self, sheet_id, ranges, format)
+        self.with_history(|engine| {
+            range_mutations::set_format_for_ranges(engine, sheet_id, ranges, format)
+        })
+    }
+
+    /// Apply a transient UI format without adding an undo step or clearing redo.
+    #[bridge::write(scope = "sheet")]
+    pub fn set_format_for_ranges_ui_state(
+        &mut self,
+        sheet_id: &SheetId,
+        ranges: &[(u32, u32, u32, u32)],
+        format: &CellFormat,
+    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+        let result =
+            self.without_history(|engine| engine.set_format_for_ranges(sheet_id, ranges, format));
+        if result.is_ok() {
+            self.rebase_history_ui_format(*sheet_id, ranges, format);
+        }
+        result
     }
 
     /// Apply a tri-state format patch: values set properties and clear_fields
@@ -163,10 +184,12 @@ impl YrsComputeEngine {
         format: &CellFormat,
         clear_fields: &[String],
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        range_mutations::patch_format_for_ranges(self, sheet_id, ranges, format, clear_fields)
+        self.with_history(|engine| {
+            range_mutations::patch_format_for_ranges(engine, sheet_id, ranges, format, clear_fields)
+        })
     }
 
-    /// Apply an ordered batch of nested border patches as one undoable command.
+    /// Apply an ordered batch of nested border patches as one command.
     /// Supplied edges/flags replace complete members, cleared members remove
     /// direct overrides, and omitted members remain unchanged.
     #[bridge::write(scope = "sheet")]
@@ -175,23 +198,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         operations: Vec<BorderPatchOperation>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        range_mutations::patch_borders(self, sheet_id, operations)
-    }
-
-    #[bridge::write(scope = "sheet")]
-    pub fn set_format_for_ranges_ui_state(
-        &mut self,
-        sheet_id: &SheetId,
-        ranges: &[(u32, u32, u32, u32)],
-        format: &CellFormat,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        range_mutations::set_format_for_ranges_with_origin(
-            self,
-            sheet_id,
-            ranges,
-            format,
-            ORIGIN_UI_STATE,
-        )
+        self.with_history(|engine| range_mutations::patch_borders(engine, sheet_id, operations))
     }
 
     #[bridge::write(scope = "sheet")]
@@ -200,7 +207,9 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         ranges: &[(u32, u32, u32, u32)],
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        range_mutations::clear_format_for_ranges(self, sheet_id, ranges)
+        self.with_history(|engine| {
+            range_mutations::clear_format_for_ranges(engine, sheet_id, ranges)
+        })
     }
 
     #[bridge::write(scope = "sheet")]
@@ -209,7 +218,9 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         updates: Vec<(u32, u32, CellFormat)>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        range_mutations::set_cell_properties_batch(self, sheet_id, updates)
+        self.with_history(|engine| {
+            range_mutations::set_cell_properties_batch(engine, sheet_id, updates)
+        })
     }
 
     #[bridge::write(scope = "sheet")]
@@ -218,7 +229,9 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         updates: Vec<(u32, u32, CellFormat, Vec<String>)>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        range_mutations::patch_cell_properties_batch(self, sheet_id, updates)
+        self.with_history(|engine| {
+            range_mutations::patch_cell_properties_batch(engine, sheet_id, updates)
+        })
     }
 
     #[bridge::write(scope = "sheet")]
@@ -227,7 +240,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         rule: serde_json::Value,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        conditional_formats::add_cf_rule(self, sheet_id, rule)
+        self.with_history(|engine| conditional_formats::add_cf_rule(engine, sheet_id, rule))
     }
 
     #[bridge::write(scope = "sheet")]
@@ -237,7 +250,9 @@ impl YrsComputeEngine {
         rule_id: &str,
         updates: serde_json::Value,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        conditional_formats::update_cf_rule(self, sheet_id, rule_id, updates)
+        self.with_history(|engine| {
+            conditional_formats::update_cf_rule(engine, sheet_id, rule_id, updates)
+        })
     }
 
     #[bridge::write(scope = "sheet")]
@@ -246,7 +261,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         rule_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        conditional_formats::delete_cf_rule(self, sheet_id, rule_id)
+        self.with_history(|engine| conditional_formats::delete_cf_rule(engine, sheet_id, rule_id))
     }
 
     #[bridge::write(scope = "sheet")]
@@ -255,7 +270,9 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         rule_ids: Vec<String>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        conditional_formats::reorder_cf_rules(self, sheet_id, rule_ids)
+        self.with_history(|engine| {
+            conditional_formats::reorder_cf_rules(engine, sheet_id, rule_ids)
+        })
     }
 
     #[bridge::read(scope = "sheet")]
@@ -294,7 +311,9 @@ impl YrsComputeEngine {
         format_id: &str,
         new_ranges: &[CFCellRange],
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        conditional_formats::update_cf_ranges(self, sheet_id, format_id, new_ranges)
+        self.with_history(|engine| {
+            conditional_formats::update_cf_ranges(engine, sheet_id, format_id, new_ranges)
+        })
     }
 
     #[bridge::write(scope = "sheet")]
@@ -302,7 +321,9 @@ impl YrsComputeEngine {
         &mut self,
         sheet_id: &SheetId,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        conditional_formats::clear_cf_formats_for_sheet(self, sheet_id)
+        self.with_history(|engine| {
+            conditional_formats::clear_cf_formats_for_sheet(engine, sheet_id)
+        })
     }
 
     #[bridge::write(scope = "sheet")]
@@ -312,7 +333,9 @@ impl YrsComputeEngine {
         format_id: &str,
         rule: &CFRule,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        conditional_formats::add_rule_to_cf(self, sheet_id, format_id, rule)
+        self.with_history(|engine| {
+            conditional_formats::add_rule_to_cf(engine, sheet_id, format_id, rule)
+        })
     }
 
     #[bridge::write(scope = "sheet")]
@@ -323,7 +346,9 @@ impl YrsComputeEngine {
         rule_id: &str,
         updates: serde_json::Value,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        conditional_formats::update_rule_in_cf(self, sheet_id, format_id, rule_id, updates)
+        self.with_history(|engine| {
+            conditional_formats::update_rule_in_cf(engine, sheet_id, format_id, rule_id, updates)
+        })
     }
 
     #[bridge::write(scope = "sheet")]
@@ -333,7 +358,9 @@ impl YrsComputeEngine {
         format_id: &str,
         rule_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        conditional_formats::delete_rule_from_cf(self, sheet_id, format_id, rule_id)
+        self.with_history(|engine| {
+            conditional_formats::delete_rule_from_cf(engine, sheet_id, format_id, rule_id)
+        })
     }
 
     #[bridge::read(scope = "workbook")]
@@ -382,7 +409,7 @@ impl YrsComputeEngine {
         row: u32,
         format: CellFormat,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        row_col::set_row_format(self, sheet_id, row, format)
+        self.with_history(|engine| row_col::set_row_format(engine, sheet_id, row, format))
     }
 
     #[bridge::write(scope = "sheet")]
@@ -393,7 +420,9 @@ impl YrsComputeEngine {
         format: CellFormat,
         clear_fields: Vec<String>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        row_col::patch_row_format(self, sheet_id, row, format, clear_fields)
+        self.with_history(|engine| {
+            row_col::patch_row_format(engine, sheet_id, row, format, clear_fields)
+        })
     }
 
     #[bridge::write(scope = "sheet")]
@@ -403,7 +432,7 @@ impl YrsComputeEngine {
         col: u32,
         format: CellFormat,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        row_col::set_col_format(self, sheet_id, col, format)
+        self.with_history(|engine| row_col::set_col_format(engine, sheet_id, col, format))
     }
 
     #[bridge::write(scope = "sheet")]
@@ -414,7 +443,9 @@ impl YrsComputeEngine {
         format: CellFormat,
         clear_fields: Vec<String>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        row_col::patch_col_format(self, sheet_id, col, format, clear_fields)
+        self.with_history(|engine| {
+            row_col::patch_col_format(engine, sheet_id, col, format, clear_fields)
+        })
     }
 
     #[bridge::write(scope = "sheet")]
@@ -423,7 +454,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         col: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        row_col::clear_col_format(self, sheet_id, col)
+        self.with_history(|engine| row_col::clear_col_format(engine, sheet_id, col))
     }
 
     #[bridge::write(scope = "sheet")]
@@ -434,7 +465,9 @@ impl YrsComputeEngine {
         end_col: u32,
         format: CellFormat,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        row_col::set_col_format_range(self, sheet_id, start_col, end_col, format)
+        self.with_history(|engine| {
+            row_col::set_col_format_range(engine, sheet_id, start_col, end_col, format)
+        })
     }
 
     #[bridge::read(scope = "sheet")]
@@ -452,7 +485,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         updates: Vec<(u32, CellFormat)>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        row_col::set_row_formats(self, sheet_id, updates)
+        self.with_history(|engine| row_col::set_row_formats(engine, sheet_id, updates))
     }
 
     #[bridge::write(scope = "sheet")]
@@ -461,7 +494,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         updates: Vec<(u32, CellFormat, Vec<String>)>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        row_col::patch_row_formats(self, sheet_id, updates)
+        self.with_history(|engine| row_col::patch_row_formats(engine, sheet_id, updates))
     }
 
     #[bridge::read(scope = "sheet")]
@@ -479,7 +512,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         updates: Vec<(u32, CellFormat)>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        row_col::set_col_formats(self, sheet_id, updates)
+        self.with_history(|engine| row_col::set_col_formats(engine, sheet_id, updates))
     }
 
     #[bridge::write(scope = "sheet")]
@@ -488,7 +521,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         updates: Vec<(u32, CellFormat, Vec<String>)>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        row_col::patch_col_formats(self, sheet_id, updates)
+        self.with_history(|engine| row_col::patch_col_formats(engine, sheet_id, updates))
     }
 
     #[bridge::read(scope = "range")]
@@ -541,7 +574,7 @@ impl YrsComputeEngine {
         col_index: u32,
         schema: &ColumnSchema,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        schemas::set_column_schema(self, sheet_id, col_index, schema)
+        self.with_history(|engine| schemas::set_column_schema(engine, sheet_id, col_index, schema))
     }
 
     #[bridge::write(scope = "sheet")]
@@ -550,7 +583,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         col_index: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        schemas::clear_column_schema(self, sheet_id, col_index)
+        self.with_history(|engine| schemas::clear_column_schema(engine, sheet_id, col_index))
     }
 
     #[bridge::read(scope = "sheet")]
@@ -574,7 +607,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         schema: &RangeSchema,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        schemas::set_range_schema(self, sheet_id, schema)
+        self.with_history(|engine| schemas::set_range_schema(engine, sheet_id, schema))
     }
 
     #[bridge::write(scope = "sheet")]
@@ -584,7 +617,9 @@ impl YrsComputeEngine {
         schema_id: &str,
         updates: &RangeSchema,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        schemas::update_range_schema(self, sheet_id, schema_id, updates)
+        self.with_history(|engine| {
+            schemas::update_range_schema(engine, sheet_id, schema_id, updates)
+        })
     }
 
     #[bridge::write(scope = "sheet")]
@@ -593,7 +628,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         schema_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        schemas::delete_range_schema(self, sheet_id, schema_id)
+        self.with_history(|engine| schemas::delete_range_schema(engine, sheet_id, schema_id))
     }
 
     #[bridge::read(scope = "cell")]
@@ -608,7 +643,7 @@ impl YrsComputeEngine {
     }
 }
 
-impl YrsComputeEngine {
+impl ComputeEngine {
     /// Resolve displayed formats for an ordered list of cell positions.
     ///
     /// The result is palette-compressed with `u32` IDs aligned one-for-one to

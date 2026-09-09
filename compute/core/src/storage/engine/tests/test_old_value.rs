@@ -16,7 +16,7 @@ fn find_change_by_cell_id<'a>(
 #[test]
 fn test_old_value_direct_edit_number_to_number() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // A1 starts at 10, edit to 50
     let (_patches, result) = engine
@@ -47,7 +47,7 @@ fn test_old_value_direct_edit_number_to_number() {
 fn test_old_value_direct_edit_same_value_already_exists() {
     // A1=10 already exists. Set it to 10 again -- verify old_value is 10 if reported.
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let (_patches, result) = engine
         .set_cell(
@@ -72,7 +72,7 @@ fn test_old_value_direct_edit_same_value_already_exists() {
 #[test]
 fn test_old_value_direct_edit_value_to_text() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // A1=10, set to "hello" (non-numeric text)
     let (_patches, result) = engine
@@ -105,7 +105,7 @@ fn test_old_value_direct_edit_value_to_text() {
 #[test]
 fn test_old_value_cascade_formula() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // Verify A2=30 initially
     assert_eq!(
@@ -141,7 +141,7 @@ fn test_old_value_cascade_formula() {
 #[test]
 fn test_old_value_cascade_chain_both_cells() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // Edit A1=50 => A1 direct + A2 cascade
     let (_patches, result) = engine
@@ -174,7 +174,7 @@ fn test_old_value_cascade_chain_both_cells() {
 #[test]
 fn test_old_value_not_set_when_value_unchanged() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // Set A1 to its current value (10). B1 is unchanged (20), A2 stays 30.
     let (_patches, result) = engine
@@ -203,7 +203,7 @@ fn test_old_value_not_set_when_value_unchanged() {
 #[test]
 fn test_old_value_formula_edit() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // A2 = A1+B1 = 30. Change formula to =A1*B1 => 200
     let (_patches, result) = engine
@@ -235,7 +235,7 @@ fn test_old_value_formula_edit() {
 #[test]
 fn test_old_value_set_to_empty_string() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // A1=10, set to "" (empty => clears cell)
     let (_patches, result) = engine
@@ -260,7 +260,7 @@ fn test_old_value_set_to_empty_string() {
 #[test]
 fn test_old_value_multiple_cells_sequential() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // Edit A1 from 10 to 50
     let (_patches, result1) = engine
@@ -300,7 +300,7 @@ fn test_old_value_multiple_cells_sequential() {
 #[test]
 fn test_old_value_clear_cells() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // A1=10, clear it via batch_clear_cells
     let (_patches, result) = engine.batch_clear_cells(vec![cell_id_a1()]).unwrap();
@@ -322,7 +322,7 @@ fn test_old_value_clear_cells() {
 #[test]
 fn test_old_value_overwrite_twice() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // First edit: A1 from 10 to 50
     let (_patches, result1) = engine
@@ -364,7 +364,7 @@ fn test_old_value_overwrite_twice() {
 #[test]
 fn test_old_value_text_to_number() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // Set A1 to text first
     let _ = engine
@@ -403,7 +403,7 @@ fn test_old_value_text_to_number() {
 #[test]
 fn test_old_value_cascade_preserves_direct_edit() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // Edit A1=50 triggers cascade on A2
     let (_patches, result) = engine
@@ -440,7 +440,7 @@ fn test_old_value_cascade_preserves_direct_edit() {
 #[test]
 fn test_old_value_boolean_value() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // Set A1 to TRUE (boolean)
     let _ = engine
@@ -491,7 +491,7 @@ fn test_old_value_boolean_value() {
 #[test]
 fn test_old_value_error_propagation() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // A2 = A1+B1 = 30. Set A2 to a formula that errors: =1/0
     let (_patches, result1) = engine

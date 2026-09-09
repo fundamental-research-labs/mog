@@ -20,7 +20,7 @@ use value_types::{CellValue, FiniteF64};
 ///
 /// Contains structural metadata to locate values in rendered pivot cells.
 /// The pivot compute engine produces the cells; GETPIVOTDATA reads them.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PivotTableDef {
     /// Stable pivot table ID. Display names are user-editable and not unique.
@@ -114,7 +114,7 @@ impl PivotTableDef {
 ///
 /// Contains the region bounds and input cell references from the XLSX
 /// `<f t="dataTable">` element attributes (r1, r2).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DataTableOoxmlFlags {
     /// Authored `<f t="dataTable" r1="...">` attribute spelling, preserved for
@@ -148,7 +148,7 @@ pub struct DataTableOoxmlFlags {
     pub del2: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DataTableRegionDef {
     /// Sheet ID as UUID string.
@@ -225,6 +225,12 @@ pub type SnapshotAxisIdentityRunRef = AxisIdentityRunRef;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkbookSnapshot {
+    /// Next compact axis run counter, retained across deletions and reloads.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub axis_run_high_water_mark: Option<u64>,
+    /// Next local identity counter, retained so deleted identities are never reused.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity_high_water_mark: Option<u64>,
     /// All sheets in the workbook.
     pub sheets: Vec<SheetSnapshot>,
     /// Workbook-level named ranges.
@@ -233,6 +239,9 @@ pub struct WorkbookSnapshot {
     /// Table definitions.
     #[serde(default)]
     pub tables: Vec<TableDef>,
+    /// Full authored table catalog. When present, it takes precedence over `tables`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub canonical_tables: Vec<domain_types::domain::table::TableCatalogEntry>,
     /// Pivot table definitions for GETPIVOTDATA lookup.
     #[serde(default)]
     pub pivot_tables: Vec<PivotTableDef>,
@@ -257,9 +266,12 @@ pub struct WorkbookSnapshot {
 impl Default for WorkbookSnapshot {
     fn default() -> Self {
         Self {
+            axis_run_high_water_mark: None,
+            identity_high_water_mark: None,
             sheets: vec![],
             named_ranges: vec![],
             tables: vec![],
+            canonical_tables: vec![],
             pivot_tables: vec![],
             data_table_regions: vec![],
             iterative_calc: false,
@@ -303,9 +315,31 @@ pub struct RangeDataBin {
 }
 
 /// Single sheet snapshot (JSON path).
+/// A sparse identity position with no authored value or formula.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CellIdentityPosition {
+    /// Stable cell identity.
+    pub cell_id: cell_types::CellId,
+    /// Current zero-based row position.
+    pub row: u32,
+    /// Current zero-based column position.
+    pub col: u32,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SheetSnapshot {
+    /// Identity-only positions used by metadata and formula references.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub identities: Vec<CellIdentityPosition>,
+    /// Native row identities in their current order. Absent in legacy inputs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub row_axis: Option<cell_types::AxisIdentityStore<RowId>>,
+    /// Native column identities in their current order. Absent in legacy inputs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub col_axis: Option<cell_types::AxisIdentityStore<ColId>>,
+
     /// Sheet ID as UUID string.
     pub id: String,
     /// Display name of the sheet.
@@ -366,6 +400,12 @@ impl CellData {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkbookSnapshotBin {
+    /// Next compact axis run counter, retained across deletions and reloads.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub axis_run_high_water_mark: Option<u64>,
+    /// Next local identity counter, retained so deleted identities are never reused.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity_high_water_mark: Option<u64>,
     /// All sheets in the workbook.
     pub sheets: Vec<SheetSnapshotBin>,
     /// Workbook-level named ranges.
@@ -374,6 +414,9 @@ pub struct WorkbookSnapshotBin {
     /// Table definitions.
     #[serde(default)]
     pub tables: Vec<TableDef>,
+    /// Full authored table catalog. When present, it takes precedence over `tables`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub canonical_tables: Vec<domain_types::domain::table::TableCatalogEntry>,
     /// Pivot table definitions for GETPIVOTDATA lookup.
     #[serde(default)]
     pub pivot_tables: Vec<PivotTableDef>,
@@ -398,9 +441,12 @@ pub struct WorkbookSnapshotBin {
 impl Default for WorkbookSnapshotBin {
     fn default() -> Self {
         Self {
+            axis_run_high_water_mark: None,
+            identity_high_water_mark: None,
             sheets: vec![],
             named_ranges: vec![],
             tables: vec![],
+            canonical_tables: vec![],
             pivot_tables: vec![],
             data_table_regions: vec![],
             iterative_calc: false,
@@ -415,6 +461,16 @@ impl Default for WorkbookSnapshotBin {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SheetSnapshotBin {
+    /// Identity-only positions used by metadata and formula references.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub identities: Vec<CellIdentityPosition>,
+    /// Native row identities in their current order. Absent in legacy inputs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub row_axis: Option<cell_types::AxisIdentityStore<RowId>>,
+    /// Native column identities in their current order. Absent in legacy inputs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub col_axis: Option<cell_types::AxisIdentityStore<ColId>>,
+
     /// Sheet ID as raw u128.
     pub id: u128,
     /// Display name of the sheet.
@@ -482,7 +538,12 @@ mod tests {
     #[test]
     fn workbook_snapshot_serde_roundtrip() {
         let ws = WorkbookSnapshot {
+            axis_run_high_water_mark: None,
+            identity_high_water_mark: None,
             sheets: vec![SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: "abc-123".into(),
                 name: "Sheet1".into(),
                 rows: 100,
@@ -492,6 +553,7 @@ mod tests {
             }],
             named_ranges: vec![],
             tables: vec![],
+            canonical_tables: vec![],
             pivot_tables: vec![],
             data_table_regions: vec![],
             iterative_calc: false,
@@ -857,5 +919,111 @@ mod tests {
             array_ref: None,
         };
         assert!(cdb2.effective_identity_formula().is_none());
+    }
+}
+
+impl WorkbookSnapshot {
+    /// Next compact run identity, including active imported axes.
+    pub fn next_axis_run_counter(&self) -> u64 {
+        fn reserve<Id: cell_types::AxisIdentityId>(
+            next: &mut u64,
+            axis: &cell_types::AxisIdentityStore<Id>,
+        ) {
+            if let Some(run_id) = axis.max_run_id() {
+                *next = (*next).max(run_id.as_u64().saturating_add(1));
+            }
+        }
+        let mut next = self.axis_run_high_water_mark.unwrap_or(1).max(1);
+        for sheet in &self.sheets {
+            if let Some(rows) = &sheet.row_axis {
+                reserve(&mut next, rows);
+            }
+            if let Some(cols) = &sheet.col_axis {
+                reserve(&mut next, cols);
+            }
+        }
+        next
+    }
+
+    /// Next available native identity counter, including identities in imported axes.
+    /// UUID identities outside the local counter namespace do not advance it.
+    pub fn next_identity_counter(&self) -> u64 {
+        fn reserve(next: &mut u64, raw: u128) {
+            if let Ok(raw) = u64::try_from(raw) {
+                *next = (*next).max(raw.saturating_add(1));
+            }
+        }
+        fn axis<Id: cell_types::AxisIdentityId>(
+            next: &mut u64,
+            axis: &cell_types::AxisIdentityStore<Id>,
+        ) {
+            match axis {
+                cell_types::AxisIdentityStore::Explicit(ids) => {
+                    for id in ids {
+                        reserve(next, id.as_raw());
+                    }
+                }
+                cell_types::AxisIdentityStore::Runs(_) => {}
+            }
+        }
+        fn formula(next: &mut u64, value: &formula_types::IdentityFormula) {
+            use formula_types::IdentityFormulaRef as R;
+            for reference in &value.refs {
+                match reference {
+                    R::Cell(r) => reserve(next, r.id.as_u128()),
+                    R::Range(r) => {
+                        reserve(next, r.start_id.as_u128());
+                        reserve(next, r.end_id.as_u128());
+                    }
+                    R::FullRow(r) => reserve(next, r.row_id.as_u128()),
+                    R::FullCol(r) => reserve(next, r.col_id.as_u128()),
+                    R::RowRange(r) => {
+                        reserve(next, r.start_row_id.as_u128());
+                        reserve(next, r.end_row_id.as_u128());
+                    }
+                    R::ColRange(r) => {
+                        reserve(next, r.start_col_id.as_u128());
+                        reserve(next, r.end_col_id.as_u128());
+                    }
+                    R::RectRange(r) => {
+                        reserve(next, r.start_row_id.as_u128());
+                        reserve(next, r.end_row_id.as_u128());
+                        reserve(next, r.start_col_id.as_u128());
+                        reserve(next, r.end_col_id.as_u128());
+                    }
+                    _ => {}
+                }
+            }
+        }
+        let mut next = self.identity_high_water_mark.unwrap_or(1).max(1);
+        for sheet in &self.sheets {
+            if let Ok(id) = cell_types::SheetId::from_uuid_str(&sheet.id) {
+                reserve(&mut next, id.as_u128());
+            }
+            if let Some(rows) = &sheet.row_axis {
+                axis(&mut next, rows);
+            }
+            if let Some(cols) = &sheet.col_axis {
+                axis(&mut next, cols);
+            }
+            for cell in &sheet.cells {
+                if let Ok(id) = cell_types::CellId::from_uuid_str(&cell.cell_id) {
+                    reserve(&mut next, id.as_u128());
+                }
+                if let Some(identity) = &cell.identity_formula {
+                    formula(&mut next, identity);
+                }
+            }
+            for identity in &sheet.identities {
+                reserve(&mut next, identity.cell_id.as_u128());
+            }
+            for range in &sheet.ranges {
+                reserve(&mut next, range.range_id.as_u128());
+            }
+        }
+        for name in &self.named_ranges {
+            formula(&mut next, &name.refers_to);
+        }
+        next
     }
 }

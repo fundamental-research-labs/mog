@@ -9,7 +9,7 @@ mod predicate;
 mod wildcard;
 
 pub use elements::extract_criteria_elements;
-pub use predicate::parse_criteria;
+pub use predicate::{numeric_equality_criteria, parse_criteria, plain_text_criteria};
 pub use wildcard::{WildcardPattern, wildcard_match};
 
 #[cfg(test)]

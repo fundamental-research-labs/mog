@@ -1,17 +1,14 @@
 use cell_types::{SheetId, SheetPos};
 use domain_types::CellData;
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 
 use crate::mirror::CellMirror;
 use crate::storage::engine::stores::EngineStores;
 
 use super::super::PaletteOps;
-use super::materialize::{
-    build_cell_data_for_cell_id, explicit_blank_cell, is_imported_style_only_blank_cell,
-    is_plain_blank_cell, range_payload_cell,
-};
-use super::style_ids::format_range_style_id_at;
-use super::yrs_reads::batch_read_props_array_refs_and_formula_metadata;
+use super::materialize::{build_cell_data_for_cell_id, range_payload_cell};
+use super::metadata_reads::batch_read_props_array_refs_and_formula_metadata;
+use super::style_ids::positional_style_id_at;
 
 pub(in crate::storage::engine) fn export_cells_for_sheet(
     stores: &EngineStores,
@@ -21,32 +18,14 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
 ) -> Vec<CellData> {
     let mut profile = crate::xlsx_profile::PhaseTimer::new("export", "export_cells_for_sheet");
 
-    // Batch-read all cell properties and formula metadata in a single Yrs
-    // transaction, avoiding duplicate transaction setup overhead.
-    // Uses CellId keys to eliminate per-cell id_to_hex() String allocations.
+    // Read native cell properties and formula metadata using typed CellId keys.
     let (all_props, array_refs, formula_metadata, rich_strings) =
-        batch_read_props_array_refs_and_formula_metadata(stores, sheet_id);
+        batch_read_props_array_refs_and_formula_metadata(stores, mirror, sheet_id);
 
     // Build a reverse map: cell_id → (row, col) from grid_indexes.
     let grid = stores.grid_indexes.get(sheet_id);
     let sheet_mirror = mirror.get_sheet(sheet_id);
     let mut cells_by_pos: FxHashMap<(u32, u32), CellData> = FxHashMap::default();
-    let mut range_override_positions: FxHashSet<(u32, u32)> = FxHashSet::default();
-
-    if let Some(sheet) = sheet_mirror {
-        for (_, range) in sheet.ranges_sorted_by_id() {
-            for &(row_id, col_id) in range.overrides.keys() {
-                let Some(row) = sheet.row_index_of(&row_id) else {
-                    continue;
-                };
-                let Some(col) = sheet.col_index_of(&col_id) else {
-                    continue;
-                };
-                range_override_positions.insert((row, col));
-            }
-        }
-    }
-
     // Iterate all cells registered in the grid index.
     if let Some(grid) = grid {
         profile.counter("grid_cells", grid.cells().count() as u64);
@@ -65,10 +44,9 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
                 palette,
                 false,
             ) {
-                if cell.style_id.is_none()
-                    && let Some(sheet) = sheet_mirror
-                {
-                    cell.style_id = format_range_style_id_at(sheet, row, col, palette);
+                if cell.style_id.is_none() {
+                    cell.style_id =
+                        positional_style_id_at(stores, mirror, sheet_id, row, col, palette);
                 }
                 cells_by_pos.insert((row, col), cell);
             }
@@ -76,8 +54,44 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
     }
 
     if let Some(sheet) = sheet_mirror {
+        // Native authored entries can exist without an eagerly allocated grid CellId.
+        for (cell_id, _) in sheet.cells_iter() {
+            let Some(pos) = sheet.position_of(cell_id) else {
+                continue;
+            };
+            if cells_by_pos.contains_key(&(pos.row(), pos.col())) {
+                continue;
+            }
+            if let Some(mut cell) = build_cell_data_for_cell_id(
+                stores,
+                mirror,
+                sheet_id,
+                cell_id,
+                pos.row(),
+                pos.col(),
+                &all_props,
+                &array_refs,
+                &formula_metadata,
+                &rich_strings,
+                palette,
+                cell_id.is_virtual(),
+            ) {
+                if cell.style_id.is_none() {
+                    cell.style_id = positional_style_id_at(
+                        stores,
+                        mirror,
+                        sheet_id,
+                        pos.row(),
+                        pos.col(),
+                        palette,
+                    );
+                }
+                cells_by_pos.insert((pos.row(), pos.col()), cell);
+            }
+        }
+
         sheet.visit_range_values_for_export(|row, col, value| {
-            if value.is_null() || range_override_positions.contains(&(row, col)) {
+            if value.is_null() {
                 return;
             }
             match cells_by_pos.get_mut(&(row, col)) {
@@ -88,66 +102,12 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
                 }
                 None => {
                     let mut cell = range_payload_cell(row, col, value);
-                    cell.style_id = format_range_style_id_at(sheet, row, col, palette);
+                    cell.style_id =
+                        positional_style_id_at(stores, mirror, sheet_id, row, col, palette);
                     cells_by_pos.insert((row, col), cell);
                 }
             }
         });
-
-        // Match the dense-column overlay contract: RangeView overrides win over
-        // payload values and explicit sparse cells. Sorting makes overlapping
-        // range override conflicts deterministic, with higher RangeId winning.
-        for (_, range) in sheet.ranges_sorted_by_id() {
-            let mut overrides: Vec<_> = range.overrides.iter().collect();
-            overrides.sort_by_key(|((row_id, col_id), _)| {
-                (
-                    sheet.row_index_of(row_id).unwrap_or(u32::MAX),
-                    sheet.col_index_of(col_id).unwrap_or(u32::MAX),
-                )
-            });
-            for (&(row_id, col_id), cell_id) in overrides {
-                let Some(row) = sheet.row_index_of(&row_id) else {
-                    continue;
-                };
-                let Some(col) = sheet.col_index_of(&col_id) else {
-                    continue;
-                };
-                let replacement_from_cell = build_cell_data_for_cell_id(
-                    stores,
-                    mirror,
-                    sheet_id,
-                    cell_id,
-                    row,
-                    col,
-                    &all_props,
-                    &array_refs,
-                    &formula_metadata,
-                    &rich_strings,
-                    palette,
-                    true,
-                );
-                let is_synthetic_placeholder = replacement_from_cell.is_none();
-                let mut replacement =
-                    replacement_from_cell.unwrap_or_else(|| explicit_blank_cell(row, col));
-                let replaces_existing_payload = cells_by_pos.contains_key(&(row, col));
-                if !replaces_existing_payload
-                    && ((is_synthetic_placeholder && is_plain_blank_cell(&replacement))
-                        || is_imported_style_only_blank_cell(&replacement))
-                {
-                    continue;
-                }
-                if replacement.style_id.is_none() {
-                    replacement.style_id = format_range_style_id_at(sheet, row, col, palette);
-                }
-
-                if cells_by_pos.get(&(row, col)).is_some_and(|existing| {
-                    existing.formula.is_some() && replacement.formula.is_none()
-                }) {
-                    continue;
-                }
-                cells_by_pos.insert((row, col), replacement);
-            }
-        }
     }
 
     let sheet_uuid = sheet_id.to_uuid_string();

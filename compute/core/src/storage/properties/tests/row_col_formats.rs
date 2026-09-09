@@ -181,8 +181,7 @@ fn test_clear_col_format_virtual_noop() {
 fn test_clear_col_format_splits_inherited_col_format_range() {
     let (mut storage, sid, gi, mut mirror) = storage_with_sheet_and_mirror();
     insert_col_format_range(
-        &storage,
-        &sid,
+        mirror.get_sheet_mut(&sid).unwrap(),
         crate::mirror::RangeId::from_raw(700),
         0,
         4,
@@ -193,16 +192,13 @@ fn test_clear_col_format_splits_inherited_col_format_range() {
         Some(42),
     );
 
-    hydrate_col_format_ranges(&storage, &sid, mirror.get_sheet_mut(&sid).unwrap());
-
-    clear_col_format_with_alloc(
-        &mut storage,
-        &sid,
+    clear_col_format(&mut storage, &sid, 2, Some(&gi));
+    clear_col_format_ranges_in_span(
+        mirror.get_sheet_mut(&sid).unwrap(),
         2,
-        Some(&gi),
+        2,
         &cell_types::IdAllocator::with_seed(10_000),
     );
-    hydrate_col_format_ranges(&storage, &sid, mirror.get_sheet_mut(&sid).unwrap());
 
     let sheet_mirror = mirror.get_sheet(&sid).unwrap();
     let mut ranges = sheet_mirror.col_format_ranges().to_vec();
@@ -227,10 +223,9 @@ fn test_clear_col_format_splits_inherited_col_format_range() {
 
 #[test]
 fn test_set_col_format_range_merges_inherited_defaults_sparsely() {
-    let (mut storage, sid, gi, mut mirror) = storage_with_sheet_and_mirror();
+    let (storage, sid, gi, mut mirror) = storage_with_sheet_and_mirror();
     insert_col_format_range(
-        &storage,
-        &sid,
+        mirror.get_sheet_mut(&sid).unwrap(),
         crate::mirror::RangeId::from_raw(701),
         0,
         4,
@@ -242,8 +237,7 @@ fn test_set_col_format_range_merges_inherited_defaults_sparsely() {
     );
 
     set_col_format_range_with_alloc(
-        &mut storage,
-        &sid,
+        mirror.get_sheet_mut(&sid).unwrap(),
         1,
         3,
         &CellFormat {
@@ -252,7 +246,6 @@ fn test_set_col_format_range_merges_inherited_defaults_sparsely() {
         },
         &cell_types::IdAllocator::with_seed(11_000),
     );
-    hydrate_col_format_ranges(&storage, &sid, mirror.get_sheet_mut(&sid).unwrap());
 
     assert!(
         get_all_col_formats(&storage, &sid, Some(&gi)).is_empty(),
@@ -294,23 +287,7 @@ fn test_get_all_row_formats_surfaces_formats_and_xlsx_style_ids() {
         Some(&gi),
     )
     .unwrap();
-    insert_row_xlsx_style_id(&storage, &sid, &gi, 4, 17);
-    {
-        let sheets = storage.sheets();
-        let mut txn = storage.doc().transact_mut();
-        let sheet_hex = id_to_hex(sid.as_u128());
-        let sheet_map = match sheets.get(&txn, &sheet_hex) {
-            Some(Out::YMap(map)) => map,
-            _ => panic!("sheet map not found"),
-        };
-        let row_formats = match sheet_map.get(&txn, compute_document::schema::KEY_ROW_FORMATS) {
-            Some(Out::YMap(map)) => map,
-            _ => panic!("rowFormats map not found"),
-        };
-        row_formats.insert(&mut txn, "not-a-row-id", Any::Number(1.0));
-        let row_key = id_to_hex(gi.row_id(6).unwrap().as_u128());
-        row_formats.insert(&mut txn, &*row_key, Any::Number(2.0));
-    }
+    insert_row_xlsx_style_id(&mut storage, &sid, &gi, 4, 17);
 
     let mut rows = get_all_row_formats(&storage, &sid, Some(&gi));
     rows.sort_by_key(|entry| entry.row);
@@ -344,23 +321,7 @@ fn test_get_all_col_formats_surfaces_formats_and_xlsx_style_ids() {
         Some(&gi),
     )
     .unwrap();
-    insert_col_xlsx_style_id(&storage, &sid, &gi, 3, 23);
-    {
-        let sheets = storage.sheets();
-        let mut txn = storage.doc().transact_mut();
-        let sheet_hex = id_to_hex(sid.as_u128());
-        let sheet_map = match sheets.get(&txn, &sheet_hex) {
-            Some(Out::YMap(map)) => map,
-            _ => panic!("sheet map not found"),
-        };
-        let col_formats = match sheet_map.get(&txn, compute_document::schema::KEY_COL_FORMATS) {
-            Some(Out::YMap(map)) => map,
-            _ => panic!("colFormats map not found"),
-        };
-        col_formats.insert(&mut txn, "not-a-col-id", Any::Number(1.0));
-        let col_key = id_to_hex(gi.col_id(6).unwrap().as_u128());
-        col_formats.insert(&mut txn, &*col_key, Any::Number(2.0));
-    }
+    insert_col_xlsx_style_id(&mut storage, &sid, &gi, 3, 23);
 
     let mut cols = get_all_col_formats(&storage, &sid, Some(&gi));
     cols.sort_by_key(|entry| entry.col);

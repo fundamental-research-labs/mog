@@ -2,7 +2,7 @@ use super::fixtures::*;
 
 use compute_api::ComputeService;
 use compute_api::dispatch::Dispatch;
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use compute_security::{AccessLevel, AccessPolicy, AccessPolicyPatch, AccessTarget, Template};
 use value_types::CellValue;
 
@@ -656,27 +656,6 @@ fn structural_create_sheet_allowed_for_admin() {
     service.set_active_principal(Some(owner));
     // No policies ⇒ owner defaults to Admin; structural pass on fast path.
     service.create_sheet("Sheet2").expect("admin create");
-}
-
-#[test]
-fn policy_persists_across_engine_restart() {
-    // Composition/enforcement overlap scenario 10: write policies via
-    // service, round-trip the doc through sync_full_state, new service
-    // sees the same policies.
-    let (mut service_a, _sheet_id) = fresh_service();
-    let owner = service_a.make_principal(vec!["mog:owner".into()]);
-    service_a.set_active_principal(Some(owner));
-    service_a
-        .wb_security_add_policy(workbook_policy("agent:*", AccessLevel::Read))
-        .expect("seed");
-    let state = service_a.sync_full_state();
-
-    let (engine_b, _) = YrsComputeEngine::from_yrs_state(&state).expect("from_yrs_state");
-    let dispatch_b = Dispatch::from_engine(engine_b).expect("dispatch b");
-    let service_b = ComputeService::new(dispatch_b);
-    let listed = service_b.wb_security_list_policies();
-    assert_eq!(listed.len(), 1, "policy must survive round-trip");
-    assert!(service_b.security_active(), "seed-on-load activates");
 }
 
 #[test]

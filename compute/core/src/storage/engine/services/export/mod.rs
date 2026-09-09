@@ -18,15 +18,16 @@ pub(in crate::storage::engine) use cells::{
 pub(in crate::storage::engine) use comment_package_metadata::export_comment_package_metadata;
 pub(in crate::storage::engine) use dimensions::{
     ExportedTableProjectionInput, TableExportProjection, export_dimensions_for_sheet,
-    export_tables_for_sheet, finalize_table_export_projection,
+    export_tables_for_sheet, finalize_table_export_projection, table_catalog_for_snapshot,
 };
 pub(crate) use palette::{LocalPalette, PaletteOps};
 pub(in crate::storage::engine) use sheet_metadata::{
     export_auto_filter_for_sheet, export_conditional_formats_for_sheet,
     export_data_validations_for_sheet, export_dv_declared_count, export_dv_disable_prompts,
-    export_dv_window_attr, export_floating_objects_for_sheet, export_hyperlinks_for_sheet,
-    export_outline_groups_for_sheet, export_page_breaks_for_sheet, export_sheet_protection,
-    export_sort_state_for_sheet, export_sparkline_groups_for_sheet, export_sparklines_for_sheet,
+    export_dv_x_window, export_dv_y_window, export_floating_objects_for_sheet,
+    export_hyperlinks_for_sheet, export_outline_groups_for_sheet, export_page_breaks_for_sheet,
+    export_sheet_protection, export_sort_state_for_sheet, export_sparkline_groups_for_sheet,
+    export_sparklines_for_sheet,
 };
 pub(in crate::storage::engine) use slicers::export_workbook_slicer_caches;
 pub(in crate::storage::engine) use workbook::{
@@ -39,17 +40,14 @@ use super::objects::get_all_comments;
 use super::queries;
 use crate::mirror::CellMirror;
 use crate::storage::engine::stores::EngineStores;
-use crate::storage::sheet::{dimensions as dims_mod, get_meta_for_export, merges, print};
+use crate::storage::sheet::{dimensions as dims_mod, merges, print};
 use cell_types::SheetId;
-use compute_document::schema::{KEY_COLS, KEY_ROWS};
 use domain_types::{
-    DataTableRegion, FrozenPane, MergeRegion, ParseOutput, SheetData, SheetView,
+    DataTableRegion, FrozenPane, MergeRegion, ParseOutput, SheetData,
     domain::comment::{Comment, CommentType},
     domain::conditional_format::ConditionalFormat as DomainConditionalFormat,
-    domain::print::PrintSettings,
     domain::table::TableSpec,
 };
-use yrs::{Any, Map, Out, Transact};
 
 use named_ranges::export_workbook_named_ranges;
 #[cfg(feature = "native")]
@@ -85,12 +83,7 @@ fn export_single_sheet(
         export_authored_style_runs_for_sheet(stores, mirror, sheet_id, palette);
 
     let merges_raw = match stores.grid_indexes.get(sheet_id) {
-        Some(grid) => merges::get_all_merges(
-            stores.storage.doc(),
-            stores.storage.sheets(),
-            *sheet_id,
-            grid,
-        ),
+        Some(grid) => merges::get_all_merges(&stores.storage, *sheet_id, grid),
         None => Vec::new(),
     };
     let merge_regions: Vec<MergeRegion> = merges_raw
@@ -103,233 +96,20 @@ fn export_single_sheet(
         })
         .collect();
 
-    let view_opts = queries::get_view_options_query(stores, sheet_id);
-    let scroll = queries::get_scroll_position_query(stores, sheet_id);
-    #[allow(clippy::type_complexity)]
-    let (
-        zoom_scale_normal,
-        zoom_scale_page_layout_view,
-        zoom_scale_sheet_layout_view,
-        tab_selected,
-        active_cell,
-        sqref,
-        has_explicit_top_left_cell,
-        frozen_pane_tlc,
-        pane_config,
-        selections,
-        extra_sheet_views,
-        rt_view_type,
-        rt_show_outline_symbols,
-        rt_show_ruler,
-        rt_show_white_space,
-        rt_default_grid_color,
-        rt_window_protection,
-        rt_color_id,
-        workbook_view_id,
-        sheet_view_ext_lst_xml,
-    ) = {
-        let txn = stores.storage.doc().transact();
-        let meta = get_meta_for_export(&txn, stores.storage.sheets(), sheet_id);
-        match meta {
-            Some(m) => {
-                let zsn = m.get(&txn, "zoomScaleNormal").and_then(|v| match v {
-                    Out::Any(Any::Number(n)) => Some(n as u32),
-                    _ => None,
-                });
-                let zsplv = m
-                    .get(&txn, "zoomScalePageLayoutView")
-                    .and_then(|v| match v {
-                        Out::Any(Any::Number(n)) => Some(n as u32),
-                        _ => None,
-                    });
-                let zsslv = m
-                    .get(&txn, "zoomScaleSheetLayoutView")
-                    .and_then(|v| match v {
-                        Out::Any(Any::Number(n)) => Some(n as u32),
-                        _ => None,
-                    });
-                let ts = m
-                    .get(&txn, "tabSelected")
-                    .and_then(|v| match v {
-                        Out::Any(Any::Bool(b)) => Some(b),
-                        _ => None,
-                    })
-                    .unwrap_or(false);
-                let ac = m.get(&txn, "activeCell").and_then(|v| match v {
-                    Out::Any(Any::String(s)) => Some(s.to_string()),
-                    _ => None,
-                });
-                let sq = m.get(&txn, "sqref").and_then(|v| match v {
-                    Out::Any(Any::String(s)) => Some(s.to_string()),
-                    _ => None,
-                });
-                let etlc = m
-                    .get(&txn, "hasExplicitTopLeftCell")
-                    .and_then(|v| match v {
-                        Out::Any(Any::Bool(b)) => Some(b),
-                        _ => None,
-                    })
-                    .unwrap_or(false);
-                let fp_tlc = m.get(&txn, "frozenPaneTopLeftCell").and_then(|v| match v {
-                    Out::Any(Any::String(s)) => Some(s.to_string()),
-                    _ => None,
-                });
-                let pane = m.get(&txn, "sheetPaneConfig").and_then(|v| match v {
-                    Out::Any(Any::String(s)) => {
-                        serde_json::from_str::<domain_types::SheetPaneConfig>(&s).ok()
-                    }
-                    _ => None,
-                });
-                let sels = m
-                    .get(&txn, "selections")
-                    .and_then(|v| match v {
-                        Out::Any(Any::String(s)) => serde_json::from_str(&s).ok(),
-                        _ => None,
-                    })
-                    .unwrap_or_default();
-                let esv = m
-                    .get(&txn, "extraSheetViews")
-                    .and_then(|v| match v {
-                        Out::Any(Any::String(s)) => serde_json::from_str(&s).ok(),
-                        _ => None,
-                    })
-                    .unwrap_or_default();
-                let vt = m.get(&txn, "viewType").and_then(|v| match v {
-                    Out::Any(Any::String(s)) => Some(s.to_string()),
-                    _ => None,
-                });
-                let sos = m
-                    .get(&txn, "showOutlineSymbols")
-                    .and_then(|v| match v {
-                        Out::Any(Any::Bool(b)) => Some(b),
-                        _ => None,
-                    })
-                    .unwrap_or(true);
-                let sr = m
-                    .get(&txn, "showRuler")
-                    .and_then(|v| match v {
-                        Out::Any(Any::Bool(b)) => Some(b),
-                        _ => None,
-                    })
-                    .unwrap_or(true);
-                let sws = m
-                    .get(&txn, "showWhiteSpace")
-                    .and_then(|v| match v {
-                        Out::Any(Any::Bool(b)) => Some(b),
-                        _ => None,
-                    })
-                    .unwrap_or(true);
-                let dgc = m
-                    .get(&txn, "defaultGridColor")
-                    .and_then(|v| match v {
-                        Out::Any(Any::Bool(b)) => Some(b),
-                        _ => None,
-                    })
-                    .unwrap_or(true);
-                let wp = m
-                    .get(&txn, "windowProtection")
-                    .and_then(|v| match v {
-                        Out::Any(Any::Bool(b)) => Some(b),
-                        _ => None,
-                    })
-                    .unwrap_or(false);
-                let cid = m.get(&txn, "colorId").and_then(|v| match v {
-                    Out::Any(Any::Number(n)) => Some(n as u32),
-                    _ => None,
-                });
-                let wvid = m
-                    .get(&txn, "workbookViewId")
-                    .and_then(|v| match v {
-                        Out::Any(Any::Number(n)) => Some(n as u32),
-                        _ => None,
-                    })
-                    .unwrap_or(0);
-                let view_ext = m.get(&txn, "sheetViewExtLstXml").and_then(|v| match v {
-                    Out::Any(Any::String(s)) => Some(s.to_string()),
-                    _ => None,
-                });
-                (
-                    zsn, zsplv, zsslv, ts, ac, sq, etlc, fp_tlc, pane, sels, esv, vt, sos, sr, sws,
-                    dgc, wp, cid, wvid, view_ext,
-                )
-            }
-            None => (
-                None,
-                None,
-                None,
-                false,
-                None,
-                None,
-                false,
-                None,
-                None,
-                Vec::new(),
-                Vec::new(),
-                None,
-                true,
-                true,
-                true,
-                true,
-                false,
-                None,
-                0,
-                None,
-            ),
-        }
-    };
-    let frozen_pane = if pane_config
+    let metadata = stores.storage.sheet_metadata.get(sheet_id)?;
+    let view = metadata.view.to_domain();
+    let frozen_pane = view
+        .pane
         .as_ref()
-        .is_some_and(|pane| pane.state.is_frozen())
-    {
-        Some(FrozenPane {
-            rows: pane_config.as_ref().unwrap().y_split as u32,
-            cols: pane_config.as_ref().unwrap().x_split as u32,
-            top_left_cell: pane_config
-                .as_ref()
-                .unwrap()
-                .top_left_cell
-                .clone()
-                .or(frozen_pane_tlc),
-        })
-    } else {
-        None
-    };
-    let view = SheetView {
-        show_gridlines: view_opts.show_gridlines,
-        show_row_col_headers: view_opts.show_row_headers && view_opts.show_column_headers,
-        show_zeros: view_opts.show_zeros,
-        show_outline_symbols: rt_show_outline_symbols,
-        show_formulas: view_opts.show_formulas,
-        right_to_left: view_opts.right_to_left,
-        show_ruler: rt_show_ruler,
-        show_white_space: rt_show_white_space,
-        default_grid_color: rt_default_grid_color,
-        window_protection: rt_window_protection,
-        color_id: rt_color_id,
-        zoom_scale: view_opts.zoom_scale,
-        zoom_scale_normal,
-        view: rt_view_type,
-        zoom_scale_page_layout_view,
-        zoom_scale_sheet_layout_view,
-        workbook_view_id,
-        scroll_row: scroll.top_row,
-        scroll_col: scroll.left_col,
-        has_explicit_top_left_cell,
-        tab_selected,
-        active_cell,
-        sqref,
-        pane: pane_config,
-        selections,
-        pivot_selection: Vec::new(),
-        ext_lst_xml: sheet_view_ext_lst_xml,
-    };
+        .filter(|pane| pane.state.is_frozen())
+        .map(|pane| FrozenPane {
+            rows: pane.y_split as u32,
+            cols: pane.x_split as u32,
+            top_left_cell: pane.top_left_cell.clone(),
+        });
+    let extra_sheet_views = metadata.extra_views.clone();
 
-    let stored_max_col = dims_mod::get_max_materialized_col(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        stores.grid_indexes.get(sheet_id),
-    );
+    let stored_max_col = dims_mod::get_max_materialized_col(stores.grid_indexes.get(sheet_id));
     let sheet_dimensions = export_dimensions_for_sheet(stores, mirror, sheet_id, stored_max_col);
 
     let raw_comments = get_all_comments(stores, sheet_id);
@@ -380,14 +160,9 @@ fn export_single_sheet(
     let data_validations = export_data_validations_for_sheet(stores, sheet_id);
     let x14_data_validations = Vec::new();
 
-    let ps = print::get_print_settings(stores.storage.doc(), stores.storage.sheets(), sheet_id);
-    let print_settings = if ps == PrintSettings::default() {
-        None
-    } else {
-        Some(ps)
-    };
+    let print_settings = metadata.print_settings.clone();
 
-    let hf_images = print::get_hf_images(stores.storage.doc(), stores.storage.sheets(), sheet_id);
+    let hf_images = print::get_hf_images(&stores.storage, sheet_id);
 
     let protection = export_sheet_protection(stores, sheet_id);
 
@@ -398,22 +173,10 @@ fn export_single_sheet(
         .map(|c| data_max_col.max(c + 1))
         .unwrap_or(data_max_col);
     let _sheet_max_col = max_col;
-    let (stored_rows, stored_cols) = {
-        let txn = stores.storage.doc().transact();
-        if let Some(meta) = get_meta_for_export(&txn, stores.storage.sheets(), sheet_id) {
-            let rows = match meta.get(&txn, KEY_ROWS) {
-                Some(Out::Any(Any::Number(n))) => Some(n.max(0.0) as u32),
-                _ => None,
-            };
-            let cols = match meta.get(&txn, KEY_COLS) {
-                Some(Out::Any(Any::Number(n))) => Some(n.max(0.0) as u32),
-                _ => None,
-            };
-            (rows, cols)
-        } else {
-            (None, None)
-        }
-    };
+    let (stored_rows, stored_cols) = mirror
+        .get_sheet(sheet_id)
+        .map(|sheet| (Some(sheet.grid_rows), Some(sheet.grid_cols)))
+        .unwrap_or((None, None));
     let (legacy_comment_authors, comment_package, drawing_package) =
         export_comment_package_metadata(stores, sheet_id);
     let dims_max_row = sheet_dimensions
@@ -472,139 +235,16 @@ fn export_single_sheet(
 
     let (charts, floating_objects) = chart_sources::split_charts_for_sheet_export(all_fobjs);
 
-    let (
-        original_sheet_id,
-        visibility,
-        sheet_uid,
-        mut sheet_properties,
-        worksheet_semantic_containers,
-        worksheet_root_namespaces,
-        worksheet_ext_lst_xml,
-        worksheet_dimension_ref,
-        sheet_calc_pr,
-        sheet_views_ext_lst_xml,
-    ) = {
-        let txn = stores.storage.doc().transact();
-        let meta = get_meta_for_export(&txn, stores.storage.sheets(), sheet_id);
-        match meta {
-            Some(m) => {
-                let osi = m.get(&txn, "originalSheetId").and_then(|v| match v {
-                    Out::Any(Any::Number(n)) => Some(n as u32),
-                    _ => None,
-                });
-                let is_hidden = m
-                    .get(&txn, "hidden")
-                    .and_then(|v| match v {
-                        Out::Any(Any::Bool(b)) => Some(b),
-                        _ => None,
-                    })
-                    .unwrap_or(false);
-                let is_very_hidden = m
-                    .get(&txn, "veryHidden")
-                    .and_then(|v| match v {
-                        Out::Any(Any::Bool(b)) => Some(b),
-                        _ => None,
-                    })
-                    .unwrap_or(false);
-                let vis = if is_very_hidden {
-                    domain_types::SheetState::VeryHidden
-                } else if is_hidden {
-                    domain_types::SheetState::Hidden
-                } else {
-                    domain_types::SheetState::Visible
-                };
-                let uid = m.get(&txn, "sheetUid").and_then(|v| match v {
-                    Out::Any(Any::String(s)) => Some(s.to_string()),
-                    _ => None,
-                });
-                let mut sheet_properties = m
-                    .get(
-                        &txn,
-                        domain_types::yrs_schema::sheet_properties::PROPERTY_KEY,
-                    )
-                    .and_then(|v| match v {
-                        Out::YMap(map) => {
-                            domain_types::yrs_schema::sheet_properties::from_yrs_map(&map, &txn)
-                        }
-                        _ => None,
-                    });
-                let tab_color = m.get(&txn, "tabColor").and_then(|v| match v {
-                    Out::Any(Any::String(s)) => Some(s.to_string()),
-                    _ => None,
-                });
-                if let Some(tab_color) = tab_color {
-                    let properties = sheet_properties.get_or_insert_with(Default::default);
-                    if properties.tab_color.is_none() {
-                        properties.tab_color = Some(tab_color_to_ooxml_color(&tab_color));
-                    }
-                }
-                let worksheet_semantic_containers = m
-                    .get(&txn, "worksheetSemanticContainers")
-                    .and_then(|v| match v {
-                        Out::Any(Any::String(s)) => {
-                            serde_json::from_str::<domain_types::WorksheetSemanticContainers>(&s)
-                                .ok()
-                        }
-                        _ => None,
-                    })
-                    .unwrap_or_default();
-                let worksheet_root_namespaces = m
-                    .get(&txn, "worksheetRootNamespaces")
-                    .and_then(|v| match v {
-                        Out::Any(Any::String(s)) => {
-                            serde_json::from_str::<domain_types::XmlNamespaceDeclarations>(&s).ok()
-                        }
-                        _ => None,
-                    })
-                    .unwrap_or_default();
-                let worksheet_ext_lst_xml =
-                    m.get(&txn, "worksheetExtLstXml").and_then(|v| match v {
-                        Out::Any(Any::String(s)) => Some(s.to_string()),
-                        _ => None,
-                    });
-                let worksheet_dimension_ref =
-                    m.get(&txn, "worksheetDimensionRef").and_then(|v| match v {
-                        Out::Any(Any::String(s)) => Some(s.to_string()),
-                        _ => None,
-                    });
-                let sheet_calc_pr = m.get(&txn, "sheetCalcPr").and_then(|v| match v {
-                    Out::Any(Any::String(s)) => {
-                        serde_json::from_str::<ooxml_types::worksheet::SheetCalcPr>(&s).ok()
-                    }
-                    _ => None,
-                });
-                let sheet_views_ext_lst_xml =
-                    m.get(&txn, "sheetViewsExtLstXml").and_then(|v| match v {
-                        Out::Any(Any::String(s)) => Some(s.to_string()),
-                        _ => None,
-                    });
-                (
-                    osi,
-                    vis,
-                    uid,
-                    sheet_properties,
-                    worksheet_semantic_containers,
-                    worksheet_root_namespaces,
-                    worksheet_ext_lst_xml,
-                    worksheet_dimension_ref,
-                    sheet_calc_pr,
-                    sheet_views_ext_lst_xml,
-                )
-            }
-            None => (
-                None,
-                domain_types::SheetState::Visible,
-                None,
-                None,
-                Default::default(),
-                Default::default(),
-                None,
-                None,
-                None,
-                None,
-            ),
-        }
-    };
+    let original_sheet_id = metadata.original_sheet_id;
+    let visibility = metadata.visibility.clone();
+    let sheet_uid = metadata.uid.clone();
+    let mut sheet_properties = metadata.properties.clone();
+    let worksheet_semantic_containers = metadata.semantic_containers.clone();
+    let worksheet_root_namespaces = metadata.root_namespaces.clone();
+    let worksheet_ext_lst_xml = metadata.ext_lst_xml.clone();
+    let worksheet_dimension_ref = metadata.dimension_ref.clone();
+    let sheet_calc_pr = metadata.calc_properties.clone();
+    let sheet_views_ext_lst_xml = metadata.views_ext_lst_xml.clone();
     if let Some(outline) = outline_properties.clone() {
         sheet_properties
             .get_or_insert_with(Default::default)
@@ -648,8 +288,8 @@ fn export_single_sheet(
         data_validations,
         data_validations_declared_count: export_dv_declared_count(stores, sheet_id),
         data_validations_disable_prompts: export_dv_disable_prompts(stores, sheet_id),
-        data_validations_x_window: export_dv_window_attr(stores, sheet_id, "dvXWindow"),
-        data_validations_y_window: export_dv_window_attr(stores, sheet_id, "dvYWindow"),
+        data_validations_x_window: export_dv_x_window(stores, sheet_id),
+        data_validations_y_window: export_dv_y_window(stores, sheet_id),
         x14_data_validations,
         x14_data_validations_declared_count: None,
         x14_data_validations_disable_prompts: false,
@@ -689,13 +329,10 @@ fn export_single_sheet(
     })
 }
 
-fn export_data_table_regions(stores: &EngineStores, sheet_ids: &[SheetId]) -> Vec<DataTableRegion> {
-    let mut regions: Vec<DataTableRegion> =
-        crate::storage::workbook::data_tables::get_all_data_table_regions(
-            stores.storage.doc(),
-            stores.storage.workbook_map(),
-        )
-        .into_iter()
+fn export_data_table_regions(mirror: &CellMirror, sheet_ids: &[SheetId]) -> Vec<DataTableRegion> {
+    let mut regions: Vec<DataTableRegion> = mirror
+        .all_data_table_regions()
+        .iter()
         .filter_map(|region| {
             let sheet_id = SheetId::from_uuid_str(&region.sheet).ok()?;
             let sheet_index = sheet_ids.iter().position(|sid| *sid == sheet_id)? as u32;
@@ -707,11 +344,10 @@ fn export_data_table_regions(stores: &EngineStores, sheet_ids: &[SheetId]) -> Ve
                 end_col: region.end_col,
                 row_input_ref: region.row_input_ref,
                 col_input_ref: region.col_input_ref,
-                ooxml_flags: region
-                    .ooxml_flags
-                    .map(|flags| domain_types::DataTableOoxmlFlags {
-                        r1: flags.r1,
-                        r2: flags.r2,
+                ooxml_flags: region.ooxml_flags.as_ref().map(|flags| {
+                    domain_types::DataTableOoxmlFlags {
+                        r1: flags.r1.clone(),
+                        r2: flags.r2.clone(),
                         aca: flags.aca,
                         ca: flags.ca,
                         bx: flags.bx,
@@ -719,7 +355,8 @@ fn export_data_table_regions(stores: &EngineStores, sheet_ids: &[SheetId]) -> Ve
                         dtr: flags.dtr,
                         del1: flags.del1,
                         del2: flags.del2,
-                    }),
+                    }
+                }),
             })
         })
         .collect();
@@ -735,26 +372,13 @@ fn export_data_table_regions(stores: &EngineStores, sheet_ids: &[SheetId]) -> Ve
     regions
 }
 
-fn tab_color_to_ooxml_color(color: &str) -> ooxml_types::styles::ColorDef {
-    let hex = color.strip_prefix('#').unwrap_or(color);
-    let argb = if hex.len() == 6 {
-        format!("FF{hex}")
-    } else {
-        hex.to_string()
-    };
-    ooxml_types::styles::ColorDef::Rgb {
-        val: argb,
-        tint: None,
-    }
-}
-
-/// Build a complete `ParseOutput` from the current Yrs storage state.
+/// Build a complete `ParseOutput` from the current native storage state.
 /// This produces the same type that the XLSX parser emits, enabling
 /// the unified XLSX writer to consume it.
 ///
 /// On native targets (with rayon), sheets are exported in parallel using a
 /// shared thread-safe style palette. On WASM, sheets are processed sequentially.
-pub(in crate::storage::engine) fn build_parse_output_from_yrs(
+pub(in crate::storage::engine) fn build_parse_output(
     stores: &EngineStores,
     mirror: &CellMirror,
 ) -> ParseOutput {
@@ -828,7 +452,7 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
         let stylesheet = workbook_stylesheet.get_or_insert_with(Default::default);
         stylesheet.dxf_registry.extend(generated_table_style_dxfs);
     }
-    let data_table_regions = export_data_table_regions(stores, &sheet_ids);
+    let data_table_regions = export_data_table_regions(mirror, &sheet_ids);
     let connections = workbook::export_workbook_connections(stores);
     let workbook_views = export_workbook_views_for_sheets(stores, &sheet_ids, &mut output_sheets);
 
@@ -838,7 +462,7 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
     let pivot_tables =
         export_workbook_parsed_pivot_tables(stores, mirror, default_pivot_style.as_deref());
 
-    let output = ParseOutput {
+    let mut output = ParseOutput {
         sheets: output_sheets,
         workbook_sheet_inventory: Vec::new(),
         parsed_workbook_sheet_indices: Default::default(),
@@ -883,7 +507,7 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
         has_persons_part,
         volatile_dependency_part: workbook::export_volatile_dependency_part(stores),
     };
-    let _data_features = output.workbook_data_features();
+    slicers::reconcile_pivot_bindings(&mut output);
     output
 }
 

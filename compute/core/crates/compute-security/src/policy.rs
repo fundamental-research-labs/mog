@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::level::AccessLevel;
 use crate::tag_match::TagMatcher;
 
-/// Discriminated union persisted into the Yrs `security.policies` map.
+/// Target of a native access policy.
 ///
 /// The wire shape is pinned to the legacy TS types the pre-R6 kernel
 /// serialized (`contracts/src/security/types.ts` in `59aa74b0`):
@@ -39,8 +39,7 @@ pub enum AccessTarget {
 }
 
 /// Policy identifier. `transparent` serde so the wire format is a bare
-/// UUID string, matching the legacy on-wire representation that
-/// `SecurityStore` (R2.1) rewrites in place without migration.
+/// UUID string.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct PolicyId(Uuid);
@@ -68,8 +67,8 @@ impl std::fmt::Display for PolicyId {
     }
 }
 
-/// Provenance and authoring metadata attached to every policy. Stored in
-/// Yrs alongside the policy itself (R2.1) and surfaced in explain output.
+/// Provenance and authoring metadata attached to every policy and surfaced
+/// in explain output.
 ///
 /// Wire shape matches legacy `AccessPolicyMetadata` (camelCase
 /// `createdBy` / `createdAt` / `templateId`). The Rust `created_at_millis`
@@ -86,7 +85,7 @@ pub struct PolicyMetadata {
     pub template_id: Option<Arc<str>>,
 }
 
-/// Top-level policy record persisted in Yrs.
+/// Native policy record.
 ///
 /// Wire shape matches legacy `AccessPolicy` (camelCase `principalTag`).
 /// The outer `rename_all = "camelCase"` converts `principal_tag` →
@@ -110,8 +109,8 @@ pub struct AccessPolicy {
 /// the SDK-facing JSON only carries the fields the caller actually meant
 /// to change.
 ///
-/// `id` is not patchable: once a policy is created the ID is the Yrs-map
-/// key used for LWW and must not move. Callers that want to re-key
+/// `id` is not patchable: it identifies the policy for its lifetime.
+/// Callers that want to re-key
 /// should `remove_policy` + `add_policy`.
 ///
 /// Mutating `target` is supported even though the target carries a

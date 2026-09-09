@@ -1,535 +1,300 @@
-use super::super::{KEY_COL_FORMATS, KEY_ROW_FORMATS, id_to_hex};
+//! Direct row/column formats keyed by native axis identities.
 use super::merge::{merge_formats, normalize_format_patch};
-use super::ranges::clear_col_format_ranges_in_span;
-use super::yrs::get_sheet_submap;
 use crate::border_patch::BorderPatchField;
 use crate::identity::GridIndex;
-use crate::storage::YrsStorage;
-use cell_types::{IdAllocator, SheetId};
-use compute_document::undo::ORIGIN_USER_EDIT;
-use domain_types::{CellBorders, CellFormat, yrs_schema};
+use crate::storage::WorkbookStorage;
+use crate::storage::sheet::dimensions::StoredAxisFormat;
+use cell_types::SheetId;
+use domain_types::{CellBorders, CellFormat};
 use value_types::ComputeError;
-use yrs::{Any, Map, MapPrelim, Origin, Out, Transact};
 
-// -------------------------------------------------------------------
-// Row Format (keyed by RowId via row_col_identity)
-// -------------------------------------------------------------------
-
-/// Get format for a row.
-///
-/// Uses read-only `get_row_id_at` so virtual (unmaterialized) rows
-/// return `None` without side-effects.
 pub fn get_row_format(
-    storage: &YrsStorage,
+    storage: &WorkbookStorage,
     sheet_id: &SheetId,
     row: u32,
-    grid_index: Option<&GridIndex>,
+    grid: Option<&GridIndex>,
 ) -> Option<CellFormat> {
-    let row_id = id_to_hex(grid_index?.row_id(row)?.as_u128());
-    let sheets = storage.sheets_ref();
-    let txn = storage.doc().transact();
-    let fmt_map = get_sheet_submap(&txn, &sheets, sheet_id, KEY_ROW_FORMATS)?;
-    match fmt_map.get(&txn, &row_id) {
-        Some(Out::YMap(nested)) => yrs_schema::cell_format::from_yrs_map(&nested, &txn),
-        _ => None,
-    }
+    let id = grid?.row_id(row)?;
+    storage
+        .sheet_metadata
+        .get(sheet_id)?
+        .dimensions
+        .rows
+        .get(&id)?
+        .format
+        .as_ref()?
+        .resolve(&storage.metadata.style_palette)
+        .cloned()
 }
-
-/// Set format for a row, materializing the row if needed.
-///
-/// Merges with any existing row format on a per-property basis.
-pub fn set_row_format(
-    storage: &mut YrsStorage,
-    sheet_id: &SheetId,
-    row: u32,
-    format: &CellFormat,
-    grid_index: Option<&GridIndex>,
-) -> Result<(), ComputeError> {
-    let row_id = grid_index
-        .and_then(|gi| gi.row_id(row))
-        .map(|rid| id_to_hex(rid.as_u128()))
-        .ok_or_else(|| ComputeError::SheetNotFound {
-            sheet_id: sheet_id.to_uuid_string(),
-        })?;
-
-    let existing: Option<CellFormat> = {
-        let sheets = storage.sheets_ref();
-        let txn = storage.doc().transact();
-        get_sheet_submap(&txn, &sheets, sheet_id, KEY_ROW_FORMATS).and_then(|m| {
-            match m.get(&txn, &row_id) {
-                Some(Out::YMap(nested)) => yrs_schema::cell_format::from_yrs_map(&nested, &txn),
-                _ => None,
-            }
-        })
-    };
-
-    let merged = match &existing {
-        Some(ex) => merge_formats(ex, format),
-        None => normalize_format_patch(format),
-    };
-
-    let sheets = storage.sheets_ref();
-    let mut txn = storage
-        .doc()
-        .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    if let Some(fmt_map) = get_sheet_submap(&txn, &sheets, sheet_id, KEY_ROW_FORMATS) {
-        // Remove old entry (may be legacy JSON string or prior Y.Map) then insert structured.
-        fmt_map.remove(&mut txn, &row_id);
-        let entries = yrs_schema::cell_format::to_yrs_prelim(&merged);
-        let nested: MapPrelim = entries.into_iter().collect();
-        fmt_map.insert(&mut txn, &*row_id, nested);
-    }
-    Ok(())
-}
-
-/// Apply a tri-state patch to a row's stored direct format.
-pub fn patch_row_format(
-    storage: &mut YrsStorage,
-    sheet_id: &SheetId,
-    row: u32,
-    format: &CellFormat,
-    clear_fields: &[String],
-    grid_index: Option<&GridIndex>,
-) -> Result<(), ComputeError> {
-    let row_id = grid_index
-        .and_then(|gi| gi.row_id(row))
-        .map(|rid| id_to_hex(rid.as_u128()))
-        .ok_or_else(|| ComputeError::SheetNotFound {
-            sheet_id: sheet_id.to_uuid_string(),
-        })?;
-    let existing = get_row_format(storage, sheet_id, row, grid_index).unwrap_or_default();
-    let patched = super::apply_format_patch(&existing, format, clear_fields)?;
-
-    let sheets = storage.sheets_ref();
-    let mut txn = storage
-        .doc()
-        .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    if let Some(fmt_map) = get_sheet_submap(&txn, &sheets, sheet_id, KEY_ROW_FORMATS) {
-        fmt_map.remove(&mut txn, &row_id);
-        if patched != CellFormat::default() {
-            let entries = yrs_schema::cell_format::to_yrs_prelim(&patched);
-            let nested: MapPrelim = entries.into_iter().collect();
-            fmt_map.insert(&mut txn, &*row_id, nested);
-        }
-    }
-    Ok(())
-}
-
-/// Apply a nested border patch to a row's stored direct format.
-pub fn patch_row_borders(
-    storage: &mut YrsStorage,
-    sheet_id: &SheetId,
-    row: u32,
-    borders: &CellBorders,
-    clear_fields: &[BorderPatchField],
-    grid_index: Option<&GridIndex>,
-) -> Result<(), ComputeError> {
-    let row_id = grid_index
-        .and_then(|gi| gi.row_id(row))
-        .map(|rid| id_to_hex(rid.as_u128()))
-        .ok_or_else(|| ComputeError::SheetNotFound {
-            sheet_id: sheet_id.to_uuid_string(),
-        })?;
-    let mut patched = get_row_format(storage, sheet_id, row, grid_index).unwrap_or_default();
-    patched.borders = super::apply_borders_patch(patched.borders.as_ref(), borders, clear_fields);
-
-    let sheets = storage.sheets_ref();
-    let mut txn = storage
-        .doc()
-        .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    if let Some(fmt_map) = get_sheet_submap(&txn, &sheets, sheet_id, KEY_ROW_FORMATS) {
-        fmt_map.remove(&mut txn, &row_id);
-        if patched != CellFormat::default() {
-            let entries = yrs_schema::cell_format::to_yrs_prelim(&patched);
-            let nested: MapPrelim = entries.into_iter().collect();
-            fmt_map.insert(&mut txn, &*row_id, nested);
-        }
-    }
-    Ok(())
-}
-
-/// Clear the format for a row.
-///
-/// Uses read-only `get_row_id_at` -- if the row is virtual (no RowId),
-/// this is a no-op.
-pub fn clear_row_format(
-    storage: &mut YrsStorage,
-    sheet_id: &SheetId,
-    row: u32,
-    grid_index: Option<&GridIndex>,
-) {
-    let row_id = match grid_index.and_then(|gi| gi.row_id(row)) {
-        Some(rid) => id_to_hex(rid.as_u128()),
-        None => return,
-    };
-    let sheets = storage.sheets_ref();
-    let mut txn = storage
-        .doc()
-        .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    if let Some(fmt_map) = get_sheet_submap(&txn, &sheets, sheet_id, KEY_ROW_FORMATS) {
-        fmt_map.remove(&mut txn, &row_id);
-    }
-}
-
-// -------------------------------------------------------------------
-// Column Format (keyed by ColId via row_col_identity)
-// -------------------------------------------------------------------
-
-/// Get format for a column.
-///
-/// Uses read-only `get_col_id_at` so virtual (unmaterialized) columns
-/// return `None` without side-effects.
-pub fn get_col_format(
-    storage: &YrsStorage,
-    sheet_id: &SheetId,
-    col: u32,
-    grid_index: Option<&GridIndex>,
-) -> Option<CellFormat> {
-    let col_id = id_to_hex(grid_index?.col_id(col)?.as_u128());
-    let sheets = storage.sheets_ref();
-    let txn = storage.doc().transact();
-    let fmt_map = get_sheet_submap(&txn, &sheets, sheet_id, KEY_COL_FORMATS)?;
-    match fmt_map.get(&txn, &col_id) {
-        Some(Out::YMap(nested)) => yrs_schema::cell_format::from_yrs_map(&nested, &txn),
-        _ => None,
-    }
-}
-
-/// Get the stored original XLSX cellXfs index for a column format.
-///
-/// Returns `None` if the column has no format or no stored xlsxStyleId.
-pub fn get_col_xlsx_style_id(
-    storage: &YrsStorage,
-    sheet_id: &SheetId,
-    col: u32,
-    grid_index: Option<&GridIndex>,
-) -> Option<u32> {
-    let col_id = id_to_hex(grid_index?.col_id(col)?.as_u128());
-    let sheets = storage.sheets_ref();
-    let txn = storage.doc().transact();
-    let fmt_map = get_sheet_submap(&txn, &sheets, sheet_id, KEY_COL_FORMATS)?;
-    match fmt_map.get(&txn, &col_id) {
-        Some(Out::YMap(nested)) => {
-            use domain_types::yrs_schema::cell_format::KEY_XLSX_STYLE_ID;
-            match nested.get(&txn, KEY_XLSX_STYLE_ID) {
-                Some(Out::Any(Any::Number(n))) => Some(n as u32),
-                _ => None,
-            }
-        }
-        _ => None,
-    }
-}
-
-/// Get the stored original XLSX cellXfs index for a row format.
-///
-/// Returns `None` if the row has no format or no stored xlsxStyleId.
 pub fn get_row_xlsx_style_id(
-    storage: &YrsStorage,
+    storage: &WorkbookStorage,
     sheet_id: &SheetId,
     row: u32,
-    grid_index: Option<&GridIndex>,
+    grid: Option<&GridIndex>,
 ) -> Option<u32> {
-    let row_id = id_to_hex(grid_index?.row_id(row)?.as_u128());
-    let sheets = storage.sheets_ref();
-    let txn = storage.doc().transact();
-    let fmt_map = get_sheet_submap(&txn, &sheets, sheet_id, KEY_ROW_FORMATS)?;
-    match fmt_map.get(&txn, &row_id) {
-        Some(Out::YMap(nested)) => {
-            use domain_types::yrs_schema::cell_format::KEY_XLSX_STYLE_ID;
-            match nested.get(&txn, KEY_XLSX_STYLE_ID) {
-                Some(Out::Any(Any::Number(n))) => Some(n as u32),
-                _ => None,
-            }
-        }
-        _ => None,
-    }
+    let id = grid?.row_id(row)?;
+    storage
+        .sheet_metadata
+        .get(sheet_id)?
+        .dimensions
+        .rows
+        .get(&id)?
+        .format
+        .as_ref()?
+        .xlsx_style_id()
 }
 
-/// Set format for a column, materializing the column if needed.
-///
-/// Merges with any existing column format on a per-property basis.
-pub fn set_col_format(
-    storage: &mut YrsStorage,
+fn replace_row_format(
+    storage: &mut WorkbookStorage,
     sheet_id: &SheetId,
-    col: u32,
-    format: &CellFormat,
-    grid_index: Option<&GridIndex>,
+    row: u32,
+    format: CellFormat,
+    grid: Option<&GridIndex>,
 ) -> Result<(), ComputeError> {
-    let col_id = grid_index
-        .and_then(|gi| gi.col_id(col))
-        .map(|cid| id_to_hex(cid.as_u128()))
-        .ok_or_else(|| ComputeError::SheetNotFound {
-            sheet_id: sheet_id.to_uuid_string(),
-        })?;
-
-    let existing: Option<CellFormat> = {
-        let sheets = storage.sheets_ref();
-        let txn = storage.doc().transact();
-        get_sheet_submap(&txn, &sheets, sheet_id, KEY_COL_FORMATS).and_then(|m| {
-            match m.get(&txn, &col_id) {
-                Some(Out::YMap(nested)) => yrs_schema::cell_format::from_yrs_map(&nested, &txn),
-                _ => None,
-            }
-        })
+    let missing = || ComputeError::SheetNotFound {
+        sheet_id: sheet_id.to_uuid_string(),
     };
-
-    let merged = match &existing {
-        Some(ex) => merge_formats(ex, format),
-        None => normalize_format_patch(format),
-    };
-
-    let sheets = storage.sheets_ref();
-    let mut txn = storage
-        .doc()
-        .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    if let Some(fmt_map) = get_sheet_submap(&txn, &sheets, sheet_id, KEY_COL_FORMATS) {
-        // Remove old entry (may be legacy JSON string or prior Y.Map) then insert structured.
-        fmt_map.remove(&mut txn, &col_id);
-        let entries = yrs_schema::cell_format::to_yrs_prelim(&merged);
-        let nested: MapPrelim = entries.into_iter().collect();
-        fmt_map.insert(&mut txn, &*col_id, nested);
-    }
+    let id = grid.and_then(|grid| grid.row_id(row)).ok_or_else(missing)?;
+    crate::storage::engine::history::metadata::capture_row(storage, *sheet_id, id);
+    let meta = storage
+        .sheet_metadata
+        .get_mut(sheet_id)
+        .ok_or_else(missing)?;
+    meta.dimensions.rows.entry(id).or_default().format =
+        (format != CellFormat::default()).then(|| StoredAxisFormat::Detailed(Box::new(format)));
     Ok(())
 }
 
-/// Apply a tri-state patch to a column's stored direct format.
-pub fn patch_col_format(
-    storage: &mut YrsStorage,
+pub fn set_row_format(
+    storage: &mut WorkbookStorage,
     sheet_id: &SheetId,
-    col: u32,
+    row: u32,
+    format: &CellFormat,
+    grid: Option<&GridIndex>,
+) -> Result<(), ComputeError> {
+    let merged = get_row_format(storage, sheet_id, row, grid)
+        .map(|existing| merge_formats(&existing, format))
+        .unwrap_or_else(|| normalize_format_patch(format));
+    replace_row_format(storage, sheet_id, row, merged, grid)
+}
+
+pub fn patch_row_format(
+    storage: &mut WorkbookStorage,
+    sheet_id: &SheetId,
+    row: u32,
     format: &CellFormat,
     clear_fields: &[String],
-    grid_index: Option<&GridIndex>,
+    grid: Option<&GridIndex>,
 ) -> Result<(), ComputeError> {
-    let col_id = grid_index
-        .and_then(|gi| gi.col_id(col))
-        .map(|cid| id_to_hex(cid.as_u128()))
-        .ok_or_else(|| ComputeError::SheetNotFound {
-            sheet_id: sheet_id.to_uuid_string(),
-        })?;
-    let existing = get_col_format(storage, sheet_id, col, grid_index).unwrap_or_default();
+    let existing = get_row_format(storage, sheet_id, row, grid).unwrap_or_default();
     let patched = super::apply_format_patch(&existing, format, clear_fields)?;
-
-    let sheets = storage.sheets_ref();
-    let mut txn = storage
-        .doc()
-        .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    if let Some(fmt_map) = get_sheet_submap(&txn, &sheets, sheet_id, KEY_COL_FORMATS) {
-        fmt_map.remove(&mut txn, &col_id);
-        if patched != CellFormat::default() {
-            let entries = yrs_schema::cell_format::to_yrs_prelim(&patched);
-            let nested: MapPrelim = entries.into_iter().collect();
-            fmt_map.insert(&mut txn, &*col_id, nested);
-        }
-    }
-    Ok(())
+    replace_row_format(storage, sheet_id, row, patched, grid)
 }
 
-/// Apply a nested border patch to a column's stored direct format.
-pub fn patch_col_borders(
-    storage: &mut YrsStorage,
+pub fn patch_row_borders(
+    storage: &mut WorkbookStorage,
     sheet_id: &SheetId,
-    col: u32,
+    row: u32,
     borders: &CellBorders,
     clear_fields: &[BorderPatchField],
-    grid_index: Option<&GridIndex>,
+    grid: Option<&GridIndex>,
 ) -> Result<(), ComputeError> {
-    let col_id = grid_index
-        .and_then(|gi| gi.col_id(col))
-        .map(|cid| id_to_hex(cid.as_u128()))
-        .ok_or_else(|| ComputeError::SheetNotFound {
-            sheet_id: sheet_id.to_uuid_string(),
-        })?;
-    let mut patched = get_col_format(storage, sheet_id, col, grid_index).unwrap_or_default();
+    let mut patched = get_row_format(storage, sheet_id, row, grid).unwrap_or_default();
     patched.borders = super::apply_borders_patch(patched.borders.as_ref(), borders, clear_fields);
-
-    let sheets = storage.sheets_ref();
-    let mut txn = storage
-        .doc()
-        .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    if let Some(fmt_map) = get_sheet_submap(&txn, &sheets, sheet_id, KEY_COL_FORMATS) {
-        fmt_map.remove(&mut txn, &col_id);
-        if patched != CellFormat::default() {
-            let entries = yrs_schema::cell_format::to_yrs_prelim(&patched);
-            let nested: MapPrelim = entries.into_iter().collect();
-            fmt_map.insert(&mut txn, &*col_id, nested);
-        }
-    }
-    Ok(())
+    replace_row_format(storage, sheet_id, row, patched, grid)
 }
 
-/// Clear the format for a column.
-///
-/// Uses read-only `get_col_id_at` -- if the column is virtual (no ColId),
-/// this is a no-op.
-pub fn clear_col_format(
-    storage: &mut YrsStorage,
-    sheet_id: &SheetId,
-    col: u32,
-    grid_index: Option<&GridIndex>,
-) {
-    clear_col_format_with_alloc(
-        storage,
-        sheet_id,
-        col,
-        grid_index,
-        &crate::storage::STORAGE_ID_ALLOC,
-    );
-}
-
-pub(crate) fn clear_col_format_with_alloc(
-    storage: &mut YrsStorage,
-    sheet_id: &SheetId,
-    col: u32,
-    grid_index: Option<&GridIndex>,
-    id_alloc: &IdAllocator,
-) {
-    let col_id = grid_index
-        .and_then(|gi| gi.col_id(col))
-        .map(|cid| id_to_hex(cid.as_u128()));
-
-    if let Some(col_id) = col_id {
-        let sheets = storage.sheets_ref();
-        let mut txn = storage
-            .doc()
-            .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-        if let Some(fmt_map) = get_sheet_submap(&txn, &sheets, sheet_id, KEY_COL_FORMATS) {
-            fmt_map.remove(&mut txn, &col_id);
-        }
-    }
-
-    clear_col_format_ranges_in_span(storage, sheet_id, col, col, id_alloc);
-}
-
-// -------------------------------------------------------------------
-// Batch Row/Col Format Reads (export path)
-// -------------------------------------------------------------------
-
-/// Row format entry returned by batch read — includes the CellFormat and
-/// the optional original XLSX cellXfs style index for lossless round-trip.
 pub struct RowFormatEntry {
     pub row: u32,
     pub format: Option<CellFormat>,
     pub xlsx_style_id: Option<u32>,
 }
 
-/// Column format entry returned by batch read.
+pub fn get_all_row_formats(
+    storage: &WorkbookStorage,
+    sheet_id: &SheetId,
+    grid: Option<&GridIndex>,
+) -> Vec<RowFormatEntry> {
+    let (Some(meta), Some(grid)) = (storage.sheet_metadata.get(sheet_id), grid) else {
+        return vec![];
+    };
+    let mut entries: Vec<_> = meta
+        .dimensions
+        .rows
+        .iter()
+        .filter_map(|(id, record)| {
+            let format = record.format.as_ref()?;
+            Some(RowFormatEntry {
+                row: grid.row_index(id)?,
+                format: format.resolve(&storage.metadata.style_palette).cloned(),
+                xlsx_style_id: format.xlsx_style_id(),
+            })
+        })
+        .collect();
+    entries.sort_unstable_by_key(|entry| entry.row);
+    entries
+}
+
+pub fn get_col_format(
+    storage: &WorkbookStorage,
+    sheet_id: &SheetId,
+    col: u32,
+    grid: Option<&GridIndex>,
+) -> Option<CellFormat> {
+    let id = grid?.col_id(col)?;
+    storage
+        .sheet_metadata
+        .get(sheet_id)?
+        .dimensions
+        .columns
+        .get(&id)?
+        .format
+        .as_ref()?
+        .resolve(&storage.metadata.style_palette)
+        .cloned()
+}
+pub fn get_col_xlsx_style_id(
+    storage: &WorkbookStorage,
+    sheet_id: &SheetId,
+    col: u32,
+    grid: Option<&GridIndex>,
+) -> Option<u32> {
+    let id = grid?.col_id(col)?;
+    storage
+        .sheet_metadata
+        .get(sheet_id)?
+        .dimensions
+        .columns
+        .get(&id)?
+        .format
+        .as_ref()?
+        .xlsx_style_id()
+}
+
+fn replace_col_format(
+    storage: &mut WorkbookStorage,
+    sheet_id: &SheetId,
+    col: u32,
+    format: CellFormat,
+    grid: Option<&GridIndex>,
+) -> Result<(), ComputeError> {
+    let missing = || ComputeError::SheetNotFound {
+        sheet_id: sheet_id.to_uuid_string(),
+    };
+    let id = grid.and_then(|grid| grid.col_id(col)).ok_or_else(missing)?;
+    crate::storage::engine::history::metadata::capture_column(storage, *sheet_id, id);
+    let meta = storage
+        .sheet_metadata
+        .get_mut(sheet_id)
+        .ok_or_else(missing)?;
+    meta.dimensions.columns.entry(id).or_default().format =
+        (format != CellFormat::default()).then(|| StoredAxisFormat::Detailed(Box::new(format)));
+    Ok(())
+}
+
+pub fn set_col_format(
+    storage: &mut WorkbookStorage,
+    sheet_id: &SheetId,
+    col: u32,
+    format: &CellFormat,
+    grid: Option<&GridIndex>,
+) -> Result<(), ComputeError> {
+    let merged = get_col_format(storage, sheet_id, col, grid)
+        .map(|existing| merge_formats(&existing, format))
+        .unwrap_or_else(|| normalize_format_patch(format));
+    replace_col_format(storage, sheet_id, col, merged, grid)
+}
+
+pub fn patch_col_format(
+    storage: &mut WorkbookStorage,
+    sheet_id: &SheetId,
+    col: u32,
+    format: &CellFormat,
+    clear_fields: &[String],
+    grid: Option<&GridIndex>,
+) -> Result<(), ComputeError> {
+    let existing = get_col_format(storage, sheet_id, col, grid).unwrap_or_default();
+    let patched = super::apply_format_patch(&existing, format, clear_fields)?;
+    replace_col_format(storage, sheet_id, col, patched, grid)
+}
+
+pub fn patch_col_borders(
+    storage: &mut WorkbookStorage,
+    sheet_id: &SheetId,
+    col: u32,
+    borders: &CellBorders,
+    clear_fields: &[BorderPatchField],
+    grid: Option<&GridIndex>,
+) -> Result<(), ComputeError> {
+    let mut patched = get_col_format(storage, sheet_id, col, grid).unwrap_or_default();
+    patched.borders = super::apply_borders_patch(patched.borders.as_ref(), borders, clear_fields);
+    replace_col_format(storage, sheet_id, col, patched, grid)
+}
+
 pub struct ColFormatEntry {
     pub col: u32,
     pub format: Option<CellFormat>,
     pub xlsx_style_id: Option<u32>,
 }
 
-/// Batch-read ALL row formats for a sheet in a single Yrs transaction.
-///
-/// Instead of calling `get_row_format()` per row (each creating a new
-/// transaction), this iterates the `rowFormats` Yrs map once and resolves
-/// hex keys back to row indices via the GridIndex. Returns entries only
-/// for rows that actually have stored formats.
-pub fn get_all_row_formats(
-    storage: &YrsStorage,
+pub fn get_all_col_formats(
+    storage: &WorkbookStorage,
     sheet_id: &SheetId,
-    grid_index: Option<&GridIndex>,
-) -> Vec<RowFormatEntry> {
-    let grid = match grid_index {
-        Some(g) => g,
-        None => return vec![],
+    grid: Option<&GridIndex>,
+) -> Vec<ColFormatEntry> {
+    let (Some(meta), Some(grid)) = (storage.sheet_metadata.get(sheet_id), grid) else {
+        return vec![];
     };
-    let sheets = storage.sheets_ref();
-    let txn = storage.doc().transact();
-    let fmt_map = match get_sheet_submap(&txn, &sheets, sheet_id, KEY_ROW_FORMATS) {
-        Some(m) => m,
-        None => return vec![],
-    };
-
-    let mut result = Vec::new();
-    for (hex_key, value) in fmt_map.iter(&txn) {
-        // Parse hex key → RowId → row index
-        let raw_id = match compute_document::hex::hex_to_id(hex_key) {
-            Some(id) => id,
-            None => continue,
-        };
-        let row_id = cell_types::RowId::from_raw(raw_id);
-        let row = match grid.row_index(&row_id) {
-            Some(r) => r,
-            None => continue,
-        };
-
-        let (format, xlsx_style_id) = match value {
-            Out::YMap(nested) => {
-                let fmt = yrs_schema::cell_format::from_yrs_map(&nested, &txn);
-                let xi = {
-                    use domain_types::yrs_schema::cell_format::KEY_XLSX_STYLE_ID;
-                    match nested.get(&txn, KEY_XLSX_STYLE_ID) {
-                        Some(Out::Any(Any::Number(n))) => Some(n as u32),
-                        _ => None,
-                    }
-                };
-                (fmt, xi)
-            }
-            _ => continue,
-        };
-
-        result.push(RowFormatEntry {
-            row,
-            format,
-            xlsx_style_id,
-        });
-    }
-    result
+    let mut entries: Vec<_> = meta
+        .dimensions
+        .columns
+        .iter()
+        .filter_map(|(id, record)| {
+            let format = record.format.as_ref()?;
+            Some(ColFormatEntry {
+                col: grid.col_index(id)?,
+                format: format.resolve(&storage.metadata.style_palette).cloned(),
+                xlsx_style_id: format.xlsx_style_id(),
+            })
+        })
+        .collect();
+    entries.sort_unstable_by_key(|entry| entry.col);
+    entries
 }
 
-/// Batch-read ALL column formats for a sheet in a single Yrs transaction.
-///
-/// Same pattern as `get_all_row_formats` but for the `colFormats` map.
-pub fn get_all_col_formats(
-    storage: &YrsStorage,
+pub fn clear_row_format(
+    storage: &mut WorkbookStorage,
     sheet_id: &SheetId,
-    grid_index: Option<&GridIndex>,
-) -> Vec<ColFormatEntry> {
-    let grid = match grid_index {
-        Some(g) => g,
-        None => return vec![],
+    row: u32,
+    grid: Option<&GridIndex>,
+) {
+    let Some(id) = grid.and_then(|grid| grid.row_id(row)) else {
+        return;
     };
-    let sheets = storage.sheets_ref();
-    let txn = storage.doc().transact();
-    let fmt_map = match get_sheet_submap(&txn, &sheets, sheet_id, KEY_COL_FORMATS) {
-        Some(m) => m,
-        None => return vec![],
-    };
-
-    let mut result = Vec::new();
-    for (hex_key, value) in fmt_map.iter(&txn) {
-        let raw_id = match compute_document::hex::hex_to_id(hex_key) {
-            Some(id) => id,
-            None => continue,
-        };
-        let col_id = cell_types::ColId::from_raw(raw_id);
-        let col = match grid.col_index(&col_id) {
-            Some(c) => c,
-            None => continue,
-        };
-
-        let (format, xlsx_style_id) = match value {
-            Out::YMap(nested) => {
-                let fmt = yrs_schema::cell_format::from_yrs_map(&nested, &txn);
-                let xi = {
-                    use domain_types::yrs_schema::cell_format::KEY_XLSX_STYLE_ID;
-                    match nested.get(&txn, KEY_XLSX_STYLE_ID) {
-                        Some(Out::Any(Any::Number(n))) => Some(n as u32),
-                        _ => None,
-                    }
-                };
-                (fmt, xi)
-            }
-            _ => continue,
-        };
-
-        result.push(ColFormatEntry {
-            col,
-            format,
-            xlsx_style_id,
-        });
+    crate::storage::engine::history::metadata::capture_row(storage, *sheet_id, id);
+    if let Some(record) = storage
+        .sheet_metadata
+        .get_mut(sheet_id)
+        .and_then(|meta| meta.dimensions.rows.get_mut(&id))
+    {
+        record.format = None;
     }
-    result
+}
+
+pub fn clear_col_format(
+    storage: &mut WorkbookStorage,
+    sheet_id: &SheetId,
+    col: u32,
+    grid: Option<&GridIndex>,
+) {
+    if let Some(id) = grid.and_then(|grid| grid.col_id(col)) {
+        crate::storage::engine::history::metadata::capture_column(storage, *sheet_id, id);
+        if let Some(record) = storage
+            .sheet_metadata
+            .get_mut(sheet_id)
+            .and_then(|meta| meta.dimensions.columns.get_mut(&id))
+        {
+            record.format = None;
+        }
+    }
 }

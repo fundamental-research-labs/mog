@@ -58,8 +58,8 @@ mod tests;
 /// Convert a `ParseOutput` into a `WorkbookSnapshot` for compute-core initialization.
 ///
 /// When `id_map` is `Some`, the snapshot uses the **same IDs** that
-/// `hydrate_from_parse_output` allocated into Yrs storage, ensuring a
-/// single identity space across Yrs and ComputeCore. When `None`,
+/// `hydrate_from_parse_output` allocated for native storage, ensuring a
+/// single identity space across metadata and evaluation. When `None`,
 /// fast monotonic IDs are generated via `STORAGE_ID_ALLOC`.
 pub fn parse_output_to_workbook_snapshot(
     output: &ParseOutput,
@@ -106,13 +106,13 @@ pub fn parse_output_to_workbook_snapshot(
                 Some(map)
             };
 
-        debug_assert_eq!(id_map.row_ids.len(), sheets.len());
-        debug_assert_eq!(id_map.col_ids.len(), sheets.len());
+        debug_assert_eq!(id_map.row_axes.len(), sheets.len());
+        debug_assert_eq!(id_map.col_axes.len(), sheets.len());
         debug_assert_eq!(output.sheets.len(), sheets.len());
 
         for (sheet_idx, sheet) in sheets.iter_mut().enumerate() {
-            if sheet_idx < id_map.row_ids.len()
-                && sheet_idx < id_map.col_ids.len()
+            if sheet_idx < id_map.row_axes.len()
+                && sheet_idx < id_map.col_axes.len()
                 && sheet_idx < output.sheets.len()
             {
                 classifier::classify_sheet_ranges(
@@ -120,8 +120,8 @@ pub fn parse_output_to_workbook_snapshot(
                     &output.sheets[sheet_idx],
                     &snapshot_so_far,
                     cell_id_to_pos.as_ref(),
-                    &id_map.row_ids[sheet_idx],
-                    &id_map.col_ids[sheet_idx],
+                    &id_map.row_axes[sheet_idx],
+                    &id_map.col_axes[sheet_idx],
                     allocator,
                 );
             }
@@ -132,15 +132,20 @@ pub fn parse_output_to_workbook_snapshot(
         name_lowering::link_named_ranges_to_data_ranges(
             &mut named_ranges,
             &sheets,
-            &id_map.row_ids,
-            &id_map.col_ids,
+            &id_map.row_axes,
+            &id_map.col_axes,
         );
     }
 
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
         sheets,
         named_ranges,
         tables,
+        canonical_tables: id_map
+            .map(|map| map.canonical_tables.clone())
+            .unwrap_or_default(),
         pivot_tables,
         data_table_regions,
         iterative_calc,

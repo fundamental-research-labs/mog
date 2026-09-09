@@ -1,59 +1,63 @@
+use super::ranges::cell_in_range;
+use crate::storage::WorkbookStorage;
+use cell_types::SheetId;
+use domain_types::domain::conditional_format::{
+    ConditionalFormat, canonicalize_conditional_format_defaults,
+};
 use std::collections::{HashMap, HashSet};
 
-use cell_types::SheetId;
-use compute_document::undo::ORIGIN_USER_EDIT;
-use domain_types::domain::conditional_format::ConditionalFormat;
-use yrs::{Doc, Map, MapRef, Origin, Out, Transact};
-
-use crate::storage::infra::grid_helpers::sheet_id_to_hex;
-
-use super::ranges::cell_in_range;
-use super::yrs_io::{get_cf_map, read_cf_from_yrs_map, write_cf_to_yrs};
-
-// =============================================================================
-// CF CRUD Operations
-// =============================================================================
-
-/// Add a new conditional format to the sheet's conditionalFormat map.
-pub fn add_conditional_format(doc: &Doc, sheets: &MapRef, format: &ConditionalFormat) {
-    let sheet_id = match SheetId::from_uuid_str(&format.sheet_id) {
-        Ok(id) => id,
-        Err(_) => return,
-    };
-    let sheet_hex = sheet_id_to_hex(&sheet_id);
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let cf_map = match get_cf_map(&txn, sheets, &sheet_hex) {
-        Some(m) => m,
-        None => return,
-    };
-    write_cf_to_yrs(&mut txn, &cf_map, format);
+pub(crate) fn imported_formats(
+    formats: &[ConditionalFormat],
+    sheet_id: SheetId,
+) -> std::collections::BTreeMap<String, ConditionalFormat> {
+    formats
+        .iter()
+        .cloned()
+        .map(|mut format| {
+            format.sheet_id = sheet_id.to_uuid_string();
+            canonicalize_conditional_format_defaults(&mut format);
+            (format.id.clone(), format)
+        })
+        .collect()
 }
-
-/// Update an existing conditional format by merging JSON updates.
-///
-/// Reads the existing CF from the structured Y.Map, deserializes it to a
-/// serde_json::Value, applies the JSON merge, then writes back as a structured
-/// Y.Map (removing the old entry first so the new Y.Map replaces it).
+pub fn add_conditional_format(storage: &mut WorkbookStorage, format: &ConditionalFormat) {
+    let Ok(sheet_id) = SheetId::from_uuid_str(&format.sheet_id) else {
+        return;
+    };
+    crate::storage::engine::history::metadata::capture_sheet_entry!(
+        storage,
+        sheet_id,
+        conditional_formats,
+        format.id
+    );
+    let Some(metadata) = storage.sheet_metadata.get_mut(&sheet_id) else {
+        return;
+    };
+    let mut format = format.clone();
+    canonicalize_conditional_format_defaults(&mut format);
+    metadata
+        .conditional_formats
+        .insert(format.id.clone(), format);
+}
+/// Apply a public JSON patch, then keep only the validated typed format.
 pub fn update_conditional_format(
-    doc: &Doc,
-    sheets: &MapRef,
+    storage: &mut WorkbookStorage,
     format_id: &str,
     sheet_id: &SheetId,
     updates: &serde_json::Value,
 ) -> bool {
-    let sheet_hex = sheet_id_to_hex(sheet_id);
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let cf_map = match get_cf_map(&txn, sheets, &sheet_hex) {
-        Some(m) => m,
-        None => return false,
+    crate::storage::engine::history::metadata::capture_sheet_entry!(
+        storage,
+        *sheet_id,
+        conditional_formats,
+        format_id
+    );
+
+    let Some(metadata) = storage.sheet_metadata.get_mut(sheet_id) else {
+        return false;
     };
-    let existing_map = match cf_map.get(&txn, format_id) {
-        Some(Out::YMap(m)) => m,
-        _ => return false,
-    };
-    let mut cf = match read_cf_from_yrs_map(&existing_map, &txn) {
-        Some(c) => c,
-        None => return false,
+    let Some(mut cf) = metadata.conditional_formats.get(format_id).cloned() else {
+        return false;
     };
     // Serialize existing CF to JSON for merge.
     let existing_cf_value = match serde_json::to_value(&cf) {
@@ -113,74 +117,54 @@ pub fn update_conditional_format(
         Err(_) => return false,
     };
     cf.id = format_id.to_string();
-    // Remove old entry and write new structured Y.Map
-    cf_map.remove(&mut txn, format_id);
-    write_cf_to_yrs(&mut txn, &cf_map, &cf);
+    cf.sheet_id = sheet_id.to_uuid_string();
+    canonicalize_conditional_format_defaults(&mut cf);
+    metadata
+        .conditional_formats
+        .insert(format_id.to_owned(), cf);
     true
 }
-
-/// Delete a conditional format by ID.
 pub fn delete_conditional_format(
-    doc: &Doc,
-    sheets: &MapRef,
+    storage: &mut WorkbookStorage,
     format_id: &str,
     sheet_id: &SheetId,
 ) -> bool {
-    let sheet_hex = sheet_id_to_hex(sheet_id);
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let cf_map = match get_cf_map(&txn, sheets, &sheet_hex) {
-        Some(m) => m,
-        None => return false,
-    };
-    if cf_map.get(&txn, format_id).is_none() {
-        return false;
-    }
-    cf_map.remove(&mut txn, format_id);
-    true
-}
+    crate::storage::engine::history::metadata::capture_sheet_entry!(
+        storage,
+        *sheet_id,
+        conditional_formats,
+        format_id
+    );
 
-/// Get a single conditional format by ID.
+    storage
+        .sheet_metadata
+        .get_mut(sheet_id)
+        .is_some_and(|metadata| metadata.conditional_formats.remove(format_id).is_some())
+}
 pub fn get_conditional_format(
-    doc: &Doc,
-    sheets: &MapRef,
+    storage: &WorkbookStorage,
     format_id: &str,
     sheet_id: &SheetId,
 ) -> Option<ConditionalFormat> {
-    let sheet_hex = sheet_id_to_hex(sheet_id);
-    let txn = doc.transact();
-    let cf_map = get_cf_map(&txn, sheets, &sheet_hex)?;
-    match cf_map.get(&txn, format_id)? {
-        Out::YMap(m) => read_cf_from_yrs_map(&m, &txn),
-        _ => None,
-    }
+    storage
+        .sheet_metadata
+        .get(sheet_id)?
+        .conditional_formats
+        .get(format_id)
+        .cloned()
 }
-
-/// Get all conditional formats for a sheet, sorted by document order then priority.
 pub fn get_formats_for_sheet(
-    doc: &Doc,
-    sheets: &MapRef,
+    storage: &WorkbookStorage,
     sheet_id: &SheetId,
 ) -> Vec<ConditionalFormat> {
-    let sheet_hex = sheet_id_to_hex(sheet_id);
-    let txn = doc.transact();
-    let cf_map = match get_cf_map(&txn, sheets, &sheet_hex) {
-        Some(m) => m,
-        None => return vec![],
+    let Some(metadata) = storage.sheet_metadata.get(sheet_id) else {
+        return Vec::new();
     };
-    // Collect (key, cf) pairs so we can sort them deterministically.
-    // Y.Map iteration order is not guaranteed, so we sort explicitly.
-    let mut keyed: Vec<(String, ConditionalFormat)> = Vec::new();
-    for (key, out) in cf_map.iter(&txn) {
-        if let Out::YMap(m) = out
-            && let Some(cf) = read_cf_from_yrs_map(&m, &txn)
-        {
-            keyed.push((key.to_string(), cf));
-        }
-    }
-    // Primary sort: hydration key parse index (cf-parse-0, cf-parse-1, …)
-    // to preserve original XLSX document order for imported formats.
-    // Secondary: first rule's priority for UI-created formats.
-    // Final tiebreaker: key string.
+    let mut keyed: Vec<_> = metadata
+        .conditional_formats
+        .iter()
+        .map(|(id, cf)| (id.clone(), cf.clone()))
+        .collect();
     keyed.sort_by(|(a, cf_a), (b, cf_b)| {
         // Primary: hydration key index (cf-parse-0, cf-parse-1, …) to
         // preserve original XLSX document order for imported formats.
@@ -218,150 +202,145 @@ pub fn get_formats_for_sheet(
     });
     keyed.into_iter().map(|(_, cf)| cf).collect()
 }
-
-/// Get all formats that apply to a specific cell (position-based check).
-///
-/// TODO(perf): This performs a linear scan of all CF formats × ranges per call.
-/// For render paths that query many cells, consider a batched API that precomputes
-/// a cell→formats mapping (similar to the approach in cf_eval.rs) to avoid
-/// repeated O(formats × ranges) scans.
 pub fn get_formats_for_cell(
-    doc: &Doc,
-    sheets: &MapRef,
+    storage: &WorkbookStorage,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
 ) -> Vec<ConditionalFormat> {
-    let sheet_formats = get_formats_for_sheet(doc, sheets, sheet_id);
-    sheet_formats
+    get_formats_for_sheet(storage, sheet_id)
         .into_iter()
-        .filter(|format| format.ranges.iter().any(|r| cell_in_range(r, row, col)))
+        .filter(|format| {
+            format
+                .ranges
+                .iter()
+                .any(|range| cell_in_range(range, row, col))
+        })
         .collect()
 }
-
-/// Check if a cell is within any CF range on the sheet.
-pub fn has_cf_for_cell(doc: &Doc, sheets: &MapRef, sheet_id: &SheetId, row: u32, col: u32) -> bool {
-    !get_formats_for_cell(doc, sheets, sheet_id, row, col).is_empty()
+pub fn has_cf_for_cell(storage: &WorkbookStorage, sheet_id: &SheetId, row: u32, col: u32) -> bool {
+    storage
+        .sheet_metadata
+        .get(sheet_id)
+        .is_some_and(|metadata| {
+            metadata.conditional_formats.values().any(|format| {
+                format
+                    .ranges
+                    .iter()
+                    .any(|range| cell_in_range(range, row, col))
+            })
+        })
 }
+pub fn clear_formats_for_sheet(storage: &mut WorkbookStorage, sheet_id: &SheetId) {
+    if storage.history.is_active() {
+        if let Some(meta) = storage.sheet_metadata.get(sheet_id) {
+            for (id, _value) in &meta.conditional_formats {
+                if true {
+                    crate::storage::engine::history::metadata::capture_sheet_entry!(
+                        storage,
+                        *sheet_id,
+                        conditional_formats,
+                        id
+                    );
+                }
+            }
+        }
+    }
 
-/// Clear all conditional formats for a sheet.
-pub fn clear_formats_for_sheet(doc: &Doc, sheets: &MapRef, sheet_id: &SheetId) {
-    let sheet_hex = sheet_id_to_hex(sheet_id);
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let cf_map = match get_cf_map(&txn, sheets, &sheet_hex) {
-        Some(m) => m,
-        None => return,
-    };
-    let keys: Vec<String> = cf_map.keys(&txn).map(|k| k.to_string()).collect();
-    for key in &keys {
-        cf_map.remove(&mut txn, key.as_str());
+    if let Some(metadata) = storage.sheet_metadata.get_mut(sheet_id) {
+        metadata.conditional_formats.clear();
     }
 }
-
-/// Bump every CF rule's priority on a sheet by `delta` in place.
-///
-/// Reads each conditional format on the sheet through the typed CFRule
-/// schema, mutates priority via [`CFRule::set_priority`], and writes the
-/// format back as a structured Y.Map. Returns the number of formats whose
-/// priorities were rewritten.
-///
-/// This is the typed replacement for the JSON-round-trip priority bumping
-/// in `formatting::add_cf_rule` (filter viewport finding 13 — N+1 serde
-/// round-trips that silently discarded errors via `let _ =`). The new
-/// path fails loudly: any format that fails to read or write returns
-/// `Err(ComputeError::Eval)`.
 pub fn bump_priorities_for_sheet(
-    doc: &Doc,
-    sheets: &MapRef,
+    storage: &mut WorkbookStorage,
     sheet_id: &SheetId,
     delta: i32,
 ) -> Result<usize, value_types::ComputeError> {
-    let sheet_hex = sheet_id_to_hex(sheet_id);
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let cf_map = match get_cf_map(&txn, sheets, &sheet_hex) {
-        Some(m) => m,
-        None => return Ok(0),
-    };
-    // Snapshot keys + existing CFs first; we cannot iterate the Y.Map while
-    // mutating it.
-    let mut to_rewrite: Vec<(String, ConditionalFormat)> = Vec::new();
-    for (key, out) in cf_map.iter(&txn) {
-        if let Out::YMap(m) = out
-            && let Some(cf) = read_cf_from_yrs_map(&m, &txn)
-        {
-            to_rewrite.push((key.to_string(), cf));
+    if storage.history.is_active() {
+        if let Some(meta) = storage.sheet_metadata.get(sheet_id) {
+            for (id, _value) in &meta.conditional_formats {
+                if true {
+                    crate::storage::engine::history::metadata::capture_sheet_entry!(
+                        storage,
+                        *sheet_id,
+                        conditional_formats,
+                        id
+                    );
+                }
+            }
         }
     }
-    let mut rewritten = 0usize;
-    for (key, mut cf) in to_rewrite {
-        for r in cf.rules.iter_mut() {
-            let p = r.priority();
-            r.set_priority(p + delta);
-        }
-        // Replace the existing entry with the typed-rewritten CF.
-        cf_map.remove(&mut txn, key.as_str());
-        write_cf_to_yrs(&mut txn, &cf_map, &cf);
-        rewritten += 1;
-    }
-    Ok(rewritten)
-}
 
-/// Rewrite conditional-format priority order in a single Yrs transaction.
-///
-/// Undo groups at the Yrs transaction boundary. Reordering by calling
-/// `update_conditional_format` once per format creates one undo item per
-/// priority rewrite, so a single user undo only partially restores the order.
-/// This function snapshots every format, applies the requested ordering, and
-/// writes the changed priorities back under one `ORIGIN_USER_EDIT` transaction.
+    let Some(metadata) = storage.sheet_metadata.get_mut(sheet_id) else {
+        return Ok(0);
+    };
+    if metadata
+        .conditional_formats
+        .values()
+        .flat_map(|cf| &cf.rules)
+        .any(|rule| rule.priority().checked_add(delta).is_none())
+    {
+        return Err(value_types::ComputeError::Eval {
+            message: "Conditional-format priority overflow".into(),
+        });
+    }
+    for cf in metadata.conditional_formats.values_mut() {
+        for rule in &mut cf.rules {
+            rule.set_priority(rule.priority() + delta);
+        }
+    }
+    Ok(metadata.conditional_formats.len())
+}
 pub fn reorder_conditional_formats(
-    doc: &Doc,
-    sheets: &MapRef,
+    storage: &mut WorkbookStorage,
     sheet_id: &SheetId,
     ordered_format_ids: &[String],
 ) -> Result<usize, value_types::ComputeError> {
-    let sheet_hex = sheet_id_to_hex(sheet_id);
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let cf_map = match get_cf_map(&txn, sheets, &sheet_hex) {
-        Some(m) => m,
-        None => return Ok(0),
-    };
-
-    let mut existing: Vec<(String, ConditionalFormat)> = Vec::new();
-    for (key, out) in cf_map.iter(&txn) {
-        if let Out::YMap(m) = out
-            && let Some(cf) = read_cf_from_yrs_map(&m, &txn)
-        {
-            existing.push((key.to_string(), cf));
+    if storage.history.is_active() {
+        if let Some(meta) = storage.sheet_metadata.get(sheet_id) {
+            for (id, _value) in &meta.conditional_formats {
+                if true {
+                    crate::storage::engine::history::metadata::capture_sheet_entry!(
+                        storage,
+                        *sheet_id,
+                        conditional_formats,
+                        id
+                    );
+                }
+            }
         }
     }
 
-    let existing_ids: HashSet<&str> = existing.iter().map(|(_, cf)| cf.id.as_str()).collect();
+    let Some(metadata) = storage.sheet_metadata.get_mut(sheet_id) else {
+        return Ok(0);
+    };
+    let existing_ids: HashSet<&str> = metadata
+        .conditional_formats
+        .keys()
+        .map(String::as_str)
+        .collect();
     let requested_ids: HashSet<&str> = ordered_format_ids.iter().map(String::as_str).collect();
-    if existing.len() != ordered_format_ids.len() || existing_ids != requested_ids {
+    if metadata.conditional_formats.len() != ordered_format_ids.len()
+        || existing_ids != requested_ids
+    {
         return Err(value_types::ComputeError::Eval {
-            message: "CF reorder must include exactly the existing format IDs".to_string(),
+            message: "CF reorder must include exactly the existing format IDs".into(),
         });
     }
-
-    let priority_by_id: HashMap<&str, i32> = ordered_format_ids
+    let priorities: HashMap<&str, i32> = ordered_format_ids
         .iter()
         .enumerate()
         .map(|(i, id)| (id.as_str(), i as i32 + 1))
         .collect();
-
-    let mut rewritten = 0usize;
-    for (key, mut cf) in existing {
-        let priority = priority_by_id[cf.id.as_str()];
-        let changed = cf.rules.iter().any(|r| r.priority() != priority);
-        for rule in cf.rules.iter_mut() {
-            rule.set_priority(priority);
-        }
-        if changed {
-            cf_map.remove(&mut txn, key.as_str());
-            write_cf_to_yrs(&mut txn, &cf_map, &cf);
+    let mut rewritten = 0;
+    for cf in metadata.conditional_formats.values_mut() {
+        let priority = priorities[cf.id.as_str()];
+        if cf.rules.iter().any(|rule| rule.priority() != priority) {
             rewritten += 1;
         }
+        for rule in &mut cf.rules {
+            rule.set_priority(priority);
+        }
     }
-
     Ok(rewritten)
 }

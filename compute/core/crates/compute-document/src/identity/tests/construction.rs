@@ -102,7 +102,7 @@ fn compact_axis_grid_resolves_position_and_id_without_dense_maps() {
 }
 
 #[test]
-fn legacy_yrs_arrays_hydrate_dense_axis_behavior() {
+fn explicit_axis_stores_preserve_existing_identities() {
     let row_ids = [RowId::from_raw(0x101), RowId::from_raw(0x102)];
     let col_ids = [
         ColId::from_raw(0x201),
@@ -118,10 +118,10 @@ fn legacy_yrs_arrays_hydrate_dense_axis_behavior() {
         .map(|id| crate::hex::id_to_hex(id.as_u128()).to_string())
         .collect();
 
-    let grid = GridIndex::from_yrs_arrays(
+    let grid = GridIndex::from_axis_stores(
         SheetId::from_raw(0x600),
-        &row_hexes,
-        &col_hexes,
+        AxisIdentityStore::Explicit(row_ids.to_vec()),
+        AxisIdentityStore::Explicit(col_ids.to_vec()),
         Arc::new(IdAllocator::new()),
     );
 
@@ -140,4 +140,30 @@ fn row_id_out_of_bounds_returns_none() {
     let grid = make_grid(3, 3);
     assert_eq!(grid.row_id(3), None);
     assert_eq!(grid.col_id(3), None);
+}
+
+#[test]
+fn compact_grid_growth_and_structural_changes_keep_stable_axis_ids() {
+    let sheet = SheetId::from_raw(100);
+    let allocator = Arc::new(IdAllocator::new());
+    let mut grid = GridIndex::new(sheet, 5, 3, allocator);
+    let first = grid.row_id(0).unwrap();
+    let fifth = grid.row_id(4).unwrap();
+    grid.register_cell(CellId::from_raw(0x123456789abcdef0123456789abcdef0), 0, 0);
+    grid.ensure_row_capacity(999_999);
+    let inserted = grid.insert_rows(2, 1)[0];
+    assert_eq!(grid.row_index(&first), Some(0));
+    assert_eq!(grid.row_index(&fifth), Some(5));
+    grid.delete_rows(2, 1);
+    assert_eq!(grid.row_index(&inserted), None);
+    assert_eq!(grid.row_index(&fifth), Some(4));
+    grid.reorder_row_ids(&[(0, 1), (1, 0)]);
+    assert_eq!(grid.row_index(&first), Some(1));
+    assert_eq!(grid.row_count(), 1_000_000);
+    assert!(grid.row_ids_dense().is_empty());
+    let axis = grid.row_axis();
+    let AxisIdentityStore::Runs(runs) = axis.store() else {
+        panic!("compact axis was expanded");
+    };
+    assert!(runs.segments().len() <= 6);
 }

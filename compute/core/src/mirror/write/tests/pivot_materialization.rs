@@ -23,8 +23,8 @@ fn clear_pivot_region_touches_only_existing_columns() {
     mirror.clear_pivot_region(&sheet_id, 2, 3, 2, 2);
 
     let sheet = mirror.get_sheet(&sheet_id).unwrap();
-    assert_eq!(sheet.col_data[&3][2], CellValue::Null);
-    assert!(!sheet.col_data.contains_key(&4));
+    assert_eq!(sheet.get_column_view(3).unwrap()[2], CellValue::Null);
+    assert!(!sheet.get_column_view(4).is_some());
     assert_eq!(mirror.col_version(&sheet_id, 3), before_existing + 1);
     assert_eq!(mirror.col_version(&sheet_id, 4), before_missing);
 }
@@ -91,7 +91,7 @@ fn clear_pivot_region_removes_authored_overrides_that_mask_output() {
 }
 
 #[test]
-fn materialized_pivot_output_is_identity_backed_without_overwriting_col_data() {
+fn materialized_pivot_output_is_identity_backed_without_overwriting_column_values() {
     let (mut mirror, sheet_id) = make_mirror();
     let id_alloc = cell_types::IdAllocator::new();
     let value_header = PivotHeader {

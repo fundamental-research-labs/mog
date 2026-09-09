@@ -5,8 +5,6 @@ use super::filter::{SortConditionBy, SortMethod};
 
 mod ooxml;
 
-#[cfg(feature = "yrs")]
-pub(crate) use ooxml::col_index_to_letter;
 pub use ooxml::{
     catalog_entry_to_xlsx_table_spec, parse_table_range_ref,
     xlsx_table_spec_to_catalog_entry_with_ids,
@@ -567,7 +565,7 @@ pub struct TableColumn {
     pub xr3_uid: Option<String>,
 }
 
-/// Complete table definition — the one canonical representation stored in Yrs.
+/// Complete table definition — the canonical representation in the native table catalog.
 ///
 /// `TableCatalogEntry` is an alias for this type at storage/engine boundaries.
 /// XLSX import transforms `TableSpec` -> `TableCatalogEntry`.

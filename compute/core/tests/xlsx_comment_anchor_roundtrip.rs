@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use cell_types::SheetId;
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use domain_types::domain::comment::{CommentType, NoteShapeAnchor, PersonInfo, RichTextRun};
 use domain_types::domain::floating_object::{
     AnchorMode, FloatingObject, FloatingObjectAnchor, FloatingObjectCommon, FloatingObjectData,
@@ -144,7 +144,7 @@ fn l2_preserves_empty_comment_anchor_identity_without_data_cells() {
     let input = fixture_parse_output();
     let input_bytes = write_xlsx_from_parse_output(&input).expect("write input xlsx");
 
-    let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&input_bytes).expect("from_xlsx_bytes");
+    let (engine, _) = ComputeEngine::from_xlsx_bytes(&input_bytes).expect("from_xlsx_bytes");
     let sheet_id = SheetId::from_uuid_str(
         engine
             .get_sheet_order()
@@ -426,7 +426,7 @@ fn l2_preserves_typed_floating_object_anchors_through_xlsx_import_export() {
     };
 
     let input_bytes = write_xlsx_from_parse_output(&input).expect("write input xlsx");
-    let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&input_bytes).expect("from_xlsx_bytes");
+    let (engine, _) = ComputeEngine::from_xlsx_bytes(&input_bytes).expect("from_xlsx_bytes");
 
     let exported = engine
         .export_to_parse_output()

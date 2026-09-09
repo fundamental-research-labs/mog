@@ -29,3 +29,6 @@ pub use ooxml::*;
 pub use placement::*;
 pub use placement_flat::*;
 pub use show_values_as::*;
+
+/// Typed imported cache rows, keyed by the workbook cache identifier.
+pub type PivotCacheRecords = std::collections::HashMap<u32, Vec<Vec<value_types::CellValue>>>;

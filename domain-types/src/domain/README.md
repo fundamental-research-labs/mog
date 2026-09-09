@@ -4,7 +4,7 @@ Pure Rust data structures for every domain concept in the spreadsheet engine (co
 
 ## Purpose
 
-These structs are the **canonical data definitions** — they specify what the data looks like (fields, types, defaults) with no persistence or serialization logic beyond `serde`. They are used everywhere: XLSX parser, compute-core, Yrs CRDT layer, and bridge codegen.
+These structs are the **canonical data definitions** — they specify what the data looks like (fields, types, defaults) with no persistence or serialization logic beyond `serde`. They are used everywhere: XLSX parser, native compute storage, evaluator, and bridge codegen.
 
 ## Conventions
 
@@ -14,6 +14,6 @@ These structs are the **canonical data definitions** — they specify what the d
 - Each file covers one domain (e.g. `comment.rs` has `Comment`, `PersonInfo`, `RichTextRun`)
 - `mod.rs` re-exports everything via `pub use <module>::*`
 
-## Relationship to `yrs_schema/`
+## Native storage
 
-These types know nothing about Yrs or CRDTs. The sibling `yrs_schema/` module handles mapping these structs to/from Y.Map documents for real-time collaboration. This separation keeps domain types pure and reusable across all layers.
+The engine stores these typed values directly in native workbook and sheet metadata. Stable identity indexes handle cell and axis ownership; XML and JSON conversion stays at import, export, and wire boundaries.

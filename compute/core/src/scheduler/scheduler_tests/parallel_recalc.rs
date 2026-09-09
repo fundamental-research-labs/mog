@@ -37,7 +37,13 @@ fn test_parallel_recalc_basic_independent() {
     }
 
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "00000000-0000-0000-0000-000000000001".to_string(),
             name: "Sheet1".to_string(),
             rows: 200,
@@ -77,7 +83,13 @@ fn test_parallel_recalc_chain() {
     let mut mirror = CellMirror::new();
 
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "00000000-0000-0000-0000-000000000001".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -172,7 +184,13 @@ fn test_parallel_recalc_diamond() {
     let mut mirror = CellMirror::new();
 
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "00000000-0000-0000-0000-000000000001".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -291,7 +309,13 @@ fn test_parallel_recalc_wide_level() {
     }
 
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "00000000-0000-0000-0000-000000000001".to_string(),
             name: "Sheet1".to_string(),
             rows: 200,
@@ -352,7 +376,13 @@ fn test_group_by_level_diamond_pattern() {
     let mut mirror = CellMirror::new();
 
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "00000000-0000-0000-0000-000000000001".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -431,7 +461,13 @@ fn test_small_level_stays_sequential() {
     let mut mirror = CellMirror::new();
 
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "00000000-0000-0000-0000-000000000001".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -524,7 +560,13 @@ fn test_parallel_matches_sequential_complex_graph() {
     let mut mirror = CellMirror::new();
 
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "00000000-0000-0000-0000-000000000001".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,

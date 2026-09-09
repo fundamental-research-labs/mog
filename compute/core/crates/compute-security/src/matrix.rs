@@ -15,7 +15,7 @@ use crate::events::AmbiguityWarning;
 use crate::level::AccessLevel;
 
 /// Adapter that lets the pure engine resolve column identities to column
-/// positions without depending on the Yrs grid. Tests supply an in-memory
+/// positions without depending on workbook storage. Tests supply an in-memory
 /// stub; `compute-core` wires it to the structural index.
 pub trait ColumnIndex {
     fn position_of(&self, col: ColId) -> Option<u32>;

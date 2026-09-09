@@ -23,7 +23,7 @@
 //!
 //! ## What this crate doesn't do
 //!
-//! - Hydration / Yrs writes (consumer's job, in `compute-core`).
+//! - Native workbook hydration (consumer's job, in `compute-core`).
 //! - Currency / percentage detection (out of scope this round).
 //! - Streaming for multi-GB inputs (the largest fixture is 2 MB).
 //! - CSV *export* (separate round, separate crate).

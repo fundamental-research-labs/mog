@@ -1,9 +1,9 @@
 use cell_types::{CellId, SheetId};
 use snapshot_types::RecalcResult;
 
-use super::{YrsComputeEngine, services};
+use super::{ComputeEngine, services};
 
-impl YrsComputeEngine {
+impl ComputeEngine {
     /// Post-process recalc (CF refresh + display text + schema validation) and stash for flush.
     ///
     /// This is the central funnel for every mutation path that produces a

@@ -1,7 +1,7 @@
-use super::super::YrsComputeEngine;
+use super::super::ComputeEngine;
 use crate::snapshot::RecalcResult;
 
-impl YrsComputeEngine {
+impl ComputeEngine {
     /// After a recalculation pass, refresh the CF cache for every sheet that
     /// both (a) has conditional formatting rules and (b) had at least one cell
     /// change in the recalc result.

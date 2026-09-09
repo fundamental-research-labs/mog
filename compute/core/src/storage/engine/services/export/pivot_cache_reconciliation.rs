@@ -6,15 +6,10 @@
 
 use std::collections::{HashMap, HashSet};
 
-use compute_document::schema::{KEY_PIVOT_CACHE_RECORDS, KEY_PIVOT_CACHE_SOURCES};
-use domain_types::{
-    domain::pivot::{
-        ParsedPivotTable, PivotCacheSourceDef, PivotCacheSourceKind, PivotTableConfig,
-        PivotTableOoxmlPreservation,
-    },
-    yrs_schema,
+use domain_types::domain::pivot::{
+    ParsedPivotTable, PivotCacheSourceDef, PivotCacheSourceKind, PivotTableConfig,
+    PivotTableOoxmlPreservation,
 };
-use yrs::{Map, Out, Transact};
 
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::workbook::imported_pivots::{
@@ -27,17 +22,8 @@ const FORKED_PIVOT_CACHE_NAMESPACE: uuid::Uuid =
 pub(super) fn export_pivot_cache_records(
     stores: &EngineStores,
     exported_pivots: &[ParsedPivotTable],
-) -> domain_types::yrs_schema::pivot_cache_records::PivotCacheRecords {
-    let doc = stores.storage.doc();
-    let txn = doc.transact();
-    let workbook = stores.storage.workbook_map();
-
-    let records_map = match workbook.get(&txn, KEY_PIVOT_CACHE_RECORDS) {
-        Some(Out::YMap(m)) => m,
-        _ => return Default::default(),
-    };
-
-    let mut records = yrs_schema::pivot_cache_records::from_yrs_map(&records_map, &txn);
+) -> domain_types::domain::pivot::PivotCacheRecords {
+    let mut records = stores.storage.metadata.pivot_cache_records.clone();
     if let Some(surviving) = surviving_pivot_cache_ids(stores, exported_pivots) {
         records.retain(|cache_id, _| surviving.contains(cache_id));
     }
@@ -63,15 +49,13 @@ pub(super) fn export_pivot_cache_sources(
 }
 
 pub(super) fn read_pivot_cache_sources(stores: &EngineStores) -> Vec<PivotCacheSourceDef> {
-    let doc = stores.storage.doc();
-    let txn = doc.transact();
-    let workbook = stores.storage.workbook_map();
-
-    let Some(Out::YMap(sources_map)) = workbook.get(&txn, KEY_PIVOT_CACHE_SOURCES) else {
-        return Default::default();
-    };
-
-    yrs_schema::pivot_cache_records::sources_from_yrs_map(&sources_map, &txn)
+    stores
+        .storage
+        .metadata
+        .pivot_cache_sources
+        .values()
+        .cloned()
+        .collect()
 }
 
 pub(super) fn reconcile_promoted_import_cache_for_export(
@@ -193,7 +177,7 @@ fn reconcile_surviving_cache_sources_with_live_pivots(
 }
 
 fn promoted_native_pivot_ids(stores: &EngineStores) -> HashSet<String> {
-    imported_pivots::read_all(stores.storage.doc(), stores.storage.workbook_map())
+    imported_pivots::read_all(&stores.storage)
         .into_iter()
         .filter(|association| association.status == ImportedPivotAssociationStatus::Promoted)
         .filter_map(|association| association.native_pivot_id)
@@ -205,8 +189,7 @@ fn surviving_pivot_cache_ids(
     pivots: &[ParsedPivotTable],
 ) -> Option<HashSet<u32>> {
     if pivots.is_empty() {
-        let associations =
-            imported_pivots::read_all(stores.storage.doc(), stores.storage.workbook_map());
+        let associations = imported_pivots::read_all(&stores.storage);
         if associations.is_empty() {
             return None;
         }

@@ -8,7 +8,7 @@ use crate::engine_types::{
 
 #[test]
 fn blank_cell_annotation_roundtrips_and_removes() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
 
     let (_patches, result) = engine
@@ -51,7 +51,7 @@ fn blank_cell_annotation_roundtrips_and_removes() {
 
 #[test]
 fn cell_annotation_becomes_stale_after_cell_edit() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
 
     engine
@@ -77,7 +77,7 @@ fn cell_annotation_becomes_stale_after_cell_edit() {
 
 #[test]
 fn table_annotation_uses_stable_table_id_across_rename() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
 
     engine
@@ -130,4 +130,42 @@ fn table_annotation_uses_stable_table_id_across_rename() {
         .expect("get by table id")
         .expect("annotation should exist");
     assert_eq!(by_id.id, created.id);
+}
+
+#[test]
+fn copied_table_annotation_has_new_anchor_and_matching_native_fingerprint() {
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let sid = sheet_id();
+    engine
+        .create_table(
+            &sid,
+            "Annotated".into(),
+            0,
+            0,
+            2,
+            1,
+            vec!["Name".into(), "Amount".into()],
+            true,
+        )
+        .unwrap();
+    engine
+        .set_table_annotation("Annotated", "Review this schema")
+        .unwrap();
+    let source = engine.get_table_annotation("Annotated").unwrap().unwrap();
+    let (copied_sheet, _) = engine.copy_sheet(&sid, "Annotated copy").unwrap();
+    let copied_table = engine
+        .mirror()
+        .all_tables()
+        .into_iter()
+        .find(|table| table.sheet_id == copied_sheet)
+        .unwrap()
+        .id
+        .clone();
+    let copied = engine.get_table_annotation(&copied_table).unwrap().unwrap();
+    assert_ne!(copied.id, source.id);
+    assert_ne!(copied.anchor_id, source.anchor_id);
+    assert_eq!(copied.anchor_id, copied_table);
+    assert_eq!(copied.text, source.text);
+    assert_eq!(copied.status, AnnotationStatus::Fresh);
+    assert!(copied.stale_reason.is_none());
 }

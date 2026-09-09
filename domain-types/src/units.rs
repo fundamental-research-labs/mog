@@ -45,7 +45,7 @@ use std::ops::{Add, Div, Mul, Sub};
 // Type-safe dimension newtypes
 // =============================================================================
 
-/// Row height in OOXML points (1pt = 1/72 inch). Stored in Yrs.
+/// Row height in OOXML points (1pt = 1/72 inch). Stored in native sheet metadata.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize, Default)]
 #[serde(transparent)]
 pub struct Points(pub f64);
@@ -55,7 +55,7 @@ pub struct Points(pub f64);
 #[serde(transparent)]
 pub struct Pixels(pub f64);
 
-/// Column width in OOXML character-width units (relative to MDW). Stored in Yrs.
+/// Column width in OOXML character-width units (relative to MDW). Stored in native sheet metadata.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize, Default)]
 #[serde(transparent)]
 pub struct CharWidth(pub f64);

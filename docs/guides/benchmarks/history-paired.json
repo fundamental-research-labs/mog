@@ -1,0 +1,327 @@
+{
+  "runs": 5,
+  "warmups": 1,
+  "rayon_num_threads": 1,
+  "benchmark_binary_sha256": {
+    "baseline": "fb4d30750defe9cef508b9f3270181c01a736b1cc5abcc1b4d4d36225bc57eb4",
+    "native": "22ca9fe68aed63d53bc8a23774f7f589c91127585fa89235f7e43dbbaa3ebcfd"
+  },
+  "workloads": {
+    "xlsx_100k": {
+      "baseline": {
+        "samples": [
+          {
+            "wall_s": 0.13717240397818387,
+            "user_s": 0.124971,
+            "system_s": 0.012062999999999999,
+            "cpu_s": 0.137034,
+            "peak_rss_kib": 152548,
+            "live_rss_kib": 66920,
+            "phases_s": {
+              "parse_hydrate": 0.126508276
+            },
+            "log": "/tmp/mog-history-paired/xlsx_100k-baseline-0.log"
+          },
+          {
+            "wall_s": 0.13603468297515064,
+            "user_s": 0.11855099999999999,
+            "system_s": 0.017387,
+            "cpu_s": 0.135938,
+            "peak_rss_kib": 152532,
+            "live_rss_kib": 67108,
+            "phases_s": {
+              "parse_hydrate": 0.125647057
+            },
+            "log": "/tmp/mog-history-paired/xlsx_100k-baseline-1.log"
+          },
+          {
+            "wall_s": 0.13387653196696192,
+            "user_s": 0.118726,
+            "system_s": 0.015052999999999999,
+            "cpu_s": 0.133779,
+            "peak_rss_kib": 152532,
+            "live_rss_kib": 67120,
+            "phases_s": {
+              "parse_hydrate": 0.123910911
+            },
+            "log": "/tmp/mog-history-paired/xlsx_100k-baseline-2.log"
+          },
+          {
+            "wall_s": 0.13700381899252534,
+            "user_s": 0.125909,
+            "system_s": 0.010962999999999999,
+            "cpu_s": 0.136872,
+            "peak_rss_kib": 152532,
+            "live_rss_kib": 67108,
+            "phases_s": {
+              "parse_hydrate": 0.126824614
+            },
+            "log": "/tmp/mog-history-paired/xlsx_100k-baseline-3.log"
+          },
+          {
+            "wall_s": 0.1351961720502004,
+            "user_s": 0.12206299999999999,
+            "system_s": 0.012974999999999999,
+            "cpu_s": 0.135038,
+            "peak_rss_kib": 152544,
+            "live_rss_kib": 67124,
+            "phases_s": {
+              "parse_hydrate": 0.124909632
+            },
+            "log": "/tmp/mog-history-paired/xlsx_100k-baseline-4.log"
+          }
+        ],
+        "median": {
+          "wall_s": 0.13603468297515064,
+          "user_s": 0.12206299999999999,
+          "system_s": 0.012974999999999999,
+          "cpu_s": 0.135938,
+          "peak_rss_kib": 152532,
+          "live_rss_kib": 67108,
+          "phases_s": {
+            "parse_hydrate": 0.125647057
+          }
+        }
+      },
+      "native": {
+        "samples": [
+          {
+            "wall_s": 0.1394607649417594,
+            "user_s": 0.12432399999999999,
+            "system_s": 0.015,
+            "cpu_s": 0.139324,
+            "peak_rss_kib": 152328,
+            "live_rss_kib": 58332,
+            "phases_s": {
+              "parse_hydrate": 0.130789702
+            },
+            "log": "/tmp/mog-history-paired/xlsx_100k-native-0.log"
+          },
+          {
+            "wall_s": 0.13851475401315838,
+            "user_s": 0.127361,
+            "system_s": 0.011005,
+            "cpu_s": 0.138366,
+            "peak_rss_kib": 152300,
+            "live_rss_kib": 58312,
+            "phases_s": {
+              "parse_hydrate": 0.129890859
+            },
+            "log": "/tmp/mog-history-paired/xlsx_100k-native-1.log"
+          },
+          {
+            "wall_s": 0.14067478000652045,
+            "user_s": 0.125466,
+            "system_s": 0.015018,
+            "cpu_s": 0.140484,
+            "peak_rss_kib": 152312,
+            "live_rss_kib": 58324,
+            "phases_s": {
+              "parse_hydrate": 0.13298302
+            },
+            "log": "/tmp/mog-history-paired/xlsx_100k-native-2.log"
+          },
+          {
+            "wall_s": 0.13971230993047357,
+            "user_s": 0.129195,
+            "system_s": 0.010364,
+            "cpu_s": 0.13955900000000002,
+            "peak_rss_kib": 152332,
+            "live_rss_kib": 58324,
+            "phases_s": {
+              "parse_hydrate": 0.131448377
+            },
+            "log": "/tmp/mog-history-paired/xlsx_100k-native-3.log"
+          },
+          {
+            "wall_s": 0.13909180299378932,
+            "user_s": 0.124873,
+            "system_s": 0.014065,
+            "cpu_s": 0.138938,
+            "peak_rss_kib": 152324,
+            "live_rss_kib": 58312,
+            "phases_s": {
+              "parse_hydrate": 0.130404364
+            },
+            "log": "/tmp/mog-history-paired/xlsx_100k-native-4.log"
+          }
+        ],
+        "median": {
+          "wall_s": 0.1394607649417594,
+          "user_s": 0.125466,
+          "system_s": 0.014065,
+          "cpu_s": 0.139324,
+          "peak_rss_kib": 152324,
+          "live_rss_kib": 58324,
+          "phases_s": {
+            "parse_hydrate": 0.130789702
+          }
+        }
+      }
+    },
+    "sum_100k": {
+      "baseline": {
+        "samples": [
+          {
+            "wall_s": 2.2241147860186175,
+            "user_s": 2.195544,
+            "system_s": 0.027392999999999997,
+            "cpu_s": 2.222937,
+            "peak_rss_kib": 294004,
+            "live_rss_kib": 285660,
+            "phases_s": {
+              "hydrate_recalc": 1.914169631,
+              "recalc_100": 0.274256391
+            },
+            "log": "/tmp/mog-history-paired/sum_100k-baseline-0.log"
+          },
+          {
+            "wall_s": 2.18585643498227,
+            "user_s": 2.16035,
+            "system_s": 0.021019,
+            "cpu_s": 2.181369,
+            "peak_rss_kib": 294020,
+            "live_rss_kib": 285660,
+            "phases_s": {
+              "hydrate_recalc": 1.849723118,
+              "recalc_100": 0.301325479
+            },
+            "log": "/tmp/mog-history-paired/sum_100k-baseline-1.log"
+          },
+          {
+            "wall_s": 2.2799500019755214,
+            "user_s": 2.243185,
+            "system_s": 0.030983,
+            "cpu_s": 2.274168,
+            "peak_rss_kib": 294012,
+            "live_rss_kib": 285652,
+            "phases_s": {
+              "hydrate_recalc": 1.957849688,
+              "recalc_100": 0.288420073
+            },
+            "log": "/tmp/mog-history-paired/sum_100k-baseline-2.log"
+          },
+          {
+            "wall_s": 2.188471270026639,
+            "user_s": 2.156477,
+            "system_s": 0.031000999999999997,
+            "cpu_s": 2.187478,
+            "peak_rss_kib": 293888,
+            "live_rss_kib": 285656,
+            "phases_s": {
+              "hydrate_recalc": 1.871866439,
+              "recalc_100": 0.283496805
+            },
+            "log": "/tmp/mog-history-paired/sum_100k-baseline-3.log"
+          },
+          {
+            "wall_s": 2.183604420046322,
+            "user_s": 2.151565,
+            "system_s": 0.029362,
+            "cpu_s": 2.180927,
+            "peak_rss_kib": 293836,
+            "live_rss_kib": 285668,
+            "phases_s": {
+              "hydrate_recalc": 1.849461961,
+              "recalc_100": 0.29600254
+            },
+            "log": "/tmp/mog-history-paired/sum_100k-baseline-4.log"
+          }
+        ],
+        "median": {
+          "wall_s": 2.188471270026639,
+          "user_s": 2.16035,
+          "system_s": 0.029362,
+          "cpu_s": 2.187478,
+          "peak_rss_kib": 294004,
+          "live_rss_kib": 285660,
+          "phases_s": {
+            "hydrate_recalc": 1.871866439,
+            "recalc_100": 0.288420073
+          }
+        }
+      },
+      "native": {
+        "samples": [
+          {
+            "wall_s": 0.23220346798188984,
+            "user_s": 0.22019799999999998,
+            "system_s": 0.010943,
+            "cpu_s": 0.23114099999999999,
+            "peak_rss_kib": 86452,
+            "live_rss_kib": 68476,
+            "phases_s": {
+              "hydrate_recalc": 0.038124126,
+              "recalc_100": 0.186938755
+            },
+            "log": "/tmp/mog-history-paired/sum_100k-native-0.log"
+          },
+          {
+            "wall_s": 0.23659564601257443,
+            "user_s": 0.226398,
+            "system_s": 0.009041,
+            "cpu_s": 0.23543899999999998,
+            "peak_rss_kib": 86424,
+            "live_rss_kib": 68496,
+            "phases_s": {
+              "hydrate_recalc": 0.03847434,
+              "recalc_100": 0.190963804
+            },
+            "log": "/tmp/mog-history-paired/sum_100k-native-1.log"
+          },
+          {
+            "wall_s": 0.24160638102330267,
+            "user_s": 0.23258399999999999,
+            "system_s": 0.008007,
+            "cpu_s": 0.240591,
+            "peak_rss_kib": 86424,
+            "live_rss_kib": 68496,
+            "phases_s": {
+              "hydrate_recalc": 0.038954346,
+              "recalc_100": 0.195245571
+            },
+            "log": "/tmp/mog-history-paired/sum_100k-native-2.log"
+          },
+          {
+            "wall_s": 0.25749557407107204,
+            "user_s": 0.250918,
+            "system_s": 0.00537,
+            "cpu_s": 0.25628799999999996,
+            "peak_rss_kib": 86416,
+            "live_rss_kib": 68504,
+            "phases_s": {
+              "hydrate_recalc": 0.038020126,
+              "recalc_100": 0.212229026
+            },
+            "log": "/tmp/mog-history-paired/sum_100k-native-3.log"
+          },
+          {
+            "wall_s": 0.2470283639850095,
+            "user_s": 0.237511,
+            "system_s": 0.008039,
+            "cpu_s": 0.24555,
+            "peak_rss_kib": 86404,
+            "live_rss_kib": 68492,
+            "phases_s": {
+              "hydrate_recalc": 0.039293559,
+              "recalc_100": 0.200509676
+            },
+            "log": "/tmp/mog-history-paired/sum_100k-native-4.log"
+          }
+        ],
+        "median": {
+          "wall_s": 0.24160638102330267,
+          "user_s": 0.23258399999999999,
+          "system_s": 0.008039,
+          "cpu_s": 0.240591,
+          "peak_rss_kib": 86424,
+          "live_rss_kib": 68496,
+          "phases_s": {
+            "hydrate_recalc": 0.03847434,
+            "recalc_100": 0.195245571
+          }
+        }
+      }
+    }
+  }
+}

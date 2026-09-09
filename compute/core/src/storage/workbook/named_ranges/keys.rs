@@ -12,11 +12,17 @@ pub(super) const RESERVED_WORDS: &[&str] = &["TRUE", "FALSE", "NULL"];
 ///
 /// Workbook scope: uppercase name (e.g., "REVENUE")
 /// Sheet scope: "NAME:sheetId" (e.g., "SALES:abc123")
-pub(super) fn get_defined_name_key(name: &str, scope: Option<&str>) -> String {
+pub(crate) fn get_defined_name_key(name: &str, scope: Option<&str>) -> String {
     match scope {
-        Some(sheet_id) => format!("{}:{}", name.to_uppercase(), sheet_id),
+        Some(sheet_id) => format!("{}:{}", name.to_uppercase(), normalize_scope(sheet_id)),
         None => name.to_uppercase(),
     }
+}
+
+pub(super) fn normalize_scope(scope: &str) -> String {
+    cell_types::SheetId::from_uuid_str(scope)
+        .map(|sheet| sheet.to_uuid_string())
+        .unwrap_or_else(|_| scope.to_string())
 }
 
 /// Check if a string looks like a cell reference (A1 through XFD1048576).

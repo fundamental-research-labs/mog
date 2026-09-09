@@ -614,7 +614,13 @@ mod tests {
     fn data_table_snapshot() -> WorkbookSnapshot {
         let sheet_id = test_sheet_id();
         WorkbookSnapshot {
+            axis_run_high_water_mark: None,
+            identity_high_water_mark: None,
+            canonical_tables: Vec::new(),
             sheets: vec![SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: sheet_id.to_uuid_string(),
                 name: "Sheet1".to_string(),
                 rows: 10,

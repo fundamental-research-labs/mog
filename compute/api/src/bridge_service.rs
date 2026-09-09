@@ -2,18 +2,18 @@
 //!
 //! `ComputeService` is the **single bridge surface** for all FFI consumers.
 //! WASM, N-API, and Tauri binding crates consume descriptors from `ComputeService`,
-//! not from `YrsComputeEngine` directly.
+//! not from `ComputeEngine` directly.
 //!
 //! **How it works:**
 //! - `bridge_delegate::delegate!()` consumes bridge descriptors from `compute-core`
-//!   (on `YrsComputeEngine`) and auto-generates delegate methods on `ComputeService`
+//!   (on `ComputeEngine`) and auto-generates delegate methods on `ComputeService`
 //!   that call through `Dispatch`.
 //! - The macro also re-emits descriptor macros (`__bridge_descriptor_ComputeService_*`)
 //!   that WASM/NAPI/Tauri binding crates consume via `generate!()`.
 //! - Return types are passed through as-is (including `(Vec<u8>, MutationResult)` for
 //!   write methods) so binding crates get viewport patches for TS compatibility.
 //!
-//! **Result:** Zero hand-written boilerplate. Adding a method to `YrsComputeEngine`
+//! **Result:** Zero hand-written boilerplate. Adding a method to `ComputeEngine`
 //! with `#[bridge::api]` automatically makes it available on `ComputeService` and
 //! across all FFI targets.
 
@@ -152,7 +152,7 @@ impl ComputeService {
 }
 
 // ---------------------------------------------------------------------------
-// Auto-generated delegate methods from YrsComputeEngine bridge descriptors.
+// Auto-generated delegate methods from ComputeEngine bridge descriptors.
 //
 // Each descriptor group generates:
 // 1. `impl ComputeService { ... }` with delegate methods
@@ -163,35 +163,34 @@ bridge_delegate::delegate!(
     target = ComputeService,
     dispatch = dispatch,
     gated = true,
-    compute_core::__bridge_descriptor_YrsComputeEngine_core,
-    compute_core::__bridge_descriptor_YrsComputeEngine_core_cells,
-    compute_core::__bridge_descriptor_YrsComputeEngine_core_sync,
-    compute_core::__bridge_descriptor_YrsComputeEngine_core_undo,
-    compute_core::__bridge_descriptor_YrsComputeEngine_core_theme,
-    compute_core::__bridge_descriptor_YrsComputeEngine_viewport,
-    compute_core::__bridge_descriptor_YrsComputeEngine_tables,
-    compute_core::__bridge_descriptor_YrsComputeEngine_features,
-    compute_core::__bridge_descriptor_YrsComputeEngine_formatting,
-    compute_core::__bridge_descriptor_YrsComputeEngine_structural,
-    compute_core::__bridge_descriptor_YrsComputeEngine_queries,
-    compute_core::__bridge_descriptor_YrsComputeEngine_cell_semantics,
-    compute_core::__bridge_descriptor_YrsComputeEngine_search,
-    compute_core::__bridge_descriptor_YrsComputeEngine_atomics,
-    compute_core::__bridge_descriptor_YrsComputeEngine_layout,
-    compute_core::__bridge_descriptor_YrsComputeEngine_objects,
-    compute_core::__bridge_descriptor_YrsComputeEngine_objects_annotations,
-    compute_core::__bridge_descriptor_YrsComputeEngine_objects_comments,
-    compute_core::__bridge_descriptor_YrsComputeEngine_objects_floating,
-    compute_core::__bridge_descriptor_YrsComputeEngine_objects_groups,
-    compute_core::__bridge_descriptor_YrsComputeEngine_objects_hyperlinks,
-    compute_core::__bridge_descriptor_YrsComputeEngine_objects_pivots,
-    compute_core::__bridge_descriptor_YrsComputeEngine_objects_z_order,
-    compute_core::__bridge_descriptor_YrsComputeEngine_delegations,
-    compute_core::__bridge_descriptor_YrsComputeEngine_viewport_registry,
-    compute_core::__bridge_descriptor_YrsComputeEngine_export,
-    compute_core::__bridge_descriptor_YrsComputeEngine_styles,
-    compute_core::__bridge_descriptor_YrsComputeEngine_screenshot,
-    compute_core::__bridge_descriptor_YrsComputeEngine_security_ops,
+    compute_core::__bridge_descriptor_ComputeEngine_core,
+    compute_core::__bridge_descriptor_ComputeEngine_core_cells,
+    compute_core::__bridge_descriptor_ComputeEngine_core_undo,
+    compute_core::__bridge_descriptor_ComputeEngine_core_theme,
+    compute_core::__bridge_descriptor_ComputeEngine_viewport,
+    compute_core::__bridge_descriptor_ComputeEngine_tables,
+    compute_core::__bridge_descriptor_ComputeEngine_features,
+    compute_core::__bridge_descriptor_ComputeEngine_formatting,
+    compute_core::__bridge_descriptor_ComputeEngine_structural,
+    compute_core::__bridge_descriptor_ComputeEngine_queries,
+    compute_core::__bridge_descriptor_ComputeEngine_cell_semantics,
+    compute_core::__bridge_descriptor_ComputeEngine_search,
+    compute_core::__bridge_descriptor_ComputeEngine_atomics,
+    compute_core::__bridge_descriptor_ComputeEngine_layout,
+    compute_core::__bridge_descriptor_ComputeEngine_objects,
+    compute_core::__bridge_descriptor_ComputeEngine_objects_annotations,
+    compute_core::__bridge_descriptor_ComputeEngine_objects_comments,
+    compute_core::__bridge_descriptor_ComputeEngine_objects_floating,
+    compute_core::__bridge_descriptor_ComputeEngine_objects_groups,
+    compute_core::__bridge_descriptor_ComputeEngine_objects_hyperlinks,
+    compute_core::__bridge_descriptor_ComputeEngine_objects_pivots,
+    compute_core::__bridge_descriptor_ComputeEngine_objects_z_order,
+    compute_core::__bridge_descriptor_ComputeEngine_delegations,
+    compute_core::__bridge_descriptor_ComputeEngine_viewport_registry,
+    compute_core::__bridge_descriptor_ComputeEngine_export,
+    compute_core::__bridge_descriptor_ComputeEngine_styles,
+    compute_core::__bridge_descriptor_ComputeEngine_screenshot,
+    compute_core::__bridge_descriptor_ComputeEngine_security_ops,
 );
 
 // ---------------------------------------------------------------------------
@@ -215,36 +214,13 @@ impl ComputeService {
         layout_metrics: Option<domain_types::units::LayoutMetrics>,
     ) -> Result<(Self, snapshot_types::RecalcResult), value_types::ComputeError> {
         let (engine, recalc) =
-            compute_core::storage::engine::YrsComputeEngine::from_snapshot_with_layout_metrics(
+            compute_core::storage::engine::ComputeEngine::from_snapshot_with_layout_metrics(
                 snapshot,
                 layout_metrics.unwrap_or_default(),
             )?;
         let dispatch = crate::dispatch::Dispatch::from_engine(engine).map_err(|e| {
             value_types::ComputeError::Eval {
                 message: e.to_string(),
-            }
-        })?;
-        Ok((ComputeService::new(dispatch), recalc))
-    }
-
-    /// Create a `ComputeService` from raw Yrs state bytes, returning the
-    /// service and the initial recalc result.
-    ///
-    /// Used for collaboration: subsequent participants fork from the
-    /// coordinator's authoritative Yrs state to share CellIds and history.
-    #[bridge::lifecycle(create_from = "yrs_state")]
-    pub fn init_from_yrs_state(
-        state: Vec<u8>,
-        layout_metrics: Option<domain_types::units::LayoutMetrics>,
-    ) -> Result<(Self, snapshot_types::RecalcResult), value_types::ComputeError> {
-        let (engine, recalc) =
-            compute_core::storage::engine::YrsComputeEngine::from_yrs_state_with_layout_metrics(
-                &state,
-                layout_metrics.unwrap_or_default(),
-            )?;
-        let dispatch = crate::dispatch::Dispatch::from_engine(engine).map_err(|e| {
-            value_types::ComputeError::Eval {
-                message: format!("dispatch creation failed: {e}"),
             }
         })?;
         Ok((ComputeService::new(dispatch), recalc))

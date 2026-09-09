@@ -1,22 +1,22 @@
 use bridge_core as bridge;
 
-use super::{CsvImportOptions, YrsComputeEngine, construction, services};
+use super::{ComputeEngine, CsvImportOptions, construction, services};
 use crate::snapshot::{ChangeKind, MutationResult, RecalcResult, WorkbookSnapshot};
 use value_types::ComputeError;
 
 #[bridge::api(
-    service = "YrsComputeEngine",
+    service = "ComputeEngine",
     key = "doc_id",
     group = "core",
     fn_prefix = "compute",
     crate_path = "compute_core"
 )]
-impl YrsComputeEngine {
+impl ComputeEngine {
     // -------------------------------------------------------------------
     // Construction
     // -------------------------------------------------------------------
 
-    /// Create a `YrsComputeEngine` from a workbook snapshot.
+    /// Create a `ComputeEngine` from a workbook snapshot.
     #[tracing::instrument(name = "engine_from_snapshot", skip_all)]
     #[bridge::lifecycle(create)]
     #[bridge::skip(wasm, tauri, napi, pyo3)]
@@ -31,7 +31,7 @@ impl YrsComputeEngine {
         construction::from_snapshot_with_layout_metrics(snapshot, layout_metrics)
     }
 
-    /// Assemble an export-capable Yrs engine from an already-initialized
+    /// Assemble an export-capable native engine from an already-initialized
     /// formula-eval compute state without running another full recalculation.
     #[cfg(feature = "__internal")]
     #[doc(hidden)]
@@ -40,7 +40,7 @@ impl YrsComputeEngine {
         mirror: crate::mirror::CellMirror,
         compute: crate::scheduler::ComputeCore,
     ) -> Result<Self, ComputeError> {
-        let storage = crate::storage::YrsStorage::from_snapshot(snapshot.clone())?;
+        let storage = crate::storage::WorkbookStorage::from_snapshot(snapshot.clone())?;
         construction::assemble_engine(storage, mirror, compute, &snapshot)
     }
 
@@ -69,41 +69,31 @@ impl YrsComputeEngine {
         xlsx_data: &[u8],
         do_recalc: bool,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let recalc = {
-            let _span = tracing::info_span!("import_construction").entered();
-            construction::import_from_xlsx_bytes(self, xlsx_data, do_recalc)?
-        };
-        let result = {
-            let _span = tracing::info_span!("import_mutation_result").entered();
-            services::mutation_handlers::build_mutation_result_for_hydration(
-                &self.stores,
-                &self.mirror,
-                recalc,
-            )
-        };
-        Ok((
-            compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-            result,
-        ))
+        let result = self.without_history(|engine| {
+            let recalc = {
+                let _span = tracing::info_span!("import_construction").entered();
+                construction::import_from_xlsx_bytes(engine, xlsx_data, do_recalc)?
+            };
+            let result = {
+                let _span = tracing::info_span!("import_mutation_result").entered();
+                services::mutation_handlers::build_mutation_result_for_hydration(
+                    &engine.stores,
+                    &engine.mirror,
+                    recalc,
+                )
+            };
+            Ok((
+                compute_wire::mutation::serialize_multi_viewport_patches(&[]),
+                result,
+            ))
+        });
+        if result.is_ok() {
+            self.clear_history();
+        }
+        result
     }
 
-    /// Create a `YrsComputeEngine` from raw Yrs state bytes.
-    ///
-    /// Used for collaboration: creates an engine that shares the same CellIds
-    /// and Yrs document history as the source engine. This is required for
-    /// CRDT sync to work between engines.
-    pub fn from_yrs_state(state: &[u8]) -> Result<(Self, RecalcResult), ComputeError> {
-        construction::from_yrs_state(state)
-    }
-
-    pub fn from_yrs_state_with_layout_metrics(
-        state: &[u8],
-        layout_metrics: domain_types::units::LayoutMetrics,
-    ) -> Result<(Self, RecalcResult), ComputeError> {
-        construction::from_yrs_state_with_layout_metrics(state, layout_metrics)
-    }
-
-    /// Construct a `YrsComputeEngine` directly from raw XLSX bytes (no recalc).
+    /// Construct a `ComputeEngine` directly from raw XLSX bytes (no recalc).
     pub fn from_xlsx_bytes(xlsx_data: &[u8]) -> Result<(Self, RecalcResult), ComputeError> {
         construction::from_xlsx_bytes(xlsx_data)
     }
@@ -113,66 +103,69 @@ impl YrsComputeEngine {
         &mut self,
         xlsx_data: &[u8],
     ) -> Result<RecalcResult, ComputeError> {
-        construction::import_from_xlsx_bytes(self, xlsx_data, false)
+        let result = self.without_history(|engine| {
+            construction::import_from_xlsx_bytes(engine, xlsx_data, false)
+        });
+        if result.is_ok() {
+            self.clear_history();
+        }
+        result
     }
 
-    /// Fast-path XLSX import: parses and builds indexes from snapshot (NO Yrs hydration).
-    /// The viewport can display immediately. Call `complete_deferred_hydration()` after
-    /// first paint to enable mutations and persistence.
+    /// Load the active worksheet into native storage for first display.
+    /// `complete_deferred_hydration()` loads the remaining worksheets.
     #[bridge::write(scope = "workbook")]
     #[tracing::instrument(name = "engine_import_from_xlsx_bytes_deferred", skip_all)]
     pub fn import_from_xlsx_bytes_deferred(
         &mut self,
         xlsx_data: &[u8],
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        construction::import_from_xlsx_bytes_deferred(self, xlsx_data)?;
-        // Build the mutation result using the existing hydration builder.
-        // In deferred mode, Yrs is empty but the snapshot data is in
-        // deferred_hydration. We temporarily build indexes + mutation result
-        // from the deferred data, then call the standard builder which reads
-        // domain data from the stores (grid indexes, merge indexes, layout indexes
-        // are already populated from parse_output).
-        let result = {
-            let _span = tracing::info_span!("deferred_mutation_result").entered();
-            services::mutation_handlers::build_mutation_result_for_deferred(
-                &self.stores,
-                &self.mirror,
-                self.deferred_hydration.as_ref(),
-            )
-        };
-        Ok((
-            compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-            result,
-        ))
+        let result = self.without_history(|engine| {
+            construction::import_from_xlsx_bytes_deferred(engine, xlsx_data)?;
+            let result = services::mutation_handlers::build_mutation_result_for_hydration(
+                &engine.stores,
+                &engine.mirror,
+                RecalcResult::empty(),
+            );
+            Ok((
+                compute_wire::mutation::serialize_multi_viewport_patches(&[]),
+                result,
+            ))
+        });
+        if result.is_ok() {
+            self.clear_history();
+        }
+        result
     }
 
-    /// Complete the deferred Yrs CRDT hydration started by `import_from_xlsx_bytes_deferred`.
-    /// Call after first viewport paint. This performs the slow Yrs write and rebuilds
-    /// indexes with full fidelity.
+    /// Load the remaining worksheet payloads and complete the formula graph.
+    /// Retains the active sheet already installed by the initial load.
     #[bridge::write(scope = "workbook")]
     #[tracing::instrument(name = "engine_complete_deferred_hydration", skip_all)]
     pub fn complete_deferred_hydration(
         &mut self,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let deferred_filter_created_keys = if self.deferred_hydration.is_some() {
-            collect_deferred_filter_created_keys(self)
-        } else {
-            Default::default()
-        };
-        let Some(mut completion) = construction::stage_deferred_hydration(self)? else {
-            let result = services::mutation_handlers::build_mutation_result_for_hydration(
-                &self.stores,
-                &self.mirror,
-                RecalcResult::empty(),
-            );
-            return Ok((
-                compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-                result,
-            ));
-        };
+        self.without_history(|engine| {
+            let deferred_filter_created_keys = if engine.deferred_hydration.is_some() {
+                collect_deferred_filter_created_keys(engine)
+            } else {
+                Default::default()
+            };
+            let Some(mut completion) = construction::stage_deferred_hydration(engine)? else {
+                let result = services::mutation_handlers::build_mutation_result_for_hydration(
+                    &engine.stores,
+                    &engine.mirror,
+                    RecalcResult::empty(),
+                );
+                return Ok((
+                    compute_wire::mutation::serialize_multi_viewport_patches(&[]),
+                    result,
+                ));
+            };
 
-        let mut recalc =
-            if completion.calculation.full_calc_on_load || completion.calculation.force_full_calc {
+            let mut recalc = if completion.calculation.full_calc_on_load
+                || completion.calculation.force_full_calc
+            {
                 let calculation = completion.calculation.clone();
                 let options = snapshot_types::RecalcOptions {
                     iterative: Some(calculation.iterate),
@@ -196,21 +189,22 @@ impl YrsComputeEngine {
                 RecalcResult::empty()
             };
 
-        construction::commit_deferred_hydration(self, completion);
-        self.postprocess_import_open_recalc(&mut recalc);
-        let mut result = services::mutation_handlers::build_mutation_result_for_hydration(
-            &self.stores,
-            &self.mirror,
-            recalc,
-        );
-        suppress_deferred_duplicate_filter_created_changes(
-            &mut result,
-            &deferred_filter_created_keys,
-        );
-        Ok((
-            compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-            result,
-        ))
+            construction::commit_deferred_hydration(engine, completion);
+            engine.postprocess_import_open_recalc(&mut recalc);
+            let mut result = services::mutation_handlers::build_mutation_result_for_hydration(
+                &engine.stores,
+                &engine.mirror,
+                recalc,
+            );
+            suppress_deferred_duplicate_filter_created_changes(
+                &mut result,
+                &deferred_filter_created_keys,
+            );
+            Ok((
+                compute_wire::mutation::serialize_multi_viewport_patches(&[]),
+                result,
+            ))
+        })
     }
 
     // -------------------------------------------------------------------
@@ -230,13 +224,8 @@ impl YrsComputeEngine {
     /// Build a hydration-shape [`MutationResult`] over the current engine
     /// state without mutating Rust state.
     ///
-    /// Called by the document lifecycle after a Provider replay completes
-    /// (e.g. IndexedDB restore on browser refresh). Provider replay applies
-    /// Yrs updates via `syncApply`, which populates the engine but never
-    /// produces a `MutationResult` — so the kernel TS state mirror stays
-    /// at its pre-attach defaults. This entry point lets the lifecycle
-    /// emit a single hydration-shape `MutationResult` after replay so the
-    /// mirror sees the post-replay snapshot for every sheet.
+    /// Introduces the current native workbook to bridge consumers after loading
+    /// or attaching to an existing engine.
     ///
     /// Idempotent for snapshot-replace variants (sheet/workbook settings,
     /// frozen panes, scroll position, ...): calling on top of an
@@ -260,15 +249,17 @@ impl YrsComputeEngine {
     #[bridge::write(scope = "workbook")]
     #[tracing::instrument(name = "engine_settle_for_mirror", skip_all)]
     pub fn settle_for_mirror(&mut self) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let result = services::mutation_handlers::build_mutation_result_for_hydration(
-            &self.stores,
-            &self.mirror,
-            RecalcResult::empty(),
-        );
-        Ok((
-            compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-            result,
-        ))
+        self.without_history(|engine| {
+            let result = services::mutation_handlers::build_mutation_result_for_hydration(
+                &engine.stores,
+                &engine.mirror,
+                RecalcResult::empty(),
+            );
+            Ok((
+                compute_wire::mutation::serialize_multi_viewport_patches(&[]),
+                result,
+            ))
+        })
     }
 
     /// Import directly from raw CSV file bytes (with recalculation).
@@ -285,19 +276,25 @@ impl YrsComputeEngine {
         csv_data: &[u8],
         options: CsvImportOptions,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let recalc = construction::import_from_csv_bytes(self, csv_data, &options, true)?;
-        let result = services::mutation_handlers::build_mutation_result_for_hydration(
-            &self.stores,
-            &self.mirror,
-            recalc,
-        );
-        Ok((
-            compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-            result,
-        ))
+        let result = self.without_history(|engine| {
+            let recalc = construction::import_from_csv_bytes(engine, csv_data, &options, true)?;
+            let result = services::mutation_handlers::build_mutation_result_for_hydration(
+                &engine.stores,
+                &engine.mirror,
+                recalc,
+            );
+            Ok((
+                compute_wire::mutation::serialize_multi_viewport_patches(&[]),
+                result,
+            ))
+        });
+        if result.is_ok() {
+            self.clear_history();
+        }
+        result
     }
 
-    /// Construct a `YrsComputeEngine` directly from raw CSV bytes (no recalc).
+    /// Construct a `ComputeEngine` directly from raw CSV bytes (no recalc).
     pub fn from_csv_bytes(
         csv_data: &[u8],
         options: CsvImportOptions,
@@ -311,13 +308,19 @@ impl YrsComputeEngine {
         csv_data: &[u8],
         options: CsvImportOptions,
     ) -> Result<RecalcResult, ComputeError> {
-        construction::import_from_csv_bytes(self, csv_data, &options, false)
+        let result = self.without_history(|engine| {
+            construction::import_from_csv_bytes(engine, csv_data, &options, false)
+        });
+        if result.is_ok() {
+            self.clear_history();
+        }
+        result
     }
 
     /// Import specific sheets from an XLSX byte buffer into the existing document.
     ///
     /// Parses the XLSX, filters by `sheet_names` (case-insensitive), merges the
-    /// style palette, hydrates each matched sheet into the Yrs document, syncs
+    /// style palette, hydrates each matched sheet into native storage, synchronizes
     /// all stores, and inserts them at `insert_position` in the sheet order.
     /// Returns the names of inserted sheets (possibly deduped to avoid collisions).
     #[bridge::write(scope = "workbook")]
@@ -328,12 +331,14 @@ impl YrsComputeEngine {
         sheet_names: Vec<String>,
         insert_position: Option<u32>,
     ) -> Result<Vec<String>, ComputeError> {
-        construction::import_sheets_from_xlsx(self, xlsx_data, &sheet_names, insert_position)
+        self.with_history(|engine| {
+            construction::import_sheets_from_xlsx(engine, xlsx_data, &sheet_names, insert_position)
+        })
     }
 }
 
 fn collect_deferred_filter_created_keys(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
 ) -> std::collections::HashSet<(String, String)> {
     engine
         .stores
@@ -341,13 +346,9 @@ fn collect_deferred_filter_created_keys(
         .keys()
         .flat_map(|sheet_id| {
             let sheet_id_str = sheet_id.to_uuid_string();
-            crate::storage::sheet::filters::get_filters_in_sheet(
-                engine.stores.storage.doc(),
-                engine.stores.storage.sheets(),
-                sheet_id,
-            )
-            .into_iter()
-            .map(move |filter| (sheet_id_str.clone(), filter.id))
+            crate::storage::sheet::filters::get_filters_in_sheet(&engine.stores.storage, sheet_id)
+                .into_iter()
+                .map(move |filter| (sheet_id_str.clone(), filter.id))
         })
         .collect()
 }

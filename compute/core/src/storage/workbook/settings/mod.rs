@@ -1,12 +1,9 @@
 //! Workbook Settings Storage Module
 //!
-//! Provides CRUD operations for workbook-level settings stored in the Yrs CRDT
-//! document. Settings are stored in the `workbookSettings` Y.Map at the workbook
-//! level. This module is a compatibility facade over focused settings modules.
+//! Typed native workbook settings and public settings projections.
 
 mod calculation;
 mod custom;
-mod map;
 mod protection;
 mod read;
 mod styles;
@@ -28,11 +25,7 @@ pub(crate) use styles::{
     get_named_slicer_style, get_named_slicer_style_count, list_named_slicer_styles,
     set_default_pivot_table_style, set_default_slicer_style, set_default_table_style_id,
 };
-#[allow(unused_imports)]
-pub(crate) use write::{
-    patch_settings_with_origin, reset_settings, set_setting, set_setting_with_origin, set_settings,
-    set_settings_with_origin,
-};
+pub(crate) use write::{patch_settings, reset_settings, set_setting, set_settings};
 
 #[cfg(test)]
 mod tests {
@@ -40,12 +33,12 @@ mod tests {
     use crate::snapshot::{
         AutomaticConversionPolicy, CalculationSettings, WorkbookProtectionOptions, WorkbookSettings,
     };
-    use crate::storage::YrsStorage;
+    use crate::storage::workbook::WorkbookMetadata;
 
     #[test]
     fn test_get_settings_defaults_on_empty() {
-        let storage = YrsStorage::new();
-        let settings = get_settings(storage.doc(), storage.workbook_map());
+        let metadata = WorkbookMetadata::default();
+        let settings = get_settings(&metadata);
         let defaults = WorkbookSettings::default();
 
         assert_eq!(settings, defaults);
@@ -76,21 +69,21 @@ mod tests {
 
     #[test]
     fn test_get_setting_individual() {
-        let storage = YrsStorage::new();
+        let mut metadata = WorkbookMetadata::default();
 
         // Set a boolean
         set_setting(
-            storage.doc(),
-            storage.workbook_map(),
+            &mut metadata,
             "showTabStrip",
             serde_json::Value::Bool(false),
-        );
+        )
+        .unwrap();
 
-        let val = get_setting(storage.doc(), storage.workbook_map(), "showTabStrip");
+        let val = get_setting(&metadata, "showTabStrip");
         assert_eq!(val, Some(serde_json::Value::Bool(false)));
 
         // Non-existent key returns None
-        let val = get_setting(storage.doc(), storage.workbook_map(), "nonExistentKey");
+        let val = get_setting(&metadata, "nonExistentKey");
         assert!(val.is_none());
     }
 
@@ -100,25 +93,25 @@ mod tests {
 
     #[test]
     fn test_enter_key_direction() {
-        let storage = YrsStorage::new();
+        let mut metadata = WorkbookMetadata::default();
 
         // Default is "down"
-        let settings = get_settings(storage.doc(), storage.workbook_map());
+        let settings = get_settings(&metadata);
         assert_eq!(
             settings.enter_key_direction,
             crate::snapshot::EnterKeyDirection::Down
         );
 
         // Set to "right" — stored as JSON string
-        let right_json = serde_json::to_string(&crate::snapshot::EnterKeyDirection::Right).unwrap();
+        let right_json = "right".to_owned();
         set_setting(
-            storage.doc(),
-            storage.workbook_map(),
+            &mut metadata,
             "enterKeyDirection",
             serde_json::Value::String(right_json),
-        );
+        )
+        .unwrap();
 
-        let settings = get_settings(storage.doc(), storage.workbook_map());
+        let settings = get_settings(&metadata);
         assert_eq!(
             settings.enter_key_direction,
             crate::snapshot::EnterKeyDirection::Right
@@ -131,23 +124,18 @@ mod tests {
 
     #[test]
     fn test_selected_sheet_ids() {
-        let storage = YrsStorage::new();
+        let mut metadata = WorkbookMetadata::default();
 
         // Default: none
-        let settings = get_settings(storage.doc(), storage.workbook_map());
+        let settings = get_settings(&metadata);
         assert!(settings.selected_sheet_ids.is_none());
 
         // Set selected sheets
         let sheet_ids = vec!["sheet1".to_string(), "sheet2".to_string()];
-        let json_str = serde_json::to_string(&sheet_ids).unwrap();
-        set_setting(
-            storage.doc(),
-            storage.workbook_map(),
-            "selectedSheetIds",
-            serde_json::Value::String(json_str),
-        );
+        let json_value = serde_json::to_value(&sheet_ids).unwrap();
+        set_setting(&mut metadata, "selectedSheetIds", json_value).unwrap();
 
-        let settings = get_settings(storage.doc(), storage.workbook_map());
+        let settings = get_settings(&metadata);
         assert_eq!(
             settings.selected_sheet_ids,
             Some(vec!["sheet1".to_string(), "sheet2".to_string()])
@@ -160,21 +148,21 @@ mod tests {
 
     #[test]
     fn test_theme_fonts_id() {
-        let storage = YrsStorage::new();
+        let mut metadata = WorkbookMetadata::default();
 
         // Default: none
-        let settings = get_settings(storage.doc(), storage.workbook_map());
+        let settings = get_settings(&metadata);
         assert!(settings.theme_fonts_id.is_none());
 
         // Set theme fonts
         set_setting(
-            storage.doc(),
-            storage.workbook_map(),
+            &mut metadata,
             "themeFontsId",
             serde_json::Value::String("arial".to_string()),
-        );
+        )
+        .unwrap();
 
-        let settings = get_settings(storage.doc(), storage.workbook_map());
+        let settings = get_settings(&metadata);
         assert_eq!(settings.theme_fonts_id, Some("arial".to_string()));
     }
 
@@ -240,3 +228,5 @@ mod tests {
     // -------------------------------------------------------------------
     // Test 20: CalculationSettings serde roundtrip
 }
+
+pub(crate) use styles::unique_style_name;

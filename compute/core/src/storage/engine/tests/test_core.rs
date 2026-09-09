@@ -3,7 +3,7 @@
 use super::super::*;
 use super::helpers::*;
 use crate::engine_types::PivotCreateWithSheetOptions;
-use crate::snapshot::{ChangeKind, SheetChangeField};
+use crate::snapshot::SheetChangeField;
 use cell_types::SheetId;
 use formula_types::StructureChange;
 use serde_json::json;
@@ -16,7 +16,7 @@ use value_types::{CellValue, FiniteF64};
 #[test]
 fn test_from_snapshot_cells_accessible() {
     let snap = simple_snapshot();
-    let (engine, recalc) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (engine, recalc) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // A1 = 10
     let a1 = engine.mirror().get_cell_value(&cell_id_a1());
@@ -55,7 +55,7 @@ fn test_from_snapshot_cells_accessible() {
 #[test]
 fn test_set_cell_triggers_recalc() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // Verify initial state: A2 = A1+B1 = 10+20 = 30
     assert_eq!(
@@ -86,7 +86,7 @@ fn test_set_cell_triggers_recalc() {
         "recalc should report changes"
     );
 
-    // YrsStorage should also reflect the change
+    // WorkbookStorage should also reflect the change
     assert_eq!(
         *engine.mirror().get_cell_value(&cell_id_a1()).unwrap(),
         CellValue::Number(FiniteF64::must(50.0))
@@ -100,7 +100,7 @@ fn test_set_cell_triggers_recalc() {
 #[test]
 fn test_structure_change_insert_rows() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
 
@@ -130,7 +130,7 @@ fn test_structure_change_insert_rows() {
 #[test]
 fn test_structure_change_insert_rows_auto_grows_sparse_axis() {
     let snap = empty_bulk_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
 
@@ -157,7 +157,7 @@ fn test_structure_change_insert_rows_auto_grows_sparse_axis() {
 #[test]
 fn test_structure_change_insert_cols_auto_grows_sparse_axis() {
     let snap = empty_bulk_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
 
@@ -188,17 +188,17 @@ fn test_structure_change_insert_cols_auto_grows_sparse_axis() {
 #[test]
 fn test_engine_debug_format() {
     let snap = simple_snapshot();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let debug = format!("{:?}", engine);
-    assert!(debug.contains("YrsComputeEngine"));
+    assert!(debug.contains("ComputeEngine"));
     assert!(debug.contains("storage"));
 }
 
 #[test]
 fn pivot_source_sheet_id_survives_sheet_rename() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
     let sid_str = sid.to_uuid_string();
 
@@ -234,7 +234,7 @@ fn pivot_source_sheet_id_survives_sheet_rename() {
 #[test]
 fn pivot_legacy_source_sheet_name_resolves_to_source_sheet_id_on_read() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     let config = json!({
@@ -267,7 +267,7 @@ fn pivot_legacy_source_sheet_name_resolves_to_source_sheet_id_on_read() {
 #[test]
 fn pivot_create_treats_null_optional_sheet_ids_as_absent() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
     let sid_str = sid.to_uuid_string();
 
@@ -299,7 +299,7 @@ fn pivot_create_treats_null_optional_sheet_ids_as_absent() {
 #[test]
 fn pivot_update_persists_detected_fields_for_sparse_placement_config() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -434,7 +434,7 @@ fn pivot_update_persists_detected_fields_for_sparse_placement_config() {
 #[test]
 fn pivot_create_with_sheet_can_insert_before_source_sheet() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let (source_hex, _) = engine.create_sheet("Data").expect("create source sheet");
     let source_id = SheetId::from_uuid_str(&source_hex).expect("source sheet id");
     let source_uuid = source_id.to_uuid_string();
@@ -487,7 +487,7 @@ fn pivot_create_with_sheet_can_insert_before_source_sheet() {
 #[test]
 fn pivot_create_rejects_source_sheet_id_name_conflict() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let config = json!({
         "id": "caller-id",
@@ -511,51 +511,6 @@ fn pivot_create_rejects_source_sheet_id_name_conflict() {
     );
 }
 
-#[test]
-fn pivot_create_undo_redo_emits_semantic_pivot_changes() {
-    let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
-
-    let config = json!({
-        "id": "caller-id",
-        "name": "UndoPivot",
-        "sourceSheetName": "Sheet1",
-        "sourceRange": { "startRow": 0, "startCol": 0, "endRow": 1, "endCol": 1 },
-        "outputSheetName": "Sheet1",
-        "outputLocation": { "row": 5, "col": 0 },
-        "fields": [],
-        "placements": [],
-        "filters": []
-    });
-
-    let (_patches, created_result) = engine.pivot_create(config).expect("pivot create");
-    let created: compute_pivot::PivotTableConfig = created_result
-        .extract_data()
-        .expect("created pivot config in data");
-
-    let (_patches, undo_result) = engine.undo().expect("undo pivot create");
-    assert!(
-        undo_result.pivot_changes.iter().any(|change| {
-            change.sheet_id == sheet_id().to_uuid_string()
-                && change.pivot_id == created.id
-                && change.kind == ChangeKind::Removed
-        }),
-        "undo of pivot create must emit semantic Removed, got {:?}",
-        undo_result.pivot_changes
-    );
-
-    let (_patches, redo_result) = engine.redo().expect("redo pivot create");
-    assert!(
-        redo_result.pivot_changes.iter().any(|change| {
-            change.sheet_id == sheet_id().to_uuid_string()
-                && change.pivot_id == created.id
-                && change.kind == ChangeKind::Set
-        }),
-        "redo of pivot create must emit semantic Set, got {:?}",
-        redo_result.pivot_changes
-    );
-}
-
 // -------------------------------------------------------------------
 // Test 8: set_cell with formula
 // -------------------------------------------------------------------
@@ -563,7 +518,7 @@ fn pivot_create_undo_redo_emits_semantic_pivot_changes() {
 #[test]
 fn test_set_cell_with_formula() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // Change A2 formula from =A1+B1 to =A1*B1
     let result = engine
@@ -595,7 +550,7 @@ fn test_set_cell_with_formula() {
 #[test]
 fn test_accessors() {
     let snap = simple_snapshot();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // storage() returns a reference
     let _ = engine.storage().sheet_order();
@@ -609,10 +564,4 @@ fn test_accessors() {
 
     // compute() returns a reference
     let _ = engine.mirror();
-
-    // undo_manager() returns a reference
-    assert!(!engine.undo_manager().can_undo());
-
-    // observer() returns a reference
-    assert!(!engine.observer().has_changes());
 }

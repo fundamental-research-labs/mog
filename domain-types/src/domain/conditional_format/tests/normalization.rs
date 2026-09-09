@@ -251,7 +251,7 @@ fn canonicalize_typed_defaults_materializes_false_flags() {
         sheet_id: "s1".into(),
         pivot: None,
         ranges: vec![],
-        range_identities: None,
+
         rules: vec![
             CFRule::Top10 {
                 id: "r1".into(),

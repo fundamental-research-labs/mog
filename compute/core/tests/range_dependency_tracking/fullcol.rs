@@ -1,7 +1,7 @@
 use crate::helpers::*;
 use crate::matrix::{AggregatorShape, Extent};
 use crate::summary::Summary;
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use snapshot_types::{CellData, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
 
@@ -78,7 +78,7 @@ pub(crate) fn fullcol_workbook(shape: AggregatorShape, extent: Extent) -> Workbo
 /// inverse back, assert dependent returns to pre-op value.
 pub(crate) fn run_fullcol_case(shape: AggregatorShape, extent: Extent) -> Result<(), String> {
     let snapshot = fullcol_workbook(shape, extent);
-    let (mut engine, _init) = YrsComputeEngine::from_snapshot(snapshot)
+    let (mut engine, _init) = ComputeEngine::from_snapshot(snapshot)
         .map_err(|e| format!("from_snapshot err: {:?}", e))?;
 
     let source = sheet_id(0);

@@ -2,7 +2,7 @@
 //!
 //! Canonical shared types for row/column grouping. These are the single source
 //! of truth — imported by both the XLSX I/O layer and the compute-core runtime.
-//! Pure data contracts — no Yrs, no storage internals.
+//! Pure data contracts without storage internals.
 
 use serde::{Deserialize, Serialize};
 
@@ -97,8 +97,7 @@ impl SubtotalFunction {
 /// A row or column group definition (runtime model).
 /// Groups can be nested up to 8 levels deep (matching Excel).
 ///
-/// In the Rust port we use position-based `start`/`end` directly.
-/// The TS RowId/ColId identity model is a CRDT layer concern handled by Yjs.
+/// Groups use position-based `start`/`end` bounds directly.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GroupDefinition {
@@ -129,7 +128,7 @@ pub struct GroupDefinition {
 
 // ── Per-sheet config ───────────────────────────────────────────────
 
-/// Per-sheet grouping configuration (source of truth in Y.Map).
+/// Per-sheet grouping configuration stored in native sheet metadata.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SheetGroupingConfig {

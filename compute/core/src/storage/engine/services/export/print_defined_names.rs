@@ -14,28 +14,26 @@ pub(super) fn export_print_defined_names(
 ) -> Vec<NamedRange> {
     let mut named_ranges = Vec::new();
     for (sheet_index, sheet_id) in sheet_ids.iter().enumerate() {
-        let sheet_name = sheet_properties::get_sheet_name(
-            stores.storage.doc(),
-            stores.storage.sheets(),
-            sheet_id,
-        )
-        .unwrap_or_else(|| format!("Sheet{}", sheet_index + 1));
+        let sheet_name = sheet_properties::get_sheet_name(&stores.storage, sheet_id)
+            .unwrap_or_else(|| format!("Sheet{}", sheet_index + 1));
         let qualified_sheet_name = quote_sheet_name_for_defined_name(&sheet_name);
         let local_sheet_id = Some(sheet_index as u32);
 
-        if let Some(area) =
-            print::get_print_area(stores.storage.doc(), stores.storage.sheets(), sheet_id)
-        {
+        let areas = print::get_print_areas(&stores.storage, sheet_id);
+        if !areas.is_empty() {
             named_ranges.push(NamedRange {
                 name: PRINT_AREA_DEFINED_NAME.to_string(),
-                refers_to: format!("{}!{}", qualified_sheet_name, format_print_area_ref(&area)),
+                refers_to: areas
+                    .iter()
+                    .map(|area| format!("{}!{}", qualified_sheet_name, format_print_area_ref(area)))
+                    .collect::<Vec<_>>()
+                    .join(","),
                 local_sheet_id,
                 ..Default::default()
             });
         }
 
-        let titles =
-            print::get_print_titles(stores.storage.doc(), stores.storage.sheets(), sheet_id);
+        let titles = print::get_print_titles(&stores.storage, sheet_id);
         if let Some(refers_to) = format_print_titles_ref(&qualified_sheet_name, &titles) {
             named_ranges.push(NamedRange {
                 name: PRINT_TITLES_DEFINED_NAME.to_string(),

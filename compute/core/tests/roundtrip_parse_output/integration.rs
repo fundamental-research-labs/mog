@@ -189,7 +189,7 @@ fn roundtrip_all_new_domains_combined() {
         sheet_id: String::new(),
         pivot: None,
         ranges: vec![CFCellRange::new(1, 1, 2, 1)], // B2:B3
-        range_identities: None,
+
         rules: vec![CFRule::CellValue {
             id: "test-rule-all".to_string(),
             operator: CfOperator::GreaterThan,

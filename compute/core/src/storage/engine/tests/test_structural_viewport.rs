@@ -23,7 +23,7 @@ fn patch_positions_from_packed(packed: &[u8]) -> Vec<(u32, u32)> {
 #[test]
 fn test_structural_viewport_insert_col_formula_cell_visible() {
     let snap = simple_snapshot(); // A1=10, B1=20, A2=A1+B1
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // Register a viewport covering the relevant area
@@ -66,7 +66,7 @@ fn test_structural_viewport_insert_col_formula_cell_visible() {
 #[test]
 fn test_structural_viewport_insert_rows() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     let _ = engine.register_viewport("main", &sid, 0, 0, 3, 2);
@@ -101,7 +101,7 @@ fn test_structural_viewport_insert_rows() {
 #[test]
 fn test_structural_viewport_delete_cols() {
     let snap = simple_snapshot(); // A1=10, B1=20, A2=A1+B1
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     let _ = engine.register_viewport("main", &sid, 0, 0, 3, 3);
@@ -142,7 +142,7 @@ fn test_structural_viewport_delete_cols() {
 #[test]
 fn test_structural_viewport_delete_rows() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     let _ = engine.register_viewport("main", &sid, 0, 0, 3, 2);
@@ -178,7 +178,7 @@ fn test_structural_viewport_delete_rows() {
 #[test]
 fn test_structural_change_without_viewport_no_crash() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // No viewport registered -- structural change should still work
@@ -197,7 +197,7 @@ fn test_structural_change_without_viewport_no_crash() {
 #[test]
 fn structural_formula_text_preserves_explicit_same_sheet_qualifier() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -244,7 +244,7 @@ fn structural_formula_text_preserves_explicit_same_sheet_qualifier() {
 #[test]
 fn delete_column_invalidates_shifted_direct_cell_reference() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -284,7 +284,7 @@ fn delete_column_invalidates_shifted_direct_cell_reference() {
 #[test]
 fn delete_row_invalidates_shifted_direct_cell_reference() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -327,7 +327,7 @@ fn delete_row_invalidates_shifted_direct_cell_reference() {
 #[test]
 fn delete_column_invalidates_shifted_absolute_direct_ref_text() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -374,7 +374,7 @@ fn delete_column_invalidates_shifted_absolute_direct_ref_text() {
 #[test]
 fn delete_row_invalidates_shifted_absolute_direct_ref_text() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -421,7 +421,7 @@ fn delete_row_invalidates_shifted_absolute_direct_ref_text() {
 #[test]
 fn relocate_precedent_regenerates_dependent_formula_text() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -430,7 +430,7 @@ fn relocate_precedent_regenerates_dependent_formula_text() {
     assert_eq!(engine.get_formula(&cell_id_b1()).as_deref(), Some("=A1*2"));
 
     engine
-        .relocate_cells_yrs(&sid, 0, 0, 0, 0, &sid, 0, 2)
+        .relocate_cells(&sid, 0, 0, 0, 0, &sid, 0, 2)
         .expect("relocate A1 to C1");
 
     assert_eq!(engine.get_formula(&cell_id_b1()).as_deref(), Some("=C1*2"));
@@ -459,28 +459,4 @@ fn relocate_precedent_regenerates_dependent_formula_text() {
         .expect("C1 moved value");
     assert_eq!(c1.value, CellValue::Number(FiniteF64::must(10.0)));
     assert!(c1.formula.is_none());
-
-    engine.undo().expect("undo relocate");
-    assert_eq!(engine.get_formula(&cell_id_b1()).as_deref(), Some("=A1*2"));
-
-    let undo_row = engine.query_range(&sid, 0, 0, 0, 2);
-    let undo_b1 = undo_row
-        .cells
-        .iter()
-        .find(|cell| cell.row == 0 && cell.col == 1)
-        .expect("B1 formula cell after undo");
-    assert_eq!(undo_b1.value, CellValue::Number(FiniteF64::must(20.0)));
-    assert_eq!(undo_b1.formula.as_deref(), Some("=A1*2"));
-
-    engine.redo().expect("redo relocate");
-    assert_eq!(engine.get_formula(&cell_id_b1()).as_deref(), Some("=C1*2"));
-
-    let redo_row = engine.query_range(&sid, 0, 0, 0, 2);
-    let redo_b1 = redo_row
-        .cells
-        .iter()
-        .find(|cell| cell.row == 0 && cell.col == 1)
-        .expect("B1 formula cell after redo");
-    assert_eq!(redo_b1.value, CellValue::Number(FiniteF64::must(20.0)));
-    assert_eq!(redo_b1.formula.as_deref(), Some("=C1*2"));
 }

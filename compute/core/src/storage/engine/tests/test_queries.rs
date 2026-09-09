@@ -13,7 +13,7 @@ use value_types::{CellValue, FiniteF64};
 #[test]
 fn test_get_active_cell() {
     let snap = simple_snapshot();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // A1 is a plain value cell
     let a1_data = engine.get_active_cell(&sheet_id(), &cell_id_a1());
@@ -42,7 +42,7 @@ fn test_get_active_cell() {
 #[test]
 fn test_get_active_cell_nonexistent() {
     let snap = simple_snapshot();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let fake_cell = CellId::from_raw(999999);
     let data = engine.get_active_cell(&sheet_id(), &fake_cell);
@@ -57,7 +57,7 @@ fn test_get_active_cell_nonexistent() {
 #[test]
 fn test_query_range() {
     let snap = simple_snapshot();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let range = engine.query_range(&sheet_id(), 0, 0, 0, 1);
     // Should have A1 and B1
@@ -78,7 +78,7 @@ fn test_query_range() {
 #[test]
 fn test_get_selection_aggregates() {
     let snap = simple_snapshot();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // Select A1(10) and B1(20)
     let agg = engine.get_selection_aggregates(&sheet_id(), &[(0, 0, 0, 1)]);
@@ -97,7 +97,7 @@ fn test_get_selection_aggregates() {
 #[test]
 fn test_get_selection_aggregates_multiple_ranges() {
     let snap = simple_snapshot();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // Select A1(10) and A2(30, formula result)
     let agg = engine.get_selection_aggregates(&sheet_id(), &[(0, 0, 0, 0), (1, 0, 1, 0)]);
@@ -116,7 +116,7 @@ fn test_get_selection_aggregates_multiple_ranges() {
 #[test]
 fn test_get_selection_aggregates_empty() {
     let snap = simple_snapshot();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let agg = engine.get_selection_aggregates(&sheet_id(), &[(50, 50, 55, 55)]);
     assert_eq!(agg.count, 0);
@@ -133,6 +133,9 @@ fn evaluate_expression_resolves_references_in_the_requested_sheet_context() {
     let mut snapshot = simple_snapshot();
     let second_sheet_id = SheetId::from_uuid_str("550e8400-e29b-41d4-a716-446655440099").unwrap();
     snapshot.sheets.push(SheetSnapshot {
+        identities: Vec::new(),
+        row_axis: None,
+        col_axis: None,
         id: second_sheet_id.to_uuid_string(),
         name: "Inputs".to_string(),
         rows: 100,
@@ -159,7 +162,7 @@ fn evaluate_expression_resolves_references_in_the_requested_sheet_context() {
         ],
         ranges: vec![],
     });
-    let (engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
 
     assert_eq!(
         engine.evaluate_expression(&sheet_id(), "A1+B1").unwrap(),
@@ -205,7 +208,7 @@ fn evaluate_expression_resolves_references_in_the_requested_sheet_context() {
 #[test]
 fn test_query_range_returns_formula_text() {
     let snap = simple_snapshot();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // A2 has formula =A1+B1
     let range = engine.query_range(&sheet_id(), 1, 0, 1, 0);
@@ -225,7 +228,13 @@ fn test_query_range_returns_formula_text() {
 fn test_query_range_returns_cse_formula_text_for_members() {
     let sheet_id = sheet_id();
     let snapshot = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_id.to_uuid_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -242,7 +251,7 @@ fn test_query_range_returns_cse_formula_text_for_members() {
         max_change: FiniteF64::must(0.001),
         calculation_settings: None,
     };
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
 
     engine
         .set_array_formula(&sheet_id, 0, 3, 2, 3, "=SEQUENCE(3,1)".to_string())
@@ -264,7 +273,7 @@ fn test_query_range_returns_cse_formula_text_for_members() {
 #[test]
 fn test_query_range_no_formula_for_literals() {
     let snap = simple_snapshot();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let range = engine.query_range(&sheet_id(), 0, 0, 0, 0);
     assert_eq!(range.cells.len(), 1);
@@ -275,7 +284,7 @@ fn test_query_range_no_formula_for_literals() {
 #[test]
 fn test_query_range_skips_empty_cells() {
     let snap = simple_snapshot();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     // Query a 3x3 region -- only 3 cells have data (A1, B1, A2)
     let range = engine.query_range(&sheet_id(), 0, 0, 2, 2);
@@ -293,7 +302,13 @@ fn test_find_data_edge_uses_materialized_range_values() {
     }
 
     let snapshot = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_id.to_uuid_string(),
             name: "Sheet1".to_string(),
             rows: 1,
@@ -333,7 +348,7 @@ fn test_find_data_edge_uses_materialized_range_values() {
         max_change: FiniteF64::must(0.001),
         calculation_settings: None,
     };
-    let (engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
 
     let target_left = engine.find_data_edge(&sheet_id, 0, 9, "left");
     assert_eq!((target_left.row, target_left.col), (0, 6));
@@ -363,7 +378,13 @@ fn test_current_region_uses_materialized_range_values() {
     }
 
     let snapshot = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_id.to_uuid_string(),
             name: "Sheet1".to_string(),
             rows: ROWS as u32,
@@ -395,7 +416,7 @@ fn test_current_region_uses_materialized_range_values() {
         max_change: FiniteF64::must(0.001),
         calculation_settings: None,
     };
-    let (engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
 
     let region = engine.get_current_region(&sheet_id, 0, 0);
     assert_eq!(region.start_row, 0);
@@ -416,7 +437,7 @@ fn test_current_region_uses_materialized_range_values() {
 #[test]
 fn test_query_range_includes_formatted() {
     let snap = simple_snapshot();
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
 
     let range = engine.query_range(&sheet_id(), 0, 0, 0, 0);
     assert_eq!(range.cells.len(), 1);
@@ -429,7 +450,7 @@ fn test_query_range_includes_formatted() {
 #[test]
 fn batch_column_width_setters_update_queries_and_dimension_changes() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     let (_, pixel_result) = engine

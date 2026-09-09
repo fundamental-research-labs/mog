@@ -1,5 +1,5 @@
 use crate::snapshot::{CalculationSettings, ChangeKind};
-use crate::storage::engine::YrsComputeEngine;
+use crate::storage::engine::ComputeEngine;
 use crate::storage::engine::mutation::CellInput;
 use cell_types::{SheetId, SheetPos};
 use snapshot_types::{RecalcOptions, SheetSnapshot, WorkbookSnapshot};
@@ -7,9 +7,12 @@ use value_types::{CellError, CellValue};
 
 const SHEET_UUID: &str = "550e8400-e29b-41d4-a716-446655440000";
 
-fn build_engine() -> YrsComputeEngine {
+fn build_engine() -> ComputeEngine {
     let snap = WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET_UUID.to_string(),
             name: "Sheet1".to_string(),
             rows: 10,
@@ -19,7 +22,7 @@ fn build_engine() -> YrsComputeEngine {
         }],
         ..Default::default()
     };
-    let (engine, _) = YrsComputeEngine::from_snapshot(snap).expect("from_snapshot");
+    let (engine, _) = ComputeEngine::from_snapshot(snap).expect("from_snapshot");
     engine
 }
 
@@ -33,7 +36,7 @@ fn parse_input(text: &str) -> CellInput {
     }
 }
 
-fn number_at(engine: &YrsComputeEngine, row: u32, col: u32) -> f64 {
+fn number_at(engine: &ComputeEngine, row: u32, col: u32) -> f64 {
     match engine
         .mirror()
         .get_cell_value_at(&sheet_id(), SheetPos::new(row, col))
@@ -43,7 +46,7 @@ fn number_at(engine: &YrsComputeEngine, row: u32, col: u32) -> f64 {
     }
 }
 
-fn assert_circular_error_at(engine: &YrsComputeEngine, row: u32, col: u32) {
+fn assert_circular_error_at(engine: &ComputeEngine, row: u32, col: u32) {
     match engine
         .mirror()
         .get_cell_value_at(&sheet_id(), SheetPos::new(row, col))
@@ -282,82 +285,4 @@ fn set_calculation_settings_marks_dirty_for_existing_circular_recalc() {
     );
     assert_close(number_at(&engine, 0, 0), 2.0, 0.01, "A1");
     assert_close(number_at(&engine, 0, 1), 1.0, 0.01, "B1");
-}
-
-#[test]
-fn from_yrs_state_hydrates_runtime_calculation_settings() {
-    let mut engine_a = build_engine();
-    let mut settings = engine_a.get_workbook_settings();
-    settings.calculation_settings = Some(CalculationSettings {
-        enable_iterative_calculation: true,
-        max_iterations: 100,
-        ..CalculationSettings::default()
-    });
-    engine_a
-        .set_workbook_settings(settings)
-        .expect("set workbook settings");
-
-    let state = compute_collab::encode_full_state(engine_a.storage().doc());
-    let (mut engine_b, _) = YrsComputeEngine::from_yrs_state(&state).expect("from_yrs_state");
-    let sid = sheet_id();
-    let (_patches, result) = engine_b
-        .batch_set_cells_by_position(
-            vec![
-                (sid, 0, 0, parse_input("=B1+1")),
-                (sid, 0, 1, parse_input("=A1*0.5")),
-            ],
-            true,
-        )
-        .expect("batch set circular formulas");
-
-    assert!(
-        result.recalc.metrics.iterative_iterations > 1,
-        "from_yrs_state must hydrate iterative runtime settings; metrics = {:?}",
-        result.recalc.metrics
-    );
-    assert_close(number_at(&engine_b, 0, 0), 2.0, 0.01, "A1");
-    assert_close(number_at(&engine_b, 0, 1), 1.0, 0.01, "B1");
-}
-
-#[test]
-fn apply_sync_update_syncs_remote_runtime_calculation_settings_before_cell_recalc() {
-    let mut engine_a = build_engine();
-    let full_state = compute_collab::encode_full_state(engine_a.storage().doc());
-    let (mut engine_b, _) = YrsComputeEngine::from_yrs_state(&full_state).expect("from_yrs_state");
-    let engine_b_state_vector = engine_b.encode_state_vector();
-
-    let mut settings = engine_a.get_workbook_settings();
-    settings.calculation_settings = Some(CalculationSettings {
-        enable_iterative_calculation: true,
-        max_iterations: 100,
-        ..CalculationSettings::default()
-    });
-    engine_a
-        .set_workbook_settings(settings)
-        .expect("set workbook settings");
-    let sid = sheet_id();
-    engine_a
-        .batch_set_cells_by_position(
-            vec![
-                (sid, 0, 0, parse_input("=B1+1")),
-                (sid, 0, 1, parse_input("=A1*0.5")),
-            ],
-            true,
-        )
-        .expect("batch set circular formulas");
-
-    let delta = engine_a
-        .encode_diff(&engine_b_state_vector)
-        .expect("encode A to B diff");
-    let (_patches, result) = engine_b
-        .apply_sync_update_legacy(&delta)
-        .expect("apply A to B diff");
-
-    assert!(
-        result.recalc.metrics.iterative_iterations > 1,
-        "remote settings must sync before remote formulas recalc; metrics = {:?}",
-        result.recalc.metrics
-    );
-    assert_close(number_at(&engine_b, 0, 0), 2.0, 0.01, "A1");
-    assert_close(number_at(&engine_b, 0, 1), 1.0, 0.01, "B1");
 }

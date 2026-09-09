@@ -9,13 +9,16 @@
 //!
 //! This is a unit-level test — no export round-trip needed.
 
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
 
 fn one_sheet_snapshot(name: &str, rows: u32, cols: u32, cells: Vec<CellData>) -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             name: name.to_string(),
             rows,
@@ -52,7 +55,7 @@ fn formula_cell(uuid_suffix: u32, row: u32, col: u32, formula: &str, cached: f64
 }
 
 fn xlsx_bytes_for(snapshot: WorkbookSnapshot) -> Vec<u8> {
-    let (engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (engine, _) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
     engine.export_to_xlsx_bytes().expect("export_to_xlsx_bytes")
 }
 
@@ -70,7 +73,7 @@ fn xlsx_hydrated_formula_cell_raw_value_returns_formula_text() {
         ],
     ));
 
-    let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
+    let (engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
     let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
 
     let raw = engine.get_raw_value(&sid, 0, 2);
@@ -91,7 +94,7 @@ fn xlsx_hydrated_value_cell_raw_value_returns_value_string() {
         vec![value_cell(1, 0, 0, 42.0)],
     ));
 
-    let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
+    let (engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
     let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
 
     let raw = engine.get_raw_value(&sid, 0, 0);

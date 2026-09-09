@@ -5,7 +5,7 @@
 use cell_types::SheetId;
 
 use crate::mirror::CellMirror;
-use crate::storage::YrsStorage;
+use crate::storage::WorkbookStorage;
 
 /// Build a `SheetId` from a small numeric seed (tests only).
 pub(crate) fn make_sheet_id(n: u128) -> SheetId {
@@ -13,8 +13,8 @@ pub(crate) fn make_sheet_id(n: u128) -> SheetId {
 }
 
 /// Create a storage with one sheet named "Sheet1" ready for testing.
-pub(crate) fn setup() -> (YrsStorage, CellMirror, SheetId) {
-    let mut storage = YrsStorage::new();
+pub(crate) fn setup() -> (WorkbookStorage, CellMirror, SheetId) {
+    let mut storage = WorkbookStorage::new();
     let mut mirror = CellMirror::new();
     let sid = make_sheet_id(1);
     storage

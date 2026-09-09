@@ -20,8 +20,7 @@ pub(super) fn get_unique_column_values(
         };
     let sid = *sheet_id;
     filters::get_unique_values(
-        stores.storage.doc(),
-        stores.storage.sheets(),
+        &stores.storage,
         sheet_id,
         filter_id,
         &header_cell_id,
@@ -45,8 +44,7 @@ pub(super) fn get_filtered_record_count(
 ) -> Option<filters::FilterRecordCount> {
     let sid = *sheet_id;
     filters::get_filtered_record_count(
-        stores.storage.doc(),
-        stores.storage.sheets(),
+        &stores.storage,
         sheet_id,
         filter_id,
         |row, col| {

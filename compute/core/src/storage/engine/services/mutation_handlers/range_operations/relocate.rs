@@ -5,10 +5,8 @@ use value_types::{CellValue, ComputeError};
 use crate::mirror::CellMirror;
 use crate::snapshot::{CellChange, CellPosition, RecalcResult};
 use crate::snapshot::{ChangeKind, PivotTableChange, TableChange};
-use crate::storage::engine::mutation_coordinator::MutationCoordinator;
 use crate::storage::engine::services::metadata_shift;
 use crate::storage::engine::stores::EngineStores;
-use yrs::{Origin, Transact};
 
 use super::patches::{merge_recalc_results, synthetic_null_change};
 
@@ -16,12 +14,11 @@ use super::patches::{merge_recalc_results, synthetic_null_change};
 // mutation_relocate_cells
 // ---------------------------------------------------------------------------
 
-/// Relocate cells from source range to target position with full 5-store sync.
+/// Relocate cells from source range to target position while updating native identities and metadata.
 #[allow(clippy::too_many_arguments)]
 pub(in crate::storage::engine) fn mutation_relocate_cells(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
-    mutation: &mut MutationCoordinator,
     source_sheet_id: &SheetId,
     src_start_row: u32,
     src_start_col: u32,
@@ -61,6 +58,18 @@ pub(in crate::storage::engine) fn mutation_relocate_cells(
         src_end_col,
     );
 
+    crate::storage::engine::history::relocate::capture_relocation(
+        stores,
+        mirror,
+        *source_sheet_id,
+        src_start_row,
+        src_start_col,
+        src_end_row,
+        src_end_col,
+        *target_sheet_id,
+        target_row,
+        target_col,
+    );
     let result = if source_sheet_id == target_sheet_id {
         let grid = stores
             .grid_indexes
@@ -68,10 +77,8 @@ pub(in crate::storage::engine) fn mutation_relocate_cells(
             .ok_or_else(|| ComputeError::SheetNotFound {
                 sheet_id: id_to_hex(source_sheet_id.as_u128()).to_string(),
             })?;
-        mutation.observer.set_suppressed(true);
         let result = cell_iter::relocate_cells(
-            stores.storage.doc(),
-            stores.storage.sheets(),
+            &mut stores.storage,
             *source_sheet_id,
             &source_range,
             *target_sheet_id,
@@ -80,7 +87,6 @@ pub(in crate::storage::engine) fn mutation_relocate_cells(
             grid,
             None,
         );
-        mutation.observer.set_suppressed(false);
         result
     } else {
         // Cross-sheet: need mutable borrows of two different grids. `get_many_mut`
@@ -108,10 +114,8 @@ pub(in crate::storage::engine) fn mutation_relocate_cells(
                 }
             }
         };
-        mutation.observer.set_suppressed(true);
         let result = cell_iter::relocate_cells(
-            stores.storage.doc(),
-            stores.storage.sheets(),
+            &mut stores.storage,
             *source_sheet_id,
             &source_range,
             *target_sheet_id,
@@ -120,7 +124,6 @@ pub(in crate::storage::engine) fn mutation_relocate_cells(
             src_grid,
             Some(tgt_grid),
         );
-        mutation.observer.set_suppressed(false);
         result
     };
 
@@ -150,7 +153,7 @@ pub(in crate::storage::engine) fn mutation_relocate_cells(
 
     // Relocate any pivot whose entire output sits inside the moved range. This
     // shifts the authoritative anchor; the returned changes signal the caller
-    // (apply_relocate_cells_yrs) to re-materialize and rebuild the sheet
+    // (apply_relocate_cells) to re-materialize and rebuild the sheet
     // viewport so the old rendered region is cleared and the new one drawn.
     let source_sheet_hex = source_sheet_id.to_uuid_string();
     let pivot_changes: Vec<PivotTableChange> = metadata_shift::relocate_pivot_ranges(
@@ -173,6 +176,10 @@ pub(in crate::storage::engine) fn mutation_relocate_cells(
     })
     .collect();
 
+    if let Some(grid) = stores.grid_indexes.get(target_sheet_id) {
+        mirror.install_sheet_axes(*target_sheet_id, grid.row_axis(), grid.col_axis());
+    }
+
     // 2. Sync mirror and compute for all affected cells. The GridIndex is
     //    already in its final state post-relocation, so we can look up
     //    target positions straight from it.
@@ -182,25 +189,26 @@ pub(in crate::storage::engine) fn mutation_relocate_cells(
     let mut clear_ids: Vec<CellId> = Vec::new();
 
     for &cell_id in &result.target_cells_cleared {
+        stores.storage.clear_cell_metadata(cell_id);
         clear_ids.push(cell_id);
     }
 
     for &cell_id in &result.moved_cell_ids {
         if let Some(grid) = stores.grid_indexes.get(target_sheet_id)
             && let Some((new_row, new_col)) = grid.cell_position(&cell_id)
-            && let Some((value, _formula, identity_formula)) =
-                stores.storage.read_cell_from_yrs(target_sheet_id, &cell_id)
         {
-            let identity_formula =
-                identity_formula.or_else(|| mirror.get_formula(&cell_id).cloned());
-            mirror.apply_edit(
-                target_sheet_id,
-                cell_id,
-                SheetPos::new(new_row, new_col),
-                value.clone(),
-                identity_formula,
-            );
-            moved_validation_edits.push((*target_sheet_id, cell_id, new_row, new_col, value, None));
+            let value = mirror.get_cell_value_raw(&cell_id).cloned();
+            mirror.move_cell(&cell_id, target_sheet_id, SheetPos::new(new_row, new_col));
+            if let Some(value) = value {
+                moved_validation_edits.push((
+                    *target_sheet_id,
+                    cell_id,
+                    new_row,
+                    new_col,
+                    value,
+                    None,
+                ));
+            }
             moved_cell_ids.push(cell_id);
         }
     }
@@ -332,6 +340,12 @@ pub(in crate::storage::engine) fn mutation_relocate_cells(
         error: result.error,
     };
 
+    crate::storage::sheet::comments::relocate_anchors(
+        &mut stores.storage,
+        mirror,
+        source_sheet_id,
+        target_sheet_id,
+    );
     Ok((recalc, relocate_result, table_changes, pivot_changes))
 }
 
@@ -415,7 +429,6 @@ fn relocate_whole_tables(
         .collect();
 
     let mut changes = Vec::with_capacity(tables_to_move.len());
-    let mut moved_tables = Vec::with_capacity(tables_to_move.len());
     for mut table in tables_to_move {
         let row_offset = table.range.start_row().saturating_sub(src_start_row);
         let col_offset = table.range.start_col().saturating_sub(src_start_col);
@@ -438,24 +451,12 @@ fn relocate_whole_tables(
             target_start_col + table_col_span,
         );
         stores.compute.set_table(mirror, table.clone());
-        moved_tables.push(table.clone());
         changes.push(TableChange {
             name: table.name,
             table_id: Some(table.id),
             sheet_id: target_sheet_hex.clone(),
             kind: ChangeKind::Set,
         });
-    }
-
-    if !moved_tables.is_empty() {
-        let workbook = stores.storage.workbook_map().clone();
-        let mut txn = stores
-            .storage
-            .doc()
-            .transact_mut_with(Origin::from(compute_document::undo::ORIGIN_USER_EDIT));
-        for table in &moved_tables {
-            super::super::super::tables::persist_table_to_yrs_in_txn(&workbook, &mut txn, table);
-        }
     }
 
     changes

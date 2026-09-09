@@ -10,7 +10,7 @@ use cell_types::SheetPos;
 // CellId Range Types
 // ============================================================================
 
-/// A range defined by two corner CellIds (CRDT-safe table positioning).
+/// A range defined by two corner CellIds (stable table positioning).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CellIdRange {
     /// CellId of the top-left corner cell.
@@ -24,7 +24,7 @@ pub struct CellIdRange {
 pub struct TableRangeWithIdentity {
     /// Static position-based range (legacy, always present).
     pub range: TableRange,
-    /// CellId-based range for CRDT-safe positioning (present after migration).
+    /// Optional CellId-based range for stable positioning across structural edits.
     pub range_identity: Option<CellIdRange>,
 }
 

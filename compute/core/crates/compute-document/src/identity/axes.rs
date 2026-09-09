@@ -3,6 +3,27 @@ use cell_types::{AxisIdentityStore, ColId, RowId};
 use super::GridIndex;
 
 impl GridIndex {
+    /// Restore shared native axes when cell positions are restored separately.
+    /// The allocator remains shared and monotonic; it is never replaced or rewound.
+    pub fn restore_shared_axes(
+        &mut self,
+        rows: std::sync::Arc<super::AxisIndex<RowId>>,
+        cols: std::sync::Arc<super::AxisIndex<ColId>>,
+    ) {
+        self.row_axis = rows;
+        self.col_axis = cols;
+    }
+
+    /// Share the native row axis without copying its identities.
+    pub fn row_axis(&self) -> std::sync::Arc<super::AxisIndex<RowId>> {
+        self.row_axis.clone()
+    }
+
+    /// Share the native column axis without copying its identities.
+    pub fn col_axis(&self) -> std::sync::Arc<super::AxisIndex<ColId>> {
+        self.col_axis.clone()
+    }
+
     /// Get RowId for a row index.
     #[inline]
     #[must_use]
@@ -76,7 +97,7 @@ impl GridIndex {
     #[inline]
     #[must_use]
     pub fn row_ids_dense(&self) -> &[RowId] {
-        match &self.row_axis {
+        match self.row_axis.store() {
             AxisIdentityStore::Explicit(ids) => ids,
             AxisIdentityStore::Runs(_) => &[],
         }
@@ -98,7 +119,7 @@ impl GridIndex {
     #[inline]
     #[must_use]
     pub fn col_ids_dense(&self) -> &[ColId] {
-        match &self.col_axis {
+        match self.col_axis.store() {
             AxisIdentityStore::Explicit(ids) => ids,
             AxisIdentityStore::Runs(_) => &[],
         }

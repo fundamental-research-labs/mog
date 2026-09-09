@@ -63,22 +63,6 @@ pub enum FloatingObjectChangeKind {
     /// Object was removed.
     Removed,
 }
-/// Undo/redo state snapshot.
-///
-/// Returned by `get_undo_state()` to let the UI know whether undo/redo
-/// buttons should be enabled, and how deep the stacks are.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UndoState {
-    /// Whether undo is available.
-    pub can_undo: bool,
-    /// Whether redo is available.
-    pub can_redo: bool,
-    /// Number of items in the undo stack.
-    pub undo_depth: usize,
-    /// Number of items in the redo stack.
-    pub redo_depth: usize,
-}
 /// Runtime/session reconciliation hint emitted alongside sheet lifecycle mutations.
 ///
 /// This does not persist active-sheet state in the workbook. It gives the

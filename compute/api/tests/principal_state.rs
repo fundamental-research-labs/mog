@@ -14,7 +14,7 @@
 
 use compute_api::ComputeService;
 use compute_api::dispatch::Dispatch;
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use snapshot_types::{SheetSnapshot, WorkbookSnapshot};
 
 const SHEET1_UUID: &str = "33333333-3333-3333-3333-333333333333";
@@ -22,6 +22,9 @@ const SHEET1_UUID: &str = "33333333-3333-3333-3333-333333333333";
 fn fresh_service() -> ComputeService {
     let snapshot = WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET1_UUID.to_string(),
             name: "Sheet1".to_string(),
             rows: 10,
@@ -31,7 +34,7 @@ fn fresh_service() -> ComputeService {
         }],
         ..Default::default()
     };
-    let (engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (engine, _) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
     let dispatch = Dispatch::from_engine(engine).expect("dispatch");
     ComputeService::new(dispatch)
 }

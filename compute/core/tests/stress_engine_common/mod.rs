@@ -1,9 +1,9 @@
-//! Shared helpers for YrsComputeEngine-level stress tests (Categories 11-16).
+//! Shared helpers for ComputeEngine-level stress tests (Categories 11-16).
 
 use cell_types::SheetPos;
 use compute_core::bridge_types::{BridgeSortCriterion, BridgeSortMode, BridgeSortOptions};
 use compute_core::engine_types::fill::{BridgeAutoFillRequest, BridgeFillRangeSpec};
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use domain_types::domain::filter::SortOrder;
 use snapshot_types::{CellData, RecalcResult, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellError, CellValue};
@@ -62,6 +62,9 @@ pub fn num(v: f64) -> CellValue {
 pub fn make_snapshot(cells: Vec<CellData>) -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET1_UUID.to_string(),
             name: "Sheet1".to_string(),
             rows: 1000,
@@ -76,6 +79,9 @@ pub fn make_snapshot(cells: Vec<CellData>) -> WorkbookSnapshot {
 pub fn make_snapshot_large(rows: u32, cols: u32, cells: Vec<CellData>) -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET1_UUID.to_string(),
             name: "Sheet1".to_string(),
             rows,
@@ -91,6 +97,9 @@ pub fn make_two_sheet_snapshot(cells1: Vec<CellData>, cells2: Vec<CellData>) -> 
     WorkbookSnapshot {
         sheets: vec![
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: SHEET1_UUID.to_string(),
                 name: "Sheet1".to_string(),
                 rows: 1000,
@@ -99,6 +108,9 @@ pub fn make_two_sheet_snapshot(cells1: Vec<CellData>, cells2: Vec<CellData>) -> 
                 ranges: vec![],
             },
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: SHEET2_UUID.to_string(),
                 name: "Sheet2".to_string(),
                 rows: 1000,
@@ -118,6 +130,9 @@ pub fn make_iterative_snapshot(
 ) -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET1_UUID.to_string(),
             name: "Sheet1".to_string(),
             rows: 1000,
@@ -200,12 +215,7 @@ pub fn sort_desc(col: u32) -> BridgeSortOptions {
 // ---------------------------------------------------------------------------
 
 /// Read f64 from engine mirror. Panics if not Number.
-pub fn read_num(
-    engine: &YrsComputeEngine,
-    sheet_id: &cell_types::SheetId,
-    row: u32,
-    col: u32,
-) -> f64 {
+pub fn read_num(engine: &ComputeEngine, sheet_id: &cell_types::SheetId, row: u32, col: u32) -> f64 {
     match engine
         .mirror()
         .get_cell_value_at(sheet_id, SheetPos::new(row, col))
@@ -217,7 +227,7 @@ pub fn read_num(
 
 /// Read cell value, returning None for empty.
 pub fn read_value(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &cell_types::SheetId,
     row: u32,
     col: u32,
@@ -239,7 +249,7 @@ pub fn has_circular(result: &RecalcResult) -> bool {
 
 /// Assert cell == exact f64. Tolerance: 1e-6.
 pub fn assert_num(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &cell_types::SheetId,
     row: u32,
     col: u32,
@@ -258,7 +268,7 @@ pub fn assert_num(
 
 /// Assert cell == f64 within tolerance.
 pub fn assert_num_tol(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &cell_types::SheetId,
     row: u32,
     col: u32,
@@ -279,7 +289,7 @@ pub fn assert_num_tol(
 
 /// Assert cell is a specific CellError.
 pub fn assert_error(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &cell_types::SheetId,
     row: u32,
     col: u32,
@@ -302,7 +312,7 @@ pub fn assert_error(
 }
 
 /// Assert cell is Null (empty / cleared).
-pub fn assert_null(engine: &YrsComputeEngine, sheet_id: &cell_types::SheetId, row: u32, col: u32) {
+pub fn assert_null(engine: &ComputeEngine, sheet_id: &cell_types::SheetId, row: u32, col: u32) {
     match engine
         .mirror()
         .get_cell_value_at(sheet_id, SheetPos::new(row, col))
@@ -314,7 +324,7 @@ pub fn assert_null(engine: &YrsComputeEngine, sheet_id: &cell_types::SheetId, ro
 
 /// Assert cell is Text with exact content.
 pub fn assert_text(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &cell_types::SheetId,
     row: u32,
     col: u32,
@@ -337,12 +347,7 @@ pub fn assert_text(
 }
 
 /// Assert cell is any Error (when we care it's an error but not which kind).
-pub fn assert_is_error(
-    engine: &YrsComputeEngine,
-    sheet_id: &cell_types::SheetId,
-    row: u32,
-    col: u32,
-) {
+pub fn assert_is_error(engine: &ComputeEngine, sheet_id: &cell_types::SheetId, row: u32, col: u32) {
     match engine
         .mirror()
         .get_cell_value_at(sheet_id, SheetPos::new(row, col))

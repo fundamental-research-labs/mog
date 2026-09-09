@@ -64,7 +64,7 @@ fn partial_roundtrip_multi_domain() {
         sheet_id: String::new(),
         pivot: None,
         ranges: vec![CFCellRange::new(1, 1, 2, 1)], // B2:B3
-        range_identities: None,
+
         rules: vec![CFRule::CellValue {
             id: "test-rule-1".to_string(),
             operator: ooxml_types::cond_format::CfOperator::GreaterThan,

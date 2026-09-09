@@ -1,4 +1,4 @@
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 
 use crate::edit::{overwrite_number, read_number_at, sheet_id};
 use crate::runner::{EDIT_DELTA, FamilyResult};
@@ -11,7 +11,7 @@ fn class_iii_rapid_reverts() {
     let sid = sheet_id();
     let seed = 0.4_f64;
     let (snapshot, dependent) = chain_snapshot(seed);
-    let (mut engine, _init) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (mut engine, _init) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
 
     let initial = match read_number_at(&engine, &sid, dependent) {
         Some(v) => v,
@@ -60,7 +60,7 @@ fn class_iii_edit_sequence_nested() {
     let sid = sheet_id();
     let seed = 0.4_f64;
     let (snapshot, dependent) = fanin_snapshot(seed);
-    let (mut engine, _init) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (mut engine, _init) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
     let before = read_number_at(&engine, &sid, dependent).expect("numeric initial");
     let before_bits = before.to_bits();
 
@@ -94,7 +94,7 @@ fn class_iii_edit_sequence_aba() {
     let seed_a = 0.4_f64;
     let seed_b = 0.7_f64;
     let (snapshot, dependent) = chain_snapshot(seed_a);
-    let (mut engine, _init) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (mut engine, _init) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
     let before = read_number_at(&engine, &sid, dependent).expect("numeric initial");
     let before_bits = before.to_bits();
 

@@ -7,15 +7,14 @@ use crate::mirror::CellMirror;
 use crate::snapshot::{CellChange, CellPosition, PolicyPreservedParseOutcome, RecalcResult};
 use crate::storage::cells::values::InputParseContext;
 use crate::storage::engine::mutation::CellInput;
-use crate::storage::engine::mutation_coordinator::MutationCoordinator;
 use crate::storage::engine::services::cell_editing::{
-    NO_OLD_FORMULA_SENTINEL, persist_cell_formula_identity,
+    NO_OLD_FORMULA_SENTINEL, register_formula_cell_identities,
 };
 use crate::storage::engine::stores::EngineStores;
 
 use super::edits::{canonicalize_resolved_cell_inputs, validate_edit_bounds};
+use super::identity_registration::register_cell_positions;
 use super::outcomes::{attach_policy_preserved_outcomes, truncate_submitted_text};
-use super::yrs_writes::write_prepared_cell_inputs_to_yrs;
 
 #[derive(Debug, Clone)]
 struct DirectEditRecord {
@@ -31,37 +30,8 @@ struct DirectEditRecord {
 
 impl DirectEditRecord {
     fn new_formula(&self) -> Option<String> {
-        self.prepared_formula
-            .as_deref()
-            .map(formula_body_to_display_formula)
+        self.prepared_formula.clone()
     }
-}
-
-fn formula_body_to_display_formula(body: &str) -> String {
-    if body.starts_with('=') {
-        body.to_string()
-    } else {
-        format!("={body}")
-    }
-}
-
-fn result_has_direct_change(
-    result: &RecalcResult,
-    cell_id: CellId,
-    sheet_id: &SheetId,
-    row: u32,
-    col: u32,
-) -> bool {
-    let cell_id = cell_id.to_uuid_string();
-    let sheet_id = sheet_id.to_uuid_string();
-    result.changed_cells.iter().any(|change| {
-        change.cell_id == cell_id
-            || (change.sheet_id == sheet_id
-                && change
-                    .position
-                    .as_ref()
-                    .is_some_and(|position| position.row == row && position.col == col))
-    })
 }
 
 fn resolved_post_edit_value(mirror: &CellMirror, record: &DirectEditRecord) -> CellValue {
@@ -80,14 +50,22 @@ fn append_missing_direct_edit_changes(
     mirror: &CellMirror,
     records: &[DirectEditRecord],
 ) {
-    for record in records {
-        if result_has_direct_change(
-            result,
-            record.cell_id,
-            &record.sheet_id,
-            record.row,
-            record.col,
+    let mut changed_ids = rustc_hash::FxHashSet::default();
+    let mut changed_positions = rustc_hash::FxHashSet::default();
+    for change in &result.changed_cells {
+        if let Ok(id) = CellId::from_uuid_str(&change.cell_id) {
+            changed_ids.insert(id);
+        }
+        if let (Ok(sheet_id), Some(position)) = (
+            SheetId::from_uuid_str(&change.sheet_id),
+            change.position.as_ref(),
         ) {
+            changed_positions.insert((sheet_id, position.row, position.col));
+        }
+    }
+    for record in records {
+        let position = (record.sheet_id, record.row, record.col);
+        if changed_ids.contains(&record.cell_id) || changed_positions.contains(&position) {
             continue;
         }
 
@@ -97,6 +75,8 @@ fn append_missing_direct_edit_changes(
             continue;
         }
 
+        changed_ids.insert(record.cell_id);
+        changed_positions.insert(position);
         result.changed_cells.push(CellChange {
             cell_id: record.cell_id.to_uuid_string(),
             sheet_id: record.sheet_id.to_uuid_string(),
@@ -151,7 +131,6 @@ fn patch_direct_edit_before_snapshots(
 pub(in crate::storage::engine) fn mutation_set_cells(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
-    mutation: &mut MutationCoordinator,
     edits: Vec<(SheetId, CellId, u32, u32, CellInput)>,
     skip_cycle_check: bool,
 ) -> Result<RecalcResult, ComputeError> {
@@ -165,11 +144,11 @@ pub(in crate::storage::engine) fn mutation_set_cells(
         .compute
         .validate_region_partial_writes(mirror, &edits)?;
 
-    // Resolve the format hint for each Parse-arm edit BEFORE opening any
-    // write txn (the cascade helpers in `properties` open their own
-    // read-only txn, which would conflict with `transact_mut`). See
-    // `compute/core/src/storage/cells/values.rs` `resolve_format_hint` for
-    // the rationale.
+    for (sheet, cell, row, col, _) in &edits {
+        crate::storage::engine::history::cells::capture_cell(stores, mirror, *sheet, *cell, *row, *col);
+    }
+
+    // Resolve format hints from the pre-edit state before parsing inputs.
     let format_hints: Vec<Option<compute_formats::FormatType>> = edits
         .iter()
         .map(|(sheet_id, _cid, row, col, input)| {
@@ -207,10 +186,8 @@ pub(in crate::storage::engine) fn mutation_set_cells(
                 .map(compute_formats::detect_format_type)
         })
         .collect();
-    let workbook_settings = crate::storage::workbook::settings::get_settings(
-        stores.storage.doc(),
-        stores.storage.workbook_map(),
-    );
+    let workbook_settings =
+        crate::storage::workbook::settings::get_settings(&stores.storage.metadata);
     let parse_contexts: Vec<InputParseContext> = format_hints
         .iter()
         .copied()
@@ -223,10 +200,8 @@ pub(in crate::storage::engine) fn mutation_set_cells(
         .collect();
     let mut preserved_outcomes = Vec::new();
 
-    let _suppress = mutation.suppress_guard();
-
     let mut direct_edit_records = Vec::with_capacity(edits.len());
-    let mut prepared_values = Vec::with_capacity(edits.len());
+    let mut prepared_edits = Vec::with_capacity(edits.len());
     for (idx, &(ref sheet_id, cell_id, row, col, ref input)) in edits.iter().enumerate() {
         let target = format_hints[idx];
         let context = &parse_contexts[idx];
@@ -250,11 +225,9 @@ pub(in crate::storage::engine) fn mutation_set_cells(
                     // without formula interpretation or type coercion.
                     (CellValue::Text(stripped.to_string().into()), None)
                 } else if trimmed.starts_with('=') {
-                    // Strip leading '=' for Yrs storage — KEY_FORMULA stores body only
-                    (
-                        CellValue::Null,
-                        Some(trimmed.strip_prefix('=').unwrap_or(trimmed).to_string()),
-                    )
+                    // Preserve the complete submitted formula. Removing and
+                    // restoring its prefix would turn invalid `==A1` into `=A1`.
+                    (CellValue::Null, Some(trimmed.to_string()))
                 } else {
                     // G1/G3 hint flows into `parse_input_value` via
                     // `parse_rich_value_with_target` (format-aware). When
@@ -277,6 +250,7 @@ pub(in crate::storage::engine) fn mutation_set_cells(
         };
         let old_value = mirror
             .get_cell_value(&cell_id)
+            .or_else(|| mirror.get_cell_value_at(sheet_id, SheetPos::new(row, col)))
             .cloned()
             .unwrap_or(CellValue::Null);
         let old_formula = stores.compute.get_formula(&cell_id).map(str::to_owned);
@@ -290,7 +264,11 @@ pub(in crate::storage::engine) fn mutation_set_cells(
             old_value,
             old_formula,
         });
-        prepared_values.push((value, formula));
+        let prepared_input = formula
+            .as_deref()
+            .map(CellInput::formula)
+            .unwrap_or(CellInput::Value { value });
+        prepared_edits.push((*sheet_id, cell_id, row, col, prepared_input));
     }
     let direct_edit_records_by_cell: HashMap<CellId, DirectEditRecord> = direct_edit_records
         .iter()
@@ -298,9 +276,16 @@ pub(in crate::storage::engine) fn mutation_set_cells(
         .map(|record| (record.cell_id, record))
         .collect();
 
-    write_prepared_cell_inputs_to_yrs(stores, &edits, &prepared_values)?;
+    register_cell_positions(
+        stores,
+        mirror,
+        edits
+            .iter()
+            .map(|(sheet_id, cell_id, row, col, _)| (*sheet_id, *cell_id, *row, *col)),
+    )?;
     let mut cache_metadata_cells: HashMap<SheetId, Vec<CellId>> = HashMap::new();
     for (sheet_id, cell_id, _, _, _) in &edits {
+        stores.storage.clear_cell_metadata(*cell_id);
         cache_metadata_cells
             .entry(*sheet_id)
             .or_default()
@@ -308,47 +293,19 @@ pub(in crate::storage::engine) fn mutation_set_cells(
     }
     for (sheet_id, cell_ids) in cache_metadata_cells {
         crate::storage::properties::clear_formula_cache_metadata_for_cell_ids(
-            stores.storage.doc(),
-            stores.storage.workbook_map(),
-            stores.storage.sheets(),
+            &mut stores.storage,
             &sheet_id,
             &cell_ids,
         );
     }
 
-    for ((sheet_id, cell_id, row, col, _), (value, formula)) in
-        edits.iter().zip(prepared_values.iter())
-    {
-        // Update mirror — ONLY for plain-value edits. For formula edits,
-        //    `process_input` needs to see the prior cell value to detect
-        //    "same formula re-entered" and preserve the converged
-        //    iterative-calc seed. Pre-writing with `CellValue::Null`
-        //    (formula branch's parsed value) would destroy the seed.
-        if formula.is_none() {
-            mirror.apply_edit(
-                sheet_id,
-                *cell_id,
-                SheetPos::new(*row, *col),
-                value.clone(),
-                None,
-            );
-        }
-    }
-
-    // 5. Delegate to ComputeCore for recalculation. The Parse-arm hints
-    //    (G1/G3) flow into `process_input` via `set_cells_with_targets`
-    //    so the scheduler-side classifier matches the format-aware shape
-    //    we just committed to yrs. Without the hint, `process_input` →
-    //    `parse_plain_value` (format-blind) would overwrite the mirror
-    //    with the wrong value.
-    let mut result = stores.compute.set_cells_with_contexts(
-        mirror,
-        &edits,
-        &parse_contexts,
-        skip_cycle_check,
-    )?;
-    for (sheet_id, cell_id, _, _, _) in &edits {
-        persist_cell_formula_identity(stores, mirror, sheet_id, *cell_id)?;
+    // Classification ran once with workbook culture, conversion policy, and format.
+    // The scheduler owns the sole cell write and preserves iterative formula seeds.
+    let mut result = stores
+        .compute
+        .set_cells(mirror, &prepared_edits, skip_cycle_check)?;
+    for (_, cell_id, _, _, _) in &edits {
+        register_formula_cell_identities(stores, mirror, *cell_id);
     }
 
     patch_direct_edit_before_snapshots(&mut result, &direct_edit_records_by_cell);

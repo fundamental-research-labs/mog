@@ -135,7 +135,7 @@ impl Principal {
     /// `PrincipalPool::intern` instead.
     ///
     /// This constructor exists to support bridge-surface methods like
-    /// `YrsComputeEngine::wb_security_effective_access(target,
+    /// `ComputeEngine::wb_security_effective_access(target,
     /// principal_tags: Vec<String>)` that trade `Vec<String>` on the
     /// wire (because `Principal` is not serialisable) and then
     /// construct a fresh Principal on the engine side for

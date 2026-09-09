@@ -142,6 +142,7 @@ pub(super) fn decode_utf16le(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::vba::constants::OLE_MAGIC;
 
     fn write_dir_name(entry: &mut [u8], name: &str) {
         let encoded: Vec<u8> = name

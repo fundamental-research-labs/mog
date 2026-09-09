@@ -1,35 +1,20 @@
-use yrs::{Any, Map, MapPrelim, MapRef, Transact};
-
 use domain_types::ParseOutput;
 use domain_types::domain::pivot::PivotCacheSourceDef;
 
-use compute_document::hex::id_to_hex;
-use compute_document::schema::*;
-use compute_document::workbook_metadata::{
-    ImportedExternalCacheRecord, ImportedExternalLinkIdentity, ImportedExternalPackageArtifact,
-    PersistedLinkTarget, PersistedWorkbookLinkRecord, PersistedWorkbookLinkSourceKind,
-    PersistedWorkbookMetadata, WorkbookCreationMetadata, read_workbook_metadata,
-    write_imported_external_cache_record, write_imported_external_package_artifact,
-    write_workbook_link_record, write_workbook_metadata,
-};
-use domain_types::domain::external_link::{ExternalLink, ExternalLinkType};
-use workbook_types::{LinkId, WorkbookId};
-
 use value_types::ComputeError;
 
-use crate::storage::YrsStorage;
-use crate::storage::sheet::pivots::insert_existing_pivot_if_absent_in_txn;
+use crate::storage::WorkbookStorage;
+use crate::storage::sheet::pivots::insert_existing_pivot_if_absent;
 use crate::storage::workbook::imported_pivots::{
     ImportedPivotAssociationStatus, ImportedPivotUnsupportedReason, association_from_parsed_pivot,
     existing_promoted_import_pivot_matches, import_identity_for_parsed_pivot,
     native_imported_pivot_id, write as write_imported_pivot_association,
 };
 
-use super::data_tables::hydrate_data_table_regions_from_parse_output;
 use super::imported_pivot_classification::{ImportedPivotClassification, classify_imported_pivot};
 use super::print_defined_names::hydrate_workbook_print_defined_names;
 use super::sheet::{SheetIdAllocation, hydrate_sheet, hydrate_sheet_with_allocation};
-use super::styles::{ImportedRangeStyle, hydrate_style_palette, hydrate_workbook_stylesheet};
+use super::styles::{hydrate_style_palette, hydrate_workbook_stylesheet};
 use super::table_styles::hydrate_custom_table_styles_from_ooxml;
 use super::workbook::{
     hydrate_custom_workbook_views_xml, hydrate_package_fidelity_metadata,
@@ -47,135 +32,82 @@ use super::{HydrationIdMap, IdAllocator};
 // XLSX import path: hydrate_from_parse_output
 // ======================================================================
 
-impl YrsStorage {
-    /// Materialize parser-owned imported external-link fidelity into workbook-owned Yrs records.
-    ///
-    /// The XLSX parser remains a domain parser/writer. This adapter is the import
-    /// orchestration boundary that translates parsed OOXML external links into
-    /// the persisted workbook link registry and imported cache maps.
-    pub(crate) fn hydrate_imported_external_links(
-        &mut self,
-        external_links: &[ExternalLink],
-    ) -> Result<(), ComputeError> {
-        if external_links.is_empty() {
-            return Ok(());
-        }
-
-        let mut txn = self.doc.transact_mut();
-        let destination_workbook_id =
-            ensure_imported_workbook_identity(&mut txn, &self.workbook, external_links)?;
-
-        for link in external_links {
-            let Some(identity) = &link.imported_identity else {
-                let artifact = imported_external_package_artifact(&destination_workbook_id, link)?;
-                write_imported_external_package_artifact(&mut txn, &self.workbook, &artifact)
-                    .map_err(|err| ComputeError::Deserialize {
-                        message: format!("imported external package artifact serialization: {err}"),
-                    })?;
-                continue;
-            };
-
-            let link_id = imported_excel_link_id(&destination_workbook_id, identity)?;
-            let record = PersistedWorkbookLinkRecord {
-                link_id,
-                expected_workbook_id: None,
-                target: persisted_target_for_external_link(link, identity),
-                display_name: display_name_for_external_link(link, identity),
-                source_kind: source_kind_for_external_link(link),
-                imported_excel_identity: Some(imported_identity_from_domain(identity)),
-                materialized_cache_metadata: None,
-            };
-            write_workbook_link_record(&mut txn, &self.workbook, &record).map_err(|err| {
-                ComputeError::Deserialize {
-                    message: format!("workbook link record serialization: {err}"),
-                }
-            })?;
-
-            let payload_json =
-                serde_json::to_string(link).map_err(|err| ComputeError::Deserialize {
-                    message: format!("external link fidelity payload serialization: {err}"),
-                })?;
-            let cache = ImportedExternalCacheRecord {
-                link_id,
-                payload_kind: "domain-types.external-link".to_string(),
-                payload_version: 1,
-                payload_json,
-            };
-            write_imported_external_cache_record(&mut txn, &self.workbook, &cache).map_err(
-                |err| ComputeError::Deserialize {
-                    message: format!("imported external cache serialization: {err}"),
-                },
-            )?;
-        }
-
-        Ok(())
-    }
-
-    /// Hydrate a Yrs document from a [`ParseOutput`] using structured Y.Maps.
-    ///
-    /// This is the XLSX import hydration path. It uses `yrs_schema` modules for
-    /// domain objects instead of JSON blobs, and reads from `ParseOutput`
-    /// instead of `ImportSnapshot`.
-    ///
-    /// The `IdAllocator` is used to assign UUIDs to all identity objects
-    /// (sheets, cells, rows, columns).
+impl WorkbookStorage {
+    /// Hydrate typed native metadata and allocate identities shared with the
+    /// snapshot builder. Cell values are installed in the mirror by the caller.
     #[tracing::instrument(name = "hydrate_from_parse_output", skip_all)]
     pub fn hydrate_from_parse_output(
         &mut self,
         output: &ParseOutput,
         allocator: &mut impl IdAllocator,
     ) -> Result<HydrationIdMap, ComputeError> {
-        let _span = tracing::info_span!("hydrate_yrs_from_parse_output").entered();
-        let mut txn = self.doc.transact_mut();
+        let _span = tracing::info_span!("hydrate_native_metadata").entered();
 
         let mut id_map = HydrationIdMap::default();
 
-        // Sheet order array — Provider Protocol lifecycle: lazy-create rather than
-        // rely on the (now-removed) eager bootstrap from `YrsStorage::new`.
-        // See [`YrsStorage::new`] doc-comment.
-        let order_arr = self.ensure_sheet_order_array(&mut txn);
-
-        // Write the style palette to a workbook-level Yrs map so that compact
-        // cell properties (`{"s": N}`) can resolve their format at read time.
-        hydrate_style_palette(&mut txn, &self.workbook, &output.style_palette);
-        hydrate_workbook_stylesheet(&mut txn, &self.workbook, &output.workbook_stylesheet);
-        let theme = output.theme.as_ref();
-        let indexed_colors = output
-            .workbook_stylesheet
-            .as_ref()
-            .and_then(|stylesheet| stylesheet.indexed_colors.as_ref());
+        // Cell properties refer to the shared imported style palette.
+        hydrate_style_palette(&mut self.metadata, &output.style_palette);
+        hydrate_workbook_stylesheet(&mut self.metadata, &output.workbook_stylesheet);
 
         for sheet_data in &output.sheets {
             let (
                 sheet_id,
                 sheet_cell_ids,
-                sheet_phantom_cells,
-                sheet_identity_only_cells,
-                sheet_row_ids,
-                sheet_col_ids,
+                sheet_identities,
+                sheet_row_axis,
+                sheet_col_axis,
+                native_merges,
+                native_auto_filter,
+                native_hyperlinks,
+                native_comments,
+                native_floating_objects,
             ) = hydrate_sheet(
-                &mut txn,
-                &self.sheets,
-                &order_arr,
+                &mut self.cell_metadata,
                 sheet_data,
-                &output.style_palette,
                 &output.persons,
-                theme,
-                indexed_colors,
                 allocator,
             )?;
+            self.metadata.sheet_order.push(sheet_id);
+            self.sheet_metadata.insert(
+                sheet_id,
+                crate::storage::sheet::SheetMetadata::from_import(
+                    sheet_data,
+                    sheet_id,
+                    &sheet_row_axis,
+                    &sheet_col_axis,
+                    native_merges,
+                    native_auto_filter,
+                ),
+            );
+            self.sheet_metadata
+                .get_mut(&sheet_id)
+                .expect("sheet metadata initialized")
+                .hyperlinks = native_hyperlinks;
+            self.sheet_metadata
+                .get_mut(&sheet_id)
+                .expect("sheet metadata initialized")
+                .comments = native_comments;
+            self.sheet_metadata
+                .get_mut(&sheet_id)
+                .expect("sheet metadata initialized")
+                .floating_objects = native_floating_objects;
+            self.sheet_metadata
+                .get_mut(&sheet_id)
+                .expect("sheet metadata initialized")
+                .cell_properties = super::styles::hydrate_cell_styles(
+                &sheet_data.cells,
+                &sheet_cell_ids,
+                &Default::default(),
+            );
             id_map.sheet_ids.push(sheet_id);
             id_map.cell_ids.push(sheet_cell_ids);
-            id_map.row_ids.push(sheet_row_ids);
-            id_map.col_ids.push(sheet_col_ids);
-            for (cell_id, row, col) in sheet_phantom_cells {
-                id_map.phantom_cells.push((sheet_id, cell_id, row, col));
-            }
-            for (cell_id, row, col) in sheet_identity_only_cells {
-                id_map
-                    .identity_only_cells
-                    .push((sheet_id, cell_id, row, col));
-            }
+            id_map.row_axes.push(sheet_row_axis);
+            id_map.col_axes.push(sheet_col_axis);
+            id_map.identities.extend(
+                sheet_identities
+                    .into_iter()
+                    .map(|(cell_id, row, col)| (sheet_id, cell_id, row, col)),
+            );
         }
 
         // Provider Protocol lifecycle (Provider Protocol): workbook-level domain maps
@@ -188,17 +120,15 @@ impl YrsStorage {
 
         // Populate workbook-level data
         hydrate_workbook_print_defined_names(
-            &self.sheets,
+            &mut self.sheet_metadata,
             &output.named_ranges,
             &id_map.sheet_ids,
-            &mut txn,
         );
         hydrate_workbook_named_ranges(
-            &self.workbook,
+            &mut self.metadata,
             &output.named_ranges,
             &id_map.sheet_ids,
             allocator,
-            &mut txn,
         );
         // Collect tables from all sheets, paired with their sheet IDs.
         let all_tables: Vec<_> = output
@@ -206,122 +136,94 @@ impl YrsStorage {
             .iter()
             .zip(id_map.sheet_ids.iter())
             .flat_map(|(s, sheet_id)| {
-                let sheet_hex = id_to_hex(sheet_id.as_u128());
+                let sheet_uuid = sheet_id.to_uuid_string();
                 s.tables
                     .iter()
-                    .map(move |t| (t.clone(), sheet_hex.to_string()))
+                    .map(move |t| (t.clone(), sheet_uuid.clone()))
             })
             .collect();
-        let imported_table_identity =
-            hydrate_workbook_tables(&self.workbook, &all_tables, allocator, &mut txn);
-        hydrate_workbook_connections(&self.workbook, &output.connections, &mut txn);
-        hydrate_workbook_root_namespaces(
-            &self.workbook,
-            &output.workbook_root_namespaces,
-            &mut txn,
-        );
+        let (imported_table_identity, canonical_tables) =
+            hydrate_workbook_tables(&all_tables, allocator);
+        id_map.canonical_tables = canonical_tables;
+        hydrate_workbook_connections(&mut self.metadata, &output.connections);
+        hydrate_workbook_root_namespaces(&mut self.metadata, &output.workbook_root_namespaces);
         hydrate_workbook_table_styles(
-            &self.workbook,
+            &mut self.metadata,
             &output.default_table_style,
             &output.default_pivot_style,
-            &mut txn,
         );
         hydrate_custom_table_styles_from_ooxml(
-            &self.workbook,
+            &mut self.metadata,
             &output.custom_table_styles,
             &output.workbook_stylesheet,
             &output.theme,
-            &mut txn,
         );
-        hydrate_workbook_theme(&self.workbook, &output.theme, &mut txn);
-        hydrate_workbook_protection(&self.workbook, &output.protection, &mut txn);
+        hydrate_workbook_theme(&mut self.metadata, &output.theme);
+        hydrate_workbook_protection(&mut self.metadata, &output.protection);
 
         // Hydrate slicers: merge per-sheet slicers with workbook-level caches
-        // into StoredSlicer entries in the workbook slicers Y.Map.
+        // into typed native workbook slicer entries.
         hydrate_workbook_slicers(
-            &self.workbook,
+            &mut self.metadata,
             &output.sheets,
             &id_map.sheet_ids,
             &output.slicer_caches,
-            &imported_table_identity,
-            &mut txn,
+            imported_table_identity,
+            &[],
         );
         hydrate_workbook_timelines(
-            &self.workbook,
+            &mut self.metadata,
             &output.sheets,
             &id_map.sheet_ids,
             &output.timeline_caches,
-            &mut txn,
         );
 
-        hydrate_imported_pivots_as_native(
-            &self.workbook,
-            &self.sheets,
-            &output.pivot_tables,
-            &output.pivot_cache_sources,
-            &output.sheets,
-            &id_map.sheet_ids,
-            &mut txn,
-        )?;
         // Hydrate pivot tables at workbook level as an OOXML preservation sidecar.
-        hydrate_workbook_parsed_pivot_tables(&self.workbook, &output.pivot_tables, &mut txn);
-        hydrate_workbook_pivot_cache_sources(&self.workbook, &output.pivot_cache_sources, &mut txn);
-        hydrate_workbook_pivot_cache_records(&self.workbook, &output.pivot_cache_records, &mut txn);
+        hydrate_workbook_parsed_pivot_tables(&mut self.metadata, &output.pivot_tables);
+        hydrate_workbook_pivot_cache_sources(&mut self.metadata, &output.pivot_cache_sources);
+        hydrate_workbook_pivot_cache_records(&mut self.metadata, &output.pivot_cache_records);
 
-        hydrate_workbook_calculation(&self.workbook, &output.calculation, &mut txn);
+        hydrate_workbook_calculation(&mut self.metadata, &output.calculation);
         hydrate_workbook_views(
-            &self.workbook,
+            &mut self.metadata,
             &output.workbook_views,
             &id_map.sheet_ids,
-            &mut txn,
         );
-        hydrate_custom_workbook_views_xml(
-            &self.workbook,
-            &output.custom_workbook_views_xml,
-            &mut txn,
-        );
-        hydrate_workbook_web_publishing(&self.workbook, &output.web_publishing, &mut txn);
+        hydrate_custom_workbook_views_xml(&mut self.metadata, &output.custom_workbook_views_xml);
+        hydrate_workbook_web_publishing(&mut self.metadata, &output.web_publishing);
         hydrate_workbook_threaded_comment_persons(
-            &self.workbook,
+            &mut self.metadata,
             &output.persons,
             output.has_persons_part,
-            &mut txn,
         );
-        hydrate_shared_string_hints(&self.workbook, &output.shared_string_hints, &mut txn);
-        hydrate_package_fidelity_metadata(&self.workbook, &output.package_fidelity, &mut txn);
-        hydrate_volatile_dependency_part(
-            &self.workbook,
-            &output.volatile_dependency_part,
-            &mut txn,
-        );
+        hydrate_shared_string_hints(&mut self.metadata, &output.shared_string_hints);
+        hydrate_package_fidelity_metadata(&mut self.metadata, &output.package_fidelity);
+        hydrate_volatile_dependency_part(&mut self.metadata, &output.volatile_dependency_part);
         hydrate_workbook_metadata(
-            &self.workbook,
+            &mut self.metadata,
             &output.workbook_properties,
             &output.properties,
             &output.extended_properties,
             &output.metadata,
             &output.file_version,
             &output.file_sharing,
-            &mut txn,
         );
-        hydrate_data_table_regions_from_parse_output(&self.workbook, output, &id_map, &mut txn);
 
         // Stamp schema version — import always creates a new document.
-        write_schema_version(&mut txn, &self.workbook);
+
+        hydrate_imported_pivots_as_native(
+            self,
+            &output.pivot_tables,
+            &output.pivot_cache_sources,
+            &output.sheets,
+            &id_map.sheet_ids,
+        )?;
 
         Ok(id_map)
     }
 
-    /// Hydrate a Yrs document using pre-allocated IDs, skipping ranged cells.
-    ///
-    /// This is the "Range-before-Yrs" variant. The caller has already:
-    /// 1. Allocated IDs via `allocate_sheet_ids` for each sheet.
-    /// 2. Built the WorkbookSnapshot and run the Range classifier.
-    /// 3. Collected `ranged_positions` per sheet (cells promoted to Ranges).
-    ///
-    /// This method writes everything to Yrs except ranged cells (which are
-    /// stored as compact Range payloads instead), then writes the Range
-    /// metadata/payloads from the snapshot into the Yrs range sub-maps.
+    /// Hydrate metadata using identities already assigned during compact range
+    /// classification. The mirror owns the range values directly.
     #[tracing::instrument(name = "hydrate_from_parse_output_with_ranges", skip_all)]
     pub(crate) fn hydrate_from_parse_output_with_ranges(
         &mut self,
@@ -329,268 +231,288 @@ impl YrsStorage {
         allocations: &[SheetIdAllocation],
         ranged_positions: &[std::collections::HashSet<(u32, u32)>],
         range_style_positions: &[std::collections::HashSet<(u32, u32)>],
-        range_data_per_sheet: &[Vec<snapshot_types::RangeData>],
-        range_styles_per_sheet: &[Vec<ImportedRangeStyle>],
         allocator: &mut impl IdAllocator,
     ) -> Result<HydrationIdMap, ComputeError> {
-        let _span = tracing::info_span!("hydrate_yrs_from_parse_output_with_ranges").entered();
-        tracing::info!(target: "deferred_hydration", "hydrate: transact_mut");
-        let mut txn = self.doc.transact_mut();
-        tracing::info!(target: "deferred_hydration", "hydrate: transact_mut done");
+        let _span = tracing::info_span!("hydrate_native_metadata_with_ranges").entered();
 
         let mut id_map = HydrationIdMap::default();
-        let order_arr = self.ensure_sheet_order_array(&mut txn);
         tracing::info!(target: "deferred_hydration", "hydrate: style palette");
-        hydrate_style_palette(&mut txn, &self.workbook, &output.style_palette);
-        hydrate_workbook_stylesheet(&mut txn, &self.workbook, &output.workbook_stylesheet);
-        let theme = output.theme.as_ref();
-        let indexed_colors = output
-            .workbook_stylesheet
-            .as_ref()
-            .and_then(|stylesheet| stylesheet.indexed_colors.as_ref());
+        hydrate_style_palette(&mut self.metadata, &output.style_palette);
+        hydrate_workbook_stylesheet(&mut self.metadata, &output.workbook_stylesheet);
         tracing::info!(target: "deferred_hydration", "hydrate: sheets start, count={}", output.sheets.len());
 
-        for (sheet_idx, sheet_data) in output.sheets.iter().enumerate() {
+        for sheet_idx in 0..output.sheets.len() {
             tracing::info!(target: "deferred_hydration", "hydrate: sheet {sheet_idx} start");
             let alloc = &allocations[sheet_idx];
             let ranged = &ranged_positions[sheet_idx];
             let range_style_positions_for_sheet = &range_style_positions[sheet_idx];
-            let range_styles = range_styles_per_sheet
-                .get(sheet_idx)
-                .map(Vec::as_slice)
-                .unwrap_or(&[]);
-
-            let (phantom_cells, identity_only_cells) = hydrate_sheet_with_allocation(
-                &mut txn,
-                &self.sheets,
-                &order_arr,
-                sheet_data,
-                &output.style_palette,
-                &output.persons,
-                theme,
-                indexed_colors,
+            let identities = self.hydrate_allocated_sheet(
+                output,
+                sheet_idx,
                 alloc,
                 ranged,
                 range_style_positions_for_sheet,
-                range_styles,
                 allocator,
             )?;
-            tracing::info!(target: "deferred_hydration", "hydrate: sheet {sheet_idx} hydrated");
-
-            // Write Range data to the sheet's canonical Yrs sub-maps.
-            //
-            // `hydrate_sheet_with_allocation` creates the full canonical sheet
-            // schema, including empty range maps. Do not replace those maps
-            // here: inserting a nested YMap and then writing through the old
-            // handle in the same import transaction leaves local state looking
-            // correct but can produce a replay state whose range payloads are
-            // disconnected from the sheet. Use the existing maps and create
-            // them only as a defensive fallback for older/corrupt documents.
-            let sheet_hex = &alloc.sheet_hex;
-            if let Some(yrs::Out::YMap(sheet_map)) = self.sheets.get(&txn, sheet_hex) {
-                let ranges = &range_data_per_sheet[sheet_idx];
-                if !ranges.is_empty() {
-                    let ranges_map: MapRef = match sheet_map.get(&txn, KEY_RANGES) {
-                        Some(yrs::Out::YMap(map)) => map,
-                        _ => sheet_map.insert(
-                            &mut txn,
-                            KEY_RANGES,
-                            MapPrelim::from([] as [(&str, Any); 0]),
-                        ),
-                    };
-                    let payloads_map: MapRef = match sheet_map.get(&txn, KEY_RANGE_PAYLOADS) {
-                        Some(yrs::Out::YMap(map)) => map,
-                        _ => sheet_map.insert(
-                            &mut txn,
-                            KEY_RANGE_PAYLOADS,
-                            MapPrelim::from([] as [(&str, Any); 0]),
-                        ),
-                    };
-                    if !matches!(
-                        sheet_map.get(&txn, KEY_RANGE_FORMATS),
-                        Some(yrs::Out::YMap(_))
-                    ) {
-                        sheet_map.insert(
-                            &mut txn,
-                            KEY_RANGE_FORMATS,
-                            MapPrelim::from([] as [(&str, Any); 0]),
-                        );
-                    }
-                    if !matches!(
-                        sheet_map.get(&txn, KEY_RANGE_BINDINGS),
-                        Some(yrs::Out::YMap(_))
-                    ) {
-                        sheet_map.insert(
-                            &mut txn,
-                            KEY_RANGE_BINDINGS,
-                            MapPrelim::from([] as [(&str, Any); 0]),
-                        );
-                    }
-
-                    for rd in ranges {
-                        let metadata = compute_document::range::RangeMetadata {
-                            range_id: rd.range_id,
-                            kind: rd.kind,
-                            anchor: rd.anchor.clone(),
-                            encoding: rd.encoding,
-                            row_axis: rd.row_axis.clone(),
-                            col_axis: rd.col_axis.clone(),
-                            row_ids: rd.row_ids.clone(),
-                            col_ids: rd.col_ids.clone(),
-                        };
-                        compute_document::range::write_range_to_yrs(
-                            &mut txn,
-                            &ranges_map,
-                            &payloads_map,
-                            &metadata,
-                            &rd.payload,
-                        );
-                    }
-                }
-            }
-
             let sheet_id = alloc.sheet_id;
+            self.metadata.sheet_order.push(sheet_id);
             id_map.sheet_ids.push(sheet_id);
             id_map.cell_ids.push(alloc.cell_ids.clone());
-            id_map.row_ids.push(alloc.row_ids.clone());
-            id_map.col_ids.push(alloc.col_ids.clone());
-            for (cell_id, row, col) in phantom_cells {
-                id_map.phantom_cells.push((sheet_id, cell_id, row, col));
-            }
-            for (cell_id, row, col) in identity_only_cells {
-                id_map
-                    .identity_only_cells
-                    .push((sheet_id, cell_id, row, col));
-            }
+            id_map.row_axes.push(alloc.row_axis.clone());
+            id_map.col_axes.push(alloc.col_axis.clone());
+            id_map.identities.extend(
+                identities
+                    .into_iter()
+                    .map(|(cell_id, row, col)| (sheet_id, cell_id, row, col)),
+            );
         }
 
         tracing::info!(target: "deferred_hydration", "hydrate: all sheets done, workbook-level data");
         // Workbook-level data (identical to hydrate_from_parse_output)
         hydrate_workbook_print_defined_names(
-            &self.sheets,
+            &mut self.sheet_metadata,
             &output.named_ranges,
             &id_map.sheet_ids,
-            &mut txn,
         );
         hydrate_workbook_named_ranges(
-            &self.workbook,
+            &mut self.metadata,
             &output.named_ranges,
             &id_map.sheet_ids,
             allocator,
-            &mut txn,
         );
         let all_tables: Vec<_> = output
             .sheets
             .iter()
             .zip(id_map.sheet_ids.iter())
             .flat_map(|(s, sheet_id)| {
-                let sheet_hex = id_to_hex(sheet_id.as_u128());
+                let sheet_uuid = sheet_id.to_uuid_string();
                 s.tables
                     .iter()
-                    .map(move |t| (t.clone(), sheet_hex.to_string()))
+                    .map(move |t| (t.clone(), sheet_uuid.clone()))
             })
             .collect();
-        let imported_table_identity =
-            hydrate_workbook_tables(&self.workbook, &all_tables, allocator, &mut txn);
-        hydrate_workbook_root_namespaces(
-            &self.workbook,
-            &output.workbook_root_namespaces,
-            &mut txn,
-        );
+        let (imported_table_identity, canonical_tables) =
+            hydrate_workbook_tables(&all_tables, allocator);
+        id_map.canonical_tables = canonical_tables;
+        hydrate_workbook_root_namespaces(&mut self.metadata, &output.workbook_root_namespaces);
         hydrate_workbook_table_styles(
-            &self.workbook,
+            &mut self.metadata,
             &output.default_table_style,
             &output.default_pivot_style,
-            &mut txn,
         );
         hydrate_custom_table_styles_from_ooxml(
-            &self.workbook,
+            &mut self.metadata,
             &output.custom_table_styles,
             &output.workbook_stylesheet,
             &output.theme,
-            &mut txn,
         );
-        hydrate_workbook_theme(&self.workbook, &output.theme, &mut txn);
-        hydrate_workbook_protection(&self.workbook, &output.protection, &mut txn);
+        hydrate_workbook_theme(&mut self.metadata, &output.theme);
+        hydrate_workbook_protection(&mut self.metadata, &output.protection);
         hydrate_workbook_slicers(
-            &self.workbook,
+            &mut self.metadata,
             &output.sheets,
             &id_map.sheet_ids,
             &output.slicer_caches,
-            &imported_table_identity,
-            &mut txn,
+            imported_table_identity,
+            &[],
         );
         hydrate_workbook_timelines(
-            &self.workbook,
+            &mut self.metadata,
             &output.sheets,
             &id_map.sheet_ids,
             &output.timeline_caches,
-            &mut txn,
         );
-        hydrate_imported_pivots_as_native(
-            &self.workbook,
-            &self.sheets,
-            &output.pivot_tables,
-            &output.pivot_cache_sources,
-            &output.sheets,
-            &id_map.sheet_ids,
-            &mut txn,
-        )?;
-        hydrate_workbook_parsed_pivot_tables(&self.workbook, &output.pivot_tables, &mut txn);
-        hydrate_workbook_pivot_cache_sources(&self.workbook, &output.pivot_cache_sources, &mut txn);
-        hydrate_workbook_pivot_cache_records(&self.workbook, &output.pivot_cache_records, &mut txn);
-        hydrate_workbook_calculation(&self.workbook, &output.calculation, &mut txn);
+        hydrate_workbook_parsed_pivot_tables(&mut self.metadata, &output.pivot_tables);
+        hydrate_workbook_pivot_cache_sources(&mut self.metadata, &output.pivot_cache_sources);
+        hydrate_workbook_pivot_cache_records(&mut self.metadata, &output.pivot_cache_records);
+        hydrate_workbook_calculation(&mut self.metadata, &output.calculation);
         hydrate_workbook_views(
-            &self.workbook,
+            &mut self.metadata,
             &output.workbook_views,
             &id_map.sheet_ids,
-            &mut txn,
         );
-        hydrate_custom_workbook_views_xml(
-            &self.workbook,
-            &output.custom_workbook_views_xml,
-            &mut txn,
-        );
-        hydrate_workbook_web_publishing(&self.workbook, &output.web_publishing, &mut txn);
+        hydrate_custom_workbook_views_xml(&mut self.metadata, &output.custom_workbook_views_xml);
+        hydrate_workbook_web_publishing(&mut self.metadata, &output.web_publishing);
         hydrate_workbook_threaded_comment_persons(
-            &self.workbook,
+            &mut self.metadata,
             &output.persons,
             output.has_persons_part,
-            &mut txn,
         );
-        hydrate_shared_string_hints(&self.workbook, &output.shared_string_hints, &mut txn);
-        hydrate_package_fidelity_metadata(&self.workbook, &output.package_fidelity, &mut txn);
-        hydrate_volatile_dependency_part(
-            &self.workbook,
-            &output.volatile_dependency_part,
-            &mut txn,
-        );
+        hydrate_shared_string_hints(&mut self.metadata, &output.shared_string_hints);
+        hydrate_package_fidelity_metadata(&mut self.metadata, &output.package_fidelity);
+        hydrate_volatile_dependency_part(&mut self.metadata, &output.volatile_dependency_part);
         hydrate_workbook_metadata(
-            &self.workbook,
+            &mut self.metadata,
             &output.workbook_properties,
             &output.properties,
             &output.extended_properties,
             &output.metadata,
             &output.file_version,
             &output.file_sharing,
-            &mut txn,
         );
-        hydrate_data_table_regions_from_parse_output(&self.workbook, output, &id_map, &mut txn);
 
-        write_schema_version(&mut txn, &self.workbook);
+        hydrate_imported_pivots_as_native(
+            self,
+            &output.pivot_tables,
+            &output.pivot_cache_sources,
+            &output.sheets,
+            &id_map.sheet_ids,
+        )?;
 
+        Ok(id_map)
+    }
+    fn hydrate_allocated_sheet(
+        &mut self,
+        output: &ParseOutput,
+        sheet_idx: usize,
+        alloc: &SheetIdAllocation,
+        ranged: &std::collections::HashSet<(u32, u32)>,
+        range_style_positions_for_sheet: &std::collections::HashSet<(u32, u32)>,
+        allocator: &mut impl IdAllocator,
+    ) -> Result<Vec<(cell_types::CellId, u32, u32)>, ComputeError> {
+        let sheet_data = &output.sheets[sheet_idx];
+        let (
+            identities,
+            native_merges,
+            native_auto_filter,
+            native_hyperlinks,
+            native_comments,
+            native_floating_objects,
+        ) = hydrate_sheet_with_allocation(
+            &mut self.cell_metadata,
+            sheet_data,
+            &output.persons,
+            alloc,
+            ranged,
+            range_style_positions_for_sheet,
+            allocator,
+        )?;
+        tracing::info!(target: "deferred_hydration", "hydrate: sheet {sheet_idx} hydrated");
+
+        let sheet_id = alloc.sheet_id;
+        self.sheet_metadata.insert(
+            sheet_id,
+            crate::storage::sheet::SheetMetadata::from_import(
+                sheet_data,
+                sheet_id,
+                &alloc.row_axis,
+                &alloc.col_axis,
+                native_merges,
+                native_auto_filter,
+            ),
+        );
+        self.sheet_metadata
+            .get_mut(&sheet_id)
+            .expect("sheet metadata initialized")
+            .hyperlinks = native_hyperlinks;
+        self.sheet_metadata
+            .get_mut(&sheet_id)
+            .expect("sheet metadata initialized")
+            .comments = native_comments;
+        self.sheet_metadata
+            .get_mut(&sheet_id)
+            .expect("sheet metadata initialized")
+            .floating_objects = native_floating_objects;
+        self.sheet_metadata
+            .get_mut(&sheet_id)
+            .expect("sheet metadata initialized")
+            .cell_properties = super::styles::hydrate_cell_styles(
+            &sheet_data.cells,
+            &alloc.cell_ids,
+            range_style_positions_for_sheet,
+        );
+        Ok(identities)
+    }
+
+    /// Extend an already loaded workbook with the remaining parsed sheets.
+    /// Workbook metadata and loaded sheet state keep their existing identities.
+    pub(crate) fn hydrate_remaining_sheets(
+        &mut self,
+        output: &ParseOutput,
+        allocations: &[SheetIdAllocation],
+        ranged_positions: &[std::collections::HashSet<(u32, u32)>],
+        range_style_positions: &[std::collections::HashSet<(u32, u32)>],
+        loaded_sheet_index: usize,
+        existing_tables: &[domain_types::domain::table::TableCatalogEntry],
+        allocator: &mut impl IdAllocator,
+    ) -> Result<HydrationIdMap, ComputeError> {
+        let mut id_map = HydrationIdMap::default();
+        for (index, allocation) in allocations.iter().enumerate() {
+            id_map.sheet_ids.push(allocation.sheet_id);
+            id_map.cell_ids.push(allocation.cell_ids.clone());
+            id_map.row_axes.push(allocation.row_axis.clone());
+            id_map.col_axes.push(allocation.col_axis.clone());
+            if index == loaded_sheet_index {
+                continue;
+            }
+            let identities = self.hydrate_allocated_sheet(
+                output,
+                index,
+                allocation,
+                &ranged_positions[index],
+                &range_style_positions[index],
+                allocator,
+            )?;
+            id_map.identities.extend(
+                identities
+                    .into_iter()
+                    .map(|(id, row, col)| (allocation.sheet_id, id, row, col)),
+            );
+        }
+        let all_tables: Vec<_> = output
+            .sheets
+            .iter()
+            .zip(&id_map.sheet_ids)
+            .enumerate()
+            .filter(|(index, _)| *index != loaded_sheet_index)
+            .flat_map(|(_, (sheet, id))| {
+                sheet
+                    .tables
+                    .iter()
+                    .map(move |table| (table.clone(), id.to_uuid_string()))
+            })
+            .collect();
+        let (table_identity, tables) = hydrate_workbook_tables(&all_tables, allocator);
+        id_map.canonical_tables = tables;
+        hydrate_workbook_print_defined_names(
+            &mut self.sheet_metadata,
+            &output.named_ranges,
+            &id_map.sheet_ids,
+        );
+        hydrate_workbook_slicers(
+            &mut self.metadata,
+            &output.sheets,
+            &id_map.sheet_ids,
+            &output.slicer_caches,
+            table_identity,
+            existing_tables,
+        );
+        hydrate_workbook_timelines(
+            &mut self.metadata,
+            &output.sheets,
+            &id_map.sheet_ids,
+            &output.timeline_caches,
+        );
+        hydrate_workbook_parsed_pivot_tables(&mut self.metadata, &output.pivot_tables);
+        hydrate_workbook_pivot_cache_sources(&mut self.metadata, &output.pivot_cache_sources);
+        hydrate_workbook_pivot_cache_records(&mut self.metadata, &output.pivot_cache_records);
+        hydrate_imported_pivots_as_native(
+            self,
+            &output.pivot_tables,
+            &output.pivot_cache_sources,
+            &output.sheets,
+            &id_map.sheet_ids,
+        )?;
         Ok(id_map)
     }
 }
 
 fn hydrate_imported_pivots_as_native(
-    workbook: &MapRef,
-    sheets: &MapRef,
+    storage: &mut WorkbookStorage,
     pivot_tables: &[domain_types::domain::pivot::ParsedPivotTable],
     pivot_cache_sources: &[PivotCacheSourceDef],
     sheet_data: &[domain_types::SheetData],
     sheet_ids: &[cell_types::SheetId],
-    txn: &mut yrs::TransactionMut<'_>,
 ) -> Result<(), ComputeError> {
     if pivot_tables.is_empty() {
         return Ok(());
@@ -639,12 +561,10 @@ fn hydrate_imported_pivots_as_native(
                 config.source_sheet_name = source_sheet_name.to_string();
                 config.output_sheet_name = output_sheet_name.to_string();
 
-                let inserted =
-                    insert_existing_pivot_if_absent_in_txn(txn, sheets, &output_sheet_id, config)?;
+                let inserted = insert_existing_pivot_if_absent(storage, &output_sheet_id, config)?;
                 let existing_matches_import = inserted
-                    || crate::storage::sheet::pivots::get_pivot_in_txn(
-                        txn,
-                        sheets,
+                    || crate::storage::sheet::pivots::get_pivot(
+                        storage,
                         &output_sheet_id,
                         native_pivot_id.as_str(),
                     )
@@ -688,7 +608,7 @@ fn hydrate_imported_pivots_as_native(
                         Some(ImportedPivotUnsupportedReason::NativePivotIdCollision),
                     )
                 };
-                write_imported_pivot_association(txn, workbook, &association);
+                write_imported_pivot_association(storage, &association);
             }
             ImportedPivotClassification::Unsupported(reason) => {
                 let association = association_from_parsed_pivot(
@@ -706,7 +626,7 @@ fn hydrate_imported_pivots_as_native(
                         .map(cell_types::SheetId::to_uuid_string),
                     Some(reason),
                 );
-                write_imported_pivot_association(txn, workbook, &association);
+                write_imported_pivot_association(storage, &association);
             }
         }
     }
@@ -716,177 +636,4 @@ fn hydrate_imported_pivots_as_native(
 
 fn pivot_spec_key(parsed: &domain_types::domain::pivot::ParsedPivotTable, index: usize) -> String {
     format!("{}_{}", parsed.config.name, index)
-}
-
-const WORKBOOK_LINK_NAMESPACE: uuid::Uuid =
-    uuid::Uuid::from_u128(0x8d58d5b08e445f579b0d70f6d1f9a321);
-const WORKBOOK_IMPORT_NAMESPACE: uuid::Uuid =
-    uuid::Uuid::from_u128(0x149c13a0b0a75c55a690c3ab8d3a3210);
-
-fn ensure_imported_workbook_identity(
-    txn: &mut yrs::TransactionMut<'_>,
-    workbook: &MapRef,
-    external_links: &[ExternalLink],
-) -> Result<WorkbookId, ComputeError> {
-    if let Some(metadata) =
-        read_workbook_metadata(txn, workbook).map_err(|err| ComputeError::Deserialize {
-            message: format!("workbook identity read failed: {err}"),
-        })?
-    {
-        return Ok(metadata.workbook_id);
-    }
-
-    let identity_seed = external_links
-        .iter()
-        .map(|link| {
-            link.imported_identity
-                .as_ref()
-                .map(|identity| {
-                    format!(
-                        "{}:{}:{}",
-                        identity.excel_ordinal, identity.workbook_rel_id, identity.part_name
-                    )
-                })
-                .unwrap_or_else(|| format!("orphan:{}", link.id))
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-    let workbook_id = WorkbookId::from_raw(
-        uuid::Uuid::new_v5(&WORKBOOK_IMPORT_NAMESPACE, identity_seed.as_bytes()).as_u128(),
-    );
-    let metadata = PersistedWorkbookMetadata {
-        workbook_id,
-        created: WorkbookCreationMetadata {
-            created_at: None,
-            created_by: Some("xlsx-import".to_string()),
-            imported_from: Some("xlsx".to_string()),
-        },
-        lineage: None,
-    };
-    write_workbook_metadata(txn, workbook, &metadata).map_err(|err| ComputeError::Deserialize {
-        message: format!("workbook identity serialization failed: {err}"),
-    })?;
-    Ok(workbook_id)
-}
-
-fn imported_excel_link_id(
-    destination_workbook_id: &WorkbookId,
-    identity: &domain_types::domain::external_link::ImportedExternalLinkIdentity,
-) -> Result<LinkId, ComputeError> {
-    let name = format!(
-        "{}:excel:{}:{}:{}",
-        destination_workbook_id.to_uuid_string(),
-        identity.excel_ordinal,
-        identity.workbook_rel_id,
-        identity.part_name
-    );
-    Ok(LinkId::from_raw(
-        uuid::Uuid::new_v5(&WORKBOOK_LINK_NAMESPACE, name.as_bytes()).as_u128(),
-    ))
-}
-
-fn imported_artifact_id(destination_workbook_id: &WorkbookId, part_name: &str) -> String {
-    let name = format!(
-        "{}:orphan-external-link:{}",
-        destination_workbook_id.to_uuid_string(),
-        part_name
-    );
-    uuid::Uuid::new_v5(&WORKBOOK_LINK_NAMESPACE, name.as_bytes()).to_string()
-}
-
-fn imported_identity_from_domain(
-    identity: &domain_types::domain::external_link::ImportedExternalLinkIdentity,
-) -> ImportedExternalLinkIdentity {
-    ImportedExternalLinkIdentity {
-        excel_ordinal: identity.excel_ordinal,
-        workbook_rel_id: identity.workbook_rel_id.clone(),
-        part_name: identity.part_name.clone(),
-        external_book_rid: identity.external_book_rid.clone(),
-        target: identity.target.clone(),
-        target_mode: identity.target_mode.clone(),
-    }
-}
-
-fn source_kind_for_external_link(link: &ExternalLink) -> PersistedWorkbookLinkSourceKind {
-    match &link.link_type {
-        ExternalLinkType::Workbook => PersistedWorkbookLinkSourceKind::ExcelWorkbook,
-        ExternalLinkType::Dde { .. } => PersistedWorkbookLinkSourceKind::DdeLink,
-        ExternalLinkType::Ole { .. } => PersistedWorkbookLinkSourceKind::OleLink,
-    }
-}
-
-fn persisted_target_for_external_link(
-    link: &ExternalLink,
-    identity: &domain_types::domain::external_link::ImportedExternalLinkIdentity,
-) -> PersistedLinkTarget {
-    match &link.link_type {
-        ExternalLinkType::Workbook => {
-            let target = link
-                .file_path
-                .clone()
-                .or_else(|| identity.target.clone())
-                .unwrap_or_else(|| identity.part_name.clone());
-            if target.starts_with("https://") || target.starts_with("http://") {
-                PersistedLinkTarget::Url { url: target }
-            } else {
-                PersistedLinkTarget::OoxmlExternalPath { target }
-            }
-        }
-        ExternalLinkType::Dde { service, topic, .. } => PersistedLinkTarget::OpaqueHostToken {
-            namespace: "ooxml-dde".to_string(),
-            token: stable_opaque_token(&format!("{service}\u{1f}{topic}")),
-        },
-        ExternalLinkType::Ole { prog_id, .. } => PersistedLinkTarget::OpaqueHostToken {
-            namespace: "ooxml-ole".to_string(),
-            token: stable_opaque_token(prog_id),
-        },
-    }
-}
-
-fn stable_opaque_token(seed: &str) -> String {
-    uuid::Uuid::new_v5(&WORKBOOK_LINK_NAMESPACE, seed.as_bytes()).to_string()
-}
-
-fn display_name_for_external_link(
-    link: &ExternalLink,
-    identity: &domain_types::domain::external_link::ImportedExternalLinkIdentity,
-) -> String {
-    match &link.link_type {
-        ExternalLinkType::Workbook => link
-            .file_path
-            .as_deref()
-            .and_then(|path| path.rsplit(['/', '\\']).next())
-            .filter(|name| !name.is_empty())
-            .unwrap_or(identity.part_name.as_str())
-            .to_string(),
-        ExternalLinkType::Dde { .. } => "Unsupported DDE link".to_string(),
-        ExternalLinkType::Ole { .. } => "Unsupported OLE link".to_string(),
-    }
-}
-
-fn imported_external_package_artifact(
-    destination_workbook_id: &WorkbookId,
-    link: &ExternalLink,
-) -> Result<ImportedExternalPackageArtifact, ComputeError> {
-    let part_name = format!("xl/externalLinks/externalLink{}.xml", link.id);
-    let payload_json = serde_json::to_string(link).map_err(|err| ComputeError::Deserialize {
-        message: format!("orphan external link payload serialization: {err}"),
-    })?;
-    Ok(ImportedExternalPackageArtifact {
-        artifact_id: imported_artifact_id(destination_workbook_id, &part_name),
-        artifact_kind: "orphan-external-link".to_string(),
-        part_name,
-        rels_part_name: None,
-        content_type: Some(
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.externalLink+xml"
-                .to_string(),
-        ),
-        payload_kind: "domain-types.external-link".to_string(),
-        payload_version: 1,
-        payload_json,
-        rels_payload: None,
-        diagnostic: "externalLink part is not referenced by workbook externalReferences"
-            .to_string(),
-        tombstoned: false,
-    })
 }

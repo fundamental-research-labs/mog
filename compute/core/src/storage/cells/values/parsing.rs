@@ -49,7 +49,7 @@ pub(crate) struct ParsedInputValue {
 }
 
 // ===========================================================================
-// Pure Parsing Functions (no Yrs access)
+// Pure Parsing Functions
 // ===========================================================================
 
 /// Parse a raw input string to determine its type.
@@ -79,9 +79,6 @@ pub(crate) struct ParsedInputValue {
 ///
 /// The boolean and formatted-number branches remain format-blind by
 /// design.
-pub(crate) fn parse_input_value(input: &str, target: Option<FormatType>) -> ParsedValue {
-    parse_input_value_with_context(input, &InputParseContext::default_for_target(target)).value
-}
 
 pub(crate) fn parse_input_value_with_context(
     input: &str,
@@ -102,7 +99,7 @@ pub(crate) fn parse_input_value_with_context(
     }
 
     // 3. Boolean — hint NOT consulted; G2 (text-format) is enforced upstream
-    //    in `CellWrite::from_user_string` so a Text-formatted cell never
+    //    in the input boundary so a Text-formatted cell never
     //    reaches this function.
     if trimmed.eq_ignore_ascii_case("TRUE") {
         return parsed(ParsedValue::Boolean(true));
@@ -117,7 +114,7 @@ pub(crate) fn parse_input_value_with_context(
     //    date coercion so the input falls through to text — Excel parity
     //    for "format-aware text fallback." `None`, `General`, `Date`,
     //    `Time`, and `Custom` keep the permissive behavior. (`Text` never
-    //    reaches this function — `CellWrite::from_user_string` short-
+    //    reaches this function — the input boundary short-
     //    circuits text-formatted cells before parse runs.) Regression-
     //    guarded by
     //    `parse_input_value_percent_hint_date_input_falls_through_to_text`

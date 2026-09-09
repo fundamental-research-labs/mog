@@ -1,6 +1,6 @@
-//! Feature methods (filters, sorting, slicers, sparklines, grouping, subtotals) for YrsComputeEngine.
+//! Feature methods (filters, sorting, slicers, sparklines, grouping, subtotals) for ComputeEngine.
 
-use super::YrsComputeEngine;
+use super::ComputeEngine;
 use crate::snapshot::MutationResult;
 use crate::storage::cells::data_ops as cell_ops;
 use crate::storage::sheet::{
@@ -20,13 +20,13 @@ mod sparklines;
 mod text_to_columns;
 
 #[bridge::api(
-    service = "YrsComputeEngine",
+    service = "ComputeEngine",
     key = "doc_id",
     group = "features",
     fn_prefix = "compute",
     crate_path = "compute_core"
 )]
-impl YrsComputeEngine {
+impl ComputeEngine {
     // -------------------------------------------------------------------
     // Filters
     // -------------------------------------------------------------------
@@ -37,7 +37,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         config: serde_json::Value,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        filters::create_filter(self, sheet_id, config)
+        self.with_history(|engine| filters::create_filter(engine, sheet_id, config))
     }
 
     #[bridge::write(scope = "sheet")]
@@ -46,7 +46,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         filter_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        filters::delete_filter(self, sheet_id, filter_id)
+        self.with_history(|engine| filters::delete_filter(engine, sheet_id, filter_id))
     }
 
     #[bridge::write(scope = "sheet")]
@@ -57,7 +57,9 @@ impl YrsComputeEngine {
         header_col: u32,
         criteria: sheet_filters::ColumnFilter,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        filters::set_column_filter(self, sheet_id, filter_id, header_col, criteria)
+        self.with_history(|engine| {
+            filters::set_column_filter(engine, sheet_id, filter_id, header_col, criteria)
+        })
     }
 
     #[bridge::write(scope = "sheet")]
@@ -67,7 +69,9 @@ impl YrsComputeEngine {
         filter_id: &str,
         header_col: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        filters::clear_column_filter(self, sheet_id, filter_id, header_col)
+        self.with_history(|engine| {
+            filters::clear_column_filter(engine, sheet_id, filter_id, header_col)
+        })
     }
 
     #[bridge::write(scope = "sheet")]
@@ -76,7 +80,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         filter_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        filters::clear_all_column_filters(self, sheet_id, filter_id)
+        self.with_history(|engine| filters::clear_all_column_filters(engine, sheet_id, filter_id))
     }
 
     #[bridge::read(scope = "sheet")]
@@ -99,7 +103,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         request: sheet_filters::AdvancedFilterRequest,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        filters::apply_advanced_filter(self, sheet_id, request)
+        self.with_history(|engine| filters::apply_advanced_filter(engine, sheet_id, request))
     }
 
     /// Evaluate a filter and atomically hide/unhide rows.
@@ -109,8 +113,7 @@ impl YrsComputeEngine {
     /// SUBTOTAL(101-111) and AGGREGATE formulas immediately reflect the new
     /// hidden-row state without requiring a separate `calculate()` call.
     ///
-    /// Row-visibility patches (filter viewport R5.1): `apply_filter` mutates Yrs
-    /// `hiddenRows` and the layout index but the incremental
+    /// `apply_filter` updates native row visibility and the layout index. The incremental
     /// `serialize_mutation_result` wire format only carries cell-value
     /// patches, not row dimensions. Returning empty patches forced the TS
     /// kernel to call `forceRefreshAllViewports()` after every filter
@@ -123,7 +126,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         filter_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        filters::apply_filter(self, sheet_id, filter_id)
+        self.with_history(|engine| filters::apply_filter(engine, sheet_id, filter_id))
     }
 
     #[bridge::write(scope = "sheet")]
@@ -132,7 +135,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         filter_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        filters::reapply_filter(self, sheet_id, filter_id)
+        self.with_history(|engine| filters::reapply_filter(engine, sheet_id, filter_id))
     }
 
     /// Get unique values in a filter column for populating the filter dropdown.
@@ -171,10 +174,7 @@ impl YrsComputeEngine {
     // Sorting
     // -------------------------------------------------------------------
 
-    /// Sort a range of cells. Updates yrs Doc, grid_indexes, mirror, and compute.
-    ///
-    /// Changed from `#[bridge::read(scope = "range")]` to `#[bridge::write(scope = "range")]` because sorting
-    /// mutates the yrs Doc (reorders cell positions) and must update all stores.
+    /// Sort cells while updating native identities, metadata, and dependencies.
     ///
     /// **CF natively re-evaluated.** When the sort range overlaps a CF format
     /// on the same sheet, top-N / above-average / data-bar / color-scale rules
@@ -194,9 +194,11 @@ impl YrsComputeEngine {
         end_col: u32,
         options: super::mutation::BridgeSortOptions,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        range_ops::sort_range(
-            self, sheet_id, start_row, start_col, end_row, end_col, options,
-        )
+        self.with_history(|engine| {
+            range_ops::sort_range(
+                engine, sheet_id, start_row, start_col, end_row, end_col, options,
+            )
+        })
     }
 
     // -------------------------------------------------------------------
@@ -214,11 +216,11 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         request: crate::engine_types::fill::BridgeAutoFillRequest,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        range_ops::auto_fill(self, sheet_id, request)
+        self.with_history(|engine| range_ops::auto_fill(engine, sheet_id, request))
     }
 
     /// Dry-run autofill against the production fill engine without mutating
-    /// storage, viewport state, or undo history.
+    /// storage or viewport state.
     #[bridge::read(scope = "sheet")]
     pub fn auto_fill_preview(
         &self,
@@ -239,7 +241,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         request: crate::engine_types::fill::BridgeFlashFillRequest,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        range_ops::flash_fill(self, sheet_id, request)
+        self.with_history(|engine| range_ops::flash_fill(engine, sheet_id, request))
     }
 
     // -------------------------------------------------------------------
@@ -275,20 +277,22 @@ impl YrsComputeEngine {
         skip_blanks: bool,
         transpose: bool,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        range_ops::copy_range(
-            self,
-            source_sheet_id,
-            src_start_row,
-            src_start_col,
-            src_end_row,
-            src_end_col,
-            target_sheet_id,
-            target_row,
-            target_col,
-            copy_type,
-            skip_blanks,
-            transpose,
-        )
+        self.with_history(|engine| {
+            range_ops::copy_range(
+                engine,
+                source_sheet_id,
+                src_start_row,
+                src_start_col,
+                src_end_row,
+                src_end_col,
+                target_sheet_id,
+                target_row,
+                target_col,
+                copy_type,
+                skip_blanks,
+                transpose,
+            )
+        })
     }
 
     // -------------------------------------------------------------------
@@ -304,7 +308,7 @@ impl YrsComputeEngine {
         start_row: u32,
         end_row: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        grouping::group_rows(self, sheet_id, start_row, end_row)
+        self.with_history(|engine| grouping::group_rows(engine, sheet_id, start_row, end_row))
     }
 
     /// Ungroup (remove) the innermost row group containing the range.
@@ -315,7 +319,7 @@ impl YrsComputeEngine {
         start_row: u32,
         end_row: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        grouping::ungroup_rows(self, sheet_id, start_row, end_row)
+        self.with_history(|engine| grouping::ungroup_rows(engine, sheet_id, start_row, end_row))
     }
 
     /// Group a range of columns, creating a new outline group.
@@ -327,7 +331,7 @@ impl YrsComputeEngine {
         start_col: u32,
         end_col: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        grouping::group_columns(self, sheet_id, start_col, end_col)
+        self.with_history(|engine| grouping::group_columns(engine, sheet_id, start_col, end_col))
     }
 
     /// Ungroup (remove) the innermost column group containing the range.
@@ -338,7 +342,7 @@ impl YrsComputeEngine {
         start_col: u32,
         end_col: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        grouping::ungroup_columns(self, sheet_id, start_col, end_col)
+        self.with_history(|engine| grouping::ungroup_columns(engine, sheet_id, start_col, end_col))
     }
 
     /// Set the collapsed state of a specific group by ID.
@@ -349,7 +353,9 @@ impl YrsComputeEngine {
         group_id: &str,
         collapsed: bool,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        grouping::set_group_collapsed(self, sheet_id, group_id, collapsed)
+        self.with_history(|engine| {
+            grouping::set_group_collapsed(engine, sheet_id, group_id, collapsed)
+        })
     }
 
     /// Toggle the collapsed state of a group. Returns the new state via `MutationResult.data`.
@@ -359,7 +365,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         group_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        grouping::toggle_group_collapsed(self, sheet_id, group_id)
+        self.with_history(|engine| grouping::toggle_group_collapsed(engine, sheet_id, group_id))
     }
 
     /// Expand all groups on both axes.
@@ -368,7 +374,7 @@ impl YrsComputeEngine {
         &mut self,
         sheet_id: &SheetId,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        grouping::expand_all_groups(self, sheet_id)
+        self.with_history(|engine| grouping::expand_all_groups(engine, sheet_id))
     }
 
     /// Collapse all groups on both axes.
@@ -377,7 +383,7 @@ impl YrsComputeEngine {
         &mut self,
         sheet_id: &SheetId,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        grouping::collapse_all_groups(self, sheet_id)
+        self.with_history(|engine| grouping::collapse_all_groups(engine, sheet_id))
     }
 
     /// Get the full grouping configuration for a sheet.
@@ -407,42 +413,44 @@ impl YrsComputeEngine {
     /// Returns the created slicer as JSON.
     #[bridge::write(scope = "sheet")]
     pub fn create_slicer(
-        &self,
+        &mut self,
         sheet_id: &SheetId,
         config: StoredSlicer,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        slicers::create_slicer(self, sheet_id, config)
+        self.with_history(|engine| slicers::create_slicer(engine, sheet_id, config))
     }
 
     /// Delete a slicer by ID.
     #[bridge::write(scope = "sheet")]
     pub fn delete_slicer(
-        &self,
+        &mut self,
         sheet_id: &SheetId,
         slicer_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        slicers::delete_slicer(self, sheet_id, slicer_id)
+        self.with_history(|engine| slicers::delete_slicer(engine, sheet_id, slicer_id))
     }
 
     /// Delete multiple slicers in one all-or-nothing mutation.
     #[bridge::write(scope = "sheet")]
     pub fn delete_slicers(
-        &self,
+        &mut self,
         sheet_id: &SheetId,
         slicer_ids: Vec<String>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        slicers::delete_slicers(self, sheet_id, slicer_ids)
+        self.with_history(|engine| slicers::delete_slicers(engine, sheet_id, slicer_ids))
     }
 
     /// Update a slicer's configuration with a partial update.
     #[bridge::write(scope = "sheet")]
     pub fn update_slicer_config(
-        &self,
+        &mut self,
         sheet_id: &SheetId,
         slicer_id: &str,
         update: StoredSlicerUpdate,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        slicers::update_slicer_config(self, sheet_id, slicer_id, update)
+        self.with_history(|engine| {
+            slicers::update_slicer_config(engine, sheet_id, slicer_id, update)
+        })
     }
 
     /// Get all slicers for a sheet.
@@ -466,33 +474,35 @@ impl YrsComputeEngine {
     /// Toggle a slicer item selection.
     #[bridge::write(scope = "sheet")]
     pub fn toggle_slicer_item(
-        &self,
+        &mut self,
         sheet_id: &SheetId,
         slicer_id: &str,
         value: CellValue,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        slicers::toggle_slicer_item(self, sheet_id, slicer_id, value)
+        self.with_history(|engine| slicers::toggle_slicer_item(engine, sheet_id, slicer_id, value))
     }
 
     /// Replace a slicer's selection in one authoritative mutation.
     #[bridge::write(scope = "sheet")]
     pub fn set_slicer_selection(
-        &self,
+        &mut self,
         sheet_id: &SheetId,
         slicer_id: &str,
         values: Vec<CellValue>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        slicers::set_slicer_selection(self, sheet_id, slicer_id, values)
+        self.with_history(|engine| {
+            slicers::set_slicer_selection(engine, sheet_id, slicer_id, values)
+        })
     }
 
     /// Clear all slicer selections (show all data).
     #[bridge::write(scope = "sheet")]
     pub fn clear_slicer_selection(
-        &self,
+        &mut self,
         sheet_id: &SheetId,
         slicer_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        slicers::clear_slicer_selection(self, sheet_id, slicer_id)
+        self.with_history(|engine| slicers::clear_slicer_selection(engine, sheet_id, slicer_id))
     }
 
     // -------------------------------------------------------------------
@@ -571,9 +581,11 @@ impl YrsComputeEngine {
         end_col: u32,
         options: sheet_grouping::SubtotalOptions,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        grouping::create_subtotals(
-            self, sheet_id, start_row, start_col, end_row, end_col, options,
-        )
+        self.with_history(|engine| {
+            grouping::create_subtotals(
+                engine, sheet_id, start_row, start_col, end_row, end_col, options,
+            )
+        })
     }
 
     /// Remove subtotal rows and associated groups from a range.
@@ -586,7 +598,9 @@ impl YrsComputeEngine {
         end_row: u32,
         end_col: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        grouping::remove_subtotals(self, sheet_id, start_row, start_col, end_row, end_col)
+        self.with_history(|engine| {
+            grouping::remove_subtotals(engine, sheet_id, start_row, start_col, end_row, end_col)
+        })
     }
 
     /// Automatically detect formula patterns and create outline groups.
@@ -600,7 +614,9 @@ impl YrsComputeEngine {
         end_row: u32,
         end_col: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        grouping::auto_outline(self, sheet_id, start_row, start_col, end_row, end_col)
+        self.with_history(|engine| {
+            grouping::auto_outline(engine, sheet_id, start_row, start_col, end_row, end_col)
+        })
     }
 
     /// Get current subtotal configuration for a sheet (alias for get_sheet_grouping_config).
@@ -619,7 +635,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         sparkline: sheet_sparklines::Sparkline,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        sparklines::add_sparkline(self, sheet_id, sparkline)
+        self.with_history(|engine| sparklines::add_sparkline(engine, sheet_id, sparkline))
     }
 
     #[bridge::write(scope = "sheet")]
@@ -629,7 +645,9 @@ impl YrsComputeEngine {
         sparkline_id: &str,
         updates: sheet_sparklines::SparklineUpdate,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        sparklines::update_sparkline(self, sheet_id, sparkline_id, updates)
+        self.with_history(|engine| {
+            sparklines::update_sparkline(engine, sheet_id, sparkline_id, updates)
+        })
     }
 
     #[bridge::write(scope = "sheet")]
@@ -638,7 +656,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         sparkline_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        sparklines::delete_sparkline(self, sheet_id, sparkline_id)
+        self.with_history(|engine| sparklines::delete_sparkline(engine, sheet_id, sparkline_id))
     }
 
     #[bridge::read(scope = "sheet")]
@@ -670,16 +688,18 @@ impl YrsComputeEngine {
         columns: Vec<u32>,
         has_headers: bool,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        range_ops::remove_duplicates(
-            self,
-            sheet_id,
-            start_row,
-            start_col,
-            end_row,
-            end_col,
-            columns,
-            has_headers,
-        )
+        self.with_history(|engine| {
+            range_ops::remove_duplicates(
+                engine,
+                sheet_id,
+                start_row,
+                start_col,
+                end_row,
+                end_col,
+                columns,
+                has_headers,
+            )
+        })
     }
 
     #[bridge::write(scope = "sheet")]
@@ -694,9 +714,11 @@ impl YrsComputeEngine {
         dest_col: u32,
         options: serde_json::Value,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        text_to_columns::text_to_columns(
-            self, sheet_id, start_row, end_row, source_col, dest_row, dest_col, options,
-        )
+        self.with_history(|engine| {
+            text_to_columns::text_to_columns(
+                engine, sheet_id, start_row, end_row, source_col, dest_row, dest_col, options,
+            )
+        })
     }
 
     /// Simplified text-to-columns that accepts the contract format directly.
@@ -719,19 +741,21 @@ impl YrsComputeEngine {
         treat_consecutive_as_one: bool,
         text_qualifier: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        text_to_columns::text_to_columns_simple(
-            self,
-            sheet_id,
-            start_row,
-            end_row,
-            source_col,
-            dest_row,
-            dest_col,
-            delimiter,
-            custom_delimiter,
-            treat_consecutive_as_one,
-            text_qualifier,
-        )
+        self.with_history(|engine| {
+            text_to_columns::text_to_columns_simple(
+                engine,
+                sheet_id,
+                start_row,
+                end_row,
+                source_col,
+                dest_row,
+                dest_col,
+                delimiter,
+                custom_delimiter,
+                treat_consecutive_as_one,
+                text_qualifier,
+            )
+        })
     }
 
     // -------------------------------------------------------------------
@@ -788,7 +812,9 @@ impl YrsComputeEngine {
         filter_id: &str,
         sort_state: Option<sheet_filters::FilterSortState>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        filters::set_filter_sort_state(self, sheet_id, filter_id, sort_state)
+        self.with_history(|engine| {
+            filters::set_filter_sort_state(engine, sheet_id, filter_id, sort_state)
+        })
     }
 
     /// Get the sort state for a filter.
@@ -807,7 +833,7 @@ impl YrsComputeEngine {
         &mut self,
         sheet_id: &SheetId,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        filters::clear_all_filters(self, sheet_id)
+        self.with_history(|engine| filters::clear_all_filters(engine, sheet_id))
     }
 
     /// Get filtered record count (visible vs total) for a filter.
@@ -852,7 +878,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         group: sheet_sparklines::SparklineGroup,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        sparklines::add_sparkline_group(self, sheet_id, group)
+        self.with_history(|engine| sparklines::add_sparkline_group(engine, sheet_id, group))
     }
 
     /// Get a sparkline group by ID.
@@ -882,7 +908,9 @@ impl YrsComputeEngine {
         group_id: &str,
         delete_sparklines: bool,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        sparklines::delete_sparkline_group(self, sheet_id, group_id, delete_sparklines)
+        self.with_history(|engine| {
+            sparklines::delete_sparkline_group(engine, sheet_id, group_id, delete_sparklines)
+        })
     }
 
     /// Clear sparklines in a range.
@@ -895,9 +923,11 @@ impl YrsComputeEngine {
         end_row: u32,
         end_col: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        sparklines::clear_sparklines_in_range(
-            self, sheet_id, start_row, start_col, end_row, end_col,
-        )
+        self.with_history(|engine| {
+            sparklines::clear_sparklines_in_range(
+                engine, sheet_id, start_row, start_col, end_row, end_col,
+            )
+        })
     }
 
     /// Clear all sparklines and groups for a sheet.
@@ -906,7 +936,7 @@ impl YrsComputeEngine {
         &mut self,
         sheet_id: &SheetId,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        sparklines::clear_sparklines_for_sheet(self, sheet_id)
+        self.with_history(|engine| sparklines::clear_sparklines_for_sheet(engine, sheet_id))
     }
 
     /// Check if a cell has a sparkline (O(1) via cell index).
@@ -1036,7 +1066,9 @@ impl YrsComputeEngine {
         level: u32,
         collapsed: bool,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        grouping::set_level_collapsed(self, sheet_id, axis, level, collapsed)
+        self.with_history(|engine| {
+            grouping::set_level_collapsed(engine, sheet_id, axis, level, collapsed)
+        })
     }
 
     /// Update outline settings (summaryRowsBelow, summaryColumnsRight, etc.).
@@ -1046,7 +1078,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         settings: sheet_grouping::OutlineSettingsUpdate,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        grouping::set_outline_settings(self, sheet_id, settings)
+        self.with_history(|engine| grouping::set_outline_settings(engine, sheet_id, settings))
     }
 
     /// Clear row grouping in a range.
@@ -1057,7 +1089,9 @@ impl YrsComputeEngine {
         start_row: u32,
         end_row: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        grouping::clear_row_grouping(self, sheet_id, start_row, end_row)
+        self.with_history(|engine| {
+            grouping::clear_row_grouping(engine, sheet_id, start_row, end_row)
+        })
     }
 
     /// Clear column grouping in a range.
@@ -1068,7 +1102,9 @@ impl YrsComputeEngine {
         start_col: u32,
         end_col: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        grouping::clear_column_grouping(self, sheet_id, start_col, end_col)
+        self.with_history(|engine| {
+            grouping::clear_column_grouping(engine, sheet_id, start_col, end_col)
+        })
     }
 
     /// Clear all grouping (rows and columns) for a sheet.
@@ -1077,7 +1113,7 @@ impl YrsComputeEngine {
         &mut self,
         sheet_id: &SheetId,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        grouping::clear_all_grouping(self, sheet_id)
+        self.with_history(|engine| grouping::clear_all_grouping(engine, sheet_id))
     }
 
     // -------------------------------------------------------------------

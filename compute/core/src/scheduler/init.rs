@@ -44,26 +44,12 @@ impl ComputeCore {
 
         // Seed the ID allocator past the max existing ID to avoid collisions.
         {
-            let mut max_id: u128 = 0;
-            for sheet in &snapshot.sheets {
-                if let Ok(sid) = SheetId::from_uuid_str(&sheet.id) {
-                    max_id = max_id.max(sid.as_u128());
-                }
-                for cell in &sheet.cells {
-                    if let Ok(cid) = CellId::from_uuid_str(&cell.cell_id) {
-                        max_id = max_id.max(cid.as_u128());
-                    }
-                }
-            }
-            // Clamp to u64 range — monotonic IDs stay in the low range while
-            // legacy UUID-based IDs are astronomically larger (safe, no overlap).
-            let seed = if max_id <= u64::MAX as u128 {
-                (max_id as u64).saturating_add(1)
-            } else {
-                // Existing IDs are UUIDs (random u128) — any u64 counter is safe.
-                1
-            };
-            self.id_alloc = std::sync::Arc::new(IdAllocator::with_seed(seed));
+            self.id_alloc =
+                std::sync::Arc::new(IdAllocator::with_seed(snapshot.next_identity_counter()));
+            self.id_alloc
+                .ensure_axis_run_past(cell_types::AxisRunId::from_raw(
+                    snapshot.next_axis_run_counter().saturating_sub(1),
+                ));
         }
 
         // 1. Populate the cell mirror from snapshot.
@@ -137,23 +123,12 @@ impl ComputeCore {
         };
 
         {
-            let mut max_id: u128 = 0;
-            for sheet in &snapshot.sheets {
-                if let Ok(sid) = SheetId::from_uuid_str(&sheet.id) {
-                    max_id = max_id.max(sid.as_u128());
-                }
-                for cell in &sheet.cells {
-                    if let Ok(cid) = CellId::from_uuid_str(&cell.cell_id) {
-                        max_id = max_id.max(cid.as_u128());
-                    }
-                }
-            }
-            let seed = if max_id <= u64::MAX as u128 {
-                (max_id as u64).saturating_add(1)
-            } else {
-                1
-            };
-            self.id_alloc = std::sync::Arc::new(IdAllocator::with_seed(seed));
+            self.id_alloc =
+                std::sync::Arc::new(IdAllocator::with_seed(snapshot.next_identity_counter()));
+            self.id_alloc
+                .ensure_axis_run_past(cell_types::AxisRunId::from_raw(
+                    snapshot.next_axis_run_counter().saturating_sub(1),
+                ));
         }
 
         let total_cell_count: usize = snapshot.sheets.iter().map(|s| s.cells.len()).sum();
@@ -209,23 +184,12 @@ impl ComputeCore {
         };
 
         {
-            let mut max_id: u128 = 0;
-            for sheet in &snapshot.sheets {
-                if let Ok(sid) = SheetId::from_uuid_str(&sheet.id) {
-                    max_id = max_id.max(sid.as_u128());
-                }
-                for cell in &sheet.cells {
-                    if let Ok(cid) = CellId::from_uuid_str(&cell.cell_id) {
-                        max_id = max_id.max(cid.as_u128());
-                    }
-                }
-            }
-            let seed = if max_id <= u64::MAX as u128 {
-                (max_id as u64).saturating_add(1)
-            } else {
-                1
-            };
-            self.id_alloc = std::sync::Arc::new(IdAllocator::with_seed(seed));
+            self.id_alloc =
+                std::sync::Arc::new(IdAllocator::with_seed(snapshot.next_identity_counter()));
+            self.id_alloc
+                .ensure_axis_run_past(cell_types::AxisRunId::from_raw(
+                    snapshot.next_axis_run_counter().saturating_sub(1),
+                ));
         }
 
         let total_cell_count: usize = snapshot.sheets.iter().map(|s| s.cells.len()).sum();
@@ -282,23 +246,12 @@ impl ComputeCore {
         };
 
         {
-            let mut max_id: u128 = 0;
-            for sheet in &snapshot.sheets {
-                if let Ok(sid) = SheetId::from_uuid_str(&sheet.id) {
-                    max_id = max_id.max(sid.as_u128());
-                }
-                for cell in &sheet.cells {
-                    if let Ok(cid) = CellId::from_uuid_str(&cell.cell_id) {
-                        max_id = max_id.max(cid.as_u128());
-                    }
-                }
-            }
-            let seed = if max_id <= u64::MAX as u128 {
-                (max_id as u64).saturating_add(1)
-            } else {
-                1
-            };
-            self.id_alloc = std::sync::Arc::new(IdAllocator::with_seed(seed));
+            self.id_alloc =
+                std::sync::Arc::new(IdAllocator::with_seed(snapshot.next_identity_counter()));
+            self.id_alloc
+                .ensure_axis_run_past(cell_types::AxisRunId::from_raw(
+                    snapshot.next_axis_run_counter().saturating_sub(1),
+                ));
         }
 
         *mirror = CellMirror::from_snapshot(snapshot)?;
@@ -315,6 +268,33 @@ impl ComputeCore {
         self.deferred_formula_cells = Some(formula_cells);
 
         Ok(RecalcResult::empty())
+    }
+
+    /// Initialize formula descriptors against native values already installed by
+    /// the caller. The graph remains deferred until all sheets are available.
+    pub(crate) fn init_native_formula_descriptors(
+        &mut self,
+        mirror: &mut CellMirror,
+        sheet_order: &[SheetId],
+        settings: &snapshot_types::CalculationSettings,
+        formula_cells: Vec<(CellId, SheetId, String)>,
+        allocator: std::sync::Arc<IdAllocator>,
+    ) {
+        self.iterative_calc = settings.enable_iterative_calculation;
+        self.max_iterations = settings.max_iterations;
+        self.max_change = settings.max_change.get();
+        self.calc_mode = settings.calc_mode;
+        self.sheet_order = sheet_order
+            .iter()
+            .enumerate()
+            .map(|(i, &id)| (id, i))
+            .collect();
+        self.rebuild_ordered_sheets_cache();
+        self.id_alloc = allocator;
+        self.normalize_raw_named_ranges_for_graph(mirror);
+        self.seed_cell_formula_text(&formula_cells);
+        self.deferred_formula_cells = Some(formula_cells);
+        self.workbook_load_pending = false;
     }
 
     /// Ultra-minimal init for deferred-hydration XLSX import.
@@ -341,7 +321,6 @@ impl ComputeCore {
             .filter_map(|(idx, sheet)| SheetId::from_uuid_str(&sheet.id).ok().map(|sid| (sid, idx)))
             .collect();
         self.rebuild_ordered_sheets_cache();
-        let deferred_snapshot = snapshot.clone();
 
         let materialized_formula_cells = Self::extract_formula_cells_from_snapshot(&snapshot);
         self.cell_formula_text = FxHashMap::with_capacity_and_hasher(
@@ -353,7 +332,7 @@ impl ComputeCore {
         // Store the viewport-only marker so graph/recalc callers can reject
         // partial workbook graph construction until full hydration completes.
         // Readback does not depend on this marker.
-        self.deferred_snapshot = Some(deferred_snapshot);
+        self.workbook_load_pending = true;
 
         *mirror = CellMirror::from_snapshot(snapshot)?;
 
@@ -391,7 +370,7 @@ impl ComputeCore {
         // context: cross-sheet references, names, and later-sheet cells can be
         // absent. Formula readback is seeded separately, but graph construction
         // must wait for full deferred hydration.
-        if self.deferred_snapshot.is_some() {
+        if self.workbook_load_pending {
             return Err(Self::deferred_graph_construction_error());
         }
 

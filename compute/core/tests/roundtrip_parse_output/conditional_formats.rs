@@ -23,7 +23,7 @@ fn roundtrip_conditional_format_cell_value() {
         sheet_id: String::new(),
         pivot: None,
         ranges: vec![CFCellRange::new(0, 0, 2, 0)], // A1:A3
-        range_identities: None,
+
         rules: vec![CFRule::CellValue {
             id: "test-rule-1".to_string(),
             operator: CfOperator::GreaterThan,
@@ -79,7 +79,7 @@ fn roundtrip_conditional_format_formula() {
         sheet_id: String::new(),
         pivot: None,
         ranges: vec![CFCellRange::new(0, 0, 9, 0)], // A1:A10
-        range_identities: None,
+
         rules: vec![CFRule::Formula {
             id: "test-rule-formula".to_string(),
             formula: "A1>10".to_string(),
@@ -121,7 +121,7 @@ fn roundtrip_conditional_format_color_scale() {
         sheet_id: String::new(),
         pivot: None,
         ranges: vec![CFCellRange::new(0, 0, 2, 0)], // A1:A3
-        range_identities: None,
+
         rules: vec![CFRule::ColorScale {
             id: "test-rule-cs".to_string(),
             priority: 1,
@@ -193,7 +193,7 @@ fn roundtrip_conditional_format_data_bar() {
         sheet_id: String::new(),
         pivot: None,
         ranges: vec![CFCellRange::new(0, 0, 1, 0)], // A1:A2
-        range_identities: None,
+
         rules: vec![CFRule::DataBar {
             id: "test-rule-db".to_string(),
             priority: 1,
@@ -259,7 +259,7 @@ fn roundtrip_conditional_format_icon_set() {
         sheet_id: String::new(),
         pivot: None,
         ranges: vec![CFCellRange::new(0, 0, 2, 0)], // A1:A3
-        range_identities: None,
+
         rules: vec![CFRule::IconSet {
             id: "test-rule-is".to_string(),
             priority: 1,

@@ -51,13 +51,13 @@ fn ensure_cell_id_identity_only_expands_identity_extent() {
 }
 
 #[test]
-fn register_identity_only_does_not_write_col_data() {
+fn register_identity_only_does_not_write_column_values() {
     let (mut mirror, sheet_id) = make_mirror();
     let cell_id = CellId::from_raw(900);
 
     // Position beyond row extent (row 200 vs base rows=100); col=5
     // sits inside the base cols=10 so `identity_cols` doesn't grow.
-    // What's tested here is "no col_data write" + "identity extent
+    // What's tested here is "no column_values write" + "identity extent
     // grows on row" + "data extent unchanged".
     mirror.register_identity_only(&sheet_id, SheetPos::new(200, 5), cell_id);
 
@@ -66,9 +66,9 @@ fn register_identity_only_does_not_write_col_data() {
     assert_eq!(sheet.pos_to_id.get(&SheetPos::new(200, 5)), Some(&cell_id));
     assert_eq!(sheet.id_to_pos.get(&cell_id), Some(&SheetPos::new(200, 5)));
     assert!(sheet.cells.contains_key(&cell_id));
-    // col_data must NOT have been touched at column 5 (no Null write).
-    // The original sheet has no col_data for col 5 -> still none.
-    assert!(!sheet.col_data.contains_key(&5));
+    // column_values must NOT have been touched at column 5 (no Null write).
+    // The original sheet has no column_values for col 5 -> still none.
+    assert!(!sheet.get_column_view(5).is_some());
     // Data extent stays put; identity rows extent grows past base 100.
     assert_eq!(sheet.rows, 100);
     assert_eq!(sheet.cols, 10);
@@ -87,7 +87,7 @@ fn register_identity_only_grows_identity_cols_when_outside_base() {
     mirror.register_identity_only(&sheet_id, SheetPos::new(50, 25), cell_id);
 
     let sheet = mirror.get_sheet(&sheet_id).unwrap();
-    assert!(!sheet.col_data.contains_key(&25));
+    assert!(!sheet.get_column_view(25).is_some());
     // Data cols stays at base 10.
     assert_eq!(sheet.cols, 10);
     // Identity cols grows to 26 (= 25 + 1).
@@ -125,9 +125,9 @@ fn register_identity_only_is_noop_when_cell_already_present() {
 }
 
 #[test]
-fn register_ghost_cell_writes_null_into_col_data_outside_projections() {
+fn register_ghost_cell_writes_null_into_column_values_outside_projections() {
     // Lock in the *contrast* with register_identity_only: the existing
-    // register_ghost_cell path still writes Null into col_data when no
+    // register_ghost_cell path still writes Null into column_values when no
     // projection covers the position. This is correct for the parallel-
     // init path (positions back real XLSX data) but wrong for filter
     // corners - that's exactly why register_identity_only exists.
@@ -138,12 +138,12 @@ fn register_ghost_cell_writes_null_into_col_data_outside_projections() {
     mirror.register_ghost_cell(&sheet_id, pos, cell_id);
 
     let sheet = mirror.get_sheet(&sheet_id).unwrap();
-    assert!(sheet.col_data.contains_key(&7));
-    assert_eq!(sheet.col_data[&7][50], CellValue::Null);
+    assert!(sheet.get_column_view(7).is_some());
+    assert_eq!(sheet.get_column_view(7).unwrap()[50], CellValue::Null);
 }
 
 #[test]
-fn register_ghost_cell_preserves_projected_col_data() {
+fn register_ghost_cell_preserves_projected_column_values() {
     let (mut mirror, sheet_id) = make_mirror();
     let source_id = CellId::from_raw(124);
     mirror
@@ -162,11 +162,14 @@ fn register_ghost_cell_preserves_projected_col_data() {
     mirror.register_ghost_cell(&sheet_id, SheetPos::new(2, 2), CellId::from_raw(125));
 
     let sheet = mirror.get_sheet(&sheet_id).unwrap();
-    assert_eq!(sheet.col_data[&2][2], CellValue::from("diag"));
+    assert_eq!(
+        sheet.get_column_view(2).unwrap()[2],
+        CellValue::from("diag")
+    );
 }
 
 #[test]
-fn ensure_cell_id_preserves_projected_col_data() {
+fn ensure_cell_id_preserves_projected_column_values() {
     let (mut mirror, sheet_id) = make_mirror();
     let source_id = CellId::from_raw(126);
     mirror
@@ -186,5 +189,8 @@ fn ensure_cell_id_preserves_projected_col_data() {
     mirror.ensure_cell_id(&sheet_id, SheetPos::new(3, 4), &id_alloc);
 
     let sheet = mirror.get_sheet(&sheet_id).unwrap();
-    assert_eq!(sheet.col_data[&4][3], CellValue::from("right"));
+    assert_eq!(
+        sheet.get_column_view(4).unwrap()[3],
+        CellValue::from("right")
+    );
 }

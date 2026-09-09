@@ -1,6 +1,6 @@
 use super::*;
 
-impl YrsComputeEngine {
+impl ComputeEngine {
     pub(crate) fn format_lookup_cell_id_hex(
         &self,
         sheet_id: &SheetId,

@@ -83,12 +83,12 @@ impl Default for CommentType {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Comment {
+pub struct Comment<CellReference = String> {
     /// Unique identifier for this comment.
     #[serde(default)]
     pub id: String,
     /// A1 notation (position-keyed in ParseOutput)
-    pub cell_ref: String,
+    pub cell_ref: CellReference,
     pub author: String,
     /// Unique identifier of the comment author.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -137,9 +137,7 @@ pub struct Comment {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub mentions: Vec<CommentMention>,
     /// Whether this is a legacy note or a modern threaded comment.
-    /// Required (single discriminator end-to-end). Reads of legacy yrs rows
-    /// without a `commentType` key default to `ThreadedComment` in
-    /// `yrs_schema::comment::from_yrs_map` — that's the migration site.
+    /// The discriminator is preserved through native storage and OOXML export.
     #[serde(default)]
     pub comment_type: CommentType,
     /// Whether the note shape is visible (from VML `style="visibility:visible"`).
@@ -169,11 +167,11 @@ pub struct Comment {
     pub comment_pr: Option<ooxml_types::comments::CommentPr>,
 }
 
-impl Default for Comment {
+impl<CellReference: Default> Default for Comment<CellReference> {
     fn default() -> Self {
         Self {
             id: String::new(),
-            cell_ref: String::new(),
+            cell_ref: CellReference::default(),
             author: String::new(),
             author_id: None,
             author_email: None,
@@ -198,6 +196,40 @@ impl Default for Comment {
             note_shape_anchor: None,
             note_images: Vec::new(),
             comment_pr: None,
+        }
+    }
+}
+
+impl<CellReference> Comment<CellReference> {
+    /// Convert a cell anchor at the import/export boundary without changing authored metadata.
+    pub fn map_cell_ref<T>(self, map: impl FnOnce(CellReference) -> T) -> Comment<T> {
+        Comment {
+            id: self.id,
+            cell_ref: map(self.cell_ref),
+            author: self.author,
+            author_id: self.author_id,
+            author_email: self.author_email,
+            content: self.content,
+            runs: self.runs,
+            thread_id: self.thread_id,
+            parent_id: self.parent_id,
+            person_id: self.person_id,
+            resolved: self.resolved,
+            timestamp: self.timestamp,
+            created_at: self.created_at,
+            modified_at: self.modified_at,
+            xr_uid: self.xr_uid,
+            shape_id: self.shape_id,
+            ext_lst_xml: self.ext_lst_xml,
+            content_type: self.content_type,
+            mentions: self.mentions,
+            comment_type: self.comment_type,
+            visible: self.visible,
+            note_height: self.note_height,
+            note_width: self.note_width,
+            note_shape_anchor: self.note_shape_anchor,
+            note_images: self.note_images,
+            comment_pr: self.comment_pr,
         }
     }
 }

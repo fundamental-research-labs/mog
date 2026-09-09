@@ -1,16 +1,14 @@
 //! Mutation handler implementations extracted as free functions.
 //!
 //! These functions implement the `mutation_*` methods that were previously
-//! on `YrsComputeEngine`. Each takes explicit references to the stores,
+//! on `ComputeEngine`. Each takes explicit references to the stores,
 //! mirror, and mutation coordinator it needs.
 
 use std::collections::HashMap;
 
 use cell_types::{CellId, SheetId};
 
-use crate::snapshot::ChangeKind;
 use crate::storage::engine::stores::EngineStores;
-use compute_document::observe::CellChangeKind;
 
 mod cell_mutations;
 mod fill;
@@ -34,18 +32,6 @@ type AdjustedFormulaResult = Option<(
     formula_types::IdentityFormula,
     HashMap<CellId, (SheetId, u32, u32)>,
 )>;
-
-// ---------------------------------------------------------------------------
-// Private helpers
-// ---------------------------------------------------------------------------
-
-/// Convert an observer `CellChangeKind` to a snapshot `ChangeKind`.
-fn observer_kind_to_change_kind(kind: CellChangeKind) -> ChangeKind {
-    match kind {
-        CellChangeKind::Modified => ChangeKind::Set,
-        CellChangeKind::Removed => ChangeKind::Removed,
-    }
-}
 
 /// Collect all CellIds in the given range using the sparse grid index.
 /// Falls back to position-by-position lookup when no grid index exists.
@@ -74,14 +60,4 @@ pub(in crate::storage::engine) fn collect_cell_ids_in_range(
         }
         ids
     }
-}
-
-/// Resolve a RowId hex to its current row index.
-fn resolve_row_id_to_index(stores: &EngineStores, sheet_id: &SheetId, row_id: &str) -> Option<u32> {
-    super::mutation::resolve_hex_id_to_position(stores, sheet_id, row_id, true)
-}
-
-/// Resolve a ColId hex to its current column index.
-fn resolve_col_id_to_index(stores: &EngineStores, sheet_id: &SheetId, col_id: &str) -> Option<u32> {
-    super::mutation::resolve_hex_id_to_position(stores, sheet_id, col_id, false)
 }

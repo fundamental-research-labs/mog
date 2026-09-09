@@ -1,6 +1,7 @@
 mod cells;
-mod dense_col_data;
+mod column_views;
 mod metadata;
+mod numeric_cache;
 mod sheets;
 mod snapshot;
 mod structure;

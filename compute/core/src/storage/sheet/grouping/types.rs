@@ -13,6 +13,14 @@ pub type CellRange = crate::PositionRange;
 
 /// Trait for subtotal operations that require cell access.
 pub trait SubtotalsCellAccessor {
+    fn group_rows(
+        &mut self,
+        sheet_id: &cell_types::SheetId,
+        start: u32,
+        end: u32,
+    ) -> Result<GroupDefinition, String>;
+    fn clear_row_grouping(&mut self, sheet_id: &cell_types::SheetId, start: u32, end: u32);
+    fn get_row_groups(&self, sheet_id: &cell_types::SheetId) -> Vec<GroupDefinition>;
     fn get_cell_value(&self, sheet_id: &cell_types::SheetId, row: u32, col: u32) -> String;
     fn set_cell_value(&mut self, sheet_id: &cell_types::SheetId, row: u32, col: u32, value: &str);
     fn insert_rows(&mut self, sheet_id: &cell_types::SheetId, start_row: u32, count: u32);

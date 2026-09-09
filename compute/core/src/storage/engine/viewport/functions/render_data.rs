@@ -94,9 +94,8 @@ pub(in crate::storage::engine::viewport) fn build_viewport_render_data_inner(
 
     // --- Merges ---
     let render_merges: Vec<RenderViewportMerge> = match stores.grid_indexes.get(sheet_id) {
-        Some(grid) => merges::get_merges_in_viewport(
-            stores.storage.doc(),
-            stores.storage.sheets(),
+        Some(grid) => merges::get_merges_in_range(
+            &stores.storage,
             *sheet_id,
             grid,
             start_row,
@@ -120,10 +119,10 @@ pub(in crate::storage::engine::viewport) fn build_viewport_render_data_inner(
     let row_dimensions: Vec<RenderRowDimension> = (start_row..end_row)
         .map(|row| {
             let hidden = dimensions::is_row_hidden(
-                stores.storage.doc(),
-                stores.storage.sheets(),
+                &stores.storage,
                 sheet_id,
                 row,
+                stores.grid_indexes.get(sheet_id),
             );
             let height = layout_index
                 .map(|li| li.get_row_height(row as usize))
@@ -140,10 +139,10 @@ pub(in crate::storage::engine::viewport) fn build_viewport_render_data_inner(
     let col_dimensions: Vec<RenderColDimension> = (start_col..end_col)
         .map(|col| {
             let hidden = dimensions::is_column_hidden(
-                stores.storage.doc(),
-                stores.storage.sheets(),
+                &stores.storage,
                 sheet_id,
                 col,
+                stores.grid_indexes.get(sheet_id),
             );
             let width = layout_index
                 .map(|li| li.get_col_width(col as usize))

@@ -27,9 +27,7 @@ impl WorkbookSheets {
 
     /// Create the implicit default sheet on a freshly-started blank workbook.
     ///
-    /// Identical to [`Self::create_sheet`] for store synchronisation, but the
-    /// underlying Yrs transaction does not enter the undo stack. Used by the
-    /// document lifecycle when no sheet exists in the persisted state.
+    /// Returns full sheet hydration metadata for the initial empty view.
     pub fn create_default_sheet(
         &self,
         name: &str,

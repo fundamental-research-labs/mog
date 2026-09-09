@@ -11,14 +11,7 @@ pub(in crate::storage::engine) fn get_merge_at_cell_query(
     col: u32,
 ) -> Option<CellMergeInfo> {
     let grid = stores.grid_indexes.get(sheet_id)?;
-    merges::get_merge_for_cell(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        *sheet_id,
-        grid,
-        row,
-        col,
-    )
+    merges::get_merge_for_cell(&stores.storage, *sheet_id, grid, row, col)
 }
 
 pub(in crate::storage::engine) fn get_all_merges_in_sheet(
@@ -26,12 +19,7 @@ pub(in crate::storage::engine) fn get_all_merges_in_sheet(
     sheet_id: &SheetId,
 ) -> Vec<ResolvedMergedRegion> {
     match stores.grid_indexes.get(sheet_id) {
-        Some(grid) => merges::get_all_merges(
-            stores.storage.doc(),
-            stores.storage.sheets(),
-            *sheet_id,
-            grid,
-        ),
+        Some(grid) => merges::get_all_merges(&stores.storage, *sheet_id, grid),
         None => Vec::new(),
     }
 }
@@ -60,7 +48,7 @@ pub(in crate::storage::engine) fn stringify_cell_ref(cell: &A1CellRef) -> Option
 // Spatial Range Queries
 // -------------------------------------------------------------------
 
-pub(in crate::storage::engine) fn get_merges_in_viewport_spatial(
+pub(in crate::storage::engine) fn get_merges_in_range_spatial(
     stores: &EngineStores,
     sheet_id: &SheetId,
     start_row: u32,
@@ -90,9 +78,8 @@ pub(in crate::storage::engine) fn get_merges_in_viewport_spatial(
     }
 
     let merges_vec = match stores.grid_indexes.get(sheet_id) {
-        Some(grid) => merges::get_merges_in_viewport(
-            stores.storage.doc(),
-            stores.storage.sheets(),
+        Some(grid) => merges::get_merges_in_range(
+            &stores.storage,
             *sheet_id,
             grid,
             start_row,
@@ -142,14 +129,7 @@ pub(in crate::storage::engine) fn get_merge_at_cell_spatial(
     }
 
     let grid = stores.grid_indexes.get(sheet_id)?;
-    merges::get_merge_for_cell(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        *sheet_id,
-        grid,
-        row,
-        col,
-    )
+    merges::get_merge_for_cell(&stores.storage, *sheet_id, grid, row, col)
 }
 
 // -------------------------------------------------------------------
@@ -169,7 +149,7 @@ pub(in crate::storage::engine) struct CellVisit {
 }
 
 fn formula_text_for_cell(
-    engine: &crate::storage::engine::YrsComputeEngine,
+    engine: &crate::storage::engine::ComputeEngine,
     mirror: &CellMirror,
     cell_id: &CellId,
 ) -> Option<String> {
@@ -193,7 +173,7 @@ fn formula_text_for_cell(
 ///   (no value, no formula). `query_range` passes true; `regex_search` passes false.
 #[allow(clippy::too_many_arguments)]
 pub(in crate::storage::engine) fn for_each_cell_in_range(
-    engine: &crate::storage::engine::YrsComputeEngine,
+    engine: &crate::storage::engine::ComputeEngine,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,
@@ -213,12 +193,7 @@ pub(in crate::storage::engine) fn for_each_cell_in_range(
     if let Some(grid) = engine.stores.grid_indexes.get(sheet_id) {
         // Build merge child→origin lookup for this range
         let merge_origins: HashMap<(u32, u32), (u32, u32)> = {
-            let all_merges = merges::get_all_merges(
-                engine.stores.storage.doc(),
-                engine.stores.storage.sheets(),
-                *sheet_id,
-                grid,
-            );
+            let all_merges = merges::get_all_merges(&engine.stores.storage, *sheet_id, grid);
             let mut map = HashMap::new();
             for m in &all_merges {
                 let origin = (m.start_row, m.start_col);
@@ -233,7 +208,7 @@ pub(in crate::storage::engine) fn for_each_cell_in_range(
             map
         };
 
-        // Pre-cache column formats (one CRDT read per column, not per cell).
+        // Pre-cache column formats (one metadata lookup per column).
         let col_fmt_cache: HashMap<u32, bool> = (start_col..=end_col)
             .map(|c| {
                 let has = properties::get_col_format(
@@ -307,13 +282,8 @@ pub(in crate::storage::engine) fn for_each_cell_in_range(
 
                     // Pre-fetch cell properties once for both the skip check
                     // and effective format build.
-                    let cell_props = properties::get_properties(
-                        engine.stores.storage.doc(),
-                        engine.stores.storage.workbook_map(),
-                        engine.stores.storage.sheets(),
-                        sheet_id,
-                        &cell_id_hex,
-                    );
+                    let cell_props =
+                        properties::get_properties(&engine.stores.storage, sheet_id, &cell_id_hex);
                     let has_cell_format = cell_props
                         .as_ref()
                         .map(|props| props.format.is_some() || props.style_id.is_some())

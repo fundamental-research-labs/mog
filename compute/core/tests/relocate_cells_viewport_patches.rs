@@ -1,8 +1,8 @@
-//! Regression tests for filter viewport R5.3 — `relocate_cells_yrs` emits
+//! Regression tests for filter viewport R5.3 — `relocate_cells` emits
 //! clear-patches for source cells AND write-patches for every target.
 //!
 //! Before R5.3:
-//!   - `relocate_cells_yrs` returned `serialize_multi_viewport_patches(&[])` —
+//!   - `relocate_cells` returned `serialize_multi_viewport_patches(&[])` —
 //!     no viewport patches at all.
 //!   - `mutation_relocate_cells` swallowed the source-clear via
 //!     `let _ = stores.compute.clear_cells(...)`, never appending the
@@ -16,7 +16,7 @@
 //!     for vacated source positions).
 //!   - The write pass propagates into `recalc.changed_cells` for each
 //!     target position.
-//!   - `relocate_cells_yrs` calls `flush_viewport_patches` and (for
+//!   - `relocate_cells` calls `flush_viewport_patches` and (for
 //!     cross-sheet) additionally rebuilds full viewport binaries on both
 //!     source and target sheets.
 //!
@@ -33,7 +33,7 @@
 //!   cargo test -p compute-core --test relocate_cells_viewport_patches
 
 use cell_types::SheetId;
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use compute_wire::constants::{
     CELL_STRIDE, MUTATION_HEADER_SIZE, OFF_FLAGS, OFF_NUMBER_VALUE, PATCH_STRIDE,
     VIEWPORT_HEADER_SIZE,
@@ -76,6 +76,9 @@ fn snapshot_two_sheets() -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: sheet_id_str(1),
                 name: "S1".to_string(),
                 rows: 50,
@@ -89,6 +92,9 @@ fn snapshot_two_sheets() -> WorkbookSnapshot {
                 ranges: vec![],
             },
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: sheet_id_str(2),
                 name: "S2".to_string(),
                 rows: 50,
@@ -104,6 +110,9 @@ fn snapshot_two_sheets() -> WorkbookSnapshot {
 fn snapshot_single_sheet() -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_id_str(1),
             name: "S1".to_string(),
             rows: 50,
@@ -125,6 +134,9 @@ fn snapshot_single_sheet() -> WorkbookSnapshot {
 fn snapshot_a1_a3_column() -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_id_str(1),
             name: "S1".to_string(),
             rows: 50,
@@ -140,7 +152,7 @@ fn snapshot_a1_a3_column() -> WorkbookSnapshot {
     }
 }
 
-fn register_viewport(engine: &mut YrsComputeEngine, sheet_id: &SheetId, vp_id: &str) {
+fn register_viewport(engine: &mut ComputeEngine, sheet_id: &SheetId, vp_id: &str) {
     engine
         .register_viewport(vp_id, sheet_id, 0, 0, 9, 5)
         .expect("register_viewport");
@@ -344,14 +356,14 @@ fn viewport_bytes<'a>(packed: &'a [u8], vp_id: &str) -> Option<&'a [u8]> {
 #[test]
 fn relocate_same_sheet_emits_patches_with_clear_and_write() {
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_single_sheet()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(snapshot_single_sheet()).expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("S1").expect("S1");
     register_viewport(&mut engine, &sid, "vp-s1");
 
     // Move A1:B2 (rows 0..=1, cols 0..=1) to D5 (row 4, col 3).
     let (patches, _result) = engine
-        .relocate_cells_yrs(&sid, 0, 0, 1, 1, &sid, 4, 3)
-        .expect("relocate_cells_yrs");
+        .relocate_cells(&sid, 0, 0, 1, 1, &sid, 4, 3)
+        .expect("relocate_cells");
 
     // Same-sheet: incremental flush_viewport_patches; one viewport
     // because we registered one. filter viewport R5.3 — pre-fix, this returned
@@ -433,7 +445,7 @@ fn relocate_same_sheet_emits_patches_with_clear_and_write() {
 #[test]
 fn relocate_cross_sheet_emits_patches_on_both_sheets() {
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_two_sheets()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(snapshot_two_sheets()).expect("from_snapshot");
     let s1 = engine.mirror().sheet_by_name("S1").expect("S1");
     let s2 = engine.mirror().sheet_by_name("S2").expect("S2");
     register_viewport(&mut engine, &s1, "vp-s1");
@@ -441,8 +453,8 @@ fn relocate_cross_sheet_emits_patches_on_both_sheets() {
 
     // Move S1!A1:B2 to S2!A1.
     let (patches, _result) = engine
-        .relocate_cells_yrs(&s1, 0, 0, 1, 1, &s2, 0, 0)
-        .expect("relocate_cells_yrs");
+        .relocate_cells(&s1, 0, 0, 1, 1, &s2, 0, 0)
+        .expect("relocate_cells");
 
     // Cross-sheet: incremental flush + full rebuilds on both sheets.
     // Combined payload should carry at least 2 viewports (one per sheet);
@@ -526,7 +538,7 @@ fn relocate_cross_sheet_emits_patches_on_both_sheets() {
     }
 }
 
-/// `relocate_cells_yrs` must clear every source position and write every
+/// `relocate_cells` must clear every source position and write every
 /// target position — not just the *last* one. filter viewport finding 2 / R5.3
 /// pinned exactly this contract: the prior implementation only carried
 /// the last-cell patch, so multi-cell relocations left interior source
@@ -537,14 +549,14 @@ fn relocate_cross_sheet_emits_patches_on_both_sheets() {
 #[test]
 fn relocate_writes_all_target_positions_not_just_last() {
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_single_sheet()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(snapshot_single_sheet()).expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("S1").expect("S1");
     register_viewport(&mut engine, &sid, "vp");
 
     // Move A1:B2 (4 cells) to D5.
     let (_patches, _) = engine
-        .relocate_cells_yrs(&sid, 0, 0, 1, 1, &sid, 4, 3)
-        .expect("relocate_cells_yrs");
+        .relocate_cells(&sid, 0, 0, 1, 1, &sid, 4, 3)
+        .expect("relocate_cells");
 
     // Every target position must hold a moved CellId in the GridIndex.
     let grid = engine.grid_index(&sid).expect("grid");
@@ -571,14 +583,14 @@ fn relocate_writes_all_target_positions_not_just_last() {
 #[test]
 fn cut_clears_source_on_paste_only() {
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_a1_a3_column()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(snapshot_a1_a3_column()).expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("S1").expect("S1");
     register_viewport(&mut engine, &sid, "vp");
 
     // Move A1:A3 (rows 0..=2, col 0) to C1 (row 0, col 2).
     let (patches, _result) = engine
-        .relocate_cells_yrs(&sid, 0, 0, 2, 0, &sid, 0, 2)
-        .expect("relocate_cells_yrs");
+        .relocate_cells(&sid, 0, 0, 2, 0, &sid, 0, 2)
+        .expect("relocate_cells");
 
     let bytes = viewport_bytes(&patches, "vp").expect("vp bytes");
 
@@ -683,6 +695,9 @@ fn cut_clears_source_on_paste_only() {
 fn relocate_formula_cell_after_insert_down_writes_target_patch_when_source_offscreen() {
     let snapshot = WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_id_str(1),
             name: "S1".to_string(),
             rows: 50,
@@ -699,7 +714,7 @@ fn relocate_formula_cell_after_insert_down_writes_target_patch_when_source_offsc
         }],
         ..Default::default()
     };
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("S1").expect("S1");
 
     let before = engine.query_range(&sid, 6, 26, 6, 27);
@@ -719,7 +734,7 @@ fn relocate_formula_cell_after_insert_down_writes_target_patch_when_source_offsc
         .insert_cells_with_shift(&sid, 6, 11, 1, 2, false)
         .expect("insert L7:M7 shift down");
     let (patches, _result) = engine
-        .relocate_cells_yrs(&sid, 6, 26, 6, 27, &sid, 6, 11)
+        .relocate_cells(&sid, 6, 26, 6, 27, &sid, 6, 11)
         .expect("relocate AA7:AB7 to L7:M7");
     let bytes = viewport_bytes(&patches, "vp").expect("vp bytes");
 
@@ -782,15 +797,15 @@ fn relocate_formula_cell_after_insert_down_writes_target_patch_when_source_offsc
 #[test]
 fn relocate_overlap_keeps_destination_writes() {
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_a1_a3_column()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(snapshot_a1_a3_column()).expect("from_snapshot");
     let sid = engine.mirror().sheet_by_name("S1").expect("S1");
     register_viewport(&mut engine, &sid, "vp");
 
     // Move A1:A3 (rows 0..=2, col 0) to A2 (row 1, col 0). Source and
     // target overlap on rows 1, 2.
     let (patches, _result) = engine
-        .relocate_cells_yrs(&sid, 0, 0, 2, 0, &sid, 1, 0)
-        .expect("relocate_cells_yrs");
+        .relocate_cells(&sid, 0, 0, 2, 0, &sid, 1, 0)
+        .expect("relocate_cells");
 
     let bytes = viewport_bytes(&patches, "vp").expect("vp bytes");
 

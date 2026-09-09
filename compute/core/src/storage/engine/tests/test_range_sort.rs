@@ -2,7 +2,7 @@
 //!
 //! Verifies that sorting a Range-backed sheet correctly reorders
 //! `rowOrder` (not payload bytes), updates the GridIndex, and
-//! supports undo.
+//! preserves cell identities.
 //!
 //! **ID alignment:** `from_snapshot` hydration allocates fresh monotonic
 //! IDs via `IdAllocator::new()` (starts at 1). For a sheet with
@@ -19,7 +19,6 @@
 //! a regression that sorts directly by pure range-backed col 1.
 
 use super::super::*;
-use super::helpers::*;
 use crate::snapshot::{CellData, RangeData, SheetSnapshot};
 use cell_types::{
     CellId, ColId, PayloadEncoding, RangeAnchor, RangeId, RangeKind, RowId, SheetPos,
@@ -99,7 +98,7 @@ fn ascending_sort_options(col: u32) -> mutation::BridgeSortOptions {
 ///     row0: [5, 50], row1: [3, 30], row2: [1, 10], row3: [4, 40], row4: [2, 20]
 ///
 /// - Per-cell data in col 0 with the same values [5, 3, 1, 4, 2] so the
-///   sort engine can read values from the yrs cells_map for criterion
+///   sort engine can read values from the native value store for criterion
 ///   resolution.
 ///
 /// Row/col IDs are generated to match the `from_snapshot` hydration
@@ -122,7 +121,7 @@ fn sort_range_snapshot() -> WorkbookSnapshot {
     let col_ids: Vec<ColId> = (0..2).map(hydrated_col_id).collect();
 
     // Per-cell data in col 0: provides CellIds in GridIndex so sort can
-    // resolve the criterion, and provides values in yrs cells_map for
+    // resolve the criterion, and provides values in native value store for
     // the sort comparator.
     let cell_values = [5.0, 3.0, 1.0, 4.0, 2.0];
     let cells: Vec<CellData> = cell_values
@@ -140,7 +139,13 @@ fn sort_range_snapshot() -> WorkbookSnapshot {
         .collect();
 
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET_UUID.to_string(),
             name: "Sheet1".to_string(),
             rows: NUM_ROWS,
@@ -184,7 +189,7 @@ fn sort_range_snapshot() -> WorkbookSnapshot {
 #[test]
 fn range_sort_reorders_roworder() {
     let snap = sort_range_snapshot();
-    let (mut engine, _recalc) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _recalc) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = test_sheet_id();
 
     // Before sort: col 1 (range-only) reads [50, 30, 10, 40, 20]
@@ -241,12 +246,12 @@ fn range_sort_reorders_roworder() {
 // ===================================================================
 
 /// Sort ascending directly on a pure Range-backed column. Col 1 has no
-/// per-cell data in the GridIndex/Yrs cells map, so this catches regressions
+/// per-cell data in the sparse cell index, so this catches regressions
 /// where bridge criteria are resolved only through sparse CellIds.
 #[test]
 fn range_sort_uses_range_backed_sort_key_column() {
     let snap = sort_range_snapshot();
-    let (mut engine, _recalc) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _recalc) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = test_sheet_id();
 
     for (row, expected) in [(0, 50.0), (1, 30.0), (2, 10.0), (3, 40.0), (4, 20.0)] {
@@ -316,7 +321,7 @@ fn sparse_sort_on_sheet_with_unrelated_range_uses_per_cell_path() {
         });
     }
 
-    let (mut engine, _recalc) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _recalc) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = test_sheet_id();
 
     let options = ascending_sort_options(3);
@@ -384,7 +389,7 @@ fn range_sort_mixed_sheet() {
         });
     }
 
-    let (mut engine, _recalc) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _recalc) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = test_sheet_id();
 
     // Before: col 1 = [50,30,10,40,20]
@@ -429,7 +434,7 @@ fn range_sort_mixed_sheet() {
 #[test]
 fn range_sort_gridindex_coherence() {
     let snap = sort_range_snapshot();
-    let (mut engine, _recalc) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _recalc) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = test_sheet_id();
 
     // Capture pre-sort row_ids_dense order.
@@ -499,7 +504,7 @@ fn range_sort_remaps_formula_cell_positions_in_mirror() {
         array_ref: None,
     });
 
-    let (mut engine, _recalc) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _recalc) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = test_sheet_id();
 
     assert_eq!(
@@ -564,7 +569,7 @@ fn range_sort_formula_survives() {
         array_ref: None,
     });
 
-    let (mut engine, _recalc) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _recalc) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = test_sheet_id();
 
     // Verify range values are readable pre-sort.
@@ -604,70 +609,6 @@ fn range_sort_formula_survives() {
 }
 
 // ===================================================================
-// Test 8: range_sort_undo
-// ===================================================================
-
-/// Sort a Range-backed sheet, then undo. Verify that `row_ids_dense()`
-/// is restored to the original order (proving the yrs rowOrder was
-/// correctly reverted).
-#[test]
-fn range_sort_undo() {
-    let snap = sort_range_snapshot();
-    let (mut engine, _recalc) = YrsComputeEngine::from_snapshot(snap).unwrap();
-    let sid = test_sheet_id();
-
-    // Capture pre-sort row_ids_dense order.
-    let pre_sort_row_ids: Vec<RowId> = engine.grid_index(&sid).unwrap().row_ids_dense().to_vec();
-
-    // Before sort: col 1 (range-only) = [50, 30, 10, 40, 20]
-    assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(0, 1))),
-        Some(50.0)
-    );
-    assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(2, 1))),
-        Some(10.0)
-    );
-
-    // Sort ascending on col 0
-    let options = ascending_sort_options(0);
-    engine.sort_range(&sid, 0, 0, 4, 1, options).unwrap();
-
-    // Verify sorted: col 1 = [10, 20, 30, 40, 50]
-    assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(0, 1))),
-        Some(10.0)
-    );
-    assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(4, 1))),
-        Some(50.0)
-    );
-
-    // Verify grid_index was reordered
-    let sorted_row_ids: Vec<RowId> = engine.grid_index(&sid).unwrap().row_ids_dense().to_vec();
-    assert_ne!(
-        sorted_row_ids[..5],
-        pre_sort_row_ids[..5],
-        "After sort, row_ids should have changed"
-    );
-
-    // Undo the sort
-    engine.undo().unwrap();
-
-    // After undo: row_ids_dense should match the original pre-sort order.
-    // This verifies the yrs rowOrder was correctly reverted by undo.
-    let post_undo_row_ids: Vec<RowId> = engine.grid_index(&sid).unwrap().row_ids_dense().to_vec();
-
-    for i in 0..5 {
-        assert_eq!(
-            post_undo_row_ids[i], pre_sort_row_ids[i],
-            "After undo, row_id at index {} should match pre-sort order",
-            i
-        );
-    }
-}
-
-// ===================================================================
 // Test 9: xlsx_sort_roundtrip
 // ===================================================================
 
@@ -676,7 +617,7 @@ fn range_sort_undo() {
 #[test]
 fn xlsx_sort_roundtrip() {
     let snap = sort_range_snapshot();
-    let (mut engine, _recalc) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _recalc) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = test_sheet_id();
 
     // Sort ascending on col 0

@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn rename_column_updates_backing_header_cell_and_viewport() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
     engine
         .register_viewport("main", &sid, 0, 0, 3, 1)
@@ -49,7 +49,7 @@ fn rename_column_updates_backing_header_cell_and_viewport() {
 
 #[test]
 fn rename_column_rewrites_same_row_structured_ref_formulas() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
 
     engine

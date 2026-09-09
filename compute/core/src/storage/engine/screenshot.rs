@@ -11,16 +11,16 @@ use domain_types::domain::floating_object::FloatingObjectData;
 
 use bridge_core as bridge;
 
-use super::YrsComputeEngine;
+use super::ComputeEngine;
 
 #[bridge::api(
-    service = "YrsComputeEngine",
+    service = "ComputeEngine",
     key = "doc_id",
     group = "screenshot",
     fn_prefix = "compute",
     crate_path = "compute_core"
 )]
-impl YrsComputeEngine {
+impl ComputeEngine {
     /// Capture a PNG screenshot of a cell range.
     ///
     /// Builds `ViewportRenderData` for the requested region, rasterizes it

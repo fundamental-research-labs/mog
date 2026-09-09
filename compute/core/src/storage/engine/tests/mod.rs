@@ -1,14 +1,14 @@
-//! Tests for YrsComputeEngine.
+//! Tests for ComputeEngine.
 //!
 //! Split into focused submodules for navigability.
 
 mod helpers;
-mod sync_helpers;
 mod test_advanced_filter;
 mod test_annotations;
 mod test_binary_patches;
 mod test_bootstrap_hydration;
 mod test_border_patches;
+mod test_bulk_position;
 mod test_cell_input_value;
 mod test_comments;
 mod test_copy_range;
@@ -22,7 +22,13 @@ mod test_floating_object_invalid_targets;
 mod test_formatting;
 mod test_formula_format_inheritance;
 mod test_imported_autofilter_metadata;
+mod test_merge_mutations;
 mod test_named_range_refers_to;
+mod test_native_floating_storage;
+mod test_native_history;
+mod test_native_history_ui_formats;
+mod test_native_history_translation;
+mod test_native_range_storage;
 mod test_old_value;
 mod test_outline_visibility;
 mod test_pivot_materialization;
@@ -30,7 +36,6 @@ mod test_properties;
 mod test_queries;
 mod test_range_sort;
 mod test_range_structural;
-mod test_range_structural_replay;
 mod test_rebuild;
 mod test_shapes;
 mod test_sheet_introduce_unification;
@@ -42,12 +47,7 @@ mod test_sparklines;
 mod test_structural_deferred_formula_graph;
 mod test_structural_viewport;
 mod test_subtotals;
-mod test_sync_bootstrap;
-mod test_sync_mutation_results;
-mod test_sync_protocol;
-mod test_sync_provider_replay;
 mod test_table_filter_lifecycle;
-mod test_undo_observer_translation;
 mod test_undo_redo_atomic_ops;
 mod test_undo_redo_bulk_position;
 mod test_undo_redo_core;
@@ -70,3 +70,7 @@ mod test_xlsx_export_tables;
 mod test_xlsx_export_validations;
 mod test_xlsx_export_vc03;
 mod test_xlsx_export_view_state;
+
+mod test_native_history_structure;
+
+mod test_native_history_cse;

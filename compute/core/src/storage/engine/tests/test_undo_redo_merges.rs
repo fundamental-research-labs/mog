@@ -7,7 +7,7 @@ use value_types::CellValue;
 #[test]
 fn test_undo_merge_produces_merge_changes() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // Merge A1:B1
@@ -26,7 +26,7 @@ fn test_undo_merge_produces_merge_changes() {
 #[test]
 fn test_merge_range_discards_non_origin_values_after_explicit_unmerge() {
     let snap = copy_range_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine.merge_range(&sid, 0, 0, 1, 1).unwrap();
@@ -48,7 +48,7 @@ fn test_merge_range_discards_non_origin_values_after_explicit_unmerge() {
 #[test]
 fn test_rejected_overlapping_merge_does_not_discard_values() {
     let snap = copy_range_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine.merge_range(&sid, 0, 0, 0, 1).unwrap();
@@ -64,7 +64,7 @@ fn test_rejected_overlapping_merge_does_not_discard_values() {
 #[test]
 fn test_undo_merge_restores_discarded_non_origin_values() {
     let snap = copy_range_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine.merge_range(&sid, 0, 0, 1, 1).unwrap();

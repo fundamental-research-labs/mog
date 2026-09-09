@@ -6,7 +6,7 @@
 //!   compensated by re-running `validations.validate()` for every
 //!   `cell:changed` event. Root cause: Rust's `prepare_recalc_for_flush`
 //!   only emitted `RecalcValidationAnnotation`s for **column schemas** —
-//!   never for the `dataValidations` Y.Array used by Excel-style data
+//!   never for the worksheet validation collection used by Excel-style data
 //!   validation rules. So a cell that was previously flagged invalid (and
 //!   had a circle drawn) and was now edited to a valid value would never
 //!   appear in the post-recalc annotation payload, and the TS bridge had
@@ -21,7 +21,7 @@
 //!   cargo test -p compute-core --test data_validation_passed_event
 
 use cell_types::{CellId, SheetId};
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use compute_core::storage::sheet::schemas::{
     EnforcementLevel, IdentityRangeSchemaRef, RangeSchema, RangeSchemaDefinition,
     SchemaConstraints, SchemaType,
@@ -35,7 +35,13 @@ const CELL_A2_UUID: &str = "00000000-0000-0000-0000-000000000011";
 
 fn snapshot_with_one_cell() -> WorkbookSnapshot {
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET_UUID.into(),
             name: "Sheet1".into(),
             rows: 100,
@@ -102,7 +108,7 @@ fn dv_schema_a1_a10() -> RangeSchema {
 #[test]
 fn invalid_to_valid_transition_emits_passed_annotation() {
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_with_one_cell()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(snapshot_with_one_cell()).expect("from_snapshot");
     let sid = SheetId::from_uuid_str(SHEET_UUID).unwrap();
 
     // Install a data-validation rule: A1:A10 must be between 0 and 100.
@@ -166,7 +172,7 @@ fn invalid_to_valid_transition_emits_passed_annotation() {
 #[test]
 fn cell_outside_data_validation_range_produces_no_annotation() {
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_with_one_cell()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(snapshot_with_one_cell()).expect("from_snapshot");
     let sid = SheetId::from_uuid_str(SHEET_UUID).unwrap();
 
     // Schema covers A1:A10 (col 0 only). A cell at B2 (col 1) is outside.
@@ -196,7 +202,7 @@ fn cell_outside_data_validation_range_produces_no_annotation() {
 #[test]
 fn valid_to_invalid_transition_emits_failed_annotation() {
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(snapshot_with_one_cell()).expect("from_snapshot");
+        ComputeEngine::from_snapshot(snapshot_with_one_cell()).expect("from_snapshot");
     let sid = SheetId::from_uuid_str(SHEET_UUID).unwrap();
 
     engine

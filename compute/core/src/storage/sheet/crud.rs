@@ -1,323 +1,22 @@
-//! Sheet CRUD — create, delete, copy, add, remove, sheet_order.
-//!
-//! Single `impl YrsStorage` block holding all mutating sheet-lifecycle
-//! operations that need `&mut self` (both `doc` + `mirror`). Collapses the
-//! dual-block sandwich that existed in the pre-split `meta.rs`.
+//! Native sheet creation, copy, deletion, and ordering.
 
 use std::collections::HashMap;
-use std::sync::Arc;
 
-use yrs::{
-    Any, Array, ArrayPrelim, ArrayRef, Map, MapPrelim, MapRef, Origin, Out, ReadTxn, Transact,
-};
-
-use cell_types::{IdAllocator, SheetId};
+use cell_types::SheetId;
 use compute_document::hex::{hex_to_id, id_to_hex};
-use compute_document::schema::{
-    KEY_BINDINGS, KEY_CELL_ANNOTATIONS, KEY_CELL_PROPERTIES, KEY_CELLS, KEY_CF_RULES,
-    KEY_COL_FORMAT_RANGES, KEY_COL_FORMATS, KEY_COL_ORDER, KEY_COL_WIDTHS, KEY_COMMENTS,
-    KEY_CONDITIONAL_FORMAT, KEY_FILTER_HIDDEN_ROWS, KEY_FILTER_METADATA_BINDINGS, KEY_FILTERS,
-    KEY_FLOATING_OBJECT_GROUPS, KEY_FLOATING_OBJECT_ORDER, KEY_FLOATING_OBJECTS, KEY_FORMULA_REFS,
-    KEY_GRID_ID_TO_POS, KEY_GRID_INDEX, KEY_GRID_POS_TO_ID, KEY_GROUPING, KEY_HIDDEN_COLS,
-    KEY_HIDDEN_ROWS, KEY_MANUAL_HIDDEN_ROWS, KEY_MERGES, KEY_NAME, KEY_PIVOT_TABLES,
-    KEY_PROPERTIES, KEY_RANGE_BINDINGS, KEY_RANGE_FORMATS, KEY_RANGE_PAYLOADS, KEY_RANGES,
-    KEY_ROW_FORMATS, KEY_ROW_HEIGHTS, KEY_ROW_ORDER, KEY_SCHEMAS, KEY_SORTING, KEY_SPARKLINES,
-    KEY_VALIDATION_RULES, write_schema_version,
-};
-use compute_document::undo::ORIGIN_USER_EDIT;
 use domain_types::units::CharWidth;
-use domain_types::yrs_schema::comment as comment_schema;
-// Note: ORIGIN_BOOTSTRAP is supplied by callers via `*_with_origin` and never
-// referenced directly here — this file only needs to know it can accept any
-// caller-supplied origin.
 use value_types::ComputeError;
 
 use crate::mirror::CellMirror;
-use crate::storage::YrsStorage;
-
-use super::yrs_helpers::{
-    KEY_COLS, KEY_DEFAULT_COL_WIDTH, KEY_DEFAULT_ROW_HEIGHT, KEY_HIDDEN, KEY_ROWS, meta_number,
-};
+use crate::storage::WorkbookStorage;
 
 struct SheetCreationOptions {
-    origin: Origin,
     default_col_width: CharWidth,
 }
 
-// =============================================================================
-// Generic Y-value clone helpers
-// =============================================================================
-//
-// `copy_sheet` needs to recursively clone arbitrary Y.Map / Y.Array / Any
-// structures. These helpers walk a source via a read txn, materialise a
-// self-contained `YValue` tree, and write that tree into a destination parent
-// on a write txn. Other `Out` variants (text, xml, etc.) are not used by sheet
-// storage and are skipped.
-//
-// Context-specific remapping (CellId hexes in the `cells` and `gridIndex`
-// sub-maps, CellId refs inside `formula_refs` JSON) is still handled inline by
-// `copy_sheet` — these helpers provide the structural plumbing, not policy.
-
-#[derive(Clone)]
-enum YValue {
-    Any(Any),
-    Map(Vec<(String, YValue)>),
-    Array(Vec<YValue>),
-}
-
-fn read_y_out<T: ReadTxn>(out: Out, txn: &T) -> Option<YValue> {
-    match out {
-        Out::Any(a) => Some(YValue::Any(a)),
-        Out::YMap(m) => {
-            let entries: Vec<(String, YValue)> = m
-                .iter(txn)
-                .filter_map(|(k, v)| read_y_out(v, txn).map(|y| (k.to_string(), y)))
-                .collect();
-            Some(YValue::Map(entries))
-        }
-        Out::YArray(a) => {
-            let items: Vec<YValue> = a.iter(txn).filter_map(|v| read_y_out(v, txn)).collect();
-            Some(YValue::Array(items))
-        }
-        _ => None,
-    }
-}
-
-fn write_y_value_into_map(
-    parent: &MapRef,
-    txn: &mut yrs::TransactionMut,
-    key: &str,
-    value: &YValue,
-) {
-    match value {
-        YValue::Any(a) => {
-            parent.insert(txn, key, a.clone());
-        }
-        YValue::Map(entries) => {
-            let new_map: MapRef = parent.insert(txn, key, MapPrelim::default());
-            for (k, v) in entries {
-                write_y_value_into_map(&new_map, txn, k, v);
-            }
-        }
-        YValue::Array(items) => {
-            let new_arr: ArrayRef = parent.insert(txn, key, ArrayPrelim::default());
-            for item in items {
-                push_y_value_to_array(&new_arr, txn, item);
-            }
-        }
-    }
-}
-
-fn push_y_value_to_array(arr: &ArrayRef, txn: &mut yrs::TransactionMut, value: &YValue) {
-    match value {
-        YValue::Any(a) => {
-            arr.push_back(txn, a.clone());
-        }
-        YValue::Map(entries) => {
-            let new_map: MapRef = arr.push_back(txn, MapPrelim::default());
-            for (k, v) in entries {
-                write_y_value_into_map(&new_map, txn, k, v);
-            }
-        }
-        YValue::Array(items) => {
-            let new_arr: ArrayRef = arr.push_back(txn, ArrayPrelim::default());
-            for item in items {
-                push_y_value_to_array(&new_arr, txn, item);
-            }
-        }
-    }
-}
-
-/// Write the `cells` sub-map with CellId-hex remapping. The source is a
-/// `Y.Map<cell_hex, Y.Map<field, Any>>`. The new map uses freshly allocated
-/// cell-hex keys (from `remap`), and the `formula_refs` JSON inside each cell
-/// has any referenced cell-hex strings rewritten as well.
-fn write_cells_remapped(
-    new_sheet: &MapRef,
-    txn: &mut yrs::TransactionMut,
-    value: &YValue,
-    remap: &HashMap<String, String>,
-) {
-    let new_cells: MapRef = new_sheet.insert(txn, KEY_CELLS, MapPrelim::default());
-    let YValue::Map(entries) = value else {
-        return;
-    };
-    for (old_hex, cell_val) in entries {
-        let Some(new_hex) = remap.get(old_hex) else {
-            continue;
-        };
-        match cell_val {
-            YValue::Any(a) => {
-                new_cells.insert(txn, new_hex.as_str(), a.clone());
-            }
-            YValue::Map(cell_entries) => {
-                let new_cell: MapRef =
-                    new_cells.insert(txn, new_hex.as_str(), MapPrelim::default());
-                for (k, v) in cell_entries {
-                    if k == KEY_FORMULA_REFS
-                        && let YValue::Any(Any::String(s)) = v
-                    {
-                        let remapped = remap_formula_refs(s, remap);
-                        new_cell.insert(txn, k.as_str(), Any::String(Arc::from(remapped.as_str())));
-                        continue;
-                    }
-                    write_y_value_into_map(&new_cell, txn, k, v);
-                }
-            }
-            YValue::Array(_) => {
-                write_y_value_into_map(&new_cells, txn, new_hex, cell_val);
-            }
-        }
-    }
-}
-
-/// Write the `gridIndex` sub-map with CellId-hex remapping.
-///
-/// Shape: `{ posToId: Y.Map<"row:col", cell_hex>, idToPos: Y.Map<cell_hex, "row:col"> }`.
-/// `posToId` keeps its keys and remaps values; `idToPos` remaps its keys.
-fn write_grid_index_remapped(
-    new_sheet: &MapRef,
-    txn: &mut yrs::TransactionMut,
-    value: &YValue,
-    remap: &HashMap<String, String>,
-) {
-    let new_gi: MapRef = new_sheet.insert(txn, KEY_GRID_INDEX, MapPrelim::default());
-    let YValue::Map(entries) = value else {
-        return;
-    };
-    for (sub_key, sub_val) in entries {
-        match (sub_key.as_str(), sub_val) {
-            (KEY_GRID_POS_TO_ID, YValue::Map(pos_entries)) => {
-                let new_pos: MapRef = new_gi.insert(txn, KEY_GRID_POS_TO_ID, MapPrelim::default());
-                for (pos, v) in pos_entries {
-                    if let YValue::Any(Any::String(old_hex)) = v {
-                        let new_val = remap
-                            .get(old_hex.as_ref())
-                            .cloned()
-                            .unwrap_or_else(|| old_hex.to_string());
-                        new_pos.insert(txn, pos.as_str(), Any::String(Arc::from(new_val.as_str())));
-                    } else {
-                        write_y_value_into_map(&new_pos, txn, pos, v);
-                    }
-                }
-            }
-            (KEY_GRID_ID_TO_POS, YValue::Map(id_entries)) => {
-                let new_id: MapRef = new_gi.insert(txn, KEY_GRID_ID_TO_POS, MapPrelim::default());
-                for (old_hex, v) in id_entries {
-                    let new_key = remap
-                        .get(old_hex)
-                        .cloned()
-                        .unwrap_or_else(|| old_hex.clone());
-                    write_y_value_into_map(&new_id, txn, &new_key, v);
-                }
-            }
-            _ => write_y_value_into_map(&new_gi, txn, sub_key, sub_val),
-        }
-    }
-}
-
-fn write_cell_properties_remapped(
-    new_sheet: &MapRef,
-    txn: &mut yrs::TransactionMut,
-    value: &YValue,
-    remap: &HashMap<String, String>,
-) {
-    let new_props: MapRef = new_sheet.insert(txn, KEY_CELL_PROPERTIES, MapPrelim::default());
-    let YValue::Map(entries) = value else {
-        return;
-    };
-    for (old_hex, prop_val) in entries {
-        let new_key = remap
-            .get(old_hex)
-            .cloned()
-            .unwrap_or_else(|| old_hex.clone());
-        write_y_value_into_map(&new_props, txn, &new_key, prop_val);
-    }
-}
-
-fn write_comments_remapped(
-    new_sheet: &MapRef,
-    txn: &mut yrs::TransactionMut,
-    value: &YValue,
-    remap: &HashMap<String, String>,
-) {
-    let new_comments: MapRef = new_sheet.insert(txn, KEY_COMMENTS, MapPrelim::default());
-    let YValue::Map(entries) = value else {
-        return;
-    };
-    for (comment_id, comment_val) in entries {
-        match comment_val {
-            YValue::Map(comment_entries) => {
-                let new_comment: MapRef =
-                    new_comments.insert(txn, comment_id.as_str(), MapPrelim::default());
-                for (key, field_val) in comment_entries {
-                    if key == comment_schema::KEY_CELL_REF
-                        && let YValue::Any(Any::String(old_ref)) = field_val
-                    {
-                        let new_ref = remap
-                            .get(old_ref.as_ref())
-                            .cloned()
-                            .unwrap_or_else(|| old_ref.to_string());
-                        new_comment.insert(
-                            txn,
-                            key.as_str(),
-                            Any::String(Arc::from(new_ref.as_str())),
-                        );
-                        continue;
-                    }
-                    write_y_value_into_map(&new_comment, txn, key, field_val);
-                }
-            }
-            _ => write_y_value_into_map(&new_comments, txn, comment_id, comment_val),
-        }
-    }
-}
-
-/// Remap CellId-hex strings inside a `formula_refs` JSON blob. Preserves the
-/// original JSON shape (array of objects with `id`, or array of bare id
-/// strings) and only rewrites hex values present in `remap`.
-fn remap_formula_refs(refs_json: &str, remap: &HashMap<String, String>) -> String {
-    let Ok(mut arr) = serde_json::from_str::<Vec<serde_json::Value>>(refs_json) else {
-        return refs_json.to_string();
-    };
-    for item in arr.iter_mut() {
-        if let Some(id_val) = item.get_mut("id")
-            && let Some(old_id) = id_val.as_str()
-            && let Some(new_id) = remap.get(old_id)
-        {
-            *id_val = serde_json::Value::String(new_id.clone());
-        }
-        if let serde_json::Value::String(old_id) = item.clone()
-            && let Some(new_id) = remap.get(&old_id)
-        {
-            *item = serde_json::Value::String(new_id.clone());
-        }
-    }
-    serde_json::to_string(&arr).unwrap_or_else(|_| refs_json.to_string())
-}
-
-fn looks_like_hex_cell_id(value: &str) -> bool {
-    value.len() == 32 && value.bytes().all(|b| b.is_ascii_hexdigit())
-}
-
-fn ensure_cell_id_remap(
-    remap: &mut HashMap<String, String>,
-    old_hex: &str,
-    id_alloc: &cell_types::IdAllocator,
-) {
-    if !looks_like_hex_cell_id(old_hex) || remap.contains_key(old_hex) {
-        return;
-    }
-    let new_cell_id = id_alloc.next_cell_id();
-    let new_cell_hex = id_to_hex(new_cell_id.as_u128());
-    remap.insert(old_hex.to_string(), new_cell_hex.to_string());
-}
-
-impl YrsStorage {
+impl WorkbookStorage {
     fn sheet_exists(&self, sheet_id: &SheetId) -> bool {
-        let txn = self.doc.transact();
-        let sheet_hex = id_to_hex(sheet_id.as_u128());
-        self.sheets.get(&txn, &sheet_hex).is_some()
+        self.sheet_metadata.contains_key(sheet_id)
     }
 
     fn next_unused_sheet_id(&self, id_alloc: &cell_types::IdAllocator) -> SheetId {
@@ -341,74 +40,36 @@ impl YrsStorage {
         name: &str,
         id_alloc: &cell_types::IdAllocator,
     ) -> Result<SheetId, ComputeError> {
-        self.create_sheet_with_origin(
+        self.create_sheet_with_width(
             mirror,
             name,
             id_alloc,
-            Origin::from(ORIGIN_USER_EDIT),
             domain_types::units::DEFAULT_COL_WIDTH,
         )
     }
 
-    /// Create a new sheet, recording the Yrs transaction under `origin`.
-    ///
-    /// Bootstrap callers (e.g. the default-sheet creation triggered when a
-    /// blank workbook starts up) pass `Origin::from(ORIGIN_BOOTSTRAP)` so the
-    /// transaction never enters the undo stack — see
-    /// `compute_document::undo` for the canonical origin set.
-    pub(crate) fn create_sheet_with_origin(
+    /// Create a sheet using the requested default column width.
+    pub(crate) fn create_sheet_with_width(
         &mut self,
         mirror: &mut CellMirror,
         name: &str,
         id_alloc: &cell_types::IdAllocator,
-        origin: Origin,
         default_col_width: CharWidth,
     ) -> Result<SheetId, ComputeError> {
         let sheet_id = self.next_unused_sheet_id(id_alloc);
         // Default: 100 rows x 26 cols
-        self.add_sheet_with_origin(
+        self.add_sheet_with_width(
             mirror,
             sheet_id,
             name,
             100,
             26,
-            SheetCreationOptions {
-                origin,
-                default_col_width,
-            },
+            SheetCreationOptions { default_col_width },
         )?;
         Ok(sheet_id)
     }
 
-    /// Delete a sheet. Cannot delete the last remaining sheet.
-    ///
-    /// Production callers reach delete via the `DeleteSheet` mutation handler
-    /// in `engine::services::mutation_handlers::sheet_mutations`, which
-    /// duplicates the last-sheet check before calling `remove_sheet` directly.
-    /// This method is retained for tests that exercise the storage-layer
-    /// validation directly.
-    #[allow(dead_code)]
-    pub(crate) fn delete_sheet(
-        &mut self,
-        mirror: &mut CellMirror,
-        sheet_id: &SheetId,
-    ) -> Result<(), ComputeError> {
-        let order = self.sheet_order();
-        if order.len() <= 1 {
-            return Err(ComputeError::Eval {
-                message: "Cannot delete the last sheet".to_string(),
-            });
-        }
-        if !order.contains(sheet_id) {
-            return Err(ComputeError::SheetNotFound {
-                sheet_id: id_to_hex(sheet_id.as_u128()).to_string(),
-            });
-        }
-        self.remove_sheet(mirror, sheet_id);
-        Ok(())
-    }
-
-    /// Copy a sheet with a deep clone of all sub-maps. Returns the new SheetId.
+    /// Copy values and metadata with fresh sheet, axis, and cell identities.
     pub(crate) fn copy_sheet(
         &mut self,
         mirror: &mut CellMirror,
@@ -418,87 +79,31 @@ impl YrsStorage {
     ) -> Result<SheetId, ComputeError> {
         let source_hex = id_to_hex(source_id.as_u128());
         let new_id = self.next_unused_sheet_id(id_alloc);
-        let new_hex = id_to_hex(new_id.as_u128());
+        crate::storage::engine::history::structure::capture_new_sheet(self, new_id);
 
-        // Pass 1: Read source sheet into a recursive YValue tree, plus build
-        // the CellId remap table from every source keyed by CellId.
-        let rows;
-        let cols;
-        let mut top_entries: Vec<(String, YValue)> = Vec::new();
+        // Native values and axes are copied with fresh identities. Compact payloads
+        // share immutable memory until either sheet edits a value.
         let mut cell_id_remap: HashMap<String, String> = HashMap::new();
-        let source_pivots;
+        let source = mirror
+            .get_sheet(source_id)
+            .ok_or_else(|| ComputeError::SheetNotFound {
+                sheet_id: source_hex.to_string(),
+            })?;
+        let native_copy = super::copy_native::NativeSheetCopy::new(
+            source,
+            mirror,
+            new_id,
+            new_name,
+            id_alloc,
+            &mut cell_id_remap,
+        );
+        let source_pivots = super::pivots::get_all_pivots(self, source_id);
 
-        {
-            let txn = self.doc.transact();
-
-            let source_map = match self.sheets.get(&txn, &source_hex) {
-                Some(Out::YMap(m)) => m,
-                _ => {
-                    return Err(ComputeError::SheetNotFound {
-                        sheet_id: source_hex.to_string(),
-                    });
-                }
-            };
-
-            match source_map.get(&txn, KEY_PROPERTIES) {
-                Some(Out::YMap(meta)) => {
-                    rows = meta_number(&txn, &meta, KEY_ROWS, 100.0) as u32;
-                    cols = meta_number(&txn, &meta, KEY_COLS, 26.0) as u32;
-                }
-                _ => {
-                    rows = 100;
-                    cols = 26;
-                }
-            };
-
-            if let Some(Out::YMap(cells_map)) = source_map.get(&txn, KEY_CELLS) {
-                for (old_hex, _) in cells_map.iter(&txn) {
-                    ensure_cell_id_remap(&mut cell_id_remap, &old_hex, id_alloc);
-                }
-            }
-
-            if let Some(Out::YMap(grid_index)) = source_map.get(&txn, KEY_GRID_INDEX) {
-                if let Some(Out::YMap(pos_to_id)) = grid_index.get(&txn, KEY_GRID_POS_TO_ID) {
-                    for (_, value) in pos_to_id.iter(&txn) {
-                        if let Out::Any(Any::String(old_hex)) = value {
-                            ensure_cell_id_remap(&mut cell_id_remap, old_hex.as_ref(), id_alloc);
-                        }
-                    }
-                }
-                if let Some(Out::YMap(id_to_pos)) = grid_index.get(&txn, KEY_GRID_ID_TO_POS) {
-                    for (old_hex, _) in id_to_pos.iter(&txn) {
-                        ensure_cell_id_remap(&mut cell_id_remap, &old_hex, id_alloc);
-                    }
-                }
-            }
-
-            if let Some(Out::YMap(cell_properties)) = source_map.get(&txn, KEY_CELL_PROPERTIES) {
-                for (old_hex, _) in cell_properties.iter(&txn) {
-                    ensure_cell_id_remap(&mut cell_id_remap, &old_hex, id_alloc);
-                }
-            }
-
-            if let Some(Out::YMap(comments_map)) = source_map.get(&txn, KEY_COMMENTS) {
-                for (_, value) in comments_map.iter(&txn) {
-                    if let Out::YMap(comment_map) = value
-                        && let Some(Out::Any(Any::String(old_ref))) =
-                            comment_map.get(&txn, comment_schema::KEY_CELL_REF)
-                    {
-                        ensure_cell_id_remap(&mut cell_id_remap, old_ref.as_ref(), id_alloc);
-                    }
-                }
-            }
-
-            source_pivots = super::pivots::get_all_pivots_in_txn(&txn, &self.sheets, source_id);
-
-            for (key, value) in source_map.iter(&txn) {
-                if let Some(y) = read_y_out(value, &txn) {
-                    top_entries.push((key.to_string(), y));
-                }
-            }
-        }
-
-        let copied_pivots = super::pivots::remap_pivots_for_sheet_copy(
+        let source_pivot_keys: Vec<_> = source_pivots
+            .iter()
+            .map(|pivot| (pivot.id.clone(), pivot.name.clone()))
+            .collect();
+        let mut copied_pivots = super::pivots::remap_pivots_for_sheet_copy(
             source_pivots,
             source_id,
             &new_id,
@@ -506,102 +111,194 @@ impl YrsStorage {
             id_alloc,
         );
 
-        // Pass 2: Write the tree into the new sheet. `cells` and `gridIndex`
-        // get bespoke handling for CellId-hex remapping; everything else uses
-        // the generic recursive writer, which correctly preserves structured
-        // Yrs subtrees (e.g. CF rules) that the previous flat-representation
-        // path silently dropped.
-        {
-            let mut txn = self.doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-
-            let new_sheet: MapRef = self
-                .sheets
-                .insert(&mut txn, &*new_hex, MapPrelim::default());
-
-            for (key, value) in &top_entries {
-                match key.as_str() {
-                    KEY_CELLS => write_cells_remapped(&new_sheet, &mut txn, value, &cell_id_remap),
-                    KEY_GRID_INDEX => {
-                        write_grid_index_remapped(&new_sheet, &mut txn, value, &cell_id_remap)
-                    }
-                    KEY_CELL_PROPERTIES => {
-                        write_cell_properties_remapped(&new_sheet, &mut txn, value, &cell_id_remap)
-                    }
-                    KEY_COMMENTS => {
-                        write_comments_remapped(&new_sheet, &mut txn, value, &cell_id_remap)
-                    }
-                    KEY_PIVOT_TABLES => {
-                        let _: MapRef =
-                            new_sheet.insert(&mut txn, KEY_PIVOT_TABLES, MapPrelim::default());
-                    }
-                    _ => write_y_value_into_map(&new_sheet, &mut txn, key, value),
-                }
+        // Pivot names are workbook-wide bindings in slicer/timeline caches.
+        // Repeated copies of the same source must not reuse its first copy's name.
+        let mut used_pivot_names: std::collections::HashSet<String> = self
+            .sheet_metadata
+            .values()
+            .flat_map(|sheet| sheet.pivots.values().map(|pivot| pivot.name.to_lowercase()))
+            .chain(
+                self.metadata
+                    .pivot_specs
+                    .values()
+                    .map(|pivot| pivot.config.name.to_lowercase()),
+            )
+            .collect();
+        for pivot in &mut copied_pivots {
+            let base: String = pivot.name.chars().take(255).collect();
+            let mut candidate = base.clone();
+            let mut suffix = 2u32;
+            while !used_pivot_names.insert(candidate.to_lowercase()) {
+                let ending = format!(" {suffix}");
+                candidate = format!(
+                    "{}{}",
+                    base.chars().take(255 - ending.len()).collect::<String>(),
+                    ending
+                );
+                suffix += 1;
             }
-            super::pivots::write_pivots_in_txn(&mut txn, &self.sheets, &new_id, &copied_pivots)?;
-
-            // Override meta fields for new sheet
-            if let Some(Out::YMap(new_meta)) = new_sheet.get(&txn, KEY_PROPERTIES) {
-                new_meta.insert(&mut txn, KEY_NAME, Any::String(Arc::from(new_name)));
-                new_meta.insert(&mut txn, KEY_HIDDEN, Any::Bool(false));
-            }
-
-            // Insert into sheetOrder after the source sheet — lazy
-            // ensure replaces the prior eager-bootstrap dependency.
-            let order_arr = self.ensure_sheet_order_array(&mut txn);
-            let len = order_arr.len(&txn);
-            let mut insert_pos = len;
-            for i in 0..len {
-                if let Some(Out::Any(Any::String(s))) = order_arr.get(&txn, i)
-                    && *s == *source_hex
-                {
-                    insert_pos = i + 1;
-                    break;
-                }
-            }
-            order_arr.insert(
-                &mut txn,
-                insert_pos,
-                Any::String(Arc::from(new_hex.as_str())),
-            );
+            pivot.name = candidate;
         }
 
-        // Pass 3: Update mirror. Cells are left empty (mutation_copy_sheet
-        // rebuilds the full mirror from Yrs), but ranges are populated here so
-        // that the mirror entry is correct even before the caller rebuilds.
-        let ranges = {
-            let txn = self.doc.transact();
-            let mut range_data_vec = Vec::new();
-            if let Some(Out::YMap(sheet_map)) = self.sheets.get(&txn, &new_hex)
-                && let Some(Out::YMap(ranges_map)) = sheet_map.get(&txn, KEY_RANGES)
-                && let Some(Out::YMap(payloads_map)) = sheet_map.get(&txn, KEY_RANGE_PAYLOADS)
+        // A copied source has independent values, so its pivots need independent
+        // OOXML caches. Leave records absent so export rebuilds them from live cells.
+        let mut used_cache_ids: std::collections::HashSet<u32> = self
+            .metadata
+            .pivot_cache_sources
+            .keys()
+            .chain(self.metadata.pivot_cache_records.keys())
+            .copied()
+            .chain(
+                self.sheet_metadata
+                    .values()
+                    .flat_map(|sheet| sheet.pivots.values().filter_map(|pivot| pivot.cache_id)),
+            )
+            .chain(
+                self.metadata
+                    .pivot_specs
+                    .values()
+                    .filter_map(|pivot| pivot.config.cache_id),
+            )
+            .collect();
+        let mut copied_cache_ids = HashMap::new();
+        for pivot in &mut copied_pivots {
+            if pivot
+                .source_sheet_id
+                .as_deref()
+                .and_then(|id| SheetId::from_uuid_str(id).ok())
+                == Some(new_id)
+                && let Some(original_cache_id) = pivot.cache_id
             {
-                for entry in
-                    compute_document::range::read_ranges_from_yrs(&txn, &ranges_map, &payloads_map)
-                {
-                    range_data_vec.push(crate::snapshot::RangeData {
-                        range_id: entry.metadata.range_id,
-                        kind: entry.metadata.kind,
-                        anchor: entry.metadata.anchor,
-                        encoding: entry.metadata.encoding,
-                        payload: entry.payload,
-                        row_axis: entry.metadata.row_axis,
-                        col_axis: entry.metadata.col_axis,
-                        row_ids: entry.metadata.row_ids,
-                        col_ids: entry.metadata.col_ids,
-                    });
-                }
+                let new_cache_id =
+                    *copied_cache_ids
+                        .entry(original_cache_id)
+                        .or_insert_with(|| {
+                            let id = (1..=u32::MAX)
+                                .find(|id| used_cache_ids.insert(*id))
+                                .expect("pivot cache ID space exhausted");
+                            id
+                        });
+                pivot.cache_id = Some(new_cache_id);
             }
-            range_data_vec
-        };
-        let snap = crate::snapshot::SheetSnapshot {
-            id: new_id.to_uuid_string(),
-            name: new_name.to_string(),
-            rows,
-            cols,
-            cells: vec![],
-            ranges,
-        };
-        mirror.add_sheet(snap)?;
+        }
+
+        let insert_at = self
+            .metadata
+            .sheet_order
+            .iter()
+            .position(|id| id == source_id)
+            .map_or(self.metadata.sheet_order.len(), |index| index + 1);
+        crate::storage::engine::history::metadata::capture_workbook_field!(self, sheet_order);
+        self.metadata.sheet_order.insert(insert_at, new_id);
+
+        let copied_cell_metadata: Vec<_> = cell_id_remap
+            .iter()
+            .filter_map(|(old, new)| {
+                let old = cell_types::CellId::from_raw(hex_to_id(old)?);
+                let new = cell_types::CellId::from_raw(hex_to_id(new)?);
+                self.cell_metadata(&old)
+                    .cloned()
+                    .map(|metadata| (new, metadata))
+            })
+            .collect();
+        for (id, metadata) in copied_cell_metadata {
+            self.history.mark_cell_owned(id);
+            self.set_cell_metadata(id, metadata);
+        }
+        let mut metadata = self
+            .sheet_metadata
+            .get(source_id)
+            .cloned()
+            .unwrap_or_default();
+        super::comments::remap_for_copy(&mut metadata, &native_copy.cell_remap, id_alloc);
+        metadata.dimensions.remap_axes(
+            |id| native_copy.remap_row(id),
+            |id| native_copy.remap_col(id),
+        );
+        metadata.cell_properties = std::mem::take(&mut metadata.cell_properties)
+            .into_iter()
+            .filter_map(|(id, value)| {
+                native_copy
+                    .cell_remap
+                    .get(&id)
+                    .copied()
+                    .map(|new| (new, value))
+            })
+            .collect();
+        metadata.hyperlinks.retain_mut(|link| {
+            let Some(start) = native_copy.cell_remap.get(&link.start_id) else {
+                return false;
+            };
+            link.start_id = *start;
+            if let Some(end) = link.end_id.as_mut() {
+                let Some(new) = native_copy.cell_remap.get(end) else {
+                    return false;
+                };
+                *end = *new;
+            }
+            true
+        });
+        metadata.merges.retain_mut(|merge| {
+            let (Some(tl), Some(br)) = (
+                native_copy.cell_remap.get(&merge.top_left_id),
+                native_copy.cell_remap.get(&merge.bottom_right_id),
+            ) else {
+                return false;
+            };
+            merge.top_left_id = *tl;
+            merge.bottom_right_id = *br;
+            true
+        });
+        super::filters::remap_for_copy(&mut metadata, *source_id, new_id, &cell_id_remap, id_alloc);
+        metadata.column_schemas = std::mem::take(&mut metadata.column_schemas)
+            .into_iter()
+            .filter_map(|(id, schema)| native_copy.remap_col(id).map(|id| (id, schema)))
+            .collect();
+        for format in metadata.conditional_formats.values_mut() {
+            format.sheet_id = new_id.to_uuid_string();
+        }
+        metadata.data_bindings = std::mem::take(&mut metadata.data_bindings)
+            .into_values()
+            .map(|mut binding| {
+                binding.id = format!("binding-{:032x}", id_alloc.next_u128());
+                binding.sheet_id = id_to_hex(new_id.as_u128()).to_string();
+                (binding.id.clone(), binding)
+            })
+            .collect();
+        metadata
+            .floating_objects
+            .remap_for_copy(new_id, &native_copy.cell_remap, id_alloc);
+        native_copy.install(mirror, new_id)?;
+        let pivot_copies = source_pivot_keys
+            .into_iter()
+            .zip(copied_pivots.iter())
+            .flat_map(|((id, name), copy)| [(id, copy.clone()), (name, copy.clone())])
+            .collect();
+        crate::storage::workbook::slicers::copy_sheet_objects(
+            self,
+            source_id,
+            &new_id,
+            &pivot_copies,
+            id_alloc,
+        );
+        metadata.pivots = copied_pivots
+            .into_iter()
+            .map(|pivot| (pivot.id.clone(), pivot))
+            .collect();
+        metadata.name = new_name.to_owned();
+        metadata.sparklines.remap_for_copy(new_id, id_alloc);
+        metadata.visibility = domain_types::SheetState::Visible;
+        metadata.original_sheet_id = None;
+        metadata.uid = None;
+        for group in metadata
+            .grouping
+            .row_groups
+            .iter_mut()
+            .chain(metadata.grouping.column_groups.iter_mut())
+        {
+            group.sheet_id = id_to_hex(new_id.as_u128()).to_string();
+        }
+        self.sheet_metadata.insert(new_id, metadata);
 
         Ok(new_id)
     }
@@ -620,24 +317,19 @@ impl YrsStorage {
         rows: u32,
         cols: u32,
     ) -> Result<(), ComputeError> {
-        self.add_sheet_with_origin(
+        self.add_sheet_with_width(
             mirror,
             sheet_id,
             name,
             rows,
             cols,
             SheetCreationOptions {
-                origin: Origin::from(ORIGIN_USER_EDIT),
                 default_col_width: domain_types::units::DEFAULT_COL_WIDTH,
             },
         )
     }
 
-    /// Add a new sheet with a caller-supplied Yrs `origin`.
-    ///
-    /// Used by engine-bootstrap callers that need to bypass the undo stack
-    /// (see `ORIGIN_BOOTSTRAP` in `compute_document::undo`).
-    fn add_sheet_with_origin(
+    fn add_sheet_with_width(
         &mut self,
         mirror: &mut CellMirror,
         sheet_id: SheetId,
@@ -653,105 +345,12 @@ impl YrsStorage {
             });
         }
 
-        {
-            let mut txn = self.doc.transact_mut_with(options.origin);
-            write_schema_version(&mut txn, &self.workbook);
-
-            // Append to sheet order — Provider Protocol lifecycle: lazy-create rather
-            // than rely on the (now-removed) eager bootstrap from
-            // `YrsStorage::new`. See [`YrsStorage::new`] doc-comment for why
-            // eager workbook-child creation was removed.
-            let order_arr = self.ensure_sheet_order_array(&mut txn);
-            order_arr.push_back(&mut txn, Any::String(Arc::from(sheet_hex.as_str())));
-
-            // Create sheet map
-            let sheet_map_prelim = MapPrelim::from([] as [(&str, Any); 0]);
-            let sheet_map: MapRef = self.sheets.insert(&mut txn, &*sheet_hex, sheet_map_prelim);
-
-            // Meta — store name + platform-appropriate defaults.
-            // Row/col counts are derived from YArray lengths (no rows/cols keys).
-            let meta = MapPrelim::from([
-                (KEY_NAME, Any::String(Arc::from(name))),
-                (
-                    KEY_DEFAULT_ROW_HEIGHT,
-                    Any::Number(domain_types::units::DEFAULT_ROW_HEIGHT.0),
-                ),
-                (
-                    KEY_DEFAULT_COL_WIDTH,
-                    Any::Number(options.default_col_width.0),
-                ),
-            ]);
-            sheet_map.insert(&mut txn, KEY_PROPERTIES, meta);
-
-            // YArray-based row/column ordering (CRDT-safe, insert_range for O(n) bulk insert)
-            let id_alloc = IdAllocator::new();
-            let row_order = sheet_map.insert(&mut txn, KEY_ROW_ORDER, ArrayPrelim::default());
-            let row_hexes: Vec<Any> = (0..rows)
-                .map(|_| {
-                    let rid = id_alloc.next_row_id();
-                    Any::String(Arc::from(id_to_hex(rid.as_u128()).as_str()))
-                })
-                .collect();
-            row_order.insert_range(&mut txn, 0, row_hexes);
-
-            let col_order = sheet_map.insert(&mut txn, KEY_COL_ORDER, ArrayPrelim::default());
-            let col_hexes: Vec<Any> = (0..cols)
-                .map(|_| {
-                    let cid = id_alloc.next_col_id();
-                    Any::String(Arc::from(id_to_hex(cid.as_u128()).as_str()))
-                })
-                .collect();
-            col_order.insert_range(&mut txn, 0, col_hexes);
-
-            // Grid index (posToId / idToPos) — authoritative yrs-side identity
-            // store post-R51. `cellGrid` / `cellPos` retired.
-            let empty_map = || MapPrelim::from([] as [(&str, Any); 0]);
-            let gi_map: MapRef = sheet_map.insert(&mut txn, KEY_GRID_INDEX, empty_map());
-            gi_map.insert(&mut txn, "posToId", empty_map());
-            gi_map.insert(&mut txn, "idToPos", empty_map());
-
-            // All per-sheet sub-maps
-            for key in [
-                KEY_CELLS,
-                KEY_CELL_PROPERTIES,
-                KEY_ROW_HEIGHTS,
-                KEY_COL_WIDTHS,
-                KEY_SCHEMAS,
-                KEY_PIVOT_TABLES,
-                KEY_MERGES,
-                KEY_MANUAL_HIDDEN_ROWS,
-                KEY_FILTER_HIDDEN_ROWS,
-                KEY_HIDDEN_ROWS,
-                KEY_HIDDEN_COLS,
-                KEY_ROW_FORMATS,
-                KEY_COL_FORMATS,
-                KEY_COL_FORMAT_RANGES,
-                KEY_COMMENTS,
-                KEY_CELL_ANNOTATIONS,
-                KEY_FILTERS,
-                KEY_FILTER_METADATA_BINDINGS,
-                KEY_SPARKLINES,
-                KEY_CONDITIONAL_FORMAT,
-                KEY_CF_RULES,
-                KEY_BINDINGS,
-                KEY_GROUPING,
-                KEY_SORTING,
-                KEY_FLOATING_OBJECTS,
-                KEY_FLOATING_OBJECT_GROUPS,
-                KEY_RANGES,
-                KEY_RANGE_PAYLOADS,
-                KEY_RANGE_FORMATS,
-                KEY_RANGE_BINDINGS,
-                KEY_VALIDATION_RULES,
-            ] {
-                let empty = MapPrelim::from([] as [(&str, Any); 0]);
-                sheet_map.insert(&mut txn, key, empty);
-            }
-            sheet_map.insert(&mut txn, KEY_FLOATING_OBJECT_ORDER, ArrayPrelim::default());
-        }
-
+        crate::storage::engine::history::structure::capture_new_sheet(self, sheet_id);
         // Update mirror
         let snap = crate::snapshot::SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_id.to_uuid_string(),
             name: name.to_string(),
             rows,
@@ -760,36 +359,64 @@ impl YrsStorage {
             ranges: vec![],
         };
         mirror.add_sheet(snap)?;
+        let mut metadata = super::SheetMetadata {
+            name: name.to_owned(),
+            ..Default::default()
+        };
+        metadata.format.default_row_height = Some(domain_types::units::DEFAULT_ROW_HEIGHT.0);
+        metadata.format.default_col_width = Some(options.default_col_width.0);
+        self.sheet_metadata.insert(sheet_id, metadata);
+        crate::storage::engine::history::metadata::capture_workbook_field!(self, sheet_order);
+        self.metadata.sheet_order.push(sheet_id);
 
         Ok(())
     }
 
-    /// Remove a sheet by SheetId. Updates both yrs doc and mirror.
+    /// Remove the sheet, its values, and its owned metadata.
     pub(crate) fn remove_sheet(&mut self, mirror: &mut CellMirror, sheet_id: &SheetId) {
-        let sheet_hex = id_to_hex(sheet_id.as_u128());
-
-        {
-            let mut txn = self.doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-
-            // Remove from sheets map
-            self.sheets.remove(&mut txn, &sheet_hex);
-
-            // Remove from sheet order array
-            if let Some(order_arr) = self.get_sheet_order_array(&txn) {
-                let len = order_arr.len(&txn);
-                for i in 0..len {
-                    if let Some(Out::Any(Any::String(s))) = order_arr.get(&txn, i)
-                        && *s == *sheet_hex
-                    {
-                        order_arr.remove(&mut txn, i);
-                        break;
-                    }
-                }
-            }
-        }
-
+        crate::storage::engine::history::metadata::capture_workbook_field!(self, sheet_order);
+        self.metadata.sheet_order.retain(|id| id != sheet_id);
         // Update mirror
+        self.cell_metadata
+            .retain(|id, _| mirror.sheet_for_cell(id).as_ref() != Some(sheet_id));
+        let slicers: Vec<_> = self
+            .metadata
+            .slicers
+            .iter()
+            .filter(|(_, value)| {
+                SheetId::from_uuid_str(&value.sheet_id).ok().as_ref() == Some(sheet_id)
+            })
+            .map(|(id, _)| id.clone())
+            .collect();
+        for id in slicers {
+            crate::storage::engine::history::metadata::capture_workbook_entry!(self, slicers, id);
+        }
+        let timelines: Vec<_> = self
+            .metadata
+            .timelines
+            .iter()
+            .filter(|(_, value)| {
+                SheetId::from_uuid_str(&value.sheet_id).ok().as_ref() == Some(sheet_id)
+            })
+            .map(|(id, _)| id.clone())
+            .collect();
+        for id in timelines {
+            crate::storage::engine::history::metadata::capture_workbook_entry!(self, timelines, id);
+        }
+        self.metadata.slicers.retain(|_, slicer| {
+            cell_types::SheetId::from_uuid_str(&slicer.sheet_id)
+                .ok()
+                .as_ref()
+                != Some(sheet_id)
+        });
+        self.metadata.timelines.retain(|_, timeline| {
+            cell_types::SheetId::from_uuid_str(&timeline.sheet_id)
+                .ok()
+                .as_ref()
+                != Some(sheet_id)
+        });
         mirror.remove_sheet(sheet_id);
+        self.sheet_metadata.remove(sheet_id);
     }
 
     /// Get the ordered list of sheet IDs.
@@ -800,20 +427,7 @@ impl YrsStorage {
     /// lands and those tests migrate, this should return to `pub(crate)`.
     #[doc(hidden)]
     pub fn sheet_order(&self) -> Vec<SheetId> {
-        let txn = self.doc.transact();
-        let Some(order_arr) = self.get_sheet_order_array(&txn) else {
-            return Vec::new();
-        };
-        let len = order_arr.len(&txn);
-        let mut result = Vec::with_capacity(len as usize);
-        for i in 0..len {
-            if let Some(Out::Any(Any::String(s))) = order_arr.get(&txn, i)
-                && let Some(id) = hex_to_id(&s)
-            {
-                result.push(SheetId::from_raw(id));
-            }
-        }
-        result
+        self.metadata.sheet_order.clone()
     }
 }
 
@@ -827,61 +441,21 @@ mod tests {
     use super::super::properties::get_sheet_name;
     use super::super::test_support::{make_sheet_id, setup};
     use crate::mirror::CellMirror;
-    use crate::storage::YrsStorage;
+    use crate::storage::WorkbookStorage;
     use cell_types::IdAllocator;
     use value_types::ComputeError;
 
     #[test]
     fn test_create_sheet() {
-        let mut storage = YrsStorage::new();
+        let mut storage = WorkbookStorage::new();
         let mut mirror = CellMirror::new();
         let sid = storage
             .create_sheet(&mut mirror, "My Sheet", &*crate::storage::STORAGE_ID_ALLOC)
             .unwrap();
-        let order = get_sheet_order(storage.doc(), storage.workbook_map());
+        let order = get_sheet_order(&storage);
         assert_eq!(order.len(), 1);
         assert_eq!(order[0], sid);
-        assert_eq!(
-            get_sheet_name(storage.doc(), storage.sheets(), &sid),
-            Some("My Sheet".to_string())
-        );
-    }
-
-    #[test]
-    fn test_delete_sheet() {
-        let mut storage = YrsStorage::new();
-        let mut mirror = CellMirror::new();
-        let s1 = storage
-            .create_sheet(&mut mirror, "Sheet1", &*crate::storage::STORAGE_ID_ALLOC)
-            .unwrap();
-        let s2 = storage
-            .create_sheet(&mut mirror, "Sheet2", &*crate::storage::STORAGE_ID_ALLOC)
-            .unwrap();
-        assert_eq!(
-            get_sheet_order(storage.doc(), storage.workbook_map()).len(),
-            2
-        );
-
-        storage.delete_sheet(&mut mirror, &s1).unwrap();
-        assert_eq!(
-            get_sheet_order(storage.doc(), storage.workbook_map()).len(),
-            1
-        );
-        assert_eq!(
-            get_sheet_order(storage.doc(), storage.workbook_map())[0],
-            s2
-        );
-    }
-
-    #[test]
-    fn test_delete_last_sheet_fails() {
-        let (mut storage, mut mirror, sid) = setup();
-        let result = storage.delete_sheet(&mut mirror, &sid);
-        assert!(result.is_err());
-        assert_eq!(
-            get_sheet_order(storage.doc(), storage.workbook_map()).len(),
-            1
-        );
+        assert_eq!(get_sheet_name(&storage, &sid), Some("My Sheet".to_string()));
     }
 
     #[test]
@@ -897,14 +471,14 @@ mod tests {
             .unwrap();
         assert_ne!(copy_id, sid);
 
-        let order = get_sheet_order(storage.doc(), storage.workbook_map());
+        let order = get_sheet_order(&storage);
         assert_eq!(order.len(), 2);
         // Copy should be inserted after source
         assert_eq!(order[0], sid);
         assert_eq!(order[1], copy_id);
 
         assert_eq!(
-            get_sheet_name(storage.doc(), storage.sheets(), &copy_id),
+            get_sheet_name(&storage, &copy_id),
             Some("Sheet1 (2)".to_string())
         );
     }
@@ -919,16 +493,10 @@ mod tests {
             .unwrap();
 
         assert_eq!(copy_id, make_sheet_id(2));
+        assert_eq!(get_sheet_order(&storage), vec![sid, copy_id]);
+        assert_eq!(get_sheet_name(&storage, &sid), Some("Sheet1".to_string()));
         assert_eq!(
-            get_sheet_order(storage.doc(), storage.workbook_map()),
-            vec![sid, copy_id]
-        );
-        assert_eq!(
-            get_sheet_name(storage.doc(), storage.sheets(), &sid),
-            Some("Sheet1".to_string())
-        );
-        assert_eq!(
-            get_sheet_name(storage.doc(), storage.sheets(), &copy_id),
+            get_sheet_name(&storage, &copy_id),
             Some("Sheet1 (2)".to_string())
         );
     }
@@ -941,10 +509,7 @@ mod tests {
         let created_id = storage.create_sheet(&mut mirror, "Sheet2", &alloc).unwrap();
 
         assert_eq!(created_id, make_sheet_id(2));
-        assert_eq!(
-            get_sheet_order(storage.doc(), storage.workbook_map()),
-            vec![sid, created_id]
-        );
+        assert_eq!(get_sheet_order(&storage), vec![sid, created_id]);
     }
 
     #[test]
@@ -954,26 +519,8 @@ mod tests {
         let result = storage.add_sheet(&mut mirror, sid, "Duplicate", 10, 5);
 
         assert!(matches!(result, Err(ComputeError::InvalidInput { .. })));
-        assert_eq!(
-            get_sheet_order(storage.doc(), storage.workbook_map()),
-            vec![sid]
-        );
-        assert_eq!(
-            get_sheet_name(storage.doc(), storage.sheets(), &sid),
-            Some("Sheet1".to_string())
-        );
-    }
-
-    #[test]
-    fn test_delete_nonexistent_sheet() {
-        let (mut storage, mut mirror, _sid) = setup();
-        // Create a second sheet so deletion is allowed in principle
-        storage
-            .add_sheet(&mut mirror, make_sheet_id(2), "Sheet2", 10, 5)
-            .unwrap();
-
-        let result = storage.delete_sheet(&mut mirror, &make_sheet_id(999));
-        assert!(result.is_err());
+        assert_eq!(get_sheet_order(&storage), vec![sid]);
+        assert_eq!(get_sheet_name(&storage, &sid), Some("Sheet1".to_string()));
     }
 
     #[test]

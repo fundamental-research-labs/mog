@@ -99,7 +99,13 @@ fn sheet_qualified_named_range_same_sheet() {
     let sheet_id = cell_types::SheetId::from_uuid_str(&sheet_id_str).unwrap();
 
     let snapshot = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_id_str.clone(),
             name: "Sheet1".to_string(),
             rows: 10,
@@ -171,7 +177,13 @@ fn unqualified_named_range_same_sheet() {
     let sheet_id = cell_types::SheetId::from_uuid_str(&sheet_id_str).unwrap();
 
     let snapshot = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_id_str.clone(),
             name: "Sheet1".to_string(),
             rows: 10,
@@ -242,8 +254,14 @@ fn sheet_qualified_named_range_cross_sheet() {
     let sheet1_id = cell_types::SheetId::from_uuid_str(&sheet1_id_str).unwrap();
 
     let snapshot = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: sheet1_id_str.clone(),
                 name: "Sheet1".to_string(),
                 rows: 10,
@@ -263,6 +281,9 @@ fn sheet_qualified_named_range_cross_sheet() {
                 ranges: vec![],
             },
             SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
                 id: sheet2_id_str.clone(),
                 name: "Sheet2".to_string(),
                 rows: 10,
@@ -324,7 +345,13 @@ fn sheet_qualified_named_range_unquoted_sheet() {
     let sheet_id = cell_types::SheetId::from_uuid_str(&sheet_id_str).unwrap();
 
     let snapshot = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_id_str.clone(),
             name: "Sheet1".to_string(),
             rows: 10,
@@ -391,7 +418,13 @@ fn sheet_qualified_named_range_in_expression() {
     let sheet_id = cell_types::SheetId::from_uuid_str(&sheet_id_str).unwrap();
 
     let snapshot = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_id_str.clone(),
             name: "Sheet1".to_string(),
             rows: 10,
@@ -458,7 +491,13 @@ fn sheet_qualified_workbook_scoped_named_range() {
     let sheet_id_str = sheet_uuid(0);
 
     let snapshot = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_id_str.clone(),
             name: "Sheet1".to_string(),
             rows: 10,

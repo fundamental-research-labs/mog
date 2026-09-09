@@ -8,7 +8,13 @@ use value_types::FiniteF64;
 
 fn blank_snapshot() -> WorkbookSnapshot {
     WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "00000000-0000-0000-0000-000000000001".to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -88,11 +94,8 @@ fn set_formula_and_verify_recalc() {
     sheet.set_cell("A2", "20").unwrap();
     let result = sheet.set_cell("A3", "=A1+A2").unwrap();
 
-    // Verify recalc happened via MutationResult — the engine computed A3's value.
-    // NOTE: get_display_value for formula cells returns "" due to an engine-level
-    // limitation (computed values live in ComputeCore's mirror, but get_display_value
-    // reads from YrsStorage's mirror which isn't synced). This is a known issue
-    // tracked for resolution in the full compute-api facade.
+    assert_eq!(sheet.get_display_value("A3").unwrap(), "30");
+
     assert!(
         !result.recalc.changed_cells.is_empty(),
         "recalc should have produced changed cells"

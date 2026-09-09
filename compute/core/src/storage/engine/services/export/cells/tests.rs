@@ -11,8 +11,8 @@ use crate::import::parse_output_to_snapshot::{
 use crate::mirror::CellMirror;
 use crate::scheduler::ComputeCore;
 use crate::snapshot::{SheetSnapshot, WorkbookSnapshot};
-use crate::storage::YrsStorage;
-use crate::storage::engine::YrsComputeEngine;
+use crate::storage::WorkbookStorage;
+use crate::storage::engine::ComputeEngine;
 use crate::storage::engine::construction::assemble_engine;
 use crate::storage::engine::services::export::LocalPalette;
 use crate::storage::properties::CellProperties;
@@ -30,6 +30,9 @@ fn number(n: f64) -> CellValue {
 fn workbook(sheet_id: &SheetId, cells: Vec<snapshot_types::CellData>) -> WorkbookSnapshot {
     WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_id.to_uuid_string(),
             name: "PivotOut".to_string(),
             rows: 20,
@@ -83,8 +86,8 @@ fn empty_shared_string_source_xlsx() -> Vec<u8> {
         .expect("source XLSX should be writable")
 }
 
-fn engine_from_parse_output(output: &domain_types::ParseOutput) -> (YrsComputeEngine, SheetId) {
-    let mut storage = YrsStorage::new();
+fn engine_from_parse_output(output: &domain_types::ParseOutput) -> (ComputeEngine, SheetId) {
+    let mut storage = WorkbookStorage::new();
     let mut allocator = DefaultIdAllocator::new();
     let id_map = storage
         .hydrate_from_parse_output(output, &mut allocator)
@@ -98,7 +101,17 @@ fn engine_from_parse_output(output: &domain_types::ParseOutput) -> (YrsComputeEn
         .init_from_snapshot_no_recalc(&mut mirror, snapshot.clone())
         .expect("compute init");
     let sheet_id = id_map.sheet_ids[0];
-    let engine = assemble_engine(storage, mirror, compute, &snapshot).expect("engine");
+    let formats = crate::storage::engine::construction::collect_imported_formats(
+        output,
+        &id_map.sheet_ids,
+        &[],
+    );
+    let mut engine = assemble_engine(storage, mirror, compute, &snapshot).expect("engine");
+    crate::storage::engine::construction::install_imported_formats(
+        &mut engine.mirror,
+        &engine.stores.storage.metadata.style_palette,
+        &formats,
+    );
     (engine, sheet_id)
 }
 
@@ -279,14 +292,14 @@ fn mutated_row_and_col_formats_use_authored_palette_ids() {
         )
         .expect("set col format");
 
-    let exported = engine.build_parse_output_from_yrs();
+    let exported = engine.build_parse_output();
     assert_eq!(exported.style_palette.len(), 3);
     assert_eq!(exported.sheets[0].row_styles[0].style_id, 1);
     assert_eq!(exported.sheets[0].col_styles[0].style_id, 2);
 }
 
 #[test]
-fn imported_cell_xf_lineage_survives_yrs_and_live_edits_use_generated_tail() {
+fn imported_cell_xf_lineage_survives_native_storage_and_live_edits_use_generated_tail() {
     let source = imported_cell_xf_lineage_output();
     let original_xfs = source
         .workbook_stylesheet
@@ -296,7 +309,7 @@ fn imported_cell_xf_lineage_survives_yrs_and_live_edits_use_generated_tail() {
         .clone();
     let (mut engine, sheet_id) = engine_from_parse_output(&source);
 
-    let pristine = engine.build_parse_output_from_yrs();
+    let pristine = engine.build_parse_output();
     assert_eq!(pristine.sheets[0].cells[0].style_id, Some(1));
     assert_eq!(
         pristine
@@ -321,7 +334,7 @@ fn imported_cell_xf_lineage_survives_yrs_and_live_edits_use_generated_tail() {
         )
         .expect("re-author the effective imported format");
 
-    let edited = engine.build_parse_output_from_yrs();
+    let edited = engine.build_parse_output();
     assert_eq!(edited.sheets[0].cells[0].style_id, Some(2));
     assert_eq!(edited.style_palette.len(), 3);
     assert_ne!(
@@ -391,7 +404,7 @@ fn inline_cell_xfs_snapshot_inherited_row_and_column_fills_and_explicit_no_fill(
         ..Default::default()
     };
     let (mut engine, sheet_id) = engine_from_parse_output(&output);
-    let cell_id_at = |engine: &YrsComputeEngine, row, col| {
+    let cell_id_at = |engine: &ComputeEngine, row, col| {
         engine.stores.grid_indexes[&sheet_id]
             .cell_id_at(row, col)
             .expect("cell identity")
@@ -452,7 +465,7 @@ fn inline_cell_xfs_snapshot_inherited_row_and_column_fills_and_explicit_no_fill(
         )
         .expect("set explicit C1 no-fill");
 
-    let exported = engine.build_parse_output_from_yrs();
+    let exported = engine.build_parse_output();
     let format_at = |row, col| {
         let style_id = exported.sheets[0]
             .cells
@@ -473,7 +486,7 @@ fn inline_cell_xfs_snapshot_inherited_row_and_column_fills_and_explicit_no_fill(
     assert_eq!(c1_fill.pattern_type.as_deref(), Some("none"));
 
     let bytes = engine.export_to_xlsx_bytes().expect("export XLSX");
-    let (reimported, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).expect("reimport XLSX");
+    let (reimported, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("reimport XLSX");
     let reimported_sheet_id = reimported.stores.storage.sheet_order()[0];
     let reimported_format_at = |row, col| {
         let cell_id = reimported.stores.grid_indexes[&reimported_sheet_id]
@@ -520,7 +533,7 @@ fn imported_style_only_blank_cells_do_not_export_as_cells() {
     let rich_strings = FxHashMap::default();
     let mut palette = Vec::new();
     let palette = LocalPalette::from_vec(&mut palette);
-    let (engine, _) = YrsComputeEngine::from_snapshot(workbook(&sheet_id, vec![])).expect("engine");
+    let (engine, _) = ComputeEngine::from_snapshot(workbook(&sheet_id, vec![])).expect("engine");
 
     let exported = build_cell_data_for_cell_id(
         &engine.stores,
@@ -548,7 +561,7 @@ fn explicit_blank_cell_export_ignores_col_data_effective_value() {
     let sheet_id = SheetId::from_raw(104);
     let blank_cell_id = CellId::from_raw(204);
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(workbook(&sheet_id, vec![])).expect("engine should build");
+        ComputeEngine::from_snapshot(workbook(&sheet_id, vec![])).expect("engine should build");
     engine
         .mirror
         .register_identity_only(&sheet_id, SheetPos::new(0, 0), blank_cell_id);
@@ -556,8 +569,8 @@ fn explicit_blank_cell_export_ignores_col_data_effective_value() {
         .mirror
         .get_sheet_mut(&sheet_id)
         .expect("sheet mirror")
-        .col_data
-        .insert(0, vec![number(88.0)]);
+        .generated_values
+        .insert(SheetPos::new(0, 0), number(88.0));
 
     assert_eq!(
         engine
@@ -603,6 +616,9 @@ fn xlsx_import_rebuild_hydrates_authored_style_ranges() {
         .expect("source XLSX should be writable");
     let bootstrap = WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: "00000000-0000-4000-8000-000000000001".to_string(),
             name: "Sheet1".to_string(),
             rows: 1,
@@ -612,13 +628,13 @@ fn xlsx_import_rebuild_hydrates_authored_style_ranges() {
         }],
         ..WorkbookSnapshot::default()
     };
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(bootstrap).expect("bootstrap engine");
+    let (mut engine, _) = ComputeEngine::from_snapshot(bootstrap).expect("bootstrap engine");
 
     engine
         .import_from_xlsx_bytes_no_recalc(&source_xlsx)
         .expect("import XLSX");
 
-    let exported = engine.build_parse_output_from_yrs();
+    let exported = engine.build_parse_output();
     let runs = &exported.sheets[0].authored_style_runs;
     assert!(
         runs.iter()
@@ -688,7 +704,7 @@ fn skipped_spill_target_is_not_replayed_from_modeled_export() {
         "spill target must not materialize as editable storage"
     );
 
-    let exported = engine.build_parse_output_from_yrs();
+    let exported = engine.build_parse_output();
     let cells = &exported.sheets[0].cells;
     assert!(cells.iter().any(|cell| (cell.row, cell.col) == (0, 0)));
     assert!(
@@ -700,7 +716,7 @@ fn skipped_spill_target_is_not_replayed_from_modeled_export() {
 #[test]
 fn original_sst_metadata_survives_l2_import_export() {
     let input = empty_shared_string_source_xlsx();
-    let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&input).expect("import XLSX");
+    let (engine, _) = ComputeEngine::from_xlsx_bytes(&input).expect("import XLSX");
 
     let output = engine
         .export_to_xlsx_bytes()
@@ -878,7 +894,7 @@ fn one_value_pivot_result(value: CellValue) -> PivotTableResult {
     }
 }
 
-fn register_rendered_pivot(engine: &mut YrsComputeEngine, sheet_id: &SheetId, value: CellValue) {
+fn register_rendered_pivot(engine: &mut ComputeEngine, sheet_id: &SheetId, value: CellValue) {
     let result = one_value_pivot_result(value);
     engine
         .mirror
@@ -910,7 +926,7 @@ fn register_rendered_pivot(engine: &mut YrsComputeEngine, sheet_id: &SheetId, va
 fn export_cells_includes_pivot_overlay_without_grid_index() {
     let sheet_id = SheetId::from_raw(100);
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(workbook(&sheet_id, vec![])).expect("engine");
+        ComputeEngine::from_snapshot(workbook(&sheet_id, vec![])).expect("engine");
     register_rendered_pivot(&mut engine, &sheet_id, number(10.0));
     engine.stores.grid_indexes.remove(&sheet_id);
 
@@ -930,7 +946,7 @@ fn export_cells_includes_pivot_overlay_without_grid_index() {
 fn export_cells_preserves_explicit_cell_over_pivot_overlay() {
     let sheet_id = SheetId::from_raw(101);
     let explicit_cell_id = cell_types::CellId::from_raw(201);
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(workbook(
+    let (mut engine, _) = ComputeEngine::from_snapshot(workbook(
         &sheet_id,
         vec![snapshot_types::CellData {
             cell_id: explicit_cell_id.to_uuid_string(),
@@ -960,7 +976,7 @@ fn export_cells_preserves_explicit_cell_over_pivot_overlay() {
 fn export_cells_does_not_emit_empty_pivot_overlay_at_origin() {
     let sheet_id = SheetId::from_raw(102);
     let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(workbook(&sheet_id, vec![])).expect("engine");
+        ComputeEngine::from_snapshot(workbook(&sheet_id, vec![])).expect("engine");
     let result = one_value_pivot_result(number(10.0));
     engine
         .mirror
@@ -997,5 +1013,174 @@ fn export_cells_does_not_emit_empty_pivot_overlay_at_origin() {
             .iter()
             .all(|cell| cell.row != 0 || cell.col != 0 || cell.value.is_null()),
         "empty pivot bounds must not export a phantom A1 overlay"
+    );
+}
+
+#[test]
+fn native_cell_metadata_is_sparse_and_survives_copy_and_authored_replacement() {
+    let rich = domain_types::RichSharedString {
+        plain_text: "Hello".to_string(),
+        runs: vec![domain_types::RichTextRun {
+            text: "Hello".to_string(),
+            bold: true,
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let output = domain_types::ParseOutput {
+        sheets: vec![domain_types::SheetData {
+            name: "Metadata".to_string(),
+            rows: 4,
+            cols: 4,
+            cells: vec![
+                domain_types::CellData {
+                    row: 0,
+                    col: 0,
+                    value: number(7.0),
+                    ..Default::default()
+                },
+                domain_types::CellData {
+                    row: 0,
+                    col: 1,
+                    value: number(8.0),
+                    formula: Some("A1+1".to_string()),
+                    cell_formula: Some(ooxml_types::worksheet::CellFormula {
+                        text: "A1+1".to_string(),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+                domain_types::CellData {
+                    row: 0,
+                    col: 2,
+                    value: CellValue::Text("Hello".into()),
+                    rich_string: Some(rich.clone()),
+                    ..Default::default()
+                },
+                domain_types::CellData {
+                    row: 0,
+                    col: 3,
+                    value: number(7.0),
+                    formula: Some("A1".to_string()),
+                    array_ref: Some("D1:D2".to_string()),
+                    cell_formula: Some(ooxml_types::worksheet::CellFormula {
+                        text: "A1".to_string(),
+                        t: ooxml_types::worksheet::CellFormulaType::Array,
+                        r#ref: Some("D1:D2".to_string()),
+                        aca: true,
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let (mut engine, sheet_id) = engine_from_parse_output(&output);
+    assert_eq!(
+        engine.stores.storage.cell_metadata.len(),
+        2,
+        "ordinary values and normal formulas have no metadata allocation"
+    );
+    let original_rich_id = engine
+        .mirror
+        .resolve_cell_id(&sheet_id, SheetPos::new(0, 2))
+        .unwrap();
+    let (copied_id, _) = engine.copy_sheet(&sheet_id, "Copy").unwrap();
+    let copied_id = SheetId::from_uuid_str(&copied_id).unwrap();
+    let copied_rich_id = engine
+        .mirror
+        .resolve_cell_id(&copied_id, SheetPos::new(0, 2))
+        .unwrap();
+    assert_ne!(original_rich_id, copied_rich_id);
+    assert_eq!(engine.stores.storage.cell_metadata.len(), 4);
+    assert_eq!(
+        engine
+            .stores
+            .storage
+            .cell_metadata(&copied_rich_id)
+            .unwrap()
+            .rich_string
+            .as_ref(),
+        Some(&rich)
+    );
+
+    engine
+        .set_cell_value_parsed(&sheet_id, 0, 2, "Plain")
+        .unwrap();
+    engine.clear_range(&sheet_id, 0, 3, 1, 3).unwrap();
+    assert!(
+        engine
+            .stores
+            .storage
+            .cell_metadata(&original_rich_id)
+            .is_none()
+    );
+    assert_eq!(
+        engine.stores.storage.cell_metadata.len(),
+        2,
+        "only copied cell metadata remains after replacing/clearing originals"
+    );
+    let exported = engine.build_parse_output();
+    let original = exported
+        .sheets
+        .iter()
+        .find(|s| s.name == "Metadata")
+        .unwrap();
+    let edited = original
+        .cells
+        .iter()
+        .find(|c| (c.row, c.col) == (0, 2))
+        .unwrap();
+    assert_eq!(edited.value, CellValue::Text("Plain".into()));
+    assert!(edited.rich_string.is_none());
+    assert!(
+        !original
+            .cells
+            .iter()
+            .any(|c| c.col == 3 && c.array_ref.is_some())
+    );
+    let copied = exported.sheets.iter().find(|s| s.name == "Copy").unwrap();
+    assert_eq!(
+        copied
+            .cells
+            .iter()
+            .find(|c| (c.row, c.col) == (0, 2))
+            .unwrap()
+            .rich_string
+            .as_ref(),
+        Some(&rich)
+    );
+    let array = copied
+        .cells
+        .iter()
+        .find(|c| (c.row, c.col) == (0, 3))
+        .unwrap();
+    assert_eq!(array.array_ref.as_deref(), Some("D1:D2"));
+    assert!(array.cell_formula.as_ref().unwrap().aca);
+    let bytes = engine.export_to_xlsx_bytes().unwrap();
+    let (reloaded, _) = ComputeEngine::from_xlsx_bytes(&bytes).unwrap();
+    let reexported = reloaded.build_parse_output();
+    let copied = reexported.sheets.iter().find(|s| s.name == "Copy").unwrap();
+    assert_eq!(
+        copied
+            .cells
+            .iter()
+            .find(|c| (c.row, c.col) == (0, 2))
+            .unwrap()
+            .rich_string
+            .as_ref(),
+        Some(&rich)
+    );
+    assert_eq!(
+        copied
+            .cells
+            .iter()
+            .find(|c| (c.row, c.col) == (0, 3))
+            .unwrap()
+            .array_ref
+            .as_deref(),
+        Some("D1:D2")
     );
 }

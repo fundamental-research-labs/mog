@@ -121,7 +121,7 @@ fn assert_dimension_set_size(
 #[test]
 fn test_undo_formula_clear_reports_restored_cell_change() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     let (_patches, clear_result) = engine.batch_clear_cells(vec![cell_id_a2()]).unwrap();
@@ -155,7 +155,7 @@ fn test_undo_format_produces_property_changes() {
     use domain_types::CellFormat;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // Apply a format change (bold A1)
@@ -188,7 +188,7 @@ fn test_undo_format_produces_viewport_patches() {
     use domain_types::CellFormat;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // Register a viewport so patches get produced
@@ -219,7 +219,13 @@ fn test_undo_cell_format_to_default_patches_default_format() {
     use domain_types::CellFormat;
 
     let snap = WorkbookSnapshot {
+        axis_run_high_water_mark: None,
+        identity_high_water_mark: None,
+        canonical_tables: Vec::new(),
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: sheet_id().to_uuid_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -229,7 +235,7 @@ fn test_undo_cell_format_to_default_patches_default_format() {
         }],
         ..Default::default()
     };
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -286,92 +292,48 @@ fn test_undo_cell_format_to_default_patches_default_format() {
 }
 
 #[test]
-fn test_observer_format_patches_use_grid_index_position_fallback() {
-    use compute_document::observe::{
-        CellChangeKind, DocumentChanges, GridIndexCellChange, PropertyCellChange,
-    };
-    use domain_types::CellFormat;
-
-    let snap = WorkbookSnapshot {
-        sheets: vec![SheetSnapshot {
-            id: sheet_id().to_uuid_string(),
-            name: "Sheet1".to_string(),
-            rows: 100,
-            cols: 26,
-            cells: vec![],
-            ranges: vec![],
-        }],
-        ..Default::default()
-    };
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+fn undo_format_only_cell_patches_saved_position_after_identity_removal() {
+    let (mut engine, _) = ComputeEngine::from_snapshot(empty_bulk_snapshot()).unwrap();
     let sid = sheet_id();
-
     engine
-        .register_viewport("main", &sid, 0, 0, 100, 26)
+        .register_viewport("main", &sid, 0, 0, 10, 10)
         .unwrap();
-
-    let format = CellFormat {
-        font_size: Some(12.0.into()),
-        ..Default::default()
-    };
     engine
-        .set_format_for_ranges(&sid, &[(0, 0, 0, 0)], &format)
-        .unwrap();
-
-    let (cell_id, row_hex, col_hex) = {
-        let grid = engine
-            .stores
-            .grid_indexes
-            .get(&sid)
-            .expect("sheet should have a grid index");
-        (
-            grid.cell_id_at(0, 0)
-                .expect("formatting A1 should allocate a CellId"),
-            grid.row_id_hex(0)
-                .expect("A1 row should have a row identity")
-                .to_string(),
-            grid.col_id_hex(0)
-                .expect("A1 column should have a column identity")
-                .to_string(),
+        .set_format_for_ranges(
+            &sid,
+            &[(0, 0, 0, 0)],
+            &CellFormat {
+                font_size: Some(12.0.into()),
+                ..Default::default()
+            },
         )
-    };
-
-    engine
-        .stores
-        .grid_indexes
-        .get_mut(&sid)
-        .expect("sheet should have a mutable grid index")
-        .remove_cell(&cell_id);
+        .unwrap();
+    let cell_id = engine
+        .grid_index(&sid)
+        .unwrap()
+        .cell_id_at(0, 0)
+        .expect("formatting a blank cell allocates its identity");
+    let (patches, result) = engine.undo().unwrap();
     assert_eq!(
-        engine
-            .stores
-            .grid_indexes
-            .get(&sid)
-            .and_then(|grid| grid.cell_position(&cell_id)),
+        engine.grid_index(&sid).unwrap().cell_position(&cell_id),
         None,
-        "test setup should simulate the observer state after gridIndex removal"
+        "undo removes the identity allocated only for the reverted format"
     );
-
-    let mut changes = DocumentChanges::default();
-    changes.properties.push(PropertyCellChange {
-        sheet_id: sid,
-        cell_id,
-        kind: CellChangeKind::Removed,
-    });
-    changes.grid_index.push(GridIndexCellChange {
-        sheet_id: sid,
-        cell_id,
-        row_hex,
-        col_hex,
-        kind: CellChangeKind::Removed,
-    });
-
-    let patches = engine.produce_observer_format_patches(&changes);
     let positions = sorted_first_viewport_patch_positions(&patches);
     assert!(
         positions.contains(&(0, 0)),
-        "format observer patch should use gridIndex row/col fallback; got {:?}",
-        positions
+        "the saved position must still be patched after identity removal: {positions:?}"
+    );
+    assert!(result.property_changes.iter().any(|change| {
+        change
+            .position
+            .as_ref()
+            .is_some_and(|position| position.row == 0 && position.col == 0)
+    }));
+    assert_eq!(
+        first_viewport_format_at(&patches, 0, 0)
+            .and_then(|format| format.font_size.map(|size| size.points())),
+        Some(11.0)
     );
 }
 
@@ -380,7 +342,7 @@ fn test_undo_row_format_produces_viewport_patches() {
     use domain_types::CellFormat;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -422,7 +384,7 @@ fn test_undo_row_format_produces_viewport_patches() {
 #[test]
 fn test_redo_grouped_bulk_set_cells_reports_changed_cells_and_viewport_patches() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -480,7 +442,7 @@ fn test_redo_grouped_bulk_set_cells_reports_changed_cells_and_viewport_patches()
 #[test]
 fn test_undo_single_position_batch_reports_changed_cell_and_viewport_patch() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -528,7 +490,7 @@ fn test_undo_col_format_produces_viewport_patches() {
     use domain_types::CellFormat;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -572,7 +534,7 @@ fn test_undo_structural_replay_provides_viewport_refresh_contract() {
     use formula_types::StructureChange;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     engine
@@ -625,7 +587,7 @@ fn test_undo_structural_replay_provides_viewport_refresh_contract() {
 #[test]
 fn test_undo_row_height_produces_dimension_changes() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // Set a row height
@@ -651,7 +613,7 @@ fn test_undo_row_height_produces_dimension_changes() {
 #[test]
 fn test_undo_col_width_restores_width_and_produces_dimension_changes() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     let before = engine.get_col_width_query(&sid, 1);
@@ -677,7 +639,7 @@ fn test_undo_col_width_restores_width_and_produces_dimension_changes() {
 #[test]
 fn test_undo_col_widths_batch_restores_all_widths_as_one_action() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     let before_col_1 = engine.get_col_width_query(&sid, 1);
@@ -714,7 +676,7 @@ fn test_undo_col_widths_batch_restores_all_widths_as_one_action() {
 #[test]
 fn test_undo_col_widths_chars_batch_restores_all_widths_as_one_action() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     let before_col_1 = engine.get_col_width_chars_query(&sid, 1);
@@ -764,7 +726,7 @@ fn test_undo_mixed_mutation_produces_both_cell_and_property_changes() {
     use domain_types::CellFormat;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // Begin undo group so both changes are in one undo step
@@ -812,7 +774,7 @@ fn test_redo_produces_property_changes() {
     use domain_types::CellFormat;
 
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // Apply a format change
@@ -840,7 +802,7 @@ fn test_redo_produces_property_changes() {
 #[test]
 fn test_redo_row_height_produces_dimension_changes() {
     let snap = simple_snapshot();
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
     // Set row height

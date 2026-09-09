@@ -6,8 +6,8 @@ use super::*;
 
 pub(in crate::storage::engine) fn get_all_named_ranges_wire(
     stores: &EngineStores,
-) -> Vec<DefinedName> {
-    workbook_named_ranges::get_all_named_ranges(stores.storage.doc(), stores.storage.workbook_map())
+) -> Vec<workbook_named_ranges::StoredDefinedName> {
+    workbook_named_ranges::get_all_named_ranges(&stores.storage.metadata)
 }
 
 // Named Ranges (Read Queries)
@@ -17,11 +17,7 @@ pub(in crate::storage::engine) fn get_named_range_by_id(
     stores: &EngineStores,
     id: &str,
 ) -> Option<DefinedName> {
-    workbook_named_ranges::get_named_range_by_id(
-        stores.storage.doc(),
-        stores.storage.workbook_map(),
-        id,
-    )
+    workbook_named_ranges::get_named_range_by_id(&stores.storage.metadata, id).map(string_api_name)
 }
 
 pub(in crate::storage::engine) fn get_named_range_by_name(
@@ -29,32 +25,27 @@ pub(in crate::storage::engine) fn get_named_range_by_name(
     name: &str,
     scope: Option<&str>,
 ) -> Option<DefinedName> {
-    workbook_named_ranges::get_named_range_by_name(
-        stores.storage.doc(),
-        stores.storage.workbook_map(),
-        name,
-        scope,
-    )
+    workbook_named_ranges::get_named_range_by_name(&stores.storage.metadata, name, scope)
+        .map(string_api_name)
 }
 
 pub(in crate::storage::engine) fn get_named_ranges_by_scope(
     stores: &EngineStores,
     scope: Option<&str>,
 ) -> Vec<DefinedName> {
-    workbook_named_ranges::get_named_ranges_by_scope(
-        stores.storage.doc(),
-        stores.storage.workbook_map(),
-        scope,
-    )
+    workbook_named_ranges::get_named_ranges_by_scope(&stores.storage.metadata, scope)
+        .into_iter()
+        .map(string_api_name)
+        .collect()
 }
 
 pub(in crate::storage::engine) fn get_visible_named_ranges(
     stores: &EngineStores,
 ) -> Vec<DefinedName> {
-    workbook_named_ranges::get_visible_named_ranges(
-        stores.storage.doc(),
-        stores.storage.workbook_map(),
-    )
+    workbook_named_ranges::get_visible_named_ranges(&stores.storage.metadata)
+        .into_iter()
+        .map(string_api_name)
+        .collect()
 }
 
 pub(in crate::storage::engine) fn named_range_exists(
@@ -62,16 +53,11 @@ pub(in crate::storage::engine) fn named_range_exists(
     name: &str,
     scope: Option<&str>,
 ) -> bool {
-    workbook_named_ranges::named_range_exists(
-        stores.storage.doc(),
-        stores.storage.workbook_map(),
-        name,
-        scope,
-    )
+    workbook_named_ranges::named_range_exists(&stores.storage.metadata, name, scope)
 }
 
 pub(in crate::storage::engine) fn named_range_count(stores: &EngineStores) -> usize {
-    workbook_named_ranges::named_range_count(stores.storage.doc(), stores.storage.workbook_map())
+    workbook_named_ranges::named_range_count(&stores.storage.metadata)
 }
 
 pub(in crate::storage::engine) fn validate_named_range_name(
@@ -80,13 +66,7 @@ pub(in crate::storage::engine) fn validate_named_range_name(
     scope: Option<&str>,
     exclude_id: Option<&str>,
 ) -> NameValidationResult {
-    workbook_named_ranges::validate_name(
-        stores.storage.doc(),
-        stores.storage.workbook_map(),
-        name,
-        scope,
-        exclude_id,
-    )
+    workbook_named_ranges::validate_name(&stores.storage.metadata, name, scope, exclude_id)
 }
 
 pub(in crate::storage::engine) fn resolve_named_range(
@@ -94,10 +74,12 @@ pub(in crate::storage::engine) fn resolve_named_range(
     name: &str,
     current_sheet: Option<&str>,
 ) -> Option<DefinedName> {
-    workbook_named_ranges::resolve_named_range(
-        stores.storage.doc(),
-        stores.storage.workbook_map(),
-        name,
-        current_sheet,
-    )
+    workbook_named_ranges::resolve_named_range(&stores.storage.metadata, name, current_sheet)
+        .map(string_api_name)
+}
+
+fn string_api_name(name: workbook_named_ranges::StoredDefinedName) -> DefinedName {
+    name.map_reference(|identity| {
+        serde_json::to_string(&identity).expect("typed reference serializes")
+    })
 }

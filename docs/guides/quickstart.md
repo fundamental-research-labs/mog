@@ -39,6 +39,10 @@ await Excel.run(async (context) => {
 `Range.values` and `Range.formulas` are queued until `context.sync()`. Reading a
 property requires `load` plus `sync`; unloaded properties throw.
 
+All edits in one mutating `context.sync()` share one undo action. A Rust host
+can call `workbook.history().undo()` or `redo()` on the workbook used by the
+script. Read-only syncs do not add history. See [undo and redo](undo-redo.md).
+
 ## Tests
 
 ```bash

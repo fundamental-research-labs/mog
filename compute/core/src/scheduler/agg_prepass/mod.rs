@@ -240,21 +240,30 @@ impl super::ComputeCore {
         // will become Boolean(true) after evaluation.
         //
         // Non-formula cells are always safe (plain data values).
+        // The mirror, ASTs, and evaluated set stay unchanged during this pass.
+        // Groups and cache warming can reuse answers for the same data range.
+        let data_formula_checks = std::cell::RefCell::new(FxHashMap::<RangeInfo, bool>::default());
         let check_data_formulas =
             |sheet: &SheetId, col: u32, start_row: u32, end_row: u32| -> bool {
                 let Some(sh) = mirror.get_sheet(sheet) else {
                     return true;
                 };
                 let clamped_end = end_row.min(sh.rows);
-                for row in start_row..clamped_end {
-                    if let Some(cell_id) = mirror.resolve_cell_id(sheet, SheetPos::new(row, col))
-                        && ast_cache.contains_key(&cell_id)
-                        && !already_evaluated.contains(&cell_id)
-                    {
-                        return true;
-                    }
-                }
-                false
+                *data_formula_checks
+                    .borrow_mut()
+                    .entry((*sheet, col, start_row, clamped_end))
+                    .or_insert_with(|| {
+                        for row in start_row..clamped_end {
+                            if let Some(cell_id) =
+                                mirror.resolve_cell_id(sheet, SheetPos::new(row, col))
+                                && ast_cache.contains_key(&cell_id)
+                                && !already_evaluated.contains(&cell_id)
+                            {
+                                return true;
+                            }
+                        }
+                        false
+                    })
             };
 
         // Criteria staleness guard: checks if any position in a dynamic criteria

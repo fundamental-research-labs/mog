@@ -195,7 +195,7 @@ fn test_apply_edits_batch() {
         *mirror.get_cell_value(&make_cell_id(702)).unwrap(),
         CellValue::Number(FiniteF64::must(3.0))
     );
-    // Formula is no longer stored in CellEntry (yrs doc is the authoritative source)
+    // This snapshot supplies raw formula text, which ComputeCore compiles separately.
     assert!(mirror.get_formula(&make_cell_id(702)).is_none());
 }
 #[test]

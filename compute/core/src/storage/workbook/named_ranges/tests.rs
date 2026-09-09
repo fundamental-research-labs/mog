@@ -1,29 +1,32 @@
 use super::keys::{get_defined_name_key, looks_like_cell_reference, looks_like_r1c1_reference};
 use super::*;
-use crate::storage::YrsStorage;
-use value_types::{CellError, FiniteF64};
+use crate::storage::WorkbookStorage;
 
 // -------------------------------------------------------------------
 // Helpers
 // -------------------------------------------------------------------
 
-fn make_storage() -> YrsStorage {
-    YrsStorage::new()
+fn make_storage() -> WorkbookStorage {
+    WorkbookStorage::new()
 }
 
-fn sample_input(name: &str, refers_to: &str) -> DefinedNameInput {
+fn sample_input(name: &str, refers_to: &str) -> DefinedNameInput<formula_types::IdentityFormula> {
     DefinedNameInput {
         name: name.to_string(),
-        refers_to: refers_to.to_string(),
+        refers_to: expression_template(refers_to),
         scope: None,
         comment: None,
     }
 }
 
-fn scoped_input(name: &str, refers_to: &str, scope: &str) -> DefinedNameInput {
+fn scoped_input(
+    name: &str,
+    refers_to: &str,
+    scope: &str,
+) -> DefinedNameInput<formula_types::IdentityFormula> {
     DefinedNameInput {
         name: name.to_string(),
-        refers_to: refers_to.to_string(),
+        refers_to: expression_template(refers_to),
         scope: Some(scope.to_string()),
         comment: None,
     }
@@ -40,7 +43,7 @@ fn scoped_input(name: &str, refers_to: &str, scope: &str) -> DefinedNameInput {
 #[test]
 fn test_validate_empty_name() {
     let storage = make_storage();
-    let result = validate_name(storage.doc(), storage.workbook_map(), "", None, None);
+    let result = validate_name(&storage.metadata, "", None, None);
     assert!(!result.valid);
     assert_eq!(result.error, Some(NameValidationError::Empty));
 }
@@ -52,7 +55,7 @@ fn test_validate_empty_name() {
 #[test]
 fn test_validate_whitespace_name() {
     let storage = make_storage();
-    let result = validate_name(storage.doc(), storage.workbook_map(), "   ", None, None);
+    let result = validate_name(&storage.metadata, "   ", None, None);
     assert!(!result.valid);
     assert_eq!(result.error, Some(NameValidationError::Empty));
 }
@@ -65,13 +68,7 @@ fn test_validate_whitespace_name() {
 fn test_validate_too_long_name() {
     let storage = make_storage();
     let long_name = "A".repeat(256);
-    let result = validate_name(
-        storage.doc(),
-        storage.workbook_map(),
-        &long_name,
-        None,
-        None,
-    );
+    let result = validate_name(&storage.metadata, &long_name, None, None);
     assert!(!result.valid);
     assert_eq!(result.error, Some(NameValidationError::TooLong));
 }
@@ -83,13 +80,7 @@ fn test_validate_too_long_name() {
 #[test]
 fn test_validate_starts_with_digit() {
     let storage = make_storage();
-    let result = validate_name(
-        storage.doc(),
-        storage.workbook_map(),
-        "1Revenue",
-        None,
-        None,
-    );
+    let result = validate_name(&storage.metadata, "1Revenue", None, None);
     assert!(!result.valid);
     assert_eq!(result.error, Some(NameValidationError::InvalidFirstChar));
 }
@@ -102,21 +93,15 @@ fn test_validate_starts_with_digit() {
 fn test_validate_cell_reference() {
     let storage = make_storage();
 
-    let result = validate_name(storage.doc(), storage.workbook_map(), "A1", None, None);
+    let result = validate_name(&storage.metadata, "A1", None, None);
     assert!(!result.valid);
     assert_eq!(result.error, Some(NameValidationError::CellReference));
 
-    let result = validate_name(
-        storage.doc(),
-        storage.workbook_map(),
-        "XFD1048576",
-        None,
-        None,
-    );
+    let result = validate_name(&storage.metadata, "XFD1048576", None, None);
     assert!(!result.valid);
     assert_eq!(result.error, Some(NameValidationError::CellReference));
 
-    let result = validate_name(storage.doc(), storage.workbook_map(), "AB123", None, None);
+    let result = validate_name(&storage.metadata, "AB123", None, None);
     assert!(!result.valid);
     assert_eq!(result.error, Some(NameValidationError::CellReference));
 }
@@ -130,7 +115,7 @@ fn test_validate_reserved_names() {
     let storage = make_storage();
 
     for reserved in &["TRUE", "FALSE", "NULL", "true", "false", "null"] {
-        let result = validate_name(storage.doc(), storage.workbook_map(), reserved, None, None);
+        let result = validate_name(&storage.metadata, reserved, None, None);
         assert!(!result.valid, "Expected '{}' to be invalid", reserved);
         assert_eq!(result.error, Some(NameValidationError::Reserved));
     }
@@ -144,11 +129,11 @@ fn test_validate_reserved_names() {
 fn test_validate_single_letter_reserved() {
     let storage = make_storage();
 
-    let result = validate_name(storage.doc(), storage.workbook_map(), "A", None, None);
+    let result = validate_name(&storage.metadata, "A", None, None);
     assert!(!result.valid);
     assert_eq!(result.error, Some(NameValidationError::Reserved));
 
-    let result = validate_name(storage.doc(), storage.workbook_map(), "Z", None, None);
+    let result = validate_name(&storage.metadata, "Z", None, None);
     assert!(!result.valid);
     assert_eq!(result.error, Some(NameValidationError::Reserved));
 }
@@ -161,17 +146,11 @@ fn test_validate_single_letter_reserved() {
 fn test_validate_r1c1_reference() {
     let storage = make_storage();
 
-    let result = validate_name(storage.doc(), storage.workbook_map(), "R1C1", None, None);
+    let result = validate_name(&storage.metadata, "R1C1", None, None);
     assert!(!result.valid);
     assert_eq!(result.error, Some(NameValidationError::R1C1Reference));
 
-    let result = validate_name(
-        storage.doc(),
-        storage.workbook_map(),
-        "R100C200",
-        None,
-        None,
-    );
+    let result = validate_name(&storage.metadata, "R100C200", None, None);
     assert!(!result.valid);
     assert_eq!(result.error, Some(NameValidationError::R1C1Reference));
 }
@@ -184,44 +163,20 @@ fn test_validate_r1c1_reference() {
 fn test_validate_valid_name() {
     let storage = make_storage();
 
-    let result = validate_name(storage.doc(), storage.workbook_map(), "Revenue", None, None);
+    let result = validate_name(&storage.metadata, "Revenue", None, None);
     assert!(result.valid);
     assert!(result.error.is_none());
 
-    let result = validate_name(
-        storage.doc(),
-        storage.workbook_map(),
-        "_private",
-        None,
-        None,
-    );
+    let result = validate_name(&storage.metadata, "_private", None, None);
     assert!(result.valid);
 
-    let result = validate_name(
-        storage.doc(),
-        storage.workbook_map(),
-        "\\backslash",
-        None,
-        None,
-    );
+    let result = validate_name(&storage.metadata, "\\backslash", None, None);
     assert!(result.valid);
 
-    let result = validate_name(
-        storage.doc(),
-        storage.workbook_map(),
-        "Sales2024",
-        None,
-        None,
-    );
+    let result = validate_name(&storage.metadata, "Sales2024", None, None);
     assert!(result.valid);
 
-    let result = validate_name(
-        storage.doc(),
-        storage.workbook_map(),
-        "tax.rate",
-        None,
-        None,
-    );
+    let result = validate_name(&storage.metadata, "tax.rate", None, None);
     assert!(result.valid);
 }
 
@@ -233,11 +188,11 @@ fn test_validate_valid_name() {
 fn test_validate_invalid_chars() {
     let storage = make_storage();
 
-    let result = validate_name(storage.doc(), storage.workbook_map(), "my name", None, None);
+    let result = validate_name(&storage.metadata, "my name", None, None);
     assert!(!result.valid);
     assert_eq!(result.error, Some(NameValidationError::InvalidChars));
 
-    let result = validate_name(storage.doc(), storage.workbook_map(), "name!", None, None);
+    let result = validate_name(&storage.metadata, "name!", None, None);
     assert!(!result.valid);
     assert_eq!(result.error, Some(NameValidationError::InvalidChars));
 }
@@ -252,29 +207,28 @@ fn test_validate_invalid_chars() {
 
 #[test]
 fn test_create_and_get_named_range() {
-    let storage = make_storage();
+    let mut storage = make_storage();
     let input = sample_input("Revenue", "=Sheet1!$A$1:$A$10");
 
     let created = create_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         input,
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
     assert_eq!(created.name, "Revenue");
-    assert_eq!(created.refers_to, "=Sheet1!$A$1:$A$10");
+    assert_eq!(created.refers_to, expression_template("=Sheet1!$A$1:$A$10"));
     assert!(created.scope.is_none());
     assert!(created.visible);
     assert!(!created.id.is_empty());
 
     // Retrieve by name
-    let found = get_named_range_by_name(storage.doc(), storage.workbook_map(), "Revenue", None)
-        .expect("should find by name");
+    let found =
+        get_named_range_by_name(&storage.metadata, "Revenue", None).expect("should find by name");
     assert_eq!(found.id, created.id);
 
     // Case-insensitive retrieval
-    let found = get_named_range_by_name(storage.doc(), storage.workbook_map(), "revenue", None)
+    let found = get_named_range_by_name(&storage.metadata, "revenue", None)
         .expect("should find case-insensitive");
     assert_eq!(found.id, created.id);
 }
@@ -285,12 +239,11 @@ fn test_create_and_get_named_range() {
 
 #[test]
 fn test_create_scoped_named_range() {
-    let storage = make_storage();
+    let mut storage = make_storage();
     let input = scoped_input("LocalName", "=Sheet1!$B$1:$B$5", "sheet123");
 
     let created = create_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         input,
         &crate::storage::STORAGE_ID_ALLOC,
     )
@@ -298,19 +251,12 @@ fn test_create_scoped_named_range() {
     assert_eq!(created.scope, Some("sheet123".to_string()));
 
     // Find with correct scope
-    let found = get_named_range_by_name(
-        storage.doc(),
-        storage.workbook_map(),
-        "LocalName",
-        Some("sheet123"),
-    )
-    .expect("should find scoped name");
+    let found = get_named_range_by_name(&storage.metadata, "LocalName", Some("sheet123"))
+        .expect("should find scoped name");
     assert_eq!(found.id, created.id);
 
     // Should NOT find without scope
-    assert!(
-        get_named_range_by_name(storage.doc(), storage.workbook_map(), "LocalName", None).is_none()
-    );
+    assert!(get_named_range_by_name(&storage.metadata, "LocalName", None).is_none());
 }
 
 // -------------------------------------------------------------------
@@ -319,18 +265,16 @@ fn test_create_scoped_named_range() {
 
 #[test]
 fn test_create_duplicate_name_error() {
-    let storage = make_storage();
+    let mut storage = make_storage();
     create_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         sample_input("Revenue", "=Sheet1!$A$1"),
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
 
     let result = create_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         sample_input("Revenue", "=Sheet1!$B$1"),
         &crate::storage::STORAGE_ID_ALLOC,
     );
@@ -343,12 +287,11 @@ fn test_create_duplicate_name_error() {
 
 #[test]
 fn test_same_name_different_scopes() {
-    let storage = make_storage();
+    let mut storage = make_storage();
 
     // Workbook-scoped
     let wb = create_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         sample_input("Sales", "=Sheet1!$A$1:$A$10"),
         &crate::storage::STORAGE_ID_ALLOC,
     )
@@ -356,15 +299,14 @@ fn test_same_name_different_scopes() {
 
     // Sheet-scoped with same name
     let sheet = create_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         scoped_input("Sales", "=Sheet1!$B$1:$B$10", "sheet1"),
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
 
     assert_ne!(wb.id, sheet.id);
-    assert_eq!(named_range_count(storage.doc(), storage.workbook_map()), 2);
+    assert_eq!(named_range_count(&storage.metadata,), 2);
 }
 
 // -------------------------------------------------------------------
@@ -373,12 +315,11 @@ fn test_same_name_different_scopes() {
 
 #[test]
 fn test_resolve_scope_precedence() {
-    let storage = make_storage();
+    let mut storage = make_storage();
 
     // Create workbook-scoped
     let wb = create_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         sample_input("Sales", "=Sheet1!$A$1"),
         &crate::storage::STORAGE_ID_ALLOC,
     )
@@ -386,36 +327,24 @@ fn test_resolve_scope_precedence() {
 
     // Create sheet-scoped with same name
     let sheet = create_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         scoped_input("Sales", "=Sheet1!$B$1", "sheet1"),
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
 
     // Resolve with sheet context -> should get sheet-scoped
-    let resolved = resolve_named_range(
-        storage.doc(),
-        storage.workbook_map(),
-        "Sales",
-        Some("sheet1"),
-    )
-    .expect("should resolve");
+    let resolved =
+        resolve_named_range(&storage.metadata, "Sales", Some("sheet1")).expect("should resolve");
     assert_eq!(resolved.id, sheet.id);
 
     // Resolve without sheet context -> should get workbook-scoped
-    let resolved = resolve_named_range(storage.doc(), storage.workbook_map(), "Sales", None)
-        .expect("should resolve");
+    let resolved = resolve_named_range(&storage.metadata, "Sales", None).expect("should resolve");
     assert_eq!(resolved.id, wb.id);
 
     // Resolve with different sheet -> should fall back to workbook
-    let resolved = resolve_named_range(
-        storage.doc(),
-        storage.workbook_map(),
-        "Sales",
-        Some("other_sheet"),
-    )
-    .expect("should resolve");
+    let resolved = resolve_named_range(&storage.metadata, "Sales", Some("other_sheet"))
+        .expect("should resolve");
     assert_eq!(resolved.id, wb.id);
 }
 
@@ -425,21 +354,19 @@ fn test_resolve_scope_precedence() {
 
 #[test]
 fn test_get_by_id() {
-    let storage = make_storage();
+    let mut storage = make_storage();
     let created = create_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         sample_input("Revenue", "=Sheet1!$A$1"),
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
 
-    let found = get_named_range_by_id(storage.doc(), storage.workbook_map(), &created.id)
-        .expect("should find by ID");
+    let found = get_named_range_by_id(&storage.metadata, &created.id).expect("should find by ID");
     assert_eq!(found.name, "Revenue");
 
     // Non-existent ID
-    assert!(get_named_range_by_id(storage.doc(), storage.workbook_map(), "nonexistent").is_none());
+    assert!(get_named_range_by_id(&storage.metadata, "nonexistent").is_none());
 }
 
 // -------------------------------------------------------------------
@@ -448,32 +375,29 @@ fn test_get_by_id() {
 
 #[test]
 fn test_get_all() {
-    let storage = make_storage();
-    assert!(get_all_named_ranges(storage.doc(), storage.workbook_map()).is_empty());
+    let mut storage = make_storage();
+    assert!(get_all_named_ranges(&storage.metadata,).is_empty());
 
     create_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         sample_input("Revenue", "=A1"),
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
     create_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         sample_input("Costs", "=B1"),
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
     create_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         sample_input("Profit", "=C1"),
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
 
-    let all = get_all_named_ranges(storage.doc(), storage.workbook_map());
+    let all = get_all_named_ranges(&storage.metadata);
     assert_eq!(all.len(), 3);
 }
 
@@ -483,47 +407,43 @@ fn test_get_all() {
 
 #[test]
 fn test_get_by_scope() {
-    let storage = make_storage();
+    let mut storage = make_storage();
     create_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         sample_input("WbName", "=A1"),
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
     create_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         scoped_input("SheetName1", "=B1", "sheet1"),
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
     create_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         scoped_input("SheetName2", "=C1", "sheet1"),
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
     create_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         scoped_input("OtherSheet", "=D1", "sheet2"),
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
 
     // Workbook scope
-    let wb = get_named_ranges_by_scope(storage.doc(), storage.workbook_map(), None);
+    let wb = get_named_ranges_by_scope(&storage.metadata, None);
     assert_eq!(wb.len(), 1);
     assert_eq!(wb[0].name, "WbName");
 
     // Sheet1 scope
-    let s1 = get_named_ranges_by_scope(storage.doc(), storage.workbook_map(), Some("sheet1"));
+    let s1 = get_named_ranges_by_scope(&storage.metadata, Some("sheet1"));
     assert_eq!(s1.len(), 2);
 
     // Sheet2 scope
-    let s2 = get_named_ranges_by_scope(storage.doc(), storage.workbook_map(), Some("sheet2"));
+    let s2 = get_named_ranges_by_scope(&storage.metadata, Some("sheet2"));
     assert_eq!(s2.len(), 1);
 }
 
@@ -533,12 +453,11 @@ fn test_get_by_scope() {
 
 #[test]
 fn test_get_visible() {
-    let storage = make_storage();
+    let mut storage = make_storage();
 
     // Create visible name
     create_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         sample_input("Visible", "=A1"),
         &crate::storage::STORAGE_ID_ALLOC,
     )
@@ -546,15 +465,13 @@ fn test_get_visible() {
 
     // Create then hide a name
     let hidden = create_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         sample_input("Hidden", "=B1"),
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
     update_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         &hidden.id,
         NamedRangeUpdate {
             visible: Some(false),
@@ -563,7 +480,7 @@ fn test_get_visible() {
     )
     .unwrap();
 
-    let visible = get_visible_named_ranges(storage.doc(), storage.workbook_map());
+    let visible = get_visible_named_ranges(&storage.metadata);
     assert_eq!(visible.len(), 1);
     assert_eq!(visible[0].name, "Visible");
 }
@@ -574,18 +491,16 @@ fn test_get_visible() {
 
 #[test]
 fn test_update_name() {
-    let storage = make_storage();
+    let mut storage = make_storage();
     let created = create_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         sample_input("OldName", "=A1"),
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
 
     let updated = update_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         &created.id,
         NamedRangeUpdate {
             name: Some("NewName".to_string()),
@@ -598,14 +513,10 @@ fn test_update_name() {
     assert_eq!(updated.id, created.id);
 
     // Old name should not be found
-    assert!(
-        get_named_range_by_name(storage.doc(), storage.workbook_map(), "OldName", None).is_none()
-    );
+    assert!(get_named_range_by_name(&storage.metadata, "OldName", None).is_none());
 
     // New name should be found
-    assert!(
-        get_named_range_by_name(storage.doc(), storage.workbook_map(), "NewName", None).is_some()
-    );
+    assert!(get_named_range_by_name(&storage.metadata, "NewName", None).is_some());
 }
 
 // -------------------------------------------------------------------
@@ -614,27 +525,28 @@ fn test_update_name() {
 
 #[test]
 fn test_update_refers_to() {
-    let storage = make_storage();
+    let mut storage = make_storage();
     let created = create_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         sample_input("Revenue", "=Sheet1!$A$1"),
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
 
     let updated = update_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         &created.id,
         NamedRangeUpdate {
-            refers_to: Some("=Sheet1!$A$1:$A$100".to_string()),
+            refers_to: Some(expression_template("=Sheet1!$A$1:$A$100")),
             ..Default::default()
         },
     )
     .unwrap();
 
-    assert_eq!(updated.refers_to, "=Sheet1!$A$1:$A$100");
+    assert_eq!(
+        updated.refers_to,
+        expression_template("=Sheet1!$A$1:$A$100")
+    );
 }
 
 // -------------------------------------------------------------------
@@ -643,22 +555,19 @@ fn test_update_refers_to() {
 
 #[test]
 fn test_delete_by_id() {
-    let storage = make_storage();
+    let mut storage = make_storage();
     let created = create_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         sample_input("Revenue", "=A1"),
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
 
-    assert_eq!(named_range_count(storage.doc(), storage.workbook_map()), 1);
+    assert_eq!(named_range_count(&storage.metadata,), 1);
 
-    remove_named_range_by_id(storage.doc(), storage.workbook_map(), &created.id).unwrap();
-    assert_eq!(named_range_count(storage.doc(), storage.workbook_map()), 0);
-    assert!(
-        get_named_range_by_name(storage.doc(), storage.workbook_map(), "Revenue", None).is_none()
-    );
+    remove_named_range_by_id(&mut storage.metadata, &created.id).unwrap();
+    assert_eq!(named_range_count(&storage.metadata,), 0);
+    assert!(get_named_range_by_name(&storage.metadata, "Revenue", None).is_none());
 }
 
 // -------------------------------------------------------------------
@@ -667,8 +576,8 @@ fn test_delete_by_id() {
 
 #[test]
 fn test_delete_by_id_not_found() {
-    let storage = make_storage();
-    let result = remove_named_range_by_id(storage.doc(), storage.workbook_map(), "nonexistent");
+    let mut storage = make_storage();
+    let result = remove_named_range_by_id(&mut storage.metadata, "nonexistent");
     assert!(result.is_err());
 }
 
@@ -678,63 +587,41 @@ fn test_delete_by_id_not_found() {
 
 #[test]
 fn test_delete_by_scope() {
-    let storage = make_storage();
+    let mut storage = make_storage();
     create_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         sample_input("WbName", "=A1"),
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
     create_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         scoped_input("Sheet1Name1", "=B1", "sheet1"),
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
     create_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         scoped_input("Sheet1Name2", "=C1", "sheet1"),
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
     create_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         scoped_input("Sheet2Name", "=D1", "sheet2"),
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
 
-    assert_eq!(named_range_count(storage.doc(), storage.workbook_map()), 4);
+    assert_eq!(named_range_count(&storage.metadata,), 4);
 
     // Remove all sheet1-scoped names
-    remove_named_ranges_by_scope(storage.doc(), storage.workbook_map(), Some("sheet1"));
+    remove_named_ranges_by_scope(&mut storage.metadata, Some("sheet1"));
 
-    assert_eq!(named_range_count(storage.doc(), storage.workbook_map()), 2);
-    assert!(
-        get_named_range_by_name(storage.doc(), storage.workbook_map(), "WbName", None).is_some()
-    );
-    assert!(
-        get_named_range_by_name(
-            storage.doc(),
-            storage.workbook_map(),
-            "Sheet2Name",
-            Some("sheet2")
-        )
-        .is_some()
-    );
-    assert!(
-        get_named_range_by_name(
-            storage.doc(),
-            storage.workbook_map(),
-            "Sheet1Name1",
-            Some("sheet1")
-        )
-        .is_none()
-    );
+    assert_eq!(named_range_count(&storage.metadata,), 2);
+    assert!(get_named_range_by_name(&storage.metadata, "WbName", None).is_some());
+    assert!(get_named_range_by_name(&storage.metadata, "Sheet2Name", Some("sheet2")).is_some());
+    assert!(get_named_range_by_name(&storage.metadata, "Sheet1Name1", Some("sheet1")).is_none());
 }
 
 // -------------------------------------------------------------------
@@ -743,12 +630,11 @@ fn test_delete_by_scope() {
 
 #[test]
 fn test_import_skips_duplicates() {
-    let storage = make_storage();
+    let mut storage = make_storage();
 
     // Create one existing
     create_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         sample_input("Existing", "=A1"),
         &crate::storage::STORAGE_ID_ALLOC,
     )
@@ -758,7 +644,7 @@ fn test_import_skips_duplicates() {
         DefinedName {
             id: "id1".to_string(),
             name: "Existing".to_string(), // duplicate
-            refers_to: "=B1".to_string(),
+            refers_to: expression_template("=B1"),
             raw_refers_to: None,
             scope: None,
             comment: None,
@@ -779,7 +665,7 @@ fn test_import_skips_duplicates() {
         DefinedName {
             id: "id2".to_string(),
             name: "NewName".to_string(),
-            refers_to: "=C1".to_string(),
+            refers_to: expression_template("=C1"),
             raw_refers_to: None,
             scope: None,
             comment: None,
@@ -800,7 +686,7 @@ fn test_import_skips_duplicates() {
         DefinedName {
             id: "id3".to_string(),
             name: "AnotherNew".to_string(),
-            refers_to: "=D1".to_string(),
+            refers_to: expression_template("=D1"),
             raw_refers_to: None,
             scope: None,
             comment: None,
@@ -820,9 +706,9 @@ fn test_import_skips_duplicates() {
         },
     ];
 
-    let imported = import_named_ranges(storage.doc(), storage.workbook_map(), names);
+    let imported = import_named_ranges(&mut storage.metadata, names);
     assert_eq!(imported, 2); // "Existing" was skipped
-    assert_eq!(named_range_count(storage.doc(), storage.workbook_map()), 3);
+    assert_eq!(named_range_count(&storage.metadata,), 3);
 }
 
 // -------------------------------------------------------------------
@@ -831,26 +717,24 @@ fn test_import_skips_duplicates() {
 
 #[test]
 fn test_count() {
-    let storage = make_storage();
-    assert_eq!(named_range_count(storage.doc(), storage.workbook_map()), 0);
+    let mut storage = make_storage();
+    assert_eq!(named_range_count(&storage.metadata,), 0);
 
     create_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         sample_input("A1Name", "=A1"),
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
-    assert_eq!(named_range_count(storage.doc(), storage.workbook_map()), 1);
+    assert_eq!(named_range_count(&storage.metadata,), 1);
 
     create_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         sample_input("B1Name", "=B1"),
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
-    assert_eq!(named_range_count(storage.doc(), storage.workbook_map()), 2);
+    assert_eq!(named_range_count(&storage.metadata,), 2);
 }
 
 // -------------------------------------------------------------------
@@ -859,46 +743,24 @@ fn test_count() {
 
 #[test]
 fn test_exists() {
-    let storage = make_storage();
+    let mut storage = make_storage();
 
-    assert!(!named_range_exists(
-        storage.doc(),
-        storage.workbook_map(),
-        "Revenue",
-        None
-    ));
+    assert!(!named_range_exists(&storage.metadata, "Revenue", None));
 
     create_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         sample_input("Revenue", "=A1"),
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
 
-    assert!(named_range_exists(
-        storage.doc(),
-        storage.workbook_map(),
-        "Revenue",
-        None
-    ));
+    assert!(named_range_exists(&storage.metadata, "Revenue", None));
     // Case-insensitive
-    assert!(named_range_exists(
-        storage.doc(),
-        storage.workbook_map(),
-        "revenue",
-        None
-    ));
-    assert!(named_range_exists(
-        storage.doc(),
-        storage.workbook_map(),
-        "REVENUE",
-        None
-    ));
+    assert!(named_range_exists(&storage.metadata, "revenue", None));
+    assert!(named_range_exists(&storage.metadata, "REVENUE", None));
     // Different scope
     assert!(!named_range_exists(
-        storage.doc(),
-        storage.workbook_map(),
+        &storage.metadata,
         "Revenue",
         Some("sheet1")
     ));
@@ -914,33 +776,20 @@ fn test_exists() {
 
 #[test]
 fn test_validate_duplicate_with_exclude_id() {
-    let storage = make_storage();
+    let mut storage = make_storage();
     let created = create_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         sample_input("Revenue", "=A1"),
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
 
     // Validating the same name for the same ID should succeed
-    let result = validate_name(
-        storage.doc(),
-        storage.workbook_map(),
-        "Revenue",
-        None,
-        Some(&created.id),
-    );
+    let result = validate_name(&storage.metadata, "Revenue", None, Some(&created.id));
     assert!(result.valid);
 
     // Validating the same name for a different ID should fail
-    let result = validate_name(
-        storage.doc(),
-        storage.workbook_map(),
-        "Revenue",
-        None,
-        Some("other-id"),
-    );
+    let result = validate_name(&storage.metadata, "Revenue", None, Some("other-id"));
     assert!(!result.valid);
     assert_eq!(result.error, Some(NameValidationError::Duplicate));
 }
@@ -951,10 +800,9 @@ fn test_validate_duplicate_with_exclude_id() {
 
 #[test]
 fn test_update_comment() {
-    let storage = make_storage();
+    let mut storage = make_storage();
     let created = create_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         sample_input("Revenue", "=A1"),
         &crate::storage::STORAGE_ID_ALLOC,
     )
@@ -962,8 +810,7 @@ fn test_update_comment() {
     assert!(created.comment.is_none());
 
     let updated = update_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         &created.id,
         NamedRangeUpdate {
             comment: Some(Some("Annual revenue".to_string())),
@@ -975,8 +822,7 @@ fn test_update_comment() {
 
     // Clear comment
     let updated = update_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         &created.id,
         NamedRangeUpdate {
             comment: Some(None),
@@ -993,10 +839,9 @@ fn test_update_comment() {
 
 #[test]
 fn test_update_not_found() {
-    let storage = make_storage();
+    let mut storage = make_storage();
     let result = update_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         "nonexistent",
         NamedRangeUpdate {
             name: Some("NewName".to_string()),
@@ -1012,22 +857,17 @@ fn test_update_not_found() {
 
 #[test]
 fn test_delete_by_scope_no_matches() {
-    let storage = make_storage();
+    let mut storage = make_storage();
     create_named_range(
-        storage.doc(),
-        storage.workbook_map(),
+        &mut storage.metadata,
         sample_input("Revenue", "=A1"),
         &crate::storage::STORAGE_ID_ALLOC,
     )
     .unwrap();
 
     // Delete by scope that has no names — should not panic or affect anything
-    remove_named_ranges_by_scope(
-        storage.doc(),
-        storage.workbook_map(),
-        Some("nonexistent_sheet"),
-    );
-    assert_eq!(named_range_count(storage.doc(), storage.workbook_map()), 1);
+    remove_named_ranges_by_scope(&mut storage.metadata, Some("nonexistent_sheet"));
+    assert_eq!(named_range_count(&storage.metadata,), 1);
 }
 
 // -------------------------------------------------------------------
@@ -1036,8 +876,8 @@ fn test_delete_by_scope_no_matches() {
 
 #[test]
 fn test_import_empty_list() {
-    let storage = make_storage();
-    let imported = import_named_ranges(storage.doc(), storage.workbook_map(), vec![]);
+    let mut storage = make_storage();
+    let imported = import_named_ranges(&mut storage.metadata, vec![]);
     assert_eq!(imported, 0);
 }
 
@@ -1050,7 +890,7 @@ fn test_validate_max_length_name() {
     let storage = make_storage();
     let name = format!("A{}", "x".repeat(254));
     assert_eq!(name.len(), 255);
-    let result = validate_name(storage.doc(), storage.workbook_map(), &name, None, None);
+    let result = validate_name(&storage.metadata, &name, None, None);
     assert!(result.valid);
 }
 
@@ -1121,13 +961,7 @@ fn test_key_generation() {
 #[test]
 fn test_validate_underscore_prefix() {
     let storage = make_storage();
-    let result = validate_name(
-        storage.doc(),
-        storage.workbook_map(),
-        "_internal",
-        None,
-        None,
-    );
+    let result = validate_name(&storage.metadata, "_internal", None, None);
     assert!(result.valid);
 }
 
@@ -1138,13 +972,7 @@ fn test_validate_underscore_prefix() {
 #[test]
 fn test_validate_backslash_prefix() {
     let storage = make_storage();
-    let result = validate_name(
-        storage.doc(),
-        storage.workbook_map(),
-        "\\special",
-        None,
-        None,
-    );
+    let result = validate_name(&storage.metadata, "\\special", None, None);
     assert!(result.valid);
 }
 
@@ -1181,4 +1009,25 @@ fn test_looks_like_r1c1_reference() {
     assert!(!looks_like_r1c1_reference("R1C"));
     assert!(!looks_like_r1c1_reference("RC1"));
     assert!(!looks_like_r1c1_reference("Revenue"));
+}
+
+#[test]
+fn scope_uuid_spellings_address_the_same_native_name() {
+    let mut storage = make_storage();
+    let hyphenated = "550e8400-e29b-41d4-a716-446655440000";
+    let canonical = "550e8400e29b41d4a716446655440000";
+    let name = create_named_range(
+        &mut storage.metadata,
+        scoped_input("LocalName", "=1", hyphenated),
+        &cell_types::IdAllocator::new(),
+    )
+    .unwrap();
+    assert_eq!(name.scope.as_deref(), Some(canonical));
+    assert!(get_named_range_by_name(&storage.metadata, "localname", Some(canonical)).is_some());
+    assert_eq!(
+        get_named_ranges_by_scope(&storage.metadata, Some(hyphenated)).len(),
+        1
+    );
+    remove_named_ranges_by_scope(&mut storage.metadata, Some(hyphenated));
+    assert_eq!(named_range_count(&storage.metadata), 0);
 }

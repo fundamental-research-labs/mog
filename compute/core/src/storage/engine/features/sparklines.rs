@@ -1,4 +1,4 @@
-use super::super::YrsComputeEngine;
+use super::super::ComputeEngine;
 use super::super::services::features as svc;
 use crate::snapshot::MutationResult;
 use crate::storage::sheet::sparklines;
@@ -20,11 +20,11 @@ fn sparkline_change_positions(result: &MutationResult) -> Vec<(u32, u32)> {
 }
 
 pub(super) fn add_sparkline(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     sparkline: sparklines::Sparkline,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    let result = svc::add_sparkline(&engine.stores, sheet_id, &sparkline)?;
+    let result = svc::add_sparkline(&mut engine.stores, sheet_id, &sparkline)?;
     let positions = sparkline_change_positions(&result);
     let patches = if positions.is_empty() {
         compute_wire::mutation::serialize_multi_viewport_patches(&[])
@@ -35,12 +35,12 @@ pub(super) fn add_sparkline(
 }
 
 pub(super) fn update_sparkline(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     sparkline_id: &str,
     updates: sparklines::SparklineUpdate,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    let result = svc::update_sparkline(&engine.stores, sheet_id, sparkline_id, &updates)?;
+    let result = svc::update_sparkline(&mut engine.stores, sheet_id, sparkline_id, &updates)?;
     let positions = sparkline_change_positions(&result);
     let patches = if positions.is_empty() {
         compute_wire::mutation::serialize_multi_viewport_patches(&[])
@@ -51,11 +51,11 @@ pub(super) fn update_sparkline(
 }
 
 pub(super) fn delete_sparkline(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     sparkline_id: &str,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    let result = svc::delete_sparkline(&engine.stores, sheet_id, sparkline_id)?;
+    let result = svc::delete_sparkline(&mut engine.stores, sheet_id, sparkline_id)?;
     let positions = sparkline_change_positions(&result);
     let patches = if positions.is_empty() {
         compute_wire::mutation::serialize_multi_viewport_patches(&[])
@@ -66,14 +66,14 @@ pub(super) fn delete_sparkline(
 }
 
 pub(super) fn get_sparklines_in_sheet(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> Vec<sparklines::Sparkline> {
     svc::get_sparklines_in_sheet(&engine.stores, sheet_id)
 }
 
 pub(super) fn get_sparkline(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     sparkline_id: &str,
 ) -> Option<sparklines::Sparkline> {
@@ -81,7 +81,7 @@ pub(super) fn get_sparkline(
 }
 
 pub(super) fn get_sparkline_at_cell(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -90,7 +90,7 @@ pub(super) fn get_sparkline_at_cell(
 }
 
 pub(super) fn add_sparkline_group(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     group: sparklines::SparklineGroup,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
@@ -105,7 +105,7 @@ pub(super) fn add_sparkline_group(
 }
 
 pub(super) fn get_sparkline_group(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     group_id: &str,
 ) -> Option<sparklines::SparklineGroup> {
@@ -113,14 +113,14 @@ pub(super) fn get_sparkline_group(
 }
 
 pub(super) fn get_sparkline_groups_in_sheet(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> Vec<sparklines::SparklineGroup> {
     svc::get_sparkline_groups_in_sheet(&engine.stores, sheet_id)
 }
 
 pub(super) fn delete_sparkline_group(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     group_id: &str,
     delete_sparklines: bool,
@@ -141,7 +141,7 @@ pub(super) fn delete_sparkline_group(
 }
 
 pub(super) fn clear_sparklines_in_range(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,
@@ -168,7 +168,7 @@ pub(super) fn clear_sparklines_in_range(
 }
 
 pub(super) fn clear_sparklines_for_sheet(
-    engine: &mut YrsComputeEngine,
+    engine: &mut ComputeEngine,
     sheet_id: &SheetId,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
     let result = svc::clear_sparklines_for_sheet(&mut engine.stores, sheet_id)?;
@@ -182,7 +182,7 @@ pub(super) fn clear_sparklines_for_sheet(
 }
 
 pub(super) fn has_sparkline(
-    engine: &YrsComputeEngine,
+    engine: &ComputeEngine,
     sheet_id: &SheetId,
     row: u32,
     col: u32,

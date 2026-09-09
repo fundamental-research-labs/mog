@@ -164,6 +164,26 @@ where
         self.position_of(sheet_id, id).is_some()
     }
 
+    /// Highest generated run identity retained by this axis, including compact
+    /// identities transported in an explicit axis.
+    #[must_use]
+    pub fn max_run_id(&self) -> Option<AxisRunId> {
+        match self {
+            Self::Runs(compact) => compact
+                .segments
+                .iter()
+                .map(|segment| segment.run.run_id)
+                .max(),
+            Self::Explicit(ids) => ids
+                .iter()
+                .filter_map(|id| {
+                    let decoded = decode_compact_axis_identity(id.as_raw())?;
+                    (decoded.axis_kind == Id::AXIS_KIND).then_some(decoded.run_id)
+                })
+                .max(),
+        }
+    }
+
     /// Iterate identities in the half-open current position range
     /// `[start, start + len)`.
     #[must_use]
@@ -265,6 +285,40 @@ where
         compact.rebuild_reverse_index();
     }
 
+    /// Insert a generated run while retaining compact segments.
+    /// Explicit stores materialize only the new run identities.
+    pub fn insert_run(&mut self, sheet_id: SheetId, at: u32, run: AxisIdentityRun) {
+        if run.is_empty() {
+            return;
+        }
+        let at = at.min(self.len());
+        match self {
+            Self::Explicit(ids) => {
+                let generated = (run.start_offset..run.end_offset()).map(|offset| {
+                    Id::from_compact_raw(encode_compact_axis_identity(
+                        Id::AXIS_KIND,
+                        sheet_id,
+                        run.run_id,
+                        run.seed,
+                        offset,
+                    ))
+                });
+                ids.splice(at as usize..at as usize, generated);
+            }
+            Self::Runs(compact) => {
+                split_segments_at(&mut compact.segments, at);
+                let index = compact
+                    .segments
+                    .partition_point(|segment| segment.position_start < at);
+                compact
+                    .segments
+                    .insert(index, AxisIdentitySegment::new(run, at));
+                recompute_position_starts(&mut compact.segments);
+                compact.rebuild_reverse_index();
+            }
+        }
+    }
+
     /// Delete identities in the current half-open range `[start, start + len)`.
     pub fn delete_range(&mut self, start: u32, len: u32) {
         if len == 0 {
@@ -287,6 +341,68 @@ where
                     !(start <= segment.position_start && segment.position_start < end)
                 });
                 recompute_position_starts(&mut compact.segments);
+                compact.rebuild_reverse_index();
+            }
+        }
+    }
+
+    /// Reorder a bijection of current positions without expanding unaffected runs.
+    /// Source and destination position sets must be equal and contain no duplicates.
+    pub fn reorder_positions(&mut self, permutation: &[(u32, u32)]) {
+        if permutation.is_empty() {
+            return;
+        }
+        match self {
+            Self::Explicit(ids) => {
+                let moved: Vec<_> = permutation
+                    .iter()
+                    .map(|&(old, new)| (new, ids[old as usize]))
+                    .collect();
+                for (new, id) in moved {
+                    ids[new as usize] = id;
+                }
+            }
+            Self::Runs(compact) => {
+                let len = compact
+                    .segments
+                    .last()
+                    .map_or(0, |segment| segment.position_end());
+                let mut ordered = permutation.to_vec();
+                ordered.sort_unstable_by_key(|&(_, new)| new);
+                let mut output: Vec<AxisIdentitySegment> =
+                    Vec::with_capacity(compact.segments.len() + ordered.len());
+                let mut append = |start: u32, count: u32| {
+                    let end = start.saturating_add(count).min(len);
+                    let mut pos = start;
+                    while pos < end {
+                        let segment = segment_at_position(&compact.segments, pos)
+                            .expect("valid compact axis position");
+                        let take = (end - pos).min(segment.position_end() - pos);
+                        let mut run = segment.run;
+                        run.start_offset += pos - segment.position_start;
+                        run.len = take;
+                        if let Some(last) = output.last_mut().filter(|last| {
+                            last.run.run_id == run.run_id
+                                && last.run.seed == run.seed
+                                && last.run.end_offset() == run.start_offset
+                        }) {
+                            last.run.len += take;
+                        } else {
+                            output.push(AxisIdentitySegment::new(run, 0));
+                        }
+                        pos += take;
+                    }
+                };
+                let mut cursor = 0;
+                for (old, new) in ordered {
+                    assert!(old < len && new < len, "axis permutation out of bounds");
+                    append(cursor, new - cursor);
+                    append(old, 1);
+                    cursor = new + 1;
+                }
+                append(cursor, len - cursor);
+                recompute_position_starts(&mut output);
+                compact.segments = output;
                 compact.rebuild_reverse_index();
             }
         }
@@ -547,6 +663,30 @@ mod tests {
             .map(|id| id.as_u128())
             .collect();
         assert_eq!(ids, vec![3, 1, 2]);
+    }
+
+    #[test]
+    fn compact_reorder_preserves_unaffected_million_row_runs() {
+        let sheet = SheetId::from_raw(50);
+        let mut store = AxisIdentityStore::<RowId>::from_runs([run(1, 10, 0, 1_000_000)]);
+        let first = store.identity_at(sheet, 0).unwrap();
+        let last = store.identity_at(sheet, 999_999).unwrap();
+        let moved = store.identity_at(sheet, 10).unwrap();
+        store.reorder_positions(&[(10, 12), (11, 10), (12, 11)]);
+        assert_eq!(store.position_of(sheet, first), Some(0));
+        assert_eq!(store.position_of(sheet, last), Some(999_999));
+        assert_eq!(store.position_of(sheet, moved), Some(12));
+        let AxisIdentityStore::Runs(compact) = &store else {
+            panic!("compact store was expanded");
+        };
+        assert!(compact.segments().len() <= 5);
+        store.insert_run(sheet, 11, run(2, 20, 0, 3));
+        assert_eq!(store.position_of(sheet, moved), Some(15));
+        store.delete_range(11, 3);
+        assert_eq!(store.position_of(sheet, moved), Some(12));
+        let restored: AxisIdentityStore<RowId> =
+            serde_json::from_str(&serde_json::to_string(&store).unwrap()).unwrap();
+        assert_eq!(restored, store);
     }
 
     #[test]

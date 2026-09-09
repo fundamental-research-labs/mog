@@ -632,7 +632,7 @@ fn test_sort_rows_three_way_cycle() {
     assert_eq!(grid.cell_position(&c1), Some((2, 0)));
     assert_eq!(grid.cell_position(&c2), Some((0, 0)));
 
-    // RowIds remain unchanged (Yrs rowOrder is authoritative)
+    // RowIds remain unchanged (the native row axis is authoritative)
     assert_eq!(grid.row_id(0).unwrap(), rid0);
     assert_eq!(grid.row_id(1).unwrap(), rid1);
     assert_eq!(grid.row_id(2).unwrap(), rid2);

@@ -6,7 +6,7 @@ use domain_types::{NamedRange, ParseOutput, SheetData, SheetDimensions};
 
 #[test]
 fn sdk_print_area_and_titles_export_as_xlsx_defined_names() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
     let area = PrintRange {
         start_row: 0,

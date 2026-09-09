@@ -1,49 +1,9 @@
-//! Cell properties CRUD, row/column format, format inheritance, and protection.
+//! Native cell properties and the format cascade.
 //!
-//! Port of `spreadsheet-model/src/properties.ts` (spreadsheet-model elimination).
-//!
-//! ## Yrs Storage Layout
-//!
-//! Each sheet has three maps for properties/format data:
-//! ```text
-//! sheets: Y.Map<SheetId, Y.Map>
-//!   +-- {sheetId}: Y.Map
-//!       +-- cellProperties: Y.Map<CellId, Y.Map (structured)>
-//!       +-- rowFormats: Y.Map<RowId, Y.Map (structured CellFormat fields)>
-//!       +-- colFormats: Y.Map<ColId, Y.Map (structured CellFormat fields)>
-//! ```
-//!
-//! ## Cell Properties Storage
-//!
-//! Cell properties are stored as structured Y.Maps via `yrs_schema::cell_properties`.
-//! Round-trip bookkeeping (style palette index, cm, vm, formula_result_type,
-//! has_empty_cached_value, original_sst_index, original_value) lives as typed fields on
-//! `CellProperties`; each field has its own short Yrs key (`si`, `cm`, `vm`,
-//! `frt`, `ecv`, `sst`, `ov`) alongside the format keys.
-//!
-//! The `style_id` field references the workbook-level `stylePalette` map, which
-//! stores the full `CellFormat` per index. This reduces per-cell Yrs payload
-//! from ~500 bytes to ~10 bytes (~50x reduction) for unedited XLSX cells.
-//!
-//! User edits transition cells to full format with the `CellFormat`
-//! written inline (the `style_id` field is cleared).
-//!
-//! Row/col formats use structured Y.Map storage (short keys like "ff", "fs",
-//! "bg", etc.) via `yrs_schema::cell_format`.
-//!
-//! ## Format Inheritance
-//!
-//! Effective format = merge(default, column, row, **Format Range**, table, cell)
-//! with later layers overriding earlier ones on a per-property basis.
-//! Format Ranges sit between row and table in the cascade. When multiple
-//! Format Ranges overlap at a cell position, they merge field-by-field with
-//! higher `RangeId` values winning on conflicts.
-//! Matches Excel's "Normal" style priority chain.
-//!
-//! ## Style Operations
-//!
-//! Style-related operations (getStyleById, applyStyleToRange, custom style CRUD)
-//! are **deferred** -- they require a built-in style registry from contracts.
+//! Cell properties use stable CellIds. Imported style-only cells retain a shared
+//! workbook palette index; metadata and edited formats are allocated when present.
+//! Effective formats merge workbook defaults, column, row, format range, table,
+//! and cell layers in that order.
 
 mod cascade;
 mod cell;
@@ -52,7 +12,6 @@ mod merge;
 mod protection;
 mod ranges;
 mod row_col;
-mod yrs;
 
 pub use crate::engine_types::formatting::*;
 
@@ -60,32 +19,32 @@ pub use crate::engine_types::formatting::*;
 use cascade::apply_format_range_layer;
 pub use cascade::{get_effective_format, get_effective_format_preloaded, get_positional_format};
 pub(crate) use cascade::{
+    get_effective_format_from_preloaded_layers,
     get_effective_format_from_preloaded_layers_with_range, get_workbook_base_format,
 };
+pub(crate) use cell::StoredCellProperties;
 pub(crate) use cell::{PreloadedCellFormatLayers, get_cell_format_layers_for_ids};
 pub use cell::{
     clear_cell_format, clear_cell_formats, clear_formula_cache_metadata,
     clear_formula_cache_metadata_for_cell_ids, clear_properties, get_all_properties,
     get_cell_format, get_properties, iter_all_properties, iter_formatted_property_cell_ids,
-    patch_cell_borders_with_origin, patch_cell_format, patch_cell_formats_with_origin,
-    replace_cell_format, set_cell_format, set_cell_formats, set_cell_formats_with_origin,
-    set_properties,
+    patch_cell_borders, patch_cell_format, patch_cell_formats, replace_cell_format,
+    set_cell_format, set_cell_formats, set_properties,
 };
 pub use defaults::default_format;
 pub(crate) use merge::normalize_format_patch;
 pub(crate) use merge::{apply_borders_patch, apply_format_patch, merge_formats};
 pub use protection::{is_cell_locked, is_formula_hidden};
-pub(crate) use ranges::set_col_format_range_with_alloc;
-pub use ranges::{
-    add_format_range, hydrate_col_format_ranges, hydrate_format_ranges, remove_format_range,
+pub(crate) use ranges::{
+    CopiedFormats, ImportedFormats, clear_col_format_ranges_in_span, patch_native_format_ranges,
+    rectangle_difference, set_col_format_range_with_alloc,
 };
-pub(crate) use row_col::clear_col_format_with_alloc;
+pub use ranges::{add_format_range, remove_format_range};
 pub use row_col::{
     ColFormatEntry, RowFormatEntry, clear_col_format, clear_row_format, get_all_col_formats,
     get_all_row_formats, get_col_format, get_col_xlsx_style_id, get_row_format,
     get_row_xlsx_style_id, patch_col_borders, patch_col_format, patch_row_borders,
     patch_row_format, set_col_format, set_row_format,
 };
-pub(crate) use yrs::resolve_compact_props_with_txn;
 #[cfg(test)]
 mod tests;

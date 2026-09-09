@@ -1,4 +1,3 @@
-use compute_document::schema::KEY_PROPERTIES;
 use domain_types::domain::validation::{
     EnforcementLevel, IdentityRangeSchemaRef, RangeSchema, RangeSchemaDefinition,
     SchemaConstraints, SchemaType,
@@ -8,10 +7,8 @@ use snapshot_types::versioning::{
     SemanticWorkbookState, VersionDomainCapabilityState, VersionDomainClass,
 };
 
-use crate::storage::engine::YrsComputeEngine;
-use crate::storage::infra::grid_helpers::{get_sheet_submap, sheet_id_to_hex};
+use crate::storage::engine::ComputeEngine;
 use crate::versioning::{SemanticWorkbookStateReader, coverage_for_states};
-use yrs::{Map, Transact};
 
 use super::workbook;
 
@@ -73,18 +70,19 @@ fn assert_opaque_blocking_presence_domain(
     );
 }
 
-fn set_data_validation_declared_count(engine: &YrsComputeEngine, sheet_id: &cell_types::SheetId) {
-    let sheets = engine.storage().sheets_ref();
-    let mut txn = engine.storage().doc().transact_mut();
-    let sheet_hex = sheet_id_to_hex(sheet_id);
-    let meta_map =
-        get_sheet_submap(&txn, &sheets, &sheet_hex, KEY_PROPERTIES).expect("sheet meta map");
-    meta_map.insert(&mut txn, "dvDeclaredCount", 1_i64);
+fn set_data_validation_declared_count(engine: &mut ComputeEngine, sheet_id: &cell_types::SheetId) {
+    engine
+        .storage_mut()
+        .sheet_metadata
+        .get_mut(sheet_id)
+        .unwrap()
+        .validations
+        .declared_count = Some(1);
 }
 
 #[test]
 fn engine_semantic_reader_marks_data_validation_presence_opaque_blocking() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(workbook(vec![])).expect("engine");
+    let (mut engine, _) = ComputeEngine::from_snapshot(workbook(vec![])).expect("engine");
     let sheet_id = engine.storage().sheet_order()[0];
     let clean_state = engine.read_semantic_workbook_state().expect("clean state");
 
@@ -108,7 +106,7 @@ fn engine_semantic_reader_marks_data_validation_presence_opaque_blocking() {
 
 #[test]
 fn engine_semantic_reader_marks_data_validation_metadata_presence_opaque_blocking() {
-    let (engine, _) = YrsComputeEngine::from_snapshot(workbook(vec![])).expect("engine");
+    let (mut engine, _) = ComputeEngine::from_snapshot(workbook(vec![])).expect("engine");
     let sheet_id = engine.storage().sheet_order()[0];
     let clean_state = engine.read_semantic_workbook_state().expect("clean state");
 
@@ -118,7 +116,7 @@ fn engine_semantic_reader_marks_data_validation_metadata_presence_opaque_blockin
             .contains_key(super::super::DATA_VALIDATION_DOMAIN)
     );
 
-    set_data_validation_declared_count(&engine, &sheet_id);
+    set_data_validation_declared_count(&mut engine, &sheet_id);
 
     let state = engine.read_semantic_workbook_state().expect("state");
     assert_opaque_blocking_presence_domain(
@@ -130,7 +128,7 @@ fn engine_semantic_reader_marks_data_validation_metadata_presence_opaque_blockin
 
 #[test]
 fn engine_semantic_reader_marks_conditional_formatting_presence_opaque_blocking() {
-    let (mut engine, _) = YrsComputeEngine::from_snapshot(workbook(vec![])).expect("engine");
+    let (mut engine, _) = ComputeEngine::from_snapshot(workbook(vec![])).expect("engine");
     let sheet_id = engine.storage().sheet_order()[0];
     let clean_state = engine.read_semantic_workbook_state().expect("clean state");
 

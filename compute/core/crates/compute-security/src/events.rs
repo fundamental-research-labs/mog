@@ -45,24 +45,12 @@ pub enum SecurityEvent {
     AmbiguityDetected {
         warning: AmbiguityWarning,
     },
-    /// Wholesale-reload notification fired from `SecurityState`'s Yrs
-    /// deep-observer after `ArcSwap::store` + `active.store` publish
-    /// a fresh `PolicyEngine` (R2.3 step 5). Covers the remote-CRDT
-    /// path that the per-op `PolicyAdded` / `PolicyUpdated` /
-    /// `PolicyRemoved` events never reach — those are emitted from the
-    /// local `security_ops` methods, but the engine has no hook on
-    /// the remote-sync side to decompose an arbitrary Yrs update into
-    /// per-policy deltas. SDK consumers polling
-    /// `wb_security_drain_events` receive this single event and can
-    /// reload their projection in one shot.
+    /// Notification that native policy state has been replaced.
     ///
-    /// Carries the policy_version pair (before → after) so observers
-    /// with their own cache keyed on the counter can invalidate
-    /// cheaply; `active` is the new value of the `SecurityState::active`
-    /// flag *after* the publish (both the `ArcSwap` store and the
-    /// `active.store` are complete when this event is emitted, so a
-    /// consumer that observes the event and then reads the engine's
-    /// state sees a consistent snapshot).
+    /// `SecurityState` publishes the new policy engine and activation flag
+    /// before queuing this event. Consumers can invalidate cached policy
+    /// projections using the before/after version pair and reload one
+    /// consistent snapshot.
     #[serde(rename_all = "camelCase")]
     PoliciesReloaded {
         policy_version_before: i64,

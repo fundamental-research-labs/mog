@@ -1,12 +1,12 @@
 //! Regression coverage for data-validation metadata during CellId-preserving
 //! relocate/cut-paste.
 //!
-//! `relocate_cells_yrs` is the production cut-paste primitive. Cell values and
+//! `relocate_cells` is the production cut-paste primitive. Cell values and
 //! CellIds move through the GridIndex, but range-backed validation rules are
 //! position-owned metadata and must be explicitly transformed.
 
 use cell_types::SheetId;
-use compute_core::storage::engine::YrsComputeEngine;
+use compute_core::storage::engine::ComputeEngine;
 use compute_core::storage::sheet::schemas::{
     EnforcementLevel, IdentityRangeSchemaRef, RangeSchema, RangeSchemaDefinition,
     SchemaConstraints, SchemaType,
@@ -32,9 +32,12 @@ fn make_cell(row: u32, col: u32, value: CellValue) -> CellData {
     }
 }
 
-fn engine_with(cells: Vec<CellData>) -> (YrsComputeEngine, SheetId) {
+fn engine_with(cells: Vec<CellData>) -> (ComputeEngine, SheetId) {
     let snapshot = WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
             id: SHEET_UUID.to_string(),
             name: "Sheet1".to_string(),
             rows: 100,
@@ -44,7 +47,7 @@ fn engine_with(cells: Vec<CellData>) -> (YrsComputeEngine, SheetId) {
         }],
         ..Default::default()
     };
-    let (engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let (engine, _) = ComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
     let sheet_id = SheetId::from_uuid_str(SHEET_UUID).expect("valid sheet uuid");
     (engine, sheet_id)
 }
@@ -92,7 +95,7 @@ fn parse_ref(value: &str) -> Option<(u32, u32)> {
 }
 
 #[test]
-fn relocate_cells_yrs_moves_single_cell_validation_rule() {
+fn relocate_cells_moves_single_cell_validation_rule() {
     let (mut engine, sheet_id) = engine_with(vec![make_cell(0, 0, CellValue::number(5.0))]);
 
     engine
@@ -100,8 +103,8 @@ fn relocate_cells_yrs_moves_single_cell_validation_rule() {
         .expect("set_range_schema");
 
     engine
-        .relocate_cells_yrs(&sheet_id, 0, 0, 0, 0, &sheet_id, 0, 1)
-        .expect("relocate_cells_yrs");
+        .relocate_cells(&sheet_id, 0, 0, 0, 0, &sheet_id, 0, 1)
+        .expect("relocate_cells");
 
     let schemas = engine.get_range_schemas_for_sheet(&sheet_id);
     assert!(
@@ -115,7 +118,7 @@ fn relocate_cells_yrs_moves_single_cell_validation_rule() {
 }
 
 #[test]
-fn relocate_cells_yrs_splits_partially_moved_validation_range() {
+fn relocate_cells_splits_partially_moved_validation_range() {
     let (mut engine, sheet_id) = engine_with(vec![make_cell(0, 0, CellValue::number(5.0))]);
 
     engine
@@ -123,8 +126,8 @@ fn relocate_cells_yrs_splits_partially_moved_validation_range() {
         .expect("set_range_schema");
 
     engine
-        .relocate_cells_yrs(&sheet_id, 0, 0, 0, 0, &sheet_id, 0, 1)
-        .expect("relocate_cells_yrs");
+        .relocate_cells(&sheet_id, 0, 0, 0, 0, &sheet_id, 0, 1)
+        .expect("relocate_cells");
 
     let schemas = engine.get_range_schemas_for_sheet(&sheet_id);
     assert!(
@@ -143,4 +146,41 @@ fn relocate_cells_yrs_splits_partially_moved_validation_range() {
         schemas.iter().any(|schema| schema_covers(schema, 0, 1)),
         "destination B1 must receive the moved validation fragment",
     );
+}
+
+#[test]
+fn single_cell_validation_follows_row_insert_and_delete() {
+    let (mut engine, sheet_id) = engine_with(vec![make_cell(0, 0, CellValue::number(5.0))]);
+    engine
+        .set_range_schema(&sheet_id, &whole_number_schema("rs-a1", "0:0", "0:0"))
+        .unwrap();
+    engine
+        .structure_change(
+            &sheet_id,
+            &formula_types::StructureChange::InsertRows {
+                at: 0,
+                count: 1,
+                new_row_ids: Vec::new(),
+            },
+        )
+        .unwrap();
+    let schemas = engine.get_range_schemas_for_sheet(&sheet_id);
+    assert_eq!(schemas.len(), 1);
+    assert!(schema_covers(&schemas[0], 1, 0));
+    assert!(!schema_covers(&schemas[0], 0, 0));
+
+    engine
+        .structure_change(
+            &sheet_id,
+            &formula_types::StructureChange::DeleteRows {
+                at: 0,
+                count: 1,
+                deleted_cell_ids: Vec::new(),
+            },
+        )
+        .unwrap();
+    let schemas = engine.get_range_schemas_for_sheet(&sheet_id);
+    assert_eq!(schemas.len(), 1);
+    assert!(schema_covers(&schemas[0], 0, 0));
+    assert!(!schema_covers(&schemas[0], 1, 0));
 }

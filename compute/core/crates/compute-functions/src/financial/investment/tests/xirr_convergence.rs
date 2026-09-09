@@ -39,6 +39,40 @@ fn xirr_guess_independence() {
     }
 }
 
+#[test]
+fn xirr_is_scale_invariant_for_tiny_and_large_cash_flows() {
+    let dates = CellValue::from_rows(vec![vec![num(ymd(2023, 1, 1)), num(ymd(2024, 1, 1))]]);
+    for magnitude in [1e-200, 1e200] {
+        let values = CellValue::from_rows(vec![vec![num(-magnitude), num(2.0 * magnitude)]]);
+        match FnXirr.call(&[values, dates.clone()]) {
+            CellValue::Number(rate) => {
+                assert!((rate.get() - 1.0).abs() < 1e-10, "XIRR = {}", rate.get());
+            }
+            other => panic!("Expected numeric XIRR at scale {magnitude}, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn xirr_one_year_root_from_nonzero_serial_dates() {
+    let vals = CellValue::from_rows(vec![vec![num(-1000.0), num(1100.0)]]);
+    let dates = CellValue::from_rows(vec![vec![num(100.0), num(465.0)]]);
+    match FnXirr.call(&[vals, dates, num(0.1)]) {
+        CellValue::Number(rate) => assert!((rate.get() - 0.1).abs() < 1e-10),
+        other => panic!("Expected XIRR near 10%, got {other:?}"),
+    }
+}
+
+#[test]
+fn xirr_near_minus_one_root_from_nonzero_serial_dates() {
+    let vals = CellValue::from_rows(vec![vec![num(-1000.0), num(1.0)]]);
+    let dates = CellValue::from_rows(vec![vec![num(100.0), num(465.0)]]);
+    match FnXirr.call(&[vals, dates, num(-0.999)]) {
+        CellValue::Number(rate) => assert!((rate.get() + 0.999).abs() < 1e-10),
+        other => panic!("Expected XIRR near -99.9%, got {other:?}"),
+    }
+}
+
 /// Bad guess near the -1 singularity should still converge.
 #[test]
 fn xirr_bad_guess_near_singularity() {

@@ -1,4 +1,4 @@
-use value_types::{CellError, CellValue};
+use value_types::{CellError, CellValue, KahanSum};
 
 use super::super::helpers::{err_val, num_or_err_msg, req_num};
 use super::dated_cash_flows::collect_value_date_pairs;
@@ -37,6 +37,14 @@ impl PureFunction for FnXnpv {
                     "XNPV: no valid value/date pairs",
                 ));
             }
+            let has_pos = values.iter().any(|&value| value > 0.0);
+            let has_neg = values.iter().any(|&value| value < 0.0);
+            if !has_pos || !has_neg {
+                return Err(CellValue::error_with_message(
+                    CellError::Num,
+                    "XNPV: cash flows must have both positive and negative values",
+                ));
+            }
 
             let base_date = dates[0];
             if base_date < 0.0 {
@@ -54,7 +62,7 @@ impl PureFunction for FnXnpv {
                 }
             }
 
-            let mut npv: f64 = 0.0;
+            let mut npv = KahanSum::new();
             for i in 0..values.len() {
                 let years = (dates[i] - base_date) / 365.0;
                 let denom = (1.0 + rate).powf(years);
@@ -64,8 +72,9 @@ impl PureFunction for FnXnpv {
                         "XNPV: discount factor overflow",
                     ));
                 }
-                npv += values[i] / denom;
+                npv.add(values[i] / denom);
             }
+            let npv = npv.total();
             if !npv.is_finite() {
                 return Err(CellValue::error_with_message(
                     CellError::Num,

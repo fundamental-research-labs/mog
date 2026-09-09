@@ -118,6 +118,17 @@ mod tests {
     }
 
     #[test]
+    fn test_datevalue_year_first_slash() {
+        let f = FnDatevalue;
+        let result = f.call(&[text("2025/06/15")]);
+        if let CellValue::Number(n) = result {
+            assert_eq!(n.get(), 45823.0);
+        } else {
+            panic!("Expected number, got {:?}", result);
+        }
+    }
+
+    #[test]
     fn test_datevalue_invalid() {
         let f = FnDatevalue;
         assert_eq!(f.call(&[text("not a date")]), err(CellError::Value));
@@ -163,6 +174,18 @@ mod tests {
     fn test_datevalue_rejects_nearby_invalid_1900_date() {
         let f = FnDatevalue;
         assert_eq!(f.call(&[text("1900-02-30")]), err(CellError::Value));
+    }
+
+    #[test]
+    fn test_datevalue_rejects_invalid_year_first_slash_dates() {
+        let f = FnDatevalue;
+        for text_value in ["1899/12/31", "10000/01/01", "2025/02/30"] {
+            assert_eq!(
+                f.call(&[text(text_value)]),
+                err(CellError::Value),
+                "unexpectedly parsed {text_value}"
+            );
+        }
     }
 
     #[test]

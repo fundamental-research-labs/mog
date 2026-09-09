@@ -36,6 +36,8 @@ mod students_t;
 mod support;
 mod weibull;
 
+pub(super) use normal::standard_normal_survival;
+
 #[cfg(test)]
 #[allow(unused_imports)]
 pub(super) use beta::{FnBetaDist, FnBetaDistLegacy, FnBetaInv, FnBetaInvLegacy};

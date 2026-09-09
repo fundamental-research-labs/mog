@@ -1,7 +1,7 @@
 use crate::PureFunction;
-use value_types::CellValue;
+use value_types::{CellError, CellValue};
 
-use super::{FnXirr, FnXnpv, num, ymd};
+use super::{FnXirr, FnXnpv, err, num, ymd};
 
 /// Empty value cells with valid dates should be treated as zero cash flow.
 #[test]
@@ -190,6 +190,81 @@ fn xnpv_text_date_coerced() {
         }
         _ => panic!("Expected numbers, got {:?} and {:?}", r_text, r_num),
     }
+}
+
+/// XIRR/XNPV truncate date serials to whole calendar days before evaluating.
+#[test]
+fn dated_functions_truncate_fractional_serials() {
+    let vals = CellValue::from_rows(vec![vec![num(-1000.0), num(1100.0)]]);
+    let fractional_dates = CellValue::from_rows(vec![vec![num(100.75), num(465.25)]]);
+    let integer_dates = CellValue::from_rows(vec![vec![num(100.0), num(465.0)]]);
+
+    let xirr_fractional = FnXirr.call(&[vals.clone(), fractional_dates.clone()]);
+    let xirr_integer = FnXirr.call(&[vals.clone(), integer_dates.clone()]);
+    let xnpv_fractional = FnXnpv.call(&[num(0.1), vals.clone(), fractional_dates]);
+    let xnpv_integer = FnXnpv.call(&[num(0.1), vals, integer_dates]);
+
+    match (xirr_fractional, xirr_integer, xnpv_fractional, xnpv_integer) {
+        (
+            CellValue::Number(xirr_fractional),
+            CellValue::Number(xirr_integer),
+            CellValue::Number(xnpv_fractional),
+            CellValue::Number(xnpv_integer),
+        ) => {
+            assert_eq!(xirr_fractional, xirr_integer);
+            assert_eq!(xnpv_fractional, xnpv_integer);
+        }
+        other => panic!("Expected numeric results, got {other:?}"),
+    }
+}
+
+/// XNPV requires at least one positive and one negative cash flow.
+#[test]
+fn xnpv_requires_positive_and_negative_cash_flows() {
+    let dates = CellValue::from_rows(vec![vec![num(ymd(2023, 1, 1)), num(ymd(2024, 1, 1))]]);
+    let positive = CellValue::from_rows(vec![vec![num(100.0), num(200.0)]]);
+    let negative = CellValue::from_rows(vec![vec![num(-100.0), num(-200.0)]]);
+    assert_eq!(
+        FnXnpv.call(&[num(0.1), positive, dates.clone()]),
+        err(CellError::Num)
+    );
+    assert_eq!(
+        FnXnpv.call(&[num(0.1), negative, dates]),
+        err(CellError::Num)
+    );
+}
+
+/// Invalid numeric date serials are #VALUE!, rather than clamped by the date
+/// conversion helper.
+#[test]
+fn xnpv_invalid_numeric_date_is_value_error() {
+    let vals = CellValue::from_rows(vec![vec![num(-100.0), num(110.0)]]);
+    let dates = CellValue::from_rows(vec![vec![num(2_958_466.0), num(2_958_465.0)]]);
+    assert_eq!(FnXnpv.call(&[num(0.1), vals, dates]), err(CellError::Value));
+}
+
+#[test]
+fn xnpv_truncates_time_on_last_valid_date() {
+    let vals = CellValue::from_rows(vec![vec![num(-100.0), num(110.0)]]);
+    let dates = CellValue::from_rows(vec![vec![num(2_958_465.75), num(2_958_465.25)]]);
+    match FnXnpv.call(&[num(0.1), vals, dates]) {
+        CellValue::Number(n) => assert_eq!(n.get(), 10.0),
+        other => panic!("Expected numeric result, got {other:?}"),
+    }
+}
+
+#[test]
+fn xnpv_rejects_mismatched_source_lengths() {
+    let vals = CellValue::from_rows(vec![vec![num(-100.0), num(50.0), num(60.0)]]);
+    let dates = CellValue::from_rows(vec![vec![num(100.0), num(465.0)]]);
+    assert_eq!(FnXnpv.call(&[num(0.1), vals, dates]), err(CellError::Num));
+}
+
+#[test]
+fn xnpv_rejects_date_before_base_date() {
+    let vals = CellValue::from_rows(vec![vec![num(-100.0), num(110.0)]]);
+    let dates = CellValue::from_rows(vec![vec![num(100.0), num(50.0)]]);
+    assert_eq!(FnXnpv.call(&[num(0.1), vals, dates]), err(CellError::Num));
 }
 
 /// Unparseable text date among enough valid pairs: bad pair skipped, rest computed.

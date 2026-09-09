@@ -1,7 +1,5 @@
 // Mechanical split from datetime.rs; keep behavior changes out of this refactor.
 
-use chrono::NaiveDate;
-
 use value_types::{CellError, CellValue};
 
 use crate::datetime::calendar::{excel_dow_from_serial, is_excel_weekend, is_excel_weekend_mask};
@@ -9,7 +7,6 @@ use crate::datetime::date_context::{
     MAX_CANONICAL_DATE_SERIAL, canonical_date_value, validate_canonical_date_serial,
 };
 use crate::helpers::coercion::{check_error, flatten_values};
-use crate::helpers::date_serial::{date_to_serial, serial_to_date};
 use crate::{FunctionContext, FunctionRegistry, PureFunction};
 
 fn canonical_date_arg_with_input(
@@ -245,11 +242,10 @@ impl PureFunction for FnWorkday {
         if let Some(e) = check_error(&args[1]) {
             return e;
         }
-        let (start_input_serial, start_serial) =
-            match canonical_date_arg_with_input(&args[0], context) {
-                Ok(values) => values,
-                Err(e) => return CellValue::Error(e, None),
-            };
+        let (_, start_serial) = match canonical_date_arg_with_input(&args[0], context) {
+            Ok(values) => values,
+            Err(e) => return CellValue::Error(e, None),
+        };
         let days = match args[1].coerce_to_number() {
             Ok(n) => n as i32,
             Err(e) => return CellValue::Error(e, None),
@@ -268,25 +264,12 @@ impl PureFunction for FnWorkday {
             Vec::new()
         };
 
-        let start = match serial_to_date(start_serial) {
-            Some(d) => d,
-            None => {
-                return CellValue::error_with_message(
-                    CellError::Num,
-                    format!("WORKDAY: invalid start date serial number {start_input_serial}"),
-                );
-            }
-        };
-
         // Weekend mask: Sat and Sun are off (standard)
         let weekend_mask = [false, false, false, false, false, true, true]; // Mon-Sun
 
-        let result = advance_workdays(start, days, &weekend_mask, &holidays);
+        let result = advance_workdays(start_serial, days, &weekend_mask, &holidays);
         match result {
-            Some(d) => {
-                let serial = date_to_serial(&d);
-                workday_result_or_error(serial, context, "WORKDAY")
-            }
+            Some(serial) => workday_result_or_error(serial, context, "WORKDAY"),
             None => CellValue::error_with_message(
                 CellError::Num,
                 format!("WORKDAY: could not compute workday after advancing {days} days"),
@@ -320,11 +303,10 @@ impl PureFunction for FnWorkdayIntl {
         if let Some(e) = check_error(&args[1]) {
             return e;
         }
-        let (start_input_serial, start_serial) =
-            match canonical_date_arg_with_input(&args[0], context) {
-                Ok(values) => values,
-                Err(e) => return CellValue::Error(e, None),
-            };
+        let (_, start_serial) = match canonical_date_arg_with_input(&args[0], context) {
+            Ok(values) => values,
+            Err(e) => return CellValue::Error(e, None),
+        };
         let days = match args[1].coerce_to_number() {
             Ok(n) => n as i32,
             Err(e) => return CellValue::Error(e, None),
@@ -360,22 +342,9 @@ impl PureFunction for FnWorkdayIntl {
             Vec::new()
         };
 
-        let start = match serial_to_date(start_serial) {
-            Some(d) => d,
-            None => {
-                return CellValue::error_with_message(
-                    CellError::Num,
-                    format!("WORKDAY.INTL: invalid start date serial number {start_input_serial}"),
-                );
-            }
-        };
-
-        let result = advance_workdays(start, days, &weekend_mask, &holidays);
+        let result = advance_workdays(start_serial, days, &weekend_mask, &holidays);
         match result {
-            Some(d) => {
-                let serial = date_to_serial(&d);
-                workday_result_or_error(serial, context, "WORKDAY.INTL")
-            }
+            Some(serial) => workday_result_or_error(serial, context, "WORKDAY.INTL"),
             None => CellValue::error_with_message(
                 CellError::Num,
                 format!("WORKDAY.INTL: could not compute workday after advancing {days} days"),
@@ -429,18 +398,25 @@ fn parse_weekend_param(val: &CellValue) -> Result<[bool; 7], CellError> {
 /// Positive days = forward, negative = backward.
 /// Uses Excel serial numbers directly to handle the Lotus 1-2-3 bug correctly.
 fn advance_workdays(
-    start: NaiveDate,
+    start_serial: f64,
     days: i32,
     weekend_mask: &[bool; 7],
     holidays: &[f64],
-) -> Option<NaiveDate> {
+) -> Option<f64> {
+    let start_day = start_serial.floor();
+    if !start_day.is_finite() || start_day < 0.0 {
+        return None;
+    }
     if days == 0 {
-        return Some(start);
+        return Some(start_day);
     }
     let signed_days = i64::from(days);
     let step: i64 = if signed_days > 0 { 1 } else { -1 };
     let mut remaining = signed_days.abs();
-    let mut current_serial = date_to_serial(&start).floor() as i64;
+    // Workday results are whole serial days. Keeping this as a serial rather
+    // than converting through `NaiveDate` preserves Excel's fake serial 60;
+    // `serial_to_date(60)` aliases it to serial 61.
+    let mut current_serial = start_day as i64;
 
     // Safety limit to prevent infinite loops
     let max_iterations = remaining as i64 * 3 + 1000;
@@ -467,7 +443,7 @@ fn advance_workdays(
             }
         }
     }
-    serial_to_date(current_serial as f64)
+    Some(current_serial as f64)
 }
 
 pub(super) fn register_networkdays(registry: &mut FunctionRegistry) {
@@ -595,6 +571,23 @@ mod tests {
         } else {
             panic!("Expected number, got {:?}", result);
         }
+    }
+
+    #[test]
+    fn test_workday_preserves_excel_serial_60() {
+        // The serial-60 compatibility day is a valid calendar day even though
+        // chrono cannot construct a corresponding NaiveDate. A zero-day
+        // advance must therefore be an exact serial round trip.
+        assert_eq!(FnWorkday.call(&[num(60.0), num(0.0)]), num(60.0));
+        assert_eq!(FnWorkday.call(&[num(60.0), num(1.0)]), num(61.0));
+        assert_eq!(
+            FnWorkdayIntl.call(&[num(60.0), num(0.0), num(1.0)]),
+            num(60.0)
+        );
+        assert_eq!(
+            FnWorkdayIntl.call(&[num(60.0), num(1.0), num(1.0)]),
+            num(61.0)
+        );
     }
 
     #[test]

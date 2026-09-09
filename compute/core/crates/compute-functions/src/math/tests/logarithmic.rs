@@ -221,3 +221,13 @@ fn test_sqrtpi() {
     }
     assert_eq!(FnSqrtPi.call(&[num(-1.0)]), err(CellError::Num));
 }
+
+#[test]
+fn test_sqrtpi_scales_before_large_intermediate_overflow() {
+    // sqrt(PI * MAX) is finite even though MAX * PI is not representable.
+    let expected = f64::MAX.sqrt() * std::f64::consts::PI.sqrt();
+    match FnSqrtPi.call(&[num(f64::MAX)]) {
+        CellValue::Number(result) => assert_eq!(result.get(), expected),
+        other => panic!("SQRTPI(MAX) should remain finite, got {other:?}"),
+    }
+}

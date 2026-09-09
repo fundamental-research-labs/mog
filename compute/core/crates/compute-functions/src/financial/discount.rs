@@ -2,7 +2,7 @@
 
 use value_types::{CellError, CellValue};
 
-use super::date_context::canonical_date_arg;
+use super::date_context::canonical_date_arg_truncated;
 use super::helpers::{arg_num, err_val, num_or_err_msg, req_num, year_frac};
 use crate::{FunctionContext, FunctionRegistry, PureFunction};
 
@@ -29,8 +29,8 @@ impl PureFunction for FnDisc {
     }
     fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
-            let settlement = canonical_date_arg(args, 0, context).map_err(err_val)?;
-            let maturity = canonical_date_arg(args, 1, context).map_err(err_val)?;
+            let settlement = canonical_date_arg_truncated(args, 0, context).map_err(err_val)?;
+            let maturity = canonical_date_arg_truncated(args, 1, context).map_err(err_val)?;
             let pr = req_num(args, 2).map_err(err_val)?;
             let redemption = req_num(args, 3).map_err(err_val)?;
             let basis = arg_num(args, 4, 0.0).map_err(err_val)? as i32;
@@ -89,8 +89,8 @@ impl PureFunction for FnIntrate {
     }
     fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
-            let settlement = canonical_date_arg(args, 0, context).map_err(err_val)?;
-            let maturity = canonical_date_arg(args, 1, context).map_err(err_val)?;
+            let settlement = canonical_date_arg_truncated(args, 0, context).map_err(err_val)?;
+            let maturity = canonical_date_arg_truncated(args, 1, context).map_err(err_val)?;
             let investment = req_num(args, 2).map_err(err_val)?;
             let redemption = req_num(args, 3).map_err(err_val)?;
             let basis = arg_num(args, 4, 0.0).map_err(err_val)? as i32;
@@ -149,8 +149,8 @@ impl PureFunction for FnPricedisc {
     }
     fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
-            let settlement = canonical_date_arg(args, 0, context).map_err(err_val)?;
-            let maturity = canonical_date_arg(args, 1, context).map_err(err_val)?;
+            let settlement = canonical_date_arg_truncated(args, 0, context).map_err(err_val)?;
+            let maturity = canonical_date_arg_truncated(args, 1, context).map_err(err_val)?;
             let discount = req_num(args, 2).map_err(err_val)?;
             let redemption = req_num(args, 3).map_err(err_val)?;
             let basis = arg_num(args, 4, 0.0).map_err(err_val)? as i32;
@@ -203,9 +203,9 @@ impl PureFunction for FnPricemat {
     }
     fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
-            let settlement = canonical_date_arg(args, 0, context).map_err(err_val)?;
-            let maturity = canonical_date_arg(args, 1, context).map_err(err_val)?;
-            let issue = canonical_date_arg(args, 2, context).map_err(err_val)?;
+            let settlement = canonical_date_arg_truncated(args, 0, context).map_err(err_val)?;
+            let maturity = canonical_date_arg_truncated(args, 1, context).map_err(err_val)?;
+            let issue = canonical_date_arg_truncated(args, 2, context).map_err(err_val)?;
             let rate = req_num(args, 3).map_err(err_val)?;
             let yld = req_num(args, 4).map_err(err_val)?;
             let basis = arg_num(args, 5, 0.0).map_err(err_val)? as i32;
@@ -273,8 +273,8 @@ impl PureFunction for FnReceived {
     }
     fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
-            let settlement = canonical_date_arg(args, 0, context).map_err(err_val)?;
-            let maturity = canonical_date_arg(args, 1, context).map_err(err_val)?;
+            let settlement = canonical_date_arg_truncated(args, 0, context).map_err(err_val)?;
+            let maturity = canonical_date_arg_truncated(args, 1, context).map_err(err_val)?;
             let investment = req_num(args, 2).map_err(err_val)?;
             let discount = req_num(args, 3).map_err(err_val)?;
             let basis = arg_num(args, 4, 0.0).map_err(err_val)? as i32;
@@ -334,8 +334,8 @@ impl PureFunction for FnYielddisc {
     }
     fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
-            let settlement = canonical_date_arg(args, 0, context).map_err(err_val)?;
-            let maturity = canonical_date_arg(args, 1, context).map_err(err_val)?;
+            let settlement = canonical_date_arg_truncated(args, 0, context).map_err(err_val)?;
+            let maturity = canonical_date_arg_truncated(args, 1, context).map_err(err_val)?;
             let pr = req_num(args, 2).map_err(err_val)?;
             let redemption = req_num(args, 3).map_err(err_val)?;
             let basis = arg_num(args, 4, 0.0).map_err(err_val)? as i32;
@@ -394,9 +394,9 @@ impl PureFunction for FnYieldmat {
     }
     fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
-            let settlement = canonical_date_arg(args, 0, context).map_err(err_val)?;
-            let maturity = canonical_date_arg(args, 1, context).map_err(err_val)?;
-            let issue = canonical_date_arg(args, 2, context).map_err(err_val)?;
+            let settlement = canonical_date_arg_truncated(args, 0, context).map_err(err_val)?;
+            let maturity = canonical_date_arg_truncated(args, 1, context).map_err(err_val)?;
+            let issue = canonical_date_arg_truncated(args, 2, context).map_err(err_val)?;
             let rate = req_num(args, 3).map_err(err_val)?;
             let pr = req_num(args, 4).map_err(err_val)?;
             let basis = arg_num(args, 5, 0.0).map_err(err_val)? as i32;

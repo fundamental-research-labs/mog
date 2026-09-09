@@ -499,3 +499,201 @@ fn native_validation_cut_between_sheets_keeps_distinct_imported_rules() {
     assert!(target_rules.contains(&moved));
     assert!(target_rules.contains(&second));
 }
+
+#[test]
+fn validation_formula_references_follow_sheet_rename_copy_and_delete() {
+    let source_name = "Old's Data";
+    let renamed_name = "New Report";
+    let formula1 = "='Old''s Data'!$A$1";
+    let formula2 = Some("='Old''s Data'!$A$2".to_string());
+    let rules = vec![
+        validation_spec(
+            "A1",
+            ValidationRule::None {
+                formula1: formula1.into(),
+            },
+        ),
+        validation_spec(
+            "A2",
+            ValidationRule::WholeNumber {
+                operator: ValidationOperator::Between,
+                formula1: formula1.into(),
+                formula2: formula2.clone(),
+            },
+        ),
+        validation_spec(
+            "A3",
+            ValidationRule::Decimal {
+                operator: ValidationOperator::Between,
+                formula1: formula1.into(),
+                formula2: formula2.clone(),
+            },
+        ),
+        validation_spec(
+            "A4",
+            ValidationRule::List {
+                formula1: formula1.into(),
+                show_dropdown: true,
+            },
+        ),
+        validation_spec(
+            "A5",
+            ValidationRule::Date {
+                operator: ValidationOperator::Between,
+                formula1: formula1.into(),
+                formula2: formula2.clone(),
+            },
+        ),
+        validation_spec(
+            "A6",
+            ValidationRule::Time {
+                operator: ValidationOperator::Between,
+                formula1: formula1.into(),
+                formula2: formula2.clone(),
+            },
+        ),
+        validation_spec(
+            "A7",
+            ValidationRule::TextLength {
+                operator: ValidationOperator::Between,
+                formula1: formula1.into(),
+                formula2,
+            },
+        ),
+        validation_spec(
+            "A8",
+            ValidationRule::Custom {
+                formula1: "=AND('Old''s Data'!A1<>\"Old's Data!A1\")".into(),
+            },
+        ),
+    ];
+    let input = ParseOutput {
+        sheets: vec![
+            SheetData {
+                name: source_name.into(),
+                rows: 2,
+                cols: 1,
+                ..Default::default()
+            },
+            SheetData {
+                name: "Validation Host".into(),
+                rows: 8,
+                cols: 1,
+                data_validations: rules,
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+    let mut engine = engine_from_parse_output_normal(&input);
+    let old_sheet = SheetId::from_uuid_str(&engine.get_all_sheet_ids()[0]).unwrap();
+    let host_sheet = SheetId::from_uuid_str(&engine.get_all_sheet_ids()[1]).unwrap();
+    let (copy_hex, _) = engine.copy_sheet(&host_sheet, "Validation Copy").unwrap();
+    let copy_sheet = SheetId::from_uuid_str(&copy_hex).unwrap();
+
+    engine
+        .rename_compute_sheet(&old_sheet, renamed_name)
+        .unwrap();
+    let after_rename = engine.export_to_parse_output().unwrap().parse_output;
+    for name in ["Validation Host", "Validation Copy"] {
+        let rules = &after_rename
+            .sheets
+            .iter()
+            .find(|sheet| sheet.name == name)
+            .unwrap()
+            .data_validations;
+        assert_validation_formula_texts(rules, "'New Report'!", true);
+    }
+    let rename_bytes = engine.export_to_xlsx_bytes().unwrap();
+    let (reloaded, _) = ComputeEngine::from_xlsx_bytes(&rename_bytes).unwrap();
+    let reloaded_host = SheetId::from_uuid_str(&reloaded.get_all_sheet_ids()[1]).unwrap();
+    assert_validation_formula_texts(
+        &reloaded
+            .export_to_parse_output()
+            .unwrap()
+            .parse_output
+            .sheets
+            .iter()
+            .find(|sheet| sheet.name == "Validation Host")
+            .unwrap()
+            .data_validations,
+        "'New Report'!",
+        true,
+    );
+    assert_eq!(
+        reloaded.get_sheet_name(&reloaded_host).as_deref(),
+        Some("Validation Host")
+    );
+
+    engine.delete_sheet(&old_sheet).unwrap();
+    let after_delete = engine.export_to_parse_output().unwrap().parse_output;
+    for name in ["Validation Host", "Validation Copy"] {
+        assert_validation_formula_texts(
+            &after_delete
+                .sheets
+                .iter()
+                .find(|sheet| sheet.name == name)
+                .unwrap()
+                .data_validations,
+            "#REF!",
+            true,
+        );
+    }
+    let delete_bytes = engine.export_to_xlsx_bytes().unwrap();
+    let (reparsed, _) = xlsx_parser::parse_xlsx_to_output(&delete_bytes).unwrap();
+    assert_validation_formula_texts(
+        &reparsed
+            .sheets
+            .iter()
+            .find(|sheet| sheet.name == "Validation Host")
+            .unwrap()
+            .data_validations,
+        "#REF!",
+        true,
+    );
+    assert!(engine.get_sheet_name(&copy_sheet).is_some());
+}
+
+fn assert_validation_formula_texts(
+    specs: &[ValidationSpec],
+    expected_reference: &str,
+    preserves_string_literal: bool,
+) {
+    assert_eq!(specs.len(), 8);
+    for spec in specs {
+        let (formula1, formula2) = match &spec.rule {
+            ValidationRule::None { formula1 }
+            | ValidationRule::List { formula1, .. }
+            | ValidationRule::Custom { formula1 } => (formula1, None),
+            ValidationRule::WholeNumber {
+                formula1, formula2, ..
+            }
+            | ValidationRule::Decimal {
+                formula1, formula2, ..
+            }
+            | ValidationRule::Date {
+                formula1, formula2, ..
+            }
+            | ValidationRule::Time {
+                formula1, formula2, ..
+            }
+            | ValidationRule::TextLength {
+                formula1, formula2, ..
+            } => (formula1, formula2.as_deref()),
+        };
+        assert!(formula1.contains(expected_reference), "{formula1}");
+        if let Some(formula2) = formula2 {
+            assert!(formula2.contains(expected_reference), "{formula2}");
+        }
+    }
+    if preserves_string_literal {
+        let custom = specs
+            .iter()
+            .find(|spec| matches!(spec.rule, ValidationRule::Custom { .. }))
+            .unwrap();
+        let ValidationRule::Custom { formula1 } = &custom.rule else {
+            unreachable!()
+        };
+        assert!(formula1.contains("\"Old's Data!A1\""), "{formula1}");
+    }
+}

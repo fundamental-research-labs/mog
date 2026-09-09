@@ -1,6 +1,6 @@
 use value_types::{CellError, CellValue};
 
-use super::common::{is_truthy, to_array};
+use super::common::to_array;
 use crate::PureFunction;
 
 pub(in crate::lookup) struct FnFilter;
@@ -29,6 +29,18 @@ impl PureFunction for FnFilter {
         };
         let if_empty = args.get(2);
 
+        // Every include value must convert to a Boolean. This propagates an
+        // embedded error and rejects invalid text instead of treating either
+        // as a false mask value, independent of include shape or `if_empty`.
+        let include_mask: Vec<bool> = match include
+            .iter()
+            .map(CellValue::coerce_to_bool)
+            .collect::<Result<_, _>>()
+        {
+            Ok(mask) => mask,
+            Err(error) => return CellValue::Error(error, None),
+        };
+
         if array.is_empty() {
             return CellValue::Array(array);
         }
@@ -41,8 +53,7 @@ impl PureFunction for FnFilter {
         if inc_cols == 1 && inc_rows == num_rows {
             let mut result = Vec::new();
             for ri in 0..num_rows {
-                let val = include.get(ri, 0).unwrap_or(&CellValue::Null);
-                if is_truthy(val) {
+                if include_mask[ri] {
                     result.push(array.row(ri).to_vec());
                 }
             }
@@ -57,12 +68,11 @@ impl PureFunction for FnFilter {
             }
             CellValue::from_rows(result)
         } else if inc_rows == 1 && inc_cols == num_cols {
-            let mask: Vec<bool> = include.row(0).iter().map(is_truthy).collect();
             let mut result = Vec::with_capacity(num_rows);
             for row in array.rows_iter() {
                 let filtered: Vec<CellValue> = row
                     .iter()
-                    .zip(mask.iter())
+                    .zip(include_mask.iter())
                     .filter(|&(_, &keep)| keep)
                     .map(|(v, _)| v.clone())
                     .collect();
@@ -81,7 +91,10 @@ impl PureFunction for FnFilter {
         } else if inc_rows == num_rows && inc_cols == num_cols {
             let mut result = Vec::new();
             for ri in 0..num_rows {
-                let any_true = include.row(ri).iter().any(is_truthy);
+                let row_start = ri * num_cols;
+                let any_true = include_mask[row_start..row_start + num_cols]
+                    .iter()
+                    .any(|keep| *keep);
                 if any_true {
                     result.push(array.row(ri).to_vec());
                 }

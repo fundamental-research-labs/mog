@@ -1,14 +1,13 @@
 // Mechanical split from datetime.rs; keep behavior changes out of this refactor.
 
-use chrono::{Datelike, NaiveDate};
-
 use value_types::{CellError, CellValue};
 
 use crate::datetime::array_lift::{array_get, broadcast_dims, has_any_array};
-use crate::datetime::calendar::{add_months, last_day_of_month};
+use crate::datetime::calendar::{
+    add_months_to_excel_serial, excel_last_day_of_month, excel_serial_to_ymd, excel_ymd_to_serial,
+};
 use crate::datetime::date_context::{canonical_date_value, validate_canonical_date_serial};
 use crate::helpers::coercion::check_error;
-use crate::helpers::date_serial::{date_to_serial, serial_to_date};
 use crate::{FunctionContext, FunctionRegistry, PureFunction};
 
 /// Return both the value-layer serial used in diagnostics and the canonical
@@ -22,19 +21,6 @@ fn canonical_date_arg_with_input(
     let input_serial = value.coerce_to_number()?;
     let serial = canonical_date_value(value, context)?;
     Ok((input_serial, serial))
-}
-
-#[inline]
-fn checked_add_months(date: NaiveDate, months: i32) -> Option<NaiveDate> {
-    // Compute the target month in a wide type before calling the legacy
-    // i32-based calendar helper. This rejects impossible years before its
-    // intermediate `year * 12 + months` expression can overflow.
-    let total_months = i64::from(date.year()) * 12 + i64::from(date.month0()) + i64::from(months);
-    let target_year = total_months.div_euclid(12);
-    if !(1..=9999).contains(&target_year) {
-        return None;
-    }
-    add_months(date, months)
 }
 
 #[inline]
@@ -71,20 +57,15 @@ fn edate_scalar(args: &[CellValue], context: &FunctionContext) -> CellValue {
         Ok(n) => n as i32,
         Err(e) => return CellValue::Error(e, None),
     };
-    match serial_to_date(serial) {
-        Some(d) => match checked_add_months(d, months) {
-            Some(new_date) => {
-                let serial = date_to_serial(&new_date);
-                date_result_or_error(serial, context, "EDATE")
-            }
-            None => CellValue::error_with_message(
-                CellError::Num,
-                format!("EDATE: could not compute date after adding {months} months"),
-            ),
-        },
+    match add_months_to_excel_serial(serial, months) {
+        Some(new_serial) => date_result_or_error(new_serial, context, "EDATE"),
         None => CellValue::error_with_message(
             CellError::Num,
-            format!("EDATE: invalid start date serial number {input_serial}"),
+            if serial < 0.0 {
+                format!("EDATE: invalid start date serial number {input_serial}")
+            } else {
+                format!("EDATE: could not compute date after adding {months} months")
+            },
         ),
     }
 }
@@ -144,37 +125,37 @@ fn eomonth_scalar(args: &[CellValue], context: &FunctionContext) -> CellValue {
         Ok(n) => n as i32,
         Err(e) => return CellValue::Error(e, None),
     };
-    match serial_to_date(serial) {
-        Some(d) => {
-            let total_months = i64::from(d.year()) * 12 + i64::from(d.month0()) + i64::from(months);
-            let target_year = total_months.div_euclid(12);
-            let target_month = (total_months.rem_euclid(12) + 1) as u32;
-            if !(1..=9999).contains(&target_year) {
-                return CellValue::error_with_message(
-                    CellError::Num,
-                    format!(
-                        "EOMONTH: could not construct end-of-month date for {target_year}-{target_month}"
-                    ),
-                );
-            }
-            let target_year = target_year as i32;
-            let last_day = last_day_of_month(target_year, target_month);
-            match NaiveDate::from_ymd_opt(target_year, target_month, last_day) {
-                Some(end_date) => {
-                    let serial = date_to_serial(&end_date);
-                    date_result_or_error(serial, context, "EOMONTH")
-                }
-                None => CellValue::error_with_message(
-                    CellError::Num,
-                    format!(
-                        "EOMONTH: could not construct end-of-month date for {target_year}-{target_month}"
-                    ),
-                ),
-            }
+    let (year, month, _) = match excel_serial_to_ymd(serial) {
+        Some(parts) => parts,
+        None => {
+            return CellValue::error_with_message(
+                CellError::Num,
+                format!("EOMONTH: invalid start date serial number {input_serial}"),
+            );
         }
+    };
+    let total_months = i64::from(year) * 12 + i64::from(month - 1) + i64::from(months);
+    let target_year = total_months.div_euclid(12);
+    let target_month = (total_months.rem_euclid(12) + 1) as u32;
+    let target_year = match i32::try_from(target_year) {
+        Ok(year) => year,
+        Err(_) => {
+            return CellValue::error_with_message(
+                CellError::Num,
+                format!(
+                    "EOMONTH: could not construct end-of-month date for {target_year}-{target_month}"
+                ),
+            );
+        }
+    };
+    let last_day = excel_last_day_of_month(target_year, target_month);
+    match excel_ymd_to_serial(target_year, target_month, last_day) {
+        Some(result_serial) => date_result_or_error(result_serial, context, "EOMONTH"),
         None => CellValue::error_with_message(
             CellError::Num,
-            format!("EOMONTH: invalid start date serial number {input_serial}"),
+            format!(
+                "EOMONTH: could not construct end-of-month date for {target_year}-{target_month}"
+            ),
         ),
     }
 }
@@ -247,8 +228,8 @@ impl FnDatedif {
                 "DATEDIF: start date must not be after end date".to_string(),
             );
         }
-        let start = match serial_to_date(start_serial) {
-            Some(d) => d,
+        let (start_year, start_month, start_day) = match excel_serial_to_ymd(start_serial) {
+            Some(parts) => parts,
             None => {
                 return CellValue::error_with_message(
                     CellError::Num,
@@ -256,8 +237,8 @@ impl FnDatedif {
                 );
             }
         };
-        let end = match serial_to_date(end_serial) {
-            Some(d) => d,
+        let (end_year, end_month, end_day) = match excel_serial_to_ymd(end_serial) {
+            Some(parts) => parts,
             None => {
                 return CellValue::error_with_message(
                     CellError::Num,
@@ -268,8 +249,8 @@ impl FnDatedif {
         let result = match unit.as_str() {
             "Y" => {
                 // Complete years
-                let mut years = end.year() - start.year();
-                if (end.month(), end.day()) < (start.month(), start.day()) {
+                let mut years = end_year - start_year;
+                if (end_month, end_day) < (start_month, start_day) {
                     years -= 1;
                 }
                 years as f64
@@ -277,8 +258,8 @@ impl FnDatedif {
             "M" => {
                 // Complete months
                 let mut months =
-                    (end.year() - start.year()) * 12 + end.month() as i32 - start.month() as i32;
-                if end.day() < start.day() {
+                    (end_year - start_year) * 12 + end_month as i32 - start_month as i32;
+                if end_day < start_day {
                     months -= 1;
                 }
                 months as f64
@@ -290,25 +271,23 @@ impl FnDatedif {
             }
             "MD" => {
                 // Days ignoring months and years
-                let mut days = end.day() as i32 - start.day() as i32;
+                let mut days = end_day as i32 - start_day as i32;
                 if days < 0 {
                     // Get days in previous month
-                    let prev_month = if end.month() == 1 {
-                        NaiveDate::from_ymd_opt(end.year() - 1, 12, 1)
+                    let (prev_year, prev_month) = if end_month == 1 {
+                        (end_year - 1, 12)
                     } else {
-                        NaiveDate::from_ymd_opt(end.year(), end.month() - 1, 1)
+                        (end_year, end_month - 1)
                     };
-                    if let Some(pm) = prev_month {
-                        let days_in_prev = last_day_of_month(pm.year(), pm.month());
-                        days += days_in_prev as i32;
-                    }
+                    let days_in_prev = excel_last_day_of_month(prev_year, prev_month);
+                    days += days_in_prev as i32;
                 }
                 days as f64
             }
             "YM" => {
                 // Months ignoring years
-                let mut months = end.month() as i32 - start.month() as i32;
-                if end.day() < start.day() {
+                let mut months = end_month as i32 - start_month as i32;
+                if end_day < start_day {
                     months -= 1;
                 }
                 if months < 0 {
@@ -318,22 +297,16 @@ impl FnDatedif {
             }
             "YD" => {
                 // Days ignoring years
-                let end_adjusted = NaiveDate::from_ymd_opt(start.year(), end.month(), end.day());
+                // Construct the comparison date as an Excel serial so the
+                // serial-60 compatibility day remains distinct from March 1.
+                let start_day_serial = start_serial.floor();
+                let end_adjusted = excel_ymd_to_serial(start_year, end_month, end_day);
                 let end_adjusted = match end_adjusted {
-                    Some(ea) if ea >= start => Some(ea),
-                    _ => NaiveDate::from_ymd_opt(start.year() + 1, end.month(), end.day()),
+                    Some(candidate) if candidate >= start_day_serial => Some(candidate),
+                    _ => excel_ymd_to_serial(start_year + 1, end_month, end_day),
                 };
                 match end_adjusted {
-                    Some(ea) => {
-                        let mut days = (ea - start).num_days() as f64;
-                        // Account for the Lotus 1-2-3 fake Feb 29, 1900.
-                        let start_s = date_to_serial(&start);
-                        let ea_s = date_to_serial(&ea);
-                        if start_s <= 59.0 && ea_s >= 61.0 {
-                            days += 1.0;
-                        }
-                        days
-                    }
+                    Some(candidate) => candidate.floor() - start_day_serial,
                     None => {
                         return CellValue::error_with_message(
                             CellError::Num,
@@ -450,8 +423,8 @@ impl FnDays360 {
             false // US method (default)
         };
 
-        let start = match serial_to_date(start_serial) {
-            Some(d) => d,
+        let (sy, sm, mut sd) = match excel_serial_to_ymd(start_serial) {
+            Some((year, month, day)) => (year, month as i32, day as i32),
             None => {
                 return CellValue::error_with_message(
                     CellError::Num,
@@ -459,8 +432,8 @@ impl FnDays360 {
                 );
             }
         };
-        let end = match serial_to_date(end_serial) {
-            Some(d) => d,
+        let (ey, em, mut ed) = match excel_serial_to_ymd(end_serial) {
+            Some((year, month, day)) => (year, month as i32, day as i32),
             None => {
                 return CellValue::error_with_message(
                     CellError::Num,
@@ -468,13 +441,6 @@ impl FnDays360 {
                 );
             }
         };
-
-        let mut sd = start.day() as i32;
-        let sm = start.month() as i32;
-        let sy = start.year();
-        let mut ed = end.day() as i32;
-        let em = end.month() as i32;
-        let ey = end.year();
 
         if european {
             // European method: if day > 30, set to 30
@@ -491,8 +457,8 @@ impl FnDays360 {
             //    of February, set ed=30
             // 3. If sd == 31, set sd=30
             // 4. If ed == 31 and sd >= 30, set ed=30
-            let start_is_last_feb = sm == 2 && sd == last_day_of_month(sy, sm as u32) as i32;
-            let end_is_last_feb = em == 2 && ed == last_day_of_month(ey, em as u32) as i32;
+            let start_is_last_feb = sm == 2 && sd == excel_last_day_of_month(sy, sm as u32) as i32;
+            let end_is_last_feb = em == 2 && ed == excel_last_day_of_month(ey, em as u32) as i32;
 
             // Rule 1: start is last day of February
             if start_is_last_feb {
@@ -590,6 +556,70 @@ mod tests {
         } else {
             panic!("Expected number");
         }
+    }
+
+    #[test]
+    fn test_calendar_functions_preserve_excel_serial_60() {
+        assert_eq!(
+            FnEdate.call(&[num(60.0), num(0.0)]),
+            num(60.0),
+            "EDATE must keep the compatibility date when no month is added"
+        );
+        assert_eq!(FnEdate.call(&[num(60.0), num(1.0)]), num(89.0));
+        assert_eq!(FnEdate.call(&[num(60.0), num(-1.0)]), num(29.0));
+
+        assert_eq!(FnEomonth.call(&[num(60.0), num(0.0)]), num(60.0));
+        assert_eq!(FnEomonth.call(&[num(60.0), num(1.0)]), num(91.0));
+
+        assert_eq!(FnDays360.call(&[num(60.0), num(61.0)]), num(1.0));
+        for unit in ["Y", "M", "D", "MD", "YM", "YD"] {
+            assert_eq!(
+                FnDatedif.call(&[num(60.0), num(61.0), text(unit)]),
+                num(if unit == "D" || unit == "MD" || unit == "YD" {
+                    1.0
+                } else {
+                    0.0
+                }),
+                "DATEDIF serial-60 boundary failed for {unit}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_calendar_serial_60_neighbors_and_fractional_inputs() {
+        assert_eq!(FnDatedif.call(&[num(59.0), num(61.0), text("D")]), num(2.0));
+        assert_eq!(
+            FnDatedif.call(&[num(59.0), num(61.0), text("MD")]),
+            num(2.0)
+        );
+        assert_eq!(
+            FnDatedif.call(&[num(61.0), num(59.0), text("D")]),
+            err(CellError::Num)
+        );
+        assert_eq!(
+            FnDays360.call(&[num(60.75), num(61.25)]),
+            FnDays360.call(&[num(60.0), num(61.0)])
+        );
+    }
+
+    #[test]
+    fn test_calendar_functions_keep_the_1904_epoch_boundary() {
+        let context = FunctionContext {
+            date1904: true,
+            ..FunctionContext::default()
+        };
+        assert_eq!(
+            FnEdate.call_with_context(&[num(0.0), num(0.0)], &context),
+            num(0.0)
+        );
+        assert_eq!(
+            FnEomonth.call_with_context(&[num(0.0), num(0.0)], &context),
+            num(30.0)
+        );
+        assert_eq!(
+            FnDays360.call_with_context(&[num(0.0), num(0.0)], &context),
+            num(0.0)
+        );
     }
 
     #[test]

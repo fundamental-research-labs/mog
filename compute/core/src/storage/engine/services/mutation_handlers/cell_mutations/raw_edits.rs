@@ -12,6 +12,7 @@ use crate::storage::engine::stores::EngineStores;
 
 use super::edits::{canonicalize_resolved_raw_edits, validate_edit_bounds};
 use super::identity_registration::register_cell_positions;
+use super::imported_array_caches;
 
 pub(in crate::storage::engine) fn mutation_set_cells_raw(
     stores: &mut EngineStores,
@@ -46,6 +47,9 @@ pub(in crate::storage::engine) fn mutation_set_cells_raw_with_trust(
             .compute
             .validate_raw_user_edit_region_writes(mirror, &edits)?;
     }
+    // Viewport-only deferred imports reject graph construction. Do that
+    // preflight before history, identity, and metadata are mutated below.
+    stores.compute.ensure_graph_construction_ready()?;
 
     for (sheet, cell, row, col, _, _) in &edits {
         crate::storage::engine::history::cells::capture_cell(
@@ -98,6 +102,16 @@ pub(in crate::storage::engine) fn mutation_set_cells_raw_with_trust(
 
     crate::storage::engine::cell_metadata::refresh(&stores.storage, mirror, stores.layout_metrics);
 
+    // Raw edits power copy, fill, paste, and scenario paths. They need the
+    // same pre-scheduler retirement as parsed edits so an imported spill's
+    // old cached children cannot block a replacement of its anchor.
+    imported_array_caches::retire_for_positions(
+        mirror,
+        edits
+            .iter()
+            .map(|(sheet_id, _, row, col, _, _)| (*sheet_id, *row, *col)),
+    );
+
     // 5. Delegate to ComputeCore for recalculation via lossless entry point.
     //    For formula edits, `process_value_input` owns the mirror update and
     //    will preserve the prior value as a seed when the formula matches.
@@ -107,10 +121,17 @@ pub(in crate::storage::engine) fn mutation_set_cells_raw_with_trust(
     //    into a CSE / Data Table region still reject. Engine-owned region
     //    materialization can pass `TrustedReplay` after validating the parent
     //    operation atomically.
-    let mut result =
-        stores
-            .compute
-            .set_cells_raw_with_trust(mirror, &edits, skip_cycle_check, trust)?;
+    let mut result = match stores
+        .compute
+        .set_cells_raw_with_trust(mirror, &edits, skip_cycle_check, trust)
+    {
+        Ok(result) => result,
+        Err(error) => {
+            imported_array_caches::restore_after_rejection(stores, mirror);
+            return Err(error);
+        }
+    };
+    imported_array_caches::commit(stores, mirror);
     for (_, cell_id, _, _, _, _) in &edits {
         register_formula_cell_identities(stores, mirror, *cell_id);
     }

@@ -2,7 +2,7 @@
 
 use value_types::{CellError, CellValue};
 
-use super::date_context::canonical_date_arg;
+use super::date_context::canonical_date_arg_truncated;
 use super::helpers::{actual_days_between, err_val, num_or_err_msg, req_num};
 use crate::{FunctionContext, FunctionRegistry, PureFunction};
 
@@ -29,8 +29,8 @@ impl PureFunction for FnTbillprice {
     }
     fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
-            let settlement = canonical_date_arg(args, 0, context).map_err(err_val)?;
-            let maturity = canonical_date_arg(args, 1, context).map_err(err_val)?;
+            let settlement = canonical_date_arg_truncated(args, 0, context).map_err(err_val)?;
+            let maturity = canonical_date_arg_truncated(args, 1, context).map_err(err_val)?;
             let discount = req_num(args, 2).map_err(err_val)?;
             if settlement >= maturity {
                 return Err(CellValue::error_with_message(
@@ -79,8 +79,8 @@ impl PureFunction for FnTbillyield {
     }
     fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
-            let settlement = canonical_date_arg(args, 0, context).map_err(err_val)?;
-            let maturity = canonical_date_arg(args, 1, context).map_err(err_val)?;
+            let settlement = canonical_date_arg_truncated(args, 0, context).map_err(err_val)?;
+            let maturity = canonical_date_arg_truncated(args, 1, context).map_err(err_val)?;
             let pr = req_num(args, 2).map_err(err_val)?;
             if settlement >= maturity {
                 return Err(CellValue::error_with_message(
@@ -129,8 +129,8 @@ impl PureFunction for FnTbilleq {
     }
     fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
-            let settlement = canonical_date_arg(args, 0, context).map_err(err_val)?;
-            let maturity = canonical_date_arg(args, 1, context).map_err(err_val)?;
+            let settlement = canonical_date_arg_truncated(args, 0, context).map_err(err_val)?;
+            let maturity = canonical_date_arg_truncated(args, 1, context).map_err(err_val)?;
             let discount = req_num(args, 2).map_err(err_val)?;
             if settlement >= maturity {
                 return Err(CellValue::error_with_message(

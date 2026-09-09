@@ -96,7 +96,17 @@ impl PureFunction for FnCoth {
                         format!("COTH: sinh({n}) is 0 (division by zero)"),
                     )
                 } else {
-                    CellValue::number(n.cosh() / sinh_val)
+                    let cosh_val = n.cosh();
+                    if sinh_val.is_finite() && cosh_val.is_finite() {
+                        // Keep the original operation in its finite range so
+                        // ordinary results retain their established rounding.
+                        CellValue::number(cosh_val / sinh_val)
+                    } else {
+                        // coth(x) = 1 / tanh(x). Evaluating cosh(x) / sinh(x)
+                        // directly turns into INF / INF for large, otherwise
+                        // valid arguments even though tanh(x) is well-defined.
+                        CellValue::number(1.0 / n.tanh())
+                    }
                 }
             }
             Err(e) => CellValue::Error(e, None),

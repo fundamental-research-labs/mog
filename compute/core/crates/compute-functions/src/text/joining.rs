@@ -234,13 +234,15 @@ impl PureFunction for FnRept {
             Ok(n) => n as usize,
             Err(e) => return CellValue::Error(e, None),
         };
-        // Excel limit: result can't exceed 32767 chars
-        if text.chars().count() * times > 32767 {
+        // Excel limit: result can't exceed 32767 chars. Compare by division
+        // so an out-of-range repeat count cannot overflow the product before
+        // we reject it.
+        let text_len = text.chars().count();
+        if text_len != 0 && times > 32767 / text_len {
             return CellValue::error_with_message(
                 CellError::Value,
                 format!(
-                    "REPT: result would exceed 32767 character limit ({} x {times})",
-                    text.chars().count()
+                    "REPT: result would exceed 32767 character limit ({text_len} x {times})",
                 ),
             );
         }
@@ -407,6 +409,15 @@ mod tests {
         let f = FnRept;
         assert_eq!(f.call(&[text("ab"), num(3.0)]), text("ababab"));
         assert_eq!(f.call(&[text("a"), num(0.0)]), text(""));
+    }
+
+    #[test]
+    fn test_rept_rejects_repeat_count_before_product_overflow() {
+        let f = FnRept;
+        assert!(matches!(
+            f.call(&[text("ab"), num(9.223_372_036_854_776e18)]),
+            CellValue::Error(CellError::Value, _)
+        ));
     }
 
     #[test]

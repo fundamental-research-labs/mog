@@ -211,7 +211,7 @@ pub fn parse_criteria(criteria: &CellValue) -> Box<dyn Fn(&CellValue) -> bool> {
         }
         CellValue::Error(target, _) => {
             let target = *target;
-            Box::new(move |v: &CellValue| matches!(v, CellValue::Error(e, None) if *e == target))
+            Box::new(move |v: &CellValue| matches!(v, CellValue::Error(e, _) if *e == target))
         }
         CellValue::Null => Box::new(|v| matches!(v, CellValue::Null)),
         CellValue::Control(c) => {

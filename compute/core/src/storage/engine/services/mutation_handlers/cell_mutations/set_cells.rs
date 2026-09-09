@@ -14,6 +14,7 @@ use crate::storage::engine::stores::EngineStores;
 
 use super::edits::{canonicalize_resolved_cell_inputs, validate_edit_bounds};
 use super::identity_registration::register_cell_positions;
+use super::imported_array_caches;
 use super::outcomes::{attach_policy_preserved_outcomes, truncate_submitted_text};
 
 #[derive(Debug, Clone)]
@@ -143,6 +144,9 @@ pub(in crate::storage::engine) fn mutation_set_cells(
     stores
         .compute
         .validate_region_partial_writes(mirror, &edits)?;
+    // Viewport-only deferred imports reject graph construction. Check before
+    // history, identity, and metadata state can be changed by this mutation.
+    stores.compute.ensure_graph_construction_ready()?;
 
     for (sheet, cell, row, col, _) in &edits {
         crate::storage::engine::history::cells::capture_cell(
@@ -306,11 +310,36 @@ pub(in crate::storage::engine) fn mutation_set_cells(
 
     crate::storage::engine::cell_metadata::refresh(&stores.storage, mirror, stores.layout_metrics);
 
+    // Imported dynamic-array children are package caches, not authored cells.
+    // A direct replacement of their anchor must retire those old values before
+    // the scheduler evaluates the new formula; otherwise the anchor's own
+    // former spill children are incorrectly observed as #SPILL! blockers.
+    // Region validation above has already rejected partial writes. Keep the
+    // durable cache intact until the scheduler accepts the mutation, so a
+    // later failed write can restore the exact imported-cache state.
+    imported_array_caches::retire_for_positions(
+        mirror,
+        edits
+            .iter()
+            .map(|(sheet_id, _, row, col, _)| (*sheet_id, *row, *col)),
+    );
+
     // Classification ran once with workbook culture, conversion policy, and format.
     // The scheduler owns the sole cell write and preserves iterative formula seeds.
-    let mut result = stores
+    let mut result = match stores
         .compute
-        .set_cells(mirror, &prepared_edits, skip_cycle_check)?;
+        .set_cells(mirror, &prepared_edits, skip_cycle_check)
+    {
+        Ok(result) => result,
+        Err(error) => {
+            // Invalidating only the live mirror before scheduling avoids stale
+            // spill blockers. Restore it from the still-authoritative storage
+            // sidecar if scheduling rejects the batch.
+            imported_array_caches::restore_after_rejection(stores, mirror);
+            return Err(error);
+        }
+    };
+    imported_array_caches::commit(stores, mirror);
     for (_, cell_id, _, _, _) in &edits {
         register_formula_cell_identities(stores, mirror, *cell_id);
     }

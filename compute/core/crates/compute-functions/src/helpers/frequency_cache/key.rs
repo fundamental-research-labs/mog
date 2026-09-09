@@ -1,5 +1,7 @@
 use value_types::{CellError, CellValue};
 
+use crate::helpers::criteria::numeric_equality_criteria;
+
 /// Normalized key for case-insensitive text and tolerance-aware numeric matching.
 ///
 /// Two cell values that COUNTIF considers "equal" must produce the same key.
@@ -34,9 +36,8 @@ impl NormalizedKey {
 
     /// Normalize a cell value for frequency map keying.
     ///
-    /// Text that parses as a number is normalized to `Number` so that
-    /// `Text("2019")` and `Number(2019)` produce the same key. This matches
-    /// Excel's COUNTIF/SUMIF/AVERAGEIF cross-type comparison semantics.
+    /// Plain numeric text is normalized to `Number` so that `Text("2019")`
+    /// and `Number(2019)` produce the same range-side key.
     #[inline]
     pub fn from_cell_value(v: &CellValue) -> Self {
         match v {
@@ -59,6 +60,22 @@ impl NormalizedKey {
                 Self::from_cell_value(arr.get(0, 0).unwrap_or(&CellValue::Null))
             }
             _ => NormalizedKey::Null,
+        }
+    }
+
+    /// Normalize a scalar criteria value using the shared criteria parser.
+    ///
+    /// Criteria syntax can carry a numeric representation (currently plain
+    /// numbers and percentages) even when the source cell is text. Keep this
+    /// separate from `from_cell_value`: range-side text coercion intentionally
+    /// follows `CellValue::as_comparable_number` and must not silently gain a
+    /// new grammar only because a criterion used the cache path.
+    #[inline]
+    pub fn from_criteria(v: &CellValue) -> Self {
+        if let Some(n) = numeric_equality_criteria(v).filter(|n| n.is_finite()) {
+            Self::Number(Self::quantize(n))
+        } else {
+            Self::from_cell_value(v)
         }
     }
 }

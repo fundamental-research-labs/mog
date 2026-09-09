@@ -329,6 +329,58 @@ fn test_countif_single_element_array_is_scalar() {
 }
 
 #[test]
+fn test_countif_cached_and_linear_numeric_criteria_agree() {
+    // Plain criteria use the production frequency-cache route; an explicit
+    // '=' uses parse_criteria's linear route. Percent criteria use the shared
+    // numeric parser, while currency/date strings remain literal text on both
+    // routes until their grammar has an explicit compatibility contract.
+    let date_serial = value_types::date_serial::try_parse_date("1/1/2024").unwrap();
+    let range = col_arr(vec![
+        num(0.5),
+        text("50%"),
+        num(1234.5),
+        text("$1,234.50"),
+        num(date_serial),
+        text("1/1/2024"),
+    ]);
+    let f = FnCountIf;
+    for (literal, expected) in [("50%", 1.0), ("$1,234.50", 1.0), ("1/1/2024", 1.0)] {
+        let cached = f.call(&[range.clone(), text(literal)]);
+        let linear = f.call(&[range.clone(), text(&format!("={literal}"))]);
+        assert_eq!(cached, num(expected), "cached criteria {literal}");
+        assert_eq!(linear, cached, "linear criteria {literal}");
+    }
+}
+
+#[test]
+fn test_countifs_and_sumifs_indexed_percent_criteria_agree_with_linear_route() {
+    // COUNTIFS/SUMIFS exact criteria use the ColumnIndex production path.
+    // Compare it with an explicit '=' criterion, which takes the predicate
+    // path, to ensure criteria-side percent normalization is consistent.
+    let values = col_arr(vec![num(0.5), text("50%"), num(0.25), num(0.5)]);
+    let groups = col_arr(vec![text("A"), text("A"), text("A"), text("B")]);
+    let sums = col_arr(vec![num(10.0), num(20.0), num(30.0), num(40.0)]);
+    let count = FnCountIfs;
+    let sum = FnSumIfs;
+
+    let indexed_count = count.call(&[values.clone(), text("50%"), groups.clone(), text("A")]);
+    let linear_count = count.call(&[values.clone(), text("=50%"), groups.clone(), text("A")]);
+    assert_eq!(indexed_count, num(1.0));
+    assert_eq!(linear_count, indexed_count);
+
+    let indexed_sum = sum.call(&[
+        sums.clone(),
+        values.clone(),
+        text("50%"),
+        groups.clone(),
+        text("A"),
+    ]);
+    let linear_sum = sum.call(&[sums, values, text("=50%"), groups, text("A")]);
+    assert_eq!(indexed_sum, num(10.0));
+    assert_eq!(linear_sum, indexed_sum);
+}
+
+#[test]
 fn test_countifs_array_criteria_one_array_one_scalar() {
     // COUNTIFS(name_range, name_array, dept_range, "Enterprise")
     // Names: Acme, Acme, Beta, Beta, Gamma

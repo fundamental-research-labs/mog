@@ -1,6 +1,6 @@
 use value_types::{CellError, CellValue};
 
-use super::common::{cell_value_cmp_sort, to_array};
+use super::common::{cell_value_cmp_sort, parse_sort_order, to_array};
 use crate::PureFunction;
 
 pub(in crate::lookup) struct FnSort;
@@ -45,9 +45,9 @@ impl PureFunction for FnSort {
         };
 
         let sort_order = if args.len() > 2 {
-            match args[2].coerce_to_number() {
-                Ok(n) => n as i32,
-                Err(e) => return CellValue::Error(e, None),
+            match parse_sort_order(&args[2]) {
+                Ok(order) => order,
+                Err(error) => return error,
             }
         } else {
             1

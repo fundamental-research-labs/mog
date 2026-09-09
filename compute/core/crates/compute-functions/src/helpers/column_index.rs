@@ -80,7 +80,7 @@ impl ColumnIndex {
     /// Query for exact-match criterion: return bitmap of matching rows.
     /// O(K) where K = number of matching rows.
     pub fn query_exact(&self, criteria: &CellValue) -> ColumnBitset {
-        let key = NormalizedKey::from_cell_value(criteria);
+        let key = NormalizedKey::from_criteria(criteria);
         let mut bitmap = ColumnBitset::new_all_false(self.nrows);
         if let Some(indices) = self.exact_map.get(&key) {
             for &idx in indices {
@@ -292,6 +292,19 @@ mod tests {
 
         let bitmap = index.query_exact(&text("5"));
         assert_bitset_eq(&bitmap, &[true, true, false]);
+    }
+
+    #[test]
+    fn test_percent_criteria_uses_criteria_key_without_reclassifying_text() {
+        let values = [num(0.5), text("50%"), text("0.5")];
+        let refs: Vec<&CellValue> = values.iter().collect();
+        let index = ColumnIndex::build(&refs);
+
+        // The criterion 50% is numeric 0.5, while the literal range text
+        // "50%" remains text. Numeric text "0.5" follows existing range
+        // normalization and still matches the numeric key.
+        let bitmap = index.query_exact(&text("50%"));
+        assert_bitset_eq(&bitmap, &[true, false, true]);
     }
 
     #[test]

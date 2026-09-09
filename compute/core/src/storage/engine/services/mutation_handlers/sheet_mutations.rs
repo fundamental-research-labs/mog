@@ -232,6 +232,12 @@ pub(in crate::storage::engine) fn mutation_delete_sheet(
 
     // 2. Remove native metadata (values were cleared by compute.remove_sheet)
     stores.storage.remove_sheet(mirror, sheet_id);
+    if let Some(name) = name.as_deref() {
+        crate::storage::sheet::schemas::invalidate_validation_sheet_references(
+            &mut stores.storage,
+            name,
+        );
+    }
 
     // 3. Remove GridIndex, merge spatial index, and layout index
     stores.grid_indexes.remove(sheet_id);
@@ -277,6 +283,13 @@ pub(in crate::storage::engine) fn mutation_rename_sheet(
     crate::storage::sheet::properties::rename_sheet(&mut stores.storage, sheet_id, name);
     // 2. Rename in ComputeCore, which updates the mirror and authored formula text.
     stores.compute.rename_sheet(mirror, sheet_id, name);
+    if let Some(old_name) = old_name.as_deref() {
+        crate::storage::sheet::schemas::rewrite_validation_sheet_references(
+            &mut stores.storage,
+            old_name,
+            name,
+        );
+    }
     crate::storage::workbook::imported_pivots::update_output_sheet_name_for_sheet(
         &mut stores.storage,
         sheet_id,

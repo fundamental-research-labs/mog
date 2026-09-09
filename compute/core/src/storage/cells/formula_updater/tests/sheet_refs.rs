@@ -1,5 +1,6 @@
 use super::super::sheet_refs::{
-    escape_sheet_name_for_formula, replace_sheet_name_in_a1_formula, sheet_name_needs_quoting,
+    escape_sheet_name_for_formula, invalidate_sheet_references_in_a1_formula,
+    replace_sheet_name_in_a1_formula, sheet_name_needs_quoting,
 };
 
 #[test]
@@ -65,5 +66,66 @@ fn test_replace_a1_formula_empty() {
     assert_eq!(
         replace_sheet_name_in_a1_formula("Sheet1!A1", "", "Data"),
         "Sheet1!A1"
+    );
+}
+
+#[test]
+fn test_replace_a1_formula_rewrites_only_sheet_reference_tokens() {
+    assert_eq!(
+        replace_sheet_name_in_a1_formula(
+            "=SUM('Old''s Data'!A1,\"Old's Data!A1\",OtherOld!A1)",
+            "Old's Data",
+            "New Data",
+        ),
+        "=SUM('New Data'!A1,\"Old's Data!A1\",OtherOld!A1)"
+    );
+}
+
+#[test]
+fn test_replace_a1_formula_preserves_escaped_double_quotes() {
+    assert_eq!(
+        replace_sheet_name_in_a1_formula(
+            "=IF(A1=\"quoted \"\"Old!A1\"\"\",Old!A1,0)",
+            "Old",
+            "New Sheet",
+        ),
+        "=IF(A1=\"quoted \"\"Old!A1\"\"\",'New Sheet'!A1,0)"
+    );
+}
+
+#[test]
+fn test_replace_a1_formula_rewrites_all_local_sheet_reference_forms() {
+    assert_eq!(
+        replace_sheet_name_in_a1_formula(
+            "=SUM(old!$A:$C,OLD!$1:$2,Old!LocalValue)",
+            "Old",
+            "New Sheet",
+        ),
+        "=SUM('New Sheet'!$A:$C,'New Sheet'!$1:$2,'New Sheet'!LocalValue)"
+    );
+}
+
+#[test]
+fn test_replace_a1_formula_rewrites_sheet_qualified_range_endpoints() {
+    assert_eq!(
+        replace_sheet_name_in_a1_formula("=SUM(Old!A1:Old!A2,A1:Old!A2)", "Old", "New"),
+        "=SUM(New!A1:New!A2,A1:New!A2)"
+    );
+}
+
+#[test]
+fn test_replace_a1_formula_preserves_external_and_three_d_references() {
+    let formula = "=SUM([Other.xlsx]Old!A1,'[Other.xlsx]Old'!$A:$A,Start:Old!A1,Old:End!A1)";
+    assert_eq!(
+        replace_sheet_name_in_a1_formula(formula, "Old", "New Sheet"),
+        formula
+    );
+}
+
+#[test]
+fn test_invalidate_sheet_references_rewrites_only_reference_tokens() {
+    assert_eq!(
+        invalidate_sheet_references_in_a1_formula("=SUM(Old!A1,\"Old!A1\",OtherOld!A1)", "Old",),
+        "=SUM(#REF!,\"Old!A1\",OtherOld!A1)"
     );
 }

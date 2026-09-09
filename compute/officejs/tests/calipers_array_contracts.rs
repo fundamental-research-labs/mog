@@ -473,6 +473,148 @@ fn cli_save_recalculate_replaces_rich_text_cached_spill_child_with_numeric_proje
 }
 
 #[test]
+fn cli_run_replacing_imported_dynamic_array_anchor_retires_only_its_old_cache() {
+    let replace = |script: &str, output_name: &str| {
+        let fixture = Fixture::new(&dynamic_roundtrip_sheet());
+        let output = fixture.run(&fixture.input(), false, script, output_name);
+        (fixture, output)
+    };
+
+    // The old A2/A3 package values belong to A1's imported spill. Replacing
+    // A1 must retire that cache before the scheduler evaluates the new anchor,
+    // otherwise those former children block the new spill with #SPILL!. The
+    // independent cached C1:D2 spill and its F1 dependent cache remain
+    // untouched. E1 depends on the replacement source and is refreshed by
+    // the normal formula-mutation dependency path.
+    let (fixture, shorter) = replace(
+        r#"await Excel.run(async context => {
+            const sheet = context.workbook.worksheets.getItem("Sheet1");
+            sheet.getRange("A1").formulas = [["=SEQUENCE(2)"]];
+            await context.sync();
+        });"#,
+        "replaced-shorter.xlsx",
+    );
+    let shorter_book = fixture.load(&shorter);
+    let shorter_sheet = shorter_book.sheet_by_index(0).unwrap();
+    assert_number(&shorter_sheet, "A1", 1.0);
+    assert_number(&shorter_sheet, "A2", 2.0);
+    assert_empty(&shorter_sheet, "A3");
+    assert_number(&shorter_sheet, "E1", 3.0);
+    assert_number(&shorter_sheet, "F1", 502.0);
+    let shorter_xml = fixture.worksheet_xml(&shorter);
+    assert!(cell_fragment(&shorter_xml, "A1").contains(r#"ref="A1:A2""#));
+    assert_empty_formula_marker(&shorter_xml, "A2");
+    assert!(
+        !shorter_xml.contains(r#"r="A3""#),
+        "the retired, unstyled A3 cache cell survived: {shorter_xml}"
+    );
+    assert_cell_bold(
+        &fixture.styles_xml(&shorter),
+        &shorter_xml,
+        "A2",
+        true,
+    );
+
+    // The explicit calculation route uses the same replacement path, then
+    // refreshes dependent caches instead of retaining their imported values.
+    let fixture = Fixture::new(&dynamic_roundtrip_sheet());
+    let recalculated = fixture.run(
+        &fixture.input(),
+        true,
+        r#"await Excel.run(async context => {
+            const sheet = context.workbook.worksheets.getItem("Sheet1");
+            sheet.getRange("A1").formulas = [["=SEQUENCE(2)"]];
+            await context.sync();
+        });"#,
+        "replaced-shorter-recalculated.xlsx",
+    );
+    let recalculated_book = fixture.load(&recalculated);
+    let recalculated_sheet = recalculated_book.sheet_by_index(0).unwrap();
+    assert_number(&recalculated_sheet, "A1", 1.0);
+    assert_number(&recalculated_sheet, "A2", 2.0);
+    assert_empty(&recalculated_sheet, "A3");
+    assert_number(&recalculated_sheet, "E1", 3.0);
+    assert_number(&recalculated_sheet, "F1", 10.0);
+
+    let (fixture, longer) = replace(
+        r#"await Excel.run(async context => {
+            const sheet = context.workbook.worksheets.getItem("Sheet1");
+            sheet.getRange("A1").formulas = [["=SEQUENCE(4)"]];
+            await context.sync();
+        });"#,
+        "replaced-longer.xlsx",
+    );
+    let longer_book = fixture.load(&longer);
+    let longer_sheet = longer_book.sheet_by_index(0).unwrap();
+    for (address, expected) in [("A1", 1.0), ("A2", 2.0), ("A3", 3.0), ("A4", 4.0)] {
+        assert_number(&longer_sheet, address, expected);
+    }
+    assert_number(&longer_sheet, "E1", 6.0);
+    assert_number(&longer_sheet, "F1", 502.0);
+    assert!(cell_fragment(&fixture.worksheet_xml(&longer), "A1").contains(r#"ref="A1:A4""#));
+
+    // Replacing the array with scalar content or clearing its anchor also
+    // retires every former child. It must not resurrect old cached values on
+    // the next import.
+    let (fixture, scalar) = replace(
+        r#"await Excel.run(async context => {
+            const sheet = context.workbook.worksheets.getItem("Sheet1");
+            sheet.getRange("A1").values = [["replacement"]];
+            await context.sync();
+        });"#,
+        "replaced-scalar.xlsx",
+    );
+    let scalar_book = fixture.load(&scalar);
+    let scalar_sheet = scalar_book.sheet_by_index(0).unwrap();
+    assert_eq!(
+        scalar_sheet.get_cell_value("A1").unwrap(),
+        CellValue::Text("replacement".into())
+    );
+    assert_empty(&scalar_sheet, "A2");
+    assert_empty(&scalar_sheet, "A3");
+    assert_number(&scalar_sheet, "E1", 501.0);
+    assert_number(&scalar_sheet, "F1", 502.0);
+
+    let (fixture, cleared) = replace(
+        r#"await Excel.run(async context => {
+            const sheet = context.workbook.worksheets.getItem("Sheet1");
+            sheet.getRange("A1").clear(Excel.ClearApplyTo.contents);
+            await context.sync();
+        });"#,
+        "replaced-clear.xlsx",
+    );
+    let cleared_book = fixture.load(&cleared);
+    let cleared_sheet = cleared_book.sheet_by_index(0).unwrap();
+    for address in ["A1", "A2", "A3"] {
+        assert_empty(&cleared_sheet, address);
+    }
+    assert_number(&cleared_sheet, "E1", 501.0);
+    assert_number(&cleared_sheet, "F1", 502.0);
+
+    // A real authored cell still blocks the new spill. Cache retirement must
+    // never hide a simultaneous external write merely because it lies in the
+    // proposed new spill range.
+    let (fixture, blocked) = replace(
+        r#"await Excel.run(async context => {
+            const sheet = context.workbook.worksheets.getItem("Sheet1");
+            sheet.getRange("A4").values = [[777]];
+            sheet.getRange("A1").formulas = [["=SEQUENCE(4)"]];
+            await context.sync();
+        });"#,
+        "replaced-blocked.xlsx",
+    );
+    let blocked_book = fixture.load(&blocked);
+    let blocked_sheet = blocked_book.sheet_by_index(0).unwrap();
+    assert_spill_error(&blocked_sheet, "A1");
+    assert_number(&blocked_sheet, "A4", 777.0);
+    // In a manual-calculation workbook an unsuccessful replacement retains
+    // dependent imported caches; only the edited array anchor reports its
+    // fresh #SPILL! result. The unrelated F1 cache must also stay intact.
+    assert_number(&blocked_sheet, "E1", 501.0);
+    assert_number(&blocked_sheet, "F1", 502.0);
+}
+
+#[test]
 fn cli_run_recalculate_grows_shrinks_and_preserves_a_genuine_blocker() {
     let fixture = Fixture::new(&resize_sheet());
     let input_xml = fixture.worksheet_xml(&fixture.input());

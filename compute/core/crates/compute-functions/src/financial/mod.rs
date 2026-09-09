@@ -21,6 +21,9 @@ mod securities;
 mod time_value;
 mod treasury;
 
+#[cfg(test)]
+mod date_contracts;
+
 use crate::FunctionRegistry;
 
 // ===========================================================================

@@ -1,13 +1,10 @@
 // Mechanical split from datetime.rs; keep behavior changes out of this refactor.
 
-use chrono::Datelike;
-
 use value_types::{CellError, CellValue};
 
-use crate::datetime::calendar::year_length_actual;
+use crate::datetime::calendar::{excel_serial_to_ymd, year_length_actual};
 use crate::datetime::date_context::canonical_date_value;
 use crate::helpers::coercion::check_error;
-use crate::helpers::date_serial::serial_to_date;
 use crate::{FunctionContext, FunctionRegistry, PureFunction};
 
 pub struct FnYearFrac;
@@ -42,8 +39,8 @@ impl FnYearFrac {
             (end_serial, start_serial)
         };
 
-        let start = match serial_to_date(s_serial) {
-            Some(d) => d,
+        let (sy, sm, sd) = match excel_serial_to_ymd(s_serial) {
+            Some(parts) => parts,
             None => {
                 return CellValue::error_with_message(
                     CellError::Num,
@@ -51,8 +48,8 @@ impl FnYearFrac {
                 );
             }
         };
-        let end = match serial_to_date(e_serial) {
-            Some(d) => d,
+        let (ey, em, ed) = match excel_serial_to_ymd(e_serial) {
+            Some(parts) => parts,
             None => {
                 return CellValue::error_with_message(
                     CellError::Num,
@@ -64,12 +61,10 @@ impl FnYearFrac {
         let result = match basis {
             0 => {
                 // US (NASD) 30/360
-                let mut sd = start.day() as i32;
-                let sm = start.month() as i32;
-                let sy = start.year();
-                let mut ed = end.day() as i32;
-                let em = end.month() as i32;
-                let ey = end.year();
+                let mut sd = sd as i32;
+                let sm = sm as i32;
+                let mut ed = ed as i32;
+                let em = em as i32;
 
                 if sd == 31 {
                     sd = 30;
@@ -83,28 +78,26 @@ impl FnYearFrac {
             }
             1 => {
                 // Actual/actual
-                let actual_days = (end - start).num_days() as f64;
-                let avg_year = year_length_actual(start, end);
+                let actual_days = e_serial.floor() - s_serial.floor();
+                let avg_year = year_length_actual(sy, ey);
                 actual_days / avg_year
             }
             2 => {
                 // Actual/360
-                let actual_days = (end - start).num_days() as f64;
+                let actual_days = e_serial.floor() - s_serial.floor();
                 actual_days / 360.0
             }
             3 => {
                 // Actual/365
-                let actual_days = (end - start).num_days() as f64;
+                let actual_days = e_serial.floor() - s_serial.floor();
                 actual_days / 365.0
             }
             4 => {
                 // European 30/360
-                let mut sd = start.day() as i32;
-                let sm = start.month() as i32;
-                let sy = start.year();
-                let mut ed = end.day() as i32;
-                let em = end.month() as i32;
-                let ey = end.year();
+                let mut sd = sd as i32;
+                let sm = sm as i32;
+                let mut ed = ed as i32;
+                let em = em as i32;
 
                 if sd == 31 {
                     sd = 30;
@@ -203,6 +196,17 @@ mod tests {
         } else {
             panic!("Expected number, got {:?}", result);
         }
+    }
+
+    #[test]
+    fn test_yearfrac_preserves_excel_serial_60() {
+        let f = FnYearFrac;
+        // Retain the existing basis-0 edge behavior; the boundary fix is
+        // preserving serial 60 as a distinct date instead of aliasing it to
+        // serial 61.
+        assert_num_close(f.call(&[num(60.0), num(61.0), num(0.0)]), 2.0 / 360.0);
+        assert_num_close(f.call(&[num(60.0), num(61.0), num(2.0)]), 1.0 / 360.0);
+        assert_num_close(f.call(&[num(60.0), num(61.0), num(3.0)]), 1.0 / 365.0);
     }
 
     #[test]

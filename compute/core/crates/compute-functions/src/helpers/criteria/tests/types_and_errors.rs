@@ -136,6 +136,21 @@ fn test_parse_criteria_error_matches_same_error() {
 }
 
 #[test]
+fn test_parse_criteria_error_ignores_diagnostic_message() {
+    // Spreadsheet error equality is determined by the error code.  A
+    // diagnostic is contextual metadata and must not change COUNTIF matching.
+    let crit = parse_criteria(&CellValue::Error(
+        CellError::Na,
+        Some("criterion context".into()),
+    ));
+    assert!(crit(&CellValue::Error(
+        CellError::Na,
+        Some("range context".into()),
+    )));
+    assert!(crit(&CellValue::Error(CellError::Na, None)));
+}
+
+#[test]
 fn test_parse_criteria_error_does_not_match_different_error() {
     // #N/A criteria should NOT match #REF! cells
     let crit = parse_criteria(&CellValue::Error(CellError::Na, None));

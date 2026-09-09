@@ -5,6 +5,7 @@
 use value_types::{CellError, CellValue};
 
 use crate::helpers::coercion::flatten_values;
+use crate::lookup::helpers::cell_value_cmp;
 use crate::{FunctionRegistry, PureFunction};
 
 // ---------------------------------------------------------------------------
@@ -312,7 +313,10 @@ impl PureFunction for FnXor {
 
 fn cell_values_equal(a: &CellValue, b: &CellValue) -> bool {
     match (a, b) {
-        (CellValue::Number(x), CellValue::Number(y)) => (x.get() - y.get()).abs() < 1e-10,
+        // Use the shared Excel numeric comparator only for numbers. The
+        // existing SWITCH rules for text and the other value variants remain
+        // deliberately unchanged.
+        (CellValue::Number(_), CellValue::Number(_)) => cell_value_cmp(a, b) == 0,
         (CellValue::Text(x), CellValue::Text(y)) => x.eq_ignore_ascii_case(y),
         (CellValue::Boolean(x), CellValue::Boolean(y)) => x == y,
         (CellValue::Null, CellValue::Null) => true,
@@ -453,6 +457,26 @@ mod tests {
         assert_eq!(
             FnSwitch.call(&[num(4.0), num(1.0), text("one"), num(2.0), text("two")],),
             err(CellError::Na)
+        );
+    }
+
+    #[test]
+    fn test_switch_uses_excel_numeric_comparison_precision() {
+        // Excel compares stored values at 15 significant digits. A difference
+        // at the 12th digit must not match, while a binary64 ghost beyond the
+        // 15th digit does match.
+        assert_eq!(
+            FnSwitch.call(&[num(1.0), num(1.00000000001), text("wrong"), text("default"),]),
+            text("default")
+        );
+        assert_eq!(
+            FnSwitch.call(&[
+                num(50.0 * 0.57),
+                num(28.5),
+                text("matched"),
+                text("default"),
+            ]),
+            text("matched")
         );
     }
 

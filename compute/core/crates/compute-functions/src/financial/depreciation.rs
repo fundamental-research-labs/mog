@@ -2,7 +2,7 @@
 
 use value_types::{CellError, CellValue};
 
-use super::date_context::canonical_date_arg;
+use super::date_context::canonical_date_arg_truncated;
 use super::helpers::{arg_num, err_val, num_or_err_msg, req_num, year_frac};
 use crate::{FunctionContext, FunctionRegistry, PureFunction};
 
@@ -389,8 +389,8 @@ impl PureFunction for FnAmorlinc {
     fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
             let cost = req_num(args, 0).map_err(err_val)?;
-            let date_purchased = canonical_date_arg(args, 1, context).map_err(err_val)?;
-            let first_period = canonical_date_arg(args, 2, context).map_err(err_val)?;
+            let date_purchased = canonical_date_arg_truncated(args, 1, context).map_err(err_val)?;
+            let first_period = canonical_date_arg_truncated(args, 2, context).map_err(err_val)?;
             let salvage = req_num(args, 3).map_err(err_val)?;
             let period = req_num(args, 4).map_err(err_val)?;
             let rate = req_num(args, 5).map_err(err_val)?;
@@ -413,10 +413,16 @@ impl PureFunction for FnAmorlinc {
                     format!("AMORLINC: period must be >= 0, got {period}"),
                 ));
             }
-            if !(0..=4).contains(&basis) {
+            if date_purchased > first_period {
                 return Err(CellValue::error_with_message(
                     CellError::Num,
-                    format!("AMORLINC: basis must be 0..4, got {basis}"),
+                    "AMORLINC: date_purchased must not follow first_period",
+                ));
+            }
+            if !matches!(basis, 0 | 1 | 3 | 4) {
+                return Err(CellValue::error_with_message(
+                    CellError::Num,
+                    format!("AMORLINC: basis must be 0, 1, 3, or 4, got {basis}"),
                 ));
             }
 
@@ -466,8 +472,8 @@ impl PureFunction for FnAmordegrc {
     fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
             let cost = req_num(args, 0).map_err(err_val)?;
-            let date_purchased = canonical_date_arg(args, 1, context).map_err(err_val)?;
-            let first_period = canonical_date_arg(args, 2, context).map_err(err_val)?;
+            let date_purchased = canonical_date_arg_truncated(args, 1, context).map_err(err_val)?;
+            let first_period = canonical_date_arg_truncated(args, 2, context).map_err(err_val)?;
             let salvage = req_num(args, 3).map_err(err_val)?;
             let period = req_num(args, 4).map_err(err_val)?;
             let rate = req_num(args, 5).map_err(err_val)?;

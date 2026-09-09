@@ -452,6 +452,25 @@ fn test_parse_dxfs_section() {
 }
 
 #[test]
+fn test_parse_dxf_font_preserves_charset() {
+    let xml = r#"<dxfs count="1"><dxf><font>
+        <name val="ＭＳ Ｐゴシック"/>
+        <charset val="128"/>
+        <color theme="1"/>
+    </font></dxf></dxfs>"#;
+
+    let result = parse_dxfs(xml.as_bytes());
+    let font = result[0]
+        .font
+        .as_ref()
+        .expect("DXF font should be parsed");
+
+    assert_eq!(font.name.as_deref(), Some("ＭＳ Ｐゴシック"));
+    assert_eq!(font.charset, Some(128));
+    assert_eq!(font.color, Some(ColorDef::Theme { id: 1, tint: None }));
+}
+
+#[test]
 fn test_parse_dxfs_with_ext_lst() {
     let xml =
         br#"<dxfs count="1"><dxf><font><b/></font><extLst><ext uri="dxf"/></extLst></dxf></dxfs>"#;

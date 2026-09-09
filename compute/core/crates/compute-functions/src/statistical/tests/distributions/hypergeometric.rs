@@ -150,6 +150,54 @@ fn test_hypgeom_dist_s_gt_sample() {
 }
 
 #[test]
+fn test_hypgeom_dist_rejects_impossible_lower_tail_and_degenerate_sizes() {
+    // Sampling four items from a population of four containing one success
+    // must include that success; sample_s=0 is outside the valid support.
+    assert_eq!(
+        FnHypGeomDist.call(&[
+            num(0.0),
+            num(4.0),
+            num(1.0),
+            num(4.0),
+            CellValue::Boolean(false),
+        ]),
+        err(CellError::Num)
+    );
+
+    // Excel rejects zero-sized samples, zero-success populations, and empty
+    // populations even when the other arguments are nonnegative.
+    for args in [
+        [
+            num(0.0),
+            num(0.0),
+            num(1.0),
+            num(1.0),
+            CellValue::Boolean(false),
+        ],
+        [
+            num(0.0),
+            num(1.0),
+            num(0.0),
+            num(1.0),
+            CellValue::Boolean(false),
+        ],
+        [
+            num(0.0),
+            num(1.0),
+            num(1.0),
+            num(0.0),
+            CellValue::Boolean(false),
+        ],
+    ] {
+        assert_eq!(
+            FnHypGeomDist.call(&args),
+            err(CellError::Num),
+            "degenerate HYPGEOM.DIST arguments must return #NUM!"
+        );
+    }
+}
+
+#[test]
 fn test_hypgeomdist_legacy_basic() {
     assert_num(
         FnHypGeomDistLegacy.call(&[num(1.0), num(4.0), num(8.0), num(20.0)]),
@@ -165,4 +213,24 @@ fn test_hypgeomdist_legacy_sample_gt_pop() {
         FnHypGeomDistLegacy.call(&[num(1.0), num(100.0), num(8.0), num(20.0)]),
         err(CellError::Num)
     );
+}
+
+#[test]
+fn test_hypgeomdist_legacy_rejects_impossible_lower_tail_and_degenerate_sizes() {
+    assert_eq!(
+        FnHypGeomDistLegacy.call(&[num(0.0), num(4.0), num(1.0), num(4.0)]),
+        err(CellError::Num)
+    );
+
+    for args in [
+        [num(0.0), num(0.0), num(1.0), num(1.0)],
+        [num(0.0), num(1.0), num(0.0), num(1.0)],
+        [num(0.0), num(1.0), num(1.0), num(0.0)],
+    ] {
+        assert_eq!(
+            FnHypGeomDistLegacy.call(&args),
+            err(CellError::Num),
+            "degenerate HYPGEOMDIST arguments must return #NUM!"
+        );
+    }
 }

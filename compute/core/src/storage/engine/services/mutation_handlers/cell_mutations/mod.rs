@@ -2,6 +2,7 @@ mod clear;
 mod cse_clear;
 mod edits;
 mod identity_registration;
+mod imported_array_caches;
 mod outcomes;
 mod position_resolution;
 mod raw_edits;

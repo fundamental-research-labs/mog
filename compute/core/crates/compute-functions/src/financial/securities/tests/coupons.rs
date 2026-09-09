@@ -63,6 +63,13 @@ fn test_coupdays_error_settlement_ge_maturity() {
 }
 
 #[test]
+fn coupon_dates_truncate_before_order_check() {
+    let d = ymd_to_serial(2020, 1, 15);
+    let r = FnCoupdays.call(&[num(d + 0.25), num(d + 0.75), num(2.0)]);
+    assert!(matches!(r, CellValue::Error(CellError::Num, _)));
+}
+
+#[test]
 fn test_coupdaybs_mid_period() {
     // settlement=2020-03-15, maturity=2025-01-15, freq=2, basis=0
     // Prev coupon: 2020-01-15, days from Jan15 to Mar15 = 2*30 = 60

@@ -2,7 +2,7 @@
 
 use value_types::{CellError, CellValue};
 
-use super::super::date_context::canonical_date_arg;
+use super::super::date_context::canonical_date_arg_truncated;
 use super::super::helpers::{
     actual_days_between, arg_num, days_in_year_by_basis, days360_between, err_val, num_or_err_msg,
     req_num, serial_to_ymd,
@@ -28,9 +28,9 @@ impl PureFunction for FnAccrint {
     }
     fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
-            let issue = canonical_date_arg(args, 0, context).map_err(err_val)?;
-            let first_interest = canonical_date_arg(args, 1, context).map_err(err_val)?;
-            let settlement = canonical_date_arg(args, 2, context).map_err(err_val)?;
+            let issue = canonical_date_arg_truncated(args, 0, context).map_err(err_val)?;
+            let first_interest = canonical_date_arg_truncated(args, 1, context).map_err(err_val)?;
+            let settlement = canonical_date_arg_truncated(args, 2, context).map_err(err_val)?;
             let rate = req_num(args, 3).map_err(err_val)?;
             let par = req_num(args, 4).map_err(err_val)?;
             let frequency = req_num(args, 5).map_err(err_val)? as i32;
@@ -119,8 +119,8 @@ impl PureFunction for FnAccrintm {
     }
     fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
-            let issue = canonical_date_arg(args, 0, context).map_err(err_val)?;
-            let settlement = canonical_date_arg(args, 1, context).map_err(err_val)?;
+            let issue = canonical_date_arg_truncated(args, 0, context).map_err(err_val)?;
+            let settlement = canonical_date_arg_truncated(args, 1, context).map_err(err_val)?;
             let rate = req_num(args, 2).map_err(err_val)?;
             let par = req_num(args, 3).map_err(err_val)?;
             let basis = arg_num(args, 4, 0.0).map_err(err_val)? as i32;

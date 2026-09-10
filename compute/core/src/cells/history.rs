@@ -13,7 +13,13 @@ impl CellStore {
         &mut self,
         sheet_id: SheetId,
         previous: &mut Option<SheetStore>,
+        previous_cells: &mut rustc_hash::FxHashMap<cell_types::CellId, super::CellEntry>,
+        previous_formulas: &mut rustc_hash::FxHashMap<
+            cell_types::CellId,
+            formula_types::IdentityFormula,
+        >,
     ) {
+        let current_payloads = self.take_sheet_payloads(sheet_id);
         let current = self.sheets.remove(&sheet_id);
         if let Some(sheet) = &current {
             self.sheet_names.remove(&normalize_sheet_key(&sheet.name));
@@ -36,6 +42,14 @@ impl CellStore {
             self.sheets.insert(sheet_id, sheet);
         }
         *previous = current;
+        let current_payloads = {
+            let restored_cells = std::mem::take(previous_cells);
+            let restored_formulas = std::mem::take(previous_formulas);
+            self.restore_sheet_payloads(restored_cells, restored_formulas);
+            current_payloads
+        };
+        *previous_cells = current_payloads.0;
+        *previous_formulas = current_payloads.1;
         self.history_rebuild_sheet(sheet_id);
     }
 
@@ -59,7 +73,7 @@ impl CellStore {
             .filter_map(|range| range.compute_extent(&rows, &cols))
             .collect();
         sheet.range_spatial_index = IntervalTree::build(&extents);
-        sheet.rebuild_column_index();
+        sheet.rebuild_column_index(&self.cells, &self.formulas);
         let columns: Vec<_> = sheet.column_lengths.keys().copied().collect();
         self.refresh_axis_ownership(sheet_id);
         self.dense_cache.invalidate_sheet(&sheet_id);

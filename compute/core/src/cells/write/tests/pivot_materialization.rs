@@ -23,8 +23,8 @@ fn clear_pivot_region_touches_only_existing_columns() {
     cell_store.clear_pivot_region(&sheet_id, 2, 3, 2, 2);
 
     let sheet = cell_store.get_sheet(&sheet_id).unwrap();
-    assert_eq!(sheet.get_column_view(3).unwrap()[2], CellValue::Null);
-    assert!(!sheet.get_column_view(4).is_some());
+    assert_eq!(cell_store.get_column_view(&sheet_id, 3).unwrap()[2], CellValue::Null);
+    assert!(!cell_store.get_column_view(&sheet_id, 4).is_some());
     assert_eq!(cell_store.col_version(&sheet_id, 3), before_existing + 1);
     assert_eq!(cell_store.col_version(&sheet_id, 4), before_missing);
 }

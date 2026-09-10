@@ -145,7 +145,7 @@ pub(crate) fn bench_range_backed_col_slice(c: &mut Criterion) {
             },
             |(cell_store, sheet_id)| {
                 let sheet = cell_store.get_sheet(&sheet_id).unwrap();
-                black_box(sheet.get_column_view(0));
+                black_box(cell_store.get_column_view(&sheet.id, 0));
             },
         );
     });
@@ -157,7 +157,7 @@ pub(crate) fn bench_range_backed_col_slice(c: &mut Criterion) {
 
         b.iter(|| {
             let sheet = cell_store.get_sheet(&sheet_id).unwrap();
-            black_box(sheet.get_column_view(0));
+            black_box(cell_store.get_column_view(&sheet.id, 0));
         });
     });
 
@@ -175,8 +175,7 @@ pub(crate) fn bench_range_backed_dense_cache(c: &mut Criterion) {
 
         b.iter(|| {
             let mut cache = DenseColumnCache::new();
-            let sheet_store = cell_store.get_sheet(&sheet_id).unwrap();
-            cache.materialize(&sheet_id, 0, sheet_store);
+            cache.materialize(&sheet_id, 0, &cell_store);
             black_box(&cache);
         });
     });

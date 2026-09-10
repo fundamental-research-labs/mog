@@ -79,12 +79,12 @@ impl NativeSheetCopy {
                 id_to_hex(new_id.as_u128()).to_string(),
             );
         }
-        let copied_cells = source
-            .cells_iter()
+        let copied_cells = cell_store
+            .iter_sheet_cells(&source.id)
             .filter_map(|(old_id, entry)| {
                 let pos = source.position_of(old_id)?;
                 let new_id = *cells.get(old_id)?;
-                let mut formula = source.formula(old_id).cloned();
+                let mut formula = cell_store.get_formula(old_id).cloned();
                 if let Some(formula) = &mut formula {
                     remap_formula(formula, source.id, sheet_id, &cells, remap_row, remap_col);
                 }

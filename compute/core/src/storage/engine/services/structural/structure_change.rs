@@ -350,14 +350,14 @@ fn hydrate_stored_formula_identities_for_structure_change(
     // identity formula is authoritative and retains references across moves.
     let mut pending = Vec::new();
     for sheet_id in cell_store.sheet_ids() {
-        let Some(sheet) = cell_store.get_sheet(sheet_id) else {
+        if cell_store.get_sheet(sheet_id).is_none() {
             continue;
-        };
-        for cell_id in sheet.cell_ids() {
-            if sheet.formula(cell_id).is_none()
-                && let Some(formula) = stores.compute.get_formula(cell_id)
+        }
+        for cell_id in cell_store.sheet_cell_ids(sheet_id) {
+            if cell_store.get_formula(&cell_id).is_none()
+                && let Some(formula) = stores.compute.get_formula(&cell_id)
             {
-                pending.push((*sheet_id, *cell_id, formula.to_owned()));
+                pending.push((*sheet_id, cell_id, formula.to_owned()));
             }
         }
     }

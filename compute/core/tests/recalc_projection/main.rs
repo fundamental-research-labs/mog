@@ -164,8 +164,8 @@ pub fn assert_col_data_number(
     let sheet_store = cell_store
         .get_sheet(sheet_id)
         .unwrap_or_else(|| panic!("{}: sheet not found", label));
-    let col_slice = sheet_store
-        .get_column_view(col)
+    let col_slice = cell_store
+        .get_column_view(sheet_id, col)
         .unwrap_or_else(|| panic!("{}: col_data for column {} not found", label, col));
     match &col_slice[row as usize] {
         CellValue::Number(n) => {
@@ -195,7 +195,7 @@ pub fn assert_col_data_null_or_zero(
     let sheet_store = cell_store
         .get_sheet(sheet_id)
         .unwrap_or_else(|| panic!("{}: sheet not found", label));
-    if let Some(col_slice) = sheet_store.get_column_view(col) {
+    if let Some(col_slice) = cell_store.get_column_view(&sheet_store.id, col) {
         // If row is beyond the col_data extent, it's implicitly Null — OK
         if (row as usize) >= col_slice.len() {
             return;

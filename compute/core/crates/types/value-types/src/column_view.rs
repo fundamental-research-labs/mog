@@ -6,12 +6,18 @@ use std::ops::{Index, Range};
 pub trait ValueGrid: std::fmt::Debug + Sync {
     /// Read one scalar at a position without allocating.
     fn value_at(&self, row: u32, col: u32) -> Option<&CellValue>;
+
+    /// Read one scalar on a specific sheet. Defaults to `value_at`.
+    fn value_at_sheet(&self, _sheet: u128, row: u32, col: u32) -> Option<&CellValue> {
+        self.value_at(row, col)
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
 enum Source<'a> {
     Slice(&'a [CellValue]),
     Grid(&'a dyn ValueGrid, u32),
+    GridSheet(&'a dyn ValueGrid, u128, u32),
     Strided {
         values: &'a [CellValue],
         cols: usize,
@@ -57,6 +63,29 @@ impl<'a> ColumnView<'a> {
         );
         Self {
             source: Source::Grid(grid, col),
+            start: 0,
+            len: rows,
+        }
+    }
+    /// Borrow one column of a workbook-scoped grid that needs a sheet identity.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the last row exceeds the grid's `u32` coordinate range.
+    #[must_use]
+    pub fn from_grid_sheet(
+        grid: &'a dyn ValueGrid,
+        sheet: u128,
+        col: u32,
+        rows: usize,
+    ) -> Self {
+        assert!(
+            rows.checked_sub(1)
+                .is_none_or(|row| u32::try_from(row).is_ok()),
+            "column extent exceeds grid coordinates"
+        );
+        Self {
+            source: Source::GridSheet(grid, sheet, col),
             start: 0,
             len: rows,
         }
@@ -126,6 +155,10 @@ impl<'a> ColumnView<'a> {
             Source::Grid(grid, col) => u32::try_from(row)
                 .ok()
                 .and_then(|row| grid.value_at(row, col))
+                .unwrap_or(&CellValue::Null),
+            Source::GridSheet(grid, sheet, col) => u32::try_from(row)
+                .ok()
+                .and_then(|row| grid.value_at_sheet(sheet, row, col))
                 .unwrap_or(&CellValue::Null),
         })
     }

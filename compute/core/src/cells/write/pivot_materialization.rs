@@ -22,6 +22,7 @@ impl CellStore {
     ) {
         let mut cols_touched = Vec::new();
 
+        let mut payload_ids = Vec::new();
         if let Some(sheet_store) = self.sheets.get_mut(sheet) {
             for c in 0..total_cols {
                 let col = anchor_col + c;
@@ -35,11 +36,8 @@ impl CellStore {
 
                 for r in 0..total_rows {
                     let pos = SheetPos::new(anchor_row + r, col);
-                    if let Some(cell_id) = sheet_store.authored_cell_id_at(pos)
-                        && let Some(entry) = sheet_store.cells.get_mut(&cell_id)
-                    {
-                        entry.value = CellValue::Null;
-                        sheet_store.formulas.remove(&cell_id);
+                    if let Some(cell_id) = sheet_store.authored_cell_id_at(pos) {
+                        payload_ids.push(cell_id);
                         touched = true;
                     }
                 }
@@ -48,6 +46,12 @@ impl CellStore {
                     cols_touched.push(col);
                 }
             }
+        }
+        for cell_id in payload_ids {
+            if let Some(entry) = self.cells.get_mut(&cell_id) {
+                entry.value = CellValue::Null;
+            }
+            self.formulas.remove(&cell_id);
         }
 
         for col in cols_touched {

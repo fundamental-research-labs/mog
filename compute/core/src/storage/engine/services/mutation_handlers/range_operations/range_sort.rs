@@ -35,9 +35,7 @@ pub(super) fn sort_range_backed_rows(
             None => Vec::new(),
         }
     };
-    if let Some(sheet) = cell_store.get_sheet_mut(sheet_id) {
-        sheet.rebuild_column_index();
-    }
+    cell_store.rebuild_sheet_column_index(sheet_id);
 
     // (f) Bump col_version for all affected columns.
     for col in &range_cols {

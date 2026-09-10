@@ -193,10 +193,10 @@ pub(in crate::storage::engine) fn mutation_named_range_update(
         }
         if stores.storage.history.is_active() {
             for sheet_id in cell_store.sheet_ids().copied() {
-                let Some(sheet) = cell_store.get_sheet(&sheet_id) else {
+                if cell_store.get_sheet(&sheet_id).is_none() {
                     continue;
-                };
-                for (cell_id, formula) in &sheet.formulas {
+                }
+                for (cell_id, formula) in cell_store.iter_sheet_formulas(&sheet_id) {
                     if rewrite_scoped_name_reference(
                         &formula.template,
                         Some(sheet_id),

@@ -35,8 +35,8 @@ impl CellState {
             id,
             owner,
             position,
-            identity_formula: source.and_then(|sheet| sheet.formula(&id)).cloned(),
-            entry: source.and_then(|sheet| sheet.cells.get(&id)).cloned(),
+            identity_formula: cell_store.formulas.get(&id).cloned(),
+            entry: cell_store.cells.get(&id).cloned(),
             formula: owner.and_then(|_| stores.compute.get_formula(&id).map(str::to_owned)),
             cse,
         }

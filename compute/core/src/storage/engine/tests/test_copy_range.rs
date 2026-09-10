@@ -643,7 +643,7 @@ fn formula_at(
 ) -> Option<String> {
     let sm = engine.cell_store().get_sheet(sheet)?;
     let cell_id = sm.cell_id_at(SheetPos::new(row, col))?;
-    let formula = sm.formula(&cell_id)?;
+    let formula = engine.cell_store().get_formula(&cell_id)?;
     Some(engine.to_a1_display(display_sheet, formula))
 }
 

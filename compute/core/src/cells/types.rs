@@ -5,7 +5,6 @@ use cell_types::{CellId, ColId, PayloadEncoding, RangeId, RowId, SheetId, SheetP
 use domain_types::CellFormat;
 use formula_types::{IdentityFormula, StructureChange};
 use rustc_hash::{FxHashMap, FxHashSet};
-use std::collections::hash_map;
 use value_types::CellValue;
 
 use super::range_view::{RangeExtent, RangeView};
@@ -151,9 +150,6 @@ pub struct SheetStore {
     /// plus comment-only ghost cells). Always >= rows/cols.
     pub identity_rows: u32,
     pub identity_cols: u32,
-    /// Identity-keyed cell store.
-    pub(crate) cells: FxHashMap<CellId, CellEntry>,
-    pub(crate) formulas: FxHashMap<CellId, IdentityFormula>,
     /// Sparse stable axis pair -> CellId index.
     pub(crate) cell_by_axes: FxHashMap<(RowId, ColId), CellId>,
     /// CellId -> stable axis pair reverse index.
@@ -237,8 +233,6 @@ impl SheetStore {
             grid_cols: cols,
             identity_rows: rows,
             identity_cols: cols,
-            cells: FxHashMap::default(),
-            formulas: FxHashMap::default(),
             cell_by_axes: FxHashMap::default(),
             axes_by_cell: FxHashMap::default(),
             column_lengths: FxHashMap::default(),
@@ -271,11 +265,10 @@ impl SheetStore {
         }
     }
 
-    /// Create a sheet store with pre-sized cell maps.
+    /// Create a sheet store with pre-sized identity maps.
     ///
-    /// Pre-allocates `cells`, `cell_by_axes`, and `axes_by_cell` HashMaps to avoid
-    /// incremental rehashing during snapshot loading. For a 2M-cell workbook
-    /// this eliminates ~20 rehash cycles per HashMap.
+    /// Pre-allocates `cell_by_axes` and `axes_by_cell` to avoid incremental
+    /// rehashing during snapshot loading. Payload maps live on `CellStore`.
     pub fn with_capacity(
         id: SheetId,
         name: String,
@@ -284,7 +277,6 @@ impl SheetStore {
         cell_capacity: usize,
     ) -> Self {
         let mut sheet = Self::new(id, name, rows, cols);
-        sheet.cells.reserve(cell_capacity);
         sheet.cell_by_axes.reserve(cell_capacity);
         sheet.axes_by_cell.reserve(cell_capacity);
         sheet
@@ -352,8 +344,7 @@ impl SheetStore {
         self.grid_cols.max(self.cols)
     }
 
-    /// Borrow existing values without creating a dense CellValue copy.
-    pub fn get_column_view(&self, col: u32) -> Option<value_types::ColumnView<'_>> {
+    pub(crate) fn strided_column_view(&self, col: u32) -> Option<value_types::ColumnView<'_>> {
         let rows = *self.column_lengths.get(&col)?;
         if !self.columns_with_overlays.contains(&col)
             && let Some(ranges) = self.range_columns.get(&col)
@@ -372,7 +363,7 @@ impl SheetStore {
                 ));
             }
         }
-        Some(value_types::ColumnView::from_grid(self, col, rows))
+        None
     }
 
     pub(crate) fn note_column_position(&mut self, pos: SheetPos) {
@@ -400,12 +391,17 @@ impl SheetStore {
     }
 
     /// Read the authored value, or its range/generated source, by position.
-    pub fn value_at(&self, pos: SheetPos) -> Option<&CellValue> {
+    pub fn value_at<'a>(
+        &'a self,
+        pos: SheetPos,
+        cells: &'a FxHashMap<CellId, CellEntry>,
+        formulas: &'a FxHashMap<CellId, IdentityFormula>,
+    ) -> Option<&'a CellValue> {
         let cell = self.authored_cell_id_at(pos);
-        let entry = cell.and_then(|id| self.cells.get(&id));
+        let entry = cell.and_then(|id| cells.get(&id));
         if let Some(entry) = entry {
             if !entry.value.is_null()
-                || cell.is_some_and(|id| self.formulas.contains_key(&id) || id.is_virtual())
+                || cell.is_some_and(|id| formulas.contains_key(&id) || id.is_virtual())
             {
                 return match &entry.value {
                     CellValue::Array(array) => array.get(0, 0),
@@ -443,7 +439,7 @@ impl SheetStore {
             // authored value, so it must not hide the package cache. A real
             // entry (including a formula) and virtual range identities remain
             // authoritative.
-            && cell.is_none_or(|id| self.is_ghost(&id))
+            && cell.is_none_or(|id| self.is_ghost(&id, cells, formulas))
             && cell.is_none_or(|id| !id.is_virtual())
             && let Some(cache) = self.imported_array_caches.get(cache_index)
             && cache.values_current
@@ -461,6 +457,8 @@ impl SheetStore {
     pub(crate) fn install_imported_array_cache(
         &mut self,
         caches: impl IntoIterator<Item = ImportedArrayCache>,
+        cells: &FxHashMap<CellId, CellEntry>,
+        formulas: &FxHashMap<CellId, IdentityFormula>,
     ) {
         self.imported_array_caches.clear();
         self.imported_array_cache_positions.clear();
@@ -472,13 +470,17 @@ impl SheetStore {
             }
         }
         self.rebuild_imported_array_cache_index();
-        self.rebuild_column_index();
+        self.rebuild_column_index(cells, formulas);
     }
 
     /// Rebind imported cache positions after native identities have moved.
     /// Missing source identities retire their cache; missing child identities
     /// are pruned so deleted spill members cannot resurrect stale values.
-    pub(crate) fn rebind_imported_array_caches(&mut self) {
+    pub(crate) fn rebind_imported_array_caches(
+        &mut self,
+        cells: &FxHashMap<CellId, CellEntry>,
+        formulas: &FxHashMap<CellId, IdentityFormula>,
+    ) {
         if self.imported_array_caches.is_empty() {
             return;
         }
@@ -493,7 +495,7 @@ impl SheetStore {
         }
         self.imported_array_caches = rebound;
         self.rebuild_imported_array_cache_index();
-        self.rebuild_column_index();
+        self.rebuild_column_index(cells, formulas);
     }
 
     /// Apply the positional part of a structural change before native cell
@@ -502,6 +504,8 @@ impl SheetStore {
     pub(crate) fn apply_structure_change_to_imported_array_caches(
         &mut self,
         change: &StructureChange,
+        cells: &FxHashMap<CellId, CellEntry>,
+        formulas: &FxHashMap<CellId, IdentityFormula>,
     ) {
         if self.imported_array_caches.is_empty() {
             return;
@@ -512,7 +516,7 @@ impl SheetStore {
             .filter_map(|mut cache| cache.remap_for_structure_change(change).then_some(cache))
             .collect();
         self.rebuild_imported_array_cache_index();
-        self.rebuild_column_index();
+        self.rebuild_column_index(cells, formulas);
     }
 
     fn rebuild_imported_array_cache_index(&mut self) {
@@ -530,14 +534,18 @@ impl SheetStore {
     }
 
     /// Drop imported package caches and restore column indexes to live values.
-    pub(crate) fn clear_imported_array_cache(&mut self) {
+    pub(crate) fn clear_imported_array_cache(
+        &mut self,
+        cells: &FxHashMap<CellId, CellEntry>,
+        formulas: &FxHashMap<CellId, IdentityFormula>,
+    ) {
         if self.imported_array_caches.is_empty() {
             return;
         }
         self.imported_array_caches.clear();
         self.imported_array_cache_positions.clear();
         self.imported_array_cache_sources.clear();
-        self.rebuild_column_index();
+        self.rebuild_column_index(cells, formulas);
     }
 
     pub(crate) fn imported_array_caches(&self) -> &[ImportedArrayCache] {
@@ -589,6 +597,17 @@ impl SheetStore {
                 cache.invalidate_values();
             }
         }
+    }
+
+    pub(crate) fn has_authored_overlay(
+        &self,
+        id: &CellId,
+        cells: &FxHashMap<CellId, CellEntry>,
+        formulas: &FxHashMap<CellId, IdentityFormula>,
+    ) -> bool {
+        cells.get(id).is_some_and(|entry| {
+            !entry.value.is_null() || formulas.contains_key(id) || id.is_virtual()
+        })
     }
 
     // -----------------------------------------------------------------------
@@ -690,30 +709,16 @@ impl SheetStore {
         Some(CellId::virtual_at(self.id, row_id, col_id))
     }
 
-    /// Get a cell entry by CellId.
-    pub fn get_cell(&self, cell_id: &CellId) -> Option<&CellEntry> {
-        self.cells.get(cell_id)
-    }
-
-    pub fn formula(&self, cell_id: &CellId) -> Option<&IdentityFormula> {
-        self.formulas.get(cell_id)
-    }
-
-    pub fn is_ghost(&self, cell_id: &CellId) -> bool {
-        self.cells
+    pub fn is_ghost(
+        &self,
+        cell_id: &CellId,
+        cells: &FxHashMap<CellId, CellEntry>,
+        formulas: &FxHashMap<CellId, IdentityFormula>,
+    ) -> bool {
+        cells
             .get(cell_id)
             .is_none_or(|entry| entry.value.is_null())
-            && !self.formulas.contains_key(cell_id)
-    }
-
-    /// Iterate over all CellIds in this sheet.
-    pub fn cell_ids(&self) -> hash_map::Keys<'_, CellId, CellEntry> {
-        self.cells.keys()
-    }
-
-    /// Iterate over all (CellId, CellEntry) pairs.
-    pub fn cells_iter(&self) -> hash_map::Iter<'_, CellId, CellEntry> {
-        self.cells.iter()
+            && !formulas.contains_key(cell_id)
     }
 
     pub fn position_for_diagnostics(&self, cell_id: &CellId) -> Option<SheetPos> {
@@ -726,11 +731,15 @@ impl SheetStore {
     }
 
     /// Bounds of visible non-null content, including generated output.
-    pub(crate) fn dense_content_bounds(&self) -> Option<(u32, u32, u32, u32)> {
+    pub(crate) fn dense_content_bounds(
+        &self,
+        cells: &FxHashMap<CellId, CellEntry>,
+        formulas: &FxHashMap<CellId, IdentityFormula>,
+    ) -> Option<(u32, u32, u32, u32)> {
         let mut bounds = None;
         let mut include = |row: u32, col: u32| {
             if self
-                .value_at(SheetPos::new(row, col))
+                .value_at(SheetPos::new(row, col), cells, formulas)
                 .is_none_or(CellValue::is_null)
             {
                 return;
@@ -769,9 +778,12 @@ impl SheetStore {
         bounds
     }
 
-    /// Number of cells in this sheet.
-    pub fn cell_count(&self) -> usize {
-        self.cells.len()
+    /// Number of payload-bearing cells whose identity is registered on this sheet.
+    pub fn cell_count(&self, cells: &FxHashMap<CellId, CellEntry>) -> usize {
+        self.axes_by_cell
+            .keys()
+            .filter(|id| cells.contains_key(id))
+            .count()
     }
 
     /// Resolve a [`RowId`] to its 0-based row index within this sheet.
@@ -808,8 +820,13 @@ impl SheetStore {
         self.range_views.is_empty()
     }
 
-    pub fn iter_anchored_cells(&self) -> impl Iterator<Item = (&CellId, &CellEntry)> {
-        self.cells.iter()
+    pub fn iter_anchored_cells<'a>(
+        &'a self,
+        cells: &'a FxHashMap<CellId, CellEntry>,
+    ) -> impl Iterator<Item = (&'a CellId, &'a CellEntry)> {
+        self.axes_by_cell
+            .keys()
+            .filter_map(move |id| cells.get_key_value(id))
     }
 
     pub fn iter_ranges(&self) -> impl Iterator<Item = (&RangeId, &RangeView)> {
@@ -848,7 +865,11 @@ impl SheetStore {
     // Range and column position indexes
     // -----------------------------------------------------------------------
 
-    pub fn rebuild_column_index(&mut self) {
+    pub fn rebuild_column_index(
+        &mut self,
+        cells: &FxHashMap<CellId, CellEntry>,
+        formulas: &FxHashMap<CellId, IdentityFormula>,
+    ) {
         self.column_lengths.clear();
         self.columns_with_overlays.clear();
         self.range_row_starts.clear();
@@ -861,9 +882,7 @@ impl SheetStore {
                 continue;
             };
             let pos = SheetPos::new(row, col);
-            if self.cells.get(&id).is_some_and(|entry| {
-                !entry.value.is_null() || self.formulas.contains_key(&id) || id.is_virtual()
-            }) {
+            if self.has_authored_overlay(&id, cells, formulas) {
                 self.columns_with_overlays.insert(pos.col());
                 self.column_lengths
                     .entry(pos.col())
@@ -933,14 +952,8 @@ impl SheetStore {
         }
         let authored_positions: Vec<_> = self
             .cells()
-            .filter_map(|(id, row, col)| {
-                self.cells
-                    .get(&id)
-                    .filter(|entry| {
-                        !entry.value.is_null() || self.formulas.contains_key(&id) || id.is_virtual()
-                    })
-                    .map(|_| SheetPos::new(row, col))
-            })
+            .filter(|(id, _, _)| self.has_authored_overlay(id, cells, formulas))
+            .map(|(_, row, col)| SheetPos::new(row, col))
             .collect();
         for pos in authored_positions {
             self.consume_range_value(pos);
@@ -1038,8 +1051,4 @@ pub(crate) struct ProjectionColumn {
     pub array: std::sync::Arc<value_types::CellArray>,
 }
 
-impl value_types::ValueGrid for SheetStore {
-    fn value_at(&self, row: u32, col: u32) -> Option<&CellValue> {
-        self.value_at(SheetPos::new(row, col))
-    }
-}
+

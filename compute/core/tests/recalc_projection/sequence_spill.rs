@@ -242,7 +242,7 @@ fn test_spill_shrinkage_updates_sum() {
     assert_store_number(&cell_store, &a1, 1.0, "A1 after shrink");
     // Verify old projected positions are cleared in col_data
     let sheet_store = &cell_store.get_sheet(&sid).expect("sheet");
-    if let Some(col_slice) = sheet_store.get_column_view(0) {
+    if let Some(col_slice) = cell_store.get_column_view(&sheet_store.id, 0) {
         for row in 5..10u32 {
             if (row as usize) < col_slice.len() {
                 assert!(

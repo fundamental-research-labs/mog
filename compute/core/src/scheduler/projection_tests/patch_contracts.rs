@@ -52,7 +52,7 @@ fn test_clear_anchor_surfaces_cleared_spill_targets_in_recalc() {
 
     // Verify col_data was cleared (engine-level invariant — already known to work).
     let sheet_store = cell_store.get_sheet(&sheet_id).unwrap();
-    let col_slice = sheet_store.get_column_view(0).expect("col_data");
+    let col_slice = cell_store.get_column_view(&sheet_store.id, 0).expect("col_data");
     for r in 1..4u32 {
         assert_eq!(
             col_slice[r as usize],

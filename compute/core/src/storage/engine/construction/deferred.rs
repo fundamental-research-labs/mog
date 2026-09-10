@@ -434,8 +434,8 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
     let mut cell_store = engine.cell_store.clone();
     let mut formula_cells = Vec::new();
     if let Some(&active) = sheet_ids.get(data.loaded_sheet_index) {
-        if let Some(sheet) = cell_store.get_sheet(&active) {
-            formula_cells.extend(sheet.cells_iter().filter_map(|(&id, _)| {
+        if cell_store.get_sheet(&active).is_some() {
+            formula_cells.extend(cell_store.iter_sheet_cells(&active).filter_map(|(&id, _)| {
                 engine
                     .stores
                     .compute

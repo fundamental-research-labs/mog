@@ -55,7 +55,7 @@ fn assert_mixed_counta_formula(engine: &mut ComputeEngine, sheet_id: &SheetId, r
     let col_len = engine
         .cell_store()
         .get_sheet(sheet_id)
-        .and_then(|sheet| sheet.get_column_view(0))
+        .and_then(|sheet| engine.cell_store().get_column_view(&sheet.id, 0))
         .map(|col| col.len())
         .unwrap_or(0);
     assert_eq!(
@@ -237,8 +237,9 @@ fn deferred_xlsx_import_materializes_range_data_on_non_critical_sheet() {
         range_count > 0,
         "RangeBacked date column should be imported as RangeData",
     );
-    let q_col = sheet
-        .get_column_view(16)
+    let q_col = engine
+        .cell_store()
+        .get_column_view(&sheet.id, 16)
         .expect("RangeBacked!Q should be materialized into dense col_data");
     assert_eq!(q_col.get(3821), Some(&CellValue::number(38353.0)));
 }

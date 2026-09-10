@@ -15,7 +15,6 @@
 use rustc_hash::FxHashMap;
 use std::sync::OnceLock;
 
-use super::SheetStore;
 use cell_types::SheetId;
 use value_types::CellValue;
 
@@ -82,7 +81,7 @@ impl DenseColumnCache {
         col: u32,
         start_row: u32,
         end_row: u32,
-        source: &SheetStore,
+        source: &crate::cells::CellStore,
     ) -> Option<&DenseColumn> {
         if cfg!(feature = "dd-precision")
             || end_row < start_row
@@ -92,7 +91,7 @@ impl DenseColumnCache {
         }
         let slot = self.columns.get(&(sheet, col))?;
         let cached = slot.get_or_init(|| {
-            let view = source.get_column_view(col)?;
+            let view = source.get_column_view(&sheet, col)?;
             if view.len() < DENSE_THRESHOLD {
                 return None;
             }
@@ -155,21 +154,26 @@ impl DenseColumnCache {
         &mut self,
         sheet: &SheetId,
         col: u32,
-        sheet_store: &SheetStore,
+        cell_store: &crate::cells::CellStore,
     ) -> &DenseColumn {
-        let rows = sheet_store.rows;
+        let rows = cell_store
+            .get_sheet(sheet)
+            .map(|s| s.rows)
+            .unwrap_or(0);
         let mut values = vec![f64::NAN; rows as usize];
         let mut numeric_count = 0usize;
         let mut errors: Vec<(u32, value_types::CellError)> = Vec::new();
         let num_words = (rows as usize).div_ceil(64);
         let mut mask = DenseBoolMask::new(vec![0u64; num_words], 0, rows);
 
-        let column = sheet_store.get_column_view(col);
+        let column = cell_store.get_column_view(sheet, col);
         for row in 0..rows {
             match column
                 .as_ref()
                 .and_then(|column| column.get(row as usize))
-                .or_else(|| sheet_store.value_at(cell_types::SheetPos::new(row, col)))
+                .or_else(|| {
+                    cell_store.get_cell_value_at(sheet, cell_types::SheetPos::new(row, col))
+                })
             {
                 Some(CellValue::Number(n)) => {
                     values[row as usize] = n.get();
@@ -260,7 +264,7 @@ impl DenseColumnCache {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cells::CellEntry;
+    use crate::cells::{CellEntry, SheetStore};
     use cell_types::{CellId, SheetId, SheetPos};
     use value_types::{CellError, FiniteF64};
 
@@ -276,22 +280,22 @@ mod tests {
         CellId::from_raw(n)
     }
 
-    /// Build a SheetStore with `num_rows` rows and `num_cols` cols.
-    /// No cells are inserted -- caller populates them.
-    fn make_empty_sheet(sheet_id: SheetId, num_rows: u32, num_cols: u32) -> SheetStore {
-        SheetStore::new(sheet_id, "TestSheet".to_string(), num_rows, num_cols)
+    fn make_store(sheet_id: SheetId, num_rows: u32, num_cols: u32) -> crate::cells::CellStore {
+        let mut cell_store = crate::cells::CellStore::new();
+        let sheet_store = SheetStore::new(sheet_id, "TestSheet".to_string(), num_rows, num_cols);
+        cell_store.add_sheet_store(sheet_id, "TestSheet".to_string(), sheet_store);
+        cell_store
     }
 
-    /// Insert a cell into a SheetStore at (row, col) with a CellValue.
-    fn insert_cell(sheet: &mut SheetStore, row: u32, col: u32, value: CellValue) {
+    fn insert_cell(
+        cell_store: &mut crate::cells::CellStore,
+        sheet_id: &SheetId,
+        row: u32,
+        col: u32,
+        value: CellValue,
+    ) {
         let cell_id = make_cell_id((row as u128) * 1000 + (col as u128));
-        let entry = CellEntry { value };
-        sheet.cells.insert(cell_id, entry);
-        sheet.register_cell(
-            cell_id,
-            (SheetPos::new(row, col)).row(),
-            (SheetPos::new(row, col)).col(),
-        );
+        cell_store.insert_cell(sheet_id, cell_id, SheetPos::new(row, col), CellEntry { value });
     }
 
     // -----------------------------------------------------------------------
@@ -301,10 +305,10 @@ mod tests {
     #[test]
     fn test_materialize_empty_column() {
         let sheet_id = make_sheet_id(1);
-        let sheet = make_empty_sheet(sheet_id, 10, 5);
+        let store = make_store(sheet_id, 10, 5);
         let mut cache = DenseColumnCache::new();
 
-        let dense = cache.materialize(&sheet_id, 0, &sheet);
+        let dense = cache.materialize(&sheet_id, 0, &store);
         assert_eq!(dense.values().len(), 10);
         assert_eq!(dense.numeric_count(), 0);
         assert_eq!(dense.start_row(), 0);
@@ -321,15 +325,15 @@ mod tests {
     #[test]
     fn test_materialize_numeric_column() {
         let sheet_id = make_sheet_id(1);
-        let mut sheet = make_empty_sheet(sheet_id, 10, 5);
+        let mut store = make_store(sheet_id, 10, 5);
 
         // Insert numbers at rows 0, 3, 7
-        insert_cell(&mut sheet, 0, 0, CellValue::Number(FiniteF64::must(10.0)));
-        insert_cell(&mut sheet, 3, 0, CellValue::Number(FiniteF64::must(20.0)));
-        insert_cell(&mut sheet, 7, 0, CellValue::Number(FiniteF64::must(30.0)));
+        insert_cell(&mut store, &sheet_id, 0, 0, CellValue::Number(FiniteF64::must(10.0)));
+        insert_cell(&mut store, &sheet_id, 3, 0, CellValue::Number(FiniteF64::must(20.0)));
+        insert_cell(&mut store, &sheet_id, 7, 0, CellValue::Number(FiniteF64::must(30.0)));
 
         let mut cache = DenseColumnCache::new();
-        let dense = cache.materialize(&sheet_id, 0, &sheet);
+        let dense = cache.materialize(&sheet_id, 0, &store);
 
         assert_eq!(dense.values().len(), 10);
         assert_eq!(dense.numeric_count(), 3);
@@ -347,17 +351,17 @@ mod tests {
     #[test]
     fn test_materialize_mixed_types() {
         let sheet_id = make_sheet_id(1);
-        let mut sheet = make_empty_sheet(sheet_id, 10, 5);
+        let mut store = make_store(sheet_id, 10, 5);
 
-        insert_cell(&mut sheet, 0, 0, CellValue::Number(FiniteF64::must(42.0)));
-        insert_cell(&mut sheet, 1, 0, CellValue::Text("hello".into()));
-        insert_cell(&mut sheet, 2, 0, CellValue::Boolean(true));
-        insert_cell(&mut sheet, 3, 0, CellValue::Boolean(false));
-        insert_cell(&mut sheet, 4, 0, CellValue::Null);
-        insert_cell(&mut sheet, 5, 0, CellValue::Error(CellError::Value, None));
+        insert_cell(&mut store, &sheet_id, 0, 0, CellValue::Number(FiniteF64::must(42.0)));
+        insert_cell(&mut store, &sheet_id, 1, 0, CellValue::Text("hello".into()));
+        insert_cell(&mut store, &sheet_id, 2, 0, CellValue::Boolean(true));
+        insert_cell(&mut store, &sheet_id, 3, 0, CellValue::Boolean(false));
+        insert_cell(&mut store, &sheet_id, 4, 0, CellValue::Null);
+        insert_cell(&mut store, &sheet_id, 5, 0, CellValue::Error(CellError::Value, None));
 
         let mut cache = DenseColumnCache::new();
-        let dense = cache.materialize(&sheet_id, 0, &sheet);
+        let dense = cache.materialize(&sheet_id, 0, &store);
 
         // Numbers: 42.0 + booleans (true=1, false=0) = 3 numeric
         assert_eq!(dense.numeric_count(), 3);
@@ -458,11 +462,11 @@ mod tests {
     #[test]
     fn test_invalidate_column() {
         let sheet_id = make_sheet_id(1);
-        let mut sheet = make_empty_sheet(sheet_id, 10, 5);
-        insert_cell(&mut sheet, 0, 0, CellValue::Number(FiniteF64::must(42.0)));
+        let mut store = make_store(sheet_id, 10, 5);
+        insert_cell(&mut store, &sheet_id, 0, 0, CellValue::Number(FiniteF64::must(42.0)));
 
         let mut cache = DenseColumnCache::new();
-        cache.materialize(&sheet_id, 0, &sheet);
+        cache.materialize(&sheet_id, 0, &store);
         assert!(cache.get(&sheet_id, 0).is_some());
 
         cache.invalidate(&sheet_id, 0);
@@ -477,13 +481,13 @@ mod tests {
     fn test_invalidate_sheet() {
         let sheet_id1 = make_sheet_id(1);
         let sheet_id2 = make_sheet_id(2);
-        let sheet1 = make_empty_sheet(sheet_id1, 10, 5);
-        let sheet2 = make_empty_sheet(sheet_id2, 10, 5);
+        let store1 = make_store(sheet_id1, 10, 5);
+        let store2 = make_store(sheet_id2, 10, 5);
 
         let mut cache = DenseColumnCache::new();
-        cache.materialize(&sheet_id1, 0, &sheet1);
-        cache.materialize(&sheet_id1, 1, &sheet1);
-        cache.materialize(&sheet_id2, 0, &sheet2);
+        cache.materialize(&sheet_id1, 0, &store1);
+        cache.materialize(&sheet_id1, 1, &store1);
+        cache.materialize(&sheet_id2, 0, &store2);
 
         assert_eq!(cache.len(), 3);
 
@@ -503,12 +507,12 @@ mod tests {
     fn test_invalidate_all() {
         let sheet_id1 = make_sheet_id(1);
         let sheet_id2 = make_sheet_id(2);
-        let sheet1 = make_empty_sheet(sheet_id1, 10, 5);
-        let sheet2 = make_empty_sheet(sheet_id2, 10, 5);
+        let store1 = make_store(sheet_id1, 10, 5);
+        let store2 = make_store(sheet_id2, 10, 5);
 
         let mut cache = DenseColumnCache::new();
-        cache.materialize(&sheet_id1, 0, &sheet1);
-        cache.materialize(&sheet_id2, 0, &sheet2);
+        cache.materialize(&sheet_id1, 0, &store1);
+        cache.materialize(&sheet_id2, 0, &store2);
         assert_eq!(cache.len(), 2);
 
         cache.invalidate_all();
@@ -523,11 +527,11 @@ mod tests {
     #[test]
     fn test_materialize_after_invalidate() {
         let sheet_id = make_sheet_id(1);
-        let mut sheet = make_empty_sheet(sheet_id, 10, 5);
-        insert_cell(&mut sheet, 0, 0, CellValue::Number(FiniteF64::must(10.0)));
+        let mut store = make_store(sheet_id, 10, 5);
+        insert_cell(&mut store, &sheet_id, 0, 0, CellValue::Number(FiniteF64::must(10.0)));
 
         let mut cache = DenseColumnCache::new();
-        let dense = cache.materialize(&sheet_id, 0, &sheet);
+        let dense = cache.materialize(&sheet_id, 0, &store);
         assert_eq!(dense.values()[0], 10.0);
 
         // Invalidate
@@ -535,10 +539,10 @@ mod tests {
         assert!(cache.get(&sheet_id, 0).is_none());
 
         // Mutate the sheet (simulate a cell write)
-        insert_cell(&mut sheet, 0, 0, CellValue::Number(FiniteF64::must(99.0)));
+        insert_cell(&mut store, &sheet_id, 0, 0, CellValue::Number(FiniteF64::must(99.0)));
 
         // Re-materialize
-        let dense = cache.materialize(&sheet_id, 0, &sheet);
+        let dense = cache.materialize(&sheet_id, 0, &store);
         assert_eq!(dense.values()[0], 99.0);
         assert_eq!(dense.numeric_count(), 1);
     }
@@ -551,7 +555,7 @@ mod tests {
     fn test_large_column_sum() {
         let sheet_id = make_sheet_id(1);
         let num_rows = 10_000u32;
-        let mut sheet = make_empty_sheet(sheet_id, num_rows, 1);
+        let mut store = make_store(sheet_id, num_rows, 1);
 
         // Insert numbers 1..=10000 into column 0
         for row in 0..num_rows {
@@ -559,16 +563,11 @@ mod tests {
             let entry = CellEntry {
                 value: CellValue::Number(FiniteF64::must((row + 1) as f64)),
             };
-            sheet.cells.insert(cell_id, entry);
-            sheet.register_cell(
-                cell_id,
-                (SheetPos::new(row, 0)).row(),
-                (SheetPos::new(row, 0)).col(),
-            );
+            store.insert_cell(&sheet_id, cell_id, SheetPos::new(row, 0), entry);
         }
 
         let mut cache = DenseColumnCache::new();
-        let dense = cache.materialize(&sheet_id, 0, &sheet);
+        let dense = cache.materialize(&sheet_id, 0, &store);
 
         assert_eq!(dense.numeric_count(), 10_000);
         // Sum of 1..=10000 = 10000 * 10001 / 2 = 50_005_000
@@ -593,15 +592,15 @@ mod tests {
     #[test]
     fn test_boolean_coercion() {
         let sheet_id = make_sheet_id(1);
-        let mut sheet = make_empty_sheet(sheet_id, 4, 1);
+        let mut store = make_store(sheet_id, 4, 1);
 
-        insert_cell(&mut sheet, 0, 0, CellValue::Boolean(true));
-        insert_cell(&mut sheet, 1, 0, CellValue::Boolean(false));
-        insert_cell(&mut sheet, 2, 0, CellValue::Boolean(true));
-        insert_cell(&mut sheet, 3, 0, CellValue::Boolean(true));
+        insert_cell(&mut store, &sheet_id, 0, 0, CellValue::Boolean(true));
+        insert_cell(&mut store, &sheet_id, 1, 0, CellValue::Boolean(false));
+        insert_cell(&mut store, &sheet_id, 2, 0, CellValue::Boolean(true));
+        insert_cell(&mut store, &sheet_id, 3, 0, CellValue::Boolean(true));
 
         let mut cache = DenseColumnCache::new();
-        let dense = cache.materialize(&sheet_id, 0, &sheet);
+        let dense = cache.materialize(&sheet_id, 0, &store);
 
         assert_eq!(dense.numeric_count(), 4);
         assert_eq!(dense.values()[0], 1.0); // TRUE
@@ -641,23 +640,23 @@ mod tests {
     #[test]
     fn test_multiple_columns_same_sheet() {
         let sheet_id = make_sheet_id(1);
-        let mut sheet = make_empty_sheet(sheet_id, 5, 3);
+        let mut store = make_store(sheet_id, 5, 3);
 
         // Column 0: numbers
-        insert_cell(&mut sheet, 0, 0, CellValue::Number(FiniteF64::must(10.0)));
-        insert_cell(&mut sheet, 1, 0, CellValue::Number(FiniteF64::must(20.0)));
+        insert_cell(&mut store, &sheet_id, 0, 0, CellValue::Number(FiniteF64::must(10.0)));
+        insert_cell(&mut store, &sheet_id, 1, 0, CellValue::Number(FiniteF64::must(20.0)));
 
         // Column 1: mixed
-        insert_cell(&mut sheet, 0, 1, CellValue::Number(FiniteF64::must(100.0)));
-        insert_cell(&mut sheet, 1, 1, CellValue::Text("x".into()));
+        insert_cell(&mut store, &sheet_id, 0, 1, CellValue::Number(FiniteF64::must(100.0)));
+        insert_cell(&mut store, &sheet_id, 1, 1, CellValue::Text("x".into()));
 
         // Column 2: booleans
-        insert_cell(&mut sheet, 0, 2, CellValue::Boolean(true));
+        insert_cell(&mut store, &sheet_id, 0, 2, CellValue::Boolean(true));
 
         let mut cache = DenseColumnCache::new();
-        cache.materialize(&sheet_id, 0, &sheet);
-        cache.materialize(&sheet_id, 1, &sheet);
-        cache.materialize(&sheet_id, 2, &sheet);
+        cache.materialize(&sheet_id, 0, &store);
+        cache.materialize(&sheet_id, 1, &store);
+        cache.materialize(&sheet_id, 2, &store);
 
         assert_eq!(cache.len(), 3);
 
@@ -795,16 +794,16 @@ mod tests {
     #[test]
     fn test_materialize_with_mask() {
         let sheet_id = make_sheet_id(1);
-        let mut sheet = make_empty_sheet(sheet_id, 10, 1);
+        let mut store = make_store(sheet_id, 10, 1);
 
-        insert_cell(&mut sheet, 0, 0, CellValue::Number(FiniteF64::must(42.0)));
-        insert_cell(&mut sheet, 1, 0, CellValue::Text("hello".into()));
-        insert_cell(&mut sheet, 2, 0, CellValue::Boolean(true));
-        insert_cell(&mut sheet, 3, 0, CellValue::Boolean(false));
-        insert_cell(&mut sheet, 4, 0, CellValue::Number(FiniteF64::must(7.0)));
+        insert_cell(&mut store, &sheet_id, 0, 0, CellValue::Number(FiniteF64::must(42.0)));
+        insert_cell(&mut store, &sheet_id, 1, 0, CellValue::Text("hello".into()));
+        insert_cell(&mut store, &sheet_id, 2, 0, CellValue::Boolean(true));
+        insert_cell(&mut store, &sheet_id, 3, 0, CellValue::Boolean(false));
+        insert_cell(&mut store, &sheet_id, 4, 0, CellValue::Number(FiniteF64::must(7.0)));
 
         let mut cache = DenseColumnCache::new();
-        cache.materialize(&sheet_id, 0, &sheet);
+        cache.materialize(&sheet_id, 0, &store);
 
         // Check the bool mask was produced
         let mask = cache.get_bool_mask(&sheet_id, 0).unwrap();
@@ -835,11 +834,11 @@ mod tests {
     #[test]
     fn test_invalidate_clears_bool_mask() {
         let sheet_id = make_sheet_id(1);
-        let mut sheet = make_empty_sheet(sheet_id, 5, 1);
-        insert_cell(&mut sheet, 0, 0, CellValue::Boolean(true));
+        let mut store = make_store(sheet_id, 5, 1);
+        insert_cell(&mut store, &sheet_id, 0, 0, CellValue::Boolean(true));
 
         let mut cache = DenseColumnCache::new();
-        cache.materialize(&sheet_id, 0, &sheet);
+        cache.materialize(&sheet_id, 0, &store);
         assert!(cache.get_bool_mask(&sheet_id, 0).is_some());
 
         cache.invalidate(&sheet_id, 0);
@@ -849,11 +848,11 @@ mod tests {
     #[test]
     fn test_invalidate_sheet_clears_bool_masks() {
         let sheet_id = make_sheet_id(1);
-        let sheet = make_empty_sheet(sheet_id, 5, 2);
+        let store = make_store(sheet_id, 5, 2);
 
         let mut cache = DenseColumnCache::new();
-        cache.materialize(&sheet_id, 0, &sheet);
-        cache.materialize(&sheet_id, 1, &sheet);
+        cache.materialize(&sheet_id, 0, &store);
+        cache.materialize(&sheet_id, 1, &store);
         assert!(cache.get_bool_mask(&sheet_id, 0).is_some());
         assert!(cache.get_bool_mask(&sheet_id, 1).is_some());
 
@@ -865,10 +864,10 @@ mod tests {
     #[test]
     fn test_invalidate_all_clears_bool_masks() {
         let sheet_id = make_sheet_id(1);
-        let sheet = make_empty_sheet(sheet_id, 5, 1);
+        let store = make_store(sheet_id, 5, 1);
 
         let mut cache = DenseColumnCache::new();
-        cache.materialize(&sheet_id, 0, &sheet);
+        cache.materialize(&sheet_id, 0, &store);
         assert!(cache.get_bool_mask(&sheet_id, 0).is_some());
 
         cache.invalidate_all();

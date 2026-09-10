@@ -71,7 +71,7 @@ fn duplicate_keys_respect_case_and_selected_columns() {
             expected
         );
     }
-    assert_eq!(cell_store.get_sheet(&sheet).unwrap().cell_count(), 8);
+    assert_eq!(cell_store.iter_sheet_cells(&sheet).count(), 8);
 }
 
 #[test]

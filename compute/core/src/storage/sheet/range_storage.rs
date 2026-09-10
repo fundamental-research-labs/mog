@@ -4,10 +4,17 @@ use cell_types::{CellId, PayloadEncoding, SheetPos};
 
 use crate::cells::range_view::RangeView;
 use crate::cells::{CellEntry, SheetStore};
+use formula_types::IdentityFormula;
+use rustc_hash::FxHashMap;
 
 /// Move active range values into authored storage before removing the range.
 /// Existing authored entries take priority; blank payload slots remain absent.
-pub fn fold_range_to_cells(range: &RangeView, sheet: &mut SheetStore) -> Vec<CellId> {
+pub fn fold_range_to_cells(
+    range: &RangeView,
+    sheet: &mut SheetStore,
+    cells: &mut FxHashMap<CellId, CellEntry>,
+    formulas: &FxHashMap<CellId, IdentityFormula>,
+) -> Vec<CellId> {
     if range.encoding == PayloadEncoding::None {
         return Vec::new();
     }
@@ -22,7 +29,9 @@ pub fn fold_range_to_cells(range: &RangeView, sheet: &mut SheetStore) -> Vec<Cel
         };
         let pos = SheetPos::new(row, col);
         let id = if let Some(id) = sheet.authored_cell_id_at(pos) {
-            if !sheet.is_ghost(&id) || (id.is_virtual() && sheet.get_cell(&id).is_some()) {
+            if !sheet.is_ghost(&id, cells, formulas)
+                || (id.is_virtual() && cells.contains_key(&id))
+            {
                 return;
             }
             id
@@ -30,7 +39,7 @@ pub fn fold_range_to_cells(range: &RangeView, sheet: &mut SheetStore) -> Vec<Cel
             CellId::virtual_at(sheet.id, row_id, col_id)
         };
         sheet.register_cell(id, row, col);
-        sheet.cells.insert(id, CellEntry { value });
+        cells.insert(id, CellEntry { value });
         folded.push(id);
     });
     folded
@@ -73,13 +82,15 @@ mod tests {
     fn fold_none_encoding_returns_empty() {
         let rv = make_none_range_view();
         let mut sheet = SheetStore::new(SheetId::from_raw(1), "Sheet1".into(), 2, 1);
-        let folded = fold_range_to_cells(&rv, &mut sheet);
+        let mut cells = rustc_hash::FxHashMap::default();
+        let formulas = rustc_hash::FxHashMap::default();
+        let folded = fold_range_to_cells(&rv, &mut sheet, &mut cells, &formulas);
         assert!(
             folded.is_empty(),
             "PayloadEncoding::None should not fold any cells"
         );
         assert!(
-            sheet.cells.is_empty(),
+            cells.is_empty(),
             "No cells should be created for None encoding"
         );
     }
@@ -110,27 +121,29 @@ mod tests {
         for (row, id) in ids.iter().enumerate() {
             sheet.register_cell(*id, row as u32, 0);
         }
+        let mut cells = rustc_hash::FxHashMap::default();
+        let mut formulas = rustc_hash::FxHashMap::default();
         // Metadata-only virtual and explicit IDs, followed by an old blank
         // ghost, retain their identity when the range payload becomes authored.
-        sheet.cells.insert(
+        cells.insert(
             ids[2],
             CellEntry {
                 value: CellValue::Null,
             },
         );
-        sheet.cells.insert(
+        cells.insert(
             ids[3],
             CellEntry {
                 value: CellValue::number(99.0),
             },
         );
-        sheet.cells.insert(
+        cells.insert(
             ids[4],
             CellEntry {
                 value: CellValue::Null,
             },
         );
-        sheet.formulas.insert(
+        formulas.insert(
             ids[4],
             formula_types::IdentityFormula {
                 template: "1".into(),
@@ -141,7 +154,7 @@ mod tests {
             },
         );
         // An explicit null override of a range virtual cell remains cleared.
-        sheet.cells.insert(
+        cells.insert(
             ids[5],
             CellEntry {
                 value: CellValue::Null,
@@ -168,7 +181,7 @@ mod tests {
                 .collect(),
             col_offset_by_id: [(col, 0)].into_iter().collect(),
         };
-        let folded = fold_range_to_cells(&range, &mut sheet);
+        let folded = fold_range_to_cells(&range, &mut sheet, &mut cells, &formulas);
         assert_eq!(folded, ids[..3]);
         for row in 0..6 {
             assert_eq!(
@@ -178,16 +191,22 @@ mod tests {
         }
         for row in 0..3 {
             assert_eq!(
-                sheet.value_at(SheetPos::new(row, 0)),
+                cells.get(&ids[row as usize]).map(|e| &e.value),
                 Some(&CellValue::number(f64::from(row + 1)))
             );
         }
         assert_eq!(
-            sheet.value_at(SheetPos::new(3, 0)),
+            cells.get(&ids[3]).map(|e| &e.value),
             Some(&CellValue::number(99.0))
         );
-        assert_eq!(sheet.value_at(SheetPos::new(4, 0)), Some(&CellValue::Null));
-        assert!(sheet.formula(&ids[4]).is_some());
-        assert_eq!(sheet.value_at(SheetPos::new(5, 0)), Some(&CellValue::Null));
+        assert_eq!(
+            cells.get(&ids[4]).map(|e| &e.value),
+            Some(&CellValue::Null)
+        );
+        assert!(formulas.contains_key(&ids[4]));
+        assert_eq!(
+            cells.get(&ids[5]).map(|e| &e.value),
+            Some(&CellValue::Null)
+        );
     }
 }

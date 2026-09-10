@@ -274,8 +274,8 @@ fn test_projection_stabilization_recursion_bound() {
     );
     {
         let sheet_store = cell_store.get_sheet(&sheet_id).unwrap();
-        let col_slice = sheet_store
-            .get_column_view(0)
+        let col_slice = cell_store
+            .get_column_view(&sheet_id, 0)
             .expect("col_data should exist");
         for row in 1..10u32 {
             assert_eq!(

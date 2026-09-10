@@ -478,9 +478,14 @@ impl StructurePatch {
             let sheet = cell_store.get_sheet_mut(&sid).unwrap();
             for cell in &current_removed {
                 sheet.remove_cell_identity(&cell.id);
-                sheet.cells.remove(&cell.id);
-                sheet.formulas.remove(&cell.id);
             }
+        }
+        for cell in &current_removed {
+            cell_store.cells.remove(&cell.id);
+            cell_store.formulas.remove(&cell.id);
+        }
+        {
+            let sheet = cell_store.get_sheet_mut(&sid).unwrap();
             let current_positions: Vec<_> = self
                 .positions
                 .iter()
@@ -500,16 +505,18 @@ impl StructurePatch {
                 }
             }
             for cell in &self.removed {
-                if let Some(entry) = &cell.entry {
-                    sheet.cells.insert(cell.id, entry.clone());
-                }
-                if let Some(formula) = &cell.identity_formula {
-                    sheet.formulas.insert(cell.id, formula.clone());
-                }
                 sheet.register_cell(cell.id, cell.pos.row(), cell.pos.col());
             }
             for range in &mut self.ranges {
                 range.swap(sheet);
+            }
+        }
+        for cell in &self.removed {
+            if let Some(entry) = &cell.entry {
+                cell_store.cells.insert(cell.id, entry.clone());
+            }
+            if let Some(formula) = &cell.identity_formula {
+                cell_store.formulas.insert(cell.id, formula.clone());
             }
         }
         for cell in &current_removed {
@@ -565,8 +572,8 @@ fn capture_removed(
         .map(|(id, pos)| RemovedCell {
             id,
             pos,
-            entry: sheet.cells.get(&id).cloned(),
-            identity_formula: sheet.formula(&id).cloned(),
+            entry: cell_store.cells.get(&id).cloned(),
+            identity_formula: cell_store.formulas.get(&id).cloned(),
             cse: cell_store.cse_anchors.contains(&id),
             cse_single: cell_store.cse_single_cell.contains(&id),
             formula_text: stores.compute.get_formula(&id).map(str::to_owned),
@@ -665,6 +672,8 @@ pub(crate) fn capture_sort(
 pub(crate) struct SheetPatch {
     sheet_id: SheetId,
     sheet: Option<SheetStore>,
+    cells: FxHashMap<CellId, CellEntry>,
+    formulas: FxHashMap<CellId, formula_types::IdentityFormula>,
     metadata: Option<SheetMetadata>,
     cell_metadata: CellMetadataMap,
     cse: FxHashSet<CellId>,
@@ -684,6 +693,8 @@ impl SheetPatch {
             return Self {
                 sheet_id: sid,
                 sheet: None,
+                cells: Default::default(),
+                formulas: Default::default(),
                 metadata: None,
                 cell_metadata: Default::default(),
                 cse: Default::default(),
@@ -699,6 +710,18 @@ impl SheetPatch {
             } else {
                 None
             },
+            cells: cell_store
+                .cells
+                .iter()
+                .filter(|(id, _)| belongs(id))
+                .map(|(id, entry)| (*id, entry.clone()))
+                .collect(),
+            formulas: cell_store
+                .formulas
+                .iter()
+                .filter(|(id, _)| belongs(id))
+                .map(|(id, formula)| (*id, formula.clone()))
+                .collect(),
             metadata: stores.storage.sheet_metadata.get(&sid).cloned(),
             cell_metadata: stores
                 .storage
@@ -720,9 +743,9 @@ impl SheetPatch {
                 .copied()
                 .collect(),
             formula_texts: cell_store
-                .get_sheet(&sid)
-                .into_iter()
-                .flat_map(|sheet| sheet.cells.keys())
+                .cells
+                .keys()
+                .filter(|id| belongs(id))
                 .map(|id| (*id, stores.compute.get_formula(id).map(str::to_owned)))
                 .collect(),
         }
@@ -746,7 +769,16 @@ impl SheetPatch {
         let current = Self::capture(stores, cell_store, sid, false, false);
         // Move the live sheet into history instead of retaining two value owners.
         let mut previous = self.sheet.take();
-        cell_store.history_swap_sheet(sid, &mut previous);
+        let mut previous_cells = std::mem::take(&mut self.cells);
+        let mut previous_formulas = std::mem::take(&mut self.formulas);
+        cell_store.history_swap_sheet(
+            sid,
+            &mut previous,
+            &mut previous_cells,
+            &mut previous_formulas,
+        );
+        self.cells = previous_cells;
+        self.formulas = previous_formulas;
         let mut current = current;
         for (cell, text) in &mut current.formula_texts {
             if let Some(source) = effects.formula_texts.get(cell) {
@@ -818,6 +850,8 @@ pub(crate) fn capture_new_sheet(storage: &crate::storage::WorkbookStorage, sid: 
         HistoryPatch::Sheet(SheetPatch {
             sheet_id: sid,
             sheet: None,
+            cells: Default::default(),
+            formulas: Default::default(),
             metadata: None,
             cell_metadata: Default::default(),
             cse: Default::default(),

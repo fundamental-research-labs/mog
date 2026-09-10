@@ -396,7 +396,7 @@ fn engine_hydration_col_data_sanity() {
     // col_data may or may not be populated depending on whether aggregation
     // functions triggered materialization. We verify the sparse path dimensions.
     assert_eq!(
-        sheet.cell_count(),
+        cell_store.iter_sheet_cells(&sheet.id).count(),
         (rows as usize) * (cols as usize),
         "Sheet should have rows*cols cells"
     );
@@ -404,7 +404,7 @@ fn engine_hydration_col_data_sanity() {
     // Verify we can read back values
     let pos = SheetPos::new(0, 0);
     if let Some(cell_id) = sheet.cell_id_at(pos) {
-        let entry = sheet.get_cell(&cell_id).expect("Cell entry should exist");
+        let entry = cell_store.get_cell_entry(&cell_id).expect("Cell entry should exist");
         match &entry.value {
             CellValue::Number(n) => {
                 assert_eq!(n.get(), 0.0, "Cell (0,0) should have value 0.0");
@@ -419,7 +419,7 @@ fn engine_hydration_col_data_sanity() {
     let theoretical_sparse = estimate_per_cell_memory((rows as usize) * (cols as usize));
 
     println!("=== Engine Hydration Sanity ({}x{}) ===", rows, cols);
-    println!("  Cells in cell_store:      {}", sheet.cell_count());
+    println!("  Cells in cell_store:      {}", cell_store.iter_sheet_cells(&sheet.id).count());
     println!(
         "  col_data populated:   {}",
         !sheet.column_values_are_empty()

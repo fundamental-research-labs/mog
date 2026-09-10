@@ -39,7 +39,7 @@ fn lifecycle_col_data_partial_invariant() {
     );
 
     let sheet = engine.cell_store().get_sheet(&sid).expect("sheet store");
-    if let Some(col_slice) = sheet.get_column_view(0) {
+    if let Some(col_slice) = engine.cell_store().get_column_view(&sheet.id, 0) {
         assert!(
             col_slice.len() >= 10,
             "col_data for column A should cover at least rows 0-9, got len {}",

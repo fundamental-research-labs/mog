@@ -70,10 +70,10 @@ fn register_identity_only_does_not_write_column_values() {
         sheet.position_of(&cell_id).as_ref(),
         Some(&SheetPos::new(200, 5))
     );
-    assert!(sheet.cells.contains_key(&cell_id));
+    assert!(cell_store.cells.contains_key(&cell_id));
     // column_values must NOT have been touched at column 5 (no Null write).
     // The original sheet has no column_values for col 5 -> still none.
-    assert!(!sheet.get_column_view(5).is_some());
+    assert!(!cell_store.get_column_view(&sheet_id, 5).is_some());
     // Data extent stays put; identity rows extent grows past base 100.
     assert_eq!(sheet.rows, 100);
     assert_eq!(sheet.cols, 10);
@@ -92,7 +92,7 @@ fn register_identity_only_grows_identity_cols_when_outside_base() {
     cell_store.register_identity_only(&sheet_id, SheetPos::new(50, 25), cell_id);
 
     let sheet = cell_store.get_sheet(&sheet_id).unwrap();
-    assert!(!sheet.get_column_view(25).is_some());
+    assert!(!cell_store.get_column_view(&sheet_id, 25).is_some());
     // Data cols stays at base 10.
     assert_eq!(sheet.cols, 10);
     // Identity cols grows to 26 (= 25 + 1).
@@ -125,7 +125,7 @@ fn register_identity_only_is_noop_when_cell_already_present() {
     let sheet = cell_store.get_sheet(&sheet_id).unwrap();
     assert_eq!(sheet.authored_cell_id_at(pos).as_ref(), Some(&real_id));
     // Phantom must not have been registered.
-    assert!(!sheet.cells.contains_key(&phantom));
+    assert!(!cell_store.cells.contains_key(&phantom));
 }
 
 #[test]
@@ -142,8 +142,8 @@ fn register_ghost_cell_writes_null_into_column_values_outside_projections() {
     cell_store.register_ghost_cell(&sheet_id, pos, cell_id);
 
     let sheet = cell_store.get_sheet(&sheet_id).unwrap();
-    assert!(sheet.get_column_view(7).is_some());
-    assert_eq!(sheet.get_column_view(7).unwrap()[50], CellValue::Null);
+    assert!(cell_store.get_column_view(&sheet_id, 7).is_some());
+    assert_eq!(cell_store.get_column_view(&sheet_id, 7).unwrap()[50], CellValue::Null);
 }
 
 #[test]
@@ -167,7 +167,7 @@ fn register_ghost_cell_preserves_projected_column_values() {
 
     let sheet = cell_store.get_sheet(&sheet_id).unwrap();
     assert_eq!(
-        sheet.get_column_view(2).unwrap()[2],
+        cell_store.get_column_view(&sheet_id, 2).unwrap()[2],
         CellValue::from("diag")
     );
 }
@@ -194,7 +194,7 @@ fn ensure_cell_id_preserves_projected_column_values() {
 
     let sheet = cell_store.get_sheet(&sheet_id).unwrap();
     assert_eq!(
-        sheet.get_column_view(4).unwrap()[3],
+        cell_store.get_column_view(&sheet_id, 4).unwrap()[3],
         CellValue::from("right")
     );
 }

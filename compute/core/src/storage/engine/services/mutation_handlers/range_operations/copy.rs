@@ -145,7 +145,7 @@ pub(in crate::storage::engine) fn mutation_copy_range(
                 // Read source formula (identity formula for ref adjustment)
                 let source_formula = sheet_store.and_then(|sheet| {
                     let id = sheet.cell_id_at(pos)?;
-                    Some((id, sheet.formula(&id)?))
+                    Some((id, cell_store.get_formula(&id)?))
                 });
                 let (formula, formula_text, ref_positions) =
                     if let Some((cell_id, id_formula)) = source_formula {

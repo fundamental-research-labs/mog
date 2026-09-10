@@ -154,7 +154,7 @@ fn sequence_spill_blocked_by_merged_region() {
     let sheet_store = cell_store
         .get_sheet(&sheet_id)
         .expect("Sheet1 should exist in cell_store");
-    if let Some(col_a) = sheet_store.get_column_view(0) {
+    if let Some(col_a) = cell_store.get_column_view(&sheet_store.id, 0) {
         // It's fine for the column to be too short to address row 1 — that
         // also means "A2 was not written". Treat that as Null.
         let a2_val = col_a.get(1).cloned().unwrap_or(CellValue::Null);
@@ -192,8 +192,8 @@ fn sequence_spill_blocked_by_merged_region() {
     );
 
     let sheet_store = cell_store.get_sheet(&sheet_id).unwrap();
-    let col_a = sheet_store
-        .get_column_view(0)
+    let col_a = cell_store
+        .get_column_view(&sheet_id, 0)
         .expect("col A should exist after successful spill");
     for row in 0..5u32 {
         assert_eq!(

@@ -7,10 +7,10 @@ pub fn update_store_formulas_on_named_range_rename(
     let mut updates: Vec<(cell_types::SheetId, cell_types::CellId, String)> = Vec::new();
     let sheet_ids: Vec<cell_types::SheetId> = cell_store.sheet_ids().copied().collect();
     for sheet_id in sheet_ids {
-        let Some(sheet) = cell_store.get_sheet(&sheet_id) else {
+        if cell_store.get_sheet(&sheet_id).is_none() {
             continue;
-        };
-        for (cell_id, formula) in &sheet.formulas {
+        }
+        for (cell_id, formula) in cell_store.iter_sheet_formulas(&sheet_id) {
             let new_template = rewrite(cell_store, sheet_id, &formula.template);
             if new_template != formula.template {
                 updates.push((sheet_id, *cell_id, new_template));

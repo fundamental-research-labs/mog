@@ -30,15 +30,15 @@ fn materialize_projection_skips_origin_but_touches_all_columns() {
 
     let sheet = cell_store.get_sheet(&sheet_id).unwrap();
     assert_eq!(
-        sheet.get_column_view(1).unwrap()[1],
+        cell_store.get_column_view(&sheet_id, 1).unwrap()[1],
         CellValue::from("origin")
     );
     assert_eq!(
-        sheet.get_column_view(2).unwrap()[1],
+        cell_store.get_column_view(&sheet_id, 2).unwrap()[1],
         CellValue::from("right")
     );
     assert_eq!(
-        sheet.get_column_view(1).unwrap()[2],
+        cell_store.get_column_view(&sheet_id, 1).unwrap()[2],
         CellValue::from("down")
     );
     assert_eq!(cell_store.col_version(&sheet_id, 1), before_col_1 + 1);

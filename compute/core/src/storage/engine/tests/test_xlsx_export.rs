@@ -1906,7 +1906,7 @@ fn test_xlsx_export_range_override_matches_dense_materialization() {
     let dense_value = engine
         .cell_store()
         .get_sheet(&sid)
-        .and_then(|sheet| sheet.get_column_view(1))
+        .and_then(|sheet| engine.cell_store().get_column_view(&sheet.id, 1))
         .and_then(|col| col.get(1))
         .cloned()
         .expect("dense column materialization should include override");
@@ -1935,7 +1935,7 @@ fn test_xlsx_export_blank_range_override_suppresses_payload_value() {
     let dense_value = engine
         .cell_store()
         .get_sheet(&sid)
-        .and_then(|sheet| sheet.get_column_view(2))
+        .and_then(|sheet| engine.cell_store().get_column_view(&sheet.id, 2))
         .and_then(|col| col.get(2))
         .cloned()
         .expect("dense column materialization should include cleared override");

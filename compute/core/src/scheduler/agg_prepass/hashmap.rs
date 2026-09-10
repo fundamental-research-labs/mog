@@ -81,11 +81,7 @@ pub fn warm_sumifs_result_cache(
         let mut criteria_slices: Vec<ColumnView<'_>> = Vec::new();
         let mut ok = true;
         for pair in &pattern.pairs {
-            let Some(sheet) = cell_store.get_sheet(&pair.data_sheet) else {
-                ok = false;
-                break;
-            };
-            let Some(slice) = sheet.get_column_view(pair.data_col) else {
+            let Some(slice) = cell_store.get_column_view(&pair.data_sheet, pair.data_col) else {
                 ok = false;
                 break;
             };
@@ -95,10 +91,7 @@ pub fn warm_sumifs_result_cache(
             continue;
         }
 
-        let Some(sum_sheet) = cell_store.get_sheet(&vs) else {
-            continue;
-        };
-        let Some(sum_slice) = sum_sheet.get_column_view(vc) else {
+        let Some(sum_slice) = cell_store.get_column_view(&vs, vc) else {
             continue;
         };
 
@@ -236,8 +229,9 @@ pub fn build_agg_map(
     let empty_col = ColumnView::empty();
     let mut criteria_slices: SmallVec<[ColumnView<'_>; 4]> = SmallVec::new();
     for pair in &pattern.pairs {
-        let sheet = cell_store.get_sheet(&pair.data_sheet)?;
-        let slice = sheet.get_column_view(pair.data_col).unwrap_or(empty_col);
+        let slice = cell_store
+            .get_column_view(&pair.data_sheet, pair.data_col)
+            .unwrap_or(empty_col);
         criteria_slices.push(slice);
     }
 
@@ -245,8 +239,11 @@ pub fn build_agg_map(
     // can include it in the length calculation).
     // Missing column → empty slice (all values treated as Null).
     let value_slice: Option<ColumnView<'_>> = if let Some((vs, vc, _, _)) = &pattern.value_range {
-        let sheet = cell_store.get_sheet(vs)?;
-        Some(sheet.get_column_view(*vc).unwrap_or(empty_col))
+        Some(
+            cell_store
+                .get_column_view(vs, *vc)
+                .unwrap_or(empty_col),
+        )
     } else {
         None
     };
@@ -555,8 +552,7 @@ pub fn execute_agg_group(
     for pair in &group.pattern.pairs {
         match &pair.criteria {
             CriteriaSource::Dynamic { sheet, col } => {
-                let sm = cell_store.get_sheet(sheet)?;
-                let slice = sm.get_column_view(*col)?;
+                let slice = cell_store.get_column_view(sheet, *col)?;
                 dyn_cols.push(Some(DynCol { slice }));
             }
             _ => {

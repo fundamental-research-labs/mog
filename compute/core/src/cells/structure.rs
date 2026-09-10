@@ -95,10 +95,14 @@ impl CellStore {
         if let Some(ids) = deleted_ids {
             for cell_id in ids {
                 self.cell_to_sheet.remove(cell_id);
+                self.cells.remove(cell_id);
+                self.formulas.remove(cell_id);
             }
         }
         for cell_id in &extra_doomed {
             self.cell_to_sheet.remove(cell_id);
+            self.cells.remove(cell_id);
+            self.formulas.remove(cell_id);
         }
 
         let Some(s) = self.sheets.get_mut(sheet) else {
@@ -108,7 +112,7 @@ impl CellStore {
         // Imported array members are metadata-only package cells. Rebase their
         // positional compatibility fields alongside native identities so a
         // later rebuild cannot restore the pre-structure coordinates.
-        s.apply_structure_change_to_imported_array_caches(change);
+        s.apply_structure_change_to_imported_array_caches(change, &self.cells, &self.formulas);
 
         match change {
             StructureChange::InsertRows {
@@ -136,8 +140,6 @@ impl CellStore {
                 deleted_cell_ids,
             } => {
                 for cell_id in deleted_cell_ids.iter().chain(extra_doomed.iter()) {
-                    s.cells.remove(cell_id);
-                    s.formulas.remove(cell_id);
                     s.remove_cell_identity(cell_id);
                 }
                 remap_positional_metadata(s, at + count, *count, true, false);
@@ -175,8 +177,6 @@ impl CellStore {
                 deleted_cell_ids,
             } => {
                 for cell_id in deleted_cell_ids.iter().chain(extra_doomed.iter()) {
-                    s.cells.remove(cell_id);
-                    s.formulas.remove(cell_id);
                     s.remove_cell_identity(cell_id);
                 }
                 remap_positional_metadata(s, at + count, *count, false, false);
@@ -196,13 +196,13 @@ impl CellStore {
                 for (cell_id, new_row, new_col) in updates {
                     let pos = SheetPos::new(*new_row, *new_col);
                     if let Some(displaced) = s.authored_cell_id_at(pos).filter(|id| id != cell_id) {
-                        s.cells.remove(&displaced);
-                        s.formulas.remove(&displaced);
                         s.remove_cell_identity(&displaced);
                         self.cell_to_sheet.remove(&displaced);
+                        self.cells.remove(&displaced);
+                        self.formulas.remove(&displaced);
                     }
                     s.register_cell(*cell_id, pos.row(), pos.col());
-                    if !s.is_ghost(cell_id) {
+                    if !s.is_ghost(cell_id, &self.cells, &self.formulas) {
                         s.expand_extent(pos);
                     } else {
                         s.expand_identity_extent(pos);
@@ -215,7 +215,7 @@ impl CellStore {
         // positional pass above handles range boundaries and deleted bands;
         // this pass resolves the surviving source/child coordinates after the
         // native identity maps have shifted.
-        s.rebind_imported_array_caches();
+        s.rebind_imported_array_caches(&self.cells, &self.formulas);
 
         // --- Range-aware updates (after position shifts, before column_values rebuild) ---
 
@@ -313,7 +313,7 @@ impl CellStore {
             // Fold removed Ranges into per-cell entries.
             for range_id in &removed_range_ids {
                 if let Some(rv) = s.range_views.remove(range_id) {
-                    let folded = fold_range_to_cells(&rv, s);
+                    let folded = fold_range_to_cells(&rv, s, &mut self.cells, &self.formulas);
                     for vid in folded {
                         self.cell_to_sheet.insert(vid, *sheet);
                     }
@@ -348,7 +348,7 @@ impl CellStore {
 
         s.projected_columns.clear();
         s.generated_values.clear();
-        s.rebuild_column_index();
+        s.rebuild_column_index(&self.cells, &self.formulas);
 
         self.refresh_axis_ownership(*sheet);
         self.dense_cache.invalidate_sheet(sheet);

@@ -111,18 +111,19 @@ impl CellStore {
 
     /// Read the original array value for an anchor, or the cell's scalar.
     pub fn get_cell_value_raw(&self, cell_id: &CellId) -> Option<&CellValue> {
-        let sheet = self.sheets.get(self.cell_to_sheet.get(cell_id)?)?;
-        if let Some(entry) = sheet.cells.get(cell_id) {
+        if let Some(entry) = self.cells.get(cell_id) {
             return Some(&entry.value);
         }
-        sheet.value_at(sheet.position_of(cell_id)?)
+        let sheet = self.sheets.get(self.cell_to_sheet.get(cell_id)?)?;
+        sheet.value_at(sheet.position_of(cell_id)?, &self.cells, &self.formulas)
     }
 
     pub fn get_cell_value_in_sheet(&self, sheet: &SheetId, cell_id: &CellId) -> Option<&CellValue> {
-        let sheet = self.sheets.get(sheet)?;
-        if let Some(entry) = sheet.cells.get(cell_id)
+        let on_sheet = self.cell_to_sheet.get(cell_id) == Some(sheet);
+        if on_sheet
+            && let Some(entry) = self.cells.get(cell_id)
             && (!entry.value.is_null()
-                || sheet.formulas.contains_key(cell_id)
+                || self.formulas.contains_key(cell_id)
                 || cell_id.is_virtual())
         {
             return match &entry.value {
@@ -130,29 +131,42 @@ impl CellStore {
                 value => Some(value),
             };
         }
-        if let Some(pos) = sheet.position_of(cell_id) {
-            return sheet.value_at(pos);
+        let sheet_store = self.sheets.get(sheet)?;
+        if let Some(pos) = sheet_store.position_of(cell_id) {
+            return sheet_store.value_at(pos, &self.cells, &self.formulas);
         }
-        sheet.cells.get(cell_id).map(|entry| &entry.value)
+        on_sheet
+            .then(|| self.cells.get(cell_id).map(|entry| &entry.value))
+            .flatten()
     }
 
     pub fn get_cell_value_at(&self, sheet: &SheetId, pos: SheetPos) -> Option<&CellValue> {
-        self.sheets.get(sheet)?.value_at(pos)
+        self.sheets
+            .get(sheet)?
+            .value_at(pos, &self.cells, &self.formulas)
     }
 
-    pub(crate) fn get_column_view(
+    pub fn get_column_view(
         &self,
         sheet: &SheetId,
         col: u32,
     ) -> Option<value_types::ColumnView<'_>> {
-        self.sheets.get(sheet)?.get_column_view(col)
+        let sheet_store = self.sheets.get(sheet)?;
+        if let Some(view) = sheet_store.strided_column_view(col) {
+            return Some(view);
+        }
+        let rows = *sheet_store.column_lengths.get(&col)?;
+        Some(value_types::ColumnView::from_grid_sheet(
+            self,
+            sheet.as_u128(),
+            col,
+            rows,
+        ))
     }
 
     /// Get the identity formula for a cell (across all sheets).
     pub fn get_formula(&self, cell_id: &CellId) -> Option<&IdentityFormula> {
-        let sheet_id = self.cell_to_sheet.get(cell_id)?;
-        let sheet = self.sheets.get(sheet_id)?;
-        sheet.formulas.get(cell_id)
+        self.formulas.get(cell_id)
     }
 
     /// Resolve a position to a CellId within a sheet.
@@ -283,7 +297,7 @@ impl CellStore {
         Some(
             self.sheets
                 .get(sheet)?
-                .value_at(SheetPos::new(row, col))
+                .value_at(SheetPos::new(row, col), &self.cells, &self.formulas)
                 .cloned()
                 .unwrap_or(CellValue::Null),
         )

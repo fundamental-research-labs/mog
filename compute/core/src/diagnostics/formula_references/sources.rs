@@ -43,7 +43,15 @@ pub(super) fn collect_sources(
         let Some(sheet) = cell_store.get_sheet(sheet_id) else {
             continue;
         };
-        collect_sheet_sources(sheet, compute, document_id, sheet_index, &mut sources);
+        collect_sheet_sources(
+            cell_store,
+            sheet_id,
+            sheet,
+            compute,
+            document_id,
+            sheet_index,
+            &mut sources,
+        );
     }
 
     if sheet_filter.is_none() {
@@ -81,13 +89,15 @@ pub(super) fn collect_sources(
 }
 
 fn collect_sheet_sources(
+    cell_store: &CellStore,
+    sheet_id: &SheetId,
     sheet: &SheetStore,
     compute: &ComputeCore,
     document_id: &str,
     sheet_index: usize,
     sources: &mut Vec<SourceFormula>,
 ) {
-    let mut cells: Vec<_> = sheet.formulas.iter().collect();
+    let mut cells: Vec<_> = cell_store.iter_sheet_formulas(sheet_id).collect();
     cells.sort_by_key(|(cell_id, _)| {
         sheet
             .position_for_diagnostics(cell_id)

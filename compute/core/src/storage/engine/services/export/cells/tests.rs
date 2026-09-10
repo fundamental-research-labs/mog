@@ -711,7 +711,7 @@ fn spill_target_metadata_identity_does_not_author_cached_value() {
         .expect("spill metadata retains a positional identity");
     let sheet = engine.cell_store.get_sheet(&sheet_id).expect("sheet store");
     assert!(
-        sheet.is_ghost(&spill_id),
+        engine.cell_store().is_ghost(&spill_id),
         "metadata identity must not become an authored spill blocker"
     );
 

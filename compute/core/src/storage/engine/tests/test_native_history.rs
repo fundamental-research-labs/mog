@@ -181,7 +181,7 @@ fn compact_range_undo_redo_preserves_payload_and_virtual_identity() {
     let (range_id, range) = sheet.iter_ranges().next().expect("compact numeric column");
     let range_id = *range_id;
     let original_payload = Arc::as_ptr(&range.values);
-    let authored_cells = sheet.cells_iter().count();
+    let authored_cells = engine.cell_store().iter_sheet_cells(&sheet.id).count();
     let position = SheetPos::new(255, 0);
     let cell_id = engine.cell_store().resolve_cell_id(&sid, position).unwrap();
     assert!(cell_id.is_virtual());
@@ -223,7 +223,7 @@ fn compact_range_undo_redo_preserves_payload_and_virtual_identity() {
             );
         } else {
             assert_eq!(
-                sheet.cells_iter().count(),
+                engine.cell_store().iter_sheet_cells(&sheet.id).count(),
                 authored_cells,
                 "undo must remove the authored override without materializing range values"
             );

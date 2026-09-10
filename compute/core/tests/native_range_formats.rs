@@ -154,9 +154,7 @@ fn large_edits_preserve_inheritance_partial_clears_and_xlsx_without_expanding_va
         .unwrap();
     let eager_before = engine
         .cell_store()
-        .get_sheet(&id)
-        .unwrap()
-        .cells_iter()
+        .iter_sheet_cells(&id)
         .count();
     let cell_count = engine.get_cell_count(&id);
     let all = [(0, 0, 513, 239)];
@@ -182,9 +180,7 @@ fn large_edits_preserve_inheritance_partial_clears_and_xlsx_without_expanding_va
     assert_eq!(
         engine
             .cell_store()
-            .get_sheet(&id)
-            .unwrap()
-            .cells_iter()
+            .iter_sheet_cells(&id)
             .count(),
         eager_before,
         "formatting must not expand native values into per-cell entries"
@@ -227,9 +223,7 @@ fn large_toggle_and_direct_formats_override_table_styles_and_clear_back_to_them(
     assert_eq!(inherited.bold, Some(true), "table header supplies bold");
     let count = engine
         .cell_store()
-        .get_sheet(&id)
-        .unwrap()
-        .cells_iter()
+        .iter_sheet_cells(&id)
         .count();
     let all = [(0, 0, 513, 239)];
     engine
@@ -240,9 +234,7 @@ fn large_toggle_and_direct_formats_override_table_styles_and_clear_back_to_them(
     assert_eq!(
         engine
             .cell_store()
-            .get_sheet(&id)
-            .unwrap()
-            .cells_iter()
+            .iter_sheet_cells(&id)
             .count(),
         count
     );
@@ -296,9 +288,7 @@ fn large_border_clear_removes_only_the_requested_edge() {
     };
     let count = engine
         .cell_store()
-        .get_sheet(&id)
-        .unwrap()
-        .cells_iter()
+        .iter_sheet_cells(&id)
         .count();
     engine
         .patch_borders(
@@ -327,9 +317,7 @@ fn large_border_clear_removes_only_the_requested_edge() {
     assert_eq!(
         engine
             .cell_store()
-            .get_sheet(&id)
-            .unwrap()
-            .cells_iter()
+            .iter_sheet_cells(&id)
             .count(),
         count
     );

@@ -24,7 +24,7 @@ fn lifecycle_import_cold_load_read() {
     assert_sum_at(&engine, &sid, 0, 1, 55.0, "cold-load SUM(A1:A10)");
 
     let sheet = engine.cell_store().get_sheet(&sid).expect("sheet store");
-    if let Some(col_slice) = sheet.get_column_view(0) {
+    if let Some(col_slice) = engine.cell_store().get_column_view(&sheet.id, 0) {
         assert!(
             col_slice.len() >= 10,
             "col_data for column A should have at least 10 entries"

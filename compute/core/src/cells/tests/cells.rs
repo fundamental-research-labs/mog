@@ -260,7 +260,7 @@ fn formula_sidecar_distinguishes_null_results_from_ghosts() {
         CellValue::Null,
         None,
     );
-    assert!(store.get_sheet(&sheet_id).unwrap().is_ghost(&cell_id));
+    assert!(store.is_ghost(&cell_id));
     let formula = formula_types::IdentityFormula {
         template: "1".to_string(),
         refs: vec![],
@@ -269,7 +269,7 @@ fn formula_sidecar_distinguishes_null_results_from_ghosts() {
         is_aggregate: false,
     };
     store.set_formula(&cell_id, Some(formula.clone()));
-    assert!(!store.get_sheet(&sheet_id).unwrap().is_ghost(&cell_id));
+    assert!(!store.is_ghost(&cell_id));
     assert_eq!(store.get_formula(&cell_id), Some(&formula));
     store.apply_edit(
         &sheet_id,
@@ -278,7 +278,85 @@ fn formula_sidecar_distinguishes_null_results_from_ghosts() {
         CellValue::Null,
         None,
     );
-    assert!(store.get_sheet(&sheet_id).unwrap().is_ghost(&cell_id));
+    assert!(store.is_ghost(&cell_id));
     store.set_value_mut(&cell_id, CellValue::Number(FiniteF64::must(0.0)));
-    assert!(!store.get_sheet(&sheet_id).unwrap().is_ghost(&cell_id));
+    assert!(!store.is_ghost(&cell_id));
+}
+
+#[test]
+fn global_payloads_are_keyed_by_cell_id_and_isolated_on_sheet_delete() {
+    let mut store = CellStore::new();
+    let sheet_a = make_sheet_id(1);
+    let sheet_b = make_sheet_id(2);
+    store.add_sheet_store(
+        sheet_a,
+        "A".to_string(),
+        crate::cells::SheetStore::new(sheet_a, "A".to_string(), 8, 4),
+    );
+    store.add_sheet_store(
+        sheet_b,
+        "B".to_string(),
+        crate::cells::SheetStore::new(sheet_b, "B".to_string(), 8, 4),
+    );
+
+    let cell_a = make_cell_id(201);
+    let cell_b = make_cell_id(202);
+    let formula_a = formula_types::IdentityFormula {
+        template: "A1".to_string(),
+        refs: vec![],
+        is_dynamic_array: false,
+        is_volatile: false,
+        is_aggregate: false,
+    };
+    let formula_b = formula_types::IdentityFormula {
+        template: "B1".to_string(),
+        refs: vec![],
+        is_dynamic_array: false,
+        is_volatile: false,
+        is_aggregate: false,
+    };
+
+    store.apply_edit(
+        &sheet_a,
+        cell_a,
+        SheetPos::new(0, 0),
+        CellValue::Number(FiniteF64::must(11.0)),
+        Some(formula_a.clone()),
+    );
+    store.apply_edit(
+        &sheet_b,
+        cell_b,
+        SheetPos::new(1, 1),
+        CellValue::Number(FiniteF64::must(22.0)),
+        Some(formula_b.clone()),
+    );
+
+    assert_eq!(
+        store.get_cell_value(&cell_a),
+        Some(&CellValue::Number(FiniteF64::must(11.0)))
+    );
+    assert_eq!(
+        store.get_cell_value(&cell_b),
+        Some(&CellValue::Number(FiniteF64::must(22.0)))
+    );
+    assert_eq!(store.get_formula(&cell_a), Some(&formula_a));
+    assert_eq!(store.get_formula(&cell_b), Some(&formula_b));
+
+    assert!(store.set_value_mut(&cell_a, CellValue::Number(FiniteF64::must(33.0))));
+    assert!(store.set_formula(&cell_b, Some(formula_a.clone())));
+    assert_eq!(
+        store.get_cell_value(&cell_a),
+        Some(&CellValue::Number(FiniteF64::must(33.0)))
+    );
+    assert_eq!(store.get_formula(&cell_b), Some(&formula_a));
+
+    store.remove_sheet(&sheet_a);
+    assert!(store.get_cell_value(&cell_a).is_none());
+    assert!(store.get_formula(&cell_a).is_none());
+    assert!(store.get_cell_entry(&cell_a).is_none());
+    assert_eq!(
+        store.get_cell_value(&cell_b),
+        Some(&CellValue::Number(FiniteF64::must(22.0)))
+    );
+    assert_eq!(store.get_formula(&cell_b), Some(&formula_a));
 }

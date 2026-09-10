@@ -126,8 +126,8 @@ fn assert_col_data_number(
     let sheet_store = cell_store
         .get_sheet(sheet_id)
         .unwrap_or_else(|| panic!("{}: sheet not found", label));
-    let col_slice = sheet_store
-        .get_column_view(col)
+    let col_slice = cell_store
+        .get_column_view(sheet_id, col)
         .unwrap_or_else(|| panic!("{}: col_data for column {} not found", label, col));
     assert!(
         (row as usize) < col_slice.len(),

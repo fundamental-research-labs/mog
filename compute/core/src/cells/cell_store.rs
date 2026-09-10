@@ -12,8 +12,9 @@ use formula_types::TableDef;
 use snapshot_types::{DataTableRegionDef, PivotTableDef};
 
 use super::dense::DenseColumnCache;
-use super::types::SheetStore;
+use super::types::{CellEntry, SheetStore};
 use super::variable_store::VariableStore;
+use formula_types::IdentityFormula;
 
 /// The top-level cell store — identity-indexed, in-process cell store.
 ///
@@ -34,6 +35,9 @@ pub struct CellStore {
     /// calculation-context change remains effective across lifecycle paths.
     pub(crate) char_code_page: compute_functions::CharCodePage,
     pub(super) id_alloc: std::sync::Arc<cell_types::IdAllocator>,
+    pub(crate) cells: FxHashMap<CellId, CellEntry>,
+    /// Identity formulas keyed by CellId across every sheet.
+    pub(crate) formulas: FxHashMap<CellId, IdentityFormula>,
     pub(super) sheets: FxHashMap<SheetId, SheetStore>,
     /// Lowercase sheet name -> SheetId for case-insensitive lookup.
     pub(super) sheet_names: FxHashMap<String, SheetId>,
@@ -112,6 +116,83 @@ impl CellStore {
         self.cell_to_sheet.len()
     }
 
+    pub fn get_cell_entry(&self, cell_id: &CellId) -> Option<&CellEntry> {
+        self.cells.get(cell_id)
+    }
+
+    pub fn iter_sheet_cells(
+        &self,
+        sheet_id: &SheetId,
+    ) -> impl Iterator<Item = (&CellId, &CellEntry)> + '_ {
+        self.sheets.get(sheet_id).into_iter().flat_map(|sheet| {
+            sheet
+                .axes_by_cell
+                .keys()
+                .filter_map(|id| self.cells.get_key_value(id))
+        })
+    }
+
+    pub fn iter_sheet_formulas(
+        &self,
+        sheet_id: &SheetId,
+    ) -> impl Iterator<Item = (&CellId, &IdentityFormula)> + '_ {
+        self.sheets.get(sheet_id).into_iter().flat_map(|sheet| {
+            sheet
+                .axes_by_cell
+                .keys()
+                .filter_map(|id| self.formulas.get_key_value(id))
+        })
+    }
+
+    pub fn sheet_cell_ids(&self, sheet_id: &SheetId) -> impl Iterator<Item = CellId> + '_ {
+        self.iter_sheet_cells(sheet_id).map(|(id, _)| *id)
+    }
+
+    pub fn is_ghost(&self, cell_id: &CellId) -> bool {
+        self.cells
+            .get(cell_id)
+            .is_none_or(|entry| entry.value.is_null())
+            && !self.formulas.contains_key(cell_id)
+    }
+
+    pub(crate) fn rebuild_sheet_column_index(&mut self, sheet_id: &SheetId) {
+        if let Some(sheet) = self.sheets.get_mut(sheet_id) {
+            sheet.rebuild_column_index(&self.cells, &self.formulas);
+        }
+    }
+
+    pub(super) fn take_sheet_payloads(
+        &mut self,
+        sheet_id: SheetId,
+    ) -> (FxHashMap<CellId, CellEntry>, FxHashMap<CellId, IdentityFormula>) {
+        let ids: Vec<CellId> = self
+            .cell_to_sheet
+            .iter()
+            .filter(|(_, owner)| **owner == sheet_id)
+            .map(|(id, _)| *id)
+            .collect();
+        let mut cells = FxHashMap::default();
+        let mut formulas = FxHashMap::default();
+        for id in ids {
+            if let Some(entry) = self.cells.remove(&id) {
+                cells.insert(id, entry);
+            }
+            if let Some(formula) = self.formulas.remove(&id) {
+                formulas.insert(id, formula);
+            }
+        }
+        (cells, formulas)
+    }
+
+    pub(super) fn restore_sheet_payloads(
+        &mut self,
+        cells: FxHashMap<CellId, CellEntry>,
+        formulas: FxHashMap<CellId, IdentityFormula>,
+    ) {
+        self.cells.extend(cells);
+        self.formulas.extend(formulas);
+    }
+
     /// Create an empty cell store.
     pub fn new() -> Self {
         Self {
@@ -121,6 +202,8 @@ impl CellStore {
             history: Default::default(),
             char_code_page: compute_functions::DEFAULT_CHAR_CODE_PAGE,
             id_alloc: std::sync::Arc::new(cell_types::IdAllocator::new()),
+            cells: FxHashMap::default(),
+            formulas: FxHashMap::default(),
             sheets: FxHashMap::default(),
             sheet_names: FxHashMap::default(),
             variables: VariableStore::new(),
@@ -154,11 +237,15 @@ impl CellStore {
     ) {
         self.imported_array_cache_invalidations.clear();
         for sheet in self.sheets.values_mut() {
-            sheet.clear_imported_array_cache();
+            sheet.clear_imported_array_cache(&self.cells, &self.formulas);
         }
         for (sheet_id, cells) in caches {
             if let Some(sheet) = self.sheets.get_mut(sheet_id) {
-                sheet.install_imported_array_cache(cells.iter().cloned());
+                sheet.install_imported_array_cache(
+                    cells.iter().cloned(),
+                    &self.cells,
+                    &self.formulas,
+                );
             }
         }
     }
@@ -167,7 +254,7 @@ impl CellStore {
     pub(crate) fn clear_imported_array_caches(&mut self) {
         self.imported_array_cache_invalidations.clear();
         for sheet in self.sheets.values_mut() {
-            sheet.clear_imported_array_cache();
+            sheet.clear_imported_array_cache(&self.cells, &self.formulas);
         }
     }
 
@@ -371,7 +458,7 @@ impl CellStore {
         if let Some(cell_id) = self.resolve_cell_id(sheet, SheetPos::new(row, col))
             && let Some(sheet_store) = self.sheets.get(sheet)
         {
-            if let Some(value) = sheet_store.value_at(SheetPos::new(row, col)) {
+            if let Some(value) = sheet_store.value_at(SheetPos::new(row, col), &self.cells, &self.formulas) {
                 return CellRender::Plain(PlainCellView {
                     cell_id,
                     value,
@@ -665,7 +752,7 @@ impl CellStore {
                     sheet.register_cell(*vid, (*pos).row(), (*pos).col());
                 }
                 sheet.range_spatial_index = IntervalTree::build(&extents);
-                sheet.rebuild_column_index();
+                sheet.rebuild_column_index(&self.cells, &self.formulas);
             }
             for (_, vid) in virtual_registrations {
                 self.cell_to_sheet.insert(vid, sheet_id);
@@ -686,6 +773,16 @@ use crate::eval::context::traits::DataSource;
 use compute_graph::positions::{CellPosition, PositionResolver};
 use value_types::CellValue;
 
+impl value_types::ValueGrid for CellStore {
+    fn value_at(&self, _row: u32, _col: u32) -> Option<&CellValue> {
+        None
+    }
+
+    fn value_at_sheet(&self, sheet: u128, row: u32, col: u32) -> Option<&CellValue> {
+        self.get_cell_value_at(&SheetId::from_raw(sheet), SheetPos::new(row, col))
+    }
+}
+
 impl DataSource for CellStore {
     fn col_version(&self, sheet: &SheetId, col: u32) -> u64 {
         self.col_versions.get(&(*sheet, col)).copied().unwrap_or(0)
@@ -700,7 +797,7 @@ impl DataSource for CellStore {
     }
 
     fn get_column_view(&self, sheet: &SheetId, col: u32) -> Option<value_types::ColumnView<'_>> {
-        self.sheets.get(sheet)?.get_column_view(col)
+        CellStore::get_column_view(self, sheet, col)
     }
 
     fn cell_id_at(&self, sheet: &SheetId, row: u32, col: u32) -> Option<CellId> {

@@ -91,9 +91,28 @@
   function Workbook(context) {
     ClientObject.call(this, context);
     this.worksheets = new WorksheetCollection(context);
+    this.names = new NamedItemCollection(context);
   }
   Workbook.prototype = Object.create(ClientObject.prototype);
   Workbook.prototype.constructor = Workbook;
+
+  function NamedItemCollection(context) {
+    ClientObject.call(this, context);
+  }
+  NamedItemCollection.prototype = Object.create(ClientObject.prototype);
+  NamedItemCollection.prototype.constructor = NamedItemCollection;
+
+  NamedItemCollection.prototype.add = function (name, reference) {
+    var item = new ClientObject(this.context);
+    var op = { op: "addName", id: item._id, name: String(name) };
+    if (reference && typeof reference === "object" && reference._id) {
+      op.rangeId = reference._id;
+    } else if (reference != null) {
+      op.formula = String(reference);
+    }
+    this.context._queue.push(op);
+    return item;
+  };
 
   function WorksheetCollection(context) {
     ClientObject.call(this, context);
@@ -121,9 +140,19 @@
     return ws;
   };
 
+  WorksheetCollection.prototype.getActiveWorksheet = function () {
+    var ws = new Worksheet(this.context, null);
+    this.context._queue.push({
+      op: "getActiveWorksheet",
+      id: ws._id,
+    });
+    return ws;
+  };
+
   function Worksheet(context, name) {
     ClientObject.call(this, context);
     this._nameHint = name;
+    this.charts = new ChartCollection(context, this);
   }
   Worksheet.prototype = Object.create(ClientObject.prototype);
   Worksheet.prototype.constructor = Worksheet;
@@ -207,8 +236,83 @@
     return promise;
   }
 
+  function ChartCollection(context, worksheet) {
+    ClientObject.call(this, context);
+    this._worksheet = worksheet;
+  }
+  ChartCollection.prototype = Object.create(ClientObject.prototype);
+  ChartCollection.prototype.constructor = ChartCollection;
+
+  ChartCollection.prototype.add = function (type, source) {
+    var chart = new Chart(this.context);
+    this.context._queue.push({
+      op: "addChart",
+      id: chart._id,
+      worksheetId: this._worksheet._id,
+      chartType: String(type),
+      sourceRangeId: source._id,
+    });
+    return chart;
+  };
+
+  function Chart(context) {
+    ClientObject.call(this, context);
+    this.title = new ChartTitle(context, this._id);
+    this.axes = new ChartAxes(context, this._id);
+  }
+  Chart.prototype = Object.create(ClientObject.prototype);
+  Chart.prototype.constructor = Chart;
+
+  function ChartTitle(context, chartId) {
+    this.context = context;
+    this._chartId = chartId;
+  }
+  Object.defineProperty(ChartTitle.prototype, "text", {
+    set: function (value) {
+      this.context._queue.push({
+        op: "set",
+        id: this._chartId,
+        property: "title.text",
+        value: value,
+      });
+    },
+  });
+
+  function ChartAxes(context, chartId) {
+    this.categoryAxis = new ChartAxis(context, chartId, "categoryAxis");
+    this.valueAxis = new ChartAxis(context, chartId, "valueAxis");
+  }
+
+  function ChartAxis(context, chartId, kind) {
+    this.title = new ChartAxisTitle(context, chartId, kind);
+  }
+
+  function ChartAxisTitle(context, chartId, kind) {
+    this.context = context;
+    this._chartId = chartId;
+    this._kind = kind;
+  }
+  Object.defineProperty(ChartAxisTitle.prototype, "text", {
+    set: function (value) {
+      this.context._queue.push({
+        op: "set",
+        id: this._chartId,
+        property: "axes." + this._kind + ".title.text",
+        value: value,
+      });
+    },
+  });
+
   global.__mogPendingRuns = pendingRuns;
-  global.Excel = { run: run };
+  global.Excel = {
+    run: run,
+    ChartType: {
+      columnClustered: "ColumnClustered",
+      barClustered: "BarClustered",
+      line: "Line",
+      pie: "Pie",
+    },
+  };
   global.OfficeExtension = {
     ClientObject: ClientObject,
     RequestContext: RequestContext,

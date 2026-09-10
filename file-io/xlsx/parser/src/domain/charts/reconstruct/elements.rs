@@ -132,6 +132,7 @@ fn build_title_with_text(
     charts::Title {
         tx: Some(tx),
         layout: layout.cloned().map(Into::into),
+        overlay: Some(false),
         sp_pr,
         tx_pr: format.and_then(build_text_body),
         ..Default::default()

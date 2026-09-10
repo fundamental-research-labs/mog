@@ -11,6 +11,8 @@ use value_types::CellValue;
 enum Op {
     #[serde(rename = "getItem")]
     GetItem { id: String, name: String },
+    #[serde(rename = "getActiveWorksheet")]
+    GetActiveWorksheet { id: String },
     #[serde(rename = "addWorksheet")]
     AddWorksheet { id: String, name: Option<String> },
     #[serde(rename = "getRange")]
@@ -19,6 +21,25 @@ enum Op {
         #[serde(rename = "worksheetId")]
         worksheet_id: String,
         address: String,
+    },
+    #[serde(rename = "addName")]
+    AddName {
+        #[serde(rename = "id")]
+        _id: String,
+        name: String,
+        #[serde(rename = "rangeId")]
+        range_id: Option<String>,
+        formula: Option<String>,
+    },
+    #[serde(rename = "addChart")]
+    AddChart {
+        id: String,
+        #[serde(rename = "worksheetId")]
+        worksheet_id: String,
+        #[serde(rename = "chartType")]
+        chart_type: String,
+        #[serde(rename = "sourceRangeId")]
+        source_range_id: String,
     },
     #[serde(rename = "set")]
     Set {
@@ -49,10 +70,19 @@ struct RangeRef {
     bounds: (u32, u32, u32, u32),
 }
 
+struct ChartRef {
+    sheet: Sheet,
+    chart_id: String,
+    title: Option<String>,
+    category_title: Option<String>,
+    value_title: Option<String>,
+}
+
 pub(crate) struct Host {
     workbook: Workbook,
     sheets: Mutex<HashMap<String, Sheet>>,
     ranges: Mutex<HashMap<String, RangeRef>>,
+    charts: Mutex<HashMap<String, ChartRef>>,
     stdout: Mutex<String>,
 }
 
@@ -62,6 +92,7 @@ impl Host {
             workbook,
             sheets: Mutex::new(HashMap::new()),
             ranges: Mutex::new(HashMap::new()),
+            charts: Mutex::new(HashMap::new()),
             stdout: Mutex::new(String::new()),
         }
     }
@@ -101,10 +132,12 @@ impl Host {
             message: format!("invalid Office.js batch: {e}"),
         })?;
 
-        if !ops
-            .iter()
-            .any(|op| matches!(op, Op::AddWorksheet { .. } | Op::Set { .. }))
-        {
+        if !ops.iter().any(|op| {
+            matches!(
+                op,
+                Op::AddWorksheet { .. } | Op::Set { .. } | Op::AddName { .. } | Op::AddChart { .. }
+            )
+        }) {
             return self.apply_batch(ops);
         }
 
@@ -135,6 +168,15 @@ impl Host {
                         code: "ItemNotFound",
                         message: format!("The requested resource doesn't exist. Name: {name}"),
                     })?;
+                    self.sheets.lock().expect("sheets lock").insert(id, sheet);
+                }
+                Op::GetActiveWorksheet { id } => {
+                    let names = self.workbook.sheet_names().map_err(engine_error)?;
+                    let name = names.first().ok_or_else(|| BatchError {
+                        code: "ItemNotFound",
+                        message: "The workbook has no worksheets.".to_string(),
+                    })?;
+                    let sheet = self.workbook.sheet_by_name(name).map_err(engine_error)?;
                     self.sheets.lock().expect("sheets lock").insert(id, sheet);
                 }
                 Op::AddWorksheet { id, name } => {
@@ -177,11 +219,104 @@ impl Host {
                         .expect("ranges lock")
                         .insert(id, RangeRef { sheet, bounds });
                 }
+                Op::AddName {
+                    name,
+                    range_id,
+                    formula,
+                    _id: _,
+                } => {
+                    let refers_to = if let Some(range_id) = range_id {
+                        let ranges = self.ranges.lock().expect("ranges lock");
+                        let range = ranges.get(&range_id).ok_or_else(|| BatchError {
+                            code: "InvalidObjectPath",
+                            message: "The range object is not available.".to_string(),
+                        })?;
+                        let sheet_name = range.sheet.name().map_err(engine_error)?;
+                        range_formula(&sheet_name, range.bounds)
+                    } else {
+                        let raw = formula.unwrap_or_default();
+                        if raw.trim().is_empty() {
+                            return Err(BatchError {
+                                code: "InvalidArgument",
+                                message: "names.add requires a range or formula".to_string(),
+                            });
+                        }
+                        if raw.starts_with('=') {
+                            raw
+                        } else {
+                            format!("={raw}")
+                        }
+                    };
+                    self.workbook
+                        .names()
+                        .create_named_range(compute_api::DefinedNameInput {
+                            name,
+                            refers_to,
+                            scope: None,
+                            comment: None,
+                        })
+                        .map_err(engine_error)?;
+                }
+                Op::AddChart {
+                    id,
+                    worksheet_id,
+                    chart_type,
+                    source_range_id,
+                } => {
+                    let sheet = self
+                        .sheets
+                        .lock()
+                        .expect("sheets lock")
+                        .get(&worksheet_id)
+                        .cloned()
+                        .ok_or_else(|| BatchError {
+                            code: "InvalidObjectPath",
+                            message: "The worksheet object is not available.".to_string(),
+                        })?;
+                    let ranges = self.ranges.lock().expect("ranges lock");
+                    let range = ranges.get(&source_range_id).ok_or_else(|| BatchError {
+                        code: "InvalidObjectPath",
+                        message: "The range object is not available.".to_string(),
+                    })?;
+                    let sheet_name = range.sheet.name().map_err(engine_error)?;
+                    let data_range = unqualified_range_formula(&sheet_name, range.bounds);
+                    let config = json!({
+                        "type": map_chart_type(&chart_type),
+                        "dataRange": data_range,
+                    });
+                    let result = sheet.charts().create(&config).map_err(engine_error)?;
+                    let chart_id = result
+                        .data
+                        .as_ref()
+                        .and_then(|data| {
+                            data.as_str().map(str::to_string).or_else(|| {
+                                data.get("id").and_then(Value::as_str).map(str::to_string)
+                            })
+                        })
+                        .ok_or_else(|| BatchError {
+                            code: "GeneralException",
+                            message: "chart creation did not return an id".to_string(),
+                        })?;
+                    self.charts.lock().expect("charts lock").insert(
+                        id,
+                        ChartRef {
+                            sheet,
+                            chart_id,
+                            title: None,
+                            category_title: None,
+                            value_title: None,
+                        },
+                    );
+                }
                 Op::Set {
                     id,
                     property,
                     value,
                 } => {
+                    if self.charts.lock().expect("charts lock").contains_key(&id) {
+                        self.set_chart_property(&id, &property, &value)?;
+                        continue;
+                    }
                     let ranges = self.ranges.lock().expect("ranges lock");
                     let range = ranges.get(&id).ok_or_else(|| BatchError {
                         code: "InvalidObjectPath",
@@ -245,6 +380,101 @@ impl Host {
             loaded,
         })
     }
+
+    fn set_chart_property(
+        &self,
+        id: &str,
+        property: &str,
+        value: &Value,
+    ) -> Result<(), BatchError> {
+        let mut charts = self.charts.lock().expect("charts lock");
+        let chart = charts.get_mut(id).ok_or_else(|| BatchError {
+            code: "InvalidObjectPath",
+            message: "The chart object is not available.".to_string(),
+        })?;
+        let text = match value {
+            Value::String(s) => s.clone(),
+            other => other.to_string(),
+        };
+        match property {
+            "title.text" => chart.title = Some(text),
+            "axes.categoryAxis.title.text" => chart.category_title = Some(text),
+            "axes.valueAxis.title.text" => chart.value_title = Some(text),
+            other => {
+                return Err(BatchError {
+                    code: "InvalidArgument",
+                    message: format!("Unsupported Chart property '{other}'"),
+                });
+            }
+        }
+        let mut config = json!({});
+        if let Some(title) = &chart.title {
+            config["title"] = json!(title);
+        }
+        let mut axes = json!({});
+        if let Some(title) = &chart.category_title {
+            axes["categoryAxis"] = json!({ "title": title, "visible": true });
+        }
+        if let Some(title) = &chart.value_title {
+            axes["valueAxis"] = json!({ "title": title, "visible": true });
+        }
+        if axes.as_object().is_some_and(|obj| !obj.is_empty()) {
+            // ChartData JSON uses `axis` (singular); ChartSpec uses `axes`.
+            config["axis"] = axes;
+        }
+        chart
+            .sheet
+            .charts()
+            .update(&chart.chart_id, &config)
+            .map_err(engine_error)?;
+        Ok(())
+    }
+}
+
+fn map_chart_type(chart_type: &str) -> &'static str {
+    match chart_type.to_ascii_lowercase().as_str() {
+        "columnclustered" | "column" | "columnclusteredchart" => "column",
+        "barclustered" | "bar" => "bar",
+        "line" => "line",
+        "pie" => "pie",
+        "area" => "area",
+        "scatter" | "xyscatter" => "scatter",
+        other if other.contains("column") => "column",
+        _ => "column",
+    }
+}
+
+fn col_letter(mut col: u32) -> String {
+    let mut out = String::new();
+    col += 1;
+    while col > 0 {
+        col -= 1;
+        out.insert(0, (b'A' + (col % 26) as u8) as char);
+        col /= 26;
+    }
+    out
+}
+
+fn range_formula(sheet_name: &str, bounds: (u32, u32, u32, u32)) -> String {
+    let (sr, sc, er, ec) = bounds;
+    format!(
+        "='{sheet_name}'!${}${}:${}${}",
+        col_letter(sc),
+        sr + 1,
+        col_letter(ec),
+        er + 1
+    )
+}
+
+fn unqualified_range_formula(sheet_name: &str, bounds: (u32, u32, u32, u32)) -> String {
+    let (sr, sc, er, ec) = bounds;
+    format!(
+        "{sheet_name}!{}{}:{}{}",
+        col_letter(sc),
+        sr + 1,
+        col_letter(ec),
+        er + 1
+    )
 }
 
 fn unique_sheet_name(workbook: &Workbook) -> Result<String, BatchError> {

@@ -29,7 +29,7 @@ use value_types::CellValue;
 
 /// Simulate the pivot_render logic inline to produce a cell grid.
 /// This duplicates the renderer's layout algorithm so we can test it within
-/// the compute-pivot crate without depending on formula-eval.
+/// the compute-pivot crate.
 fn simulate_render(
     result: &PivotTableResult,
     config: &PivotTableConfig,

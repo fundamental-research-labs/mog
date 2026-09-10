@@ -49,7 +49,7 @@ pub use bridge_delegate_macros::__expand;
 ///
 /// This generates:
 /// 1. `impl ComputeService { ... }` with delegate methods for each descriptor method
-/// 2. New descriptor macros `__bridge_descriptor_ComputeService_*` that WASM/NAPI can consume
+/// 2. New descriptor macros `__bridge_descriptor_ComputeService_*`
 ///
 /// For `#[bridge::write]` methods returning `(Vec<u8>, MutationResult)`, the delegate
 /// strips the `Vec<u8>` and returns just `MutationResult`. The re-emitted descriptor

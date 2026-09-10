@@ -3,21 +3,16 @@
 //! `ComputeApiError` wraps `ComputeError` from the engine and adds
 //! facade-level error variants (address validation, sheet lookup, etc.).
 //!
-//! `ComputeApiError` implements [`bridge_types::BridgeStructuredError`] so the
-//! bridge macros (WASM,
-//! NAPI, Tauri) emit the **same** tagged-JSON envelope across every
-//! transport: `[BRIDGE_ERROR]{"kind":"...","message":"...", ...}`. The
-//! TS-side discriminated union (`kernel/src/types/bridge-error.ts`)
-//! mirrors this shape exactly.
+//! `ComputeApiError` implements [`bridge_types::BridgeStructuredError`] so
+//! bridge macros emit the same tagged-JSON envelope:
+//! `[BRIDGE_ERROR]{"kind":"...","message":"...", ...}`.
 
 use compute_security::{AccessLevel, AccessTarget, SecurityError};
 use value_types::ComputeError;
 
 /// Wire-friendly access target for SDK bindings. Mirrors
 /// `compute_security::AccessTarget` but renders UUIDs as strings so the
-/// shape crosses NAPI/PyO3/WASM without a typed-enum codegen round-trip
-/// (that codegen lands in B.2 for the policy-add/list paths — the error
-/// path doesn't need it yet).
+/// shape serializes without a typed-enum codegen round-trip.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum AccessTargetWire {

@@ -1,9 +1,9 @@
 //! Source-independent formula contracts.
 //!
-//! These tests complement `dev/formula-eval`: they encode small, durable
-//! product contracts without depending on XLSX cached values. Workbook cases
-//! must hydrate through `ComputeEngine::from_snapshot` so they exercise the
-//! same storage/cell_store/recalc path used by production engine initialization.
+//! These tests encode small, durable product contracts without depending on
+//! XLSX cached values. Workbook cases must hydrate through
+//! `ComputeEngine::from_snapshot` so they exercise the same
+//! storage/cell_store/recalc path used by production engine initialization.
 
 use cell_types::{SheetId, SheetPos};
 use compute_core::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};

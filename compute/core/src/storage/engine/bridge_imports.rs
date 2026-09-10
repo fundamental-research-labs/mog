@@ -32,7 +32,7 @@ impl ComputeEngine {
     }
 
     /// Assemble an export-capable native engine from an already-initialized
-    /// formula-eval compute state without running another full recalculation.
+    /// compute state without running another full recalculation.
     #[cfg(feature = "__internal")]
     #[doc(hidden)]
     pub fn from_evaluated_snapshot_for_export(

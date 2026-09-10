@@ -369,8 +369,8 @@ impl<'a> MirrorAccess<'a> {
         }
 
         // Resolve based on the first (and typically only) ref.
-        // If positional resolution fails (CellId not in cell_store — common in
-        // formula-eval where snapshot CellIds are random UUIDs), fall back to
+        // If positional resolution fails (CellId not in cell_store — common when
+        // snapshot CellIds are random UUIDs), fall back to
         // raw_expression which gets parsed and evaluated as a formula.
         let positional_result = match &formula.refs[0] {
             IdentityFormulaRef::Cell(cell_ref) => {
@@ -513,9 +513,9 @@ impl<'a> MirrorAccess<'a> {
             return Some(resolved);
         }
 
-        // Positional resolution failed (CellIds not found in cell_store — common in
-        // formula-eval where snapshot CellIds are random UUIDs that don't match
-        // the cell store's actual CellIds). Fall back to `raw_expression` which
+        // Positional resolution failed (CellIds not found in cell_store — common
+        // when snapshot CellIds are random UUIDs that don't match the cell
+        // store's actual CellIds). Fall back to `raw_expression` which
         // gets classified and evaluated (as constant or reparsed formula).
         // The typed classifier replaces the byte-level `try_parse_constant`
         // deleted in typed formula boundary

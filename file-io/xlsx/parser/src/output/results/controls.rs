@@ -3,7 +3,7 @@ use super::*;
 // FormControlOutput
 // =============================================================================
 
-/// Serializable form control output for WASM consumers.
+/// Serializable form control output.
 ///
 /// Mirrors all CT_FormControlPr attributes plus anchor and VML data
 /// for lossless roundtrip and rendering on the TypeScript side.

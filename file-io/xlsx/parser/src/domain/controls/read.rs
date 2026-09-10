@@ -169,7 +169,7 @@ pub fn parse_worksheet_controls_from_xml(worksheet_xml: &[u8]) -> Vec<WorksheetC
 ///    - Modern anchor from `<controlPr>` in worksheet XML is preferred.
 ///    - VML anchor is used as fallback.
 ///
-/// Returns `Vec<FormControlOutput>` ready for WASM serialization.
+/// Returns `Vec<FormControlOutput>`.
 pub fn parse_form_controls_for_sheet(
     archive: &crate::zip::XlsxArchive,
     sheet_num: usize,
@@ -188,7 +188,7 @@ pub fn parse_form_controls_for_sheet(
 /// or `mc:AlternateContent`), parses their attributes and `<objectPr>` children,
 /// and optionally enriches with VML preview image references.
 ///
-/// Returns `Vec<OleObjectOutput>` ready for WASM serialization.
+/// Returns `Vec<OleObjectOutput>`.
 pub fn parse_ole_objects_for_sheet(
     archive: &crate::zip::XlsxArchive,
     sheet_num: usize,

@@ -13,7 +13,7 @@
 //! over `u128` — the raw bytes of a UUID. This gives us `Copy`, single-instruction equality,
 //! and zero-cost hashing via `FxHashMap` (the entire 128-bit value IS the hash bucket key).
 //! UUID string parsing (`uuid::Uuid::parse_str(s).as_u128()`) happens only at the IPC boundary
-//! (Tauri commands, snapshot deserialization) — internal code never touches strings.
+//! (snapshot deserialization) — internal code never touches strings.
 //!
 //! # `CellRef`: Resolved vs Positional
 //!
@@ -45,7 +45,7 @@
 //! - **Coercion hot paths**: `coerce_to_number`, `coerce_to_string`, `coerce_to_bool` are
 //!   allocation-free for the common cases (Number, Null, Boolean). Text coercion uses
 //!   `fast_float::parse` for number conversion and `Cow::Borrowed` to avoid copies.
-//! - **Snapshot formats**: JSON path (string UUIDs) for Tauri command default; bincode path
+//! - **Snapshot formats**: JSON path (string UUIDs) at the IPC boundary; bincode path
 //!   (raw u128) for large workbooks — skips UUID string parsing entirely.
 
 #![forbid(unsafe_code)]

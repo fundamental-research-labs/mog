@@ -1,7 +1,7 @@
 //! Recalculation types for incremental cell updates.
 //!
-//! [`CellEdit`] carries a single cell change from TS to Rust.
-//! [`RecalcResult`] carries the computed changes back from Rust to TS.
+//! [`CellEdit`] carries a single cell change into the engine.
+//! [`RecalcResult`] carries the computed changes back to the caller.
 
 use std::collections::HashMap;
 
@@ -13,7 +13,7 @@ use domain_types::domain::validation::{SchemaType, ValidationErrorCode, Validati
 use value_types::{CellValue, FiniteF64};
 
 /// Aggregate counters for a full recalc pass. Always-on, near-zero overhead.
-/// Returned as part of RecalcResult so formula-eval can display them.
+/// Returned as part of RecalcResult.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RecalcMetrics {

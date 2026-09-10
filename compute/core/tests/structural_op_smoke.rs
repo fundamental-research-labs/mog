@@ -401,8 +401,7 @@ fn smoke_add_sheet_then_delete_sheet() {
 // ---------------------------------------------------------------------------
 // 6. delete_sheet → add_sheet
 //
-// Caveat documented in the WalkOp module (`dev/formula-eval/src/walk/ops.rs`):
-// delete_sheet destroys cell identities inside the deleted sheet. The
+// Caveat: delete_sheet destroys cell identities inside the deleted sheet. The
 // re-created sheet has a fresh SheetId. This smoke test therefore asserts
 // the **name-level** inverse — post-state has the same sheet names as
 // pre-state — and does not try to roundtrip cell data inside the deleted

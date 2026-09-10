@@ -142,7 +142,6 @@ pub enum TerminationReason {
     /// Numerical error (NaN, overflow, etc.).
     NumericalError,
     /// Problem requires Python solver (multi-variable, LP, MIP, global).
-    /// The calling layer (Tauri/WASM) catches this and dispatches to Python sandbox.
     RequiresPython,
 }
 

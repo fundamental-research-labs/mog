@@ -131,7 +131,7 @@ impl ComputeCore {
                 None => continue,
             };
 
-            for (&cell_id, _entry) in sheet.cells_iter() {
+            for (&cell_id, _entry) in cell_store.iter_sheet_cells(&key.sheet_id) {
                 // Resolve position; skip if not in the target column.
                 let pos = match sheet.position_of(&cell_id) {
                     Some(p) => p,

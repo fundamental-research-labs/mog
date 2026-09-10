@@ -11,7 +11,17 @@ impl CellStore {
         if let Some(s) = self.sheets.remove(sheet) {
             self.dense_cache.remove_sheet(sheet);
             self.sheet_names.remove(&normalize_sheet_key(&s.name));
-            self.cell_to_sheet.retain(|_, owner| owner != sheet);
+            let ids: Vec<_> = self
+                .cell_to_sheet
+                .iter()
+                .filter(|(_, owner)| *owner == sheet)
+                .map(|(id, _)| *id)
+                .collect();
+            for id in ids {
+                self.cell_to_sheet.remove(&id);
+                self.cells.remove(&id);
+                self.formulas.remove(&id);
+            }
             self.row_to_sheet.retain(|_, owner| owner != sheet);
             self.col_to_sheet.retain(|_, owner| owner != sheet);
             self.row_run_sheets.retain(|_, owners| {

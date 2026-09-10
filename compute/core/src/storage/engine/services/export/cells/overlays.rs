@@ -100,7 +100,7 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
                     // authored cell. Its value and metadata are authoritative
                     // even if the import cache still exists in a deferred or
                     // manually-calculated engine.
-                    if has_authored_cell_at(sheet, SheetPos::new(cached.row, cached.col)) {
+                    if has_authored_cell_at(cell_store, sheet, SheetPos::new(cached.row, cached.col)) {
                         continue;
                     }
                     match cells_by_pos.entry(key) {
@@ -118,7 +118,7 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
                 // An authored cell at this position may be a genuine blocker
                 // or an explicit user replacement. Never reattach imported
                 // child metadata to it.
-                if has_authored_cell_at(sheet, position) {
+                if has_authored_cell_at(cell_store, sheet, position) {
                     continue;
                 }
 
@@ -228,17 +228,21 @@ fn cache_position_owned_by_source(
         .is_some_and(|(owner, _, _)| owner == cache.source_id)
 }
 
-fn has_authored_cell_at(sheet: &crate::cells::SheetStore, position: SheetPos) -> bool {
+fn has_authored_cell_at(
+    cell_store: &CellStore,
+    sheet: &crate::cells::SheetStore,
+    position: SheetPos,
+) -> bool {
     let Some(cell_id) = sheet.cell_id_at(position) else {
         return false;
     };
-    sheet
-        .get_cell(&cell_id)
+    cell_store
+        .get_cell_entry(&cell_id)
         // `cell_id_at` can resolve identity-only entries allocated for
         // comments, merges, or formula dependencies. They carry no authored
         // value and must not hide an imported spill cache. A virtual range
         // identity is authoritative only when it has a materialized entry.
-        .is_some_and(|_| !sheet.is_ghost(&cell_id) || cell_id.is_virtual())
+        .is_some_and(|_| !cell_store.is_ghost(&cell_id) || cell_id.is_virtual())
 }
 
 fn is_empty_imported_formula_marker(cell: &CellData) -> bool {

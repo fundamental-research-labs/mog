@@ -45,7 +45,7 @@ fn preview_splits_native_values_respects_limit_and_preserves_cells() {
         preview_text_to_columns(&cell_store, sheet_id, 0, 99, 0, &options, 2),
         vec![vec!["a", "b", "c"], vec!["d", "e"]]
     );
-    assert_eq!(cell_store.get_sheet(&sheet_id).unwrap().cell_count(), 3);
+    assert_eq!(cell_store.iter_sheet_cells(&sheet_id).count(), 3);
     assert_eq!(
         cell_store.get_cell_value_at(&sheet_id, SheetPos::new(0, 0)),
         Some(&CellValue::Text("a,b,c".into()))

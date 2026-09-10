@@ -136,8 +136,7 @@ pub(crate) fn bench_dense_cache_materialize(c: &mut Criterion) {
 
         b.iter(|| {
             let mut cache = DenseColumnCache::new();
-            let sheet_store = cell_store.get_sheet(&sheet_id).unwrap();
-            cache.materialize(&sheet_id, 0, sheet_store);
+            cache.materialize(&sheet_id, 0, &cell_store);
             black_box(&cache);
         });
     });

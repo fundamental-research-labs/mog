@@ -122,13 +122,10 @@ fn data_table_snapshot() -> WorkbookSnapshot {
 
 fn cell_id_at(cell_store: &CellStore, sheet_id: SheetId, row: u32, col: u32) -> CellId {
     cell_store
-        .get_sheet(&sheet_id)
-        .and_then(|s| {
-            s.cells_iter()
-                .find_map(|(id, _)| match cell_store.resolve_position(id) {
-                    Some(pos) if pos.row() == row && pos.col() == col => Some(*id),
-                    _ => None,
-                })
+        .iter_sheet_cells(&sheet_id)
+        .find_map(|(id, _)| match cell_store.resolve_position(id) {
+            Some(pos) if pos.row() == row && pos.col() == col => Some(*id),
+            _ => None,
         })
         .unwrap_or_else(|| panic!("no cell at ({row}, {col})"))
 }

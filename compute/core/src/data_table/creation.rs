@@ -200,15 +200,15 @@ pub(super) fn validate_body_is_empty(
     sheet_id: &SheetId,
     body: Rect,
 ) -> Result<(), ComputeError> {
-    let Some(sheet) = cell_store.get_sheet(sheet_id) else {
+    if cell_store.get_sheet(sheet_id).is_none() {
         return Err(ComputeError::SheetNotFound {
             sheet_id: sheet_id.to_uuid_string(),
         });
-    };
+    }
     for row in body.start_row..=body.end_row {
         for col in body.start_col..=body.end_col {
             if let Some(cell_id) = cell_store.resolve_cell_id(sheet_id, SheetPos::new(row, col))
-                && !sheet.is_ghost(&cell_id)
+                && !cell_store.is_ghost(&cell_id)
             {
                 return Err(invalid_data_table(
                     "DATA_TABLE_BODY_NOT_EMPTY",

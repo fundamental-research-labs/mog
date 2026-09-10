@@ -81,6 +81,7 @@ impl CellStore {
         // This avoids incremental rehashing as cells are inserted sheet-by-sheet.
         let total_cells: usize = snapshot.sheets.iter().map(|s| s.cells.len()).sum();
         cell_store.cell_to_sheet.reserve(total_cells);
+        cell_store.cells.reserve(total_cells);
 
         // Pre-size sheet_names for the number of sheets.
         let sheet_count = snapshot.sheets.len();
@@ -226,9 +227,9 @@ impl CellStore {
             let cell_id = CellId::from_uuid_str(&cell_data.cell_id)?;
             let pos = SheetPos::new(cell_data.row, cell_data.col);
             sheet_store.register_cell(cell_id, (pos).row(), (pos).col());
-            sheet_store.cells.insert(cell_id, entry);
+            self.cells.insert(cell_id, entry);
             if let Some(formula) = cell_data.identity_formula {
-                sheet_store.formulas.insert(cell_id, formula);
+                self.formulas.insert(cell_id, formula);
             }
             self.cell_to_sheet.insert(cell_id, sheet_id);
 
@@ -299,7 +300,7 @@ impl CellStore {
         }
 
         // Emit post-tightening dimensions for profiling (zero-cost when no subscriber).
-        let non_null_count = sheet_store.cells.len();
+        let non_null_count = sheet_store.cell_count(&self.cells);
         let _dims = tracing::info_span!("store_sheet_dims",
             sheet = %snapshot.name,
             snapshot_rows = snapshot.rows,
@@ -434,7 +435,7 @@ impl CellStore {
     ) {
         sheet_store.history = self.history.share();
         sheet_store.set_id_alloc(self.id_alloc.clone());
-        sheet_store.rebuild_column_index();
+        sheet_store.rebuild_column_index(&self.cells, &self.formulas);
         // Maintain cell_to_sheet for all cells in this sheet store
         for cell_id in sheet_store.axes_by_cell.keys() {
             self.cell_to_sheet.insert(*cell_id, sheet_id);
@@ -820,7 +821,7 @@ mod tests {
         assert_eq!(sheet.position_of(&ghost_id), Some(ghost_pos));
 
         // Ghost cell should be in cells map
-        assert!(sheet.get_cell(&ghost_id).is_some());
+        assert!(cell_store.get_cell_entry(&ghost_id).is_some());
 
         // Content cell should also work
         let content_id = CellId::from_uuid_str(content_uuid).unwrap();
@@ -833,7 +834,7 @@ mod tests {
         assert_eq!(values.rows(), 100);
         assert_eq!(values.get(5, 0), Some(&CellValue::number(42.0)));
         assert_eq!(values.get(99, 0), Some(&CellValue::Null));
-        assert_eq!(sheet.get_column_view(2).map(|col| col.len()), Some(6));
+        assert_eq!(cell_store.get_column_view(&sheet.id, 2).map(|col| col.len()), Some(6));
     }
 }
 

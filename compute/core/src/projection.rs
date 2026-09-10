@@ -415,11 +415,11 @@ impl ProjectionRegistry {
 
                 // Check cell_store for existing cell content.
                 if let Some(cell_id) = cell_store.resolve_cell_id(sheet, SheetPos::new(row, col))
-                    && let Some(sheet_store) = cell_store.get_sheet(sheet)
-                    && let Some(entry) = sheet_store.get_cell(&cell_id)
+                    && cell_store.get_sheet(sheet).is_some()
+                    && let Some(entry) = cell_store.get_cell_entry(&cell_id)
                 {
                     let has_content =
-                        !entry.value.is_null() || sheet_store.formula(&cell_id).is_some();
+                        !entry.value.is_null() || cell_store.get_formula(&cell_id).is_some();
                     if has_content {
                         return Err(cell_id);
                     }

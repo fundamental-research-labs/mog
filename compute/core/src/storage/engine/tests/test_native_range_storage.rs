@@ -154,7 +154,7 @@ fn native_data_range_has_no_duplicate_persisted_payload() {
     let sheet = engine.cell_store().get_sheet(&test_sheet_id()).unwrap();
     assert_eq!(sheet.iter_ranges().count(), 1);
     assert_eq!(
-        sheet.cells_iter().count(),
+        engine.cell_store().iter_sheet_cells(&sheet.id).count(),
         0,
         "compact values do not materialize authored cell entries"
     );
@@ -185,7 +185,7 @@ fn compact_csv_constructor_and_replacement_preserve_range_reads_and_edits() {
         let sid = *engine.cell_store().sheet_ids().next().unwrap();
         let sheet = engine.cell_store().get_sheet(&sid).unwrap();
         assert!(sheet.iter_ranges().count() > 0);
-        assert_eq!(sheet.cells_iter().count(), 0);
+        assert_eq!(engine.cell_store().iter_sheet_cells(&sheet.id).count(), 0);
         assert!(
             engine
                 .cell_store()
@@ -343,7 +343,7 @@ fn native_snapshot_preserves_identity_only_range_positions_without_blank_overrid
     let (engine, _) = ComputeEngine::from_snapshot(range_backed_snapshot()).unwrap();
     let sid = test_sheet_id();
     let source = engine.cell_store.get_sheet(&sid).unwrap();
-    assert_eq!(source.cells_iter().count(), 0);
+    assert_eq!(engine.cell_store.iter_sheet_cells(&sid).count(), 0);
     let row = source.row_id_at(0).unwrap();
     let col = source.col_id_at(0).unwrap();
     let snapshot = construction::build_workbook_snapshot(&engine.stores, &engine.cell_store);
@@ -353,10 +353,10 @@ fn native_snapshot_preserves_identity_only_range_positions_without_blank_overrid
     let decoded = serde_json::from_slice(&bytes).unwrap();
     let (restored, _) = ComputeEngine::from_snapshot(decoded).unwrap();
     let sheet = restored.cell_store.get_sheet(&sid).unwrap();
-    assert_eq!(sheet.cells_iter().count(), 0);
+    assert_eq!(engine.cell_store().iter_sheet_cells(&sheet.id).count(), 0);
     assert_eq!(sheet.row_id_at(0), Some(row));
     assert_eq!(sheet.col_id_at(0), Some(col));
-    assert_eq!(as_f64(sheet.value_at(SheetPos::new(0, 0))), Some(1.0));
+    assert_eq!(as_f64(engine.cell_store().get_cell_value_at(&sheet.id, SheetPos::new(0, 0))), Some(1.0));
     let grid = &restored.stores.grid_indexes[&sid];
     assert!(std::sync::Arc::ptr_eq(&sheet.row_axis, &grid.row_axis()));
     assert!(std::sync::Arc::ptr_eq(&sheet.col_axis, &grid.col_axis()));
@@ -440,7 +440,7 @@ fn metadata_only_growth_shares_native_axes_and_remains_value_sparse() {
         Some((sid, 100_000))
     );
     assert_eq!(engine.cell_store.col_index_lookup(&col_id), Some((sid, 15)));
-    assert_eq!(sheet.cells_iter().count(), 0);
+    assert_eq!(engine.cell_store().iter_sheet_cells(&sheet.id).count(), 0);
     assert_eq!(
         sheet.position_of(&cell_id),
         Some(SheetPos::new(100_000, 15))
@@ -498,7 +498,7 @@ fn sparse_million_row_import_keeps_shared_compact_axes_and_snapshot_identities()
     };
     assert_eq!(rows.segments().len(), 1);
     assert_eq!(cols.segments().len(), 1);
-    assert_eq!(sheet.cells_iter().count(), 1);
+    assert_eq!(engine.cell_store().iter_sheet_cells(&sheet.id).count(), 1);
     assert_eq!(sheet.cells().count(), 1);
     let last_row = sheet.row_axis.identity_at(sid, 999_999).unwrap();
     let snapshot = construction::build_workbook_snapshot(&engine.stores, &engine.cell_store);

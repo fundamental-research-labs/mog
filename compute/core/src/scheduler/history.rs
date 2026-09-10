@@ -48,8 +48,8 @@ impl ComputeCore {
                 });
             }
             for sheet in cell_store.sheet_ids() {
-                if let Some(source) = cell_store.get_sheet(sheet) {
-                    for cell in source.formulas.keys() {
+                if cell_store.get_sheet(sheet).is_some() {
+                    for (cell, _) in cell_store.iter_sheet_formulas(sheet) {
                         refresh
                             .entry(*cell)
                             .or_insert_with(|| self.get_formula(cell).map(str::to_owned));

@@ -162,16 +162,20 @@ pub(super) fn build_sorted_range_index(
     let empty_col = ColumnView::empty();
     let mut criteria_slices: SmallVec<[ColumnView<'_>; 4]> = SmallVec::new();
     for pair in &pattern.pairs {
-        let sheet = cell_store.get_sheet(&pair.data_sheet)?;
-        let slice = sheet.get_column_view(pair.data_col).unwrap_or(empty_col);
+        let slice = cell_store
+            .get_column_view(&pair.data_sheet, pair.data_col)
+            .unwrap_or(empty_col);
         criteria_slices.push(slice);
     }
 
     // Read value column slice (for SUMIFS etc.)
     // Missing column → empty slice (all values treated as 0.0 per Excel SUMIFS semantics).
     let value_slice: Option<ColumnView<'_>> = if let Some((vs, vc, _, _)) = &pattern.value_range {
-        let sheet = cell_store.get_sheet(vs)?;
-        Some(sheet.get_column_view(*vc).unwrap_or(empty_col))
+        Some(
+            cell_store
+                .get_column_view(vs, *vc)
+                .unwrap_or(empty_col),
+        )
     } else {
         None
     };
@@ -179,9 +183,8 @@ pub(super) fn build_sorted_range_index(
     // Read range column slice.
     // Missing column → empty slice (no numeric values → empty sorted index → all results 0).
     let (range_sheet, range_col, _range_start, _range_end) = plan.range_data_col;
-    let range_sheet_data = cell_store.get_sheet(&range_sheet)?;
-    let range_slice = range_sheet_data
-        .get_column_view(range_col)
+    let range_slice = cell_store
+        .get_column_view(&range_sheet, range_col)
         .unwrap_or(empty_col);
 
     // Determine actual row bounds (same logic as build_agg_map)
@@ -376,12 +379,10 @@ pub(super) fn execute_sorted_range_prepass(
 
     // Pre-load dynamic column slices for bound resolution
     let lower_slice: Option<ColumnView<'_>> = plan.lower_bound.as_ref().and_then(|b| {
-        let sh = cell_store.get_sheet(&b.dynamic_sheet)?;
-        sh.get_column_view(b.dynamic_col)
+        cell_store.get_column_view(&b.dynamic_sheet, b.dynamic_col)
     });
     let upper_slice: Option<ColumnView<'_>> = plan.upper_bound.as_ref().and_then(|b| {
-        let sh = cell_store.get_sheet(&b.dynamic_sheet)?;
-        sh.get_column_view(b.dynamic_col)
+        cell_store.get_column_view(&b.dynamic_sheet, b.dynamic_col)
     });
 
     let mut results = Vec::with_capacity(group.cell_ids.len());

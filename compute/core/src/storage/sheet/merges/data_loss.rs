@@ -14,11 +14,11 @@ pub fn check_merge_data_loss(
         return (false, 0);
     };
     let mut occupied = std::collections::HashSet::new();
-    for id in sheet.cell_ids() {
-        if sheet.is_ghost(id) {
+    for id in cell_store.sheet_cell_ids(&sheet_id) {
+        if cell_store.is_ghost(&id) {
             continue;
         }
-        let Some(pos) = sheet.position_of(id) else {
+        let Some(pos) = sheet.position_of(&id) else {
             continue;
         };
         if pos.row() < sr
@@ -35,7 +35,7 @@ pub fn check_merge_data_loss(
                 !value.is_null()
                     && !matches!(value, value_types::CellValue::Text(text) if text.is_empty())
             })
-            || cell_store.get_formula(id).is_some()
+            || cell_store.get_formula(&id).is_some()
         {
             occupied.insert((pos.row(), pos.col()));
         }
@@ -43,7 +43,7 @@ pub fn check_merge_data_loss(
     let max_col = ec.min(sheet.cols.saturating_sub(1));
     if sc <= max_col {
         for col in sc..=max_col {
-            if let Some(values) = sheet.get_column_view(col) {
+            if let Some(values) = cell_store.get_column_view(&sheet_id, col) {
                 for (row, value) in values
                     .iter()
                     .enumerate()

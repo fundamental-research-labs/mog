@@ -37,7 +37,7 @@ fn numeric_column(cell_store: &CellStore, sheet: SheetId) -> Option<&value_types
         0,
         0,
         ROWS - 1,
-        cell_store.get_sheet(&sheet).unwrap(),
+        cell_store,
     )
 }
 

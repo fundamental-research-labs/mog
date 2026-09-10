@@ -86,7 +86,7 @@ fn insert_cell_creates_column_values_for_new_column() {
     let (mut cell_store, sheet_id) = make_store();
     // Column 20 has no column_values entry initially
     let sheet = cell_store.get_sheet(&sheet_id).unwrap();
-    assert!(!sheet.get_column_view(20).is_some());
+    assert!(!cell_store.get_column_view(&sheet_id, 20).is_some());
 
     let cell_id = CellId::from_raw(100);
     cell_store.insert_cell(
@@ -100,8 +100,8 @@ fn insert_cell_creates_column_values_for_new_column() {
 
     // column_values should now exist for column 20
     let sheet = cell_store.get_sheet(&sheet_id).unwrap();
-    assert!(sheet.get_column_view(20).is_some());
-    let col_vec = &sheet.get_column_view(20).unwrap();
+    assert!(cell_store.get_column_view(&sheet_id, 20).is_some());
+    let col_vec = &cell_store.get_column_view(&sheet_id, 20).unwrap();
     assert_eq!(col_vec[5], CellValue::number(42.0));
 }
 
@@ -123,7 +123,7 @@ fn set_value_mut_creates_column_values_for_new_column() {
     cell_store.set_value_mut(&cell_id, CellValue::number(99.0));
     let sheet = cell_store.get_sheet(&sheet_id).unwrap();
     assert_eq!(
-        sheet.get_column_view(25).unwrap()[3],
+        cell_store.get_column_view(&sheet_id, 25).unwrap()[3],
         CellValue::number(99.0)
     );
 }
@@ -132,7 +132,7 @@ fn set_value_mut_creates_column_values_for_new_column() {
 fn apply_edit_creates_column_values_for_new_column() {
     let (mut cell_store, sheet_id) = make_store();
     let sheet = cell_store.get_sheet(&sheet_id).unwrap();
-    assert!(!sheet.get_column_view(30).is_some());
+    assert!(!cell_store.get_column_view(&sheet_id, 30).is_some());
 
     let cell_id = CellId::from_raw(102);
     cell_store.apply_edit(
@@ -144,9 +144,9 @@ fn apply_edit_creates_column_values_for_new_column() {
     );
 
     let sheet = cell_store.get_sheet(&sheet_id).unwrap();
-    assert!(sheet.get_column_view(30).is_some());
+    assert!(cell_store.get_column_view(&sheet_id, 30).is_some());
     assert_eq!(
-        sheet.get_column_view(30).unwrap()[2],
+        cell_store.get_column_view(&sheet_id, 30).unwrap()[2],
         CellValue::number(77.0)
     );
 }
@@ -217,8 +217,8 @@ fn distant_cell_uses_sparse_storage_and_column_view_borrows_the_authority() {
     let pos = SheetPos::new(1_000_000, 200);
     cell_store.apply_edit(&sheet_id, id, pos, CellValue::from("sparse"), None);
     let sheet = cell_store.get_sheet(&sheet_id).unwrap();
-    let entry = sheet.get_cell(&id).unwrap();
-    let column = sheet.get_column_view(200).unwrap();
+    let entry = cell_store.get_cell_entry(&id).unwrap();
+    let column = cell_store.get_column_view(&sheet_id, 200).unwrap();
     assert_eq!(column.len(), 1_000_001);
     assert!(std::ptr::eq(column.get(1_000_000).unwrap(), &entry.value));
     assert_eq!(column.get(999_999), Some(&CellValue::Null));
@@ -266,7 +266,7 @@ fn store_with_imported_text_ghost() -> (
             col_offset_by_id: [(col_id, 0)].into_iter().collect(),
         },
     );
-    sheet.rebuild_column_index();
+    cell_store.rebuild_sheet_column_index(&sheet_id);
     let id = CellId::from_raw(500);
     let pos = SheetPos::new(0, 0);
     cell_store.register_identity_only(&sheet_id, pos, id);
@@ -334,7 +334,6 @@ fn moving_between_sheets_transfers_ownership_and_invalidates_both_columns() {
         Some(&CellValue::from("moved"))
     );
     let source = cell_store.get_sheet(&source_sheet).unwrap();
-    assert!(!source.cells.contains_key(&cell));
     assert!(!source.position_of(&cell).is_some());
     assert!(!source.authored_cell_id_at(source_pos).is_some());
     assert_eq!(

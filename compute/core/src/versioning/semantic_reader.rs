@@ -113,7 +113,7 @@ pub fn read_engine_semantic_workbook_state(
             digest: None,
         };
 
-        let mut cells: Vec<_> = sheet.cells_iter().collect();
+        let mut cells: Vec<_> = engine.cell_store().iter_sheet_cells(&sheet_id).collect();
         cells.sort_by_key(|(cell_id, _)| {
             let pos = sheet.position_for_diagnostics(cell_id);
             (
@@ -135,7 +135,7 @@ pub fn read_engine_semantic_workbook_state(
                 .and_then(|props| props.format.clone())
                 .map(canonical_direct_format)
                 .transpose()?;
-            if sheet.is_ghost(cell_id)
+            if engine.cell_store().is_ghost(cell_id)
                 && direct_format.is_none()
                 && authored_formula.is_none()
                 && value_provenance.is_empty()
@@ -151,8 +151,9 @@ pub fn read_engine_semantic_workbook_state(
             };
 
             let cell_key = canonical_cell_key(&sheet_key, pos.row(), pos.col());
-            let formula = sheet
-                .formula(cell_id)
+            let formula = engine
+                .cell_store()
+                .get_formula(cell_id)
                 .map(|formula| {
                     canonical_formula(
                         engine,

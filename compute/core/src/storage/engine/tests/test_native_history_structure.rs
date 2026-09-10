@@ -45,7 +45,7 @@ fn partial_range_deletions_restore_slots_and_axis_ids_without_payload_clone() {
     let original_cols = engine.stores.grid_indexes[&sid].col_axis();
     let original = engine.cell_store().get_sheet(&sid).unwrap();
     let pointer = Arc::as_ptr(&original.iter_ranges().next().unwrap().1.values);
-    let authored = original.cells_iter().count();
+    let authored = engine.cell_store().iter_sheet_cells(&sid).count();
     let original_identity = engine
         .cell_store()
         .resolve_cell_id(&sid, SheetPos::new(255, 1));
@@ -91,7 +91,7 @@ fn partial_range_deletions_restore_slots_and_axis_ids_without_payload_clone() {
             original_cols.store()
         );
         let sheet = engine.cell_store().get_sheet(&sid).unwrap();
-        assert_eq!(sheet.cells_iter().count(), authored);
+        assert_eq!(engine.cell_store().iter_sheet_cells(&sheet.id).count(), authored);
         assert_eq!(
             Arc::as_ptr(&sheet.iter_ranges().next().unwrap().1.values),
             pointer
@@ -157,7 +157,7 @@ fn fully_deleted_range_returns_with_original_payload_and_no_materialized_cells()
             Arc::as_ptr(&sheet.iter_ranges().next().unwrap().1.values),
             pointer
         );
-        assert_eq!(sheet.cells_iter().count(), 0);
+        assert_eq!(engine.cell_store().iter_sheet_cells(&sheet.id).count(), 0);
         assert_eq!(cell_value_at(&engine, &sid, 511, 1), num(1511.0));
         engine.redo().unwrap();
         assert_eq!(
@@ -432,7 +432,7 @@ fn compact_sort_undo_redo_keeps_payload_and_row_identity_order() {
             first
         );
         let sheet = engine.cell_store().get_sheet(&sid).unwrap();
-        assert_eq!(sheet.cells_iter().count(), 0);
+        assert_eq!(engine.cell_store().iter_sheet_cells(&sheet.id).count(), 0);
         assert_eq!(
             Arc::as_ptr(&sheet.iter_ranges().next().unwrap().1.values),
             pointer
@@ -785,9 +785,7 @@ fn blank_comment_anchor_keeps_identity_through_structure_and_history() {
     assert!(
         engine
             .cell_store()
-            .get_sheet(&sid)
-            .unwrap()
-            .get_cell(&anchor)
+            .get_cell_entry(&anchor)
             .is_none()
     );
 
@@ -855,9 +853,7 @@ fn blank_comment_anchor_keeps_identity_through_structure_and_history() {
         assert!(
             engine
                 .cell_store()
-                .get_sheet(&sid)
-                .unwrap()
-                .get_cell(&anchor)
+                .get_cell_entry(&anchor)
                 .is_none()
         );
         engine.redo().unwrap();
@@ -887,9 +883,7 @@ fn blank_comment_anchor_keeps_identity_through_structure_and_history() {
     assert!(
         engine
             .cell_store()
-            .get_sheet(&sid)
-            .unwrap()
-            .get_cell(&anchor)
+            .get_cell_entry(&anchor)
             .is_none()
     );
 }

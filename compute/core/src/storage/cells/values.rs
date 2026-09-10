@@ -33,9 +33,9 @@ pub fn get_cell_count(cell_store: &CellStore, sheet_id: &SheetId) -> usize {
     let Some(sheet) = cell_store.get_sheet(sheet_id) else {
         return 0;
     };
-    let authored = sheet
-        .cells_iter()
-        .filter(|(id, _)| !sheet.is_ghost(id))
+    let authored = cell_store
+        .iter_sheet_cells(sheet_id)
+        .filter(|(id, _)| !cell_store.is_ghost(id))
         .count();
     let imported: usize = sheet
         .iter_ranges()

@@ -115,10 +115,8 @@ impl CellStore {
             return;
         }
         self.register_identity_position(*sheet_id, pos, cell_id);
-        if let Some(sheet) = self.sheets.get_mut(sheet_id) {
-            sheet.cells.entry(cell_id).or_insert(CellEntry {
-                value: CellValue::Null,
-            });
-        }
+        self.cells.entry(cell_id).or_insert(CellEntry {
+            value: CellValue::Null,
+        });
     }
 }

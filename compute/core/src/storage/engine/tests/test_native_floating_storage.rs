@@ -135,11 +135,11 @@ fn drawing_anchor_growth_is_sparse_and_structural_export_projects_current_positi
     });
     let sheet = engine.storage().sheet_order()[0];
     engine.set_floating_object(&sheet, "far", serde_json::json!({"type":"shape","shapeType":"rect","anchorRow":100_000,"anchorCol":2,"width":20,"height":30})).unwrap();
-    let cell_store = engine.cell_store().get_sheet(&sheet).unwrap();
-    assert_eq!(cell_store.cells_iter().count(), 0);
-    assert_eq!(cell_store.cells().count(), 1);
+    let sheet_store = engine.cell_store().get_sheet(&sheet).unwrap();
+    assert_eq!(engine.cell_store().iter_sheet_cells(&sheet).count(), 0);
+    assert_eq!(sheet_store.cells().count(), 1);
     assert!(std::sync::Arc::ptr_eq(
-        &cell_store.row_axis,
+        &sheet_store.row_axis,
         &engine.stores.grid_indexes[&sheet].row_axis()
     ));
     engine
@@ -176,9 +176,7 @@ fn drawing_anchor_growth_is_sparse_and_structural_export_projects_current_positi
     assert_eq!(
         engine
             .cell_store()
-            .get_sheet(&sheet)
-            .unwrap()
-            .cells_iter()
+            .iter_sheet_cells(&sheet)
             .count(),
         0
     );
@@ -203,5 +201,5 @@ fn imported_blank_drawing_anchor_has_one_identity_and_no_value_overlay() {
     let sheet = engine.cell_store().get_sheet(&sheet_id).unwrap();
     assert_eq!(sheet.position_of(&anchor), Some(SheetPos::new(1, 2)));
     assert_eq!(sheet.cells().count(), 1);
-    assert_eq!(sheet.cells_iter().count(), 0);
+    assert_eq!(engine.cell_store().iter_sheet_cells(&sheet_id).count(), 0);
 }

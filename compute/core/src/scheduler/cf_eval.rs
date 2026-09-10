@@ -198,7 +198,7 @@ impl ComputeCore {
                     // For very large ranges, only evaluate cells that actually
                     // have data. Iterate column-by-column using dense storage.
                     for c in rp.start_col()..=eff_end_col {
-                        if let Some(col_slice) = sheet.get_column_view(c) {
+                        if let Some(col_slice) = cell_store.get_column_view(sheet_id, c) {
                             let row_end = (col_slice.len() as u32).min(eff_end_row + 1);
                             for r in rp.start_row()..row_end {
                                 if !matches!(
@@ -341,16 +341,15 @@ fn compute_range_stats_from_store(
 ) -> crate::cf::stats::RangeStatistics {
     use crate::cf::stats::compute_range_stats;
 
-    let sheet = match cell_store.get_sheet(sheet_id) {
-        Some(s) => s,
-        None => return crate::cf::stats::RangeStatistics::default(),
-    };
+    if cell_store.get_sheet(sheet_id).is_none() {
+        return crate::cf::stats::RangeStatistics::default();
+    }
 
     // Collect values using dense column storage (fast path) rather than
     // iterating every cell in the range.
     let mut range_values: Vec<value_types::CellValue> = Vec::new();
     for c in rp.start_col()..=clamped_end_col {
-        if let Some(col_slice) = sheet.get_column_view(c) {
+        if let Some(col_slice) = cell_store.get_column_view(sheet_id, c) {
             let row_end = (col_slice.len() as u32).min(clamped_end_row + 1);
             for r in rp.start_row()..row_end {
                 if let Some(cv) = col_slice.get(r as usize)

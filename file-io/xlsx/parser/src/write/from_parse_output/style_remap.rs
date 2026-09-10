@@ -34,7 +34,10 @@ pub(super) struct StyleExportPlan {
 
 #[must_use]
 pub(super) fn build_style_export_plan(output: &ParseOutput) -> StyleExportPlan {
-    let palette = if output_references_style_ids(output) {
+    // Cells without `s` still inherit Normal (xf 0). Dropping the palette
+    // whenever no cell has an explicit style_id rewrites the workbook font
+    // to Calibri 11. Keep imported styles whenever a stylesheet is present.
+    let palette = if output.workbook_stylesheet.is_some() || output_references_style_ids(output) {
         output.style_palette.as_slice()
     } else {
         &[]
@@ -45,6 +48,14 @@ pub(super) fn build_style_export_plan(output: &ParseOutput) -> StyleExportPlan {
     };
     let stylesheet = stylesheet.normalized();
     if !can_replay_imported_styles(&stylesheet, palette) {
+        if palette.is_empty() && !stylesheet.cell_xfs.is_empty() {
+            return StyleExportPlan {
+                writer: StylesWriter::from_workbook_stylesheet(&stylesheet),
+                remapper: StyleExportRemapper {
+                    emitted_cell_xf_ids: Vec::new(),
+                },
+            };
+        }
         return generated_style_export_plan(palette);
     }
 

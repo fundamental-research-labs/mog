@@ -31,6 +31,7 @@ fi
 
 exec "${calipers_bin}" verify --engine "${mog_bin}" \
   --cases-dir "${root}/vendor/calipers/verification/cases" \
+  --case roundtrip/simple \
   --case roundtrip/custom_view_printer_settings \
   --case roundtrip/theme_linked_colors \
   --case default/names_add_defined_names_order \

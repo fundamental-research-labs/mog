@@ -396,6 +396,45 @@ fn deferred_xlsx_filter_clear_rejects_before_hydration_without_partial_mutation(
 }
 
 #[test]
+fn deferred_xlsx_cell_write_rejects_before_history_or_cell_metadata_mutates() {
+    let bytes = active_visible_deferred_fixture_xlsx();
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    engine
+        .import_from_xlsx_bytes_deferred(&bytes)
+        .expect("deferred XLSX import should succeed");
+
+    let (_, active_visible) = sheet_ids(&engine);
+    let cell_id_before = engine
+        .get_cell_id_at(&active_visible, 0, 0)
+        .expect("active visible A1 should be hydrated");
+    let value_before = engine.get_cell_value(&active_visible, 0, 0);
+    let undo_before = engine.get_undo_state();
+
+    let error = engine
+        .set_cell_value_parsed(&active_visible, 0, 0, "99")
+        .expect_err("cell write must wait for deferred XLSX hydration");
+    assert!(
+        error.to_string().contains("deferred XLSX hydration"),
+        "write should fail at the graph readiness preflight, got {error:?}"
+    );
+    assert_eq!(
+        engine.get_cell_id_at(&active_visible, 0, 0),
+        Some(cell_id_before),
+        "rejected write must not replace the hydrated cell identity"
+    );
+    assert_eq!(
+        engine.get_cell_value(&active_visible, 0, 0),
+        value_before,
+        "rejected write must not change the hydrated cell value"
+    );
+    assert_eq!(
+        engine.get_undo_state(),
+        undo_before,
+        "rejected write must not leave a history entry"
+    );
+}
+
+#[test]
 fn deferred_xlsx_import_emits_picture_floating_objects_before_full_hydration() {
     let (mut source, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let source_sheet_id = sheet_id();

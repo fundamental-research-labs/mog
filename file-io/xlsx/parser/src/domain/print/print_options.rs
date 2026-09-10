@@ -194,6 +194,15 @@ mod tests {
         let opts = PrintOptions::parse(xml).unwrap();
         assert!(opts.grid_lines);
         assert!(opts.headings);
+        assert!(opts.grid_lines_set, "gridLinesSet defaults to true");
+    }
+
+    #[test]
+    fn test_parse_print_options_grid_lines_set_controls_effective_setting() {
+        let xml = br#"<worksheet><printOptions gridLines="1" gridLinesSet="0"/></worksheet>"#;
+        let opts = PrintOptions::parse(xml).unwrap();
+        assert!(opts.grid_lines);
+        assert!(!opts.grid_lines_set);
     }
 
     #[test]

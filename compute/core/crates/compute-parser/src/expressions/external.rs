@@ -27,6 +27,24 @@ pub(super) fn parse_external_ref_or_error(
     let workbook = ExternalWorkbookToken::new(input[..=bracket_end].to_string());
     *input = &input[bracket_end + 1..];
 
+    // An omitted sheet before ! identifies a workbook-scoped defined name.
+    // Keep index zero explicit so sheet-local names cannot shadow it.
+    if let Some(after_bang) = input.strip_prefix('!') {
+        *input = after_bang;
+        let Ok(name) = lexer::identifier.parse_next(input) else {
+            *input = saved;
+            return Err(backtrack());
+        };
+        if crate::parse_a1_cell(name).is_some() {
+            *input = saved;
+            return Err(backtrack());
+        }
+        return Ok(ASTNode::ExternalNameRef {
+            workbook,
+            name: name.to_string(),
+        });
+    }
+
     let sheet_name: String = if input.starts_with('\'') {
         if let Ok(name) = lexer::quoted_sheet_name.parse_next(input) {
             name
@@ -53,6 +71,20 @@ pub(super) fn parse_external_ref_or_error(
         *input = saved;
         return Err(backtrack());
     };
+
+    if workbook.is_current_workbook() {
+        if let Some((start_name, end_name)) = sheet_name.split_once(':') {
+            return Ok(ASTNode::UnresolvedThreeDRef {
+                start_name: start_name.to_string(),
+                end_name: end_name.to_string(),
+                inner: Box::new(inner),
+            });
+        }
+        return Ok(ASTNode::UnresolvedSheetRef {
+            sheet_name,
+            inner: Box::new(inner),
+        });
+    }
 
     if let Some((start_sheet, end_sheet)) = sheet_name.split_once(':') {
         Ok(ASTNode::ExternalThreeDRef {

@@ -62,20 +62,49 @@ pub fn write_vml_with_ole(
         .attr("xmlns:x", EXCEL_NS)
         .end_attrs();
 
-    w.start_element_ns("o", "shapelayout")
-        .attr("v:ext", "edit")
-        .end_attrs();
-    w.start_element_ns("o", "idmap")
-        .attr("v:ext", "edit")
-        .attr("data", "1")
-        .self_close();
-    w.end_element_ns("o", "shapelayout");
+    if let Some(layout) = ole_objects
+        .iter()
+        .filter_map(|object| {
+            object
+                .preview_vml
+                .as_ref()
+                .and_then(|p| p.shape_layout_xml.as_deref())
+        })
+        .find(|xml| super::ole_preview::safe_fragment(xml))
+    {
+        w.raw_str(layout);
+    } else {
+        w.start_element_ns("o", "shapelayout")
+            .attr("v:ext", "edit")
+            .end_attrs();
+        w.start_element_ns("o", "idmap")
+            .attr("v:ext", "edit")
+            .attr("data", "1")
+            .self_close();
+        w.end_element_ns("o", "shapelayout");
+    }
 
     if !controls.is_empty() {
         write_vml_shapetype_201(&mut w);
     }
     if !ole_objects.is_empty() {
-        write_vml_shapetype_75(&mut w);
+        let mut ids = std::collections::HashSet::new();
+        for object in ole_objects {
+            if let Some(xml) = object
+                .preview_vml
+                .as_ref()
+                .and_then(|p| p.shape_type_xml.as_deref())
+                && super::ole_preview::safe_fragment(xml)
+                && let Some((element, _)) = crate::infra::vml_presentation::elements(xml)
+                && let Some(id) = element.attr("id")
+                && ids.insert(id.to_string())
+            {
+                w.raw_str(xml);
+            }
+        }
+        if !ids.contains("_x0000_t75") {
+            write_vml_shapetype_75(&mut w);
+        }
     }
 
     for (i, control) in controls.iter().enumerate() {
@@ -180,6 +209,10 @@ fn write_vml_shapetype_75(w: &mut XmlWriter) {
 }
 
 fn write_vml_ole_shape(w: &mut XmlWriter, ole: &OleObject, shape_id: u32, preview_rel_id: &str) {
+    if let Some(presentation) = &ole.preview_vml {
+        super::ole_preview::write_shape(w, ole, shape_id, preview_rel_id, presentation);
+        return;
+    }
     let shape_id_str = format!("_x0000_s{}", shape_id);
     let anchor = &ole.anchor;
     let style = format!(

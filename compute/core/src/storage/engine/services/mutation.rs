@@ -1,6 +1,6 @@
 //! Shared merge-index updates for local mutations.
 
-use cell_types::SheetId;
+use cell_types::{CellId, SheetId};
 
 use crate::cells::CellStore;
 use crate::range_manager::MergeList;
@@ -8,6 +8,56 @@ use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::merges;
 
 use super::super::merge_index::{MergeRangeRef, MergeSpatialItem};
+
+/// Parse an A1-style range string (e.g., `"A1:C5"`) into 0-based
+/// `(start_row, start_col, end_row, end_col)`. Local helper for
+/// reconciling the persisted CSE marker against the runtime cell store.
+/// Returns `None` if the string can't be parsed as a positional range.
+fn parse_a1_range_simple(s: &str) -> Option<(u32, u32, u32, u32)> {
+    let range = compute_parser::parse_a1_range(s)?;
+    let (sr, sc) = match range.start {
+        formula_types::CellRef::Positional { row, col, .. } => (row, col),
+        formula_types::CellRef::Resolved(_) => return None,
+    };
+    let (er, ec) = match range.end {
+        formula_types::CellRef::Positional { row, col, .. } => (row, col),
+        formula_types::CellRef::Resolved(_) => return None,
+    };
+    Some((sr, sc, er, ec))
+}
+
+/// Reconcile the runtime CSE state with a persisted array-formula range.
+///
+/// Structural range operations must call this helper after moving a cell.
+/// Removing the old projection first is essential: a changed or cleared marker otherwise leaves partial-array-write
+/// guards and spill reads pointing at the old sheet/position.
+pub(in crate::storage::engine) fn reconcile_persisted_array_ref(
+    cell_store: &mut CellStore,
+    sheet_id: &SheetId,
+    cell_id: &CellId,
+    array_ref: Option<&str>,
+) {
+    cell_store.projection_registry.remove(cell_id);
+    cell_store.unmark_cse_anchor(cell_id);
+    cell_store.cse_single_cell.remove(cell_id);
+
+    let Some(array_ref) = array_ref else {
+        return;
+    };
+
+    cell_store.mark_cse_anchor(*cell_id);
+    if let Some((sr, sc, er, ec)) = parse_a1_range_simple(array_ref) {
+        let rows = er - sr + 1;
+        let cols = ec - sc + 1;
+        if rows == 1 && cols == 1 {
+            cell_store.cse_single_cell.insert(*cell_id);
+        } else {
+            cell_store
+                .projection_registry
+                .register(*cell_id, *sheet_id, sr, sc, rows, cols);
+        }
+    }
+}
 
 /// Rebuild the merge list for a sheet by reading all merges
 /// from native metadata.

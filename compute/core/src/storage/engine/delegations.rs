@@ -32,7 +32,7 @@ use value_types::ComputeError;
     crate_path = "compute_core"
 )]
 impl ComputeEngine {
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn create_scenario(
         &mut self,
         input: ScenarioCreateInput,
@@ -40,7 +40,7 @@ impl ComputeEngine {
         self.with_history(|engine| scenarios_bindings::create_scenario(engine, input))
     }
 
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn update_scenario(
         &mut self,
         scenario_id: &str,
@@ -49,32 +49,32 @@ impl ComputeEngine {
         self.with_history(|engine| scenarios_bindings::update_scenario(engine, scenario_id, input))
     }
 
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn remove_scenario(&mut self, scenario_id: &str) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| scenarios_bindings::remove_scenario(engine, scenario_id))
     }
 
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn get_all_scenarios(&self) -> Vec<Scenario> {
         scenarios_bindings::get_all_scenarios(self)
     }
 
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn get_active_scenario_state(&self) -> Option<crate::snapshot::ScenarioActiveState> {
         scenarios_bindings::get_active_scenario_state(self)
     }
 
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn apply_scenario(&mut self, scenario_id: &str) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| scenarios_bindings::apply_scenario(engine, scenario_id))
     }
 
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn restore_scenario(&mut self, baseline_id: &str) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| scenarios_bindings::restore_scenario(engine, baseline_id))
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn create_binding(
         &mut self,
         sheet_id: &SheetId,
@@ -83,7 +83,7 @@ impl ComputeEngine {
         self.with_history(|engine| scenarios_bindings::create_binding(engine, sheet_id, binding))
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn update_binding(
         &mut self,
         sheet_id: &SheetId,
@@ -95,7 +95,7 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn remove_binding(
         &mut self,
         sheet_id: &SheetId,
@@ -104,12 +104,12 @@ impl ComputeEngine {
         self.with_history(|engine| scenarios_bindings::remove_binding(engine, sheet_id, binding_id))
     }
 
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_all_bindings(&self, sheet_id: &SheetId) -> Vec<bindings::SheetDataBinding> {
         scenarios_bindings::get_all_bindings(self, sheet_id)
     }
 
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_binding(
         &self,
         sheet_id: &SheetId,
@@ -118,7 +118,7 @@ impl ComputeEngine {
         scenarios_bindings::get_binding(self, sheet_id, binding_id)
     }
 
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn get_bindings_for_connection(
         &self,
         connection_id: &str,
@@ -126,7 +126,7 @@ impl ComputeEngine {
         scenarios_bindings::get_bindings_for_connection(self, connection_id)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn update_refresh_metadata(
         &mut self,
         sheet_id: &SheetId,
@@ -145,7 +145,7 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn remove_bindings_for_connection(
         &mut self,
         connection_id: &str,
@@ -155,7 +155,7 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn batch_set_cells(
         &mut self,
         edits: Vec<(SheetId, CellId, u32, u32, super::mutation::CellInput)>,
@@ -164,7 +164,7 @@ impl ComputeEngine {
         self.with_history(|engine| batch_cells::batch_set_cells(engine, edits, skip_cycle_check))
     }
 
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn batch_clear_cells(
         &mut self,
         cell_ids: Vec<CellId>,
@@ -172,7 +172,7 @@ impl ComputeEngine {
         self.with_history(|engine| batch_cells::batch_clear_cells(engine, cell_ids))
     }
 
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn batch_set_cells_by_position(
         &mut self,
         edits: Vec<(SheetId, u32, u32, super::mutation::CellInput)>,
@@ -183,7 +183,7 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_cells_batch(
         &mut self,
         sheet_id: &SheetId,
@@ -192,7 +192,7 @@ impl ComputeEngine {
         self.with_history(|engine| batch_cells::set_cells_batch(engine, sheet_id, cells))
     }
 
-    #[bridge::write(scope = "cell")]
+    #[bridge::write]
     pub fn set_date_value(
         &mut self,
         sheet_id: &SheetId,
@@ -207,7 +207,7 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::write(scope = "cell")]
+    #[bridge::write]
     pub fn set_time_value(
         &mut self,
         sheet_id: &SheetId,
@@ -222,7 +222,7 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::write(scope = "range")]
+    #[bridge::write]
     pub fn clear_range_by_position(
         &mut self,
         sheet_id: SheetId,
@@ -238,7 +238,7 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn apply_changes(
         &mut self,
         changes: Vec<CellEdit>,
@@ -247,7 +247,7 @@ impl ComputeEngine {
         self.with_history(|engine| batch_cells::apply_changes(engine, changes, skip_cycle_check))
     }
 
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn add_compute_sheet(
         &mut self,
         snapshot: SheetSnapshot,
@@ -255,7 +255,7 @@ impl ComputeEngine {
         self.without_history(|engine| compute_sheets_named::add_compute_sheet(engine, snapshot))
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn remove_compute_sheet(
         &mut self,
         sheet_id: &SheetId,
@@ -264,7 +264,7 @@ impl ComputeEngine {
     }
 
     #[bridge::skip(ts_bridge)]
-    #[bridge::structural(scope = "sheet")]
+    #[bridge::structural]
     pub fn rename_compute_sheet(
         &mut self,
         sheet_id: &SheetId,
@@ -275,7 +275,7 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn set_named_range(
         &mut self,
         name: String,
@@ -284,12 +284,12 @@ impl ComputeEngine {
         self.with_history(|engine| compute_sheets_named::set_named_range(engine, name, def))
     }
 
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn remove_named_range(&mut self, name: &str) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| compute_sheets_named::remove_named_range(engine, name))
     }
 
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn eval_cf(
         &self,
         sheet_id: &SheetId,
@@ -298,7 +298,7 @@ impl ComputeEngine {
         compute_sheets_named::eval_cf(self, sheet_id, rules)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn to_identity_formula(
         &mut self,
         sheet_id: &SheetId,
@@ -309,17 +309,17 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn to_a1_display(&self, sheet_id: &SheetId, formula: &IdentityFormula) -> String {
         compute_sheets_named::to_a1_display(self, sheet_id, formula)
     }
 
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn to_a1_display_qualified(&self, sheet_id: &SheetId, formula: &IdentityFormula) -> String {
         compute_sheets_named::to_a1_display_qualified(self, sheet_id, formula)
     }
 
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn semantic_workbook_state_envelope(
         &self,
     ) -> Result<SemanticWorkbookStateEnvelope, ComputeError> {
@@ -336,13 +336,13 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     #[bridge::skip(tauri)]
     pub fn solve(&self, params: &crate::solver::SolverParams) -> crate::solver::SolverResult {
         what_if::solve(self, params)
     }
 
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn goal_seek(
         &self,
         params: &crate::solver::GoalSeekParams,
@@ -350,7 +350,7 @@ impl ComputeEngine {
         what_if::goal_seek(self, params)
     }
 
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn data_table(
         &self,
         params: &crate::data_table::DataTableParams,
@@ -358,7 +358,7 @@ impl ComputeEngine {
         what_if::data_table(self, params)
     }
 
-    #[bridge::write(scope = "range")]
+    #[bridge::write]
     pub fn create_data_table(
         &mut self,
         sheet_id: &SheetId,
@@ -376,13 +376,13 @@ impl ComputeEngine {
     }
 
     #[bridge::skip(ts_bridge)]
-    #[bridge::structural(scope = "workbook")]
+    #[bridge::structural]
     pub fn create_sheet(&mut self, name: &str) -> Result<(String, MutationResult), ComputeError> {
         self.with_history(|engine| sheet_lifecycle::create_sheet(engine, name))
     }
 
     #[bridge::skip(ts_bridge)]
-    #[bridge::structural(scope = "workbook")]
+    #[bridge::structural]
     pub fn create_sheet_with_default_col_width(
         &mut self,
         name: &str,
@@ -398,7 +398,7 @@ impl ComputeEngine {
     }
 
     #[bridge::skip(ts_bridge)]
-    #[bridge::structural(scope = "workbook")]
+    #[bridge::structural]
     pub fn create_default_sheet(
         &mut self,
         name: &str,
@@ -407,7 +407,7 @@ impl ComputeEngine {
     }
 
     #[bridge::skip(ts_bridge)]
-    #[bridge::structural(scope = "workbook")]
+    #[bridge::structural]
     pub fn create_default_sheet_with_default_col_width(
         &mut self,
         name: &str,
@@ -423,12 +423,12 @@ impl ComputeEngine {
     }
 
     #[bridge::skip(ts_bridge)]
-    #[bridge::structural(scope = "sheet")]
+    #[bridge::structural]
     pub fn delete_sheet(&mut self, sheet_id: &SheetId) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| sheet_lifecycle::delete_sheet(engine, sheet_id))
     }
 
-    #[bridge::structural(scope = "workbook")]
+    #[bridge::structural]
     pub fn reorder_sheets(
         &mut self,
         new_order: Vec<String>,
@@ -437,7 +437,7 @@ impl ComputeEngine {
     }
 
     #[bridge::skip(ts_bridge)]
-    #[bridge::structural(scope = "sheet")]
+    #[bridge::structural]
     pub fn copy_sheet(
         &mut self,
         sheet_id: &SheetId,
@@ -446,7 +446,7 @@ impl ComputeEngine {
         self.with_history(|engine| sheet_lifecycle::copy_sheet(engine, sheet_id, new_name))
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_frozen_panes(
         &mut self,
         sheet_id: &SheetId,
@@ -456,7 +456,7 @@ impl ComputeEngine {
         self.with_history(|engine| sheet_lifecycle::set_frozen_panes(engine, sheet_id, rows, cols))
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_view_option(
         &mut self,
         sheet_id: &SheetId,
@@ -466,7 +466,7 @@ impl ComputeEngine {
         self.with_history(|engine| sheet_lifecycle::set_view_option(engine, sheet_id, key, value))
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_scroll_position(
         &mut self,
         sheet_id: &SheetId,
@@ -478,7 +478,7 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn move_sheet(
         &mut self,
         sheet_id: &SheetId,
@@ -487,7 +487,7 @@ impl ComputeEngine {
         self.with_history(|engine| sheet_lifecycle::move_sheet(engine, sheet_id, new_index))
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_tab_color(
         &mut self,
         sheet_id: &SheetId,
@@ -496,7 +496,7 @@ impl ComputeEngine {
         self.with_history(|engine| sheet_lifecycle::set_tab_color(engine, sheet_id, color))
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_sheet_hidden(
         &mut self,
         sheet_id: &SheetId,
@@ -505,7 +505,7 @@ impl ComputeEngine {
         self.with_history(|engine| sheet_lifecycle::set_sheet_hidden(engine, sheet_id, hidden))
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_sheet_enable_calculation(
         &mut self,
         sheet_id: &SheetId,
@@ -516,7 +516,7 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_sheet_visibility(
         &mut self,
         sheet_id: &SheetId,
@@ -525,17 +525,17 @@ impl ComputeEngine {
         self.with_history(|engine| sheet_lifecycle::set_sheet_visibility(engine, sheet_id, state))
     }
 
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_sheet_visibility(&self, sheet_id: &SheetId) -> Result<String, ComputeError> {
         sheet_lifecycle::get_sheet_visibility(self, sheet_id)
     }
 
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_sheet_settings(&self, sheet_id: &SheetId) -> SheetSettings {
         sheet_settings_print::get_sheet_settings(self, sheet_id)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_sheet_setting(
         &mut self,
         sheet_id: &SheetId,
@@ -547,7 +547,7 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn protect_sheet(
         &mut self,
         sheet_id: &SheetId,
@@ -558,7 +558,7 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn protect_sheet_with_options(
         &mut self,
         sheet_id: &SheetId,
@@ -575,7 +575,7 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_sheet_protection_options(
         &mut self,
         sheet_id: &SheetId,
@@ -586,7 +586,7 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn unprotect_sheet(
         &mut self,
         sheet_id: &SheetId,
@@ -597,12 +597,12 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_page_breaks(&self, sheet_id: &SheetId) -> PageBreaks {
         sheet_settings_print::get_page_breaks(self, sheet_id)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn add_horizontal_page_break(
         &mut self,
         sheet_id: &SheetId,
@@ -613,7 +613,7 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn remove_horizontal_page_break(
         &mut self,
         sheet_id: &SheetId,
@@ -624,7 +624,7 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn add_vertical_page_break(
         &mut self,
         sheet_id: &SheetId,
@@ -635,7 +635,7 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn remove_vertical_page_break(
         &mut self,
         sheet_id: &SheetId,
@@ -646,7 +646,7 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn clear_all_page_breaks(
         &mut self,
         sheet_id: &SheetId,
@@ -654,12 +654,12 @@ impl ComputeEngine {
         self.with_history(|engine| sheet_settings_print::clear_all_page_breaks(engine, sheet_id))
     }
 
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_print_area(&self, sheet_id: &SheetId) -> Option<PrintRange> {
         sheet_settings_print::get_print_area(self, sheet_id)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_print_area(
         &mut self,
         sheet_id: &SheetId,
@@ -668,12 +668,12 @@ impl ComputeEngine {
         self.with_history(|engine| sheet_settings_print::set_print_area(engine, sheet_id, area))
     }
 
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_print_titles(&self, sheet_id: &SheetId) -> PrintTitles {
         sheet_settings_print::get_print_titles(self, sheet_id)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_print_titles(
         &mut self,
         sheet_id: &SheetId,
@@ -682,12 +682,12 @@ impl ComputeEngine {
         self.with_history(|engine| sheet_settings_print::set_print_titles(engine, sheet_id, titles))
     }
 
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_split_config(&self, sheet_id: &SheetId) -> Option<SplitViewConfig> {
         sheet_settings_print::get_split_config(self, sheet_id)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_split_config(
         &mut self,
         sheet_id: &SheetId,
@@ -696,7 +696,7 @@ impl ComputeEngine {
         self.with_history(|engine| sheet_settings_print::set_split_config(engine, sheet_id, config))
     }
 
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn create_named_range(
         &mut self,
         input: named_ranges::DefinedNameInput,
@@ -704,7 +704,7 @@ impl ComputeEngine {
         self.with_history(|engine| defined_names_print_cells::create_named_range(engine, input))
     }
 
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn update_named_range(
         &mut self,
         id: &str,
@@ -715,12 +715,12 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn remove_named_range_by_id(&mut self, id: &str) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| defined_names_print_cells::remove_named_range_by_id(engine, id))
     }
 
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn remove_named_ranges_by_scope(
         &mut self,
         scope: Option<String>,
@@ -730,7 +730,7 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     #[bridge::skip(napi)]
     pub fn import_named_ranges(
         &mut self,
@@ -739,7 +739,7 @@ impl ComputeEngine {
         self.with_history(|engine| defined_names_print_cells::import_named_ranges(engine, names))
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_print_settings(
         &mut self,
         sheet_id: &SheetId,
@@ -750,7 +750,7 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_hf_image(
         &mut self,
         sheet_id: &SheetId,
@@ -759,7 +759,7 @@ impl ComputeEngine {
         self.with_history(|engine| defined_names_print_cells::set_hf_image(engine, sheet_id, info))
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn remove_hf_image(
         &mut self,
         sheet_id: &SheetId,
@@ -770,7 +770,7 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::write(scope = "range")]
+    #[bridge::write]
     pub fn clear_range(
         &mut self,
         sheet_id: &SheetId,
@@ -786,7 +786,7 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::write(scope = "range")]
+    #[bridge::write]
     pub fn clear_range_and_return_ids(
         &mut self,
         sheet_id: &SheetId,
@@ -802,7 +802,7 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::write(scope = "range")]
+    #[bridge::write]
     #[allow(clippy::too_many_arguments)]
     pub fn replace_all_in_range(
         &mut self,

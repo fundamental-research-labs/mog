@@ -6,6 +6,7 @@ use value_types::{CellError, Color, FiniteF64};
 mod color;
 mod conditions;
 mod dynamic;
+mod icons;
 mod edges;
 mod state;
 mod top_bottom;

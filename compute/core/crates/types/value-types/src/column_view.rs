@@ -30,10 +30,12 @@ pub struct ColumnView<'a> {
 
 impl<'a> ColumnView<'a> {
     /// Create an empty view.
+    #[must_use]
     pub const fn empty() -> Self {
         Self::from_slice(&[])
     }
     /// Borrow an existing contiguous slice.
+    #[must_use]
     pub const fn from_slice(values: &'a [CellValue]) -> Self {
         Self {
             source: Source::Slice(values),
@@ -42,9 +44,15 @@ impl<'a> ColumnView<'a> {
         }
     }
     /// Borrow one column of a native grid.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the last row exceeds the grid's `u32` coordinate range.
+    #[must_use]
     pub fn from_grid(grid: &'a dyn ValueGrid, col: u32, rows: usize) -> Self {
         assert!(
-            (rows as u64) <= u32::MAX as u64 + 1,
+            rows.checked_sub(1)
+                .is_none_or(|row| u32::try_from(row).is_ok()),
             "column extent exceeds grid coordinates"
         );
         Self {
@@ -54,6 +62,12 @@ impl<'a> ColumnView<'a> {
         }
     }
     /// Borrow a column from row-major native values, with leading/trailing Nulls.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `cols` is zero, `col` is outside the column extent, the values
+    /// do not contain complete rows, or the last row exceeds `u32::MAX`.
+    #[must_use]
     pub fn from_strided(
         values: &'a [CellValue],
         cols: usize,
@@ -61,9 +75,10 @@ impl<'a> ColumnView<'a> {
         row_start: u32,
         rows: usize,
     ) -> Self {
-        assert!(cols > 0 && col < cols && values.len().is_multiple_of(cols));
+        assert!(cols > 0 && col < cols && values.len() % cols == 0);
         assert!(
-            (rows as u64) <= u32::MAX as u64 + 1,
+            rows.checked_sub(1)
+                .is_none_or(|row| u32::try_from(row).is_ok()),
             "column extent exceeds grid coordinates"
         );
         Self {
@@ -79,14 +94,17 @@ impl<'a> ColumnView<'a> {
     }
 
     /// Number of addressable rows in the view.
+    #[must_use]
     pub fn len(&self) -> usize {
         self.len
     }
     /// Whether the view contains no rows.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
     /// Read a row relative to the view, including sparse Nulls.
+    #[must_use]
     pub fn get(&self, row: usize) -> Option<&'a CellValue> {
         if row >= self.len {
             return None;
@@ -105,10 +123,18 @@ impl<'a> ColumnView<'a> {
                 .and_then(|index| index.checked_add(col))
                 .and_then(|index| values.get(index))
                 .unwrap_or(&CellValue::Null),
-            Source::Grid(grid, col) => grid.value_at(row as u32, col).unwrap_or(&CellValue::Null),
+            Source::Grid(grid, col) => u32::try_from(row)
+                .ok()
+                .and_then(|row| grid.value_at(row, col))
+                .unwrap_or(&CellValue::Null),
         })
     }
     /// Borrow a subrange without copying values.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the range is reversed or extends beyond the view.
+    #[must_use]
     pub fn slice(&self, range: Range<usize>) -> Self {
         assert!(range.start <= range.end && range.end <= self.len);
         Self {
@@ -118,11 +144,12 @@ impl<'a> ColumnView<'a> {
         }
     }
     /// Iterate borrowed values in row order.
+    #[must_use]
     pub fn iter(&self) -> impl DoubleEndedIterator<Item = &'a CellValue> + ExactSizeIterator + 'a {
-        let view = *self;
-        (0..view.len).map(move |row| view.get(row).unwrap())
+        (*self).into_iter()
     }
     /// Materialize values for an owned boundary.
+    #[must_use]
     pub fn to_vec(&self) -> Vec<CellValue> {
         self.iter().cloned().collect()
     }
@@ -168,9 +195,37 @@ impl<'a> IntoIterator for ColumnView<'a> {
 mod tests {
     use super::*;
 
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    fn grid_column_reaches_the_last_u32_row_after_slicing() {
+        #[derive(Debug)]
+        struct LastRow(CellValue);
+        impl ValueGrid for LastRow {
+            fn value_at(&self, row: u32, col: u32) -> Option<&CellValue> {
+                (row == u32::MAX && col == 3).then_some(&self.0)
+            }
+        }
+
+        let grid = LastRow(CellValue::from(42.0));
+        let last = usize::try_from(u32::MAX).unwrap();
+        let column = ColumnView::from_grid(&grid, 3, last + 1);
+        let tail = column.slice(last - 1..last + 1).slice(1..2);
+        assert!(std::ptr::eq(tail.get(0).unwrap(), &grid.0));
+        assert_eq!(tail.iter().next_back(), Some(&grid.0));
+        assert_eq!(column.get(last + 1), None);
+    }
+
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    #[should_panic(expected = "column extent exceeds grid coordinates")]
+    fn strided_column_rejects_rows_outside_grid_coordinates() {
+        let rows = usize::try_from(u32::MAX).unwrap() + 2;
+        let _ = ColumnView::from_strided(&[], 1, 0, 0, rows);
+    }
+
     #[test]
     fn strided_column_borrows_values_and_pads_without_allocating() {
-        let values: Vec<_> = (1..=6).map(|n| CellValue::from(n as f64)).collect();
+        let values: Vec<_> = (1..=6).map(|n| CellValue::from(f64::from(n))).collect();
         let column = ColumnView::from_strided(&values, 2, 1, 2, 7);
         assert_eq!(column.get(0), Some(&CellValue::Null));
         assert!(std::ptr::eq(column.get(2).unwrap(), &values[1]));

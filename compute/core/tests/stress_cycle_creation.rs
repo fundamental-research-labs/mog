@@ -10,7 +10,7 @@ use compute_core::snapshot::{CellData, CellEdit, RecalcResult, SheetSnapshot, Wo
 use formula_types::{NamedRangeDef, Scope};
 use value_types::{CellError, CellValue, FiniteF64};
 
-/// Create a ComputeCore+Mirror with an empty Sheet1 and seed the given cells
+/// Create a ComputeCore+CellStore with an empty Sheet1 and seed the given cells
 /// with value "0" via set_cell so they exist in the dependency graph.
 fn core_with_seeds(seed_positions: &[(u32, u32)]) -> (ComputeCore, CellStore) {
     let mut core = ComputeCore::new();

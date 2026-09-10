@@ -11,6 +11,7 @@ use value_types::{CellValue, FiniteF64};
 
 mod navigation_outline;
 mod region;
+mod relocation_metadata;
 
 // -------------------------------------------------------------------
 // Helpers

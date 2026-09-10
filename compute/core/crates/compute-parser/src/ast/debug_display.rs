@@ -235,7 +235,17 @@ impl std::fmt::Display for ASTNode {
                 end_sheet.replace('\'', "''")
             ),
             Self::ExternalNameRef { workbook, name } => {
-                write!(f, "{}{}", workbook.as_str(), name)
+                write!(
+                    f,
+                    "{}{}{}",
+                    workbook.as_str(),
+                    if workbook.is_current_workbook() {
+                        "!"
+                    } else {
+                        ""
+                    },
+                    name
+                )
             }
             Self::StructuredRef(sr) => format_structured_ref(f, sr),
             Self::BinaryOp { op, left, right } => {

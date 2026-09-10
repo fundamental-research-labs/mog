@@ -265,7 +265,7 @@ fn resolve_range_to_key(
 }
 
 /// Resolve a CellRef to (SheetId, row, col) using the data source.
-/// Similar to MirrorAccess::resolve_ref_to_pos but takes sheet_ctx instead of self.
+/// Similar to StoreAccess::resolve_ref_to_pos but takes sheet_ctx instead of self.
 fn resolve_cell_ref_to_pos(
     cell_ref: &CellRef,
     sheet_ctx: Option<SheetId>,

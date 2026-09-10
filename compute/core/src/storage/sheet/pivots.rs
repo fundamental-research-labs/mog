@@ -319,6 +319,7 @@ mod tests {
         config.rows_per_page = Some(4);
         config.cols_per_page = Some(5);
         config.row_items = vec![domain_types::PivotRowColItem {
+            data_field_index: 0,
             item_type: Some(domain_types::PivotItemType::Grand),
             x_values: vec![None, Some(2)],
         }];

@@ -2,12 +2,16 @@ mod cells;
 mod chart_sources;
 mod comment_package_metadata;
 mod dimensions;
+mod dynamic_metadata;
 mod named_ranges;
+#[cfg(feature = "native")]
+mod native_parallel;
 mod palette;
 mod pivot_cache_reconciliation;
 mod print_defined_names;
 mod sheet_metadata;
 mod slicers;
+mod table_filter_preservation;
 mod table_totals;
 mod workbook;
 mod workbook_views;
@@ -48,6 +52,7 @@ use domain_types::{
     domain::conditional_format::ConditionalFormat as DomainConditionalFormat,
     domain::table::TableSpec,
 };
+use value_types::ComputeError;
 
 use named_ranges::export_workbook_named_ranges;
 #[cfg(feature = "native")]
@@ -383,7 +388,7 @@ fn export_data_table_regions(
 pub(in crate::storage::engine) fn build_parse_output(
     stores: &EngineStores,
     cell_store: &CellStore,
-) -> ParseOutput {
+) -> Result<ParseOutput, ComputeError> {
     let sheet_ids = stores.storage.sheet_order();
     let mut workbook_stylesheet = export_workbook_stylesheet(stores);
     let mut seeded_style_palette = export_workbook_style_palette(stores);
@@ -397,13 +402,15 @@ pub(in crate::storage::engine) fn build_parse_output(
             seeded_style_palette,
             imported_style_prefix_len,
         );
-        let exported_sheets: Vec<ExportedSheetData> = sheet_ids
-            .par_iter()
-            .enumerate()
-            .filter_map(|(sheet_idx, sheet_id)| {
-                export_single_sheet(stores, cell_store, sheet_id, sheet_idx, &palette)
-            })
-            .collect();
+        let exported_sheets: Vec<ExportedSheetData> = native_parallel::install(|| {
+            sheet_ids
+                .par_iter()
+                .enumerate()
+                .filter_map(|(sheet_idx, sheet_id)| {
+                    export_single_sheet(stores, cell_store, sheet_id, sheet_idx, &palette)
+                })
+                .collect()
+        })?;
         let table_projection_inputs: Vec<Vec<ExportedTableProjectionInput>> = exported_sheets
             .iter()
             .map(|sheet| sheet.table_projection_inputs.clone())
@@ -442,7 +449,19 @@ pub(in crate::storage::engine) fn build_parse_output(
     let table_projection: TableExportProjection =
         finalize_table_export_projection(&mut output_sheets, &table_projection_inputs);
 
-    let named_ranges = export_workbook_named_ranges(stores, cell_store, &sheet_ids);
+    let (workbook_sheet_inventory, parsed_workbook_sheet_indices, imported_order_to_export_order) =
+        crate::storage::workbook::sheet_inventory::export(
+            &stores.storage.metadata,
+            &sheet_ids,
+            &mut output_sheets,
+        );
+    let named_ranges = export_workbook_named_ranges(
+        stores,
+        cell_store,
+        &sheet_ids,
+        &workbook_sheet_inventory,
+        &imported_order_to_export_order,
+    );
 
     let theme = export_workbook_theme(stores);
     let wb_protection = export_workbook_protection(stores);
@@ -456,7 +475,13 @@ pub(in crate::storage::engine) fn build_parse_output(
     }
     let data_table_regions = export_data_table_regions(cell_store, &sheet_ids);
     let connections = workbook::export_workbook_connections(stores);
-    let workbook_views = export_workbook_views_for_sheets(stores, &sheet_ids, &mut output_sheets);
+    let workbook_views = export_workbook_views_for_sheets(
+        stores,
+        &sheet_ids,
+        &mut output_sheets,
+        &workbook_sheet_inventory,
+        &imported_order_to_export_order,
+    );
 
     let persons = export_workbook_threaded_comment_persons(stores);
     let has_persons_part = !persons.is_empty()
@@ -466,8 +491,8 @@ pub(in crate::storage::engine) fn build_parse_output(
 
     let mut output = ParseOutput {
         sheets: output_sheets,
-        workbook_sheet_inventory: Vec::new(),
-        parsed_workbook_sheet_indices: Default::default(),
+        workbook_sheet_inventory,
+        parsed_workbook_sheet_indices,
         workbook_root_namespaces: workbook::export_workbook_root_namespaces(stores),
         workbook_conformance: None,
         style_palette,
@@ -510,7 +535,9 @@ pub(in crate::storage::engine) fn build_parse_output(
         volatile_dependency_part: workbook::export_volatile_dependency_part(stores),
     };
     slicers::reconcile_pivot_bindings(&mut output);
-    output
+    dynamic_metadata::reconcile(&mut output);
+    let _data_features = output.workbook_data_features();
+    Ok(output)
 }
 
 /// Helper: resolve a cell_id hex string to (row, col) via the compute cell_store.

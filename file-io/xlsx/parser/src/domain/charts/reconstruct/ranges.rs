@@ -1,8 +1,8 @@
 //! Data-range to series synthesis for reconstructed charts.
 
 use domain_types::chart::{
-    ChartSeriesData, ChartSpec, apply_explicit_chart_source_ranges,
-    synthesize_chart_series_from_data_range,
+    apply_explicit_chart_source_ranges, synthesize_chart_series_from_data_range, ChartSeriesData,
+    ChartSpec,
 };
 
 pub(super) fn series_for_export(spec: &ChartSpec) -> Vec<ChartSeriesData> {

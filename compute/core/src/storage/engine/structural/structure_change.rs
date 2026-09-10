@@ -24,12 +24,6 @@ impl ComputeEngine {
 
         let recalc = apply_result?;
 
-        // R2.3 — structural layout mutated; stale column-indexed matrices
-        // must miss on next evaluate. Column deletes in particular can't
-        // leave a stale override pinned to a position that belongs to a
-        // different column now.
-        self.security.bump_structure_version();
-
         self.finish_structure_change(sheet_id, recalc, Some(change))
     }
 

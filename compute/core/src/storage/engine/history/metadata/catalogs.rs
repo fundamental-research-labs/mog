@@ -238,6 +238,7 @@ mod tests {
         let sheet = SheetId::from_raw(123).to_uuid_string();
         for (row, name) in ["First", "Second", "Third"].into_iter().enumerate() {
             cell_store.upsert_pivot_table_def(PivotTableDef {
+                grand_total_cells: Vec::new(),
                 id: name.into(),
                 name: name.into(),
                 sheet: sheet.clone(),

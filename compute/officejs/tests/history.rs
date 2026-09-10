@@ -58,9 +58,9 @@ fn one_sync_undoes_bulk_values_and_formula_together() {
     workbook.history().undo().unwrap();
     let cleared = load(&workbook, "A1:K100");
     for row in cleared["values"].as_array().unwrap() {
-        assert!(row.as_array().unwrap().iter().all(Value::is_null));
+        assert!(row.as_array().unwrap().iter().all(|value| value == ""));
     }
-    assert_eq!(load(&workbook, "K1")["formulas"], json!([[null]]));
+    assert_eq!(load(&workbook, "K1")["formulas"], json!([[""]]));
     assert_depths(&workbook, 0, 1);
 
     workbook.history().redo().unwrap();
@@ -94,7 +94,7 @@ fn separate_syncs_are_separate_actions_and_reads_preserve_redo() {
     assert_eq!(load(&workbook, "A1:A2")["values"], json!([[10], [20]]));
     assert_depths(&workbook, 1, 1);
     workbook.history().undo().unwrap();
-    assert_eq!(load(&workbook, "A1:A2")["values"], json!([[null], [null]]));
+    assert_eq!(load(&workbook, "A1:A2")["values"], json!([[""], [""]]));
     assert_depths(&workbook, 0, 2);
     workbook.history().redo().unwrap();
     workbook.history().redo().unwrap();
@@ -127,7 +127,7 @@ fn explicit_group_combines_multiple_excel_runs_and_automatic_syncs() {
     assert_depths(&workbook, 1, 0);
     assert_eq!(load(&workbook, "A1:A2")["values"], json!([[10], [20]]));
     history.undo().unwrap();
-    assert_eq!(load(&workbook, "A1:A2")["values"], json!([[null], [null]]));
+    assert_eq!(load(&workbook, "A1:A2")["values"], json!([[""], [""]]));
     history.redo().unwrap();
     assert_eq!(load(&workbook, "A1:A2")["values"], json!([[10], [20]]));
 }
@@ -199,10 +199,10 @@ fn failed_sync_keeps_successful_prefix_and_closes_its_group() {
     );
     assert_depths(&workbook, 2, 0);
     workbook.history().undo().unwrap();
-    assert_eq!(load(&workbook, "B1")["values"], json!([[null]]));
+    assert_eq!(load(&workbook, "B1")["values"], json!([[""]]));
     assert_eq!(load(&workbook, "A1:A2")["values"], json!([[10], [20]]));
     workbook.history().undo().unwrap();
-    assert_eq!(load(&workbook, "A1:A2")["values"], json!([[null], [null]]));
+    assert_eq!(load(&workbook, "A1:A2")["values"], json!([[""], [""]]));
     assert_depths(&workbook, 0, 2);
 }
 
@@ -249,7 +249,7 @@ fn script_failure_only_retains_writes_from_completed_syncs() {
         "#,
     );
     assert!(before_sync.is_err());
-    assert_eq!(load(&workbook, "A1")["values"], json!([[null]]));
+    assert_eq!(load(&workbook, "A1")["values"], json!([[""]]));
     assert_depths(&workbook, 0, 0);
 
     let after_sync = run_office_js_with_workbook(
@@ -265,8 +265,138 @@ fn script_failure_only_retains_writes_from_completed_syncs() {
         "#,
     );
     assert!(after_sync.is_err());
-    assert_eq!(load(&workbook, "A1:A2")["values"], json!([[10], [null]]));
+    assert_eq!(load(&workbook, "A1:A2")["values"], json!([[10], [""]]));
     assert_depths(&workbook, 1, 0);
     workbook.history().undo().unwrap();
-    assert_eq!(load(&workbook, "A1:A2")["values"], json!([[null], [null]]));
+    assert_eq!(load(&workbook, "A1:A2")["values"], json!([[""], [""]]));
+}
+
+#[test]
+fn range_clear_and_sort_without_property_sets_share_one_sync_action() {
+    let (workbook, _) = Workbook::blank().unwrap();
+    run(
+        &workbook,
+        r#"
+        return await Excel.run(async context => {
+          const sheet = context.workbook.worksheets.getItem("Sheet1");
+          sheet.getRange("A1:B3").values = [[3, "c"], [1, "a"], [2, "b"]];
+          sheet.getRange("D1").values = [["clear me"]];
+          await context.sync();
+        });
+        "#,
+    );
+    let before = load(&workbook, "A1:D3");
+    run(
+        &workbook,
+        r#"
+        return await Excel.run(async context => {
+          const sheet = context.workbook.worksheets.getItem("Sheet1");
+          sheet.getRange("D1").clear(Excel.ClearApplyTo.contents);
+          sheet.getRange("A1:B3").sort.apply([{key: 0, ascending: true}]);
+          await context.sync();
+        });
+        "#,
+    );
+    let after = load(&workbook, "A1:D3");
+    assert_eq!(
+        after["values"],
+        json!([[1, "a", "", ""], [2, "b", "", ""], [3, "c", "", ""]])
+    );
+    assert_depths(&workbook, 2, 0);
+    workbook.history().undo().unwrap();
+    assert_eq!(load(&workbook, "A1:D3"), before);
+    assert_depths(&workbook, 1, 1);
+    workbook.history().redo().unwrap();
+    assert_eq!(load(&workbook, "A1:D3"), after);
+    assert_depths(&workbook, 2, 0);
+}
+
+#[test]
+fn names_and_tables_without_property_sets_share_one_sync_action() {
+    let (workbook, _) = Workbook::blank().unwrap();
+    run(
+        &workbook,
+        r#"
+        return await Excel.run(async context => {
+          context.workbook.worksheets.getItem("Sheet1").getRange("A1:B3").values =
+            [["Item", "Count"], ["Pen", 4], ["Paper", 9]];
+          await context.sync();
+        });
+        "#,
+    );
+    let counts = r#"
+        return await Excel.run(async context => {
+          const names = context.workbook.names.getCount();
+          const tables = context.workbook.worksheets.getItem("Sheet1").tables.getCount();
+          await context.sync();
+          return {names: names.value, tables: tables.value};
+        });
+    "#;
+    run(
+        &workbook,
+        r#"
+        return await Excel.run(async context => {
+          const sheet = context.workbook.worksheets.getItem("Sheet1");
+          context.workbook.names.add("Inventory", sheet.getRange("A1:B3"));
+          sheet.tables.add("A1:B3", true);
+          await context.sync();
+        });
+        "#,
+    );
+    assert_eq!(run(&workbook, counts), json!({"names": 1, "tables": 1}));
+    assert_depths(&workbook, 2, 0);
+    workbook.history().undo().unwrap();
+    assert_eq!(run(&workbook, counts), json!({"names": 0, "tables": 0}));
+    assert_eq!(
+        load(&workbook, "A1:B3")["values"],
+        json!([["Item", "Count"], ["Pen", 4], ["Paper", 9]])
+    );
+    assert_depths(&workbook, 1, 1);
+    workbook.history().redo().unwrap();
+    assert_eq!(run(&workbook, counts), json!({"names": 1, "tables": 1}));
+    assert_depths(&workbook, 2, 0);
+}
+
+#[test]
+fn activating_a_worksheet_preserves_redo_and_the_view_survives_replay() {
+    let (workbook, _) = Workbook::blank().unwrap();
+    run(
+        &workbook,
+        r#"
+        return await Excel.run(async context => {
+          context.workbook.worksheets.add("Data");
+          await context.sync();
+          context.workbook.worksheets.getItem("Sheet1").getRange("A1").values = [[9]];
+          await context.sync();
+        });
+    "#,
+    );
+    assert_depths(&workbook, 2, 0);
+    workbook.history().undo().unwrap();
+    let active = run(
+        &workbook,
+        r#"
+        return await Excel.run(async context => {
+          context.workbook.worksheets.getItem("Data").activate();
+          await context.sync();
+          const active = context.workbook.worksheets.getActiveWorksheet();
+          active.load("name");
+          await context.sync();
+          return active.name;
+        });
+    "#,
+    );
+    assert_eq!(active, json!("Data"));
+    assert_depths(&workbook, 1, 1);
+    assert_eq!(
+        workbook.settings().get_workbook_view_active_tab().unwrap(),
+        Some(1)
+    );
+    workbook.history().redo().unwrap();
+    assert_eq!(load(&workbook, "A1")["values"], json!([[9]]));
+    assert_eq!(
+        workbook.settings().get_workbook_view_active_tab().unwrap(),
+        Some(1)
+    );
+    assert_depths(&workbook, 2, 0);
 }

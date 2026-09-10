@@ -324,6 +324,16 @@ impl CellStore {
         }
     }
 
+    /// Replace the native catalog while retaining entity-sized undo records.
+    pub(crate) fn replace_data_table_regions(&mut self, regions: Vec<DataTableRegionDef>) {
+        if self.history.is_active() {
+            for def in self.data_table_regions.iter().chain(regions.iter()) {
+                capture_data_table(self, def);
+            }
+        }
+        self.data_table_regions = regions;
+    }
+
     pub(crate) fn history_swap_table(
         &mut self,
         id: &str,
@@ -409,6 +419,7 @@ mod tests {
 
     fn pivot_def(name: &str, sheet: &SheetId, start_row: u32, start_col: u32) -> PivotTableDef {
         PivotTableDef {
+            grand_total_cells: Vec::new(),
             id: name.to_string(),
             name: name.to_string(),
             sheet: sheet.to_uuid_string(),

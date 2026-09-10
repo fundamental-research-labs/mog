@@ -70,13 +70,14 @@ mod writer;
 mod tests;
 
 pub use header_footer::HeaderFooter;
-pub use writer::{PrintWriter, format_f64};
+pub use writer::{format_f64, PrintWriter};
 
 /// Convert `domain_types::PrintSettings` into a `PrintWriter`.
 ///
 /// The caller is responsible for calling `.write_to()` on the returned writer.
 pub fn print_writer_from_domain(ps: &domain_types::PrintSettings) -> PrintWriter {
     use super::{Orientation, PageMargins as OoxmlPageMargins, PageSetup, PrintOptions};
+    use crate::domain::print::page_setup::normalize_scale;
 
     let mut pw = PrintWriter::new();
 
@@ -117,13 +118,13 @@ pub fn print_writer_from_domain(ps: &domain_types::PrintSettings) -> PrintWriter
             setup.orientation = Orientation::from_ooxml(orient);
         }
         if let Some(scale) = ps.scale {
-            setup.scale = Some(scale as u16);
+            setup.scale = Some(normalize_scale(scale));
         }
         if let Some(ftw) = ps.fit_to_width {
-            setup.fit_to_width = Some(ftw as u16);
+            setup.fit_to_width = Some(ftw);
         }
         if let Some(fth) = ps.fit_to_height {
-            setup.fit_to_height = Some(fth as u16);
+            setup.fit_to_height = Some(fth);
         }
         setup.black_and_white = ps.black_and_white;
         setup.draft = ps.draft;

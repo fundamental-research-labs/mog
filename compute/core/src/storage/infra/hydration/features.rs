@@ -35,16 +35,18 @@ pub(super) fn hydrate_cells(
     for cell in cells {
         let cell_id = allocator.alloc_cell_id();
         allocated_ids.push(cell_id);
-        if cell.projection_role == ImportedCellProjectionRole::DynamicArraySpillTarget {
-            continue;
-        }
-        let metadata = CellMetadata::from_import(cell);
-        if !metadata.is_empty() {
-            cell_metadata.insert(cell_id, metadata);
+        if cell.projection_role != ImportedCellProjectionRole::DynamicArraySpillTarget {
+            let metadata = CellMetadata::from_import(cell);
+            if !metadata.is_empty() {
+                cell_metadata.insert(cell_id, metadata);
+            }
         }
         let cell_hex = id_to_hex(cell_id.as_u128());
 
-        // Track position → cell_hex in memory for downstream hydration lookups
+        // Dynamic-array spill targets keep a positional identity for native
+        // style and structural operations, but their cached value/formula is
+        // still omitted from the authored snapshot and imported formula
+        // metadata.  Other cells retain the same position map contract.
         pos_map.insert((cell.row, cell.col), cell_hex.to_string());
     }
     (allocated_ids, pos_map)
@@ -62,11 +64,18 @@ pub(super) fn hydrate_cells_with_ids(
 ) -> PositionMap {
     let mut pos_map = PositionMap::with_capacity(cells.len() / 2);
     for (i, cell) in cells.iter().enumerate() {
-        if cell.projection_role == ImportedCellProjectionRole::DynamicArraySpillTarget {
-            continue;
-        }
-        let metadata = CellMetadata::from_import(cell);
-        let has_ooxml_metadata = !metadata.is_empty();
+        let is_dynamic_array_spill_target =
+            cell.projection_role == ImportedCellProjectionRole::DynamicArraySpillTarget;
+        let (has_ooxml_metadata, metadata) = if is_dynamic_array_spill_target {
+            // Spill targets are represented by the imported-array cache. Keep
+            // their native identity available for style hydration without
+            // registering stale cached values or marker formulas as authored
+            // cell metadata.
+            (false, CellMetadata::default())
+        } else {
+            let metadata = CellMetadata::from_import(cell);
+            (!metadata.is_empty(), metadata)
+        };
         if has_ooxml_metadata {
             cell_metadata.insert(cell_ids[i], metadata);
         }
@@ -77,6 +86,7 @@ pub(super) fn hydrate_cells_with_ids(
             || cell.vm.is_some()
             || cell.formula_result_type.is_some()
             || cell.has_empty_cached_value
+            || cell.cell_formula.is_some()
             || !cell.formula_cache_provenance.is_absent_or_unknown()
             || cell.original_sst_index.is_some()
             || cell.original_value.is_some()
@@ -86,6 +96,11 @@ pub(super) fn hydrate_cells_with_ids(
         // Cells with properties must stay in pos_map so hydrate_cell_styles can
         // attach their compact CellProperties entry.
         let is_feature_anchor = required_identity_positions.contains(&(cell.row, cell.col));
+        if is_dynamic_array_spill_target {
+            let cell_hex = id_to_hex(cell_ids[i].as_u128());
+            pos_map.insert((cell.row, cell.col), cell_hex.to_string());
+            continue;
+        }
         if is_empty && !has_cell_properties && !has_ooxml_metadata && !is_feature_anchor {
             continue;
         }

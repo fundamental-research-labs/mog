@@ -125,9 +125,11 @@ pub struct CellData {
     /// (e.g., `t="s"` on an empty cell). When set, the writer emits this type even
     /// though the value is `CellValue::Empty`.
     pub explicit_type: Option<String>,
-    /// Explicit type override for formula cells with no cached value.
-    /// When the original XML had `t="str"` (or `t="e"`, `t="b"`) on a formula cell
-    /// but no `<v>` element, this field preserves that type hint.
+    /// Explicit type override for formula cells whose cached value is absent
+    /// or explicitly empty. When the original XML had `t="str"` (or
+    /// `t="e"`, `t="b"`, `t="d"`) on a formula cell but no meaningful
+    /// cached lexeme, this field preserves that type hint even when the
+    /// writer uses a synthetic empty cache value internally.
     pub formula_type_hint: Option<String>,
     /// Whether to emit the cell-level phonetic display flag (`ph="1"`).
     pub phonetic: bool,

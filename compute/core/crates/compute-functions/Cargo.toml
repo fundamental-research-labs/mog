@@ -13,6 +13,7 @@ value-types = { path = "../types/value-types" }
 cell-types = { path = "../types/cell-types" }
 compute-formats = { path = "../compute-formats" }
 chrono = { workspace = true }
+libm = "0.2.16"
 statrs = "0.17"
 nalgebra = { version = "0.32", default-features = false, features = ["std"] }
 rustc-hash = "2"

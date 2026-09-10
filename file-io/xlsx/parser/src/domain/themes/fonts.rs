@@ -6,9 +6,9 @@
 //! Type definitions come from `ooxml_types::themes`; this module adds parsing logic.
 
 use crate::infra::scanner::{
-    extract_quoted_value, find_attr_simd, find_closing_tag, find_gt_simd, find_tag_simd,
+    StartTagEnd, find_closing_tag, find_start_tag_end_quoted, find_tag_simd,
 };
-use crate::infra::xml::decode_xml_entities;
+use crate::infra::xml::parse_string_attr;
 
 // Re-export canonical types
 pub use ooxml_types::themes::{FontCollection, FontScheme, ScriptFont, ThemeFontDef};
@@ -31,12 +31,8 @@ pub fn parse_font_scheme(xml: &[u8]) -> FontScheme {
         let font_end = find_closing_tag(xml, b"fontScheme", font_start).unwrap_or(xml.len());
         let font_xml = &xml[font_start..font_end];
 
-        // Parse scheme name (decode XML entities so we don't double-escape on write)
-        if let Some(name_pos) = find_attr_simd(font_xml, b"name=\"", 0) {
-            let value_start = name_pos + 6;
-            if let Some((start, end)) = extract_quoted_value(font_xml, value_start) {
-                scheme.name = decode_xml_entities(&font_xml[start..end]);
-            }
+        if let StartTagEnd::Found(end) = find_start_tag_end_quoted(font_xml, 0) {
+            scheme.name = parse_attr(&font_xml[..=end], b"name");
         }
 
         // Parse major font
@@ -79,11 +75,13 @@ pub fn parse_font_collection(xml: &[u8]) -> FontCollection {
     // Parse additional script fonts (<a:font script="..." typeface="..."/>)
     let mut pos = 0;
     while let Some(font_start) = find_tag_simd(xml, b"font", pos) {
-        let font_end = find_gt_simd(xml, font_start).unwrap_or(xml.len());
+        let StartTagEnd::Found(font_end) = find_start_tag_end_quoted(xml, font_start) else {
+            break;
+        };
         let font_xml = &xml[font_start..font_end + 1];
 
-        let script = parse_attr(font_xml, b"script=\"");
-        let typeface = parse_attr(font_xml, b"typeface=\"");
+        let script = parse_attr(font_xml, b"script");
+        let typeface = parse_attr(font_xml, b"typeface");
 
         if !script.is_empty() && !typeface.is_empty() {
             collection
@@ -99,8 +97,14 @@ pub fn parse_font_collection(xml: &[u8]) -> FontCollection {
 
 /// Parse a `ThemeFontDef` from the XML element starting at `start`.
 fn parse_font_def(xml: &[u8], start: usize) -> ThemeFontDef {
-    let typeface = parse_typeface(xml, start);
-    let panose = parse_optional_attr(xml, b"panose=\"", start);
+    // Attribute lookup must stay inside this element: an omitted attribute
+    // must not pick up a later script/font definition's value.
+    let StartTagEnd::Found(end) = find_start_tag_end_quoted(xml, start) else {
+        return ThemeFontDef::new("");
+    };
+    let element = &xml[start..=end];
+    let typeface = parse_attr(element, b"typeface");
+    let panose = parse_optional_attr(element, b"panose");
     ThemeFontDef {
         typeface,
         panose,
@@ -109,45 +113,14 @@ fn parse_font_def(xml: &[u8], start: usize) -> ThemeFontDef {
     }
 }
 
-/// Parse the typeface attribute from a font element.
-fn parse_typeface(xml: &[u8], start: usize) -> String {
-    if let Some(type_pos) = find_attr_simd(xml, b"typeface=\"", start) {
-        let value_start = type_pos + 10; // len of b"typeface=\""
-        if let Some((start, end)) = extract_quoted_value(xml, value_start) {
-            if let Ok(typeface) = std::str::from_utf8(&xml[start..end]) {
-                return typeface.to_string();
-            }
-        }
-    }
-    String::new()
+/// Read semantic attribute text, decoding XML entities exactly once.
+fn parse_optional_attr(xml: &[u8], attr: &[u8]) -> Option<String> {
+    parse_string_attr(xml, attr).filter(|value| !value.is_empty())
 }
 
-/// Parse an optional string attribute.
-fn parse_optional_attr(xml: &[u8], attr: &[u8], search_start: usize) -> Option<String> {
-    if let Some(attr_pos) = find_attr_simd(xml, attr, search_start) {
-        let value_start = attr_pos + attr.len();
-        if let Some((start, end)) = extract_quoted_value(xml, value_start) {
-            if let Ok(val) = std::str::from_utf8(&xml[start..end]) {
-                if !val.is_empty() {
-                    return Some(val.to_string());
-                }
-            }
-        }
-    }
-    None
-}
-
-/// Parse a string attribute value.
+/// Parse a string attribute value, defaulting missing/empty attributes to empty.
 fn parse_attr(xml: &[u8], attr: &[u8]) -> String {
-    if let Some(attr_pos) = find_attr_simd(xml, attr, 0) {
-        let value_start = attr_pos + attr.len();
-        if let Some((start, end)) = extract_quoted_value(xml, value_start) {
-            if let Ok(val) = std::str::from_utf8(&xml[start..end]) {
-                return val.to_string();
-            }
-        }
-    }
-    String::new()
+    parse_optional_attr(xml, attr).unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -224,6 +197,18 @@ mod tests {
         assert_eq!(collection.script_fonts.len(), 2);
         assert_eq!(collection.script_fonts[0].script, "Jpan");
         assert_eq!(collection.script_fonts[1].script, "Hang");
+    }
+
+    #[test]
+    fn test_font_attributes_do_not_leak_from_later_elements() {
+        let collection = parse_font_collection(
+            br#"<a:majorFont><a:latin/><a:ea typeface="East"/><a:cs typeface="Complex" panose="&#48;2"/></a:majorFont>"#,
+        );
+        assert_eq!(collection.latin.typeface, "");
+        assert_eq!(collection.latin.panose, None);
+        assert_eq!(collection.ea.typeface, "East");
+        assert_eq!(collection.ea.panose, None);
+        assert_eq!(collection.cs.panose.as_deref(), Some("02"));
     }
 
     #[test]

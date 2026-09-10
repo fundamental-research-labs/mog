@@ -4,6 +4,7 @@ use ooxml_types::charts::{ChartSpace, ExtensionEntry};
 use super::{
     chart::build_chart,
     formatting::{build_shape_properties, build_text_body},
+    text_body_fidelity::preserve_imported_text_body_properties,
 };
 
 // =============================================================================
@@ -24,6 +25,17 @@ pub(super) fn build_chart_space(spec: &ChartSpec) -> ChartSpace {
         .and_then(|color_map_override| color_map_override.to_ooxml())
         .or_else(|| imported.and_then(|chart_space| chart_space.clr_map_ovr.clone()));
 
+    let mut sp_pr = spec.chart_format.as_ref().and_then(build_shape_properties);
+    merge_imported_shape_properties(
+        &mut sp_pr,
+        imported.and_then(|chart_space| chart_space.sp_pr.as_ref()),
+    );
+    let mut tx_pr = spec.chart_format.as_ref().and_then(build_text_body);
+    preserve_imported_text_body_properties(
+        &mut tx_pr,
+        imported.and_then(|chart_space| chart_space.tx_pr.as_ref()),
+    );
+
     ChartSpace {
         date1904: imported.and_then(|chart_space| chart_space.date1904),
         lang: imported.and_then(|chart_space| chart_space.lang.clone()),
@@ -37,8 +49,8 @@ pub(super) fn build_chart_space(spec: &ChartSpec) -> ChartSpace {
         clr_map_ovr,
         protection: imported.and_then(|chart_space| chart_space.protection.clone()),
         chart: build_chart(spec),
-        sp_pr: spec.chart_format.as_ref().and_then(build_shape_properties),
-        tx_pr: spec.chart_format.as_ref().and_then(build_text_body),
+        sp_pr,
+        tx_pr,
         external_data: imported
             .and_then(|chart_space| chart_space.external_data.as_ref())
             .filter(|external_data| external_data_relationship_is_supported(spec, external_data))
@@ -52,6 +64,98 @@ pub(super) fn build_chart_space(spec: &ChartSpec) -> ChartSpace {
         extensions: imported
             .map(|chart_space| clean_chart_extensions(&chart_space.extensions))
             .unwrap_or_default(),
+    }
+}
+
+/// Merge the complete imported chart-space shape properties behind the public
+/// chart format projection. The domain model intentionally exposes only
+/// ordinary fill/line values; relationship-backed picture fills, effects,
+/// transforms, and future extension fields remain available on the imported
+/// OOXML definition and must survive a modeled chart edit.
+pub(super) fn merge_imported_shape_properties(
+    target: &mut Option<ooxml_types::drawings::ShapeProperties>,
+    imported: Option<&ooxml_types::drawings::ShapeProperties>,
+) {
+    let Some(imported) = imported else {
+        return;
+    };
+    let Some(target) = target.as_mut() else {
+        *target = Some(imported.clone());
+        return;
+    };
+
+    if target.xfrm.is_none() {
+        target.xfrm = imported.xfrm.clone();
+    }
+    if target.geometry.is_none() {
+        target.geometry = imported.geometry.clone();
+    }
+    if target.fill.is_none() {
+        target.fill = imported.fill.clone();
+    }
+    merge_imported_outline(&mut target.ln, imported.ln.as_ref());
+    if target.effects.is_none() {
+        target.effects = imported.effects.clone();
+    }
+    if target.scene3d.is_none() {
+        target.scene3d = imported.scene3d.clone();
+    }
+    if target.sp3d.is_none() {
+        target.sp3d = imported.sp3d.clone();
+    }
+    if target.bw_mode.is_none() {
+        target.bw_mode = imported.bw_mode;
+    }
+    if target.ext_lst.is_none() {
+        target.ext_lst = imported.ext_lst.clone();
+    }
+}
+
+/// Preserve imported line properties that the public chart format does not
+/// expose.  `ChartFormatData::line` currently models the ordinary width,
+/// fill, and dash values, while cap/compound/alignment/join/arrowhead details
+/// are still represented by the OOXML outline.  A modeled value wins when it
+/// is present; each omitted field falls back independently to the imported
+/// value instead of replacing the complete outline.
+fn merge_imported_outline(
+    target: &mut Option<ooxml_types::drawings::Outline>,
+    imported: Option<&ooxml_types::drawings::Outline>,
+) {
+    let Some(imported) = imported else {
+        return;
+    };
+
+    let Some(target) = target.as_mut() else {
+        *target = Some(imported.clone());
+        return;
+    };
+
+    if target.width.is_none() {
+        target.width = imported.width;
+    }
+    if target.fill.is_none() {
+        target.fill = imported.fill.clone();
+    }
+    if target.dash.is_none() {
+        target.dash = imported.dash.clone();
+    }
+    if target.compound.is_none() {
+        target.compound = imported.compound;
+    }
+    if target.cap.is_none() {
+        target.cap = imported.cap;
+    }
+    if target.align.is_none() {
+        target.align = imported.align;
+    }
+    if target.join.is_none() {
+        target.join = imported.join.clone();
+    }
+    if target.head_end.is_none() {
+        target.head_end = imported.head_end.clone();
+    }
+    if target.tail_end.is_none() {
+        target.tail_end = imported.tail_end.clone();
     }
 }
 

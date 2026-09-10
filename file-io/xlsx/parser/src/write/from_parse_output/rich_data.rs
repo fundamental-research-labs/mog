@@ -56,6 +56,18 @@ pub(super) fn register_parts(
             &part.path,
             &part.content_type,
         ))?;
+        if let Some(relationship_type) = workbook_relationship_type(&part.content_type) {
+            graph.add_relationship(crate::write::package_graph::PackageRelationship {
+                owner: crate::write::package_graph::PackageOwner::Part {
+                    path: "xl/workbook.xml".into(),
+                },
+                relationship_type: relationship_type.into(),
+                target: crate::write::package_graph::PackageRelationshipTarget::InternalPart {
+                    path: part.path.clone(),
+                },
+                identity_hint: None,
+            });
+        }
         for relationship in &part.relationships {
             let target = if crate::write::package_graph::is_external_target_mode(
                 relationship.target_mode.as_deref(),
@@ -121,7 +133,10 @@ pub(super) fn register_parts(
 fn metadata_preserves_rich_data_cluster(output: &ParseOutput) -> bool {
     output.metadata.as_ref().is_some_and(|metadata| {
         super::metadata::imported_metadata_xml_is_current(output, metadata)
-            || (!metadata.value_metadata.is_empty() && metadata.imported_metadata_xml.is_none())
+            // Cell metadata additions, moved cells, and removed value references
+            // do not invalidate this workbook-level registry. Typed value
+            // metadata keeps its imported indexes; retain its owned parts.
+            || !metadata.value_metadata.is_empty()
     })
 }
 
@@ -143,4 +158,22 @@ fn referenced_related_targets(parts: &[RichDataPart]) -> HashSet<String> {
         }
     }
     targets
+}
+
+fn workbook_relationship_type(content_type: &str) -> Option<&'static str> {
+    match content_type {
+        "application/vnd.ms-excel.rdrichvalue+xml" => {
+            Some("http://schemas.microsoft.com/office/2017/06/relationships/rdRichValue")
+        }
+        "application/vnd.ms-excel.rdrichvaluestructure+xml" => {
+            Some("http://schemas.microsoft.com/office/2017/06/relationships/rdRichValueStructure")
+        }
+        "application/vnd.ms-excel.rdrichvaluetypes+xml" => {
+            Some("http://schemas.microsoft.com/office/2017/06/relationships/rdRichValueTypes")
+        }
+        "application/vnd.ms-excel.rdrichvaluerel+xml" => {
+            Some("http://schemas.microsoft.com/office/2022/10/relationships/richValueRel")
+        }
+        _ => None,
+    }
 }

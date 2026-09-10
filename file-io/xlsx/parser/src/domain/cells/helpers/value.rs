@@ -16,7 +16,7 @@ use crate::domain::strings::read::decode_xml_entities_full;
 /// Handles:
 /// - `<v>` (value) elements for numbers and shared string indices
 /// - `<f>` (formula) elements (simple and with attributes like t="shared")
-/// - `<f/>` or `<f .../>` (self-closing formula - shared formula reference)
+/// - `<f/>` or `<f .../>` (empty formula element; often a shared reference)
 /// - `<is><t>` (inline string) elements
 pub fn extract_cell_value_fast<'a>(xml: &'a [u8], shared_strings: &'a [&'a str]) -> (u8, &'a [u8]) {
     // Check for formula element (<f> or <prefix:f>).
@@ -45,8 +45,8 @@ pub fn extract_cell_value_fast<'a>(xml: &'a [u8], shared_strings: &'a [&'a str])
 
 /// Extract formula value, scanning forward from the `<f` position.
 ///
-/// Handles `<f>formula</f>`, `<f ...>formula</f>`, and `<f .../>` (self-closing
-/// shared formula reference with cached `<v>` value).
+/// Handles `<f>formula</f>`, `<f ...>formula</f>`, and `<f .../>` (an empty
+/// formula element with an optional cached `<v>` value).
 #[inline]
 pub(super) fn extract_formula_forward<'a>(
     xml: &'a [u8],
@@ -59,7 +59,8 @@ pub(super) fn extract_formula_forward<'a>(
     };
 
     if f_tag.is_self_closing {
-        // Self-closing <f .../> — shared formula reference
+        // Self-closing <f .../> — the caller preserves its formula metadata;
+        // this scanner only extracts the cached value.
         // Extract the cached <v> value that follows within the same cell. The
         // fast worksheet scanner passes the whole worksheet buffer here, so the
         // search must be bounded to this `<c>` element rather than the next
@@ -131,10 +132,10 @@ fn extract_v_forward<'a>(
     (VALUE_TYPE_NONE, b"")
 }
 
-pub(super) fn extract_inline_string_owned_forward(xml: &[u8], is_lt: usize) -> Option<Vec<u8>> {
+pub(crate) fn extract_inline_string_owned_forward(xml: &[u8], is_lt: usize) -> Option<Vec<u8>> {
     let is_tag = start_tag_at(xml, is_lt, b"is")?;
     if is_tag.is_self_closing {
-        return None;
+        return Some(Vec::new());
     }
     let is_close = find_closing_tag_span(xml, b"is", is_tag.content_start)?;
     let is_end = is_close.lt;
@@ -160,7 +161,7 @@ pub(super) fn extract_inline_string_owned_forward(xml: &[u8], is_lt: usize) -> O
         pos = t_close.end;
     }
 
-    if out.is_empty() { None } else { Some(out) }
+    Some(out)
 }
 
 fn extract_inline_string_slice(xml: &[u8]) -> Option<&[u8]> {

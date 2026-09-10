@@ -144,7 +144,7 @@ fn icon_filter_round_trips() {
             col_index: 0,
             filter_type: Some(OoxmlFilterType::Icon {
                 icon_set: Some("3TrafficLights1".to_string()),
-                icon_id: 1,
+                icon_id: Some(1),
             }),
             ..Default::default()
         }],

@@ -126,7 +126,7 @@ fn ooxml_filter_type_to_column_filter(ft: &OoxmlFilterType) -> ColumnFilter {
         },
         OoxmlFilterType::Icon { icon_set, icon_id } => ColumnFilter::Icon {
             icon_set_name: icon_set.clone().unwrap_or_default(),
-            icon_index: *icon_id as u8,
+            icon_index: *icon_id,
         },
     }
 }
@@ -300,17 +300,28 @@ pub fn column_filter_to_ooxml_filter_type(cf: &ColumnFilter) -> OoxmlFilterType 
             value: *count,
             filter_val: None,
         },
-        ColumnFilter::Condition { conditions, logic } => OoxmlFilterType::Custom {
-            conditions: conditions
-                .iter()
-                .map(|c| OoxmlFilterCondition {
-                    operator: format_filter_operator(&c.operator),
-                    value: c.value.clone().unwrap_or(CellValue::Null),
-                    value2: c.value2.clone(),
-                })
-                .collect(),
-            and_logic: *logic == FilterLogic::And,
-        },
+        ColumnFilter::Condition { conditions, logic } => {
+            if let Some((expanded_conditions, and_logic)) =
+                expand_singleton_interval(conditions)
+            {
+                OoxmlFilterType::Custom {
+                    conditions: expanded_conditions,
+                    and_logic,
+                }
+            } else {
+                OoxmlFilterType::Custom {
+                    conditions: conditions
+                        .iter()
+                        .map(|c| OoxmlFilterCondition {
+                            operator: format_filter_operator(&c.operator),
+                            value: c.value.clone().unwrap_or(CellValue::Null),
+                            value2: c.value2.clone(),
+                        })
+                        .collect(),
+                    and_logic: *logic == FilterLogic::And,
+                }
+            }
+        }
         ColumnFilter::Dynamic { rule } => OoxmlFilterType::Dynamic {
             dynamic_type: format_dynamic_rule(rule),
             value: None,
@@ -338,9 +349,45 @@ pub fn column_filter_to_ooxml_filter_type(cf: &ColumnFilter) -> OoxmlFilterType 
             } else {
                 Some(icon_set_name.clone())
             },
-            icon_id: *icon_index as u32,
+            icon_id: *icon_index,
         },
     }
+}
+
+/// Expand the runtime-only interval operators into the relational operators
+/// accepted by OOXML custom filters. Incomplete intervals retain the legacy
+/// one-condition representation so missing-bound behavior remains unchanged.
+fn expand_singleton_interval(
+    conditions: &[FilterCondition],
+) -> Option<(Vec<OoxmlFilterCondition>, bool)> {
+    if conditions.len() != 1 {
+        return None;
+    }
+
+    let condition = &conditions[0];
+    let lower = condition.value.clone()?;
+    let upper = condition.value2.clone()?;
+    let (lower_operator, upper_operator, and_logic) = match condition.operator {
+        FilterOperator::Between => ("greaterThanOrEqual", "lessThanOrEqual", true),
+        FilterOperator::NotBetween => ("lessThan", "greaterThan", false),
+        _ => return None,
+    };
+
+    Some((
+        vec![
+            OoxmlFilterCondition {
+                operator: lower_operator.to_string(),
+                value: lower,
+                value2: None,
+            },
+            OoxmlFilterCondition {
+                operator: upper_operator.to_string(),
+                value: upper,
+                value2: None,
+            },
+        ],
+        and_logic,
+    ))
 }
 
 /// Format a FilterOperator as an OOXML operator string.

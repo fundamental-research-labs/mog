@@ -1,7 +1,7 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
-use super::ir::{Access, DelegateDescriptor, Param, ParamTag};
+use super::ir::{Access, DelegateDescriptor, ParamTag};
 
 pub(super) fn emit_new_descriptor(desc: &DelegateDescriptor) -> TokenStream {
     let target_ident = format_ident!("{}", desc.target_type);
@@ -16,10 +16,8 @@ pub(super) fn emit_new_descriptor(desc: &DelegateDescriptor) -> TokenStream {
             Access::LifecycleCreate => quote! { lifecycle create },
             Access::Pure => quote! { method pure },
             Access::Read => quote! { method read },
-            // Structural collapses to write in re-emission — remaining
+            // Structural collapses to write in re-emission because remaining
             // descriptor consumers treat the method as a mutation either way.
-            // The original Structural semantics were already consumed by the
-            // delegate macro's gated wrapper above.
             Access::Write | Access::Structural => quote! { method write },
             // R2.4: keep `session` distinct when re-emitting so `&self`
             // is preserved. `method session` is an alias for `method read`
@@ -29,16 +27,8 @@ pub(super) fn emit_new_descriptor(desc: &DelegateDescriptor) -> TokenStream {
 
         let name_ident = format_ident!("{}", method.name);
 
-        // Strip the trailing principal param for needs_principal methods —
-        // downstream codegens must see the public signature (without principal).
-        let public_params: Vec<&Param> = if method.needs_principal {
-            let n = method.params.len().saturating_sub(1);
-            method.params.iter().take(n).collect()
-        } else {
-            method.params.iter().collect()
-        };
-
-        let param_tokens: Vec<TokenStream> = public_params
+        let param_tokens: Vec<TokenStream> = method
+            .params
             .iter()
             .map(|p| {
                 let tag = match p.tag {
@@ -86,10 +76,6 @@ pub(super) fn emit_new_descriptor(desc: &DelegateDescriptor) -> TokenStream {
         } else {
             TokenStream::new()
         };
-
-        // Note: scope and needs_principal are deliberately NOT re-emitted —
-        // downstream codegens don't recognize them, and their contract was
-        // already discharged by the gated wrapper.
 
         // Skip targets
         let skip_tokens: Vec<TokenStream> = method

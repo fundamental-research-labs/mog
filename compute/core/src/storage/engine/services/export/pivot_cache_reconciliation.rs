@@ -128,6 +128,7 @@ fn append_missing_live_cache_sources(
             external_worksheet: None,
             field_names: signature.field_names,
             shared_items: pivot.ooxml_preservation.cache_shared_items.clone(),
+            ..Default::default()
         });
     }
 }

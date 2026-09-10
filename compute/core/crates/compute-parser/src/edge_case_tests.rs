@@ -847,3 +847,39 @@ mod boundary_conditions {
         }
     }
 }
+
+#[test]
+fn backslash_names_and_structured_column_escapes_reach_the_formula_parser() {
+    use formula_types::StructuredRefSpecifier;
+    assert_eq!(
+        parse_formula(r"=\PrivateName", None).unwrap().into_inner(),
+        ASTNode::Identifier(r"\PrivateName".into())
+    );
+    for (encoded, decoded) in [
+        ("calc='#*'#", "calc=#*#"),
+        ("'#tag", "#tag"),
+        ("'@owner", "@owner"),
+        ("left'[right", "left[right"),
+        ("left']right", "left]right"),
+        ("O''Brien", "O'Brien"),
+    ] {
+        for reference in [
+            format!(r"=\Metrics.1[{encoded}]"),
+            format!(r"=\Metrics.1[[#This Row],[{encoded}]]"),
+        ] {
+            let ast = parse_formula(&reference, None)
+                .unwrap_or_else(|error| panic!("{reference}: {error:?}"))
+                .into_inner();
+            let ASTNode::StructuredRef(parsed) = ast else {
+                panic!("{reference}: {ast:?}")
+            };
+            assert_eq!(parsed.table_name, r"\Metrics.1");
+            assert!(
+                parsed.specifiers.iter().any(
+                    |s| matches!(s, StructuredRefSpecifier::Column { name } if name == decoded)
+                ),
+                "{reference}: {parsed:?}"
+            );
+        }
+    }
+}

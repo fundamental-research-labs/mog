@@ -32,7 +32,7 @@ impl ComputeEngine {
 
     /// Insert/delete rows/cols with full three-phase update.
     #[bridge::skip(ts_bridge)]
-    #[bridge::structural(scope = "sheet")]
+    #[bridge::structural]
     pub fn structure_change(
         &mut self,
         sheet_id: &SheetId,
@@ -44,7 +44,7 @@ impl ComputeEngine {
     /// Move cell values from a source range to a target position (value-only move).
     /// Copies computed values to the target, clears the source. Does NOT move formulas
     /// or update formula refs.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     #[allow(clippy::too_many_arguments)]
     pub fn relocate_values(
         &mut self,
@@ -71,7 +71,7 @@ impl ComputeEngine {
 
     /// Insert cells with shift (right or down) in a sub-range.
     /// Extends the StructuralOps pattern for partial-range shifts.
-    #[bridge::structural(scope = "sheet")]
+    #[bridge::structural]
     pub fn insert_cells_with_shift(
         &mut self,
         sheet_id: &SheetId,
@@ -94,7 +94,7 @@ impl ComputeEngine {
     }
 
     /// Delete cells with shift (left or up) in a sub-range.
-    #[bridge::structural(scope = "sheet")]
+    #[bridge::structural]
     pub fn delete_cells_with_shift(
         &mut self,
         sheet_id: &SheetId,
@@ -115,7 +115,7 @@ impl ComputeEngine {
     // -------------------------------------------------------------------
 
     /// Set row height (in pixels from UI).
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_row_height(
         &mut self,
         sheet_id: &SheetId,
@@ -126,7 +126,7 @@ impl ComputeEngine {
     }
 
     /// Set column width (in pixels from UI).
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_col_width(
         &mut self,
         sheet_id: &SheetId,
@@ -137,7 +137,7 @@ impl ComputeEngine {
     }
 
     /// Set multiple column widths (in pixels from UI).
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_col_widths(
         &mut self,
         sheet_id: &SheetId,
@@ -147,7 +147,7 @@ impl ComputeEngine {
     }
 
     /// Set column width in character-width units (OOXML-native).
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_col_width_chars(
         &mut self,
         sheet_id: &SheetId,
@@ -158,7 +158,7 @@ impl ComputeEngine {
     }
 
     /// Set multiple column widths in character-width units (OOXML-native).
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_col_widths_chars(
         &mut self,
         sheet_id: &SheetId,
@@ -168,7 +168,7 @@ impl ComputeEngine {
     }
 
     /// Hide rows.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn hide_rows(
         &mut self,
         sheet_id: &SheetId,
@@ -178,7 +178,7 @@ impl ComputeEngine {
     }
 
     /// Unhide rows.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn unhide_rows(
         &mut self,
         sheet_id: &SheetId,
@@ -188,7 +188,7 @@ impl ComputeEngine {
     }
 
     /// Hide columns.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn hide_columns(
         &mut self,
         sheet_id: &SheetId,
@@ -198,7 +198,7 @@ impl ComputeEngine {
     }
 
     /// Unhide columns.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn unhide_columns(
         &mut self,
         sheet_id: &SheetId,
@@ -212,7 +212,7 @@ impl ComputeEngine {
     // -------------------------------------------------------------------
 
     /// Merge a range of cells.
-    #[bridge::write(scope = "range")]
+    #[bridge::write]
     pub fn merge_range(
         &mut self,
         sheet_id: &SheetId,
@@ -227,7 +227,7 @@ impl ComputeEngine {
     }
 
     /// Unmerge a range.
-    #[bridge::write(scope = "range")]
+    #[bridge::write]
     pub fn unmerge_range(
         &mut self,
         sheet_id: &SheetId,
@@ -242,7 +242,7 @@ impl ComputeEngine {
     }
 
     /// Merge across: creates one merge per row in the range.
-    #[bridge::write(scope = "range")]
+    #[bridge::write]
     pub fn merge_across(
         &mut self,
         sheet_id: &SheetId,
@@ -257,7 +257,7 @@ impl ComputeEngine {
     }
 
     /// Merge and center: unmerge overlapping, then create a single merge.
-    #[bridge::write(scope = "range")]
+    #[bridge::write]
     pub fn merge_and_center(
         &mut self,
         sheet_id: &SheetId,
@@ -272,7 +272,7 @@ impl ComputeEngine {
     }
 
     /// Check whether merging a range would cause data loss.
-    #[bridge::read(scope = "range")]
+    #[bridge::read]
     pub fn check_merge_data_loss(
         &self,
         sheet_id: &SheetId,
@@ -285,20 +285,20 @@ impl ComputeEngine {
     }
 
     /// Check if the cell at (row, col) is the origin of a merge.
-    #[bridge::read(scope = "cell")]
+    #[bridge::read]
     pub fn is_merge_origin(&self, sheet_id: &SheetId, row: u32, col: u32) -> bool {
         self.apply_is_merge_origin(sheet_id, row, col)
     }
 
     /// Clear all merged regions for a sheet.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn clear_all_merges(&mut self, sheet_id: &SheetId) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| engine.apply_clear_all_merges(sheet_id))
     }
 
     /// Validate merges and remove any whose CellIds can no longer be resolved.
     /// Returns a `MutationResult` with the removed count in `data`.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn validate_and_clean_merges(
         &mut self,
         sheet_id: &SheetId,
@@ -313,7 +313,7 @@ impl ComputeEngine {
     /// Resolve a CellId at a position, allocating a stable identity if absent.
     /// Identity allocation leaves the authored value unchanged, including blanks.
     /// Returns the CellId hex string in `data`.
-    #[bridge::write(scope = "cell")]
+    #[bridge::write]
     pub fn get_or_create_cell_id(
         &mut self,
         sheet_id: &SheetId,
@@ -324,7 +324,7 @@ impl ComputeEngine {
     }
 
     /// Move a stable cell identity to an available position in the native indexes.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn update_cell_position(
         &mut self,
         sheet_id: &SheetId,
@@ -350,7 +350,7 @@ impl ComputeEngine {
     /// Routes through `apply_mutation()` for recalculation and complete mutation results.
     /// Returns a `MutationResult` with `RelocateResult` in `data`.
     ///
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     #[allow(clippy::too_many_arguments)]
     pub fn relocate_cells(
         &mut self,

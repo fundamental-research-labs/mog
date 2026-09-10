@@ -6,6 +6,19 @@ use domain_types::{
 
 use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
 
+/// Capture direct workbook children as either current typed state or an
+/// owner-scoped inert payload.
+///
+/// The fallback policy is deliberately fail-closed for direct
+/// `mc:AlternateContent` and unknown children. Branch selection can change
+/// workbook semantics, and an unknown child has no owner that can validate its
+/// references. In particular, Excel's common workbook MCE payloads include
+/// `x15ac:absPath` (a machine-local save location), while unknown revision
+/// children such as `xr:revisionPtr` carry coauthoring/session state. Replaying
+/// either value from the imported workbook would restore stale external state,
+/// so both remain diagnosed omissions until a typed owner can prove them
+/// current. Relationship-free inert children continue to use the raw payload
+/// path below.
 pub(super) fn capture_workbook_xml_fidelity(workbook_xml: &[u8]) -> WorkbookXmlFidelity {
     let Some((body_start, body_end)) = workbook_body_bounds(workbook_xml) else {
         return WorkbookXmlFidelity::default();
@@ -325,4 +338,100 @@ fn relationship_ids(xml: &[u8]) -> Vec<String> {
         }
     }
     ids
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn machine_local_path_and_revision_pointer_are_diagnosed_and_not_replayed() {
+        let xml = br#"<workbook>
+            <fileVersion appName="xl"/>
+            <mc:AlternateContent>
+                <mc:Choice Requires="x15">
+                    <x15ac:absPath url="/Users/example/workbook/"/>
+                </mc:Choice>
+            </mc:AlternateContent>
+            <xr:revisionPtr revIDLastSave="0" documentId="coauthoring-session"/>
+            <sheets/>
+        </workbook>"#;
+
+        let fidelity = capture_workbook_xml_fidelity(xml);
+
+        assert!(fidelity.raw_children.is_empty());
+        assert!(fidelity.slots.iter().any(|slot| {
+            slot.kind == WorkbookXmlChildKind::AlternateContent
+                && slot.owner_policy == WorkbookXmlOwnerPolicy::MceFailClosed
+                && slot.provenance_status == WorkbookXmlProvenanceStatus::Unsupported
+                && slot.fallback_action == WorkbookXmlFallbackAction::Omit
+        }));
+        assert!(fidelity.slots.iter().any(|slot| {
+            slot.kind == WorkbookXmlChildKind::Unknown
+                && slot.owner_policy == WorkbookXmlOwnerPolicy::Unsupported
+                && slot.provenance_status == WorkbookXmlProvenanceStatus::Unsupported
+                && slot.fallback_action == WorkbookXmlFallbackAction::Omit
+        }));
+        assert!(
+            fidelity
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.artifact.ends_with("/AlternateContent"))
+        );
+        assert!(
+            fidelity
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.artifact.ends_with("/revisionPtr"))
+        );
+    }
+
+    #[test]
+    fn relationship_free_inert_workbook_children_are_preserved() {
+        let xml = br#"<workbook>
+            <functionGroups builtInGroupCount="16"/>
+            <extLst><ext uri="{safe}"/></extLst>
+            <sheets/>
+        </workbook>"#;
+
+        let fidelity = capture_workbook_xml_fidelity(xml);
+
+        assert!(fidelity.diagnostics.is_empty());
+        assert_eq!(fidelity.raw_children.len(), 2);
+        assert!(fidelity.raw_children.iter().any(|child| {
+            child.kind == WorkbookXmlChildKind::FunctionGroups
+                && child.xml == br#"<functionGroups builtInGroupCount="16"/>"#
+        }));
+        assert!(fidelity.raw_children.iter().any(|child| {
+            child.kind == WorkbookXmlChildKind::ExtLst
+                && child.xml == br#"<extLst><ext uri="{safe}"/></extLst>"#
+        }));
+    }
+
+    #[test]
+    fn relationship_bearing_inert_workbook_child_is_omitted() {
+        let xml = br#"<workbook>
+            <extLst><ext uri="{unsafe}" r:id="rId7"/></extLst>
+            <sheets/>
+        </workbook>"#;
+
+        let fidelity = capture_workbook_xml_fidelity(xml);
+        let slot = fidelity
+            .slots
+            .iter()
+            .find(|slot| slot.kind == WorkbookXmlChildKind::ExtLst)
+            .expect("extLst slot");
+
+        assert_eq!(slot.fallback_action, WorkbookXmlFallbackAction::Omit);
+        assert_eq!(
+            slot.provenance_status,
+            WorkbookXmlProvenanceStatus::UnsafeRelationshipReference
+        );
+        assert!(fidelity.raw_children.is_empty());
+        assert_eq!(fidelity.diagnostics.len(), 1);
+        assert_eq!(
+            fidelity.diagnostics[0].relationship_ids,
+            vec!["rId7".to_string()]
+        );
+    }
 }

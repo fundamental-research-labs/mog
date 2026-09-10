@@ -63,6 +63,24 @@ fn test_sortby_multi_key() {
 }
 
 #[test]
+fn test_sortby_multiple_keys_can_omit_each_sort_order() {
+    let f = FnSortBy;
+    let array = CellValue::from_rows(vec![vec![num(10.0)], vec![num(20.0)], vec![num(30.0)]]);
+    let first_key = CellValue::from_rows(vec![vec![num(2.0)], vec![num(1.0)], vec![num(1.0)]]);
+    let second_key = CellValue::from_rows(vec![vec![num(1.0)], vec![num(2.0)], vec![num(1.0)]]);
+
+    let result = f.call(&[array, first_key, second_key]);
+    match result {
+        CellValue::Array(array) => {
+            assert_eq!(array.row(0), vec![num(30.0)]);
+            assert_eq!(array.row(1), vec![num(20.0)]);
+            assert_eq!(array.row(2), vec![num(10.0)]);
+        }
+        _ => panic!("Expected array"),
+    }
+}
+
+#[test]
 fn test_sortby_descending() {
     let f = FnSortBy;
     let arr = CellValue::from_rows(vec![vec![num(1.0)], vec![num(2.0)], vec![num(3.0)]]);
@@ -143,4 +161,37 @@ fn test_sortby_horizontal_with_text() {
         }
         _ => panic!("Expected array"),
     }
+}
+
+#[test]
+fn test_sortby_floors_valid_fractional_orders_and_rejects_other_orders() {
+    let f = FnSortBy;
+    let array = CellValue::from_rows(vec![vec![num(2.0)], vec![num(1.0)]]);
+    let by_array = CellValue::from_rows(vec![vec![num(2.0)], vec![num(1.0)]]);
+
+    assert_eq!(
+        f.call(&[array.clone(), by_array.clone(), num(1.5)]),
+        CellValue::from_rows(vec![vec![num(1.0)], vec![num(2.0)]])
+    );
+    assert_eq!(
+        f.call(&[array.clone(), by_array.clone(), num(-0.5)]),
+        CellValue::from_rows(vec![vec![num(2.0)], vec![num(1.0)]])
+    );
+    for order in [
+        num(0.0),
+        num(0.5),
+        num(-1.5),
+        num(2.0),
+        num(-2.0),
+        text("ascending"),
+    ] {
+        assert_eq!(
+            f.call(&[array.clone(), by_array.clone(), order]),
+            err(CellError::Value)
+        );
+    }
+    assert_eq!(
+        f.call(&[array, by_array, err(CellError::Na)]),
+        err(CellError::Na)
+    );
 }

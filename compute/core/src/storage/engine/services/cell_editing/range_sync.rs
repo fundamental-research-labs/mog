@@ -36,5 +36,10 @@ pub(in crate::storage::engine) fn sync_range_with_compute(
         return Ok(crate::snapshot::RecalcResult::empty());
     }
 
+    crate::storage::engine::cell_metadata::refresh(
+        &stores.storage,
+        cell_store,
+        stores.layout_metrics,
+    );
     stores.compute.set_cells_raw(cell_store, &edits, false)
 }

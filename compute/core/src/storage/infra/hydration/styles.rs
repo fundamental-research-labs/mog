@@ -105,6 +105,7 @@ pub(crate) fn hydrate_cell_styles(
                     .filter(|_| !range_style_positions.contains(&(cell.row, cell.col))),
                 cell_metadata_index: cell.cell_metadata_index,
                 vm: cell.vm,
+                imported_rich_error: cell.imported_rich_error,
                 phonetic: cell.phonetic,
                 date_lexical_value: cell.date_lexical_value.clone(),
                 formula_result_type: cell.formula_result_type,

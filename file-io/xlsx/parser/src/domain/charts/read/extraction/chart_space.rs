@@ -497,10 +497,6 @@ fn extract_chart_title_text(chart: &ooxml_types::charts::Chart) -> Option<String
         return Some(title);
     }
 
-    if chart.title.is_some() && chart.auto_title_deleted != Some(true) {
-        return Some("Chart Title".to_string());
-    }
-
     None
 }
 
@@ -1865,7 +1861,7 @@ mod tests {
     }
 
     #[test]
-    fn empty_visible_title_imports_excel_default_chart_title() {
+    fn empty_visible_title_does_not_invent_chart_title() {
         let cs = ChartSpace {
             chart: OoxmlChart {
                 title: Some(Title::default()),
@@ -1878,7 +1874,7 @@ mod tests {
 
         let spec = extract_chart_spec_from_chart_space(&cs, &chart_anchor());
 
-        assert_eq!(spec.title.as_deref(), Some("Chart Title"));
+        assert_eq!(spec.title, None);
     }
 
     #[test]

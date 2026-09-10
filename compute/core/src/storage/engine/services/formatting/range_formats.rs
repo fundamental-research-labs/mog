@@ -349,6 +349,9 @@ fn patch_ranges(
         }
     }
 
+    // Native range overlays live in the cell store, outside the storage metadata
+    // projection. Invalidate formula evaluation when CELL reads their format.
+    stores.compute.mark_dirty();
     Ok(result)
 }
 
@@ -445,6 +448,9 @@ pub(in crate::storage::engine) fn clear_format_for_ranges(
         }
     }
 
+    // Native range overlays live in the cell store, outside the storage metadata
+    // projection. Invalidate formula evaluation when CELL reads their format.
+    stores.compute.mark_dirty();
     Ok(result)
 }
 

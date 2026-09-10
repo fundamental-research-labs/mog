@@ -70,7 +70,10 @@ impl StoredCellProperties {
         props
     }
 
-    fn format<'a>(&'a self, palette: &'a [CellFormat]) -> Option<(&'a CellFormat, bool)> {
+    pub(crate) fn format<'a>(
+        &'a self,
+        palette: &'a [CellFormat],
+    ) -> Option<(&'a CellFormat, bool)> {
         match self {
             Self::ImportedStyle(id) => palette.get(*id as usize).map(|format| (format, true)),
             Self::Detailed(props) => props
@@ -238,7 +241,7 @@ pub fn clear_formula_cache_metadata_for_cell_ids(
                     }
                 })
             {
-                crate::storage::engine::history::metadata::capture_cell_properties(
+                crate::storage::engine::history::metadata::capture_cell_properties_cache_metadata(
                     storage, *sheet_id, id,
                 );
             }

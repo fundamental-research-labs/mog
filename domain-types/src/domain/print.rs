@@ -12,7 +12,8 @@ pub struct PrintSettings {
     pub paper_height: Option<String>,
     /// "portrait", "landscape"
     pub orientation: Option<String>,
-    /// Percentage
+    /// Scale percentage. `Some(0)` is Excel's automatic-scaling mode;
+    /// nonzero values represent an explicit percentage.
     pub scale: Option<u32>,
     pub fit_to_width: Option<u32>,
     pub fit_to_height: Option<u32>,
@@ -158,6 +159,7 @@ pub struct PrinterSettingsPageSetupFingerprint {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub paper_height: Option<String>,
     pub orientation: Option<String>,
+    /// Scale percentage. `Some(0)` is Excel's automatic-scaling mode.
     pub scale: Option<u32>,
     pub fit_to_width: Option<u32>,
     pub fit_to_height: Option<u32>,

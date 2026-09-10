@@ -29,6 +29,7 @@ pub mod dense;
 pub mod range_view;
 pub mod variable_store;
 
+pub(crate) mod cell_metadata;
 mod cell_store;
 mod history;
 mod metadata;

@@ -68,6 +68,33 @@ fn test_get_default_col_width() {
 }
 
 #[test]
+fn base_col_width_supplies_the_sheet_default_when_default_col_width_is_absent() {
+    // Reading `default_col_width` directly drops a `baseColWidth`-only sheet to
+    // the workbook default while the grid layout index uses the base-derived
+    // width, so the same sheet reports two different defaults.
+    let (mut storage, sid, gi) = setup();
+    // A newly authored sheet carries an explicit width; an imported
+    // `baseColWidth`-only workbook does not.
+    let format = &mut storage.sheet_metadata.get_mut(&sid).unwrap().format;
+    format.default_col_width = None;
+    format.base_col_width = Some(10);
+
+    assert_eq!(get_sheet_default_col_width(&storage, &sid), CharWidth(10.0));
+    assert_eq!(get_col_width(&storage, &sid, 0, Some(&gi)), CharWidth(10.0));
+}
+
+#[test]
+fn explicit_default_col_width_outranks_base_col_width() {
+    let (mut storage, sid, gi) = setup();
+    let format = &mut storage.sheet_metadata.get_mut(&sid).unwrap().format;
+    format.base_col_width = Some(10);
+    format.default_col_width = Some(9.25);
+
+    assert_eq!(get_sheet_default_col_width(&storage, &sid), CharWidth(9.25));
+    assert_eq!(get_col_width(&storage, &sid, 0, Some(&gi)), CharWidth(9.25));
+}
+
+#[test]
 fn test_reset_col_width_to_default_removes_entry() {
     let (mut storage, sid, gi) = setup();
     set_col_width(&mut storage, &sid, 0, CharWidth(200.0), Some(&gi)).unwrap();
@@ -376,4 +403,55 @@ fn test_column_visibility_duplicate_hide_and_absent_unhide_noops() {
     hide_columns(&mut storage, &sid, &[4, 4, 2], Some(&gi));
     unhide_columns(&mut storage, &sid, &[8], Some(&gi));
     assert_eq!(get_hidden_columns(&storage, &sid, Some(&gi)), vec![2, 4]);
+}
+
+#[test]
+fn imported_row_height_presence_is_independent_of_other_row_metadata() {
+    let (_, _, grid) = setup();
+    let dimensions = domain_types::SheetDimensions {
+        row_heights: vec![
+            domain_types::RowDimension {
+                row: 0,
+                descent: Some(0.3),
+                ..Default::default()
+            },
+            domain_types::RowDimension {
+                row: 1,
+                hidden: true,
+                ..Default::default()
+            },
+            domain_types::RowDimension {
+                row: 2,
+                height: 15.0,
+                ..Default::default()
+            },
+            domain_types::RowDimension {
+                row: 3,
+                height: 22.0,
+                custom_height: true,
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+    let sheet = domain_types::SheetData {
+        dimensions,
+        ..Default::default()
+    };
+    let state = super::state::DimensionState::from_import(
+        &sheet,
+        |row| grid.row_id(row),
+        |col| grid.col_id(col),
+    );
+    for (row, expected_height) in [(0, 0.0), (1, 0.0), (2, 15.0), (3, 22.0)] {
+        let id = grid.row_id(row).unwrap();
+        let record = &state.rows[&id];
+        assert_eq!(record.height.is_some(), row >= 2);
+        assert_eq!(
+            record
+                .to_domain(row, Points(15.0), state.row_hidden(&id))
+                .height,
+            expected_height
+        );
+    }
 }

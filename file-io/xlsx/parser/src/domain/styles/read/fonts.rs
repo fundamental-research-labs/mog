@@ -308,6 +308,16 @@ pub(super) fn parse_single_font(xml: &[u8]) -> FontDef {
         font_def.family = parse_u32_attr(&xml[fam_start..fam_end], b"val=\"");
     }
 
+    // Parse <charset val="..."/>. DXF fonts use the same CT_Font
+    // vocabulary as the workbook font table, so dropping this field here
+    // would make a conditional-format font change its code page on export.
+    if let Some(cs_start) = find_tag_simd(xml, b"charset", 0) {
+        let cs_end = find_gt_simd(xml, cs_start)
+            .map(|p| p + 1)
+            .unwrap_or(xml.len());
+        font_def.charset = parse_u32_attr(&xml[cs_start..cs_end], b"val=\"");
+    }
+
     // Parse <scheme val="..."/>
     if let Some(sch_start) = find_tag_simd(xml, b"scheme", 0) {
         let sch_end = find_gt_simd(xml, sch_start)

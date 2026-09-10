@@ -658,74 +658,44 @@ mod fractions {
         );
     }
 
-    // ---------------------------------------------------------------------
-    // Two-digit-placeholder fraction cases (# ??/??).
-    //
-    // Pre-fix bug (right-fix/rust-event-emit, Hack C): the formatter
-    // right-padded the numerator to `num_placeholders` chars, which composed
-    // with the literal space between `#` and `??` to produce a doubled
-    // inter-column space (e.g. `1  5/8` instead of `1 5/8`). The TS layer
-    // compensated with a regex that collapsed `\d {2,}\d` to a single space.
-    //
-    // Right fix: emit numerator/denominator digits without padding when they
-    // are non-zero. The literal space already provides the visual separator;
-    // padding to the placeholder width was a column-alignment choice that did
-    // not match the UI fraction-formatting fixture.
-    // ---------------------------------------------------------------------
+    // Excel reserves each ? position, aligning numerators to the slash and
+    // denominators to its right. Whole-number values blank the slash too.
+    // These contracts replace historical UI-specific whitespace collapsing.
 
     #[test]
     fn two_digit_placeholder_mixed_single_digit_num() {
-        // 1.625 = 1 5/8 — single-digit numerator, single-digit denominator,
-        // two-digit placeholders for both. No doubled spaces between the
-        // integer and the numerator block.
-        let result = format_number(1.625, "# ??/??");
-        assert_eq!(result, "1 5/8");
+        assert_eq!(format_number(1.625, "# ??/??"), "1  5/8 ");
     }
 
     #[test]
     fn two_digit_placeholder_large_int_with_fraction() {
-        // 42.75 = 42 3/4 — large integer, single-digit numerator and
-        // denominator. Same shape: single space between integer and fraction.
-        let result = format_number(42.75, "# ??/??");
-        assert_eq!(result, "42 3/4");
+        assert_eq!(format_number(42.75, "# ??/??"), "42  3/4 ");
     }
 
     #[test]
     fn two_digit_placeholder_two_digit_denom() {
-        // 1.0/13.0 ≈ 0.0769 — best two-digit approximation is 1/13 itself,
-        // so we get a two-digit denominator. No padding artifacts.
-        let result = format_number(1.0 / 13.0, "# ??/??");
-        // Integer is 0 with `#` (suppressed → blanked to one space),
-        // then literal space, then "1/13".
-        assert_eq!(result, "  1/13");
+        assert_eq!(format_number(1.0 / 13.0, "# ??/??"), "  1/13");
     }
 
     #[test]
     fn two_digit_placeholder_zero_int_single_digit_num() {
-        // 0.333 ≈ 1/3 — integer zero suppressed, single-digit numerator.
-        let result = format_number(1.0 / 3.0, "# ??/??");
-        assert_eq!(result, "  1/3");
+        assert_eq!(format_number(1.0 / 3.0, "# ??/??"), "  1/3 ");
     }
 
     #[test]
     fn two_digit_placeholder_whole_number() {
-        // 5.0 with `# ??/??` — integer "5", literal space, numerator zone
-        // blanked (two spaces), slash, denominator zone blanked (two spaces).
-        let result = format_number(5.0, "# ??/??");
-        assert_eq!(result, "5   /  ");
+        assert_eq!(format_number(5.0, "# ??/??"), "5      ");
     }
 
     #[test]
     fn three_digit_placeholder_single_digit_fraction() {
-        // 1.5 with `# ???/???` — emit "1 1/2" with no padding artifacts.
-        let result = format_number(1.5, "# ???/???");
-        assert_eq!(result, "1 1/2");
+        assert_eq!(format_number(1.5, "# ???/???"), "1   1/2  ");
     }
 
     #[test]
     fn fixed_denominator_quarter_under_one() {
         let result = format_number(0.25, "# ?/4");
-        assert_eq!(result, "  1/4");
+        assert_eq!(result, " 1/4");
     }
 
     #[test]
@@ -737,19 +707,19 @@ mod fractions {
     #[test]
     fn fixed_denominator_tenths() {
         let result = format_number(0.3, "# ?/10");
-        assert_eq!(result, "  3/10");
+        assert_eq!(result, " 3/10");
     }
 
     #[test]
     fn fixed_denominator_whole_number_preserves_fraction_columns() {
         let result = format_number(5.0, "# ?/4");
-        assert_eq!(result, "5  /4");
+        assert_eq!(result, "5    ");
     }
 
     #[test]
     fn fixed_denominator_carries_when_rounded_numerator_reaches_denominator() {
         let result = format_number(0.99, "# ?/4");
-        assert_eq!(result, "1  /4");
+        assert_eq!(result, "1    ");
     }
 
     #[test]

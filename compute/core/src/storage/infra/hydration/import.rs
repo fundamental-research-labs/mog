@@ -41,6 +41,8 @@ impl WorkbookStorage {
         output: &ParseOutput,
         allocator: &mut impl IdAllocator,
     ) -> Result<HydrationIdMap, ComputeError> {
+        self.invalidate_cell_metadata_projection();
+        self.imported_array_caches.clear();
         let _span = tracing::info_span!("hydrate_native_metadata").entered();
 
         let mut id_map = HydrationIdMap::default();
@@ -99,6 +101,7 @@ impl WorkbookStorage {
                 &sheet_cell_ids,
                 &Default::default(),
             );
+            cache_imported_array_cells(self, sheet_id, sheet_data, &sheet_cell_ids);
             id_map.sheet_ids.push(sheet_id);
             id_map.cell_ids.push(sheet_cell_ids);
             id_map.row_axes.push(sheet_row_axis);
@@ -110,24 +113,18 @@ impl WorkbookStorage {
             );
         }
 
-        // Provider Protocol lifecycle (Provider Protocol): workbook-level domain maps
-        // are NOT eagerly bulk-inserted here. Eager inserts conflict with
-        // independent-session replay via Map LWW. Each downstream
-        // `hydrate_workbook_*` helper below ensures its own sub-map via
-        // `ensure_workbook_child_map` (or a domain-specific wrapper) on
-        // first write. Empty domain maps are simply absent from the doc;
-        // every reader already handles `None` gracefully.
-
         // Populate workbook-level data
         hydrate_workbook_print_defined_names(
             &mut self.sheet_metadata,
             &output.named_ranges,
             &id_map.sheet_ids,
+            &output.workbook_sheet_inventory,
         );
         hydrate_workbook_named_ranges(
             &mut self.metadata,
             &output.named_ranges,
             &id_map.sheet_ids,
+            &output.workbook_sheet_inventory,
             allocator,
         );
         // Collect tables from all sheets, paired with their sheet IDs.
@@ -188,6 +185,7 @@ impl WorkbookStorage {
             &mut self.metadata,
             &output.workbook_views,
             &id_map.sheet_ids,
+            &output.workbook_sheet_inventory,
         );
         hydrate_custom_workbook_views_xml(&mut self.metadata, &output.custom_workbook_views_xml);
         hydrate_workbook_web_publishing(&mut self.metadata, &output.web_publishing);
@@ -198,6 +196,11 @@ impl WorkbookStorage {
         );
         hydrate_shared_string_hints(&mut self.metadata, &output.shared_string_hints);
         hydrate_package_fidelity_metadata(&mut self.metadata, &output.package_fidelity);
+        crate::storage::workbook::sheet_inventory::hydrate(
+            &mut self.metadata,
+            output,
+            &id_map.sheet_ids,
+        );
         hydrate_volatile_dependency_part(&mut self.metadata, &output.volatile_dependency_part);
         hydrate_workbook_metadata(
             &mut self.metadata,
@@ -233,6 +236,8 @@ impl WorkbookStorage {
         range_style_positions: &[std::collections::HashSet<(u32, u32)>],
         allocator: &mut impl IdAllocator,
     ) -> Result<HydrationIdMap, ComputeError> {
+        self.invalidate_cell_metadata_projection();
+        self.imported_array_caches.clear();
         let _span = tracing::info_span!("hydrate_native_metadata_with_ranges").entered();
 
         let mut id_map = HydrationIdMap::default();
@@ -273,11 +278,13 @@ impl WorkbookStorage {
             &mut self.sheet_metadata,
             &output.named_ranges,
             &id_map.sheet_ids,
+            &output.workbook_sheet_inventory,
         );
         hydrate_workbook_named_ranges(
             &mut self.metadata,
             &output.named_ranges,
             &id_map.sheet_ids,
+            &output.workbook_sheet_inventory,
             allocator,
         );
         let all_tables: Vec<_> = output
@@ -330,6 +337,7 @@ impl WorkbookStorage {
             &mut self.metadata,
             &output.workbook_views,
             &id_map.sheet_ids,
+            &output.workbook_sheet_inventory,
         );
         hydrate_custom_workbook_views_xml(&mut self.metadata, &output.custom_workbook_views_xml);
         hydrate_workbook_web_publishing(&mut self.metadata, &output.web_publishing);
@@ -340,6 +348,11 @@ impl WorkbookStorage {
         );
         hydrate_shared_string_hints(&mut self.metadata, &output.shared_string_hints);
         hydrate_package_fidelity_metadata(&mut self.metadata, &output.package_fidelity);
+        crate::storage::workbook::sheet_inventory::hydrate(
+            &mut self.metadata,
+            output,
+            &id_map.sheet_ids,
+        );
         hydrate_volatile_dependency_part(&mut self.metadata, &output.volatile_dependency_part);
         hydrate_workbook_metadata(
             &mut self.metadata,
@@ -421,6 +434,7 @@ impl WorkbookStorage {
             &alloc.cell_ids,
             range_style_positions_for_sheet,
         );
+        cache_imported_array_cells(self, sheet_id, sheet_data, &alloc.cell_ids);
         Ok(identities)
     }
 
@@ -436,6 +450,7 @@ impl WorkbookStorage {
         existing_tables: &[domain_types::domain::table::TableCatalogEntry],
         allocator: &mut impl IdAllocator,
     ) -> Result<HydrationIdMap, ComputeError> {
+        self.invalidate_cell_metadata_projection();
         let mut id_map = HydrationIdMap::default();
         for (index, allocation) in allocations.iter().enumerate() {
             id_map.sheet_ids.push(allocation.sheet_id);
@@ -478,6 +493,7 @@ impl WorkbookStorage {
             &mut self.sheet_metadata,
             &output.named_ranges,
             &id_map.sheet_ids,
+            &output.workbook_sheet_inventory,
         );
         hydrate_workbook_slicers(
             &mut self.metadata,
@@ -504,6 +520,84 @@ impl WorkbookStorage {
             &id_map.sheet_ids,
         )?;
         Ok(id_map)
+    }
+}
+
+fn cache_imported_array_cells(
+    storage: &mut WorkbookStorage,
+    sheet_id: cell_types::SheetId,
+    sheet_data: &domain_types::SheetData,
+    cell_ids: &[cell_types::CellId],
+) {
+    let source_ranges: Vec<_> = sheet_data
+        .cells
+        .iter()
+        .zip(cell_ids)
+        .filter(|(cell, _)| {
+            cell.projection_role == domain_types::ImportedCellProjectionRole::DynamicArraySource
+        })
+        .filter_map(|(cell, cell_id)| {
+            let array_ref = cell.array_ref.as_deref()?;
+            let range = compute_parser::parse_a1_range(array_ref)?;
+            let (
+                formula_types::CellRef::Positional {
+                    row: start_row,
+                    col: start_col,
+                    ..
+                },
+                formula_types::CellRef::Positional {
+                    row: end_row,
+                    col: end_col,
+                    ..
+                },
+            ) = (range.start, range.end)
+            else {
+                return None;
+            };
+            Some((
+                cell_types::SheetPos::new(cell.row, cell.col),
+                *cell_id,
+                cell_types::SheetPos::new(start_row.min(end_row), start_col.min(end_col)),
+                cell_types::SheetPos::new(start_row.max(end_row), start_col.max(end_col)),
+            ))
+        })
+        .collect();
+
+    let mut claimed = std::collections::HashSet::new();
+    let caches: Vec<_> = source_ranges
+        .into_iter()
+        .filter_map(|(source, source_id, start, end)| {
+            let members: Vec<_> = sheet_data
+                .cells
+                .iter()
+                .zip(cell_ids)
+                .filter(|(cell, _)| {
+                    cell.projection_role
+                        == domain_types::ImportedCellProjectionRole::DynamicArraySpillTarget
+                        && cell.row >= start.row()
+                        && cell.row <= end.row()
+                        && cell.col >= start.col()
+                        && cell.col <= end.col()
+                        && claimed.insert((cell.row, cell.col))
+                })
+                .map(|(cell, cell_id)| (cell.clone(), *cell_id))
+                .collect();
+            let (cells, member_ids): (Vec<_>, Vec<_>) = members.into_iter().unzip();
+            (!cells.is_empty()).then_some(crate::imported_array_cache::ImportedArrayCache {
+                source,
+                source_id,
+                start,
+                end,
+                cells,
+                cell_ids: member_ids,
+                values_current: true,
+            })
+        })
+        .collect();
+    if caches.is_empty() {
+        storage.imported_array_caches.remove(&sheet_id);
+    } else {
+        storage.imported_array_caches.insert(sheet_id, caches);
     }
 }
 

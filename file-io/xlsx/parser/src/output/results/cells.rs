@@ -39,6 +39,10 @@ pub struct FullCellData {
     /// When true, the cached `<v>` value may be stale or a placeholder (e.g., `0`).
     #[serde(default, skip_serializing_if = "is_false")]
     pub force_recalc: bool,
+    /// Whether a formula cell had an authored empty cached `<v/>` or `<v></v>`.
+    /// This is distinct from an absent `<v>` element.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub has_empty_cached_value: bool,
     /// For array formula source cells, the `ref` attribute from `<f t="array" ref="A1:C5">`.
     /// Indicates this cell is a dynamic array source and the ref gives the spill range.
     /// Phantom cells within this range should be excluded from snapshots.
@@ -70,9 +74,11 @@ pub struct FullCellData {
     /// *string* "#N/A" (t="str") from a formula returning the *error* #N/A (t="e").
     #[serde(default, skip_serializing_if = "is_zero")]
     pub cached_value_type: u8,
-    /// Original OOXML formula metadata for round-trip preservation.
-    /// The `formula` field continues to hold the expanded text.
-    /// This field is not serialized to JSON.
+    /// Original OOXML formula metadata for round-trip preservation. A Normal
+    /// formula with empty text and no `formula` text is an authored empty
+    /// `<f>` marker; it must not be registered as executable formula text.
+    /// The `formula` field continues to hold the expanded text for WASM consumers.
+    /// This field is NOT serialized to JSON (WASM doesn't need it).
     #[serde(skip)]
     pub cell_formula: Option<ooxml_types::worksheet::CellFormula>,
     /// Whether the `<f>` element had `xml:space="preserve"`, for round-trip fidelity.

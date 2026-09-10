@@ -14,3 +14,5 @@ mod normal;
 mod poisson;
 mod t_dist;
 mod weibull;
+
+mod inverse_convergence;

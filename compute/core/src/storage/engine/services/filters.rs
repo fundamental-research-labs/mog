@@ -2,14 +2,14 @@ use crate::cells::CellStore;
 use crate::snapshot::{ChangeKind, FilterChange, MutationResult, RuntimeOperationDiagnostic};
 use crate::storage::engine::filter_import_diagnostics::resolve_filter_cell_pos;
 use crate::storage::engine::services::filter_results::append_row_visibility_changes;
-use crate::storage::engine::services::imported_filters;
 use crate::storage::engine::services::resolved_formats;
+use crate::storage::engine::services::{imported_filter_runtime, imported_filters};
 use crate::storage::engine::settings::EngineSettings;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::{dimensions, filters};
 use cell_types::{SheetId, SheetPos};
 use compute_document::hex::id_to_hex;
-use value_types::{CellValue, ComputeError};
+use value_types::{CellValue, ComputeError, DateSystem};
 
 mod clear_all;
 mod value_queries;
@@ -680,7 +680,9 @@ fn apply_filter_with_action(
     action: &str,
     diagnostic_operation: Option<&'static str>,
 ) -> Result<MutationResult, ComputeError> {
-    let filter = filters::get_filter(&stores.storage, sheet_id, filter_id);
+    let filter = imported_filter_runtime::project_imported_date_group_filters_for_evaluation(
+        stores, cell_store, sheet_id, filter_id,
+    );
     let filter_kind = filter
         .as_ref()
         .map(|filter| filter_kind_wire(&filter.filter_kind).to_string());
@@ -719,10 +721,11 @@ fn apply_filter_with_action(
     }
 
     let sid = *sheet_id;
-    let results = filters::evaluate_filter(
-        &stores.storage,
-        sheet_id,
-        filter_id,
+    let icons = crate::storage::engine::services::cf_cache::evaluate_filter_icons(
+        stores, cell_store, sheet_id, filter_id,
+    );
+    let results = filters::evaluate_filter_state_with_date_system(
+        filter.as_ref(),
         |row, col| {
             let pos = SheetPos::new(row, col);
             cell_store
@@ -735,7 +738,9 @@ fn apply_filter_with_action(
                 stores, cell_store, settings, sheet_id, row, col,
             )
         },
+        |row, col| icons.get(&(row, col)).cloned(),
         |hex| resolve_filter_cell_pos(cell_store, sheet_id, hex),
+        DateSystem::from_date1904(cell_store.date1904),
     );
 
     let mut rows_to_hide = Vec::new();

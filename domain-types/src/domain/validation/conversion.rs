@@ -102,8 +102,16 @@ impl RangeSchema {
             return None;
         }
 
-        let rule =
-            build_validation_rule(self.schema.schema_type, self.schema.constraints.as_ref())?;
+        let show_dropdown = self
+            .ui
+            .as_ref()
+            .and_then(|ui| ui.show_dropdown)
+            .unwrap_or(true);
+        let rule = build_validation_rule(
+            self.schema.schema_type,
+            self.schema.constraints.as_ref(),
+            show_dropdown,
+        )?;
 
         let error_style: ErrorStyle = self.enforcement.unwrap_or(EnforcementLevel::Strict).into();
 
@@ -148,6 +156,7 @@ impl RangeSchema {
 fn build_validation_rule(
     schema_type: Option<SchemaType>,
     constraints: Option<&SchemaConstraints>,
+    show_dropdown: bool,
 ) -> Option<ValidationRule> {
     let c = constraints;
 
@@ -155,14 +164,14 @@ fn build_validation_rule(
         let formula1 = format!("\"{}\"", vals.join(","));
         return Some(ValidationRule::List {
             formula1,
-            show_dropdown: true,
+            show_dropdown,
         });
     }
 
     if let Some(formula) = c.and_then(|c| c.enum_source_formula.as_ref()) {
         return Some(ValidationRule::List {
             formula1: formula.clone(),
-            show_dropdown: true,
+            show_dropdown,
         });
     }
 
@@ -174,7 +183,7 @@ fn build_validation_rule(
     {
         return Some(ValidationRule::List {
             formula1: a1,
-            show_dropdown: true,
+            show_dropdown,
         });
     }
 
@@ -256,37 +265,35 @@ fn numeric_operator_and_formulas(
         None => return (ValidationOperator::Between, String::new(), None),
     };
 
-    if let Some(v) = c.equal {
-        return (ValidationOperator::Equal, v.to_string(), None);
+    if let Some(v) = formula_bound(c, "equal", c.equal) {
+        return (ValidationOperator::Equal, v, None);
     }
-    if let Some(v) = c.not_equal {
-        return (ValidationOperator::NotEqual, v.to_string(), None);
+    if let Some(v) = formula_bound(c, "notEqual", c.not_equal) {
+        return (ValidationOperator::NotEqual, v, None);
     }
-    if let (Some(lo), Some(hi)) = (c.not_between_min, c.not_between_max) {
-        return (
-            ValidationOperator::NotBetween,
-            lo.to_string(),
-            Some(hi.to_string()),
-        );
+    if let (Some(lo), Some(hi)) = (
+        formula_bound(c, "notBetweenMin", c.not_between_min),
+        formula_bound(c, "notBetweenMax", c.not_between_max),
+    ) {
+        return (ValidationOperator::NotBetween, lo, Some(hi));
     }
-    if let (Some(lo), Some(hi)) = (c.min, c.max) {
-        return (
-            ValidationOperator::Between,
-            lo.to_string(),
-            Some(hi.to_string()),
-        );
+    if let (Some(lo), Some(hi)) = (
+        formula_bound(c, "min", c.min),
+        formula_bound(c, "max", c.max),
+    ) {
+        return (ValidationOperator::Between, lo, Some(hi));
     }
-    if let Some(v) = c.exclusive_min {
-        return (ValidationOperator::GreaterThan, v.to_string(), None);
+    if let Some(v) = formula_bound(c, "exclusiveMin", c.exclusive_min) {
+        return (ValidationOperator::GreaterThan, v, None);
     }
-    if let Some(v) = c.min {
-        return (ValidationOperator::GreaterThanOrEqual, v.to_string(), None);
+    if let Some(v) = formula_bound(c, "min", c.min) {
+        return (ValidationOperator::GreaterThanOrEqual, v, None);
     }
-    if let Some(v) = c.exclusive_max {
-        return (ValidationOperator::LessThan, v.to_string(), None);
+    if let Some(v) = formula_bound(c, "exclusiveMax", c.exclusive_max) {
+        return (ValidationOperator::LessThan, v, None);
     }
-    if let Some(v) = c.max {
-        return (ValidationOperator::LessThanOrEqual, v.to_string(), None);
+    if let Some(v) = formula_bound(c, "max", c.max) {
+        return (ValidationOperator::LessThanOrEqual, v, None);
     }
 
     (ValidationOperator::Between, String::new(), None)
@@ -300,18 +307,17 @@ fn text_length_operator_and_formulas(
         None => return (ValidationOperator::Between, String::new(), None),
     };
 
-    if let (Some(lo), Some(hi)) = (c.min_length, c.max_length) {
-        return (
-            ValidationOperator::Between,
-            lo.to_string(),
-            Some(hi.to_string()),
-        );
+    if let (Some(lo), Some(hi)) = (
+        formula_bound(c, "minLength", c.min_length.map(|value| value as f64)),
+        formula_bound(c, "maxLength", c.max_length.map(|value| value as f64)),
+    ) {
+        return (ValidationOperator::Between, lo, Some(hi));
     }
-    if let Some(v) = c.min_length {
-        return (ValidationOperator::GreaterThanOrEqual, v.to_string(), None);
+    if let Some(v) = formula_bound(c, "minLength", c.min_length.map(|value| value as f64)) {
+        return (ValidationOperator::GreaterThanOrEqual, v, None);
     }
-    if let Some(v) = c.max_length {
-        return (ValidationOperator::LessThanOrEqual, v.to_string(), None);
+    if let Some(v) = formula_bound(c, "maxLength", c.max_length.map(|value| value as f64)) {
+        return (ValidationOperator::LessThanOrEqual, v, None);
     }
 
     (ValidationOperator::Between, String::new(), None)
@@ -403,35 +409,49 @@ fn operator_formulas_to_numeric_constraints(
     formula2: Option<&str>,
 ) -> SchemaConstraints {
     let mut c = SchemaConstraints::default();
-    let f1: Option<f64> = formula1.parse().ok();
-    let f2: Option<f64> = formula2.and_then(|s| s.parse().ok());
+    let f1 = parse_numeric_formula(formula1);
+    let f2 = formula2.and_then(parse_numeric_formula);
 
     match operator {
         ValidationOperator::Between => {
             c.min = f1;
             c.max = f2;
+            retain_formula_bound(&mut c, "min", formula1, f1);
+            if let Some(formula2) = formula2 {
+                retain_formula_bound(&mut c, "max", formula2, f2);
+            }
         }
         ValidationOperator::NotBetween => {
             c.not_between_min = f1;
             c.not_between_max = f2;
+            retain_formula_bound(&mut c, "notBetweenMin", formula1, f1);
+            if let Some(formula2) = formula2 {
+                retain_formula_bound(&mut c, "notBetweenMax", formula2, f2);
+            }
         }
         ValidationOperator::Equal => {
             c.equal = f1;
+            retain_formula_bound(&mut c, "equal", formula1, f1);
         }
         ValidationOperator::NotEqual => {
             c.not_equal = f1;
+            retain_formula_bound(&mut c, "notEqual", formula1, f1);
         }
         ValidationOperator::GreaterThan => {
             c.exclusive_min = f1;
+            retain_formula_bound(&mut c, "exclusiveMin", formula1, f1);
         }
         ValidationOperator::GreaterThanOrEqual => {
             c.min = f1;
+            retain_formula_bound(&mut c, "min", formula1, f1);
         }
         ValidationOperator::LessThan => {
             c.exclusive_max = f1;
+            retain_formula_bound(&mut c, "exclusiveMax", formula1, f1);
         }
         ValidationOperator::LessThanOrEqual => {
             c.max = f1;
+            retain_formula_bound(&mut c, "max", formula1, f1);
         }
     }
     c
@@ -444,23 +464,87 @@ fn operator_formulas_to_length_constraints(
     formula2: Option<&str>,
 ) -> SchemaConstraints {
     let mut c = SchemaConstraints::default();
-    let f1: Option<usize> = formula1.parse().ok();
-    let f2: Option<usize> = formula2.and_then(|s| s.parse().ok());
+    let f1 = parse_length_formula(formula1);
+    let f2 = formula2.and_then(parse_length_formula);
 
     match operator {
         ValidationOperator::Between => {
             c.min_length = f1;
             c.max_length = f2;
+            retain_formula_bound(&mut c, "minLength", formula1, f1.map(|value| value as f64));
+            if let Some(formula2) = formula2 {
+                retain_formula_bound(&mut c, "maxLength", formula2, f2.map(|value| value as f64));
+            }
         }
         ValidationOperator::GreaterThanOrEqual => {
             c.min_length = f1;
+            retain_formula_bound(&mut c, "minLength", formula1, f1.map(|value| value as f64));
         }
         ValidationOperator::LessThanOrEqual => {
             c.max_length = f1;
+            retain_formula_bound(&mut c, "maxLength", formula1, f1.map(|value| value as f64));
         }
         _ => {
             c.min_length = f1;
+            retain_formula_bound(&mut c, "minLength", formula1, f1.map(|value| value as f64));
         }
     }
     c
+}
+
+fn formula_bound(
+    constraints: &SchemaConstraints,
+    key: &str,
+    literal: Option<f64>,
+) -> Option<String> {
+    constraints
+        .formula_bounds
+        .as_ref()
+        .and_then(|bounds| bounds.get(key).cloned())
+        .or_else(|| literal.map(|value| value.to_string()))
+}
+
+fn parse_numeric_formula(value: &str) -> Option<f64> {
+    value
+        .trim()
+        .strip_prefix('=')
+        .unwrap_or(value.trim())
+        .trim()
+        .parse::<f64>()
+        .ok()
+        .filter(|value| value.is_finite())
+}
+
+fn parse_length_formula(value: &str) -> Option<usize> {
+    let value = parse_numeric_formula(value)?;
+    if value < 0.0 || value.fract() != 0.0 || value > usize::MAX as f64 {
+        return None;
+    }
+    Some(value as usize)
+}
+
+fn retain_formula_bound(
+    constraints: &mut SchemaConstraints,
+    key: &str,
+    formula: &str,
+    parsed: Option<f64>,
+) {
+    if parsed.is_some() {
+        return;
+    }
+    let raw = formula.trim();
+    if raw.is_empty() {
+        return;
+    }
+    constraints
+        .formula_bounds
+        .get_or_insert_with(Default::default)
+        .insert(
+            key.to_string(),
+            if raw.starts_with('=') {
+                raw.to_string()
+            } else {
+                format!("={raw}")
+            },
+        );
 }

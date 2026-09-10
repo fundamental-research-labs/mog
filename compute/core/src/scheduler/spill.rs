@@ -346,6 +346,13 @@ impl ComputeCore {
         projection_changes: &mut Vec<ProjectionChange>,
         projection_deltas: &mut Vec<ProjectionDelta>,
     ) {
+        // A source is about to publish a new scalar/array result. Invalidate
+        // its imported package cache before dependents run so a shrink,
+        // growth, or #SPILL! result cannot expose old child values during the
+        // same recalc pass.
+        if let Some(source_pos) = cell_store.resolve_position(&cell_id) {
+            cell_store.invalidate_imported_array_caches_at(std::iter::once((sheet_id, source_pos)));
+        }
         // Snapshot old projection state for delta tracking
         let old_proj = cell_store.projection_registry.get(&cell_id).cloned();
 
@@ -358,6 +365,28 @@ impl ComputeCore {
             });
         }
 
+        use crate::cells::cell_metadata::FormulaResultMode;
+        let imported_mode = cell_store.formula_result_mode(&cell_id);
+        // Fixed CSE output dimensions are authored state, unlike a dynamic
+        // formula's last successful spill range. Crop/pad to that declaration.
+        if imported_mode == Some(FormulaResultMode::Cse)
+            && let Some((rows, cols)) = cell_store.declared_array_extent(&cell_id)
+        {
+            let mut values = Vec::with_capacity(rows as usize * cols as usize);
+            for row in 0..rows as usize {
+                for col in 0..cols as usize {
+                    values.push(match &*new_value {
+                        CellValue::Array(array) => array
+                            .get(row, col)
+                            .cloned()
+                            .unwrap_or(CellValue::Error(CellError::Na, None)),
+                        scalar => scalar.clone(),
+                    });
+                }
+            }
+            *new_value = CellValue::array(values, cols as usize);
+        }
+
         // --- Run the actual spill handling logic ---
         if let CellValue::Array(ref arr) = new_value.clone() {
             let array_rows = arr.rows() as u32;
@@ -367,26 +396,23 @@ impl ComputeCore {
                 // Legacy CSE single-cell override: if the XLSX declared this formula
                 // as a 1×1 array formula (t="array" ref="X1:X1"), it must NOT spill
                 // regardless of is_dynamic_array. Apply implicit intersection.
-                let is_cse_single = cell_store.cse_single_cell.contains(&cell_id);
-                let is_cse_multi = cell_store.cse_anchors.contains(&cell_id);
-
-                // Implicit intersection: formulas that do not contain
-                // array-returning functions should apply implicit intersection
-                // (extract the top-left scalar) instead of spilling into
-                // neighboring cells. Only formulas flagged as dynamic array
-                // (is_dynamic_array in AstEntry) get spill behavior.
-                // CSE single-cell formulas also take this path.
-                // Multi-cell CSE anchors skip implicit intersection — they
-                // must take the dynamic-array spill path so projections are
-                // registered and the full array result materializes.
-                if is_cse_single
-                    || (!is_cse_multi
-                        && !self
-                            .ast_cache
-                            .get(&cell_id)
-                            .map(|e| e.is_dynamic_array)
-                            .unwrap_or(false))
-                {
+                let is_cse_single = imported_mode != Some(FormulaResultMode::Dynamic)
+                    && cell_store.cse_single_cell.contains(&cell_id);
+                let is_cse_multi = cell_store.is_cse_anchor(&cell_id);
+                let should_intersect = match imported_mode {
+                    Some(FormulaResultMode::LegacyScalar) => true,
+                    Some(FormulaResultMode::Dynamic | FormulaResultMode::Cse) => false,
+                    None => {
+                        is_cse_single
+                            || (!is_cse_multi
+                                && !self
+                                    .ast_cache
+                                    .get(&cell_id)
+                                    .map(|entry| entry.is_dynamic_array)
+                                    .unwrap_or(false))
+                    }
+                };
+                if should_intersect {
                     #[cfg(feature = "journal")]
                     {
                         crate::journal::record(crate::journal::JournalEvent::Decision {

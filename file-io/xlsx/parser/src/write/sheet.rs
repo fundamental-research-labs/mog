@@ -120,7 +120,6 @@ pub struct SheetWriter {
     /// Raw tableParts XML for verbatim passthrough.
     pub(super) table_parts_xml: Option<String>,
     /// Relationship IDs for generated worksheet pivot table references.
-    pub(super) pivot_table_r_ids: Vec<String>,
     /// Raw extLst XML for sparklines and other extensions.
     pub(super) ext_lst_xml: Option<String>,
 }
@@ -163,7 +162,6 @@ impl SheetWriter {
             controls_xml: None,
             ole_objects_xml: None,
             table_parts_xml: None,
-            pivot_table_r_ids: Vec::new(),
             ext_lst_xml: None,
         }
     }
@@ -780,12 +778,6 @@ impl SheetWriter {
     /// Set raw tableParts XML for verbatim passthrough.
     pub fn set_table_parts_xml(&mut self, xml: String) -> &mut Self {
         self.table_parts_xml = Some(xml);
-        self
-    }
-
-    /// Set generated worksheet pivot table relationship references.
-    pub fn set_pivot_table_r_ids(&mut self, r_ids: Vec<String>) -> &mut Self {
-        self.pivot_table_r_ids = r_ids;
         self
     }
 

@@ -123,6 +123,41 @@ fn test_pow() {
         ),
         CellValue::number(1024.0)
     );
+    assert_eq!(
+        eval(
+            &binop(
+                BinOp::Pow,
+                ASTNode::Number(-8.0),
+                ASTNode::Number(1.0 / 3.0)
+            ),
+            &ctx
+        ),
+        CellValue::number(-2.0)
+    );
+}
+
+#[test]
+fn test_pow_subnormal_result_flushes_to_zero() {
+    let (m, s) = test_store();
+    let ctx = make_ctx(&m, s);
+    assert_eq!(
+        eval(
+            &binop(BinOp::Pow, ASTNode::Number(f64::MAX), ASTNode::Number(-1.0)),
+            &ctx
+        ),
+        CellValue::number(0.0)
+    );
+    assert_eq!(
+        eval(
+            &binop(
+                BinOp::Pow,
+                ASTNode::Number(-f64::MAX),
+                ASTNode::Number(-1.0)
+            ),
+            &ctx
+        ),
+        CellValue::number(0.0)
+    );
 }
 
 // -----------------------------------------------------------------------

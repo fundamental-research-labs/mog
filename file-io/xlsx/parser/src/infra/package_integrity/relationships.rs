@@ -36,6 +36,9 @@ pub(super) fn collect_relationships(
             Err(_) => continue,
         };
         let rels = parse_all_rels(&rels_xml);
+        if let Some(owner_path) = owner.as_deref() {
+            super::worksheet_images::validate_worksheet_images(archive, owner_path, &rels, errors);
+        }
         relationships_by_part.insert(rels_path.to_string(), rels.clone());
         let mut seen_ids = HashSet::new();
         for rel in rels {

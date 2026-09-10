@@ -53,18 +53,13 @@ pub(super) fn semantic_coverage_records(engine: &ComputeEngine) -> Vec<SemanticC
         "sheets",
         INVENTORY,
     );
-    push(
-        &mut records,
-        Scope::TopLevel,
-        "/security/policies",
-        "security",
-        UNSUPPORTED,
-    );
     native_fields!(&mut records, &*engine.storage().metadata, WorkbookMetadata, Workbook, "/workbook/metadata/";
         external_links => ("external-data", OPAQUE),
         scenarios => ("workbook-metadata", UNSUPPORTED),
         custom_cell_styles => ("workbook-metadata", UNSUPPORTED),
         sheet_order => ("sheets", INCLUDED),
+        sheet_inventory => ("workbook-metadata", OPAQUE),
+        inert_tab_defined_names => ("named-ranges", UNSUPPORTED),
         slicers => ("workbook-metadata", UNSUPPORTED),
         timelines => ("workbook-metadata", UNSUPPORTED),
         pivot_specs => ("workbook-metadata", OPAQUE),
@@ -180,6 +175,12 @@ pub(super) fn semantic_coverage_records(engine: &ComputeEngine) -> Vec<SemanticC
         (
             Scope::Cell,
             "/cellMetadata/formula",
+            "cell-metadata",
+            UNSUPPORTED,
+        ),
+        (
+            Scope::Cell,
+            "/cellMetadata/formula_result_mode",
             "cell-metadata",
             UNSUPPORTED,
         ),

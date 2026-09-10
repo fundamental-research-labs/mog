@@ -249,6 +249,15 @@ pub(super) fn copy_range_snapshot() -> WorkbookSnapshot {
     }
 }
 
-// -------------------------------------------------------------------
-// Binary patch decode helpers
-// -------------------------------------------------------------------
+/// Reconstruct runtime calculation state from the native snapshot and metadata.
+/// Native storage owns imported workbook/cell metadata; the snapshot owns cells,
+/// formulas and stable identities. Both participate in an engine rebuild.
+pub(super) fn rebuild_native_engine(source: &ComputeEngine) -> ComputeEngine {
+    let snapshot = construction::build_workbook_snapshot(&source.stores, &source.cell_store);
+    let (mut rebuilt, _) = ComputeEngine::from_snapshot(snapshot).expect("native snapshot");
+    rebuilt.stores.storage = source.stores.storage.clone();
+    rebuilt
+        .rebuild_compute_core()
+        .expect("native metadata rebuild");
+    rebuilt
+}

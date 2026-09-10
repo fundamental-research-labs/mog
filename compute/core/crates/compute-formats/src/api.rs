@@ -74,7 +74,24 @@ pub fn format_number_result(value: f64, format_code: &str, locale: &CultureInfo)
     format_number_internal(value, format_code, locale)
 }
 
+/// Format using the workbook's 1900 or 1904 calendar. Elapsed time and numeric
+/// formats always retain the original value; only calendar dates use the epoch.
+#[must_use]
+pub fn format_number_with_date_system(value: f64, format_code: &str, date1904: bool) -> String {
+    format_number_internal_with_date_system(value, format_code, &CultureInfo::default(), date1904)
+        .text
+}
+
 fn format_number_internal(value: f64, format_code: &str, locale: &CultureInfo) -> FormatResult {
+    format_number_internal_with_date_system(value, format_code, locale, false)
+}
+
+fn format_number_internal_with_date_system(
+    value: f64,
+    format_code: &str,
+    locale: &CultureInfo,
+    date1904: bool,
+) -> FormatResult {
     if format_code.is_empty() || format_code.eq_ignore_ascii_case("General") {
         return FormatResult::text(format_general(value));
     }
@@ -90,7 +107,7 @@ fn format_number_internal(value: f64, format_code: &str, locale: &CultureInfo) -
     let text = if section.is_text_section {
         apply_text_section(section, &format_general(value))
     } else if section.is_datetime {
-        format_datetime(value, section, locale)
+        format_datetime(value, section, locale, date1904)
     } else if section
         .tokens
         .iter()

@@ -52,7 +52,22 @@ pub(crate) fn split_sections(code: &str) -> Vec<String> {
 
 fn parse_section(section: &str) -> FormatSection {
     let raw_tokens = tokenize(section);
-    let tokens = resolve_m_ambiguity(raw_tokens);
+    let mut tokens = resolve_m_ambiguity(raw_tokens);
+    // Mixed numeric patterns such as 0E0 historically use a literal E.
+    // An era-year run becomes a calendar token only for a year-only pattern
+    // or alongside other date/time tokens. Quoted/escaped placeholders do
+    // not influence this decision because tokenization has resolved them.
+    let has_numeric = tokens.iter().any(is_digit_placeholder);
+    let has_other_datetime = tokens
+        .iter()
+        .any(|token| is_datetime_token(token) && !matches!(token, Token::DateEraYear(_)));
+    if has_numeric && !has_other_datetime {
+        for token in &mut tokens {
+            if let Token::DateEraYear(run) = token {
+                *token = Token::Literal(std::mem::take(run));
+            }
+        }
+    }
     analyze_section(tokens)
 }
 
@@ -100,8 +115,10 @@ fn tokenize(section: &str) -> Vec<Token> {
                 // Check if this is a fraction slash: preceded by digit placeholder(s) and
                 // followed by digit placeholder(s) (0, #, ?) or a fixed denominator.
                 let preceded = tokens.iter().rev().any(is_digit_placeholder);
-                let followed_by_placeholder =
-                    i + 1 < chars.len() && matches!(chars[i + 1], '0' | '#' | '?');
+                let followed_by_placeholder = chars[i + 1..]
+                    .iter()
+                    .take_while(|c| !matches!(c, '/' | ';'))
+                    .any(|c| matches!(c, '0' | '#' | '?'));
                 let followed_by_fixed_denominator =
                     i + 1 < chars.len() && chars[i + 1].is_ascii_digit() && chars[i + 1] != '0';
 
@@ -131,14 +148,21 @@ fn tokenize(section: &str) -> Vec<Token> {
                 }
             }
             'E' | 'e' => {
-                if i + 1 < chars.len() && (chars[i + 1] == '+' || chars[i + 1] == '-') {
+                // E+ / E- are scientific only between a numeric mantissa
+                // and exponent placeholders. In ee-mm-dd the hyphen is
+                // a date separator, and the entire e run denotes the year.
+                if tokens.iter().any(is_digit_placeholder)
+                    && matches!(chars.get(i + 1), Some('+' | '-'))
+                    && matches!(chars.get(i + 2), Some('0' | '#' | '?'))
+                {
                     tokens.push(Token::Exponent {
                         plus_sign: chars[i + 1] == '+',
                     });
                     i += 2;
                 } else {
-                    tokens.push(Token::Literal(chars[i].to_string()));
-                    i += 1;
+                    let count = count_ci(&chars, i, 'e');
+                    tokens.push(Token::DateEraYear(chars[i..i + count].iter().collect()));
+                    i += count;
                 }
             }
             '"' => {
@@ -234,7 +258,7 @@ fn tokenize(section: &str) -> Vec<Token> {
             }
             'y' | 'Y' => {
                 let c = count_ci(&chars, i, 'y');
-                tokens.push(if c >= 4 {
+                tokens.push(if c >= 3 {
                     Token::DateYear4
                 } else {
                     Token::DateYear2
@@ -428,6 +452,17 @@ fn look_fwd_for_second(tokens: &[Token], pos: usize) -> bool {
 /// Analyze tokens: reclassify trailing commas, compute metadata.
 #[allow(clippy::too_many_lines)] // section analysis has many interrelated steps
 fn analyze_section(mut tokens: Vec<Token>) -> FormatSection {
+    // The slash lookahead can cross quoted text. Only actual denominator
+    // tokens, never digits inside a literal, establish a fraction field.
+    for i in 0..tokens.len() {
+        if matches!(tokens[i], Token::FractionSlash)
+            && !tokens[i + 1..].iter().any(|t| {
+                is_digit_placeholder(t) || matches!(t, Token::FractionDenominatorLiteral(_))
+            })
+        {
+            tokens[i] = Token::Literal("/".into());
+        }
+    }
     let has_datetime = tokens.iter().any(is_datetime_token);
     let is_text_section = tokens.iter().any(|t| matches!(t, Token::TextPlaceholder))
         && !tokens
@@ -436,35 +471,60 @@ fn analyze_section(mut tokens: Vec<Token>) -> FormatSection {
 
     // In date/time sections, commas, decimal points, and other numeric tokens are literals.
     if has_datetime {
-        for tok in &mut tokens {
+        let mut i = 0;
+        while i < tokens.len() {
+            if matches!(tokens[i], Token::DecimalPoint)
+                && i > 0
+                && matches!(
+                    tokens[i - 1],
+                    Token::DateSecond1 | Token::DateSecond2 | Token::ElapsedSeconds
+                )
+            {
+                let count = tokens[i + 1..]
+                    .iter()
+                    .take_while(|t| matches!(t, Token::Zero))
+                    .count();
+                if count > 0 {
+                    tokens.splice(i..=i + count, [Token::FractionalSecond(count)]);
+                    i += 1;
+                    continue;
+                }
+            }
+            let tok = &mut tokens[i];
             match tok {
                 Token::ThousandsSep => *tok = Token::Literal(",".to_string()),
                 Token::DecimalPoint => *tok = Token::Literal(".".to_string()),
                 _ => {}
             }
+            i += 1;
         }
     }
 
-    let has_percent = tokens.iter().any(|t| matches!(t, Token::Percent));
+    let percent_count = tokens
+        .iter()
+        .filter(|t| matches!(t, Token::Percent))
+        .count();
     let has_exponent = tokens.iter().any(|t| matches!(t, Token::Exponent { .. }));
 
-    // Find last digit placeholder index
-    let last_digit_idx = tokens.iter().rposition(is_digit_placeholder);
-
-    // Reclassify trailing commas after last digit placeholder as ScaleDivisor
+    // Commas at the end of either digit field scale by 1000. Leading
+    // commas are literals; commas with later integer digits group thousands.
+    let decimal = tokens
+        .iter()
+        .position(|t| matches!(t, Token::DecimalPoint | Token::Exponent { .. }))
+        .unwrap_or(tokens.len());
     let mut scale_divisors = 0u32;
-    if let Some(last_idx) = last_digit_idx {
-        let mut j = last_idx + 1;
-        while j < tokens.len() {
-            if matches!(tokens[j], Token::ThousandsSep) {
-                tokens[j] = Token::ScaleDivisor;
-                scale_divisors += 1;
-                j += 1;
-            } else if matches!(tokens[j], Token::DecimalPoint) {
-                break; // decimals follow -- commas before decimal are not scale divisors in this context
-            } else {
-                break;
-            }
+    for i in 0..tokens.len() {
+        if !matches!(tokens[i], Token::ThousandsSep) {
+            continue;
+        }
+        let end = if i < decimal { decimal } else { tokens.len() };
+        let has_previous_digit = tokens[..i].iter().any(is_digit_placeholder);
+        let has_later_digit = tokens[i + 1..end].iter().any(is_digit_placeholder);
+        if !has_previous_digit {
+            tokens[i] = Token::Literal(",".into());
+        } else if !has_later_digit {
+            tokens[i] = Token::ScaleDivisor;
+            scale_divisors += 1;
         }
     }
 
@@ -538,7 +598,7 @@ fn analyze_section(mut tokens: Vec<Token>) -> FormatSection {
         is_datetime: has_datetime,
         is_text_section,
         scale_divisors,
-        has_percent,
+        percent_count,
         has_exponent,
         has_thousands,
         int_placeholders,

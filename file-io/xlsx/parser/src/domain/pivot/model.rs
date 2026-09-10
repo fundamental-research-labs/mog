@@ -283,6 +283,7 @@ pub struct PageField {
 /// Row or column layout item in the rendered pivot table.
 #[derive(Debug, Clone, Default)]
 pub struct PivotRowColItem {
+    pub data_field_index: u32,
     /// Optional item type.
     pub item_type: Option<PivotItemType>,
     /// Field/item references (`<x>` children); `None` means a default `<x/>`.
@@ -352,6 +353,10 @@ pub struct CacheField {
     pub name: String,
     /// Shared items (unique values)
     pub shared_items: Vec<SharedItem>,
+    /// Authored shared-item metadata; `Some` also preserves an empty element.
+    pub shared_items_metadata: Option<ooxml_types::pivot::SharedItems>,
+    /// Scalar OOXML field metadata retained across the read-side conversion.
+    pub field_metadata: Option<ooxml_types::pivot::PivotCacheField>,
     /// Number format ID
     pub num_fmt_id: Option<u32>,
     /// SQL data type

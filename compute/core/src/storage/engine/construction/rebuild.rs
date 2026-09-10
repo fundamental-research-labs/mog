@@ -12,8 +12,16 @@ pub(in crate::storage::engine) fn build_finalized_store_from_snapshot(
     storage: &WorkbookStorage,
     snapshot: &WorkbookSnapshot,
     grid_indexes: &FxHashMap<SheetId, GridIndex>,
+    layout_metrics: domain_types::units::LayoutMetrics,
 ) -> Result<CellStore, ComputeError> {
     let mut cell_store = CellStore::from_snapshot(snapshot.clone())?;
+    cell_store.install_imported_array_caches(&storage.imported_array_caches);
+    cell_store.install_cell_metadata_provider(crate::storage::engine::cell_metadata::provider(
+        storage,
+        layout_metrics,
+    ));
+    cell_store.date1904 =
+        crate::storage::workbook::settings::get_settings(&storage.metadata).date1904;
     install_ordered_row_col_indexes(&mut cell_store, grid_indexes);
     sync_enable_calculation_flags_for_store(storage, &mut cell_store);
     cell_store.finalize_range_hydration();
@@ -40,4 +48,31 @@ pub(in crate::storage::engine) fn sync_enable_calculation_flags_for_store(
         let enabled = visibility::is_sheet_calculation_enabled(&storage, &sheet_id);
         cell_store.set_enable_calculation(&sheet_id, enabled);
     }
+}
+
+/// Build the native axes and metadata projection before initial evaluation.
+pub(in crate::storage::engine) fn build_initial_store(
+    storage: &WorkbookStorage,
+    snapshot: &WorkbookSnapshot,
+    layout_metrics: domain_types::units::LayoutMetrics,
+) -> Result<CellStore, ComputeError> {
+    let mut cell_store = CellStore::from_snapshot(snapshot.clone())?;
+    cell_store.install_imported_array_caches(&storage.imported_array_caches);
+    let indexes = super::indexes::build_grid_indexes(
+        &cell_store,
+        snapshot,
+        std::sync::Arc::new(cell_types::IdAllocator::with_seed(
+            snapshot.next_identity_counter(),
+        )),
+    )?;
+    cell_store.install_cell_metadata_provider(crate::storage::engine::cell_metadata::provider(
+        storage,
+        layout_metrics,
+    ));
+    cell_store.date1904 =
+        crate::storage::workbook::settings::get_settings(&storage.metadata).date1904;
+    install_ordered_row_col_indexes(&mut cell_store, &indexes);
+    sync_enable_calculation_flags_for_store(storage, &mut cell_store);
+    cell_store.finalize_range_hydration();
+    Ok(cell_store)
 }

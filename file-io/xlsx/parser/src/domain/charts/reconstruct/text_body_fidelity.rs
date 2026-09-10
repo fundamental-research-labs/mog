@@ -1,6 +1,10 @@
 use ooxml_types::charts::{ChartText, DataLabel, DataLabelOptions, Title};
 use ooxml_types::drawings::{RunProperties, TextBody, TextBodyProperties, TextRunContent};
 
+use crate::domain::charts::data_label_contract_ext::is_data_label_contract_extension;
+
+use super::chart_space::merge_imported_shape_properties;
+
 pub(super) fn preserve_imported_title_text_properties(
     title: &mut Title,
     imported_title: Option<&Title>,
@@ -9,17 +13,22 @@ pub(super) fn preserve_imported_title_text_properties(
         return;
     };
     preserve_imported_text_body_properties(&mut title.tx_pr, imported_title.tx_pr.as_ref());
+    preserve_imported_extensions(&mut title.extensions, &imported_title.extensions, false);
     let Some(ChartText::Rich(target_body)) = title.tx.as_mut() else {
         return;
     };
     let Some(ChartText::Rich(imported_body)) = imported_title.tx.as_ref() else {
         return;
     };
-    if text_body_visible_text(target_body) != text_body_visible_text(imported_body) {
-        return;
+    if text_body_visible_text(target_body) == text_body_visible_text(imported_body) {
+        merge_missing_text_body_properties(target_body, imported_body);
+    } else {
+        // The modeled title may have changed while the imported rich text is
+        // still the last authored snapshot. Keep its body, paragraph, and
+        // positional run formatting, but never copy its old text or restore a
+        // field node whose displayed value belongs to that old title.
+        merge_missing_text_body_properties_with_changed_text(target_body, imported_body);
     }
-
-    merge_missing_text_body_properties(target_body, imported_body);
 }
 
 pub(super) fn preserve_imported_text_body_properties(
@@ -77,14 +86,20 @@ pub(super) fn preserve_imported_data_label_options_fidelity(
         imported.show_bubble_size_present,
     );
     preserve_imported_text_body_properties(&mut target.tx_pr, imported.tx_pr.as_ref());
-
-    for label in &mut target.d_lbl {
-        let imported_label = imported
-            .d_lbl
-            .iter()
-            .find(|candidate| candidate.idx == label.idx);
-        preserve_imported_data_label_text_properties(label, imported_label);
+    merge_imported_shape_properties(&mut target.sp_pr, imported.sp_pr.as_ref());
+    if target.show_leader_lines.is_none() {
+        target.show_leader_lines = imported.show_leader_lines;
     }
+    if target.leader_lines.is_none() {
+        target.leader_lines = imported.leader_lines.clone();
+    } else if let (Some(target_lines), Some(imported_lines)) =
+        (target.leader_lines.as_mut(), imported.leader_lines.as_ref())
+    {
+        merge_imported_shape_properties(&mut target_lines.sp_pr, imported_lines.sp_pr.as_ref());
+    }
+    preserve_imported_extensions(&mut target.extensions, &imported.extensions, true);
+
+    preserve_imported_matching_data_label_text_properties(&mut target.d_lbl, &imported.d_lbl);
 }
 
 pub(super) fn preserve_imported_optional_data_label_options_fidelity(
@@ -101,7 +116,11 @@ pub(super) fn preserve_imported_optional_data_label_options_fidelity(
             || imported.show_series_name_present
             || imported.show_percent_present
             || imported.show_legend_key_present
-            || imported.show_bubble_size_present)
+            || imported.show_bubble_size_present
+            || imported.sp_pr.is_some()
+            || imported.show_leader_lines.is_some()
+            || imported.leader_lines.is_some()
+            || !imported.extensions.is_empty())
     {
         *target = Some(DataLabelOptions::default());
     }
@@ -130,12 +149,62 @@ pub(super) fn preserve_imported_data_label_text_properties(
         return;
     };
     preserve_imported_text_body_properties(&mut target.tx_pr, imported.tx_pr.as_ref());
+    merge_imported_shape_properties(&mut target.sp_pr, imported.sp_pr.as_ref());
+    if let (Some(ChartText::Rich(target_body)), Some(ChartText::Rich(imported_body))) =
+        (target.text.as_mut(), imported.text.as_ref())
+    {
+        if text_body_visible_text(target_body) == text_body_visible_text(imported_body) {
+            merge_missing_text_body_properties(target_body, imported_body);
+        }
+    }
+    preserve_imported_extensions(&mut target.extensions, &imported.extensions, true);
+}
+
+pub(super) fn preserve_imported_matching_data_label_text_properties(
+    target: &mut [DataLabel],
+    imported: &[DataLabel],
+) {
+    for label in target {
+        let imported_label = imported.iter().find(|candidate| candidate.idx == label.idx);
+        preserve_imported_data_label_text_properties(label, imported_label);
+    }
+}
+
+pub(super) fn preserve_imported_extensions(
+    target: &mut Vec<ooxml_types::charts::ExtensionEntry>,
+    imported: &[ooxml_types::charts::ExtensionEntry],
+    omit_data_label_contract: bool,
+) {
+    target.extend(
+        imported
+            .iter()
+            .filter(|extension| {
+                (!omit_data_label_contract || !is_data_label_contract_extension(extension))
+                    && !crate::infra::xml::raw_xml_contains_relationship_attr(&extension.xml)
+            })
+            .cloned(),
+    );
 }
 
 fn merge_missing_text_body_properties(target: &mut TextBody, imported: &TextBody) {
+    merge_missing_text_body_properties_with_mode(target, imported, true);
+}
+
+fn merge_missing_text_body_properties_with_changed_text(
+    target: &mut TextBody,
+    imported: &TextBody,
+) {
+    merge_missing_text_body_properties_with_mode(target, imported, false);
+}
+
+fn merge_missing_text_body_properties_with_mode(
+    target: &mut TextBody,
+    imported: &TextBody,
+    require_matching_text: bool,
+) {
     merge_missing_body_properties(&mut target.body_props, &imported.body_props);
     fill_missing(&mut target.list_style, &imported.list_style);
-    merge_missing_text_body_run_properties(target, imported);
+    merge_missing_text_body_run_properties(target, imported, require_matching_text);
 }
 
 fn merge_missing_body_properties(target: &mut TextBodyProperties, imported: &TextBodyProperties) {
@@ -169,7 +238,11 @@ fn merge_missing_body_properties(target: &mut TextBodyProperties, imported: &Tex
     fill_missing(&mut target.flat_tx, &imported.flat_tx);
 }
 
-fn merge_missing_text_body_run_properties(target: &mut TextBody, imported: &TextBody) {
+fn merge_missing_text_body_run_properties(
+    target: &mut TextBody,
+    imported: &TextBody,
+    require_matching_text: bool,
+) {
     for (target_paragraph, imported_paragraph) in
         target.paragraphs.iter_mut().zip(imported.paragraphs.iter())
     {
@@ -187,13 +260,44 @@ fn merge_missing_text_body_run_properties(target: &mut TextBody, imported: &Text
             .iter_mut()
             .zip(imported_paragraph.runs.iter())
         {
-            merge_missing_run_content_properties(target_run, imported_run);
+            merge_missing_run_content_properties(target_run, imported_run, require_matching_text);
         }
     }
 }
 
-fn merge_missing_run_content_properties(target: &mut TextRunContent, imported: &TextRunContent) {
-    if run_content_visible_text(target) != run_content_visible_text(imported) {
+fn merge_missing_run_content_properties(
+    target: &mut TextRunContent,
+    imported: &TextRunContent,
+    require_matching_text: bool,
+) {
+    if require_matching_text
+        && run_content_visible_text(target) != run_content_visible_text(imported)
+    {
+        return;
+    }
+
+    // The domain chart model exposes rich-text runs but not DrawingML field
+    // identity. If a modeled edit rebuilds the same visible label/title text,
+    // restore an imported field node and retain any explicitly edited target
+    // run properties on top of the imported field formatting.
+    if require_matching_text
+        && matches!(
+            target,
+            TextRunContent::Run(_) | TextRunContent::Field { .. }
+        )
+        && matches!(imported, TextRunContent::Field { .. })
+    {
+        let target_props = run_content_properties(target).cloned();
+        let mut imported_field = imported.clone();
+        if let TextRunContent::Field { run_props, .. } = &mut imported_field {
+            if let Some(mut target_props) = target_props {
+                if let Some(imported_props) = run_content_properties(imported) {
+                    merge_missing_run_properties(&mut target_props, imported_props);
+                }
+                *run_props = Some(target_props);
+            }
+        }
+        *target = imported_field;
         return;
     }
 

@@ -53,7 +53,7 @@ impl ComputeEngine {
     ///
     /// Uses the export path: native state → `ParseOutput` → `write_xlsx_from_parse_output` → bytes.
     /// This produces a rich XLSX (styles, comments, dimensions, named ranges).
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     #[tracing::instrument(name = "engine_export_to_xlsx_bytes", skip_all)]
     pub fn export_to_xlsx_bytes(&self) -> Result<Vec<u8>, ComputeError> {
         let result = self.export_to_parse_output()?;
@@ -65,7 +65,7 @@ impl ComputeEngine {
     /// This anti-cheat path must agree with normal export for modeled workbook
     /// facts. Any difference outside registered opaque subgraphs means source
     /// bytes are still required for modeled correctness.
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     #[tracing::instrument(name = "engine_export_to_xlsx_bytes_context_stripped", skip_all)]
     pub fn export_to_xlsx_bytes_context_stripped(&self) -> Result<Vec<u8>, ComputeError> {
         let result = self.export_to_parse_output()?;
@@ -113,10 +113,10 @@ impl ComputeEngine {
     /// This produces the same type that the XLSX parser emits, enabling
     /// the unified XLSX writer to consume it.
     #[tracing::instrument(name = "build_parse_output", skip_all)]
-    pub fn build_parse_output(&self) -> ParseOutput {
+    pub fn build_parse_output(&self) -> Result<ParseOutput, ComputeError> {
         let mut profile = crate::xlsx_profile::PhaseTimer::new("export", "build_parse_output");
         let parse_output =
-            super::services::export::build_parse_output(&self.stores, &self.cell_store);
+            super::services::export::build_parse_output(&self.stores, &self.cell_store)?;
         profile.counter("sheets", parse_output.sheets.len() as u64);
         profile.counter(
             "cells",
@@ -126,14 +126,14 @@ impl ComputeEngine {
                 .map(|sheet| sheet.cells.len() as u64)
                 .sum::<u64>(),
         );
-        parse_output
+        Ok(parse_output)
     }
 
     /// Export the engine state as a `ParseOutput`.
     #[tracing::instrument(name = "engine_export_to_parse_output", skip_all)]
     pub fn export_to_parse_output(&self) -> Result<ExportParseResult, ComputeError> {
         self.require_all_sheets_materialized("export_to_parse_output")?;
-        let parse_output = self.build_parse_output();
+        let parse_output = self.build_parse_output()?;
         Ok(ExportParseResult { parse_output })
     }
 }

@@ -1,7 +1,7 @@
 //! Style conversion: DocumentFormat → StylesWriter.
 
 use domain_types::{
-    AlignmentFormat, BorderFormat, BorderSide, DocumentFormat, FillFormat, FontFormat, ParseOutput,
+    AlignmentFormat, BorderFormat, BorderSide, DocumentFormat, FillFormat, FontFormat,
     ProtectionFormat,
 };
 
@@ -151,112 +151,6 @@ fn add_style_components(writer: &mut StylesWriter, doc_fmt: &DocumentFormat) -> 
     }
 }
 
-/// Whether the current modeled workbook references any style IDs.
-///
-/// If all style references disappeared, emitting the modeled palette would keep
-/// stale style facts alive after deletion.
-pub(super) fn output_references_style_ids(output: &ParseOutput) -> bool {
-    output.sheets.iter().any(|sheet| {
-        sheet.cells.iter().any(|cell| cell.style_id.is_some())
-            || !sheet.authored_style_runs.is_empty()
-            || !sheet.row_styles.is_empty()
-            || !sheet.col_styles.is_empty()
-            || !sheet.col_style_ranges.is_empty()
-            || sheet
-                .dimensions
-                .trailing_col_ranges
-                .iter()
-                .any(|range| range.style_id.is_some())
-            || sheet_uses_dxf_or_table_style(sheet)
-    })
-}
-
-fn sheet_uses_dxf_or_table_style(sheet: &domain_types::SheetData) -> bool {
-    sheet
-        .conditional_formats
-        .iter()
-        .any(conditional_format_uses_dxf)
-        || sheet.auto_filter.as_ref().is_some_and(auto_filter_uses_dxf)
-        || sheet.sort_state.as_ref().is_some_and(sort_state_uses_dxf)
-        || sheet.tables.iter().any(table_uses_dxf_or_table_style)
-}
-
-fn conditional_format_uses_dxf(cf: &domain_types::ConditionalFormat) -> bool {
-    cf.rules
-        .iter()
-        .filter_map(conditional_format_rule_style)
-        .any(|style| style.dxf_id.is_some())
-}
-
-fn conditional_format_rule_style(rule: &domain_types::CFRule) -> Option<&domain_types::CFStyle> {
-    match rule {
-        domain_types::CFRule::CellValue { style, .. }
-        | domain_types::CFRule::Formula { style, .. }
-        | domain_types::CFRule::Top10 { style, .. }
-        | domain_types::CFRule::AboveAverage { style, .. }
-        | domain_types::CFRule::DuplicateValues { style, .. }
-        | domain_types::CFRule::ContainsText { style, .. }
-        | domain_types::CFRule::ContainsBlanks { style, .. }
-        | domain_types::CFRule::ContainsErrors { style, .. }
-        | domain_types::CFRule::TimePeriod { style, .. } => Some(style),
-        domain_types::CFRule::ColorScale { .. }
-        | domain_types::CFRule::DataBar { .. }
-        | domain_types::CFRule::IconSet { .. } => None,
-    }
-}
-
-fn auto_filter_uses_dxf(auto_filter: &domain_types::AutoFilter) -> bool {
-    auto_filter.columns.iter().any(filter_column_uses_dxf)
-        || auto_filter.sort.as_ref().is_some_and(sort_state_uses_dxf)
-}
-
-fn filter_column_uses_dxf(column: &domain_types::FilterColumn) -> bool {
-    matches!(
-        column.filter_type,
-        Some(domain_types::OoxmlFilterType::Color {
-            dxf_id: Some(_),
-            ..
-        })
-    )
-}
-
-fn sort_state_uses_dxf(sort_state: &domain_types::SortState) -> bool {
-    sort_state
-        .conditions
-        .iter()
-        .any(|condition| condition.dxf_id.is_some())
-}
-
-fn table_uses_dxf_or_table_style(table: &domain_types::TableSpec) -> bool {
-    table.style_name.is_some()
-        || table.header_row_dxf_id.is_some()
-        || table.data_dxf_id.is_some()
-        || table.totals_row_dxf_id.is_some()
-        || table.header_row_border_dxf_id.is_some()
-        || table.table_border_dxf_id.is_some()
-        || table.totals_row_border_dxf_id.is_some()
-        || table.header_row_cell_style.is_some()
-        || table.data_cell_style.is_some()
-        || table.totals_row_cell_style.is_some()
-        || table.columns.iter().any(|column| {
-            column.header_row_dxf_id.is_some()
-                || column.data_dxf_id.is_some()
-                || column.totals_row_dxf_id.is_some()
-                || column.header_row_cell_style.is_some()
-                || column.data_cell_style.is_some()
-                || column.totals_row_cell_style.is_some()
-        })
-        || table.filter_columns.iter().any(|column| {
-            matches!(
-                column.filter,
-                domain_types::FilterSpec::Color {
-                    dxf_id: Some(_),
-                    ..
-                }
-            )
-        })
-}
-
 /// Convert a `FontFormat` to a `FontDef`.
 fn convert_font(font: &FontFormat) -> FontDef {
     FontDef {
@@ -366,8 +260,9 @@ fn convert_fill(fill: &FillFormat) -> FillDef {
         // An explicit no-fill marker must win over any stale color fields.
         PatternType::None => FillDef::None,
         // DocumentFormat uses `backgroundColor` for a cell's visible solid
-        // color. OOXML stores that same color in patternFill/fgColor. Preserve
-        // an explicit foreground color when no background was supplied.
+        // color. OOXML stores that same color in patternFill/fgColor; callers
+        // may also author that explicit foreground role directly. Prefer the
+        // public visible-color shorthand when both roles are supplied.
         PatternType::Solid => match background_color.or(pattern_foreground_color) {
             Some(fg_color) => FillDef::Solid { fg_color },
             None => FillDef::Pattern {

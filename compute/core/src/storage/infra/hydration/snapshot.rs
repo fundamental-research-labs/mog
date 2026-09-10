@@ -10,6 +10,7 @@ impl WorkbookStorage {
         &mut self,
         snapshot: WorkbookSnapshot,
     ) -> Result<(), ComputeError> {
+        self.invalidate_cell_metadata_projection();
         let sheet_ids = snapshot
             .sheets
             .iter()

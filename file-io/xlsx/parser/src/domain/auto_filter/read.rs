@@ -330,7 +330,7 @@ fn parse_icon_filter(content: &[u8], start: usize) -> OoxmlFilterType {
     let tag = &content[start..=tag_end];
     OoxmlFilterType::Icon {
         icon_set: parse_string_attr(tag, b"iconSet=\""),
-        icon_id: parse_u32_attr(tag, b"iconId=\"").unwrap_or(0),
+        icon_id: parse_u32_attr(tag, b"iconId=\""),
     }
 }
 
@@ -463,7 +463,7 @@ mod tests {
         match &af.columns[0].filter_type {
             Some(OoxmlFilterType::Icon { icon_set, icon_id }) => {
                 assert_eq!(icon_set.as_deref(), Some("3TrafficLights1"));
-                assert_eq!(*icon_id, 1);
+                assert_eq!(*icon_id, Some(1));
             }
             other => panic!("expected Icon, got {:?}", other),
         }

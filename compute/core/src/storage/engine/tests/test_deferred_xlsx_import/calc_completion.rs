@@ -81,11 +81,7 @@ fn deferred_xlsx_without_force_calc_keeps_empty_formula_caches_until_explicit_re
     assert_eq!(engine.get_cell_value(&second, 0, 1), CellValue::Null);
 
     let recalc = engine
-        .recalculate_with_options(&snapshot_types::RecalcOptions {
-            iterative: Some(false),
-            max_iterations: Some(100),
-            max_change: Some(value_types::FiniteF64::must(0.001)),
-        })
+        .recalculate()
         .expect("explicit post-hydration full recalc should populate formula values");
     assert_eq!(engine.get_cell_value(&first, 0, 1), CellValue::number(6.0));
     assert_eq!(engine.get_cell_value(&second, 0, 1), CellValue::number(9.0));
@@ -110,5 +106,28 @@ fn deferred_xlsx_without_force_calc_keeps_empty_formula_caches_until_explicit_re
         }),
         "explicit recalc should report second-sheet formula: {:?}",
         recalc.changed_cells
+    );
+    assert!(engine.recalculate().unwrap().changed_cells.is_empty());
+}
+
+#[test]
+fn deferred_xlsx_default_calculation_options_perform_pending_first_calculation() {
+    let bytes = deferred_calc_fixture_xlsx(DeferredCalcFixtureMode::Control);
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    engine.import_from_xlsx_bytes_deferred(&bytes).unwrap();
+    engine.complete_deferred_hydration().unwrap();
+    let (first, second) = sheet_ids(&engine);
+    assert_eq!(engine.get_cell_value(&first, 0, 1), CellValue::Null);
+    engine
+        .recalculate_with_options(&snapshot_types::RecalcOptions::default())
+        .unwrap();
+    assert_eq!(engine.get_cell_value(&first, 0, 1), CellValue::number(6.0));
+    assert_eq!(engine.get_cell_value(&second, 0, 1), CellValue::number(9.0));
+    assert!(
+        engine
+            .recalculate_with_options(&snapshot_types::RecalcOptions::default())
+            .unwrap()
+            .changed_cells
+            .is_empty()
     );
 }

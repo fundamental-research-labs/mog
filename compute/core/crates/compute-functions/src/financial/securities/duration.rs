@@ -2,11 +2,12 @@
 
 use value_types::{CellError, CellValue};
 
+use super::super::date_context::canonical_date_arg_truncated;
 use super::super::helpers::{
     arg_num, count_coupons_remaining, coupdaysnc_calc, days_in_coupon_period, err_val,
     num_or_err_msg, req_num,
 };
-use crate::PureFunction;
+use crate::{FunctionContext, PureFunction};
 
 pub(super) struct FnDuration;
 impl PureFunction for FnDuration {
@@ -23,9 +24,12 @@ impl PureFunction for FnDuration {
         Some(6)
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
+        self.call_with_context(args, &FunctionContext::default())
+    }
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
-            let settlement = req_num(args, 0).map_err(err_val)?;
-            let maturity = req_num(args, 1).map_err(err_val)?;
+            let settlement = canonical_date_arg_truncated(args, 0, context).map_err(err_val)?;
+            let maturity = canonical_date_arg_truncated(args, 1, context).map_err(err_val)?;
             let coupon = req_num(args, 2).map_err(err_val)?;
             let yld = req_num(args, 3).map_err(err_val)?;
             let frequency = req_num(args, 4).map_err(err_val)? as i32;
@@ -111,7 +115,10 @@ impl PureFunction for FnMduration {
         Some(6)
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
-        let mac_dur = FnDuration.call(args);
+        self.call_with_context(args, &FunctionContext::default())
+    }
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
+        let mac_dur = FnDuration.call_with_context(args, context);
         match mac_dur {
             CellValue::Number(d) => {
                 let yld = match req_num(args, 3) {

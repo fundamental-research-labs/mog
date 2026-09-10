@@ -240,13 +240,15 @@ impl TableBridge {
     pub fn table_evaluate_column_filter(
         criteria: FilterCriteria,
         column_data: Vec<CellValue>,
+        column_icons: Option<Vec<Option<domain_types::FilterIconIdentity>>>,
     ) -> Vec<u8> {
         let now = crate::eval::clock::current_calendar_date();
         let week_start_day = chrono::Weekday::Sun;
-        compute_table::filter::evaluate_column_filter(
+        compute_table::filter::evaluate_column_filter_with_icons(
             &criteria,
             &column_data,
             None,
+            column_icons.as_deref(),
             Some(now),
             Some(week_start_day),
         )
@@ -945,7 +947,9 @@ pub struct ClockBridge;
 
 #[bridge::api(group = "clock", fn_prefix = "compute", crate_path = "compute_core")]
 impl ClockBridge {
-    /// Set the global "current time" for NOW()/TODAY() as an Excel serial date number.
+    /// Set the global "current time" for NOW()/TODAY() as a canonical
+    /// 1900-system Excel serial date number. Evaluator metadata converts it
+    /// for 1904 workbooks.
     ///
     /// On WASM, this should be called from JavaScript before each recalc.
     /// On native targets, this overrides the system clock (useful for testing).

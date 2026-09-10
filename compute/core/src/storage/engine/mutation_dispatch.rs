@@ -284,11 +284,6 @@ impl ComputeEngine {
                     &name,
                     default_col_width_px,
                 )?;
-                // R2.3 — new sheet added; any cached matrix that keyed
-                // on a prior layout stays in the cache but is now
-                // orphaned. Bump so workbook-scope lookups see the
-                // fresh structure.
-                self.security.bump_structure_version();
                 // A new sheet can cause previously-#REF! cross-sheet
                 // refs to resolve on next recalc — must not short-circuit.
                 self.stores.compute.mark_dirty();
@@ -307,7 +302,6 @@ impl ComputeEngine {
                     &name,
                     default_col_width_px,
                 )?;
-                self.security.bump_structure_version();
                 self.stores.compute.mark_dirty();
                 MutationOutput::SheetId(hex, result)
             }
@@ -320,9 +314,6 @@ impl ComputeEngine {
                 )?;
                 self.postprocess_mutation_recalc(&mut recalc);
                 result.recalc = recalc;
-                // R2.3 — sheet gone; every cached matrix for that
-                // sheet id is now a lie. Let the LRU age them out.
-                self.security.bump_structure_version();
 
                 MutationOutput::Recalc(result)
             }
@@ -337,8 +328,6 @@ impl ComputeEngine {
                     &source_sheet_id,
                     &new_name,
                 )?;
-                // R2.3 — new sheet; same reasoning as CreateSheet.
-                self.security.bump_structure_version();
                 // Copied sheet adds new formula cells — next recalc has work.
                 self.stores.compute.mark_dirty();
 
@@ -352,12 +341,6 @@ impl ComputeEngine {
                     &sheet_id,
                     &name,
                 )?;
-                // R2.3 — sheet identity is unchanged by rename (sheet
-                // policies key on `SheetId`, not name), but rename is
-                // structural in the bridge taxonomy and other layers
-                // may key on name; bumping is cheap and keeps the
-                // invariant "every structural op bumps" uniform.
-                self.security.bump_structure_version();
                 // Formula display strings key on sheet names — rename
                 // can change A1 rendering; be safe and force next recalc.
                 self.stores.compute.mark_dirty();

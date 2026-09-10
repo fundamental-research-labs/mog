@@ -30,10 +30,15 @@ pub(super) fn rows_equal(a: &[CellValue], b: &[CellValue]) -> bool {
         .all(|(x, y)| cell_value_cmp(x, y) == 0)
 }
 
-pub(super) fn is_truthy(v: &CellValue) -> bool {
-    match v {
-        CellValue::Boolean(b) => *b,
-        CellValue::Number(n) => n.get() != 0.0,
-        _ => false,
+/// Parse the `sort_order` argument shared by SORT and SORTBY.
+/// Excel floors a numeric order before accepting 1 (ascending) or -1
+/// (descending); a coercion error is preserved so an error-valued order
+/// remains observable to the caller.
+pub(super) fn parse_sort_order(value: &CellValue) -> Result<i32, CellValue> {
+    match value.coerce_to_number() {
+        Ok(number) if number.floor() == 1.0 => Ok(1),
+        Ok(number) if number.floor() == -1.0 => Ok(-1),
+        Ok(_) => Err(CellValue::Error(CellError::Value, None)),
+        Err(error) => Err(CellValue::Error(error, None)),
     }
 }

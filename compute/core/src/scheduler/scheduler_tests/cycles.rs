@@ -375,6 +375,7 @@ fn full_recalc_with_options_success_restores_settings_and_clears_pending_manual_
                 iterative: Some(true),
                 max_iterations: Some(3),
                 max_change: Some(value_types::FiniteF64::must(0.00001)),
+                timestamp_serial: None,
             },
         )
         .expect("full recalc with overrides should succeed");
@@ -398,6 +399,7 @@ fn full_recalc_with_options_err_restores_settings_and_keeps_pending_manual_dirty
     core.set_iterative_calc(false);
     core.set_max_iterations(77);
     core.set_max_change(0.25);
+    core.begin_recalc_clock(Some(46_272.5));
     let dirty = cid(0xfeed);
     core.pending_manual_dirty_cells.insert(dirty);
 
@@ -408,6 +410,7 @@ fn full_recalc_with_options_err_restores_settings_and_keeps_pending_manual_dirty
                 iterative: Some(true),
                 max_iterations: Some(3),
                 max_change: Some(value_types::FiniteF64::must(0.00001)),
+                timestamp_serial: Some(value_types::FiniteF64::must(46_273.75)),
             },
         )
         .unwrap_err();
@@ -419,6 +422,7 @@ fn full_recalc_with_options_err_restores_settings_and_keeps_pending_manual_dirty
     assert!(!core.iterative_calc());
     assert_eq!(core.max_iterations(), 77);
     assert_eq!(core.max_change(), 0.25);
+    assert_eq!(core.recalc_clock().current_timestamp(), 46_272.5);
     assert!(core.pending_manual_dirty_cells.contains(&dirty));
 }
 
@@ -434,9 +438,10 @@ fn full_recalc_with_options_panic_restores_settings_and_keeps_pending_manual_dir
     core.set_iterative_calc(false);
     core.set_max_iterations(77);
     core.set_max_change(0.25);
+    core.begin_recalc_clock(Some(46_272.5));
     let dirty = cid(0xfeed);
     core.pending_manual_dirty_cells.insert(dirty);
-    super::recalc::set_recalc_options_panic_before_full_recalc_for_tests(true);
+    core.recalc_options_panic_before_full_recalc_for_tests = true;
 
     let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let _ = core.full_recalc_with_options(
@@ -445,6 +450,7 @@ fn full_recalc_with_options_panic_restores_settings_and_keeps_pending_manual_dir
                 iterative: Some(true),
                 max_iterations: Some(3),
                 max_change: Some(value_types::FiniteF64::must(0.00001)),
+                timestamp_serial: Some(value_types::FiniteF64::must(46_273.75)),
             },
         );
     }));
@@ -453,6 +459,7 @@ fn full_recalc_with_options_panic_restores_settings_and_keeps_pending_manual_dir
     assert!(!core.iterative_calc());
     assert_eq!(core.max_iterations(), 77);
     assert_eq!(core.max_change(), 0.25);
+    assert_eq!(core.recalc_clock().current_timestamp(), 46_272.5);
     assert!(core.pending_manual_dirty_cells.contains(&dirty));
 }
 
@@ -476,6 +483,7 @@ fn full_recalc_with_options_repeated_calls_do_not_leak_iterative_state() {
                 iterative: Some(true),
                 max_iterations: Some(2),
                 max_change: Some(value_types::FiniteF64::must(0.00001)),
+                timestamp_serial: None,
             },
         )
         .expect("first iterative override should succeed");
@@ -491,6 +499,7 @@ fn full_recalc_with_options_repeated_calls_do_not_leak_iterative_state() {
                 iterative: Some(true),
                 max_iterations: Some(5),
                 max_change: Some(value_types::FiniteF64::must(0.00001)),
+                timestamp_serial: None,
             },
         )
         .expect("second iterative override should succeed");
@@ -523,6 +532,7 @@ fn full_recalc_with_options_circular_workbook_consumes_per_call_options() {
                 iterative: Some(true),
                 max_iterations: Some(4),
                 max_change: Some(value_types::FiniteF64::must(0.00001)),
+                timestamp_serial: None,
             },
         )
         .expect("iterative full recalc should succeed");
@@ -639,6 +649,7 @@ fn iterative_calc_solves_chained_debt_schedule_cycles() {
                 iterative: Some(true),
                 max_iterations: Some(100),
                 max_change: Some(value_types::FiniteF64::must(0.001)),
+                timestamp_serial: None,
             },
         )
         .expect("iterative recalc should run");
@@ -757,6 +768,7 @@ fn iterative_calc_recovers_chained_debt_schedule_after_incremental_edits() {
             iterative: Some(true),
             max_iterations: Some(100),
             max_change: Some(value_types::FiniteF64::must(0.001)),
+            timestamp_serial: None,
         },
     )
     .expect("one-period iterative recalc should run");
@@ -853,6 +865,7 @@ fn iterative_calc_recovers_chained_debt_schedule_after_incremental_edits() {
                 iterative: Some(true),
                 max_iterations: Some(100),
                 max_change: Some(value_types::FiniteF64::must(0.001)),
+                timestamp_serial: None,
             },
         )
         .expect("multi-period iterative recalc should run");

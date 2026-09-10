@@ -15,7 +15,7 @@ use value_types::ComputeError;
     crate_path = "compute_core"
 )]
 impl ComputeEngine {
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn bring_floating_object_to_front(
         &mut self,
         sheet_id: &SheetId,
@@ -31,7 +31,7 @@ impl ComputeEngine {
     }
 
     /// Send a floating object to the back (lowest z-order).
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn send_floating_object_to_back(
         &mut self,
         sheet_id: &SheetId,
@@ -43,7 +43,7 @@ impl ComputeEngine {
     }
 
     /// Bring a floating object one step forward in z-order.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn bring_floating_object_forward(
         &mut self,
         sheet_id: &SheetId,
@@ -59,7 +59,7 @@ impl ComputeEngine {
     }
 
     /// Send a floating object one step backward in z-order.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn send_floating_object_backward(
         &mut self,
         sheet_id: &SheetId,
@@ -75,37 +75,37 @@ impl ComputeEngine {
     }
 
     /// Get all floating objects sorted by z-order (back to front).
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_floating_objects_in_z_order(&self, sheet_id: &SheetId) -> Vec<FloatingObject> {
         services::objects::get_floating_objects_in_z_order(&self.stores, sheet_id)
     }
 
     /// Get the maximum z-index among all floating objects in a sheet.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_floating_object_max_z_index(&self, sheet_id: &SheetId) -> i32 {
         services::objects::get_floating_object_max_z_index(&self.stores, sheet_id)
     }
 
     /// Get the minimum z-index among all floating objects in a sheet.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_floating_object_min_z_index(&self, sheet_id: &SheetId) -> i32 {
         services::objects::get_floating_object_min_z_index(&self.stores, sheet_id)
     }
 
     // -------------------------------------------------------------------
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_max_z_index_all(&self, sheet_id: &SheetId) -> i32 {
         services::objects::get_max_z_index_all(&self.stores, sheet_id)
     }
 
     /// Get the minimum z-index across ALL charts and floating objects in a sheet.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_min_z_index_all(&self, sheet_id: &SheetId) -> i32 {
         services::objects::get_min_z_index_all(&self.stores, sheet_id)
     }
 
     /// Get all charts and floating objects interleaved by z-order (ascending, back to front).
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_all_in_z_order(&self, sheet_id: &SheetId) -> Vec<ZOrderEntry> {
         services::objects::get_all_in_z_order(&self.stores, sheet_id)
     }

@@ -121,7 +121,7 @@ fn rich_auto_filter() -> AutoFilter {
                 show_button: true,
                 filter_type: Some(OoxmlFilterType::Icon {
                     icon_set: Some("3TrafficLights1".to_string()),
-                    icon_id: 2,
+                    icon_id: Some(2),
                 }),
                 ext_lst_raw: None,
             },
@@ -249,7 +249,7 @@ fn vc06_conditional_format() -> ConditionalFormat {
                     },
                     min_length: None,
                     max_length: None,
-                    positive_color: "#638EC6".to_string(),
+                    positive_color: "#638EC6".into(),
                     negative_color: None,
                     border_color: None,
                     negative_border_color: None,
@@ -470,7 +470,7 @@ fn rich_auto_filter_survives_hydrate_export_roundtrip() {
     match &af_rt.columns[5].filter_type {
         Some(OoxmlFilterType::Icon { icon_set, icon_id }) => {
             assert_eq!(icon_set.as_deref(), Some("3TrafficLights1"));
-            assert_eq!(icon_id, &2);
+            assert_eq!(icon_id, &Some(2));
         }
         other => panic!("col 5 should be Icon, got {other:?}"),
     }

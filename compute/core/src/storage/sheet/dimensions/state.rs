@@ -76,10 +76,12 @@ impl RowMetadata {
         }
     }
 
-    pub fn to_domain(&self, row: u32, default: Points, hidden: bool) -> RowDimension {
+    pub fn to_domain(&self, row: u32, _default: Points, hidden: bool) -> RowDimension {
         RowDimension {
             row,
-            height: self.height.unwrap_or(default).0,
+            // Zero is the transport sentinel for an omitted OOXML height;
+            // display defaults are resolved by the runtime dimension queries.
+            height: self.height.unwrap_or(Points(0.0)).0,
             hidden,
             height_str: self.height_str.clone(),
             custom_height: self.custom_height.clone(),
@@ -175,16 +177,14 @@ impl DimensionState {
             .filter(|group| !group.is_row && (group.collapsed || group.hidden))
             .flat_map(|group| group.start..=group.end)
             .collect();
-        let default_height = sheet.dimensions.default_row_height.unwrap_or(15.0);
         for source in &sheet.dimensions.row_heights {
             let Some(id) = row_id_at(source.row) else {
                 continue;
             };
             let mut row = RowMetadata::from_domain(source);
-            let has_height = source.custom_height || source.hidden || source.height > 0.0;
-            if !has_height
-                || (!source.custom_height && (source.height - default_height).abs() <= 0.01)
-            {
+            // Hidden/outline/descent/spans records need not author a height.
+            // Preserve explicitly authored default heights as well as custom ones.
+            if !source.custom_height && source.height <= 0.0 && source.height_str.is_none() {
                 row.height = None;
             }
             state.rows.insert(id, row);

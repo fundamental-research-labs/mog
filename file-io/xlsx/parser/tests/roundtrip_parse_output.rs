@@ -4,6 +4,8 @@
 
 #[path = "roundtrip_parse_output/cells.rs"]
 mod cells;
+#[path = "roundtrip_parse_output/charts.rs"]
+mod charts;
 #[path = "fixtures.rs"]
 mod fixtures;
 #[path = "roundtrip_parse_output/form_controls.rs"]

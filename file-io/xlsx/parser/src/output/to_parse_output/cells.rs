@@ -9,10 +9,10 @@ use domain_types::{
 use value_types::{CellError, CellValue};
 
 use crate::output::results::{
-    CELL_TYPE_VAL_BOOL as CELL_TYPE_BOOL, CELL_TYPE_VAL_DATE as CELL_TYPE_DATE,
+    FullCellData, CELL_TYPE_VAL_BOOL as CELL_TYPE_BOOL, CELL_TYPE_VAL_DATE as CELL_TYPE_DATE,
     CELL_TYPE_VAL_EMPTY as CELL_TYPE_EMPTY, CELL_TYPE_VAL_ERROR as CELL_TYPE_ERROR,
     CELL_TYPE_VAL_FORMULA as CELL_TYPE_FORMULA, CELL_TYPE_VAL_NUMBER as CELL_TYPE_NUMBER,
-    CELL_TYPE_VAL_STRING as CELL_TYPE_STRING, FullCellData,
+    CELL_TYPE_VAL_STRING as CELL_TYPE_STRING,
 };
 
 // Cell type constants for cached formula values
@@ -62,82 +62,243 @@ impl SharedStringProvenanceCompaction {
 
 /// Parse an A1-style range reference into 0-based (start_row, start_col, end_row, end_col).
 pub(super) fn parse_range_ref(s: &str) -> Option<(u32, u32, u32, u32)> {
-    // Delegates to the crate-local A1 wrapper (compute-parser post-W1).
-    crate::infra::a1::parse_a1_range(s)
+    // Array formula `ref` values are rectangular cell ranges. The generic A1
+    // parser also accepts whole-row/whole-column ranges, which would let a
+    // malformed array declaration claim an entire sheet. A degenerate
+    // one-cell declaration (`A1`) is valid for a scalar dynamic-array result
+    // and must remain a source even though it has no spill children.
+    if s.contains('!') {
+        return None;
+    }
+    let range = compute_parser::parse_a1_range(s)?;
+    if range.range_type != formula_types::RangeType::CellRange {
+        return None;
+    }
+    let (
+        formula_types::CellRef::Positional {
+            row: start_row,
+            col: start_col,
+            ..
+        },
+        formula_types::CellRef::Positional {
+            row: end_row,
+            col: end_col,
+            ..
+        },
+    ) = (range.start, range.end)
+    else {
+        return None;
+    };
+    Some((start_row, start_col, end_row, end_col))
 }
 
-/// Collect spill ranges from array formula source cells in a sheet.
-pub(super) fn collect_spill_ranges(cells: &[FullCellData]) -> Vec<(u32, u32, u32, u32)> {
-    let mut ranges = Vec::new();
-    for cell in cells {
-        if let Some(ref array_ref) = cell.array_ref {
-            if let Some(range) = parse_range_ref(array_ref) {
-                ranges.push(range);
-            }
-        }
-    }
-    ranges
+fn collect_dynamic_spill_ranges(
+    cells: &[FullCellData],
+    metadata: Option<&crate::output::results::MetadataOutput>,
+) -> Vec<(u32, u32, u32, u32)> {
+    // Scan declarations once and only retain ranges whose own cell proves it
+    // is a dynamic-array source. This keeps the pre-classification pass linear
+    // in the sparse worksheet cell list instead of looking up every range in
+    // every cell.
+    cells
+        .iter()
+        .filter_map(|cell| {
+            let array_ref = cell.array_ref.as_deref()?;
+            let range = parse_range_ref(array_ref)?;
+            is_dynamic_array_source(cell, metadata).then_some(range)
+        })
+        .collect()
 }
 
 fn cell_in_range(row: u32, col: u32, range: &(u32, u32, u32, u32)) -> bool {
-    let (r1, r2) = if range.0 <= range.2 {
-        (range.0, range.2)
-    } else {
-        (range.2, range.0)
-    };
-    let (c1, c2) = if range.1 <= range.3 {
-        (range.1, range.3)
-    } else {
-        (range.3, range.1)
-    };
-    (r1..=r2).contains(&row) && (c1..=c2).contains(&col)
+    range_is_well_formed(range)
+        && (range.0..=range.2).contains(&row)
+        && (range.1..=range.3).contains(&col)
 }
 
 fn range_source_position(range: &(u32, u32, u32, u32)) -> (u32, u32) {
-    (range.0.min(range.2), range.1.min(range.3))
+    // The first endpoint names the array formula source. Reversed ranges are
+    // rejected by `range_is_well_formed` instead of being normalized into a
+    // different source position.
+    (range.0, range.1)
 }
 
-pub(super) fn classify_projection_role(
-    cell: &FullCellData,
-    spill_ranges: &[(u32, u32, u32, u32)],
-    metadata: Option<&crate::output::results::MetadataOutput>,
-) -> ImportedCellProjectionRole {
-    let has_dynamic_array_metadata = cell
-        .cell_metadata_index
-        .is_some_and(|cm| metadata.is_some_and(|m| cell_metadata_is_dynamic_array(m, cm)));
+fn range_is_well_formed(range: &(u32, u32, u32, u32)) -> bool {
+    range.0 <= range.2 && range.1 <= range.3
+}
 
-    if cell.formula.is_some() {
-        if has_dynamic_array_metadata && cell.array_ref.is_some() {
+fn has_formula_owner(cell: &FullCellData) -> bool {
+    if cell
+        .formula
+        .as_deref()
+        .is_some_and(|formula| !formula.trim().is_empty())
+    {
+        return true;
+    }
+
+    // The parser preserves a self-closing `<f ca="1"/>` as force-recalc
+    // state and an empty Normal CellFormula. It is a cache marker, not an
+    // independent formula. Other formula kinds remain owners even when their
+    // text is carried by another cell (for example shared-formula children).
+    cell.cell_formula.as_ref().is_some_and(|formula| {
+        formula.t != ooxml_types::worksheet::CellFormulaType::Normal
+            || !formula.text.trim().is_empty()
+    })
+}
+
+fn is_array_formula_metadata(cell: &FullCellData) -> bool {
+    cell.cell_formula
+        .as_ref()
+        .is_none_or(|formula| formula.t == ooxml_types::worksheet::CellFormulaType::Array)
+}
+
+fn is_dynamic_array_source(
+    cell: &FullCellData,
+    metadata: Option<&crate::output::results::MetadataOutput>,
+) -> bool {
+    let Some(array_ref) = cell.array_ref.as_deref() else {
+        return false;
+    };
+    let Some(range) = parse_range_ref(array_ref) else {
+        return false;
+    };
+    range_is_well_formed(&range)
+        && range_source_position(&range) == (cell.row, cell.col)
+        && cell
+            .formula
+            .as_deref()
+            .is_some_and(|formula| !formula.trim().is_empty())
+        && is_array_formula_metadata(cell)
+        && cell.cell_metadata_index.is_some_and(|cm| {
+            metadata.is_some_and(|metadata| cell_metadata_is_dynamic_array(metadata, cm))
+        })
+}
+
+fn cell_metadata_has_unrelated_entries(
+    metadata: &crate::output::results::MetadataOutput,
+    cm_index: u32,
+) -> bool {
+    if cm_index == 0 {
+        return true;
+    }
+    let Some(block_index) = cm_index.checked_sub(1).map(|idx| idx as usize) else {
+        return true;
+    };
+    let Some(block) = metadata.cell_metadata.get(block_index) else {
+        return true;
+    };
+    block.records.is_empty()
+        || block
+            .records
+            .iter()
+            .any(|record| !metadata_record_is_dynamic_array(metadata, record.t))
+}
+
+fn cell_has_unrelated_metadata(
+    cell: &FullCellData,
+    metadata: Option<&crate::output::results::MetadataOutput>,
+) -> bool {
+    let Some(cm_index) = cell.cell_metadata_index else {
+        return false;
+    };
+    metadata.map_or(true, |metadata| {
+        cell_metadata_has_unrelated_entries(metadata, cm_index)
+    })
+}
+
+fn classify_projection_role_with_non_source_matches(
+    cell: &FullCellData,
+    metadata: Option<&crate::output::results::MetadataOutput>,
+    non_source_matches: usize,
+) -> ImportedCellProjectionRole {
+    if has_formula_owner(cell) {
+        if is_dynamic_array_source(cell, metadata) {
             return ImportedCellProjectionRole::DynamicArraySource;
         }
         return ImportedCellProjectionRole::Normal;
     }
 
+    if non_source_matches == 1 && !cell_has_unrelated_metadata(cell, metadata) {
+        // Cached children are derived whenever exactly one proven dynamic
+        // array claims their coordinate. Excel files vary between an empty
+        // `<f ca="1"/>`, a plain cache, and a child carrying XLDAPR `cm`.
+        // Unknown metadata remains visible rather than being discarded.
+        return ImportedCellProjectionRole::DynamicArraySpillTarget;
+    }
+
     if cell.cell_metadata_index.is_some() {
-        for range in spill_ranges {
-            if has_dynamic_array_metadata
-                && cell_in_range(cell.row, cell.col, range)
-                && (cell.row, cell.col) != range_source_position(range)
-            {
-                return ImportedCellProjectionRole::DynamicArraySpillTarget;
-            }
-        }
         return ImportedCellProjectionRole::UnknownCellMetadata;
     }
 
     ImportedCellProjectionRole::Normal
 }
 
+#[cfg(test)]
+pub(super) fn classify_projection_role(
+    cell: &FullCellData,
+    spill_ranges: &[(u32, u32, u32, u32)],
+    metadata: Option<&crate::output::results::MetadataOutput>,
+) -> ImportedCellProjectionRole {
+    let non_source_matches = spill_ranges
+        .iter()
+        .filter(|range| {
+            cell_in_range(cell.row, cell.col, range)
+                && (cell.row, cell.col) != range_source_position(range)
+        })
+        .count();
+    classify_projection_role_with_non_source_matches(cell, metadata, non_source_matches)
+}
+
 pub(super) fn build_projection_roles(
     cells: &[FullCellData],
     metadata: Option<&crate::output::results::MetadataOutput>,
 ) -> std::collections::HashMap<(u32, u32), ImportedCellProjectionRole> {
-    let spill_ranges = collect_spill_ranges(cells);
+    let spill_ranges = collect_dynamic_spill_ranges(cells, metadata);
     let mut roles = std::collections::HashMap::new();
-    for cell in cells {
-        let role = classify_projection_role(cell, &spill_ranges, metadata);
-        if role != ImportedCellProjectionRole::Normal {
-            roles.insert((cell.row, cell.col), role);
+
+    // Sweep sparse cells and ranges in row order. Counting every active claim
+    // is deliberate: overlapping claims are ambiguous and must not be
+    // assigned to whichever source happened to be iterated first.
+    let mut ordered_ranges: Vec<usize> = (0..spill_ranges.len()).collect();
+    ordered_ranges.sort_unstable_by_key(|&idx| spill_ranges[idx]);
+    let mut ordered_cells: Vec<usize> = (0..cells.len()).collect();
+    ordered_cells.sort_unstable_by_key(|&idx| (cells[idx].row, cells[idx].col));
+
+    let mut active_ranges = Vec::new();
+    let mut next_range = 0;
+    let mut next_cell = 0;
+    while next_cell < ordered_cells.len() {
+        let row = cells[ordered_cells[next_cell]].row;
+        while next_range < ordered_ranges.len() && spill_ranges[ordered_ranges[next_range]].0 <= row
+        {
+            active_ranges.push(ordered_ranges[next_range]);
+            next_range += 1;
+        }
+        active_ranges.retain(|&idx| spill_ranges[idx].2 >= row);
+
+        let row_start = next_cell;
+        while next_cell < ordered_cells.len() && cells[ordered_cells[next_cell]].row == row {
+            next_cell += 1;
+        }
+
+        for &cell_idx in &ordered_cells[row_start..next_cell] {
+            let cell = &cells[cell_idx];
+            let non_source_matches = active_ranges
+                .iter()
+                .filter(|&&range_idx| {
+                    let range = &spill_ranges[range_idx];
+                    cell_in_range(cell.row, cell.col, range)
+                        && (cell.row, cell.col) != range_source_position(range)
+                })
+                .count();
+            let role = classify_projection_role_with_non_source_matches(
+                cell,
+                metadata,
+                non_source_matches,
+            );
+            if role != ImportedCellProjectionRole::Normal {
+                roles.insert((cell.row, cell.col), role);
+            }
         }
     }
     roles
@@ -154,19 +315,31 @@ fn cell_metadata_is_dynamic_array(
         return false;
     };
 
-    block.records.iter().any(|record| {
-        let Some(type_index) = record.t.checked_sub(1).map(|idx| idx as usize) else {
-            return false;
-        };
-        metadata
-            .metadata_types
-            .get(type_index)
-            .is_some_and(|metadata_type| metadata_type.name.eq_ignore_ascii_case("XLDAPR"))
-            || metadata
-                .future_metadata
-                .get(type_index)
-                .is_some_and(|group| group.name.eq_ignore_ascii_case("XLDAPR"))
-    })
+    block
+        .records
+        .iter()
+        .any(|record| metadata_record_is_dynamic_array(metadata, record.t))
+}
+
+fn metadata_record_is_dynamic_array(
+    metadata: &crate::output::results::MetadataOutput,
+    type_index: u32,
+) -> bool {
+    let Some(type_index) = type_index.checked_sub(1).map(|idx| idx as usize) else {
+        return false;
+    };
+
+    // `rc/@t` is a 1-based index into metadataTypes. Only fall back to the
+    // future-metadata order when that type entry is absent; an unrelated
+    // metadata type at the same index must not be mistaken for XLDAPR merely
+    // because a future group happens to occupy that slot.
+    if let Some(metadata_type) = metadata.metadata_types.get(type_index) {
+        return metadata_type.name.trim().eq_ignore_ascii_case("XLDAPR");
+    }
+    metadata
+        .future_metadata
+        .get(type_index)
+        .is_some_and(|group| group.name.trim().eq_ignore_ascii_case("XLDAPR"))
 }
 
 // =============================================================================
@@ -231,10 +404,10 @@ pub(super) fn convert_cell_with_projection_role_and_provenance(
     // - The resolved CellValue is Null (empty string → Null in resolve_formula_cached_value)
     // Note: cell_formula covers shared formula children (t="shared" si="N") which
     // have cell_formula.is_some() but formula.is_none() (no formula text).
-    let has_empty_cached_value =
-        (is_formula || cell.formula.is_some() || cell.cell_formula.is_some())
+    let has_empty_cached_value = cell.has_empty_cached_value
+        || ((is_formula || cell.formula.is_some() || cell.cell_formula.is_some())
             && cell.value.as_ref().map_or(false, |v| v.is_empty())
-            && cell.cached_value_type == 0;
+            && cell.cached_value_type == 0);
     let is_formula_cell = is_formula || cell.formula.is_some() || cell.cell_formula.is_some();
 
     let can_drop_sst_provenance = cell
@@ -284,6 +457,7 @@ pub(super) fn convert_cell_with_projection_role_and_provenance(
             has_effective_formula_result_type,
         ),
         vm: cell.vm,
+        imported_rich_error: None,
         phonetic: cell.phonetic,
         date_lexical_value: cell.date_lexical_value.clone(),
         original_sst_index: if can_drop_sst_provenance {
@@ -323,6 +497,8 @@ fn formula_cache_provenance(
         && cached_value_kind.is_none()
         && cached_value_presence.is_absent()
         && cell.value.is_none()
+        && !cell.preserve_space_formula
+        && !cell.preserve_space_value
     {
         return FormulaCacheProvenance::default();
     }
@@ -334,6 +510,8 @@ fn formula_cache_provenance(
         cached_value_presence,
         cached_value_lexeme: cell.value.clone(),
         formula_identity_fingerprint: cell.formula.clone(),
+        formula_preserve_space: cell.preserve_space_formula,
+        value_preserve_space: cell.preserve_space_value,
         ..Default::default()
     }
 }

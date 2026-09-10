@@ -145,6 +145,13 @@ impl ExternalWorkbookToken {
         &self.raw
     }
 
+    /// OOXML workbook index zero denotes the containing workbook, not an
+    /// external link. A qualified name in this workbook has workbook scope.
+    #[must_use]
+    pub fn is_current_workbook(&self) -> bool {
+        self.raw == "[0]"
+    }
+
     /// Consume the token and return its text.
     #[must_use]
     pub fn into_string(self) -> String {

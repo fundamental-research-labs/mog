@@ -98,9 +98,6 @@ compute-solver = { path = "crates/compute-solver" }
 # Native UUID identities, compact axes, and position indexes
 compute-document = { path = "crates/compute-document" }
 
-# Policy types and access-control engine (structural-op privacy rebuild)
-compute-security = { path = "crates/compute-security" }
-
 # XLSX parser and API (direct Rust types for import — no serde roundtrip)
 xlsx-api = { path = "../../file-io/xlsx-api" }
 xlsx-parser = { path = "../../file-io/xlsx/parser" }
@@ -179,15 +176,6 @@ dashmap = { version = "6", optional = true }
 # Hashable f64 wrapper for exact-match lookup indexes
 ordered-float = "4"
 
-
-# LRU cache — bounds `AccessMatrixCache` (R2.2) at 64 entries so pathological
-# (principal × sheet × version) combinatorics can't blow up memory.
-lru = "0.12"
-
-# ArcSwap — `SecurityState` (R2.3) swaps `PolicyEngine` pointers without
-# locking readers, and `ComputeService` swaps the active principal the
-# same way.
-arc-swap = "1"
 
 # WASM-specific dependency overrides:
 # - getrandom needs "js" feature for random number source (used by rand/nalgebra/statrs)

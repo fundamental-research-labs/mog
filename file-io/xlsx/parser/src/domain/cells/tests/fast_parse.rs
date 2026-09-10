@@ -150,6 +150,44 @@ fn test_parse_worksheet_fast_with_extras_prefixed_formula_tags() {
 }
 
 #[test]
+fn empty_formula_metadata_is_distinct_from_shared_and_data_table_formulas() {
+    let xml = br#"<worksheet><sheetData><row r="1">
+      <c r="A1"><f t="array" ref="A1:B1" aca="1" ca="1">SUM(1,2)</f><v>3</v></c>
+      <c r="B1" t="b"><f ca="1"/><v>0</v></c>
+      <c r="C1" t="b"><f ca="1"/></c>
+      <c r="D1"><f t="shared" si="9" ref="D1:D2">A1+1</f><v>4</v></c>
+      <c r="D2"><f t="shared" si="9"/><v>5</v></c>
+      <c r="E1"><f t="dataTable" ref="E1:F2" r1="$A$1" r2="$A$2" ca="1"/><v>6</v></c>
+    </row></sheetData></worksheet>"#;
+
+    let mut cells = vec![CellData::default(); 8];
+    let mut strings = Vec::new();
+    let mut row_heights = Vec::new();
+    let mut extras = ParseExtras::default();
+    let count = parse_worksheet_fast_with_extras(
+        xml,
+        &[],
+        &mut cells,
+        &mut strings,
+        &mut row_heights,
+        &mut extras,
+        &[],
+    );
+
+    assert_eq!(count, 6);
+    assert_eq!(extras.empty_formula_metadata.len(), 2);
+    assert!(
+        extras
+            .empty_formula_metadata
+            .iter()
+            .all(|(_, metadata)| metadata.ca)
+    );
+    assert_eq!(extras.sf_refs, vec![(9, 1, 3)]);
+    assert_eq!(extras.data_tables.len(), 1);
+    assert!(extras.array_refs.iter().any(|(_, range)| range == "A1:B1"));
+}
+
+#[test]
 fn self_closing_shared_formula_without_cached_value_does_not_read_next_cell_value() {
     let xml = br#"<worksheet><sheetData>
     <row r="1">

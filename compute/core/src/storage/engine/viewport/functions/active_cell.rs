@@ -183,6 +183,7 @@ pub(in crate::storage::engine::viewport) fn get_active_cell(
             style_id: props.style_id,
             cell_metadata_index: props.cell_metadata_index,
             vm: props.vm,
+            imported_rich_error: props.imported_rich_error,
             phonetic: props.phonetic,
             date_lexical_value: props.date_lexical_value,
             formula_result_type: props.formula_result_type,

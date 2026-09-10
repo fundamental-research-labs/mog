@@ -50,6 +50,7 @@ pub(super) fn build_sheet_comment_package_info(
                     shape_id: (!shape.id.is_empty()).then_some(shape.id),
                     width: shape.note_width_style,
                     height: shape.note_height_style,
+                    presentation: shape.presentation,
                 });
         }
     }

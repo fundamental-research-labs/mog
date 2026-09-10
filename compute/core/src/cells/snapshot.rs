@@ -11,11 +11,7 @@ use super::types::{CellEntry, SheetStore};
 /// Parse an A1-style range reference (e.g., "A1:C5") into
 /// (start_row, start_col, end_row, end_col), all 0-based.
 fn parse_a1_range(s: &str) -> Option<(u32, u32, u32, u32)> {
-    // Delegates to compute-parser; rejects single-cell forms (callers here
-    // require a two-endpoint range to compute projection spill dimensions).
-    if !s.contains(':') {
-        return None;
-    }
+    // OOXML uses both ref="A1" and ref="A1:A1" for single-cell arrays.
     let range = compute_parser::parse_a1_range(s)?;
     let (sr, sc) = match range.start {
         formula_types::CellRef::Positional { row, col, .. } => (row, col),
@@ -340,9 +336,17 @@ impl CellStore {
                     // intersection instead of dynamic array spill.
                     self.cse_single_cell.insert(cell_id);
                 }
-                // Both single- and multi-cell CSE entries are anchors;
-                // editing any covered position must be rejected.
-                self.cse_anchors.insert(cell_id);
+                // A live storage-backed cell store can distinguish dynamic arrays
+                // immediately. Fresh snapshots resolve this when their metadata
+                // provider is installed by engine assembly.
+                if matches!(
+                    self.formula_result_mode(&cell_id),
+                    Some(super::cell_metadata::FormulaResultMode::Dynamic)
+                ) {
+                    self.cse_single_cell.remove(&cell_id);
+                } else {
+                    self.cse_anchors.insert(cell_id);
+                }
             }
         }
 
@@ -458,11 +462,14 @@ mod tests {
         assert_eq!(parse_a1_range("A1:C5"), Some((0, 0, 4, 2)));
         assert_eq!(parse_a1_range("B2:D10"), Some((1, 1, 9, 3)));
         assert_eq!(parse_a1_range("$A$1:$C$5"), Some((0, 0, 4, 2)));
+        // OOXML single-cell CSE declarations use either spelling.
+        assert_eq!(parse_a1_range("A1"), Some((0, 0, 0, 0)));
+        assert_eq!(parse_a1_range("$B$2"), Some((1, 1, 1, 1)));
+        assert_eq!(parse_a1_range("B2:B2"), Some((1, 1, 1, 1)));
     }
 
     #[test]
     fn test_parse_a1_range_invalid() {
-        assert_eq!(parse_a1_range("A1"), None); // No colon
         assert_eq!(parse_a1_range("A1:B2:C3"), None); // Too many parts
         assert_eq!(parse_a1_range(""), None);
     }

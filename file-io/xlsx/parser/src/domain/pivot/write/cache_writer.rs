@@ -22,10 +22,15 @@ const RELATIONSHIPS_NS: &str =
 pub struct PivotCacheWriter {
     /// Cache ID
     pub cache_id: u32,
+    pub ooxml_preservation: Option<domain_types::domain::pivot::PivotCacheOoxmlPreservation>,
     /// Source definition
     pub source: CacheSource,
     /// Cache fields
     pub fields: Vec<CacheFieldDef>,
+    /// Typed field definitions, including imported or refreshed metadata.
+    pub typed_fields: Option<Vec<ooxml_types::pivot::PivotCacheField>>,
+    /// Structural metadata retained when cache values are refreshed.
+    pub field_templates: Vec<ooxml_types::pivot::PivotCacheField>,
     /// Record count
     pub record_count: Option<u32>,
     /// Refreshed by user name
@@ -33,7 +38,7 @@ pub struct PivotCacheWriter {
     /// Refreshed date (as Excel serial date)
     pub refreshed_date: Option<f64>,
     /// Relationship id from this cache definition to its records part.
-    pub records_relationship_id: String,
+    pub records_relationship_id: Option<String>,
 }
 
 impl PivotCacheWriter {
@@ -41,12 +46,15 @@ impl PivotCacheWriter {
     pub fn new(cache_id: u32) -> Self {
         Self {
             cache_id,
+            ooxml_preservation: None,
             source: CacheSource::default(),
             fields: Vec::new(),
+            typed_fields: None,
+            field_templates: Vec::new(),
             record_count: None,
             refreshed_by: None,
             refreshed_date: None,
-            records_relationship_id: "rId1".to_string(),
+            records_relationship_id: Some("rId1".to_string()),
         }
     }
 
@@ -78,10 +86,31 @@ impl PivotCacheWriter {
             .attr("xmlns", SPREADSHEETML_NS)
             .attr("xmlns:r", RELATIONSHIPS_NS);
 
-        w.attr("r:id", &self.records_relationship_id);
+        if let Some(records_relationship_id) = &self.records_relationship_id {
+            w.attr("r:id", records_relationship_id);
+        } else {
+            w.attr_bool("saveData", false);
+        }
 
-        // Tell Excel to refresh pivot data when the workbook is opened.
-        w.attr_bool("refreshOnLoad", true);
+        if let Some(metadata) = &self.ooxml_preservation {
+            for attr in &metadata.root_namespace_declarations {
+                if attr.name != "xmlns:r" {
+                    w.attr(&attr.name, &attr.value);
+                }
+            }
+            for attr in &metadata.root_attributes {
+                let overridden = (attr.name == "saveData"
+                    && self.records_relationship_id.is_none())
+                    || (attr.name == "refreshedBy" && self.refreshed_by.is_some())
+                    || (attr.name == "refreshedDate" && self.refreshed_date.is_some());
+                if !overridden {
+                    w.attr(&attr.name, &attr.value);
+                }
+            }
+        } else {
+            // Newly constructed caches request an initial refresh.
+            w.attr_bool("refreshOnLoad", true);
+        }
 
         if let Some(ref user) = self.refreshed_by {
             w.attr("refreshedBy", user);
@@ -101,18 +130,55 @@ impl PivotCacheWriter {
         self.source.write_xml(&mut w);
 
         // Write cache fields
-        if !self.fields.is_empty() {
+        if let Some(fields) = &self.typed_fields {
+            w.start_element("cacheFields")
+                .attr_num("count", fields.len())
+                .end_attrs();
+            for (index, field) in fields.iter().enumerate() {
+                super::typed_cache_fields::write_cache_field_with_preservation(
+                    field,
+                    &mut w,
+                    self.ooxml_preservation
+                        .as_ref()
+                        .and_then(|p| p.fields.get(index)),
+                );
+            }
+            w.end_element("cacheFields");
+        } else if !self.fields.is_empty() {
             w.start_element("cacheFields")
                 .attr_num("count", self.fields.len())
                 .end_attrs();
 
-            for field in &self.fields {
-                field.write_xml(&mut w);
+            for (index, field) in self.fields.iter().enumerate() {
+                if let Some(template) = self
+                    .field_templates
+                    .get(index)
+                    .filter(|t| t.name == field.name)
+                {
+                    let mut refreshed = template.clone();
+                    refreshed.shared_items = Some(super::typed_cache_fields::infer_shared_items(
+                        &field.shared_items,
+                    ));
+                    super::typed_cache_fields::write_cache_field_with_preservation(
+                        &refreshed,
+                        &mut w,
+                        self.ooxml_preservation
+                            .as_ref()
+                            .and_then(|p| p.fields.get(index)),
+                    );
+                } else {
+                    field.write_xml(&mut w);
+                }
             }
 
             w.end_element("cacheFields");
         }
 
+        if let Some(metadata) = &self.ooxml_preservation {
+            for child in &metadata.children {
+                w.raw_str(&child.xml);
+            }
+        }
         w.end_element("pivotCacheDefinition");
 
         w.finish()

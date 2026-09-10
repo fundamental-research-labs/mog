@@ -19,6 +19,15 @@ use formula_types::{CellRef, RangeType};
 use super::chart_replay;
 
 type WorkbookCellText = HashMap<String, HashMap<(u32, u32), String>>;
+type WorkbookCellState = HashMap<String, HashMap<(u32, u32), WorkbookCellStateValue>>;
+
+#[derive(Debug, Clone)]
+struct WorkbookCellStateValue {
+    formula: String,
+    value: String,
+}
+
+const SOURCE_STALE_REASON: &str = "chart source cells changed";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct ParsedLocalRange {
@@ -36,12 +45,17 @@ struct ParsedWorkbookRange {
 
 pub(super) fn complete_chart_sources_for_xlsx_export(output: &mut ParseOutput) {
     let cell_text = workbook_cell_text(output);
+    let cell_state = workbook_cell_state(output);
     for sheet_data in &mut output.sheets {
-        complete_chart_sources_for_sheet(sheet_data, &cell_text);
+        complete_chart_sources_for_sheet(sheet_data, &cell_text, &cell_state);
     }
 }
 
-fn complete_chart_sources_for_sheet(sheet_data: &mut SheetData, cell_text: &WorkbookCellText) {
+fn complete_chart_sources_for_sheet(
+    sheet_data: &mut SheetData,
+    cell_text: &WorkbookCellText,
+    cell_state: &WorkbookCellState,
+) {
     if sheet_data.charts.is_empty() {
         return;
     }
@@ -50,6 +64,7 @@ fn complete_chart_sources_for_sheet(sheet_data: &mut SheetData, cell_text: &Work
         if chart.is_chart_ex {
             continue;
         }
+        refresh_chart_source_authority(chart, &sheet_name, cell_state);
         if !chart_replay::should_complete_sources_for_xlsx_export(chart) {
             continue;
         }
@@ -61,12 +76,20 @@ fn complete_chart_sources_for_sheet(sheet_data: &mut SheetData, cell_text: &Work
                     synthesize_chart_series_from_data_range(&chart.chart_type, data_range)
                 })
                 .unwrap_or_default();
-            apply_explicit_chart_source_ranges(
-                &mut chart.series,
-                chart.category_range.as_deref(),
-                chart.series_range.as_deref(),
-            );
         }
+        // Explicit chart-level ranges are authoritative even when the
+        // imported chart already carried series objects. Applying them here
+        // keeps category/name formulas aligned before their caches refresh.
+        let category_range =
+            valid_explicit_source_range(chart.category_range.as_deref(), &sheet_name);
+        let series_range = valid_explicit_source_range(chart.series_range.as_deref(), &sheet_name);
+        apply_explicit_chart_source_ranges(&mut chart.series, category_range, series_range);
+        refresh_chart_text_caches(chart, &sheet_name, |sheet_name, row, col| {
+            cell_text
+                .get(sheet_name)
+                .and_then(|sheet| sheet.get(&(row, col)))
+                .cloned()
+        });
         complete_series_live_ref_caches(&mut chart.series, &sheet_name, |sheet_name, row, col| {
             cell_text
                 .get(sheet_name)
@@ -87,6 +110,70 @@ fn complete_chart_sources_for_sheet(sheet_data: &mut SheetData, cell_text: &Work
     }
 }
 
+/// Refresh scalar chart text that is backed by a live worksheet reference.
+///
+/// The source parser deliberately returns `None` for unsupported formulas
+/// (`#REF!`, unknown names, structured references, and similar expressions).
+/// In that case this helper leaves the imported cache untouched. A parsed
+/// reference with an empty source cell returns `Some(None)`, allowing a valid
+/// edit that clears a title or series name to clear its old cache as well.
+fn refresh_chart_text_caches(
+    chart: &mut domain_types::ChartSpec,
+    sheet_name: &str,
+    mut cell_text: impl FnMut(&str, u32, u32) -> Option<String>,
+) {
+    if let Some(title_formula) = chart
+        .title_formula
+        .as_deref()
+        .filter(|formula| !formula.trim().is_empty())
+        && let Some(title) = live_source_first_cell_text(title_formula, sheet_name, &mut cell_text)
+    {
+        chart.title = title.filter(|value| !value.is_empty());
+    }
+
+    for series in &mut chart.series {
+        let Some(name_ref) = series
+            .name_ref
+            .as_deref()
+            .filter(|name_ref| !name_ref.trim().is_empty())
+        else {
+            continue;
+        };
+        if let Some(name) = live_source_first_cell_text(name_ref, sheet_name, &mut cell_text) {
+            series.name = name.filter(|value| !value.is_empty());
+        }
+    }
+}
+
+/// Resolve the first cell of a live scalar reference.
+///
+/// Chart title and series-name formulas are scalar in OOXML even when a
+/// malformed or hand-authored package gives them a multi-cell range. Using
+/// the first cell keeps the writer deterministic while retaining the
+/// conservative no-op behavior for references that cannot be parsed at all.
+fn live_source_first_cell_text(
+    reference: &str,
+    default_sheet_name: &str,
+    cell_text: &mut impl FnMut(&str, u32, u32) -> Option<String>,
+) -> Option<Option<String>> {
+    let range = parse_workbook_a1_range(reference, default_sheet_name)?;
+    Some(cell_text(
+        &range.sheet_name,
+        range.range.start_row,
+        range.range.start_col,
+    ))
+}
+
+fn valid_explicit_source_range<'a>(
+    reference: Option<&'a str>,
+    default_sheet_name: &str,
+) -> Option<&'a str> {
+    reference
+        .map(str::trim)
+        .filter(|reference| !reference.is_empty())
+        .filter(|reference| parse_workbook_a1_range(reference, default_sheet_name).is_some())
+}
+
 fn workbook_cell_text(output: &ParseOutput) -> WorkbookCellText {
     output
         .sheets
@@ -102,6 +189,216 @@ fn workbook_cell_text(output: &ParseOutput) -> WorkbookCellText {
             )
         })
         .collect()
+}
+
+fn workbook_cell_state(output: &ParseOutput) -> WorkbookCellState {
+    output
+        .sheets
+        .iter()
+        .map(|sheet_data| {
+            (
+                canonical_chart_sheet_name(&sheet_data.name),
+                sheet_data
+                    .cells
+                    .iter()
+                    .map(|cell| {
+                        (
+                            (cell.row, cell.col),
+                            WorkbookCellStateValue {
+                                formula: cell
+                                    .formula
+                                    .as_deref()
+                                    .unwrap_or_default()
+                                    .trim_start_matches('=')
+                                    .to_string(),
+                                value: cell.value.to_string(),
+                            },
+                        )
+                    })
+                    .collect(),
+            )
+        })
+        .collect()
+}
+
+fn refresh_chart_source_authority(
+    chart: &mut domain_types::ChartSpec,
+    owner_sheet_name: &str,
+    cell_state: &WorkbookCellState,
+) {
+    let Some(expected) = chart
+        .standard_chart_export_authority
+        .as_ref()
+        .and_then(|authority| authority.source_fingerprint.as_deref())
+        .or_else(|| {
+            chart
+                .standard_chart_provenance
+                .as_ref()
+                .and_then(|provenance| provenance.source_fingerprint.as_deref())
+        })
+    else {
+        return;
+    };
+    let expected = expected.to_string();
+    let Some(current) = chart_source_fingerprint(chart, owner_sheet_name, cell_state) else {
+        return;
+    };
+    let Some(authority) = chart.standard_chart_export_authority.as_mut() else {
+        return;
+    };
+
+    if current != expected {
+        if authority.stale_reason.as_deref() != Some(SOURCE_STALE_REASON) {
+            authority.chart_part_revision = authority.chart_part_revision.saturating_add(1);
+        }
+        authority.validity = domain_types::chart::StandardChartAuthorityValidity::Stale;
+        authority.stale_reason = Some(SOURCE_STALE_REASON.to_string());
+    } else if authority.stale_reason.as_deref() == Some(SOURCE_STALE_REASON) {
+        // An edit can be undone before export. Replaying is safe again once
+        // the dependency snapshot is back at its import state.
+        authority.validity = domain_types::chart::StandardChartAuthorityValidity::Current;
+        authority.stale_reason = None;
+    }
+}
+
+fn chart_source_fingerprint(
+    chart: &domain_types::ChartSpec,
+    owner_sheet_name: &str,
+    cell_state: &WorkbookCellState,
+) -> Option<String> {
+    let mut references = Vec::new();
+    for reference in [
+        chart.data_range.as_deref(),
+        chart.series_range.as_deref(),
+        chart.category_range.as_deref(),
+        chart.title_formula.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        references.push(reference);
+    }
+    for series in &chart.series {
+        if let Some(reference) = series.name_ref.as_deref() {
+            references.push(reference);
+        }
+        if live_chart_source_ref(series.values.as_deref(), series.value_source_kind)
+            && let Some(reference) = series.values.as_deref()
+        {
+            references.push(reference);
+        }
+        if live_chart_source_ref(series.categories.as_deref(), series.category_source_kind)
+            && let Some(reference) = series.categories.as_deref()
+        {
+            references.push(reference);
+        }
+        if live_chart_source_ref(
+            series.bubble_size.as_deref(),
+            series.bubble_size_source_kind,
+        ) && let Some(reference) = series.bubble_size.as_deref()
+        {
+            references.push(reference);
+        }
+    }
+
+    let mut ranges = Vec::new();
+    for reference in references {
+        let trimmed = reference.trim().trim_start_matches('=').trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let parsed = parse_workbook_a1_range(trimmed, owner_sheet_name)?;
+        ranges.push((
+            canonical_chart_sheet_name(&parsed.sheet_name),
+            parsed.range.start_row,
+            parsed.range.start_col,
+            parsed.range.end_row,
+            parsed.range.end_col,
+        ));
+    }
+    if ranges.is_empty() {
+        return None;
+    }
+    ranges.sort_unstable();
+    ranges.dedup();
+
+    let mut fingerprint = SourceFnv1a64::default();
+    fingerprint.write_str(&canonical_chart_sheet_name(owner_sheet_name));
+    for (sheet_name, start_row, start_col, end_row, end_col) in &ranges {
+        fingerprint.write_str(&format!(
+            "range:{sheet_name}:{start_row}:{start_col}:{end_row}:{end_col}"
+        ));
+    }
+    let mut present_cells = Vec::new();
+    for (sheet_name, cells) in cell_state {
+        for ((row, col), state) in cells {
+            if ranges
+                .iter()
+                .any(|(range_sheet, start_row, start_col, end_row, end_col)| {
+                    range_sheet == sheet_name
+                        && (*start_row..=*end_row).contains(row)
+                        && (*start_col..=*end_col).contains(col)
+                })
+            {
+                if state.formula.is_empty() && state.value.is_empty() {
+                    continue;
+                }
+                present_cells.push((
+                    sheet_name.clone(),
+                    *row,
+                    *col,
+                    state.formula.clone(),
+                    state.value.clone(),
+                ));
+            }
+        }
+    }
+    present_cells.sort_unstable();
+    for (sheet_name, row, col, formula, value) in present_cells {
+        fingerprint.write_str(&format!("cell:{sheet_name}:{row}:{col}"));
+        fingerprint.write_str(&formula);
+        fingerprint.write_str(&value);
+    }
+    Some(format!("{:016x}", fingerprint.finish()))
+}
+
+fn canonical_chart_sheet_name(name: &str) -> String {
+    name.replace("''", "'").to_lowercase()
+}
+
+fn live_chart_source_ref(
+    reference: Option<&str>,
+    source_kind: Option<domain_types::chart::ChartSeriesDimensionSourceKindData>,
+) -> bool {
+    reference.is_some_and(|reference| !reference.trim().is_empty())
+        && matches!(
+            source_kind,
+            None | Some(domain_types::chart::ChartSeriesDimensionSourceKindData::Ref)
+        )
+}
+
+#[derive(Clone, Copy)]
+struct SourceFnv1a64(u64);
+
+impl Default for SourceFnv1a64 {
+    fn default() -> Self {
+        Self(0xcbf29ce484222325)
+    }
+}
+
+impl SourceFnv1a64 {
+    fn write_str(&mut self, value: &str) {
+        for byte in value.as_bytes() {
+            self.0 ^= u64::from(*byte);
+            self.0 = self.0.wrapping_mul(0x100000001b3);
+        }
+        self.0 ^= 0xff;
+        self.0 = self.0.wrapping_mul(0x100000001b3);
+    }
+
+    fn finish(self) -> u64 {
+        self.0
+    }
 }
 
 fn complete_series_live_ref_caches(
@@ -371,7 +668,7 @@ fn parse_workbook_a1_range(
     reference: &str,
     default_sheet_name: &str,
 ) -> Option<ParsedWorkbookRange> {
-    let trimmed = reference.trim();
+    let trimmed = reference.trim().trim_start_matches('=').trim();
     let (sheet_prefix, body) = compute_parser::split_sheet_prefix(trimmed);
     let sheet_name = sheet_prefix
         .map(unescape_sheet_name)

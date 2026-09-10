@@ -860,7 +860,7 @@ impl PivotLocation {
 #[derive(Debug, Clone)]
 pub struct PivotStyle {
     /// Style name (e.g., "PivotStyleMedium9")
-    pub name: String,
+    pub name: Option<String>,
     /// Show row headers
     pub show_row_headers: bool,
     /// Show column headers
@@ -876,7 +876,7 @@ pub struct PivotStyle {
 impl Default for PivotStyle {
     fn default() -> Self {
         Self {
-            name: "PivotStyleMedium9".to_string(),
+            name: Some("PivotStyleMedium9".to_string()),
             show_row_headers: true,
             show_col_headers: true,
             show_row_stripes: false,
@@ -890,16 +890,18 @@ impl PivotStyle {
     /// Create a new pivot style
     pub fn new(name: &str) -> Self {
         Self {
-            name: name.to_string(),
+            name: Some(name.to_string()),
             ..Default::default()
         }
     }
 
     /// Write the style info to XML
     pub(crate) fn write_xml(&self, w: &mut XmlWriter) {
-        w.start_element("pivotTableStyleInfo")
-            .attr("name", &self.name)
-            .attr_bool("showRowHeaders", self.show_row_headers)
+        let elem = w.start_element("pivotTableStyleInfo");
+        if let Some(name) = &self.name {
+            elem.attr("name", name);
+        }
+        elem.attr_bool("showRowHeaders", self.show_row_headers)
             .attr_bool("showColHeaders", self.show_col_headers)
             .attr_bool("showRowStripes", self.show_row_stripes)
             .attr_bool("showColStripes", self.show_col_stripes)
@@ -915,6 +917,7 @@ impl PivotStyle {
 /// Row or column item for pivot table layout
 #[derive(Debug, Clone, Default)]
 pub struct RowColItem {
+    pub data_field_index: u32,
     /// Item type (default is "data")
     pub item_type: Option<PivotItemType>,
     /// Field references (x values)
@@ -927,6 +930,7 @@ impl RowColItem {
     /// Create a data item with field references
     pub fn data(x_values: Vec<Option<u32>>) -> Self {
         Self {
+            data_field_index: 0,
             item_type: None,
             x_values,
             preserved_attributes: Vec::new(),
@@ -936,6 +940,7 @@ impl RowColItem {
     /// Create a grand total item
     pub fn grand() -> Self {
         Self {
+            data_field_index: 0,
             item_type: Some(PivotItemType::Grand),
             x_values: vec![None],
             preserved_attributes: Vec::new(),
@@ -949,7 +954,10 @@ impl RowColItem {
         if let Some(ref t) = self.item_type {
             w.attr("t", t.as_str());
         }
-        write_preserved_attrs(w, &self.preserved_attributes, &["t"]);
+        if self.data_field_index != 0 {
+            w.attr_num("i", self.data_field_index);
+        }
+        write_preserved_attrs(w, &self.preserved_attributes, &["t", "i"]);
 
         w.end_attrs();
 

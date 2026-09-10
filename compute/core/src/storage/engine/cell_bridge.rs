@@ -19,7 +19,7 @@ impl ComputeEngine {
 
     /// Apply a cell edit through the native mutation pipeline,
     /// updates the cell store, and triggers recalculation.
-    #[bridge::write(scope = "cell")]
+    #[bridge::write]
     pub fn set_cell(
         &mut self,
         sheet_id: &SheetId,
@@ -58,7 +58,7 @@ impl ComputeEngine {
     }
 
     /// Binary variant of [`set_cell`].
-    #[bridge::write(scope = "cell")]
+    #[bridge::write]
     #[bridge::skip(napi)]
     pub fn set_cell_binary(
         &mut self,
@@ -81,7 +81,7 @@ impl ComputeEngine {
     /// state is now authoritative in compute-core, surfaced via the
     /// `is_cse_anchor` / `is_array_formula` metadata fields on
     /// [`crate::snapshot::ActiveCellData`].
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_array_formula(
         &mut self,
         sheet_id: &SheetId,
@@ -122,7 +122,7 @@ impl ComputeEngine {
     // -------------------------------------------------------------------
 
     /// Set a single cell value using rich input parsing.
-    #[bridge::write(scope = "cell")]
+    #[bridge::write]
     pub fn set_cell_value_parsed(
         &mut self,
         sheet_id: &SheetId,
@@ -159,7 +159,7 @@ impl ComputeEngine {
     }
 
     /// Set a cell value as literal text, bypassing all type coercion.
-    #[bridge::write(scope = "cell")]
+    #[bridge::write]
     pub fn set_cell_value_as_text(
         &mut self,
         sheet_id: &SheetId,
@@ -183,7 +183,7 @@ impl ComputeEngine {
     }
 
     /// Batch-set cell values using rich input parsing.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_cell_values_parsed(
         &mut self,
         sheet_id: &SheetId,
@@ -222,7 +222,7 @@ impl ComputeEngine {
     }
 
     /// Import pre-parsed cell values in bulk.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn import_values(
         &mut self,
         sheet_id: &SheetId,

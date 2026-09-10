@@ -73,18 +73,15 @@ fn test_slope_intercept() {
 }
 
 #[test]
-fn test_prob_loose_tolerance() {
+fn test_prob_non_unit_sum_is_invalid() {
     let f = FnProb;
-    // Probabilities that sum to 1.005 (within 0.01 tolerance) should work
+    // Excel requires the probability range to sum to exactly one.  A 0.5%
+    // excess is materially invalid, even though it was previously accepted by
+    // the old 0.01 tolerance.
     let xs = arr(vec![1.0, 2.0, 3.0]);
     let ps = CellValue::from_rows(vec![vec![num(0.335), num(0.335), num(0.335)]]);
     let result = f.call(&[xs, ps, num(1.0), num(3.0)]);
-    // Sum = 1.005, which should be within tolerance
-    assert!(
-        matches!(result, CellValue::Number(_)),
-        "Expected number with loose tolerance, got {:?}",
-        result
-    );
+    assert_err(result, CellError::Num, "PROB sum=1.005");
 }
 
 #[test]
@@ -833,6 +830,20 @@ fn test_prob_invalid_probability() {
 }
 
 #[test]
+fn test_prob_zero_probability_is_valid() {
+    let reg = crate::FunctionRegistry::new();
+    assert_num(
+        reg.call(
+            "PROB",
+            &[arr(vec![1.0, 2.0]), arr(vec![0.0, 1.0]), num(1.0)],
+        ),
+        0.0,
+        1e-12,
+        "PROB p=0",
+    );
+}
+
+#[test]
 fn test_prob_sum_not_one() {
     let reg = crate::FunctionRegistry::new();
     assert_err(
@@ -843,6 +854,45 @@ fn test_prob_sum_not_one() {
         CellError::Num,
         "PROB sum!=1",
     );
+}
+
+#[test]
+fn test_prob_near_unit_sum_is_still_invalid() {
+    let reg = crate::FunctionRegistry::new();
+    assert_err(
+        reg.call(
+            "PROB",
+            &[arr(vec![1.0, 2.0]), arr(vec![0.5, 0.5000000001]), num(1.0)],
+        ),
+        CellError::Num,
+        "PROB sum=1+1e-10",
+    );
+}
+
+#[test]
+fn test_prob_common_fraction_totals_are_valid() {
+    let reg = crate::FunctionRegistry::new();
+    let thirds = reg.call(
+        "PROB",
+        &[
+            arr(vec![1.0, 2.0, 3.0]),
+            arr(vec![1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0]),
+            num(1.0),
+            num(3.0),
+        ],
+    );
+    assert!(matches!(thirds, CellValue::Number(_)), "thirds: {thirds:?}");
+
+    let tenths = reg.call(
+        "PROB",
+        &[
+            arr((1..=10).map(f64::from).collect()),
+            arr(vec![0.1; 10]),
+            num(1.0),
+            num(10.0),
+        ],
+    );
+    assert!(matches!(tenths, CellValue::Number(_)), "tenths: {tenths:?}");
 }
 
 #[test]
@@ -858,4 +908,52 @@ fn test_prob_no_match() {
         1e-10,
         "PROB no match",
     );
+}
+
+#[test]
+fn paired_statistics_propagate_errors_with_or_without_diagnostics() {
+    let registry = crate::FunctionRegistry::new();
+    for name in [
+        "SLOPE",
+        "INTERCEPT",
+        "RSQ",
+        "STEYX",
+        "CORREL",
+        "PEARSON",
+        "COVAR",
+        "COVARIANCE.P",
+        "COVARIANCE.S",
+        "FORECAST",
+        "FORECAST.LINEAR",
+    ] {
+        for error in [
+            CellError::Name,
+            CellError::Ref,
+            CellError::Div0,
+            CellError::Num,
+            CellError::Value,
+            CellError::Na,
+        ] {
+            for diagnostic in [false, true] {
+                let error_value = if diagnostic {
+                    CellValue::error_with_message(error, "source observation failed")
+                } else {
+                    CellValue::Error(error, None)
+                };
+                for erroneous in [
+                    error_value.clone(),
+                    CellValue::from_rows(vec![vec![num(1.0), error_value, num(3.0)]]),
+                ] {
+                    for error_argument in 0..2 {
+                        let mut args = vec![arr(vec![2.0, 4.0, 6.0]), arr(vec![1.0, 2.0, 3.0])];
+                        args[error_argument] = erroneous.clone();
+                        if name.starts_with("FORECAST") {
+                            args.insert(0, num(4.0));
+                        }
+                        assert_err(registry.call(name, &args), error, name);
+                    }
+                }
+            }
+        }
+    }
 }

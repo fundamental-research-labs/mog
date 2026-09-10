@@ -156,6 +156,17 @@ fn page_setup_all_fields() {
     assert_eq!(ps.copies, Some(2));
 }
 
+#[test]
+fn page_setup_preserves_signed_dpi_limits() {
+    let ps = PageSetup {
+        horizontal_dpi: Some(i32::MIN),
+        vertical_dpi: Some(i32::MAX),
+        ..Default::default()
+    };
+    assert_eq!(ps.horizontal_dpi, Some(i32::MIN));
+    assert_eq!(ps.vertical_dpi, Some(i32::MAX));
+}
+
 // --------------------------------------------------
 // DisplayUnitKind + DisplayUnits
 // --------------------------------------------------

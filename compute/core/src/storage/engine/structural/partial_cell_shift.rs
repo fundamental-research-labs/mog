@@ -211,7 +211,6 @@ impl ComputeEngine {
             &mut recalc,
             positions,
         );
-        self.security.bump_structure_version();
         self.finish_structure_change(sheet_id, recalc, None)
     }
 
@@ -230,7 +229,6 @@ impl ComputeEngine {
             &mut recalc,
             positions,
         );
-        self.security.bump_structure_version();
         self.finish_structure_change(sheet_id, recalc, None)
     }
 

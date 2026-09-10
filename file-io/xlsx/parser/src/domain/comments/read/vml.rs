@@ -1,18 +1,43 @@
 use crate::domain::comments::types::CommentShape;
 use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
+use crate::infra::vml_presentation::parse_style_dimension;
 use crate::infra::xml::{parse_string_attr, parse_string_attr_verbatim};
-use domain_types::{VmlStyleDimensionInfo, VmlStyleDimensionStatus};
 
 /// Parse VML shapes for comment positioning.
 pub fn parse_vml_shapes(xml: &[u8]) -> Vec<CommentShape> {
     let mut shapes = Vec::new();
     let mut pos = 0;
+    let document = std::str::from_utf8(xml)
+        .ok()
+        .and_then(crate::infra::vml_presentation::elements);
 
     while let Some(shape_start) = find_tag_simd(xml, b"v:shape", pos) {
         let shape_end = find_closing_tag(xml, b"v:shape", shape_start).unwrap_or(xml.len());
+        let close_end = find_gt_simd(xml, shape_end).map_or(shape_end, |end| end + 1);
 
         if has_note_client_data(&xml[shape_start..shape_end]) {
-            if let Some(shape) = parse_vml_shape(&xml[shape_start..shape_end]) {
+            if let Some(mut shape) = parse_vml_shape(&xml[shape_start..shape_end]) {
+                if let Some((root, children)) = &document {
+                    shape.presentation = crate::infra::vml_presentation::capture_shape(
+                        &xml[shape_start..close_end],
+                        root,
+                        children,
+                        domain_types::VmlCellAnchor {
+                            left_column: shape.left_column,
+                            left_offset: i64::from(shape.left_offset),
+                            top_row: shape.top_row,
+                            top_offset: i64::from(shape.top_offset),
+                            right_column: shape.right_column,
+                            right_offset: i64::from(shape.right_offset),
+                            bottom_row: shape.bottom_row,
+                            bottom_offset: i64::from(shape.bottom_offset),
+                        },
+                        shape.visible,
+                    );
+                    if let Some(presentation) = &mut shape.presentation {
+                        presentation.source_order = shapes.len() as u32;
+                    }
+                }
                 shapes.push(shape);
             }
         }
@@ -155,84 +180,6 @@ fn column_to_ref(col: u32, row: u32) -> String {
     }
 
     format!("{}{}", col_str, row + 1)
-}
-
-fn parse_style_dimension(style: &str, property: &str) -> Option<VmlStyleDimensionInfo> {
-    let value = style
-        .split(';')
-        .filter_map(|declaration| declaration.split_once(':'))
-        .find_map(|(name, value)| {
-            name.trim()
-                .eq_ignore_ascii_case(property)
-                .then_some(value.trim())
-        })?;
-    Some(parse_vml_style_dimension(value))
-}
-
-fn parse_vml_style_dimension(value: &str) -> VmlStyleDimensionInfo {
-    let raw = value.trim().to_string();
-    if raw.is_empty() {
-        return VmlStyleDimensionInfo {
-            raw,
-            normalized_pt: None,
-            status: VmlStyleDimensionStatus::Malformed,
-            unit: None,
-        };
-    }
-
-    let split_at = raw
-        .char_indices()
-        .find_map(|(idx, ch)| {
-            (!(ch.is_ascii_digit() || matches!(ch, '+' | '-' | '.'))).then_some(idx)
-        })
-        .unwrap_or(raw.len());
-    let (number, unit) = raw.split_at(split_at);
-    let unit = unit.trim();
-    let Ok(amount) = number.trim().parse::<f64>() else {
-        let unit = (!unit.is_empty()).then(|| unit.to_ascii_lowercase());
-        return VmlStyleDimensionInfo {
-            raw,
-            normalized_pt: None,
-            status: VmlStyleDimensionStatus::Malformed,
-            unit,
-        };
-    };
-
-    if unit.is_empty() {
-        return VmlStyleDimensionInfo {
-            raw,
-            normalized_pt: (amount == 0.0).then_some(0.0),
-            status: if amount == 0.0 {
-                VmlStyleDimensionStatus::UnitlessZero
-            } else {
-                VmlStyleDimensionStatus::UnsupportedUnit
-            },
-            unit: None,
-        };
-    }
-
-    let unit_lower = unit.to_ascii_lowercase();
-    let normalized_pt = match unit_lower.as_str() {
-        "pt" => Some(amount),
-        "in" => Some(amount * 72.0),
-        "cm" => Some(amount * 72.0 / 2.54),
-        "mm" => Some(amount * 72.0 / 25.4),
-        "pc" => Some(amount * 12.0),
-        // CSS pixel semantics at 96 DPI: 1px = 0.75pt.
-        "px" => Some(amount * 0.75),
-        _ => None,
-    };
-
-    VmlStyleDimensionInfo {
-        raw,
-        normalized_pt,
-        status: if normalized_pt.is_some() {
-            VmlStyleDimensionStatus::Supported
-        } else {
-            VmlStyleDimensionStatus::UnsupportedUnit
-        },
-        unit: Some(unit_lower),
-    }
 }
 
 fn parse_u32_content(xml: &[u8]) -> Option<u32> {

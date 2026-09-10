@@ -31,7 +31,7 @@ fn range_ref(sheet: SheetId, r0: u32, c0: u32, r1: u32, c1: u32) -> ASTNode {
 }
 
 // -----------------------------------------------------------------------
-// SUBTOTAL func codes 1-11: always include all rows (even hidden)
+// SUBTOTAL func codes 1-11: include manually hidden rows
 // -----------------------------------------------------------------------
 
 #[test]
@@ -219,7 +219,7 @@ fn aggregate_option_5_ignore_hidden_and_nested() {
     m.set_row_hidden(&s, 3, true);
     let ctx = make_ctx(&m, s);
 
-    // AGGREGATE(9, 5, A1:A5) = SUM, option 5 = ignore hidden + nested
+    // AGGREGATE(9, 5, A1:A5) = SUM, option 5 = ignore hidden
     // Visible: 0+20+40 = 60
     let node = func(
         "AGGREGATE",
@@ -240,7 +240,7 @@ fn aggregate_option_4_no_hidden_skipping() {
     m.set_row_hidden(&s, 3, true);
     let ctx = make_ctx(&m, s);
 
-    // AGGREGATE(9, 4, A1:A5) = SUM, option 4 = ignore nested only (NOT hidden)
+    // AGGREGATE(9, 4, A1:A5) = SUM, option 4 = ignore nothing
     // All rows: 0+10+20+30+40 = 100
     let node = func(
         "AGGREGATE",

@@ -14,10 +14,6 @@ impl ComputeEngine {
     pub fn storage(&self) -> &WorkbookStorage {
         &self.stores.storage
     }
-    /// Access security state for engine primitives.
-    pub fn security(&self) -> &crate::storage::security_state::SecurityState {
-        &self.security
-    }
     pub fn cell_store(&self) -> &CellStore {
         &self.cell_store
     }

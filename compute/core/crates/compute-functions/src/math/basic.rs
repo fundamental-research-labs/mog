@@ -239,20 +239,6 @@ impl PureFunction for FnQuotient {
                 CellValue::error_with_message(CellError::Div0, "QUOTIENT: divisor must not be 0")
             }
             (Ok(n), Ok(d)) => {
-                // When both operands are very tiny, precision is
-                // unreliable — return 0 for most cases to match Excel.
-                // However, when both operands are the exact same value
-                // (bitwise equal), QUOTIENT(x,x) = 1 and QUOTIENT(x,-x) = -1.
-                const TINY: f64 = 1e-300;
-                if n != 0.0 && d != 0.0 && n.abs() < TINY && d.abs() < TINY {
-                    if n == d {
-                        return CellValue::number(1.0);
-                    }
-                    if n == -d {
-                        return CellValue::number(-1.0);
-                    }
-                    return CellValue::number(0.0);
-                }
                 let raw = n / d;
                 if raw.is_infinite() || raw.is_nan() {
                     return CellValue::error_with_message(
@@ -260,22 +246,9 @@ impl PureFunction for FnQuotient {
                         format!("QUOTIENT: {n}/{d} is not finite"),
                     );
                 }
-                // Snap values very close to zero to exactly zero.
-                // When the true quotient is mathematically 0, floating-point
-                // rounding can produce a tiny value whose trunc() is wrong.
-                if raw.abs() < f64::EPSILON {
-                    return CellValue::number(0.0);
-                }
-                // QUOTIENT = trunc(n/d).  Simply truncate toward zero.
-                // We do NOT snap epsilon-close values to nearby integers,
-                // because snapping can cross a trunc() boundary and change
-                // the result (e.g. -0.9999999999999994 would snap to -1.0,
-                // but QUOTIENT should return 0).  The only case where plain
-                // trunc() could be wrong is when n/d is mathematically an
-                // exact integer but FP division rounds down by 1 ULP (e.g.
-                // 3.0/1.0 → 2.999...96).  In practice, IEEE 754 division
-                // is correctly rounded, so n/d for exact-integer quotients
-                // always produces the exact integer.
+                // Truncate the quotient toward zero at every magnitude. Even
+                // tiny operands can have a large ratio; neither operand size
+                // nor proximity to an integer changes the truncation contract.
                 let r = raw.trunc();
                 if r.is_infinite() || r.is_nan() {
                     CellValue::error_with_message(

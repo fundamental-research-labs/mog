@@ -9,8 +9,14 @@ impl HistoryPatch {
         match self {
             Self::Cell(p) => p.swap(&mut engine.stores, &mut engine.cell_store, effects),
             Self::Relocate(p) => p.swap(&mut engine.stores, &mut engine.cell_store, effects),
-            Self::Structure(p) => p.swap(&mut engine.stores, &mut engine.cell_store, effects),
-            Self::Sheet(p) => p.swap(&mut engine.stores, &mut engine.cell_store, effects),
+            Self::Structure(p) => {
+                engine.stores.storage.invalidate_cell_metadata_projection();
+                p.swap(&mut engine.stores, &mut engine.cell_store, effects)
+            }
+            Self::Sheet(p) => {
+                engine.stores.storage.invalidate_cell_metadata_projection();
+                p.swap(&mut engine.stores, &mut engine.cell_store, effects)
+            }
             Self::SheetExtent(p) => p.swap(&mut engine.stores, &mut engine.cell_store, effects),
             Self::Metadata(p) => {
                 p.swap(&mut engine.stores.storage, &mut engine.cell_store, effects)
@@ -45,6 +51,11 @@ impl ComputeEngine {
         let post_settings =
             crate::storage::workbook::settings::get_settings(&self.stores.storage.metadata);
         self.sync_runtime_workbook_settings(&pre_settings, &post_settings);
+        crate::storage::engine::cell_metadata::refresh(
+            &self.stores.storage,
+            &mut self.cell_store,
+            self.stores.layout_metrics,
+        );
         let outcome = self.finish_history_replay(&mut effects);
         self.history.replaying = false;
         // Even a calculation error leaves the authored mutation committed and
@@ -154,8 +165,13 @@ impl ComputeEngine {
         }
         self.restore_history_cse_selections();
         let seeds: Vec<CellId> = effects.cells.keys().copied().collect();
-        let topology =
-            effects.topology || effects.named_ranges || effects.tables || effects.settings;
+        let metadata_changed = self.metadata_requires_recalc();
+        let topology = effects.topology
+            || effects.named_ranges
+            || effects.tables
+            || effects.settings
+            || metadata_changed
+            || !effects.format_rects.is_empty();
         let mut recalc = if effects.recalc || topology {
             self.stores.compute.replay_native_history(
                 &mut self.cell_store,
@@ -167,6 +183,7 @@ impl ComputeEngine {
         } else {
             RecalcResult::empty()
         };
+        self.mark_metadata_evaluated();
         self.restore_history_cse_selections();
         // A removed sparse entry still needs an explicit visible clear. Also
         // include direct formula edits whose restored cached result was unchanged.

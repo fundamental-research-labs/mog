@@ -154,6 +154,9 @@ fn overlay_x14_data_bar(
         x14.negative_bar_border_color_same_as_positive_attr_present;
     base.axis_position = x14.axis_position;
     base.axis_position_attr_present = x14.axis_position_attr_present;
+    if x14.color != ooxml_types::cond_format::CfColor::default() {
+        base.color = x14.color.clone();
+    }
     base.axis_color = x14.axis_color.clone();
     base.border_color = x14.border_color.clone();
     base.negative_fill_color = x14.negative_fill_color.clone();

@@ -72,6 +72,10 @@ pub(crate) fn print_errors_from_bytes(bytes: &[u8]) -> PrintErrors {
 /// Page setup settings (CT_PageSetup)
 ///
 /// Controls paper size, orientation, scaling, and other print layout settings.
+///
+/// Excel accepts `scale="0"` as its automatic-scaling mode even though the
+/// standard's nonzero scale range is 10..=400. Keep that sentinel distinct
+/// from an explicit 10% scale while clamping unsupported nonzero values.
 #[derive(Debug, Clone, Default)]
 pub struct PageSetup {
     /// Paper size ID (None = attribute absent in original XML)
@@ -82,12 +86,27 @@ pub struct PageSetup {
     pub paper_height: Option<UniversalMeasure>,
     /// Page orientation
     pub orientation: Orientation,
-    /// Scale percentage (None = attribute absent, Some(10..=400))
-    pub scale: Option<u16>,
-    /// Fit to width in pages (None = attribute absent, Some(0) = auto/unlimited)
-    pub fit_to_width: Option<u16>,
-    /// Fit to height in pages (None = attribute absent, Some(0) = auto/unlimited)
-    pub fit_to_height: Option<u16>,
+    /// Scale percentage (None = attribute absent, Some(0) = Excel automatic,
+    /// Some(10..=400) = explicit percentage).
+    ///
+    /// CT_PageSetup uses an unsigned integer representation. Unsupported
+    /// nonzero values are clamped to the supported range, while zero is
+    /// retained as Excel's automatic-scaling sentinel. Retaining the
+    /// schema-width type keeps the parser/domain bridge from narrowing this
+    /// field.
+    pub scale: Option<u32>,
+    /// Fit to width in pages (None = attribute absent, Some(0) = auto/unlimited).
+    ///
+    /// CT_PageSetup declares this value as `xsd:unsignedInt`; keep the full
+    /// schema width here so a valid authored value is not truncated while
+    /// passing through the parser.
+    pub fit_to_width: Option<u32>,
+    /// Fit to height in pages (None = attribute absent, Some(0) = auto/unlimited).
+    ///
+    /// CT_PageSetup declares this value as `xsd:unsignedInt`; keep the full
+    /// schema width here so a valid authored value is not truncated while
+    /// passing through the parser.
+    pub fit_to_height: Option<u32>,
     /// First page number (None = attribute absent, Some(0) = auto)
     pub first_page_number: Option<u32>,
     /// Use first page number setting
@@ -106,13 +125,25 @@ pub struct PageSetup {
     pub horizontal_dpi: Option<u32>,
     /// Vertical DPI
     pub vertical_dpi: Option<u32>,
-    /// Number of copies to print (None = attribute absent, Some(n) = explicit)
+    /// Number of copies to print (None = attribute absent, Some(n) = explicit).
+    /// Legacy `copies="0"` is normalized to the supported minimum of one.
     pub copies: Option<u32>,
     /// Whether to use printer defaults for unspecified settings.
     /// None means the attribute was absent in the original XML.
     pub use_printer_defaults: Option<bool>,
     /// Relationship ID pointing to the printer settings binary part
     pub r_id: Option<String>,
+}
+
+/// Normalize a page-setup scale at a boundary where a caller can provide a
+/// raw domain value. Excel's `0` automatic mode is distinct from 10%; only
+/// unsupported nonzero values use the standard's 10..=400 range.
+pub(crate) fn normalize_scale(value: u32) -> u32 {
+    if value == 0 {
+        0
+    } else {
+        value.clamp(10, 400)
+    }
 }
 
 impl PageSetup {
@@ -159,17 +190,17 @@ impl PageSetup {
 
         // Parse scale
         if let Some(value) = parse_u32_attr(element, b"scale=\"") {
-            setup.scale = Some(value.min(400).max(10) as u16);
+            setup.scale = Some(normalize_scale(value));
         }
 
         // Parse fitToWidth
         if let Some(value) = parse_u32_attr(element, b"fitToWidth=\"") {
-            setup.fit_to_width = Some(value as u16);
+            setup.fit_to_width = Some(value);
         }
 
         // Parse fitToHeight
         if let Some(value) = parse_u32_attr(element, b"fitToHeight=\"") {
-            setup.fit_to_height = Some(value as u16);
+            setup.fit_to_height = Some(value);
         }
 
         // Parse firstPageNumber
@@ -426,11 +457,42 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_page_setup_scale_zero_is_automatic_and_copies_zero_is_clamped() {
+        let xml = br#"<worksheet><pageSetup scale="0" copies="0"/></worksheet>"#;
+        let setup = PageSetup::parse(xml).unwrap();
+        assert_eq!(setup.scale, Some(0));
+        assert_eq!(setup.copies, Some(1));
+    }
+
+    #[test]
     fn test_parse_page_setup_fit_to_page() {
         let xml = br#"<worksheet><pageSetup fitToWidth="1" fitToHeight="2"/></worksheet>"#;
         let setup = PageSetup::parse(xml).unwrap();
         assert_eq!(setup.fit_to_width, Some(1));
         assert_eq!(setup.fit_to_height, Some(2));
+    }
+
+    #[test]
+    fn test_parse_page_setup_fit_to_page_preserves_unsigned_int_width() {
+        let xml =
+            br#"<worksheet><pageSetup fitToWidth="65536" fitToHeight="4294967295"/></worksheet>"#;
+        let setup = PageSetup::parse(xml).unwrap();
+        assert_eq!(setup.fit_to_width, Some(65_536));
+        assert_eq!(setup.fit_to_height, Some(u32::MAX));
+    }
+
+    #[test]
+    fn test_parse_page_setup_unsigned_int_attributes_preserves_schema_width() {
+        let xml = br#"<worksheet><pageSetup paperSize="4294967295" scale="4294967295" fitToWidth="4294967295" fitToHeight="65536" firstPageNumber="4294967295" horizontalDpi="4294967295" verticalDpi="65536" copies="4294967295"/></worksheet>"#;
+        let setup = PageSetup::parse(xml).unwrap();
+        assert_eq!(setup.paper_size, Some(PaperSize::Other(u32::MAX)));
+        assert_eq!(setup.scale, Some(400));
+        assert_eq!(setup.fit_to_width, Some(u32::MAX));
+        assert_eq!(setup.fit_to_height, Some(65_536));
+        assert_eq!(setup.first_page_number, Some(u32::MAX));
+        assert_eq!(setup.horizontal_dpi, Some(u32::MAX));
+        assert_eq!(setup.vertical_dpi, Some(65_536));
+        assert_eq!(setup.copies, Some(u32::MAX));
     }
 
     #[test]

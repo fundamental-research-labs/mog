@@ -150,9 +150,11 @@ pub fn unescape_column_name(escaped: &str) -> String {
     let mut chars = inner.chars().peekable();
     while let Some(ch) = chars.next() {
         match ch {
-            '\'' if chars.peek() == Some(&'\'') => {
-                chars.next();
-                result.push('\'');
+            '\'' if chars
+                .peek()
+                .is_some_and(|next| matches!(next, '\'' | '[' | ']' | '#' | '@')) =>
+            {
+                result.push(chars.next().unwrap());
             }
             ']' if chars.peek() == Some(&']') => {
                 chars.next();
@@ -347,7 +349,17 @@ fn find_matching_bracket(s: &str, start: usize) -> Option<usize> {
         return None;
     }
     let mut i = start + 1;
+    let mut in_quote = false;
     while i < bytes.len() {
+        if !in_quote && is_apostrophe_escape(bytes, i) {
+            i += 2;
+            continue;
+        }
+        if bytes[i] == b'\'' {
+            in_quote = !in_quote;
+            i += 1;
+            continue;
+        }
         if bytes[i] == b']' {
             // Check if it's an escape sequence ]]
             if i + 1 < bytes.len() && bytes[i + 1] == b']' {
@@ -403,6 +415,10 @@ pub fn find_outer_matching_bracket(s: &str, start: usize) -> Option<usize> {
     let mut i = start + 1;
     let mut in_quote = false;
     while i < bytes.len() {
+        if !in_quote && is_apostrophe_escape(bytes, i) {
+            i += 2;
+            continue;
+        }
         if bytes[i] == b'\'' {
             in_quote = !in_quote;
             i += 1;
@@ -449,8 +465,21 @@ fn split_top_level(s: &str, delimiter: char) -> Vec<String> {
     let mut current = String::new();
     let bytes = s.as_bytes();
     let mut i = 0;
+    let mut in_quote = false;
 
     while i < bytes.len() {
+        if !in_quote && is_apostrophe_escape(bytes, i) {
+            current.push('\'');
+            current.push(bytes[i + 1] as char);
+            i += 2;
+            continue;
+        }
+        if bytes[i] == b'\'' {
+            in_quote = !in_quote;
+            current.push('\'');
+            i += 1;
+            continue;
+        }
         // Handle [[ and ]] escape sequences (ASCII so byte-safe)
         if i + 1 < bytes.len() {
             if bytes[i] == b'[' && bytes[i + 1] == b'[' {
@@ -510,6 +539,14 @@ fn split_top_level(s: &str, delimiter: char) -> Vec<String> {
     }
 
     parts
+}
+
+/// Excel quotes each special structured-reference character with an apostrophe.
+fn is_apostrophe_escape(bytes: &[u8], index: usize) -> bool {
+    bytes[index] == b'\''
+        && bytes
+            .get(index + 1)
+            .is_some_and(|next| matches!(next, b'\'' | b'[' | b']' | b'#' | b'@'))
 }
 
 /// Parse a special item keyword (after the `#` prefix).

@@ -49,6 +49,66 @@ fn test_filter_numeric_include() {
 }
 
 #[test]
+fn test_filter_propagates_errors_in_include_mask_for_every_supported_shape() {
+    let f = FnFilter;
+
+    let row_array = CellValue::from_rows(vec![vec![num(10.0)], vec![num(20.0)]]);
+    let row_mask = CellValue::from_rows(vec![vec![bool_val(true)], vec![err(CellError::Na)]]);
+    assert_eq!(
+        f.call(&[row_array, row_mask, text("fallback")]),
+        err(CellError::Na)
+    );
+
+    let column_array = CellValue::from_rows(vec![vec![num(1.0), num(2.0)]]);
+    let column_mask = CellValue::from_rows(vec![vec![bool_val(true), err(CellError::Div0)]]);
+    assert_eq!(f.call(&[column_array, column_mask]), err(CellError::Div0));
+
+    let matrix_array =
+        CellValue::from_rows(vec![vec![num(1.0), num(2.0)], vec![num(3.0), num(4.0)]]);
+    let matrix_mask = CellValue::from_rows(vec![
+        vec![bool_val(false), bool_val(false)],
+        vec![err(CellError::Value), bool_val(false)],
+    ]);
+    assert_eq!(f.call(&[matrix_array, matrix_mask]), err(CellError::Value));
+}
+
+#[test]
+fn test_filter_uses_excel_boolean_coercion_for_include_mask() {
+    let f = FnFilter;
+    let array = CellValue::from_rows(vec![
+        vec![num(10.0)],
+        vec![num(20.0)],
+        vec![num(30.0)],
+        vec![num(40.0)],
+        vec![num(50.0)],
+    ]);
+    let mask = CellValue::from_rows(vec![
+        vec![bool_val(true)],
+        vec![num(0.0)],
+        vec![text("TRUE")],
+        vec![text("FALSE")],
+        vec![CellValue::Null],
+    ]);
+    let result = f.call(&[array, mask]);
+    match result {
+        CellValue::Array(array) => {
+            assert_eq!(array.rows(), 2);
+            assert_eq!(array.row(0), vec![num(10.0)]);
+            assert_eq!(array.row(1), vec![num(30.0)]);
+        }
+        _ => panic!("Expected array"),
+    }
+
+    for invalid in [text("not a Boolean"), text("")] {
+        assert_eq!(
+            f.call(&[num(1.0), invalid]),
+            err(CellError::Value),
+            "an include value that cannot convert to Boolean must fail"
+        );
+    }
+}
+
+#[test]
 fn test_filter_column_filter() {
     // Single-row include → filter columns
     let f = FnFilter;

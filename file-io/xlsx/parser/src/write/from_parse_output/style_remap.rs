@@ -2,7 +2,7 @@ use crate::domain::styles::types::CellXfDef;
 use crate::domain::styles::write::StylesWriter;
 use domain_types::{ParseOutput, WorkbookStylesheet};
 
-use super::styles::{append_generated_cell_xf, build_styles, output_references_style_ids};
+use super::styles::{append_generated_cell_xf, build_styles};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct StyleExportRemapper {
@@ -34,20 +34,19 @@ pub(super) struct StyleExportPlan {
 
 #[must_use]
 pub(super) fn build_style_export_plan(output: &ParseOutput) -> StyleExportPlan {
-    // Cells without `s` still inherit Normal (xf 0). Treat any cell as a live
-    // style use so we do not rewrite the workbook font to Calibri 11. Empty
-    // sheets with no style ids still regenerate defaults (unused xf drop).
-    let palette = if output_references_style_ids(output) || sheets_have_cells(output) {
-        output.style_palette.as_slice()
-    } else {
-        &[]
-    };
+    // Palette entry 0 is implicitly used by every unstyled cell, including
+    // future cells in an empty sheet. Deleting explicit style references does
+    // not delete the workbook's Normal style or its imported registry.
+    let palette = output.style_palette.as_slice();
 
     let Some(stylesheet) = output.workbook_stylesheet.as_ref() else {
         return generated_style_export_plan(palette);
     };
     let stylesheet = stylesheet.normalized();
     if !can_replay_imported_styles(&stylesheet, palette) {
+        // A populated sheet can inherit Normal even when its cells carry no
+        // explicit style IDs and the modeled palette is absent. Preserve the
+        // imported stylesheet in that case instead of inventing defaults.
         if palette.is_empty() && sheets_have_cells(output) && !stylesheet.cell_xfs.is_empty() {
             return StyleExportPlan {
                 writer: StylesWriter::from_workbook_stylesheet(&stylesheet),
@@ -56,7 +55,17 @@ pub(super) fn build_style_export_plan(output: &ParseOutput) -> StyleExportPlan {
                 },
             };
         }
-        return generated_style_export_plan(palette);
+
+        let mut plan = generated_style_export_plan(palette);
+        // Rebuilding cell XFs must not discard unrelated stylesheet metadata.
+        // DXFs (including extension references) are reconciled independently.
+        plan.writer.root_namespaces =
+            crate::domain::styles::write::StyleRootNamespaces::from_attrs_and_mce(
+                stylesheet.root_namespace_attrs,
+                stylesheet.root_mce_attributes,
+            );
+        plan.writer.ext_lst_raw = stylesheet.ext_lst_xml;
+        return plan;
     }
 
     let mut writer = StylesWriter::from_workbook_stylesheet(&stylesheet);

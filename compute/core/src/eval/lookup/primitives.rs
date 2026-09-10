@@ -114,6 +114,43 @@ pub(in crate::eval::lookup) fn approx_match_binary_search<'a>(
     }
 }
 
+/// Return whether numeric MATCH type -1 is impossible from the first value in
+/// a sorted candidate list.
+///
+/// MATCH type -1 searches a descending list for the smallest value greater
+/// than or equal to the lookup. In a valid descending list, the first value
+/// is the maximum, so a larger lookup cannot match. This helper only inspects
+/// the first source value and does not validate the full sort order.
+///
+/// The endpoint proof is deliberately limited to numeric values. Existing
+/// compatibility behavior uses binary search for text that is ordered by an
+/// underlying numeric field rather than by lexical text order; applying a
+/// lexical endpoint check would turn that established result into #N/A.
+pub(in crate::eval::lookup) fn approximate_match_descending_numeric_endpoint_is_impossible(
+    lookup: &CellValue,
+    values: &[CellValue],
+) -> bool {
+    let Some(first) = values.first() else {
+        return false;
+    };
+
+    if !matches!(
+        (lookup, first),
+        (CellValue::Number(_), CellValue::Number(_))
+    ) {
+        return false;
+    }
+
+    let Some(ordering) = cell_value_cmp_for_lookup(lookup, first) else {
+        // Preserve the existing error/blank filtering behavior.
+        return false;
+    };
+
+    // A descending list starts at its maximum. Nothing can be >= lookup when
+    // lookup is above that first comparable value.
+    ordering > 0
+}
+
 /// Scalar MATCH: find `lookup` in `flat` using `match_type` semantics.
 /// Returns 1-based position or CellError::Na / CellError::Value.
 pub(in crate::eval::lookup) fn match_scalar_in_flat(
@@ -153,6 +190,9 @@ pub(in crate::eval::lookup) fn match_scalar_in_flat(
         }
         -1 => {
             // Smallest value >= lookup (array must be descending)
+            if approximate_match_descending_numeric_endpoint_is_impossible(lookup, flat) {
+                return CellValue::Error(CellError::Na, None);
+            }
             match approx_match_binary_search(lookup, flat.iter().enumerate(), false) {
                 Some(i) => {
                     // Backtrack to first duplicate (Excel returns first match position)
@@ -217,6 +257,10 @@ pub(in crate::eval::lookup) fn index_scalar(
 
     let (row_idx, col_idx) =
         index_effective_position(row_idx, col_idx, has_col_arg, num_rows, num_cols);
+
+    if row_idx > num_rows || col_idx > num_cols {
+        return CellValue::Error(CellError::Ref, None);
+    }
 
     if row_idx == 0 && col_idx == 0 {
         return CellValue::Array(Arc::new(source.clone()));

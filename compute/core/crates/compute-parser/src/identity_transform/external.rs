@@ -56,6 +56,13 @@ pub(super) fn emit_external_name_ref(
     refs: &mut Vec<IdentityFormulaRef>,
     out: &mut String,
 ) -> Result<(), ParseError> {
+    if workbook.is_current_workbook() {
+        // Local named references stay in the formula template, just like
+        // unqualified names. They must never allocate an external link.
+        out.push_str("[0]!");
+        out.push_str(name);
+        return Ok(());
+    }
     let binder = external_binder.ok_or_else(external_binding_error)?;
     let link_id = binder.bind_external_workbook(workbook)?;
     let idx = refs.len();

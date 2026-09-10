@@ -8,6 +8,8 @@ mod chart_types;
 mod labels;
 mod layout;
 mod series;
+#[cfg(test)]
+mod series_order_tests;
 mod shape_props;
 mod structure;
 mod text_body;
@@ -15,6 +17,8 @@ mod util;
 
 pub(crate) use shape_props::emit_shape_properties;
 pub(crate) use text_body::emit_text_body;
+
+use std::collections::BTreeSet;
 
 use crate::write::xml_writer::XmlWriter;
 
@@ -150,6 +154,53 @@ pub fn serialize_chart_space(cs: &ChartSpace) -> Vec<u8> {
     w.finish()
 }
 
+/// Collect relationship IDs used by chart picture fills from emitted XML.
+///
+/// Chart picture relationships belong to the chart part, while the image
+/// resources are selected by the XLSX package writer.  Reading the IDs from
+/// the bytes that will actually be emitted keeps that closure correct for both
+/// canonical reconstruction and opaque imported replay.  `quick-xml` also
+/// decodes XML entities in attribute values, so an authored ID such as
+/// `rId&amp;image` remains the same model ID throughout export.
+pub fn chart_picture_relationship_ids_from_xml(xml: &[u8]) -> BTreeSet<String> {
+    use quick_xml::events::Event;
+
+    let mut reader = quick_xml::Reader::from_reader(xml);
+    let mut buffer = Vec::new();
+    let mut relationship_ids = BTreeSet::new();
+
+    loop {
+        match reader.read_event_into(&mut buffer) {
+            Ok(Event::Start(element)) | Ok(Event::Empty(element))
+                if element.local_name().as_ref() == b"blip" =>
+            {
+                for attribute in element.attributes().with_checks(false).flatten() {
+                    let local_name = attribute.key.local_name();
+                    if !matches!(local_name.as_ref(), b"embed" | b"link") {
+                        continue;
+                    }
+                    if let Ok(value) = attribute.unescape_value() {
+                        if !value.is_empty() {
+                            relationship_ids.insert(value.into_owned());
+                        }
+                    }
+                }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buffer.clear();
+    }
+
+    relationship_ids
+}
+
+/// Collect picture relationship IDs from a typed chart definition using the
+/// same canonical serialization path used by chart export.
+pub fn chart_picture_relationship_ids(cs: &ChartSpace) -> BTreeSet<String> {
+    chart_picture_relationship_ids_from_xml(&serialize_chart_space(cs))
+}
+
 // ============================================================================
 // Chart-level helpers
 // ============================================================================
@@ -260,5 +311,39 @@ fn emit_bool_chart_child(w: &mut XmlWriter, name: &str, value: Option<bool>) {
         w.start_element(name)
             .attr("val", if value { "1" } else { "0" })
             .self_close();
+    }
+}
+
+#[cfg(test)]
+mod picture_relationship_tests {
+    use super::*;
+    use ooxml_types::drawings::{BlipFill, DrawingFill, ShapeProperties};
+
+    #[test]
+    fn picture_relationship_ids_decode_entities_and_only_visit_blip_attrs() {
+        let xml = br#"<c:chartSpace xmlns:c="urn:chart" xmlns:a="urn:drawing" xmlns:r="urn:rel"><c:externalData r:id="outside"/><a:blipFill r:embed="outside-fill"><a:blip r:embed="rId&amp;image" r:link="https://example.test/a&amp;b"/></a:blipFill></c:chartSpace>"#;
+        let ids = chart_picture_relationship_ids_from_xml(xml);
+        assert_eq!(
+            ids,
+            [
+                "https://example.test/a&b".to_string(),
+                "rId&image".to_string()
+            ]
+            .into_iter()
+            .collect()
+        );
+    }
+
+    #[test]
+    fn presence_only_blip_fill_is_emitted() {
+        let chart_space = ChartSpace {
+            sp_pr: Some(ShapeProperties {
+                fill: Some(DrawingFill::Blip(BlipFill::default())),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let xml = String::from_utf8(serialize_chart_space(&chart_space)).expect("UTF-8 XML");
+        assert!(xml.contains("<a:blipFill><a:blip/>") || xml.contains("<a:blipFill><a:blip"));
     }
 }

@@ -139,25 +139,21 @@ pub(in crate::storage::engine) fn build_pixel_layout_for_sheet(
         .as_ref()
         .map(|m| domain_types::units::Points(m.default_row_height))
         .unwrap_or(dimensions::DEFAULT_ROW_HEIGHT);
-    let default_col_width_cw = meta
-        .as_ref()
-        .map(|m| domain_types::units::CharWidth(m.default_col_width))
-        .unwrap_or(dimensions::DEFAULT_COL_WIDTH);
+    let roundtrip_meta = crate::storage::sheet::settings::get_roundtrip_meta(storage, sheet_id);
 
     // Convert canonical → pixels for the PixelLayout (rendering concern)
     let default_row_height_px = meta
         .as_ref()
         .map(|_| domain_types::units::points_to_pixels(default_row_height_pt))
         .unwrap_or_else(|| layout_metrics.default_row_height());
-    let default_col_width_px = meta
-        .as_ref()
-        .map(|_| {
-            domain_types::units::char_width_to_pixels(
-                default_col_width_cw,
-                layout_metrics.column_width_mdw,
-            )
-        })
-        .unwrap_or_else(|| layout_metrics.default_column_width());
+    let default_col_width_px = domain_types::units::resolve_default_column_width(
+        roundtrip_meta
+            .default_col_width
+            .map(domain_types::units::CharWidth),
+        roundtrip_meta.base_col_width,
+        layout_metrics,
+    )
+    .pixels;
 
     // Read custom dimensions (canonical native units) and convert to pixels
     let custom_row_heights: Vec<(usize, domain_types::units::Pixels)> =

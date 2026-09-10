@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use value_types::{CellArray, CellError, CellValue};
 
-use super::common::cell_value_cmp_sort;
-use crate::PureFunction;
+use super::common::{cell_value_cmp_sort, parse_sort_order};
 use crate::helpers::coercion::flatten_values;
+use crate::PureFunction;
 
 pub(in crate::lookup) struct FnSortBy;
 
@@ -46,16 +46,20 @@ impl PureFunction for FnSortBy {
         while i < args.len() {
             let by_flat = flatten_values(&[args[i].clone()]);
             let order = if i + 1 < args.len() {
-                match args[i + 1].coerce_to_number() {
-                    Ok(n) => {
-                        let o = n as i32;
-                        i += 2;
-                        o
-                    }
-                    Err(_) => {
+                match &args[i + 1] {
+                    // The next by_array may follow without an explicit
+                    // sort_order. It is always an array at this layer.
+                    CellValue::Array(_) => {
                         i += 1;
                         1
                     }
+                    value => match parse_sort_order(value) {
+                        Ok(order) => {
+                            i += 2;
+                            order
+                        }
+                        Err(error) => return error,
+                    },
                 }
             } else {
                 i += 1;

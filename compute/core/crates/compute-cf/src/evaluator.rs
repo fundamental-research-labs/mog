@@ -11,6 +11,25 @@ use crate::types::{CFMatchResult, CFRule, CFRuleKind};
 use crate::visual;
 use chrono::NaiveDate;
 use value_types::CellValue;
+use value_types::date_serial::DateSystem;
+
+/// Calendar context for conditional formatting. Cell values and numeric rule
+/// thresholds remain in workbook units; only time-period rules interpret dates.
+#[derive(Debug, Clone, Copy)]
+pub struct CFEvaluationContext {
+    pub now: NaiveDate,
+    pub date_system: DateSystem,
+}
+
+impl CFEvaluationContext {
+    /// Compatibility context for callers using the Excel 1900 date system.
+    pub fn new(now: NaiveDate) -> Self {
+        Self {
+            now,
+            date_system: DateSystem::default(),
+        }
+    }
+}
 
 // =============================================================================
 // Helper: coerce to visual number
@@ -58,6 +77,25 @@ pub fn evaluate_rule_for_cell(
     stats: &RangeStatistics,
     formula_result: Option<&CellValue>,
     now: NaiveDate,
+    has_formula: bool,
+) -> Option<CFMatchResult> {
+    evaluate_rule_for_cell_with_context(
+        value,
+        rule,
+        stats,
+        formula_result,
+        CFEvaluationContext::new(now),
+        has_formula,
+    )
+}
+
+/// Evaluate a rule using the workbook's calendar context and target-cell metadata.
+pub fn evaluate_rule_for_cell_with_context(
+    value: &CellValue,
+    rule: &CFRule,
+    stats: &RangeStatistics,
+    formula_result: Option<&CellValue>,
+    context: CFEvaluationContext,
     has_formula: bool,
 ) -> Option<CFMatchResult> {
     match &rule.kind {
@@ -135,7 +173,12 @@ pub fn evaluate_rule_for_cell(
         }
 
         CFRuleKind::TimePeriod { period } => {
-            if !rules::time_period::evaluate_time_period(value, period, now) {
+            if !rules::time_period::evaluate_time_period_with_date_system(
+                value,
+                period,
+                context.now,
+                context.date_system,
+            ) {
                 return None;
             }
             Some(CFMatchResult::from_style(rule.style.clone()))
@@ -178,14 +221,13 @@ pub fn evaluate_rule_for_cell(
 // CascadeEvaluator
 // =============================================================================
 
-/// Stateful cascade evaluator that tracks stop-if-true per category.
+/// Stateful cascade evaluator that stops all lower-priority rules after a match.
 ///
 /// Captures the cascade logic (stop-if-true + merge) in one place.
 /// Both `evaluate_rules()` and the scheduler delegate to this.
 pub struct CascadeEvaluator {
     result: Option<CFMatchResult>,
-    style_stopped: bool,
-    visual_stopped: bool,
+    stopped: bool,
 }
 
 impl Default for CascadeEvaluator {
@@ -198,20 +240,14 @@ impl CascadeEvaluator {
     pub fn new() -> Self {
         Self {
             result: None,
-            style_stopped: false,
-            visual_stopped: false,
+            stopped: false,
         }
     }
 
-    /// Check if a rule's category is already stopped.
+    /// Check whether a matching higher-priority rule stopped this cell's cascade.
     /// Lets the caller skip expensive work (e.g., formula evaluation).
-    pub fn is_stopped(&self, rule: &CFRule) -> bool {
-        let is_visual = rule.kind.is_visual();
-        if is_visual {
-            self.visual_stopped
-        } else {
-            self.style_stopped
-        }
+    pub fn is_stopped(&self) -> bool {
+        self.stopped
     }
 
     /// Evaluate a single rule and merge the result if it matches.
@@ -237,30 +273,45 @@ impl CascadeEvaluator {
         now: NaiveDate,
         has_formula: bool,
     ) -> &mut Self {
-        let is_visual = rule.kind.is_visual();
+        self.apply_for_cell_with_context(
+            value,
+            rule,
+            stats,
+            formula_result,
+            CFEvaluationContext::new(now),
+            has_formula,
+        )
+    }
 
-        // Skip if this category has been stopped
-        if is_visual && self.visual_stopped {
+    /// Merge a rule using the workbook's calendar context and cell metadata.
+    pub fn apply_for_cell_with_context(
+        &mut self,
+        value: &CellValue,
+        rule: &CFRule,
+        stats: &RangeStatistics,
+        formula_result: Option<&CellValue>,
+        context: CFEvaluationContext,
+        has_formula: bool,
+    ) -> &mut Self {
+        if self.stopped {
             return self;
         }
-        if !is_visual && self.style_stopped {
-            return self;
-        }
 
-        if let Some(rule_result) =
-            evaluate_rule_for_cell(value, rule, stats, formula_result, now, has_formula)
-        {
+        if let Some(rule_result) = evaluate_rule_for_cell_with_context(
+            value,
+            rule,
+            stats,
+            formula_result,
+            context,
+            has_formula,
+        ) {
             self.result = Some(match self.result.take() {
                 Some(existing) => priority::merge_results(existing, rule_result),
                 None => rule_result,
             });
 
             if rule.stop_if_true {
-                if is_visual {
-                    self.visual_stopped = true;
-                } else {
-                    self.style_stopped = true;
-                }
+                self.stopped = true;
             }
         }
 
@@ -280,11 +331,9 @@ impl CascadeEvaluator {
 /// Evaluate multiple CF rules against a cell value.
 ///
 /// Rules should be sorted by priority (lower number = higher priority = first).
-/// Handles stop-if-true with per-category semantics (matching Excel):
-/// - Style rules (CellValue, Formula, Top10, etc.) and visual rules (ColorScale,
-///   DataBar, IconSet) are separate categories.
-/// - `stop_if_true` on a style rule stops only lower-priority style rules.
-/// - `stop_if_true` on a visual rule stops only lower-priority visual rules.
+/// A matching `stop_if_true` rule stops every lower-priority rule for the cell,
+/// including rules with different visual or style properties. A matching rule
+/// with no style still stops the cascade; earlier results remain intact.
 ///
 /// Returns combined `CFMatchResult` from all matching rules, or `None` if no rules match.
 ///
@@ -308,6 +357,24 @@ pub fn evaluate_rules(
     formula_results: &[Option<CellValue>],
     now: NaiveDate,
 ) -> Option<CFMatchResult> {
+    evaluate_rules_with_context(
+        value,
+        rules,
+        stats,
+        formula_results,
+        CFEvaluationContext::new(now),
+    )
+}
+
+/// Evaluate multiple rules in a workbook calendar context. Statistics and
+/// non-calendar rule values retain their original numeric units.
+pub fn evaluate_rules_with_context(
+    value: &CellValue,
+    rules: &[CFRule],
+    stats: &RangeStatistics,
+    formula_results: &[Option<CellValue>],
+    context: CFEvaluationContext,
+) -> Option<CFMatchResult> {
     debug_assert!(
         rules.windows(2).all(|w| w[0].priority <= w[1].priority),
         "CF rules must be sorted by priority (ascending)"
@@ -316,7 +383,7 @@ pub fn evaluate_rules(
     let mut cascade = CascadeEvaluator::new();
     for (i, rule) in rules.iter().enumerate() {
         let formula_result = formula_results.get(i).and_then(|r| r.as_ref());
-        cascade.apply(value, rule, stats, formula_result, now);
+        cascade.apply_for_cell_with_context(value, rule, stats, formula_result, context, false);
     }
     cascade.finish()
 }

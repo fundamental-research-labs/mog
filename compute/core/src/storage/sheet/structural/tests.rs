@@ -121,7 +121,7 @@ fn test_insert_rows_shifts_cell_positions_down() {
     assert_eq!(cell_store.resolve_position(&c1), Some(SheetPos::new(3, 0)));
     assert_eq!(cell_store.resolve_position(&c2), Some(SheetPos::new(4, 0)));
 
-    // Mirror row count updated
+    // Cell-store row count updated
     let sheet = cell_store.get_sheet(&sheet_id).unwrap();
     assert_eq!(sheet.rows, 12);
 
@@ -197,7 +197,7 @@ fn test_delete_rows_removes_and_shifts_up() {
     assert!(cell_store.get_cell_value(&c1).is_none());
     assert_eq!(cell_store.resolve_position(&c2), Some(SheetPos::new(2, 0)));
 
-    // Mirror row count
+    // Cell-store row count
     let sheet = cell_store.get_sheet(&sheet_id).unwrap();
     assert_eq!(sheet.rows, 9);
 
@@ -508,7 +508,7 @@ fn test_delete_all_rows_with_cells() {
     assert_eq!(cell_store.cells(&sheet_id).count(), 0);
     assert_eq!(grid.row_count(), 2); // 5 - 3 = 2
 
-    // Mirror also empty
+    // Cell store also empty
     assert!(cell_store.get_cell_value(&c0).is_none());
     assert!(cell_store.get_cell_value(&c1).is_none());
     assert!(cell_store.get_cell_value(&c2).is_none());

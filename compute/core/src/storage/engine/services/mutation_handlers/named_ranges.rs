@@ -243,6 +243,11 @@ pub(in crate::storage::engine) fn mutation_named_range_update(
         for definition in named_ranges::get_all_named_ranges(&stores.storage.metadata) {
             install_name(stores, cell_store, definition);
         }
+        crate::storage::engine::cell_metadata::refresh(
+            &stores.storage,
+            cell_store,
+            stores.layout_metrics,
+        );
         Some(stores.compute.structure_change_with_formula_refresh(
             cell_store,
             None,
@@ -255,6 +260,11 @@ pub(in crate::storage::engine) fn mutation_named_range_update(
             let seed = cell_store
                 .variables
                 .get_variable_cell_id(&scope, &name.name.to_ascii_lowercase());
+            crate::storage::engine::cell_metadata::refresh(
+                &stores.storage,
+                cell_store,
+                stores.layout_metrics,
+            );
             seed.map(|id| stores.compute.recalc(cell_store, &[id]))
                 .transpose()?
         } else {

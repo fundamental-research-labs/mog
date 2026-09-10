@@ -18,7 +18,7 @@ use value_types::ComputeError;
     crate_path = "compute_core"
 )]
 impl ComputeEngine {
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_floating_object(
         &mut self,
         sheet_id: &SheetId,
@@ -43,7 +43,7 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_floating_object(
         &self,
         sheet_id: &SheetId,
@@ -52,7 +52,7 @@ impl ComputeEngine {
         services::objects::get_floating_object(&self.stores, sheet_id, object_id)
     }
 
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_floating_objects_in_sheet(
         &self,
         sheet_id: &SheetId,
@@ -60,7 +60,7 @@ impl ComputeEngine {
         services::objects::get_floating_objects_in_sheet(&self.stores, sheet_id)
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn delete_floating_object(
         &mut self,
         sheet_id: &SheetId,
@@ -73,7 +73,7 @@ impl ComputeEngine {
 
     // -------------------------------------------------------------------
     // Floating Object Groups
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn create_floating_object(
         &mut self,
         sheet_id: &SheetId,
@@ -98,7 +98,7 @@ impl ComputeEngine {
     }
 
     /// Update a floating object by merging partial JSON updates.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn update_floating_object(
         &mut self,
         sheet_id: &SheetId,
@@ -124,7 +124,7 @@ impl ComputeEngine {
     }
 
     /// Create a shape from a typed config. Rust owns ID gen, z-index, timestamps, defaults.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn create_shape(
         &mut self,
         sheet_id: &SheetId,
@@ -149,7 +149,7 @@ impl ComputeEngine {
     }
 
     /// Move a floating object to a new position.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn move_floating_object_typed(
         &mut self,
         sheet_id: &SheetId,
@@ -176,7 +176,7 @@ impl ComputeEngine {
     }
 
     /// Resize a floating object.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn resize_floating_object_typed(
         &mut self,
         sheet_id: &SheetId,
@@ -195,7 +195,7 @@ impl ComputeEngine {
     }
 
     /// Rotate a floating object to a given angle in degrees.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn rotate_floating_object_typed(
         &mut self,
         sheet_id: &SheetId,
@@ -214,7 +214,7 @@ impl ComputeEngine {
     }
 
     /// Update the style properties of a shape.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn update_shape_style(
         &mut self,
         sheet_id: &SheetId,
@@ -227,7 +227,7 @@ impl ComputeEngine {
     }
 
     /// Flip a floating object along an axis.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn flip_floating_object_typed(
         &mut self,
         sheet_id: &SheetId,
@@ -246,7 +246,7 @@ impl ComputeEngine {
     }
 
     /// Duplicate a floating object with pixel offsets.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn duplicate_floating_object_typed(
         &mut self,
         sheet_id: &SheetId,
@@ -272,7 +272,7 @@ impl ComputeEngine {
     /// Returns a list of `(objectId, JSON)` pairs. Used by the TS connector
     /// re-routing coordination to discover which connectors need updating
     /// when a shape moves or resizes.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn find_connectors_for_shape(
         &self,
         sheet_id: &SheetId,
@@ -282,7 +282,7 @@ impl ComputeEngine {
     }
 
     /// Get a single floating object by ID as a typed struct.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_floating_object_typed(
         &self,
         sheet_id: &SheetId,
@@ -292,7 +292,7 @@ impl ComputeEngine {
     }
 
     /// Get all floating objects in a sheet as typed structs.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_all_floating_objects_typed(&self, sheet_id: &SheetId) -> Vec<FloatingObject> {
         services::objects::get_all_floating_objects_typed(&self.stores, sheet_id)
     }
@@ -303,7 +303,7 @@ impl ComputeEngine {
     /// computed (e.g., missing layout) are omitted from the result.
     ///
     /// This avoids N individual IPC round-trips during sheet switches and full syncs.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn compute_all_object_bounds(
         &self,
         sheet_id: &SheetId,

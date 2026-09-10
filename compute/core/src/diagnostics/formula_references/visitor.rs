@@ -130,7 +130,7 @@ impl AstVisitor for BrokenAstVisitor<'_> {
     }
 
     fn visit_unresolved_three_d_ref(&mut self, start_name: &str, end_name: &str, inner: &ASTNode) {
-        if let Some(token) = self.next_token(&[ReferenceTokenClass::SheetRef]) {
+        if let Some(token) = self.next_token(&[ReferenceTokenClass::ThreeDRef]) {
             let mut edge = PendingEdge::from_token(
                 token,
                 FormulaReferenceEdgeKind::DeletedSheet,

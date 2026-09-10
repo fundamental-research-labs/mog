@@ -13,3 +13,5 @@ pub mod scanner;
 pub mod xml;
 pub mod xml_fragment;
 pub mod xml_namespaces;
+
+pub(crate) mod vml_presentation;

@@ -15,7 +15,24 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
         if let Some(v) = self.get_variable(name) {
             return Ok(v.clone());
         }
-        match self.meta.resolve_defined_name(name) {
+        self.eval_resolved_name(name, self.meta.resolve_defined_name(name))
+            .await
+    }
+
+    pub(super) async fn eval_workbook_name(
+        &mut self,
+        name: &str,
+    ) -> Result<EvalValue, ComputeError> {
+        self.eval_resolved_name(name, self.meta.resolve_workbook_name(name))
+            .await
+    }
+
+    async fn eval_resolved_name(
+        &mut self,
+        name: &str,
+        resolved: Option<ResolvedName>,
+    ) -> Result<EvalValue, ComputeError> {
+        match resolved {
             Some(ResolvedName::Formula { raw_expression }) => {
                 match parse_defined_name_formula(&raw_expression, self.meta) {
                     Some(ast) => match self.eval_node(&ast).await {

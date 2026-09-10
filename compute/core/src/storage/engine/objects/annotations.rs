@@ -14,7 +14,7 @@ use value_types::ComputeError;
     crate_path = "compute_core"
 )]
 impl ComputeEngine {
-    #[bridge::write(scope = "cell")]
+    #[bridge::write]
     pub fn set_cell_annotation_by_position(
         &mut self,
         sheet_id: &SheetId,
@@ -35,7 +35,7 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::read(scope = "cell")]
+    #[bridge::read]
     pub fn get_cell_annotation_by_position(
         &self,
         sheet_id: &SheetId,
@@ -51,7 +51,7 @@ impl ComputeEngine {
         )
     }
 
-    #[bridge::write(scope = "cell")]
+    #[bridge::write]
     pub fn remove_cell_annotation_by_position(
         &mut self,
         sheet_id: &SheetId,
@@ -70,7 +70,7 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn list_cell_annotations(
         &self,
         sheet_id: &SheetId,
@@ -78,7 +78,7 @@ impl ComputeEngine {
         services::objects::list_cell_annotations(&self.stores, &self.cell_store, sheet_id)
     }
 
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn set_table_annotation(
         &mut self,
         table_ref: &str,
@@ -95,7 +95,7 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn get_table_annotation(
         &self,
         table_ref: &str,
@@ -103,7 +103,7 @@ impl ComputeEngine {
         services::objects::get_table_annotation(&self.stores, &self.cell_store, table_ref)
     }
 
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn remove_table_annotation(
         &mut self,
         table_ref: &str,
@@ -118,7 +118,7 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn list_table_annotations(&self) -> Result<Vec<AnnotationRecord>, ComputeError> {
         services::objects::list_table_annotations(&self.stores, &self.cell_store)
     }

@@ -111,19 +111,28 @@ pub(super) fn hydrate_workbook_named_ranges(
     metadata: &mut crate::storage::workbook::WorkbookMetadata,
     named_ranges: &[NamedRange],
     sheet_ids: &[SheetId],
+    inventory: &[domain_types::WorkbookSheetPackageInfo],
     allocator: &mut impl IdAllocator,
 ) {
     if named_ranges.is_empty() {
         return;
     }
     // Hidden and opaque names remain authored package state for export fidelity.
+    let mut inert_named_ranges = Vec::new();
     for (idx, nr) in named_ranges.iter().enumerate() {
-        // Resolve local_sheet_id (index) to a SheetId hex string for scope
+        // OOXML localSheetId counts all workbook tabs, including inert ones.
         let scope: Option<String> = nr.local_sheet_id.and_then(|idx| {
             sheet_ids
-                .get(idx as usize)
+                .get(editable_sheet_index(inventory, idx)?)
                 .map(|sid| id_to_hex(sid.as_u128()).to_string())
         });
+
+        if nr.local_sheet_id.is_some() && scope.is_none() {
+            // Inert tab names have no evaluator sheet scope. Preserve their full
+            // OOXML record separately instead of turning them into global names.
+            inert_named_ranges.push(nr.clone());
+            continue;
+        }
 
         // Generate a unique ID for this defined name (reuse cell ID allocator for
         // monotonic uniqueness — the ID just needs to be a unique hex string)
@@ -160,6 +169,20 @@ pub(super) fn hydrate_workbook_named_ranges(
 
         crate::storage::workbook::named_ranges::upsert_named_range(metadata, &defined_name);
     }
+    metadata.inert_tab_defined_names = inert_named_ranges;
+}
+
+pub(super) fn editable_sheet_index(
+    inventory: &[domain_types::WorkbookSheetPackageInfo],
+    workbook_order: u32,
+) -> Option<usize> {
+    if inventory.is_empty() {
+        return Some(workbook_order as usize);
+    }
+    inventory
+        .iter()
+        .find(|entry| entry.workbook_order == workbook_order)?
+        .editable_sheet_index
 }
 
 fn should_preserve_defined_name_ref_opaque(name: &str, refers_to: &str) -> bool {
@@ -227,7 +250,7 @@ mod tests {
             ..Default::default()
         }];
 
-        hydrate_workbook_views(&mut storage.metadata, &workbook_views, &sheet_ids);
+        hydrate_workbook_views(&mut storage.metadata, &workbook_views, &sheet_ids, &[]);
 
         let settings = get_settings(&storage.metadata);
         assert_eq!(
@@ -322,11 +345,12 @@ pub(super) fn hydrate_workbook_views(
     metadata: &mut crate::storage::workbook::WorkbookMetadata,
     views: &[domain_types::domain::workbook::WorkbookView],
     sheet_ids: &[SheetId],
+    inventory: &[domain_types::WorkbookSheetPackageInfo],
 ) {
     metadata.views = views.to_vec();
     metadata.settings.selected_sheet_ids = views
         .first()
-        .and_then(|view| sheet_ids.get(view.active_tab as usize))
+        .and_then(|view| sheet_ids.get(editable_sheet_index(inventory, view.active_tab)?))
         .map(|id| vec![id.to_uuid_string()]);
 }
 

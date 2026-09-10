@@ -19,6 +19,7 @@ pub enum ReferenceTokenClass {
     CellOrRange,
     BrokenRef,
     SheetRef,
+    ThreeDRef,
     Name,
     StructuredRef,
     ExternalRef,
@@ -187,7 +188,15 @@ fn scan_quoted_reference(formula: &str, start: usize) -> Option<(usize, Referenc
             ReferenceTokenClass::BrokenRef,
         ));
     }
-    scan_ref_body(formula, after_bang).map(|end| (end, ReferenceTokenClass::SheetRef))
+    let qualifier = slice_range(formula, start + 1, i - 1);
+    let class = if qualifier.contains('[') {
+        ReferenceTokenClass::ExternalRef
+    } else if qualifier.contains(':') {
+        ReferenceTokenClass::ThreeDRef
+    } else {
+        ReferenceTokenClass::SheetRef
+    };
+    scan_ref_body(formula, after_bang).map(|end| (end, class))
 }
 
 fn scan_external_reference(formula: &str, start: usize) -> Option<usize> {
@@ -210,6 +219,12 @@ fn scan_alpha_reference(formula: &str, start: usize) -> Option<(usize, Reference
     let ident_end = scan_identifier(formula, start)?;
     if formula.as_bytes().get(ident_end) == Some(&b'(') {
         return None;
+    }
+    if formula.as_bytes().get(ident_end) == Some(&b':')
+        && !is_valid_excel_a1_endpoint(formula, start, ident_end)
+        && let Some(three_d) = scan_unquoted_three_d_reference(formula, ident_end + 1)
+    {
+        return Some(three_d);
     }
     if formula.as_bytes().get(ident_end) == Some(&b'!') {
         let after_bang = ident_end + 1;
@@ -239,6 +254,50 @@ fn scan_alpha_reference(formula: &str, start: usize) -> Option<(usize, Reference
     Some((ident_end, ReferenceTokenClass::Name))
 }
 
+fn scan_unquoted_three_d_reference(
+    formula: &str,
+    end_sheet_start: usize,
+) -> Option<(usize, ReferenceTokenClass)> {
+    let end_sheet_end = scan_identifier(formula, end_sheet_start)?;
+    if formula.as_bytes().get(end_sheet_end) != Some(&b'!') {
+        return None;
+    }
+    let after_bang = end_sheet_end + 1;
+    scan_ref_body(formula, after_bang).map(|end| (end, ReferenceTokenClass::ThreeDRef))
+}
+
+fn is_valid_excel_a1_endpoint(formula: &str, start: usize, end: usize) -> bool {
+    if scan_cell_endpoint(formula, start) != Some(end) {
+        return false;
+    }
+    let reference = slice_range(formula, start, end).as_bytes();
+    let mut index = usize::from(reference[0] == b'$');
+    let column_start = index;
+    while reference[index].is_ascii_alphabetic() {
+        index += 1;
+    }
+    let column = excel_column_number(&reference[column_start..index]);
+    index += usize::from(reference[index] == b'$');
+    let row = std::str::from_utf8(&reference[index..])
+        .ok()
+        .and_then(|value| value.parse::<u32>().ok());
+    column.is_some_and(|column| (1..=16_384).contains(&column))
+        && matches!(row, Some(1..=1_048_576))
+}
+
+fn excel_column_number(column: &[u8]) -> Option<u32> {
+    if !(1..=3).contains(&column.len()) || !column.iter().all(u8::is_ascii_alphabetic) {
+        return None;
+    }
+    let mut value = 0u32;
+    for byte in column {
+        value = value
+            .checked_mul(26)?
+            .checked_add(u32::from(byte.to_ascii_uppercase() - b'A' + 1))?;
+    }
+    Some(value)
+}
+
 fn scan_identifier(formula: &str, start: usize) -> Option<usize> {
     let bytes = formula.as_bytes();
     let first = *bytes.get(start)?;
@@ -264,9 +323,13 @@ fn scan_cell_or_range(formula: &str, start: usize) -> Option<usize> {
         if starts_at(formula, after_colon, "#REF!") {
             return Some(scan_broken_ref_construct(formula, after_colon));
         }
-        if let Some(end) = scan_cell_endpoint(formula, after_colon) {
+        if let Some(end) = scan_cell_endpoint(formula, after_colon)
+            && formula.as_bytes().get(end) != Some(&b'!')
+        {
             i = end;
-        } else if let Some(end) = scan_col_endpoint(formula, after_colon) {
+        } else if let Some(end) = scan_col_endpoint(formula, after_colon)
+            && is_column_endpoint_boundary(formula, end)
+        {
             i = end;
         }
     }
@@ -324,7 +387,9 @@ fn scan_col_endpoint(formula: &str, start: usize) -> Option<usize> {
     while i < bytes.len() && bytes[i].is_ascii_alphabetic() {
         i += 1;
     }
-    (i > col_start).then_some(i)
+    excel_column_number(&bytes[col_start..i])
+        .is_some_and(|column| (1..=16_384).contains(&column))
+        .then_some(i)
 }
 
 fn scan_col_range(formula: &str, start: usize) -> Option<usize> {
@@ -332,7 +397,14 @@ fn scan_col_range(formula: &str, start: usize) -> Option<usize> {
     if formula.as_bytes().get(i) != Some(&b':') {
         return None;
     }
-    scan_col_endpoint(formula, i + 1)
+    let end = scan_col_endpoint(formula, i + 1)?;
+    is_column_endpoint_boundary(formula, end).then_some(end)
+}
+
+fn is_column_endpoint_boundary(formula: &str, end: usize) -> bool {
+    !formula.as_bytes().get(end).is_some_and(|byte| {
+        byte.is_ascii_alphanumeric() || matches!(byte, b'$' | b'_' | b'.' | b'!')
+    })
 }
 
 fn scan_row_range(formula: &str, start: usize) -> Option<usize> {
@@ -416,5 +488,91 @@ mod tests {
         let tokens = collect_reference_tokens("=😀+A1");
         assert_eq!(tokens[0].span_start, 4);
         assert_eq!(tokens[0].span_end, 6);
+    }
+
+    #[test]
+    fn three_d_references_are_single_distinct_tokens() {
+        let tokens = collect_reference_tokens(
+            "=Start:Old!A1+'Start Sheet:Old Sheet'!$A:$A+Old!A1:Old!A2+A1:Old!A2",
+        );
+        let classes: Vec<_> = tokens.iter().map(|token| token.class).collect();
+        let texts: Vec<_> = tokens.iter().map(|token| token.text.as_str()).collect();
+        assert_eq!(
+            texts,
+            vec![
+                "Start:Old!A1",
+                "'Start Sheet:Old Sheet'!$A:$A",
+                "Old!A1",
+                "Old!A2",
+                "A1",
+                "Old!A2",
+            ]
+        );
+        assert_eq!(
+            classes,
+            vec![
+                ReferenceTokenClass::ThreeDRef,
+                ReferenceTokenClass::ThreeDRef,
+                ReferenceTokenClass::SheetRef,
+                ReferenceTokenClass::SheetRef,
+                ReferenceTokenClass::CellOrRange,
+                ReferenceTokenClass::SheetRef,
+            ]
+        );
+    }
+
+    #[test]
+    fn long_sheet_names_and_quoted_external_references_stay_distinct() {
+        let tokens = collect_reference_tokens(
+            "=VeryLongSheetName123:Other!A1+'C:\\dir\\[Other.xlsx]Old'!A1+😀+Old!A1",
+        );
+        let texts: Vec<_> = tokens.iter().map(|token| token.text.as_str()).collect();
+        let classes: Vec<_> = tokens.iter().map(|token| token.class).collect();
+        assert_eq!(
+            texts,
+            vec![
+                "VeryLongSheetName123:Other!A1",
+                "'C:\\dir\\[Other.xlsx]Old'!A1",
+                "Old!A1",
+            ]
+        );
+        assert_eq!(
+            classes,
+            vec![
+                ReferenceTokenClass::ThreeDRef,
+                ReferenceTokenClass::ExternalRef,
+                ReferenceTokenClass::SheetRef,
+            ]
+        );
+        assert_eq!(tokens[2].span_start, 62);
+    }
+
+    #[test]
+    fn sheet_qualified_range_endpoints_are_not_consumed_as_a1_references() {
+        let tokens = collect_reference_tokens(
+            "=Old!A1:Sheet2!A2+A1:Sheet2!A2+Old!A1:A1!A2+Old!A1:'Sheet Two'!A2",
+        );
+        let texts: Vec<_> = tokens.iter().map(|token| token.text.as_str()).collect();
+        assert_eq!(
+            texts,
+            vec![
+                "Old!A1",
+                "Sheet2!A2",
+                "A1",
+                "Sheet2!A2",
+                "Old!A1",
+                "A1!A2",
+                "Old!A1",
+                "'Sheet Two'!A2",
+            ]
+        );
+        assert_eq!(
+            tokens
+                .iter()
+                .filter(|token| token.text.contains('!'))
+                .map(|token| token.class)
+                .collect::<Vec<_>>(),
+            vec![ReferenceTokenClass::SheetRef; 7]
+        );
     }
 }

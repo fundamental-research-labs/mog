@@ -292,7 +292,7 @@ fn mutated_row_and_col_formats_use_authored_palette_ids() {
         )
         .expect("set col format");
 
-    let exported = engine.build_parse_output();
+    let exported = engine.build_parse_output().expect("export projection");
     assert_eq!(exported.style_palette.len(), 3);
     assert_eq!(exported.sheets[0].row_styles[0].style_id, 1);
     assert_eq!(exported.sheets[0].col_styles[0].style_id, 2);
@@ -309,7 +309,7 @@ fn imported_cell_xf_lineage_survives_native_storage_and_live_edits_use_generated
         .clone();
     let (mut engine, sheet_id) = engine_from_parse_output(&source);
 
-    let pristine = engine.build_parse_output();
+    let pristine = engine.build_parse_output().expect("export projection");
     assert_eq!(pristine.sheets[0].cells[0].style_id, Some(1));
     assert_eq!(
         pristine
@@ -337,7 +337,7 @@ fn imported_cell_xf_lineage_survives_native_storage_and_live_edits_use_generated
         )
         .expect("re-author the effective imported format");
 
-    let edited = engine.build_parse_output();
+    let edited = engine.build_parse_output().expect("export projection");
     assert_eq!(edited.sheets[0].cells[0].style_id, Some(2));
     assert_eq!(edited.style_palette.len(), 3);
     assert_ne!(
@@ -471,7 +471,7 @@ fn inline_cell_xfs_snapshot_inherited_row_and_column_fills_and_explicit_no_fill(
         )
         .expect("set explicit C1 no-fill");
 
-    let exported = engine.build_parse_output();
+    let exported = engine.build_parse_output().expect("export projection");
     let format_at = |row, col| {
         let style_id = exported.sheets[0]
             .cells
@@ -643,7 +643,7 @@ fn xlsx_import_rebuild_hydrates_authored_style_ranges() {
         .import_from_xlsx_bytes_no_recalc(&source_xlsx)
         .expect("import XLSX");
 
-    let exported = engine.build_parse_output();
+    let exported = engine.build_parse_output().expect("export projection");
     let runs = &exported.sheets[0].authored_style_runs;
     assert!(
         runs.iter()
@@ -670,7 +670,7 @@ fn cached_shared_string_metadata_survives_hydration_export() {
 }
 
 #[test]
-fn skipped_spill_target_is_not_replayed_from_modeled_export() {
+fn spill_target_metadata_identity_does_not_author_cached_value() {
     let source = domain_types::CellData {
         row: 0,
         col: 0,
@@ -705,19 +705,25 @@ fn skipped_spill_target_is_not_replayed_from_modeled_export() {
         .cell_store()
         .get_sheet(&sheet_id)
         .expect("grid index");
+    let (spill_id, _, _) = grid
+        .cells()
+        .find(|(_, row, col)| *row == 0 && *col == 1)
+        .expect("spill metadata retains a positional identity");
+    let sheet = engine.cell_store.get_sheet(&sheet_id).expect("sheet store");
     assert!(
-        !grid
-            .cells()
-            .any(|(_cell_id, row, col)| row == 0 && col == 1),
-        "spill target must not materialize as editable storage"
+        sheet.is_ghost(&spill_id),
+        "metadata identity must not become an authored spill blocker"
     );
 
-    let exported = engine.build_parse_output();
+    let exported = engine.build_parse_output().expect("export projection");
     let cells = &exported.sheets[0].cells;
     assert!(cells.iter().any(|cell| (cell.row, cell.col) == (0, 0)));
     assert!(
-        !cells.iter().any(|cell| (cell.row, cell.col) == (0, 1)),
-        "spill target sidecars are no longer replayed into modeled export"
+        cells
+            .iter()
+            .filter(|cell| (cell.row, cell.col) == (0, 1))
+            .all(|cell| cell.value.is_null() && cell.formula.is_none()),
+        "an unowned spill cache must not become an authored value or formula"
     );
 }
 
@@ -906,6 +912,7 @@ fn register_rendered_pivot(engine: &mut ComputeEngine, sheet_id: &SheetId, value
         .cell_store
         .materialize_pivot(sheet_id, 0, 0, &result, &["Region".to_string()]);
     engine.cell_store.upsert_pivot_table_def(PivotTableDef {
+        grand_total_cells: Vec::new(),
         id: "pivot-1".to_string(),
         name: "Pivot1".to_string(),
         sheet: sheet_id.to_uuid_string(),
@@ -988,6 +995,7 @@ fn export_cells_does_not_emit_empty_pivot_overlay_at_origin() {
         .cell_store
         .materialize_pivot(&sheet_id, 0, 0, &result, &["Region".to_string()]);
     engine.cell_store.upsert_pivot_table_def(PivotTableDef {
+        grand_total_cells: Vec::new(),
         id: "empty-pivot".to_string(),
         name: "EmptyPivot".to_string(),
         sheet: sheet_id.to_uuid_string(),
@@ -1086,9 +1094,48 @@ fn native_cell_metadata_is_sparse_and_survives_copy_and_authored_replacement() {
     let (mut engine, sheet_id) = engine_from_parse_output(&output);
     assert_eq!(
         engine.stores.storage.cell_metadata.len(),
-        2,
-        "ordinary values and normal formulas have no metadata allocation"
+        3,
+        "imported formulas retain their declared result mode alongside rich text and arrays"
     );
+    let ordinary_value_id = engine
+        .cell_store
+        .resolve_cell_id(&sheet_id, SheetPos::new(0, 0))
+        .unwrap();
+    assert!(
+        engine
+            .stores
+            .storage
+            .cell_metadata(&ordinary_value_id)
+            .is_none()
+    );
+    let ordinary_formula_id = engine
+        .cell_store
+        .resolve_cell_id(&sheet_id, SheetPos::new(0, 1))
+        .unwrap();
+    assert_eq!(
+        engine
+            .stores
+            .storage
+            .cell_metadata(&ordinary_formula_id)
+            .unwrap()
+            .formula_result_mode,
+        Some(crate::cells::cell_metadata::FormulaResultMode::LegacyScalar),
+    );
+    // Authored replacement discards the imported declaration even when formula
+    // text is unchanged. Ordinary authored formulas retain the native sparse
+    // representation, and copies must not resurrect their import metadata.
+    engine
+        .set_cell_value_parsed(&sheet_id, 0, 1, "=A1+1")
+        .unwrap();
+    assert!(
+        engine
+            .stores
+            .storage
+            .cell_metadata(&ordinary_formula_id)
+            .is_none()
+    );
+    assert_eq!(engine.get_cell_value(&sheet_id, 0, 1), number(8.0));
+    assert_eq!(engine.stores.storage.cell_metadata.len(), 2);
     let original_rich_id = engine
         .cell_store
         .resolve_cell_id(&sheet_id, SheetPos::new(0, 2))
@@ -1128,7 +1175,7 @@ fn native_cell_metadata_is_sparse_and_survives_copy_and_authored_replacement() {
         2,
         "only copied cell metadata remains after replacing/clearing originals"
     );
-    let exported = engine.build_parse_output();
+    let exported = engine.build_parse_output().expect("export projection");
     let original = exported
         .sheets
         .iter()
@@ -1167,7 +1214,7 @@ fn native_cell_metadata_is_sparse_and_survives_copy_and_authored_replacement() {
     assert!(array.cell_formula.as_ref().unwrap().aca);
     let bytes = engine.export_to_xlsx_bytes().unwrap();
     let (reloaded, _) = ComputeEngine::from_xlsx_bytes(&bytes).unwrap();
-    let reexported = reloaded.build_parse_output();
+    let reexported = reloaded.build_parse_output().expect("export projection");
     let copied = reexported.sheets.iter().find(|s| s.name == "Copy").unwrap();
     assert_eq!(
         copied

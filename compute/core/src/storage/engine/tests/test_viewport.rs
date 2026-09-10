@@ -644,6 +644,7 @@ fn pivot_total_viewport_format_overrides_cell_xf() {
         named_ranges: vec![],
         tables: vec![],
         pivot_tables: vec![PivotTableDef {
+            grand_total_cells: Vec::new(),
             id: "pivot-1".to_string(),
             name: "PivotTable1".to_string(),
             sheet: sid.to_uuid_string(),

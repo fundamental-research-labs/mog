@@ -230,7 +230,7 @@ pub(super) fn build_sorted_range_index(
                 let val = cell_store
                     .get_cell_value_at(sheet, SheetPos::new(*row, *col))
                     .unwrap_or(&CellValue::Null);
-                let key = NormalizedKey::from_cell_value(val);
+                let key = NormalizedKey::from_criteria(val);
                 tracing::info!(
                     col = *col,
                     row = *row,

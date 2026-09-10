@@ -15,6 +15,7 @@ mod test_detect_groups;
 mod test_extract_pattern;
 mod test_hashmap_exec;
 mod test_sorted_range;
+mod test_underflow;
 mod test_wrappers;
 
 fn sheet_id_1() -> SheetId {

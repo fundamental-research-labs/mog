@@ -12,10 +12,9 @@ description = "Wire format definitions and binary serializers for the Rust<->Typ
 domain-types = { path = "../../../../domain-types" }
 ooxml-types = { path = "../../../../file-io/ooxml/types" }
 value-types = { path = "../types/value-types" }
-# R4.1: viewport filter uses SheetAccessMatrix + AccessLevel directly on the
-# wire buffer. compute-security has no workbook storage or compute-core deps, so this edge
-# is clean.
-compute-security = { path = "../compute-security" }
+cell-types = { path = "../types/cell-types" }
+snapshot-types = { path = "../types/snapshot-types" }
+compute-cf = { path = "../compute-cf" }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 tracing = { workspace = true }

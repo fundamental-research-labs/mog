@@ -127,25 +127,63 @@ fn convert_cell_with_metadata_refs(
         .and_then(|id| style_remapper.emitted_cell_xf_id(id));
 
     let authored_numeric_value = matching_authored_numeric_value(cell);
+    let imported_rich_error = cell.imported_rich_error.filter(|rich| {
+        emit_cell_metadata_refs
+            && cell.vm == Some(rich.vm)
+            && matches!(&cell.value, DomainValue::Error(error, _) if *error == rich.semantic)
+    });
+    let fallback_error = |error: CellError| imported_rich_error.map_or(error, |rich| rich.fallback);
     let value = match (&cell.value, &cell.formula) {
         (_, Some(formula)) => {
-            let cached = match &cell.value {
-                DomainValue::Number(n) => Some(Box::new(CellValue::Number(n.get()))),
-                DomainValue::Text(s) => {
-                    Some(Box::new(CellValue::FormulaString(s.as_ref().to_string())))
+            let cached = if cell.has_empty_cached_value {
+                // Keep an authored empty `<v/>` distinct from a typed
+                // semantic placeholder such as Boolean(false) or an error.
+                // The writer uses this empty text cache to emit `<v/>`, while
+                // `formula_type_hint` retains the original cell `t`.
+                Some(Box::new(CellValue::FormulaString(String::new())))
+            } else {
+                match &cell.value {
+                    DomainValue::Number(n) => Some(Box::new(CellValue::Number(n.get()))),
+                    DomainValue::Text(s) => {
+                        Some(Box::new(CellValue::FormulaString(s.as_ref().to_string())))
+                    }
+                    DomainValue::Boolean(b) => Some(Box::new(CellValue::Boolean(*b))),
+                    DomainValue::Error(_, _) if authored_numeric_value.is_some() => {
+                        Some(Box::new(CellValue::Number(0.0)))
+                    }
+                    DomainValue::Error(e, _) => Some(Box::new(CellValue::Error(
+                        fallback_error(*e).as_str().to_string(),
+                    ))),
+                    _ => None,
                 }
-                DomainValue::Boolean(b) => Some(Box::new(CellValue::Boolean(*b))),
-                DomainValue::Error(_, _) if authored_numeric_value.is_some() => {
-                    Some(Box::new(CellValue::Number(0.0)))
-                }
-                DomainValue::Error(e, _) => {
-                    Some(Box::new(CellValue::Error(e.as_str().to_string())))
-                }
-                _ if cell.has_empty_cached_value => Some(Box::new(CellValue::Number(0.0))),
-                _ => None,
             };
             CellValue::Formula {
                 formula: formula.clone(),
+                cached_value: cached,
+                cell_formula: cell.cell_formula.clone(),
+            }
+        }
+        (value, None) if is_authored_empty_formula(cell) => {
+            let cached = if cell.has_empty_cached_value {
+                Some(Box::new(CellValue::FormulaString(String::new())))
+            } else {
+                match value {
+                    DomainValue::Number(n) => Some(Box::new(CellValue::Number(n.get()))),
+                    DomainValue::Text(s) => {
+                        Some(Box::new(CellValue::FormulaString(s.as_ref().to_string())))
+                    }
+                    DomainValue::Boolean(b) => Some(Box::new(CellValue::Boolean(*b))),
+                    DomainValue::Error(_, _) if authored_numeric_value.is_some() => {
+                        Some(Box::new(CellValue::Number(0.0)))
+                    }
+                    DomainValue::Error(e, _) => Some(Box::new(CellValue::Error(
+                        fallback_error(*e).as_str().to_string(),
+                    ))),
+                    _ => None,
+                }
+            };
+            CellValue::Formula {
+                formula: String::new(),
                 cached_value: cached,
                 cell_formula: cell.cell_formula.clone(),
             }
@@ -169,7 +207,9 @@ fn convert_cell_with_metadata_refs(
         (DomainValue::Error(CellError::Num, _), None) if authored_numeric_value.is_some() => {
             CellValue::Number(0.0)
         }
-        (DomainValue::Error(e, _), None) => CellValue::Error(e.as_str().to_string()),
+        (DomainValue::Error(e, _), None) => {
+            CellValue::Error(fallback_error(*e).as_str().to_string())
+        }
         _ => CellValue::Empty,
     };
 
@@ -195,14 +235,27 @@ fn convert_cell_with_metadata_refs(
         cell_metadata_index: emit_cell_metadata_refs
             .then_some(cell.cell_metadata_index)
             .flatten(),
-        vm: emit_cell_metadata_refs.then_some(cell.vm).flatten(),
-        preserve_space_formula: false,
-        preserve_space_value: false,
+        vm: if cell.imported_rich_error.is_some() && imported_rich_error.is_none() {
+            None
+        } else {
+            emit_cell_metadata_refs.then_some(cell.vm).flatten()
+        },
+        preserve_space_formula: cell.formula_cache_provenance.state.is_current()
+            && cell.formula_cache_provenance.formula_preserve_space,
+        preserve_space_value: cell.formula_cache_provenance.state.is_current()
+            && cell.formula_cache_provenance.value_preserve_space,
         explicit_type: None,
         formula_type_hint,
         phonetic: cell.phonetic,
         date_lexical_value: compatible_date_lexical_value(cell),
     }
+}
+
+fn is_authored_empty_formula(cell: &DomainCellData) -> bool {
+    cell.formula.is_none()
+        && cell.cell_formula.as_ref().is_some_and(|formula| {
+            formula.t == ooxml_types::worksheet::CellFormulaType::Normal && formula.text.is_empty()
+        })
 }
 
 fn current_force_recalc(cell: &DomainCellData) -> bool {
@@ -370,5 +423,31 @@ mod tests {
                 ..
             }
         ));
+    }
+    #[test]
+    fn rich_error_fallback_requires_current_semantic_value_and_vm() {
+        let mut strings = SharedStringsWriter::new();
+        let mut cell = DomainCellData {
+            value: DomainValue::Error(CellError::Spill, None),
+            vm: Some(3),
+            imported_rich_error: Some(domain_types::ImportedRichError {
+                vm: 3,
+                semantic: CellError::Spill,
+                fallback: CellError::Value,
+            }),
+            ..Default::default()
+        };
+        let converted = convert_cell(&cell, &mut strings);
+        assert!(matches!(converted.value, CellValue::Error(error) if error == "#VALUE!"));
+        assert_eq!(converted.vm, Some(3));
+        cell.value = DomainValue::Error(CellError::Div0, None);
+        let converted = convert_cell(&cell, &mut strings);
+        assert!(matches!(converted.value, CellValue::Error(error) if error == "#DIV/0!"));
+        assert_eq!(converted.vm, None);
+        cell.value = DomainValue::Error(CellError::Spill, None);
+        cell.vm = Some(4);
+        let converted = convert_cell(&cell, &mut strings);
+        assert!(matches!(converted.value, CellValue::Error(error) if error == "#SPILL!"));
+        assert_eq!(converted.vm, None);
     }
 }

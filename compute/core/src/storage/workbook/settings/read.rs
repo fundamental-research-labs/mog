@@ -19,6 +19,7 @@ pub fn get_settings(metadata: &WorkbookMetadata) -> WorkbookSettings {
 /// Serialize a typed setting at the public JSON boundary.
 pub fn get_setting(metadata: &WorkbookMetadata, key: &str) -> Option<serde_json::Value> {
     match key {
+        "workbookViews" => serde_json::to_value(&metadata.views).ok(),
         "defaultSlicerStyle" => metadata
             .default_slicer_style
             .as_ref()

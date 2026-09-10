@@ -73,6 +73,7 @@ pub(super) use snapshots::build_workbook_snapshot;
 pub(in crate::storage::engine) use table_auto_filter_projection::table_filter_binding_fingerprint;
 pub(in crate::storage::engine) use table_auto_filter_projection::{
     materialize_table_auto_filters_for_sheets, materialize_table_auto_filters_from_preserved_specs,
+    table_filter_spec_to_column_filter,
 };
 pub(super) use types::{DeferredHydrationCompletion, DeferredHydrationData, XlsxHydrateResult};
 pub(super) use xlsx::{from_xlsx_bytes, import_from_xlsx_bytes};

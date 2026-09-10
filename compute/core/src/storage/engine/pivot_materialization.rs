@@ -342,7 +342,7 @@ impl ComputeEngine {
                         &result,
                     );
                     let def =
-                        engine_config.to_pivot_table_def(&result.rendered_bounds, &output_sheet_id);
+                        engine_config.to_pivot_table_def_from_result(&result, &output_sheet_id);
                     cell_store.upsert_pivot_table_def(def);
                 }
                 Err(e) => {
@@ -461,7 +461,7 @@ impl ComputeEngine {
                         &result,
                     );
                     let def =
-                        engine_config.to_pivot_table_def(&result.rendered_bounds, &output_sheet_id);
+                        engine_config.to_pivot_table_def_from_result(&result, &output_sheet_id);
                     self.cell_store.upsert_pivot_table_def(def);
                 }
                 Err(e) => {

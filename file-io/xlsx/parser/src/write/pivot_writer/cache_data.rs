@@ -1,3 +1,4 @@
+use crate::domain::pivot::convert::cache_records::shared_item_to_cell_value as shared_item_projection;
 use crate::domain::pivot::write::cache_writer::PivotCacheWriter;
 use crate::domain::pivot::write::types::{
     CacheFieldDef, CacheSource, CacheSourceType, SharedItem, WorksheetSource,
@@ -20,8 +21,30 @@ pub(super) fn build_cache(
     external_source_relationship_id: Option<&str>,
 ) -> Option<(Vec<u8>, Vec<u8>)> {
     let mut cache_writer = PivotCacheWriter::new(cache_src.cache_id);
+    cache_writer.ooxml_preservation = cache_src.ooxml_preservation.clone();
+    cache_writer.field_templates = cache_src.cache_fields.clone();
+    if snapshot_records.is_some_and(|rows| typed_snapshot_matches(cache_src, rows)) {
+        cache_writer.typed_fields = Some(cache_src.cache_fields.clone());
+    }
     if let Some(records_relationship_id) = records_relationship_id {
-        cache_writer.records_relationship_id = records_relationship_id.to_string();
+        cache_writer.records_relationship_id = Some(records_relationship_id.to_string());
+    }
+
+    // A definition-only imported cache has no runtime snapshot to refresh. Its
+    // typed shared-item schema remains authoritative even when live cells differ.
+    if preserve_definition_without_records(cache_src, snapshot_records) {
+        cache_writer.typed_fields = Some(cache_src.cache_fields.clone());
+        cache_writer.records_relationship_id = None;
+        cache_writer.source = CacheSource {
+            source_type: CacheSourceType::Worksheet,
+            worksheet_source: Some(WorksheetSource {
+                sheet_name: cache_src.source_sheet.clone(),
+                source_name: cache_src.source_name.clone(),
+                range_ref: cache_src.source_range.clone().unwrap_or_default(),
+                r_id: external_source_relationship_id.map(ToOwned::to_owned),
+            }),
+        };
+        return Some((cache_writer.to_definition_xml(), Vec::new()));
     }
 
     if cache_src.source_kind == PivotCacheSourceKind::ExternalWorksheet {
@@ -38,13 +61,7 @@ pub(super) fn build_cache(
         let (fields, records) = snapshot_records
             .map(|rows| cache_from_snapshot(cache_src, rows))
             .unwrap_or_else(|| (fields_from_source(cache_src, None), Vec::new()));
-        for field in fields {
-            cache_writer.add_field(field);
-        }
-        cache_writer.set_record_count(records.len() as u32);
-        let definition_xml = cache_writer.to_definition_xml();
-        let records_xml = cache_writer.to_records_xml(&records);
-        return Some((definition_xml, records_xml));
+        return Some(finish_cache(&mut cache_writer, fields, records));
     }
 
     if let Some(source_name) = &cache_src.source_name {
@@ -86,6 +103,7 @@ pub(super) fn build_cache(
                     },
                     &cache_src.field_names,
                     &cache_src.shared_items,
+                    &cache_src.cache_fields,
                 );
                 return Some(finish_cache(&mut cache_writer, fields, records));
             }
@@ -124,6 +142,7 @@ pub(super) fn build_cache(
                     },
                     &cache_src.field_names,
                     &cache_src.shared_items,
+                    &cache_src.cache_fields,
                 );
                 return Some(finish_cache(&mut cache_writer, fields, records));
             }
@@ -140,6 +159,42 @@ fn finish_cache(
     fields: Vec<CacheFieldDef>,
     records: Vec<Vec<SharedItem>>,
 ) -> (Vec<u8>, Vec<u8>) {
+    if cache_writer.typed_fields.is_none() && !cache_writer.field_templates.is_empty() {
+        cache_writer.typed_fields = Some(
+            fields
+                .iter()
+                .enumerate()
+                .map(|(index, field)| {
+                    let mut template = cache_writer
+                        .field_templates
+                        .get(index)
+                        .filter(|template| template.name == field.name)
+                        .cloned()
+                        .unwrap_or_else(|| ooxml_types::pivot::PivotCacheField {
+                            name: field.name.clone(),
+                            num_fmt_id: field.num_fmt_id,
+                            caption: field.caption.clone(),
+                            sql_type: field.sql_type,
+                            ..Default::default()
+                        });
+                    let shared =
+                        crate::domain::pivot::write::typed_cache_fields::infer_shared_items(
+                            &field.shared_items,
+                        );
+                    let mut values = field.shared_items.clone();
+                    values.extend(records.iter().filter_map(|row| row.get(index)).cloned());
+                    let mut metadata =
+                        crate::domain::pivot::write::typed_cache_fields::infer_shared_items(
+                            &values,
+                        );
+                    metadata.items = shared.items;
+                    metadata.count = Some(metadata.items.len() as u32);
+                    template.shared_items = Some(metadata);
+                    template
+                })
+                .collect(),
+        );
+    }
     for field in fields {
         cache_writer.add_field(field);
     }
@@ -208,7 +263,8 @@ fn fields_from_source(
         .len()
         .max(cache_src.shared_items.len())
         .max(snapshot_width.unwrap_or_default());
-    let mut seeded = seeded_shared_items(num_cols, &cache_src.shared_items);
+    let mut seeded =
+        seeded_shared_items(num_cols, &cache_src.shared_items, &cache_src.cache_fields);
     (0..num_cols)
         .map(|i| CacheFieldDef {
             name: cache_src
@@ -229,6 +285,17 @@ fn cache_from_snapshot(
     cache_src: &PivotCacheSourceDef,
     rows: &[Vec<CellValue>],
 ) -> (Vec<CacheFieldDef>, Vec<Vec<SharedItem>>) {
+    if typed_snapshot_matches(cache_src, rows) {
+        let records = cache_src
+            .typed_records
+            .as_ref()
+            .unwrap()
+            .records
+            .iter()
+            .map(|row| row.values.iter().map(typed_record_item).collect())
+            .collect();
+        return (Vec::new(), records);
+    }
     let num_cols = rows
         .iter()
         .map(Vec::len)
@@ -236,13 +303,31 @@ fn cache_from_snapshot(
         .unwrap_or_default()
         .max(cache_src.field_names.len())
         .max(cache_src.shared_items.len());
-    let mut seeded = seeded_shared_items(num_cols, &cache_src.shared_items);
+    let mut seeded =
+        seeded_shared_items(num_cols, &cache_src.shared_items, &cache_src.cache_fields);
+    let old_projection = typed_projection(cache_src);
     let records = rows
         .iter()
-        .map(|row| {
+        .enumerate()
+        .map(|(row_idx, row)| {
             row.iter()
                 .enumerate()
                 .map(|(col_idx, value)| {
+                    if old_projection
+                        .as_ref()
+                        .and_then(|rows| rows.get(row_idx))
+                        .and_then(|row| row.get(col_idx))
+                        == Some(value)
+                    {
+                        if let Some(item) = cache_src
+                            .typed_records
+                            .as_ref()
+                            .and_then(|records| records.records.get(row_idx))
+                            .and_then(|record| record.values.get(col_idx))
+                        {
+                            return typed_record_item(item);
+                        }
+                    }
                     cell_value_to_cache_record_item(
                         value,
                         &mut seeded.shared_items[col_idx],
@@ -329,7 +414,11 @@ struct SeededSharedItems {
     missing_indices: Vec<Option<u32>>,
 }
 
-fn seeded_shared_items(num_cols: usize, seed_shared_items: &[Vec<CellValue>]) -> SeededSharedItems {
+fn seeded_shared_items(
+    num_cols: usize,
+    seed_shared_items: &[Vec<CellValue>],
+    cache_fields: &[ooxml_types::pivot::PivotCacheField],
+) -> SeededSharedItems {
     let mut seeded = SeededSharedItems {
         shared_items: vec![Vec::new(); num_cols],
         value_indices: vec![HashMap::new(); num_cols],
@@ -338,8 +427,14 @@ fn seeded_shared_items(num_cols: usize, seed_shared_items: &[Vec<CellValue>]) ->
 
     for col_idx in 0..num_cols {
         if let Some(seeds) = seed_shared_items.get(col_idx) {
-            for value in seeds {
-                let shared_item = cell_value_to_shared_item(value);
+            for (index, value) in seeds.iter().enumerate() {
+                let shared_item = cache_fields
+                    .get(col_idx)
+                    .and_then(|field| field.shared_items.as_ref())
+                    .and_then(|items| items.items.get(index))
+                    .filter(|item| shared_item_projection(item) == *value)
+                    .map(typed_shared_item)
+                    .unwrap_or_else(|| cell_value_to_shared_item(value));
                 let item_idx = seeded.shared_items[col_idx].len() as u32;
                 if let SharedItem::String(s) = &shared_item {
                     seeded.value_indices[col_idx]
@@ -381,6 +476,7 @@ fn extract_cache_data(
     range: CacheExtractionRange,
     cache_field_names: &[String],
     seed_shared_items: &[Vec<CellValue>],
+    cache_fields: &[ooxml_types::pivot::PivotCacheField],
 ) -> (Vec<CacheFieldDef>, Vec<Vec<SharedItem>>) {
     let source_num_cols = (range.end_col - range.start_col + 1) as usize;
     let num_cols = range.schema_num_cols.unwrap_or_else(|| {
@@ -402,7 +498,7 @@ fn extract_cache_data(
 
     let data_start = range.start_row + 1;
     let data_end = range.end_row;
-    let mut seeded = seeded_shared_items(num_cols, seed_shared_items);
+    let mut seeded = seeded_shared_items(num_cols, seed_shared_items, cache_fields);
     let mut records: Vec<Vec<SharedItem>> = Vec::new();
 
     for row in data_start..=data_end {
@@ -716,5 +812,88 @@ mod tests {
         );
         assert!(records.contains(r#"<x v="0"/>"#));
         assert!(!records.contains(r#"<m/>"#));
+    }
+}
+
+/// The runtime cache projection remains authoritative after edits. Imported typed
+/// records preserve distinctions (dates, errors, indices) only while it agrees.
+fn typed_snapshot_matches(cache_src: &PivotCacheSourceDef, rows: &[Vec<CellValue>]) -> bool {
+    typed_projection(cache_src).as_deref() == Some(rows)
+}
+
+fn typed_projection(cache_src: &PivotCacheSourceDef) -> Option<Vec<Vec<CellValue>>> {
+    let records = cache_src.typed_records.as_ref()?;
+    if !typed_field_projection_matches(cache_src) {
+        return None;
+    }
+    Some(
+        crate::domain::pivot::convert::cache_records::resolve_typed_cache_records(
+            &cache_src.cache_fields,
+            &records.records,
+        ),
+    )
+}
+
+pub(super) fn preserve_definition_without_records(
+    cache_src: &PivotCacheSourceDef,
+    snapshot_records: Option<&[Vec<CellValue>]>,
+) -> bool {
+    snapshot_records.is_none()
+        && cache_src.typed_records.is_none()
+        && !cache_src.cache_fields.is_empty()
+        && matches!(
+            cache_src.source_kind,
+            PivotCacheSourceKind::LocalWorksheet
+                | PivotCacheSourceKind::LocalTableOrName
+                | PivotCacheSourceKind::ExternalWorksheet
+        )
+        && typed_field_projection_matches(cache_src)
+}
+
+fn typed_field_projection_matches(cache_src: &PivotCacheSourceDef) -> bool {
+    if cache_src
+        .cache_fields
+        .iter()
+        .map(|field| &field.name)
+        .ne(cache_src.field_names.iter())
+    {
+        return false;
+    }
+    let shared_projection: Vec<Vec<CellValue>> = cache_src
+        .cache_fields
+        .iter()
+        .map(|field| {
+            field
+                .shared_items
+                .as_ref()
+                .map(|items| items.items.iter().map(shared_item_projection).collect())
+                .unwrap_or_default()
+        })
+        .collect();
+    shared_projection == cache_src.shared_items
+}
+
+fn typed_record_item(item: &ooxml_types::pivot::cache::PivotRecordValue) -> SharedItem {
+    use ooxml_types::pivot::cache::PivotRecordValue as V;
+    match item {
+        V::Index(v) => SharedItem::Index(*v),
+        V::Number(v) => SharedItem::Number(*v),
+        V::String(v) => SharedItem::String(v.clone()),
+        V::Boolean(v) => SharedItem::Boolean(*v),
+        V::Error(v) => SharedItem::Error(v.clone()),
+        V::DateTime(v) => SharedItem::DateTime(v.clone()),
+        V::Missing => SharedItem::Missing,
+    }
+}
+
+fn typed_shared_item(item: &ooxml_types::pivot::SharedItem) -> SharedItem {
+    use ooxml_types::pivot::SharedItem as V;
+    match item {
+        V::Number(v) => SharedItem::Number(*v),
+        V::String(v) => SharedItem::String(v.clone()),
+        V::Boolean(v) => SharedItem::Boolean(*v),
+        V::Error(v) => SharedItem::Error(v.clone()),
+        V::DateTime(v) => SharedItem::DateTime(v.clone()),
+        V::Missing => SharedItem::Missing,
     }
 }

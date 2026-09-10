@@ -161,10 +161,6 @@ pub(super) fn should_generate_chart_color_style(
         )
 }
 
-pub(super) fn standard_chart_number(aux: &ChartAuxiliaryDataRef<'_>) -> Option<usize> {
-    original_chart_number(&aux.original_path, "chart")
-}
-
 pub(super) fn chart_ex_number(aux: &ChartAuxiliaryDataRef<'_>) -> Option<usize> {
     original_chart_number(&aux.original_path, "chartEx")
 }
@@ -192,6 +188,7 @@ pub(super) fn auxiliary_file_paths_for_export(
     chart_spec: &ChartSpec,
     chart_path: &str,
     allows_current_auxiliary_replay: bool,
+    chart_xml: Option<&[u8]>,
 ) -> BTreeSet<String> {
     let Some(aux) = chart_auxiliary_data(chart_spec) else {
         return BTreeSet::new();
@@ -205,12 +202,22 @@ pub(super) fn auxiliary_file_paths_for_export(
     }
 
     let generated_color_style = generated_chart_color_style_data(chart_spec, chart_path).is_some();
+    // Decode the emitted chart once. The resulting IDs are shared by every
+    // media path so resource selection cannot drift with iterator order.
+    let picture_relationship_ids = chart_picture_relationship_ids_for_export(chart_spec, chart_xml);
     supported
         .into_iter()
         .filter(|path| match auxiliary_kind(path) {
             Some(AuxiliaryKind::Style) => true,
             Some(AuxiliaryKind::ColorStyle) => !generated_color_style,
             Some(AuxiliaryKind::UserShapes) | None => false,
+            // A modeled chart edit can still carry an imported picture fill on
+            // its typed ShapeProperties. Keep only media referenced by the
+            // emitted chart bytes so an explicit fill replacement does not
+            // leave stale chart media.
+            Some(AuxiliaryKind::Image) => {
+                auxiliary_relationship_for_path(&aux, chart_path, path, &picture_relationship_ids)
+            }
         })
         .collect()
 }
@@ -249,8 +256,44 @@ pub(super) fn is_supported_auxiliary_relationship(rel_type: &str, target_path: &
         Some(AuxiliaryKind::Style) => rel_type == REL_CHART_STYLE,
         Some(AuxiliaryKind::ColorStyle) => rel_type == REL_CHART_COLOR_STYLE,
         Some(AuxiliaryKind::UserShapes) => rel_type == REL_CHART_USER_SHAPES,
+        Some(AuxiliaryKind::Image) => rel_type == crate::infra::opc::REL_IMAGE,
         None => false,
     }
+}
+
+fn auxiliary_relationship_for_path(
+    aux: &ChartAuxiliaryDataRef<'_>,
+    chart_path: &str,
+    target_path: &str,
+    picture_relationship_ids: &BTreeSet<String>,
+) -> bool {
+    aux.chart_relationships.iter().any(|rel| {
+        if crate::write::package_graph::is_external_target_mode(rel.target_mode.as_deref()) {
+            return false;
+        }
+        rel.relationship_type.as_deref() == Some(crate::infra::opc::REL_IMAGE)
+            && picture_relationship_ids.contains(&rel.r_id)
+            && rel
+                .target
+                .as_deref()
+                .and_then(|target| {
+                    crate::infra::opc::resolve_relationship_target(Some(chart_path), target).ok()
+                })
+                .is_some_and(|path| normalize_path(&path) == target_path)
+    })
+}
+
+pub(super) fn chart_picture_relationship_ids_for_export(
+    chart_spec: &ChartSpec,
+    chart_xml: Option<&[u8]>,
+) -> BTreeSet<String> {
+    if let Some(chart_xml) = chart_xml {
+        return crate::domain::charts::write_canonical::chart_picture_relationship_ids_from_xml(
+            chart_xml,
+        );
+    }
+    let chart_space = crate::domain::charts::reconstruct::reconstruct_chart_space(chart_spec);
+    crate::domain::charts::write_canonical::chart_picture_relationship_ids(&chart_space)
 }
 
 fn imported_chart_color_style<'a>(
@@ -309,6 +352,30 @@ pub(super) fn chart_external_data_relationship_is_supported(rel: &ChartRelations
             .is_some_and(|target| !target.trim().is_empty())
 }
 
+/// Return external image relationships still referenced by the chart XML that
+/// will be emitted. Reconstructed charts can intentionally clear a public fill;
+/// filtering against those bytes prevents an old imported `r:link` from
+/// surviving as an orphaned chart relationship.
+pub(super) fn chart_external_image_relationships<'a>(
+    chart_spec: &'a ChartSpec,
+    chart_xml: Option<&[u8]>,
+) -> Vec<&'a ChartRelationshipData> {
+    let image_ids = chart_picture_relationship_ids_for_export(chart_spec, chart_xml);
+    chart_spec
+        .chart_relationships
+        .iter()
+        .filter(|rel| {
+            image_ids.contains(&rel.r_id)
+                && rel.relationship_type.as_deref() == Some(crate::infra::opc::REL_IMAGE)
+                && crate::write::package_graph::is_external_target_mode(rel.target_mode.as_deref())
+                && rel
+                    .target
+                    .as_deref()
+                    .is_some_and(|target| !target.trim().is_empty())
+        })
+        .collect()
+}
+
 fn chart_user_shapes_relationship_id(chart_spec: &ChartSpec) -> Option<&str> {
     match chart_spec.definition.as_ref()? {
         ChartDefinition::Chart(chart_space) => chart_space.user_shapes.as_deref(),
@@ -355,6 +422,7 @@ enum AuxiliaryKind {
     Style,
     ColorStyle,
     UserShapes,
+    Image,
 }
 
 fn auxiliary_kind(path: &str) -> Option<AuxiliaryKind> {
@@ -371,6 +439,8 @@ fn auxiliary_kind(path: &str) -> Option<AuxiliaryKind> {
         Some(AuxiliaryKind::ColorStyle)
     } else if path.starts_with("xl/drawings/") && file_name.ends_with(".xml") {
         Some(AuxiliaryKind::UserShapes)
+    } else if path.starts_with("xl/media/") {
+        Some(AuxiliaryKind::Image)
     } else {
         None
     }

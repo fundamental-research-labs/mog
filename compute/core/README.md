@@ -130,13 +130,12 @@ Located under `crates/`. Pure computation modules, each independently testable.
 | **compute-charts** | `crates/compute-charts` | compute-stats | Chart data transforms: statistics, regression, density, binning, stacking, grouping |
 | **compute-solver** | `crates/compute-solver` | none | Numerical optimization: Nelder-Mead, BFGS, L-BFGS-B, Differential Evolution, root finding (bisection/Brent/Newton), auto dispatch |
 | **compute-document** | `crates/compute-document` | formula-types, cell-types | Native row/column axes, sparse cell identity indexes, compact axis runs, and range metadata |
-| **compute-wire** | `crates/compute-wire` | domain-types, ooxml-types, value-types, compute-security | Explicit viewport serialization, binary format palettes, and access filtering |
+| **compute-wire** | `crates/compute-wire` | domain-types, ooxml-types, value-types, cell-types, snapshot-types, compute-cf | Explicit viewport serialization, binary format palettes, and conditional-format render data |
 | **compute-fill** | `crates/compute-fill` | value-types, cell-types, formula-types | Autofill engine: pattern detection, series generation, formula reference adjustment |
 | **compute-relational** | `crates/compute-relational` | value-types, cell-types, compute-stats, pivot-types | Relational compute engine: GROUP BY, aggregation, window functions over tabular data |
 | **compute-layout-index** | `crates/compute-layout-index` | none | Sparse pixel layout: O(k) dimension prefixes for on-demand cell-to-pixel mapping |
 | **compute-text-measurement** | `crates/compute-text-measurement` | none | Text measurement engine for autofit, PDF export, and server-side layout |
 | **compute-screenshot** | `crates/compute-screenshot` | compute-wire, compute-layout-index, compute-text-measurement | Headless sheet screenshot rasterizer over `ViewportRenderData` |
-| **compute-security** | `crates/compute-security` | value-types, cell-types | Privacy policy types and access-control engine for compute-core |
 
 ### Root Crate
 
@@ -306,7 +305,7 @@ Native identity layer:
 
 Wire protocol:
   compute-wire --> formula-types + value-types + cell-types + snapshot-types
-               --> compute-cf + compute-security
+               --> compute-cf
 
 Charts:
   compute-charts --> compute-stats --> value-types
@@ -322,7 +321,7 @@ Layer 4 (orchestration):  compute-core
 Layer 3 (domain):         parser, functions, table, graph, cf, pivot,
                           schema, formats, charts, stats, solver,
                           document, wire, fill, relational,
-                          layout-index, text-measurement, screenshot, security
+                          layout-index, text-measurement, screenshot
 Layer 2 (type bridge):    formula-types, pivot-types, snapshot-types
 Layer 1 (leaf types):     value-types, cell-types
 Layer 1 support:          finite-at-boundary, finite-at-boundary-walker

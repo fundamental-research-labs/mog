@@ -105,6 +105,11 @@ impl CellStore {
             return Vec::new();
         };
 
+        // Imported array members are metadata-only package cells. Rebase their
+        // positional compatibility fields alongside native identities so a
+        // later rebuild cannot restore the pre-structure coordinates.
+        s.apply_structure_change_to_imported_array_caches(change);
+
         match change {
             StructureChange::InsertRows {
                 at,
@@ -205,6 +210,12 @@ impl CellStore {
                 }
             }
         }
+
+        // Stable identities are authoritative for moved cache members. The
+        // positional pass above handles range boundaries and deleted bands;
+        // this pass resolves the surviving source/child coordinates after the
+        // native identity maps have shifted.
+        s.rebind_imported_array_caches();
 
         // --- Range-aware updates (after position shifts, before column_values rebuild) ---
 

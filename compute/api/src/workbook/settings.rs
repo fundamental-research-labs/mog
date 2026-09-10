@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use crate::dispatch::Dispatch;
 use crate::error::ComputeApiError;
+use serde_json::Value;
 use snapshot_types::MutationResult;
 
 /// Workbook-level settings and configuration.
@@ -43,6 +44,45 @@ impl WorkbookSettings {
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
+    /// Read the active tab from the first persisted workbook view, if one is
+    /// present. The engine projects its native OOXML view metadata through
+    /// the JSON setting boundary.
+    pub fn get_workbook_view_active_tab(&self) -> Result<Option<u32>, ComputeApiError> {
+        let raw = self
+            .dispatch
+            .query_engine(|e| e.get_workbook_setting("workbookViews"))?;
+        let views = decode_workbook_views(raw)?;
+        Ok(views.first().map(|view| view.active_tab))
+    }
+
+    /// Persist the active tab in the first workbook view while preserving all
+    /// other view metadata. A missing view is created with the domain default
+    /// values so export can round-trip the explicit active tab.
+    pub fn set_workbook_view_active_tab(
+        &self,
+        active_tab: u32,
+    ) -> Result<MutationResult, ComputeApiError> {
+        let raw = self
+            .dispatch
+            .query_engine(|e| e.get_workbook_setting("workbookViews"))?;
+        let mut views = decode_workbook_views(raw)?;
+        if let Some(view) = views.first_mut() {
+            view.active_tab = active_tab;
+        } else {
+            views.push(domain_types::domain::workbook::WorkbookView {
+                active_tab,
+                ..Default::default()
+            });
+        }
+        let serialized = serde_json::to_string(&views).map_err(|error| {
+            ComputeApiError::InvalidOperation(format!("failed to encode workbook views: {error}"))
+        })?;
+        let result = self.dispatch.call_engine(move |e| {
+            e.set_workbook_setting("workbookViews", Value::String(serialized))
+        })?;
+        result.map_err(ComputeApiError::from)
+    }
+
     /// Get the theme color palette (slot name -> hex color).
     ///
     /// Returns a cloned `HashMap` since `CultureInfo` is not `Send`.
@@ -80,4 +120,19 @@ impl WorkbookSettings {
             .call_engine(move |e| e.set_iterative_calculation(enabled))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
+}
+
+fn decode_workbook_views(
+    raw: Option<Value>,
+) -> Result<Vec<domain_types::domain::workbook::WorkbookView>, ComputeApiError> {
+    let Some(raw) = raw else {
+        return Ok(Vec::new());
+    };
+    match raw {
+        Value::String(serialized) => serde_json::from_str(&serialized),
+        value => serde_json::from_value(value),
+    }
+    .map_err(|error| {
+        ComputeApiError::InvalidOperation(format!("invalid persisted workbook views: {error}"))
+    })
 }

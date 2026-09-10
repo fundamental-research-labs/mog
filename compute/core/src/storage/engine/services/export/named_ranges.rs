@@ -17,8 +17,25 @@ pub(super) fn export_workbook_named_ranges(
     stores: &EngineStores,
     cell_store: &CellStore,
     sheet_ids: &[SheetId],
+    inventory: &[domain_types::WorkbookSheetPackageInfo],
+    imported_order_to_export_order: &std::collections::HashMap<u32, u32>,
 ) -> Vec<NamedRange> {
-    let print_defined_names = export_print_defined_names(stores, sheet_ids);
+    let workbook_order_for_editable_index = |index: usize| {
+        if inventory.is_empty() {
+            Some(index as u32)
+        } else {
+            inventory
+                .iter()
+                .find(|entry| entry.editable_sheet_index == Some(index))
+                .map(|entry| entry.workbook_order)
+        }
+    };
+    let mut print_defined_names = export_print_defined_names(stores, sheet_ids);
+    for name in &mut print_defined_names {
+        name.local_sheet_id = name
+            .local_sheet_id
+            .and_then(|index| workbook_order_for_editable_index(index as usize));
+    }
     let mut named_ranges: Vec<_> =
         workbook_named_ranges::get_all_named_ranges(&stores.storage.metadata)
             .into_iter()
@@ -29,8 +46,13 @@ pub(super) fn export_workbook_named_ranges(
                     sheet_ids
                         .iter()
                         .position(|sid| *sid == scope_sid)
-                        .map(|i| i as u32)
+                        .and_then(workbook_order_for_editable_index)
                 });
+
+                // A deleted sheet's name cannot become a workbook-scoped name.
+                if dn.scope.is_some() && local_sheet_id.is_none() {
+                    return None;
+                }
 
                 let refers_to = if let Some(raw_refers_to) = dn.raw_refers_to.clone() {
                     raw_refers_to
@@ -77,6 +99,19 @@ pub(super) fn export_workbook_named_ranges(
             .filter(|nr| !collides_with_print_defined_name(&print_defined_names, nr))
             .collect();
 
+    named_ranges.extend(
+        stores
+            .storage
+            .metadata
+            .inert_tab_defined_names
+            .iter()
+            .cloned()
+            .filter_map(|mut name| {
+                name.local_sheet_id =
+                    Some(*imported_order_to_export_order.get(&name.local_sheet_id?)?);
+                Some(name)
+            }),
+    );
     named_ranges.extend(print_defined_names);
     named_ranges
 }

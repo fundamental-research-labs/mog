@@ -106,7 +106,6 @@ pub(crate) fn apply_text_section(section: &FormatSection, text: &str) -> String 
         match tok {
             Token::TextPlaceholder => result.push_str(text),
             Token::Literal(s) => result.push_str(s),
-            Token::SkipWidth(_) => {}
             _ => {}
         }
     }
@@ -145,7 +144,7 @@ pub(crate) fn format_numeric(
     }
 
     // Percent
-    if section.has_percent {
+    for _ in 0..section.percent_count {
         val *= 100.0;
     }
 
@@ -314,6 +313,20 @@ pub(crate) fn format_numeric(
         }
     }
 
+    if section.has_thousands {
+        let missing = int_output
+            .iter()
+            .take_while(|c| !matches!(c, Some(v) if v.is_ascii_digit()))
+            .filter(|c| matches!(c, Some(' ')))
+            .count();
+        let reserved_separators = (visible_digits + missing).saturating_sub(1) / 3;
+        let actual_separators = visible_digits.saturating_sub(1) / 3;
+        int_result.insert_str(
+            0,
+            &" ".repeat(reserved_separators.saturating_sub(actual_separators)),
+        );
+    }
+
     // ---- Pass 2: Walk tokens and emit the final formatted string ----
 
     let mut in_decimal = false;
@@ -353,7 +366,7 @@ pub(crate) fn format_numeric(
         for i in (0..dec_chars.len()).rev() {
             let (ch, tok) = dec_chars[i];
             match tok {
-                Token::Hash => {
+                Token::Hash | Token::Question => {
                     if ch == '0' || ch == '\0' {
                         last_significant = i;
                         continue;
@@ -365,9 +378,12 @@ pub(crate) fn format_numeric(
         }
 
         let mut s = String::new();
-        for (i, &(ch, _)) in dec_chars.iter().enumerate() {
+        for (i, &(ch, tok)) in dec_chars.iter().enumerate() {
             if i >= last_significant {
-                break;
+                if matches!(tok, Token::Question) {
+                    s.push(' ');
+                }
+                continue;
             }
             if ch != '\0' {
                 s.push(ch);
@@ -397,11 +413,11 @@ pub(crate) fn format_numeric(
                 result.push_str(&dec_output);
             }
             Token::Percent => result.push('%'),
-            Token::Literal(s) => result.push_str(s),
+            Token::Literal(s) | Token::FractionDenominatorLiteral(s) => result.push_str(s),
             Token::SkipWidth(_) => result.push(' '),
             Token::TextPlaceholder => result.push_str(&format_general(value)),
             Token::FractionSlash => result.push('/'),
-            Token::FractionDenominatorLiteral(s) => result.push_str(s),
+
             _ => {}
         }
     }

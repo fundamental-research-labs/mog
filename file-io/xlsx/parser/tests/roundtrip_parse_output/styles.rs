@@ -73,7 +73,7 @@ fn roundtrip_font_formatting() {
 }
 
 #[test]
-fn imported_deleted_style_bearing_cell_drops_unreferenced_stylesheet() {
+fn imported_deleted_style_zero_cell_preserves_workbook_normal_style() {
     let mut imported = make_single_sheet(
         "ImportedStyles",
         vec![styled_cell(
@@ -85,7 +85,7 @@ fn imported_deleted_style_bearing_cell_drops_unreferenced_stylesheet() {
     );
     imported.style_palette = vec![DocumentFormat {
         font: Some(FontFormat {
-            name: Some("StaleFont".to_string()),
+            name: Some("NormalFont".to_string()),
             size: Some(16_000),
             bold: Some(true),
             ..Default::default()
@@ -99,7 +99,7 @@ fn imported_deleted_style_bearing_cell_drops_unreferenced_stylesheet() {
         XlsxArchive::new(&imported_bytes).expect("initial XLSX should be readable");
     let imported_styles =
         String::from_utf8(imported_archive.read_file("xl/styles.xml").unwrap()).unwrap();
-    assert!(imported_styles.contains("StaleFont"));
+    assert!(imported_styles.contains("NormalFont"));
 
     let (mut output, _diagnostics) =
         parse_xlsx_to_output(&imported_bytes).expect("initial XLSX should parse");
@@ -109,7 +109,7 @@ fn imported_deleted_style_bearing_cell_drops_unreferenced_stylesheet() {
     let archive = XlsxArchive::new(&exported).expect("exported XLSX should be readable");
     let styles_xml = String::from_utf8(archive.read_file("xl/styles.xml").unwrap()).unwrap();
 
-    assert!(!styles_xml.contains("StaleFont"));
+    assert!(styles_xml.contains("NormalFont"));
     assert!(styles_xml.contains(r#"<cellXfs count="1""#));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }

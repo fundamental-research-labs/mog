@@ -123,6 +123,11 @@ pub(in crate::storage::engine) fn create_table(
     )?;
 
     // Re-parse formulas containing implicit structured refs now that the table exists.
+    crate::storage::engine::cell_metadata::refresh(
+        &stores.storage,
+        cell_store,
+        stores.layout_metrics,
+    );
     let recalc_result = stores.compute.reparse_implicit_structured_refs(
         cell_store, sheet_id, start_row, start_col, end_row, end_col,
     );
@@ -174,6 +179,11 @@ pub(in crate::storage::engine) fn delete_table(
         stores,
         cell_store,
         TableReferenceEdit::DeleteTable { table: table_name },
+    );
+    crate::storage::engine::cell_metadata::refresh(
+        &stores.storage,
+        cell_store,
+        stores.layout_metrics,
     );
     let mut result = MutationResult::from_recalc(
         stores
@@ -243,6 +253,11 @@ pub(in crate::storage::engine) fn rename_table(
             new: new_name,
         },
     );
+    crate::storage::engine::cell_metadata::refresh(
+        &stores.storage,
+        cell_store,
+        stores.layout_metrics,
+    );
     Ok(MutationResult::from_recalc(
         stores
             .compute
@@ -305,6 +320,11 @@ pub(in crate::storage::engine) fn resize_table(
 
     stores.compute.set_table(cell_store, resized.clone());
 
+    crate::storage::engine::cell_metadata::refresh(
+        &stores.storage,
+        cell_store,
+        stores.layout_metrics,
+    );
     // Re-parse formulas with implicit structured refs in the new range.
     let _ = stores.compute.reparse_implicit_structured_refs(
         cell_store,
@@ -513,6 +533,11 @@ pub(in crate::storage::engine) fn rename_table_column(
             new: new_column_name,
         },
     );
+    crate::storage::engine::cell_metadata::refresh(
+        &stores.storage,
+        cell_store,
+        stores.layout_metrics,
+    );
     let formula_recalc =
         stores
             .compute
@@ -577,6 +602,11 @@ pub(in crate::storage::engine) fn remove_table_column(
             table: table_name,
             column: &deleted_col_name,
         },
+    );
+    crate::storage::engine::cell_metadata::refresh(
+        &stores.storage,
+        cell_store,
+        stores.layout_metrics,
     );
     Ok(MutationResult::from_recalc(
         stores
@@ -855,6 +885,11 @@ pub(in crate::storage::engine) fn convert_table_to_range(
             table: &table_def,
             sheet_name: &sheet_name,
         },
+    );
+    crate::storage::engine::cell_metadata::refresh(
+        &stores.storage,
+        cell_store,
+        stores.layout_metrics,
     );
     merge_mutation_result(
         &mut result,

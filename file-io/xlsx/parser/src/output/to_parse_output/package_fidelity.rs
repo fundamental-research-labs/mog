@@ -320,7 +320,9 @@ fn package_diagnostic_owner(part: Option<&str>) -> domain_types::XlsxPackageOwne
         || part.starts_with("_xmlsignatures/")
     {
         domain_types::XlsxPackageOwnerId::ActiveContent
-    } else if part.starts_with("xl/externalLinks/") || part == "xl/connections.xml" {
+    } else if part == "xl/connections.xml" || part.starts_with("xl/queryTables/") {
+        domain_types::XlsxPackageOwnerId::ConnectionsAndQueryTables
+    } else if part.starts_with("xl/externalLinks/") {
         domain_types::XlsxPackageOwnerId::ExternalLinks
     } else if part.starts_with("xl/printerSettings/") {
         domain_types::XlsxPackageOwnerId::PrinterSettings

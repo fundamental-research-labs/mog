@@ -26,6 +26,65 @@ pub struct LookupIndex {
 }
 
 impl LookupIndex {
+    /// Search a bounded slice in either row direction. Exact matches use the
+    /// duplicate-row index; approximate matches visit closest value groups
+    /// until one contains a row in the requested slice.
+    pub fn search_range(
+        &self,
+        target: &CellValue,
+        mode: i32,
+        start: u32,
+        end: u32,
+        reverse: bool,
+    ) -> Option<u32> {
+        if start > end {
+            return None;
+        }
+        match (mode, target) {
+            (0, CellValue::Number(value)) => select_sorted_row(
+                self.exact_numeric.get(&OrderedFloat(value.get()))?,
+                start,
+                end,
+                reverse,
+            ),
+            (0, CellValue::Text(value)) => select_sorted_row(
+                self.exact_text.get(&value.to_lowercase())?,
+                start,
+                end,
+                reverse,
+            ),
+            (1 | -1, CellValue::Number(value)) => closest_bounded_row(
+                &self.sorted_numeric,
+                &value.get(),
+                mode,
+                start,
+                end,
+                reverse,
+            ),
+            (1 | -1, CellValue::Text(value)) => closest_bounded_row(
+                &self.sorted_string,
+                &value.to_lowercase(),
+                mode,
+                start,
+                end,
+                reverse,
+            ),
+            (2, CellValue::Text(pattern)) => {
+                let pattern = compile_wildcard(&pattern.to_lowercase());
+                let mut matches = self.text_by_row.iter().filter(|(text, row)| {
+                    *row >= start && *row <= end && wildcard_match(&pattern, text)
+                });
+                if reverse {
+                    matches.next_back()
+                } else {
+                    matches.next()
+                }
+                .map(|(_, row)| *row)
+            }
+            _ => None,
+        }
+    }
+
     /// Build from an iterator of (row, cell_value) pairs. O(n log n).
     /// Error values and null values are excluded from all indexes.
     /// NaN values from DenseColumn are also excluded.
@@ -296,6 +355,59 @@ impl LookupIndex {
             }
         }
         None
+    }
+}
+
+fn select_sorted_row(rows: &[u32], start: u32, end: u32, reverse: bool) -> Option<u32> {
+    let from = rows.partition_point(|row| *row < start);
+    let to = rows.partition_point(|row| *row <= end);
+    if from == to {
+        None
+    } else {
+        Some(rows[if reverse { to - 1 } else { from }])
+    }
+}
+
+fn closest_bounded_row<T: PartialOrd>(
+    values: &[(T, u32)],
+    target: &T,
+    mode: i32,
+    start: u32,
+    end: u32,
+    reverse: bool,
+) -> Option<u32> {
+    let mut boundary = if mode == 1 {
+        values.partition_point(|(value, _)| value <= target)
+    } else {
+        values.partition_point(|(value, _)| value < target)
+    };
+    loop {
+        let (from, to) = if mode == 1 {
+            let value = &values.get(boundary.checked_sub(1)?)?.0;
+            (
+                values[..boundary].partition_point(|(candidate, _)| candidate < value),
+                boundary,
+            )
+        } else {
+            let value = &values.get(boundary)?.0;
+            (
+                boundary,
+                boundary + values[boundary..].partition_point(|(candidate, _)| candidate <= value),
+            )
+        };
+        let candidates = values[from..to]
+            .iter()
+            .map(|(_, row)| *row)
+            .filter(|row| *row >= start && *row <= end);
+        let row = if reverse {
+            candidates.max()
+        } else {
+            candidates.min()
+        };
+        if row.is_some() {
+            return row;
+        }
+        boundary = if mode == 1 { from } else { to };
     }
 }
 
@@ -648,5 +760,48 @@ mod tests {
         assert_eq!(idx.search_exact_numeric(35.0), Some(2));
         assert_eq!(idx.search_exact_numeric(20.0), Some(1));
         assert_eq!(idx.search_exact_numeric(40.0), Some(3));
+    }
+    #[test]
+    fn bounded_directional_search_tracks_duplicates_and_updates() {
+        let mut index = LookupIndex::build(
+            vec![
+                (0, num(10.0)),
+                (1, num(20.0)),
+                (2, num(10.0)),
+                (3, num(20.0)),
+                (4, num(30.0)),
+                (5, CellValue::Text("apple".into())),
+                (6, CellValue::Text("azure".into())),
+                (7, CellValue::Text("APPLE".into())),
+                (8, CellValue::Text("*literal".into())),
+                (9, CellValue::Text("apple".into())),
+            ]
+            .into_iter(),
+        );
+        for (mode, target, forward, reverse) in [(0, 20.0, 1, 3), (1, 25.0, 1, 3), (-1, 15.0, 1, 3)]
+        {
+            assert_eq!(
+                index.search_range(&num(target), mode, 0, 4, false),
+                Some(forward)
+            );
+            assert_eq!(
+                index.search_range(&num(target), mode, 0, 4, true),
+                Some(reverse)
+            );
+        }
+        assert_eq!(index.search_range(&num(25.0), 1, 0, 0, true), Some(0));
+        assert_eq!(index.search_range(&num(15.0), -1, 4, 4, true), Some(4));
+        let text = |s: &str| CellValue::Text(s.into());
+        assert_eq!(index.search_range(&text("apple"), 0, 5, 7, true), Some(7));
+        assert_eq!(index.search_range(&text("A*"), 2, 5, 9, true), Some(9));
+        assert_eq!(index.search_range(&text("A*"), 2, 5, 9, false), Some(5));
+        assert_eq!(
+            index.search_range(&text("~*literal"), 2, 5, 9, true),
+            Some(8)
+        );
+        assert_eq!(index.search_range(&text("A*"), 0, 5, 9, true), None);
+        index.update(&[(3, num(20.0), num(17.0)), (9, text("apple"), text("pear"))]);
+        assert_eq!(index.search_range(&num(20.0), 0, 0, 4, true), Some(1));
+        assert_eq!(index.search_range(&text("apple"), 0, 5, 9, true), Some(7));
     }
 }

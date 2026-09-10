@@ -41,6 +41,11 @@ pub(super) fn delete_filter(
         sheet_id,
         filter_id,
     )?;
+    crate::storage::engine::cell_metadata::refresh(
+        &engine.stores.storage,
+        &mut engine.cell_store,
+        engine.stores.layout_metrics,
+    );
     let mut recalc = engine.stores.compute.full_recalc(&mut engine.cell_store)?;
     engine.postprocess_mutation_recalc(&mut recalc);
     result.recalc = recalc;
@@ -66,6 +71,11 @@ pub(super) fn set_column_filter(
         criteria,
     )?;
     let mut result = result;
+    crate::storage::engine::cell_metadata::refresh(
+        &engine.stores.storage,
+        &mut engine.cell_store,
+        engine.stores.layout_metrics,
+    );
     let mut recalc = engine.stores.compute.full_recalc(&mut engine.cell_store)?;
     engine.postprocess_mutation_recalc(&mut recalc);
     result.recalc = recalc;
@@ -89,6 +99,11 @@ pub(super) fn clear_column_filter(
         header_col,
     )?;
     let mut result = result;
+    crate::storage::engine::cell_metadata::refresh(
+        &engine.stores.storage,
+        &mut engine.cell_store,
+        engine.stores.layout_metrics,
+    );
     let mut recalc = engine.stores.compute.full_recalc(&mut engine.cell_store)?;
     engine.postprocess_mutation_recalc(&mut recalc);
     result.recalc = recalc;
@@ -110,6 +125,11 @@ pub(super) fn clear_all_column_filters(
         filter_id,
     )?;
     let mut result = result;
+    crate::storage::engine::cell_metadata::refresh(
+        &engine.stores.storage,
+        &mut engine.cell_store,
+        engine.stores.layout_metrics,
+    );
     let mut recalc = engine.stores.compute.full_recalc(&mut engine.cell_store)?;
     engine.postprocess_mutation_recalc(&mut recalc);
     result.recalc = recalc;
@@ -148,6 +168,11 @@ pub(super) fn apply_advanced_filter(
     )?;
     match mode {
         filters::AdvancedFilterMode::InPlace => {
+            crate::storage::engine::cell_metadata::refresh(
+                &engine.stores.storage,
+                &mut engine.cell_store,
+                engine.stores.layout_metrics,
+            );
             let mut recalc = engine.stores.compute.full_recalc(&mut engine.cell_store)?;
             engine.postprocess_mutation_recalc(&mut recalc);
             result.recalc = recalc;
@@ -200,6 +225,11 @@ fn finish_filter_apply(
 ) -> Result<MutationResult, ComputeError> {
     // Recalculate so SUBTOTAL/AGGREGATE formulas pick up the new hidden-row
     // state immediately (they read `cell_store.is_row_hidden()` during eval).
+    crate::storage::engine::cell_metadata::refresh(
+        &engine.stores.storage,
+        &mut engine.cell_store,
+        engine.stores.layout_metrics,
+    );
     let mut recalc = engine.stores.compute.full_recalc(&mut engine.cell_store)?;
     // Run the standard post-recalc enrichment (CF cache refresh,
     // display text, validation) for cells affected by visibility changes.
@@ -225,13 +255,19 @@ pub(super) fn get_unique_column_values(
 }
 
 pub(super) fn compute_dynamic_filter_serial_range(
-    _engine: &ComputeEngine,
+    engine: &ComputeEngine,
     rule: filters::DynamicFilterRule,
 ) -> Option<(f64, f64)> {
     let now_serial = crate::eval::clock::get_current_serial_timestamp();
     let now_date = value_types::serial_to_date(now_serial)?;
     let table_rule = filters::convert_dynamic_rule(&rule);
-    compute_table::compute_date_range_serial(&table_rule, now_date, chrono::Weekday::Sun)
+    let date_system = value_types::DateSystem::from_date1904(engine.cell_store.date1904);
+    compute_table::compute_date_range_serial_with_date_system(
+        &table_rule,
+        now_date,
+        chrono::Weekday::Sun,
+        date_system,
+    )
 }
 
 pub(super) fn get_filter(
@@ -291,6 +327,11 @@ pub(super) fn clear_all_filters(
     ensure_filter_full_recalc_ready(engine)?;
     let mut result =
         filter_svc::clear_all_filters(&mut engine.stores, &mut engine.cell_store, sheet_id)?;
+    crate::storage::engine::cell_metadata::refresh(
+        &engine.stores.storage,
+        &mut engine.cell_store,
+        engine.stores.layout_metrics,
+    );
     let mut recalc = engine.stores.compute.full_recalc(&mut engine.cell_store)?;
     engine.postprocess_mutation_recalc(&mut recalc);
     result.recalc = recalc;

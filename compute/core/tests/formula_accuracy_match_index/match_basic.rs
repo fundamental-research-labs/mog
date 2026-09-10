@@ -1,6 +1,6 @@
 use super::support::{
-    SHEET1_UUID, assert_error_value, assert_number_value, formula_cell, init_core, sheet_snapshot,
-    val_cell, workbook_snapshot,
+    SHEET1_UUID, assert_error_value, assert_number_value, cell_uuid, formula_cell, init_core,
+    sheet_snapshot, val_cell, workbook_snapshot,
 };
 use value_types::{CellError, CellValue};
 
@@ -183,5 +183,110 @@ fn test_match_with_large_range() {
         1,
         41.0,
         "MATCH(500, A1:A100, 0) should find 500 at row 41",
+    );
+}
+
+/// Numeric MATCH type -1 rejects an impossible endpoint while preserving
+/// valid interior matches in both directions.
+#[test]
+fn test_match_approx_endpoint_bounds() {
+    // A1:A3 is ascending; C1:C3 is descending.
+    // E1 uses mode -1 against the invalid ascending order, where the first
+    // value proves that a lookup of 300 cannot have a valid >= candidate.
+    // E2/E3 are valid interior matches and ensure the endpoint guard does not
+    // alter them.
+    let cells = vec![
+        val_cell(1, 0, 0, CellValue::number(100.0)),
+        val_cell(1, 1, 0, CellValue::number(200.0)),
+        val_cell(1, 2, 0, CellValue::number(300.0)),
+        val_cell(1, 0, 2, CellValue::number(300.0)),
+        val_cell(1, 1, 2, CellValue::number(200.0)),
+        val_cell(1, 2, 2, CellValue::number(100.0)),
+        formula_cell(1, 0, 4, "MATCH(300,A1:A3,-1)"),
+        formula_cell(1, 1, 4, "MATCH(250,A1:A3,1)"),
+        formula_cell(1, 2, 4, "MATCH(250,C1:C3,-1)"),
+    ];
+    let snapshot = workbook_snapshot(vec![sheet_snapshot(SHEET1_UUID, "Sheet1", 4, 5, cells)]);
+    let (cell_store, _core, result) = init_core(snapshot);
+
+    assert_error_value(
+        &cell_store,
+        &result,
+        SHEET1_UUID,
+        0,
+        4,
+        CellError::Na,
+        "MATCH type -1 above the first value should return #N/A",
+    );
+    assert_number_value(
+        &cell_store,
+        &result,
+        SHEET1_UUID,
+        1,
+        4,
+        2.0,
+        "MATCH type 1 interior match should return position 2",
+    );
+    assert_number_value(
+        &cell_store,
+        &result,
+        SHEET1_UUID,
+        2,
+        4,
+        1.0,
+        "MATCH type -1 interior match should return position 1",
+    );
+}
+
+/// The endpoint must be read after the indexed lookup has observed the
+/// refreshed dependency state. A pre-index raw cell-store read can see A1=100 even
+/// after its formula has recalculated to 500.
+#[test]
+fn test_match_endpoint_uses_refreshed_formula_first_value() {
+    // A1 is formula-backed and initially 100. After B1 changes to 500, the
+    // range becomes [500, 400, 200], a valid descending MATCH type -1 input.
+    let cells = vec![
+        formula_cell(1, 0, 0, "B1"),
+        val_cell(1, 0, 1, CellValue::number(100.0)),
+        val_cell(1, 1, 0, CellValue::number(400.0)),
+        val_cell(1, 2, 0, CellValue::number(200.0)),
+        formula_cell(1, 0, 3, "MATCH(300,A1:A3,-1)"),
+    ];
+    let snapshot = workbook_snapshot(vec![sheet_snapshot(SHEET1_UUID, "Sheet1", 3, 4, cells)]);
+    let (mut cell_store, mut core, initial) = init_core(snapshot);
+
+    assert_error_value(
+        &cell_store,
+        &initial,
+        SHEET1_UUID,
+        0,
+        3,
+        CellError::Na,
+        "initial MATCH must see the first formula value 100",
+    );
+
+    let sheet_id = cell_types::SheetId::from_uuid_str(SHEET1_UUID).unwrap();
+    let first_value_id = cell_types::CellId::from_uuid_str(&cell_uuid(1, 0, 1)).unwrap();
+    let refreshed = core
+        .set_cell(&mut cell_store, &sheet_id, first_value_id, 0, 1, "500")
+        .expect("set_cell failed");
+
+    assert_number_value(
+        &cell_store,
+        &refreshed,
+        SHEET1_UUID,
+        0,
+        0,
+        500.0,
+        "formula-backed first MATCH candidate should refresh",
+    );
+    assert_number_value(
+        &cell_store,
+        &refreshed,
+        SHEET1_UUID,
+        0,
+        3,
+        2.0,
+        "MATCH must use the refreshed endpoint and return the 400 row",
     );
 }

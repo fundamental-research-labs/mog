@@ -115,6 +115,7 @@ fn test_full_cell_data_serialize() {
         value: Some("42".to_string()),
         formula: None,
         force_recalc: false,
+        has_empty_cached_value: false,
         array_ref: None,
         cell_metadata_index: None,
         vm: None,

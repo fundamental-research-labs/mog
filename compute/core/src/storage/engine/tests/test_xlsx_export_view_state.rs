@@ -41,7 +41,7 @@ fn build_parse_output_projects_selected_sheets_into_workbook_views() {
         .set_workbook_settings(settings)
         .expect("selected sheet state write should succeed");
 
-    let exported = engine.build_parse_output();
+    let exported = engine.build_parse_output().expect("export projection");
 
     assert_eq!(exported.workbook_views[0].active_tab, 1);
     assert!(!exported.sheets[0].view.tab_selected);

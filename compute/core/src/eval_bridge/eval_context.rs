@@ -1,10 +1,11 @@
 //! EvalContext — concrete EvaluationContext backed by CellStore.
 //!
-//! Delegates all operations to the composed MirrorAccess struct.
+//! Delegates all operations to the composed StoreAccess struct.
 
-use super::store_access::{MirrorAccess, PendingCellOverride};
+use super::store_access::{PendingCellOverride, StoreAccess};
 use crate::cells::CellStore;
 use crate::eval::cache::range_store::RangeStore;
+use crate::eval::clock::RecalcClock;
 use crate::eval::context::traits::{EvalDataAccess, EvalMetadata};
 use crate::formula_text::{FormulaTextLookup, FormulaTextProvider};
 use crate::scheduler::AstEntry;
@@ -26,7 +27,7 @@ use crate::eval::lookup::index_cache::LookupIndexCache;
 
 /// Wraps a `&CellStore` and implements `EvaluationContext` (via split traits).
 pub struct EvalContext<'a> {
-    pub access: MirrorAccess<'a>,
+    pub access: StoreAccess<'a>,
     /// Optional shared lookup index cache for O(1) XLOOKUP/VLOOKUP/MATCH.
     /// When `None`, indexed lookups return `NotAvailable` and the evaluator
     /// falls back to the row-by-row materialization path.
@@ -44,12 +45,14 @@ pub struct EvalContext<'a> {
     pub workbook_cache: Option<&'a crate::eval::cache::workbook_cache::WorkbookCache>,
     /// Current scheduler-owned SUMIFS cache epoch.
     pub sumifs_cache_epoch: Option<SumifsCacheEpoch>,
+    /// Immutable clock input for the current recalc/evaluation scope.
+    pub(crate) clock: RecalcClock,
 }
 
 impl<'a> EvalContext<'a> {
     pub fn new(cell_store: &'a CellStore, current_cell_id: CellId, current_sheet: SheetId) -> Self {
         Self {
-            access: MirrorAccess::new(cell_store, current_cell_id, current_sheet),
+            access: StoreAccess::new(cell_store, current_cell_id, current_sheet),
             #[cfg(feature = "native")]
             lookup_cache: None,
             range_store: None,
@@ -57,6 +60,7 @@ impl<'a> EvalContext<'a> {
             #[cfg(feature = "native")]
             workbook_cache: None,
             sumifs_cache_epoch: None,
+            clock: RecalcClock::live(),
         }
     }
 
@@ -67,7 +71,7 @@ impl<'a> EvalContext<'a> {
         formula_text_provider: FormulaTextProvider<'a>,
     ) -> Self {
         Self {
-            access: MirrorAccess::with_formula_text_provider(
+            access: StoreAccess::with_formula_text_provider(
                 cell_store,
                 current_cell_id,
                 current_sheet,
@@ -80,6 +84,7 @@ impl<'a> EvalContext<'a> {
             #[cfg(feature = "native")]
             workbook_cache: None,
             sumifs_cache_epoch: None,
+            clock: RecalcClock::live(),
         }
     }
 
@@ -91,7 +96,7 @@ impl<'a> EvalContext<'a> {
         ordered_sheets: Vec<SheetId>,
     ) -> Self {
         Self {
-            access: MirrorAccess::with_sheet_order(
+            access: StoreAccess::with_sheet_order(
                 cell_store,
                 current_cell_id,
                 current_sheet,
@@ -104,6 +109,7 @@ impl<'a> EvalContext<'a> {
             #[cfg(feature = "native")]
             workbook_cache: None,
             sumifs_cache_epoch: None,
+            clock: RecalcClock::live(),
         }
     }
 
@@ -117,7 +123,7 @@ impl<'a> EvalContext<'a> {
         pending_override: PendingCellOverride,
     ) -> Self {
         Self {
-            access: MirrorAccess::with_pending_override(
+            access: StoreAccess::with_pending_override(
                 cell_store,
                 current_cell_id,
                 current_sheet,
@@ -130,6 +136,7 @@ impl<'a> EvalContext<'a> {
             #[cfg(feature = "native")]
             workbook_cache: None,
             sumifs_cache_epoch: None,
+            clock: RecalcClock::live(),
         }
     }
 
@@ -142,12 +149,13 @@ impl<'a> EvalContext<'a> {
         cache: &'a LookupIndexCache,
     ) -> Self {
         Self {
-            access: MirrorAccess::new(cell_store, current_cell_id, current_sheet),
+            access: StoreAccess::new(cell_store, current_cell_id, current_sheet),
             lookup_cache: Some(cache),
             range_store: None,
             ast_cache: None,
             workbook_cache: None,
             sumifs_cache_epoch: None,
+            clock: RecalcClock::live(),
         }
     }
 
@@ -161,17 +169,24 @@ impl<'a> EvalContext<'a> {
         range_store: &'a RangeStore,
     ) -> Self {
         Self {
-            access: MirrorAccess::new(cell_store, current_cell_id, current_sheet),
+            access: StoreAccess::new(cell_store, current_cell_id, current_sheet),
             lookup_cache: Some(range_store.lookup_cache()),
             range_store: Some(range_store),
             ast_cache: None,
             workbook_cache: None,
             sumifs_cache_epoch: None,
+            clock: RecalcClock::live(),
         }
     }
 
     pub fn with_sumifs_cache_epoch(mut self, epoch: Option<SumifsCacheEpoch>) -> Self {
         self.sumifs_cache_epoch = epoch;
+        self
+    }
+
+    /// Attach the immutable clock captured for the enclosing recalc.
+    pub(crate) fn with_recalc_clock(mut self, clock: RecalcClock) -> Self {
+        self.clock = clock;
         self
     }
 }
@@ -197,6 +212,9 @@ pub(super) fn root_ast_produces_dynamic_array(ast: &ASTNode) -> bool {
         ASTNode::SheetRef { inner, .. }
         | ASTNode::UnresolvedSheetRef { inner, .. }
         | ASTNode::Paren(inner) => root_ast_produces_dynamic_array(inner),
+        ASTNode::Function { name, args } if name.eq_ignore_ascii_case("CELL") => {
+            !matches!(args.first(), Some(ASTNode::Text(info)) if !info.eq_ignore_ascii_case("width"))
+        }
         ASTNode::Function { name, .. } => {
             ROOT_DYNAMIC_ARRAY_FUNCTIONS.contains(&name.to_uppercase().as_str())
         }
@@ -302,6 +320,47 @@ impl<'a> EvalDataAccess for EvalContext<'a> {
 }
 
 impl<'a> EvalMetadata for EvalContext<'a> {
+    fn cell_reference_metadata(
+        &self,
+        sheet: &SheetId,
+        row: u32,
+        col: u32,
+    ) -> Option<crate::cells::cell_metadata::CellReferenceMetadata> {
+        self.access
+            .cell_store
+            .cell_metadata_provider
+            .as_ref()?
+            .query(self.access.cell_store, sheet, row, col)
+    }
+    fn date1904(&self) -> bool {
+        self.access.cell_store.date1904
+    }
+
+    fn phonetic_shared_string(
+        &self,
+        sheet: &SheetId,
+        row: u32,
+        col: u32,
+    ) -> Option<domain_types::RichSharedString> {
+        self.access
+            .cell_store
+            .phonetic_shared_string(sheet, row, col)
+    }
+
+    fn char_code_page(&self) -> compute_functions::CharCodePage {
+        self.access.cell_store.char_code_page
+    }
+
+    fn current_timestamp(&self) -> f64 {
+        self.clock.current_timestamp_for_workbook(self.date1904())
+    }
+
+    fn legacy_reference_result(&self) -> bool {
+        self.access
+            .cell_store
+            .formula_result_mode(&self.access.current_cell())
+            == Some(crate::cells::cell_metadata::FormulaResultMode::LegacyScalar)
+    }
     fn current_cell(&self) -> CellId {
         self.access.current_cell()
     }
@@ -320,6 +379,10 @@ impl<'a> EvalMetadata for EvalContext<'a> {
 
     fn resolve_defined_name(&self, name: &str) -> Option<ResolvedName> {
         self.access.resolve_defined_name(name)
+    }
+
+    fn resolve_workbook_name(&self, name: &str) -> Option<ResolvedName> {
+        self.access.resolve_workbook_name(name)
     }
 
     fn resolve_defined_name_for_sheet(&self, name: &str, sheet: SheetId) -> Option<ResolvedName> {
@@ -385,6 +448,14 @@ impl<'a> EvalMetadata for EvalContext<'a> {
     }
 
     fn cell_has_dynamic_array_formula(&self, sheet: &SheetId, row: u32, col: u32) -> bool {
+        if let Some(id) = self
+            .access
+            .cell_store
+            .resolve_cell_id(sheet, cell_types::SheetPos::new(row, col))
+            && let Some(mode) = self.access.cell_store.formula_result_mode(&id)
+        {
+            return mode == crate::cells::cell_metadata::FormulaResultMode::Dynamic;
+        }
         if let Some(ast_cache) = self.ast_cache
             && let Some(cell_id) = self
                 .access
@@ -405,12 +476,50 @@ impl<'a> EvalMetadata for EvalContext<'a> {
         self.access.is_row_hidden(sheet, row)
     }
 
+    fn is_row_filtered(&self, sheet: &SheetId, row: u32) -> bool {
+        self.access
+            .cell_store
+            .cell_metadata_provider
+            .as_ref()
+            .is_some_and(|provider| provider.is_row_filtered(self.access.cell_store, sheet, row))
+    }
+
     fn get_table(&self, name: &str) -> Option<&formula_types::TableDef> {
         self.access.get_table(name)
     }
 
     fn find_pivot_table_at(&self, sheet: &SheetId, row: u32, col: u32) -> Option<&PivotTableDef> {
         self.access.find_pivot_table_at(sheet, row, col)
+    }
+
+    #[cfg(feature = "native")]
+    fn indexed_column_search_range(
+        &self,
+        sheet: &SheetId,
+        col: u32,
+        target: &CellValue,
+        query: crate::eval::context::traits::ColumnLookupQuery,
+    ) -> IndexedLookupResult {
+        if !matches!(target, CellValue::Number(_) | CellValue::Text(_)) {
+            return IndexedLookupResult::NotAvailable;
+        }
+        let Some(cache) = self.lookup_cache else {
+            return IndexedLookupResult::NotAvailable;
+        };
+        let Some(values) = self.access.get_column_values(sheet, col) else {
+            return IndexedLookupResult::NotAvailable;
+        };
+        let index = cache.get_or_build_from_col_data(*sheet, col, values);
+        match index.search_range(
+            target,
+            query.match_mode,
+            query.start_row,
+            query.end_row,
+            query.reverse,
+        ) {
+            Some(row) => IndexedLookupResult::Found(row),
+            None => IndexedLookupResult::NotFound,
+        }
     }
 
     #[cfg(feature = "native")]

@@ -259,6 +259,11 @@ pub(super) fn convert_sheet(
                 });
             }
         }
+        // Spans/bare-row metadata may have created a row entry before the
+        // descent pass. Merge the descent onto every existing carrier too.
+        for dimension in &mut row_heights {
+            dimension.descent = sheet.row_descents.get(&dimension.row).copied();
+        }
         row_heights.sort_by_key(|rd| rd.row);
     }
 

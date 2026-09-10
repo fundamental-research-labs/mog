@@ -235,6 +235,7 @@ pub(crate) fn parse_row_col_items(xml: &[u8]) -> Vec<PivotRowColItem> {
         };
 
         items.push(PivotRowColItem {
+            data_field_index: parse_u32_attr(element, b"i=\"").unwrap_or(0),
             item_type: parse_string_attr(element, b"t=\"").map(|_| parse_item_type_attr(element)),
             x_values: parse_x_values(body),
         });

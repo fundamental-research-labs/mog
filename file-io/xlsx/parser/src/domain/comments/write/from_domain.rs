@@ -149,22 +149,19 @@ fn build_comments_writer(
             (tc_author, runs, Some(thread_id_str))
         } else if comment.runs.is_empty() {
             let text = comment.content.as_deref().unwrap_or("");
-            let runs = vec![
-                CommentTextRun {
-                    text: format!("{}:\n", comment.author),
-                    bold: true,
-                    font_size: Some(9.0),
-                    font_name: Some("Tahoma".to_string()),
-                    ..Default::default()
-                },
-                CommentTextRun {
+            // Author metadata is independent from literal note content. Empty
+            // imported text and plain authored notes must not acquire a prefix.
+            let runs = if text.is_empty() {
+                Vec::new()
+            } else {
+                vec![CommentTextRun {
                     text: text.to_string(),
-                    font_size: Some(9.0),
-                    font_name: Some("Tahoma".to_string()),
+                    preserve_space: text.starts_with(char::is_whitespace)
+                        || text.ends_with(char::is_whitespace),
                     ..Default::default()
-                },
-            ];
-            (comment.author.clone(), runs, None)
+                }]
+            };
+            (comment.author.clone(), runs, comment.xr_uid.clone())
         } else {
             let runs = comment
                 .runs
@@ -213,6 +210,7 @@ fn build_comments_writer(
                 .find(|vml_shape| vml_shape.cell_ref.as_deref() == Some(comment.cell_ref.as_str()))
         }) {
             shape.has_vml_note_provenance = true;
+            shape.presentation = vml_shape.presentation.clone();
             shape.note_height_style = vml_shape.height.clone();
             shape.note_width_style = vml_shape.width.clone();
             shape.note_images = comment
@@ -222,7 +220,10 @@ fn build_comments_writer(
                     let relationship_id = vml_image_relationship_id
                         .and_then(|resolver| resolver(image))
                         .unwrap_or_else(|| image.relationship_id.clone());
-                    (!relationship_id.is_empty()).then_some(CommentShapeImage { relationship_id })
+                    (!relationship_id.is_empty()).then_some(CommentShapeImage {
+                        relationship_id,
+                        original_relationship_id: image.relationship_id.clone(),
+                    })
                 })
                 .collect();
         }

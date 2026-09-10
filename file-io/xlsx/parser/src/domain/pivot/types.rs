@@ -10,4 +10,5 @@ pub struct ParsedPivotCache {
     pub definition: PivotCacheDefinition,
     /// Cache records (CT_PivotCacheRecords).
     pub records: PivotCacheRecords,
+    pub ooxml_preservation: Option<domain_types::domain::pivot::PivotCacheOoxmlPreservation>,
 }

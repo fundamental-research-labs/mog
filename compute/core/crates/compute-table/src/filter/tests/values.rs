@@ -41,6 +41,13 @@ fn test_value_filter_case_insensitive_strings() {
 }
 
 #[test]
+fn test_value_filter_numeric_text_criteria_match_numeric_cells() {
+    let criteria = make_value_filter(vec![cv_text(" 2.5 ")], false);
+    let data = vec![cv_num(2.5), cv_num(2.0), cv_text(" 2.5 "), cv_null()];
+    assert_eq!(eval(&criteria, &data), vec![1, 0, 1, 0]);
+}
+
+#[test]
 fn test_value_filter_booleans() {
     let criteria = make_value_filter(vec![cv_bool(true)], false);
     let data = vec![cv_bool(true), cv_bool(false), cv_bool(true), cv_bool(false)];

@@ -132,8 +132,10 @@ pub fn parse_data_bar(xml: &[u8]) -> DataBar {
         pos = cfvo_end;
     }
 
-    // Parse color element
-    if let Some(color_start) = find_tag_simd(xml, b"color", 0) {
+    // x14 uses fillColor; base data bars (and older exports) use color.
+    if let Some(color_start) =
+        find_tag_simd(xml, b"fillColor", 0).or_else(|| find_tag_simd(xml, b"color", 0))
+    {
         let color_end = find_gt_simd(xml, color_start)
             .map(|p| p + 1)
             .unwrap_or(xml.len());

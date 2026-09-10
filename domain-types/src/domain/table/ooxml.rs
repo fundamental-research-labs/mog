@@ -56,7 +56,7 @@ where
         style: spec
             .style_name
             .clone()
-            .unwrap_or_else(|| "TableStyleMedium2".to_string()),
+            .unwrap_or_else(|| "none".to_string()),
         banded_rows: spec.row_stripes,
         banded_columns: spec.col_stripes,
         emphasize_first_column: spec.first_col_highlight,
@@ -150,7 +150,8 @@ pub fn catalog_entry_to_xlsx_table_spec(
         range_ref,
         has_headers: table.has_header_row,
         has_totals: table.has_totals_row,
-        style_name: Some(table.style.clone()),
+        style_name: (!table.style.eq_ignore_ascii_case("none") && !table.style.is_empty())
+            .then(|| table.style.clone()),
         row_stripes: table.banded_rows,
         col_stripes: table.banded_columns,
         first_col_highlight: table.emphasize_first_column,
@@ -232,4 +233,26 @@ pub(crate) fn col_index_to_letter(col: u32) -> String {
         n /= 26;
     }
     result
+}
+
+#[cfg(test)]
+mod style_roundtrip_tests {
+    use super::*;
+
+    #[test]
+    fn unnamed_table_style_remains_unstyled_in_catalog_and_export() {
+        let spec = TableSpec {
+            style_name: None,
+            ..TableSpec::default()
+        };
+        let catalog = xlsx_table_spec_to_catalog_entry_with_ids(
+            &spec,
+            "sheet",
+            "table".to_string(),
+            Vec::<String>::new(),
+        );
+        assert_eq!(catalog.style, "none");
+        let exported = catalog_entry_to_xlsx_table_spec(&catalog, None);
+        assert_eq!(exported.style_name, None);
+    }
 }

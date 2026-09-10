@@ -132,3 +132,35 @@ fn test_sort_invalid_sort_index() {
     // sort_index 5 is out of bounds (only 2 columns)
     assert_eq!(f.call(&[arr, num(5.0)]), err(CellError::Value));
 }
+
+#[test]
+fn test_sort_floors_valid_fractional_orders_and_rejects_other_orders() {
+    let f = FnSort;
+    let array = CellValue::from_rows(vec![vec![num(2.0)], vec![num(1.0)]]);
+
+    assert_eq!(
+        f.call(&[array.clone(), num(1.0), num(1.5)]),
+        CellValue::from_rows(vec![vec![num(1.0)], vec![num(2.0)]])
+    );
+    assert_eq!(
+        f.call(&[array.clone(), num(1.0), num(-0.5)]),
+        CellValue::from_rows(vec![vec![num(2.0)], vec![num(1.0)]])
+    );
+    for order in [
+        num(0.0),
+        num(0.5),
+        num(-1.5),
+        num(2.0),
+        num(-2.0),
+        text("ascending"),
+    ] {
+        assert_eq!(
+            f.call(&[array.clone(), num(1.0), order]),
+            err(CellError::Value)
+        );
+    }
+    assert_eq!(
+        f.call(&[array, num(1.0), err(CellError::Na)]),
+        err(CellError::Na)
+    );
+}

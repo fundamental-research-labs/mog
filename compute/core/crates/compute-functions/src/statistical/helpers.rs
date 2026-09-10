@@ -81,7 +81,9 @@ pub(crate) fn extract_paired_numbers(
     let mut ys = Vec::with_capacity(n);
     for i in 0..n {
         match (&flat_x[i], &flat_y[i]) {
-            (CellValue::Error(e, None), _) | (_, CellValue::Error(e, None)) => return Err(*e),
+            // Diagnostics describe the error; they never change whether a
+            // paired observation propagates it.
+            (CellValue::Error(e, _), _) | (_, CellValue::Error(e, _)) => return Err(*e),
             (CellValue::Number(x), CellValue::Number(y)) => {
                 xs.push(x.get());
                 ys.push(y.get());

@@ -18,6 +18,26 @@ pub(crate) fn capture_cell_metadata(storage: &WorkbookStorage, id: CellId) {
                 unreachable!()
             };
             let current = storage.cell_metadata.remove(id);
+            fn declaration(
+                metadata: Option<&crate::storage::CellMetadata>,
+            ) -> (
+                Option<crate::cells::cell_metadata::FormulaResultMode>,
+                Option<&str>,
+            ) {
+                metadata.map_or((None, None), |metadata| {
+                    (metadata.formula_result_mode, metadata.array_ref.as_deref())
+                })
+            }
+            if declaration(current.as_ref()) != declaration(old.as_ref())
+                || current
+                    .as_ref()
+                    .and_then(|metadata| metadata.rich_string.as_ref())
+                    != old
+                        .as_ref()
+                        .and_then(|metadata| metadata.rich_string.as_ref())
+            {
+                storage.invalidate_cell_metadata_projection();
+            }
             if let Some(value) = old.take() {
                 storage.cell_metadata.insert(*id, value);
             }
@@ -77,6 +97,18 @@ impl MetadataSwap for CellPropertiesPatch {
         cell_store: &mut CellStore,
         effects: &mut HistoryEffects,
     ) {
+        let current_format = storage
+            .sheet_metadata
+            .get(&self.sheet)
+            .and_then(|sheet| sheet.cell_properties.get(&self.cell))
+            .and_then(|properties| properties.format(&storage.metadata.style_palette));
+        let old_format = self
+            .old
+            .as_ref()
+            .and_then(|properties| properties.format(&storage.metadata.style_palette));
+        if current_format != old_format {
+            storage.invalidate_cell_metadata_projection();
+        }
         effects.metadata_events.record(
             &MetadataKey::CellProperties(self.sheet, self.cell),
             storage,
@@ -94,6 +126,17 @@ impl MetadataSwap for CellPropertiesPatch {
 }
 
 pub(crate) fn capture_cell_properties(storage: &WorkbookStorage, sheet: SheetId, id: CellId) {
+    storage.invalidate_cell_metadata_projection();
+    capture_cell_properties_cache_metadata(storage, sheet, id);
+}
+
+/// Cache provenance does not participate in reference-aware formula metadata.
+/// Capture its inverse without invalidating the formatting projection.
+pub(crate) fn capture_cell_properties_cache_metadata(
+    storage: &WorkbookStorage,
+    sheet: SheetId,
+    id: CellId,
+) {
     if !storage.history.is_active() || storage.history.owns_sheet(sheet) {
         return;
     }

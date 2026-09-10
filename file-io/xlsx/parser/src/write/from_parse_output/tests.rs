@@ -27,7 +27,9 @@ mod chart_ex_modeled_state;
 mod chart_ex_replay;
 mod chart_export_defaults;
 mod chart_export_plan;
+mod chart_picture_fill;
 mod chart_plot_vis_only_replay;
+mod chart_source_refresh;
 mod chart_user_shapes;
 mod charts;
 mod data_tables;
@@ -582,9 +584,11 @@ fn with_current_standard_chart_authority(mut chart: ChartSpec) -> ChartSpec {
     let fingerprint = chart_replay::standard_chart_projection_fingerprint(&chart);
     chart.standard_chart_provenance = Some(domain_types::chart::StandardChartProvenance {
         original_path: Some(original_path.clone()),
+        original_xml: None,
         rels_path: Some(rels_path_for_part(&original_path)),
         projection_schema_version: chart_replay::STANDARD_CHART_PROJECTION_SCHEMA_VERSION,
         projection_fingerprint: Some(fingerprint.clone()),
+        source_fingerprint: None,
         relationships: chart.chart_relationships.clone(),
         auxiliary_paths: chart
             .chart_auxiliary_files
@@ -600,6 +604,7 @@ fn with_current_standard_chart_authority(mut chart: ChartSpec) -> ChartSpec {
             package_owner: Some(original_path),
             relationship_closure_current: true,
             projection_fingerprint: Some(fingerprint),
+            source_fingerprint: None,
             invalidated_owner_ids: Vec::new(),
             stale_reason: None,
         });

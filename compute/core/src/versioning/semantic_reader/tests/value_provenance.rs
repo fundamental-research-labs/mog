@@ -100,6 +100,46 @@ fn scalar_with_formula_metadata_is_ambiguous_value_provenance() {
 }
 
 #[test]
+fn imported_formula_result_modes_remain_distinct_value_provenance() {
+    use crate::cells::cell_metadata::FormulaResultMode;
+
+    let mut digests = Vec::new();
+    for mode in [
+        FormulaResultMode::LegacyScalar,
+        FormulaResultMode::Cse,
+        FormulaResultMode::Dynamic,
+    ] {
+        let (mut engine, _) =
+            ComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::number(7.0))]))
+                .expect("engine");
+        engine.storage_mut().set_cell_metadata(
+            test_cell_id(1),
+            crate::storage::CellMetadata {
+                formula_result_mode: Some(mode),
+                ..Default::default()
+            },
+        );
+        let state = engine.read_semantic_workbook_state().expect("state");
+        assert_ambiguous_value_provenance(&state, "cell:sheet#0:r0:c0", &["formula-metadata"]);
+        let objects = &state.domains[super::super::UNSUPPORTED_CELL_VALUES_DOMAIN].objects;
+        let digest = objects
+            .iter()
+            .find(|(id, _)| {
+                id.ends_with(":unsupported:ambiguous-value-provenance:formula-metadata")
+            })
+            .expect("formula metadata provenance")
+            .1
+            .digest
+            .clone();
+        assert!(
+            !digests.contains(&digest),
+            "formula mode provenance collapsed: {mode:?}"
+        );
+        digests.push(digest);
+    }
+}
+
+#[test]
 fn rich_and_unsupported_value_metadata_are_ambiguous_value_provenance() {
     let (mut engine, _) =
         ComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::from("rich"))]))

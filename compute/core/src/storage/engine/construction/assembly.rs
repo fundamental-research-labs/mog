@@ -26,18 +26,21 @@ pub(in crate::storage::engine) fn from_snapshot_with_layout_metrics(
     let (compute, recalc_result, cell_store) = {
         let _span = tracing::info_span!("compute_init_from_snapshot").entered();
         let mut compute = ComputeCore::new();
-        let mut cell_store = CellStore::new();
-        let recalc_result = compute.init_from_snapshot(&mut cell_store, snapshot.clone())?;
+        let mut cell_store =
+            super::rebuild::build_initial_store(&storage, &snapshot, layout_metrics)?;
+        let recalc_result =
+            compute.init_from_snapshot_with_prebuilt_store(&mut cell_store, snapshot.clone())?;
         (compute, recalc_result, cell_store)
     };
 
-    let engine = assemble_engine_with_layout_metrics(
+    let mut engine = assemble_engine_with_layout_metrics(
         storage,
         cell_store,
         compute,
         &snapshot,
         layout_metrics,
     )?;
+    engine.mark_metadata_evaluated();
 
     Ok((engine, recalc_result))
 }
@@ -109,7 +112,7 @@ pub(in crate::storage::engine) fn assemble_engine_with_layout_metrics(
 }
 
 fn assemble_engine_inner(
-    storage: WorkbookStorage,
+    mut storage: WorkbookStorage,
     mut cell_store: CellStore,
     compute: ComputeCore,
     snapshot: &WorkbookSnapshot,
@@ -117,6 +120,23 @@ fn assemble_engine_inner(
     id_alloc: std::sync::Arc<cell_types::IdAllocator>,
     layout_metrics: domain_types::units::LayoutMetrics,
 ) -> Result<ComputeEngine, ComputeError> {
+    // A caller may provide a cell store that has already evaluated imported
+    // arrays. Propagate those publication invalidations before copying the
+    // durable sidecar into the assembled store, or a rebuild would restore
+    // stale package values over the live projection.
+    let invalidated = cell_store.take_imported_array_cache_invalidations();
+    storage.invalidate_imported_array_caches_at(invalidated);
+
+    // `from_evaluated_snapshot_for_export` supplies a live cell store whose
+    // imported caches are already attached, while its snapshot-derived
+    // storage intentionally has no import sidecar. Do not erase that state;
+    // ordinary snapshot assembly installs the storage-owned caches.
+    if !storage.imported_array_caches.is_empty() {
+        cell_store.install_imported_array_caches(&storage.imported_array_caches);
+    }
+    crate::storage::engine::cell_metadata::refresh(&storage, &mut cell_store, layout_metrics);
+    cell_store.date1904 =
+        crate::storage::workbook::settings::get_settings(&storage.metadata).date1904;
     let grid_indexes = build_grid_indexes(&cell_store, snapshot, grid_id_alloc.clone())?;
     let merge_indexes = build_merge_indexes(&storage, snapshot, &cell_store)?;
 
@@ -128,14 +148,6 @@ fn assemble_engine_inner(
     );
 
     let settings = derive_settings(&storage);
-
-    // Native policy changes and API events share one event buffer.
-    let security_events = std::sync::Arc::new(
-        crate::storage::engine::security_events::SecurityEventBuffer::default(),
-    );
-    let security = crate::storage::security_state::SecurityState::with_event_buffer(
-        std::sync::Arc::clone(&security_events),
-    );
 
     let mut engine = ComputeEngine {
         cell_store,
@@ -155,8 +167,6 @@ fn assemble_engine_inner(
         history: Default::default(),
         viewport: ViewportService::new(),
         settings,
-        security,
-        security_events,
         import_report: domain_types::ImportReport::default(),
         runtime_diagnostics: Default::default(),
         version_runtime_operation_context: Default::default(),
@@ -186,6 +196,7 @@ pub(in crate::storage::engine) fn rebuild_engine_from_snapshot(
     workbook_snap: WorkbookSnapshot,
     do_recalc: bool,
 ) -> Result<RecalcResult, ComputeError> {
+    let char_code_page = engine.cell_store.char_code_page;
     engine.stores.storage = new_storage;
 
     // CellStore is built inside init_from_snapshot / init_from_snapshot_minimal.
@@ -194,11 +205,22 @@ pub(in crate::storage::engine) fn rebuild_engine_from_snapshot(
     let recalc_result = {
         let mut profile = crate::xlsx_profile::PhaseTimer::new("import", "store_compute_rebuild");
         engine.stores.compute = ComputeCore::new();
+        let date1904 = workbook_settings::get_settings(&engine.stores.storage.metadata).date1904;
         let recalc_result = if do_recalc {
+            engine.cell_store = super::rebuild::build_initial_store(
+                &engine.stores.storage,
+                &workbook_snap,
+                engine.stores.layout_metrics,
+            )?;
+            engine.cell_store.char_code_page = char_code_page;
+            engine.cell_store.date1904 = date1904;
             engine
                 .stores
                 .compute
-                .init_from_snapshot(&mut engine.cell_store, workbook_snap.clone())?
+                .init_from_snapshot_with_prebuilt_store(
+                    &mut engine.cell_store,
+                    workbook_snap.clone(),
+                )?
         } else {
             #[cfg(target_arch = "wasm32")]
             {
@@ -215,6 +237,24 @@ pub(in crate::storage::engine) fn rebuild_engine_from_snapshot(
                     .init_from_snapshot_no_recalc(&mut engine.cell_store, workbook_snap.clone())?
             }
         };
+        // The no-recalc/minimal branches replace the store inside the
+        // scheduler initializer. Reapply the runtime-only calculation option
+        // after either branch; the recalc branch also set it before parsing.
+        engine.cell_store.char_code_page = char_code_page;
+        engine.cell_store.date1904 = date1904;
+        engine.cell_store.install_cell_metadata_provider(
+            crate::storage::engine::cell_metadata::provider(
+                &engine.stores.storage,
+                engine.stores.layout_metrics,
+            ),
+        );
+        if do_recalc {
+            engine.sync_imported_array_cache_invalidations();
+        } else {
+            engine
+                .cell_store
+                .install_imported_array_caches(&engine.stores.storage.imported_array_caches);
+        }
         profile.counter("sheets", workbook_snap.sheets.len() as u64);
         profile.counter(
             "snapshot_cells",
@@ -275,6 +315,9 @@ pub(in crate::storage::engine) fn rebuild_engine_from_snapshot(
 
     // Normalize named-range references into their canonical format.
     normalize_named_range_refs(engine);
+    if do_recalc {
+        engine.mark_metadata_evaluated();
+    }
 
     Ok(recalc_result)
 }

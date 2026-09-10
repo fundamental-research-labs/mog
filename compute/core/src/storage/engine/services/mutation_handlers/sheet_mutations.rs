@@ -209,12 +209,23 @@ pub(in crate::storage::engine) fn mutation_delete_sheet(
         stores.storage.cell_metadata.remove(&id);
     }
 
-    // 1. Remove from ComputeCore first — needs cell_store data to find external dependents.
+    // 1. Remove from ComputeCore first — needs cell-store data to find external dependents.
     //    This also calls cell_store.remove_sheet internally.
+    crate::storage::engine::cell_metadata::refresh(
+        &stores.storage,
+        cell_store,
+        stores.layout_metrics,
+    );
     let recalc = stores.compute.remove_sheet(cell_store, sheet_id)?;
 
     // 2. Remove native metadata (values were cleared by compute.remove_sheet)
     stores.storage.remove_sheet(cell_store, sheet_id);
+    if let Some(name) = name.as_deref() {
+        crate::storage::sheet::schemas::invalidate_validation_sheet_references(
+            &mut stores.storage,
+            name,
+        );
+    }
 
     // 3. Remove GridIndex, merge list, and layout index
     stores.grid_indexes.remove(sheet_id);
@@ -260,6 +271,13 @@ pub(in crate::storage::engine) fn mutation_rename_sheet(
     crate::storage::sheet::properties::rename_sheet(&mut stores.storage, sheet_id, name);
     // 2. Rename in ComputeCore, which updates the cell store and authored formula text.
     stores.compute.rename_sheet(cell_store, sheet_id, name);
+    if let Some(old_name) = old_name.as_deref() {
+        crate::storage::sheet::schemas::rewrite_validation_sheet_references(
+            &mut stores.storage,
+            old_name,
+            name,
+        );
+    }
     crate::storage::workbook::imported_pivots::update_output_sheet_name_for_sheet(
         &mut stores.storage,
         sheet_id,
@@ -363,6 +381,11 @@ pub(in crate::storage::engine) fn mutation_copy_sheet(
         &new_id,
         &mut formula_cells,
     )?;
+    crate::storage::engine::cell_metadata::refresh(
+        &stores.storage,
+        cell_store,
+        stores.layout_metrics,
+    );
     stores
         .compute
         .register_sheet_formulas(cell_store, new_id, formula_cells);

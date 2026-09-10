@@ -5,6 +5,10 @@ use crate::{FunctionRegistry, PureFunction};
 pub(super) struct FnCell;
 
 impl PureFunction for FnCell {
+    fn returns_array(&self) -> bool {
+        // The contextual evaluator returns [width, is_default] for "width".
+        true
+    }
     fn name(&self) -> &'static str {
         "CELL"
     }

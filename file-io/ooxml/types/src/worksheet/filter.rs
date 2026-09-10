@@ -412,7 +412,8 @@ pub struct IconFilter {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub icon_set: Option<String>,
     /// Zero-based icon index within the icon set.
-    pub icon_id: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon_id: Option<u32>,
 }
 
 // ============================================================================

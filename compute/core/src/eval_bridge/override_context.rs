@@ -1,17 +1,18 @@
 //! OverrideContext — EvaluationContext wrapper with cell value override map.
 //!
-//! Composes MirrorAccess with an override map. Value access methods check
+//! Composes StoreAccess with an override map. Value access methods check
 //! overrides first, falling through to the cell store. Structural/positional
-//! queries delegate directly to MirrorAccess.
+//! queries delegate directly to StoreAccess.
 
 use std::cell::RefCell;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::eval_context::root_ast_produces_dynamic_array;
-use super::store_access::MirrorAccess;
+use super::store_access::StoreAccess;
 use crate::cells::CellStore;
 use crate::eval::Evaluator;
+use crate::eval::clock::RecalcClock;
 use crate::eval::context::traits::{EvalDataAccess, EvalMetadata};
 use crate::eval::sync_block_on;
 use crate::formula_text::{FormulaTextLookup, FormulaTextProvider};
@@ -27,11 +28,13 @@ use value_types::{DenseBoolMask, DenseColumn};
 /// the override map is checked first; if the cell is not overridden, the cell store
 /// is consulted. Used by What-If analysis tools (Goal Seek, Data Tables).
 pub struct OverrideContext<'a> {
-    pub access: MirrorAccess<'a>,
+    pub access: StoreAccess<'a>,
     pub overrides: &'a FxHashMap<CellId, CellValue>,
     pub ast_cache: &'a FxHashMap<CellId, AstEntry>,
     pub eval_cache: &'a RefCell<FxHashMap<CellId, CellValue>>,
     pub evaluating: &'a RefCell<FxHashSet<CellId>>,
+    /// Immutable clock input for the current evaluation scope.
+    pub(crate) clock: RecalcClock,
 }
 
 impl<'a> OverrideContext<'a> {
@@ -45,11 +48,12 @@ impl<'a> OverrideContext<'a> {
         evaluating: &'a RefCell<FxHashSet<CellId>>,
     ) -> Self {
         Self {
-            access: MirrorAccess::new(cell_store, current_cell_id, current_sheet),
+            access: StoreAccess::new(cell_store, current_cell_id, current_sheet),
             overrides,
             ast_cache,
             eval_cache,
             evaluating,
+            clock: RecalcClock::live(),
         }
     }
 
@@ -64,7 +68,7 @@ impl<'a> OverrideContext<'a> {
         formula_text_provider: FormulaTextProvider<'a>,
     ) -> Self {
         Self {
-            access: MirrorAccess::with_formula_text_provider(
+            access: StoreAccess::with_formula_text_provider(
                 cell_store,
                 current_cell_id,
                 current_sheet,
@@ -74,7 +78,14 @@ impl<'a> OverrideContext<'a> {
             ast_cache,
             eval_cache,
             evaluating,
+            clock: RecalcClock::live(),
         }
+    }
+
+    /// Attach the immutable clock captured for the enclosing recalc/evaluation.
+    pub(crate) fn with_recalc_clock(mut self, clock: RecalcClock) -> Self {
+        self.clock = clock;
+        self
     }
 
     /// Resolve a cell's value, recursively evaluating formulas with current overrides.
@@ -223,6 +234,48 @@ impl<'a> EvalDataAccess for OverrideContext<'a> {
 }
 
 impl<'a> EvalMetadata for OverrideContext<'a> {
+    fn cell_reference_metadata(
+        &self,
+        sheet: &SheetId,
+        row: u32,
+        col: u32,
+    ) -> Option<crate::cells::cell_metadata::CellReferenceMetadata> {
+        self.access
+            .cell_store
+            .cell_metadata_provider
+            .as_ref()?
+            .query(self.access.cell_store, sheet, row, col)
+    }
+    fn date1904(&self) -> bool {
+        self.access.cell_store.date1904
+    }
+
+    fn phonetic_shared_string(
+        &self,
+        sheet: &SheetId,
+        row: u32,
+        col: u32,
+    ) -> Option<domain_types::RichSharedString> {
+        self.access
+            .cell_store
+            .phonetic_shared_string(sheet, row, col)
+    }
+
+    fn char_code_page(&self) -> compute_functions::CharCodePage {
+        self.access.cell_store.char_code_page
+    }
+
+    fn current_timestamp(&self) -> f64 {
+        self.clock.current_timestamp_for_workbook(self.date1904())
+    }
+
+    fn legacy_reference_result(&self) -> bool {
+        self.access
+            .cell_store
+            .formula_result_mode(&self.access.current_cell())
+            == Some(crate::cells::cell_metadata::FormulaResultMode::LegacyScalar)
+    }
+
     fn current_cell(&self) -> CellId {
         self.access.current_cell()
     }
@@ -241,6 +294,10 @@ impl<'a> EvalMetadata for OverrideContext<'a> {
 
     fn resolve_defined_name(&self, name: &str) -> Option<ResolvedName> {
         self.access.resolve_defined_name(name)
+    }
+
+    fn resolve_workbook_name(&self, name: &str) -> Option<ResolvedName> {
+        self.access.resolve_workbook_name(name)
     }
 
     fn resolve_defined_name_for_sheet(&self, name: &str, sheet: SheetId) -> Option<ResolvedName> {
@@ -292,6 +349,14 @@ impl<'a> EvalMetadata for OverrideContext<'a> {
 
     fn is_row_hidden(&self, sheet: &SheetId, row: u32) -> bool {
         self.access.is_row_hidden(sheet, row)
+    }
+
+    fn is_row_filtered(&self, sheet: &SheetId, row: u32) -> bool {
+        self.access
+            .cell_store
+            .cell_metadata_provider
+            .as_ref()
+            .is_some_and(|provider| provider.is_row_filtered(self.access.cell_store, sheet, row))
     }
 
     fn get_table(&self, name: &str) -> Option<&formula_types::TableDef> {

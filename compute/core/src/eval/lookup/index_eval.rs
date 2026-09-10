@@ -79,7 +79,7 @@ pub(in crate::eval) async fn eval_index<'a, D: EvalDataAccess, M: EvalMetadata>(
                                 num_rows,
                                 num_cols,
                             );
-                            index_lazy_cell(
+                            index_reference_value(
                                 evaluator, sheet, range_sr, range_sc, range_er, range_ec, eff_row,
                                 eff_col,
                             )
@@ -115,7 +115,7 @@ pub(in crate::eval) async fn eval_index<'a, D: EvalDataAccess, M: EvalMetadata>(
                                     num_rows,
                                     num_cols,
                                 );
-                                index_lazy_cell(
+                                index_reference_value(
                                     evaluator, sheet, range_sr, range_sc, range_er, range_ec,
                                     eff_row, eff_col,
                                 )
@@ -151,86 +151,10 @@ pub(in crate::eval) async fn eval_index<'a, D: EvalDataAccess, M: EvalMetadata>(
         let (eff_row, eff_col) =
             index_effective_position(row_idx, col_idx, has_col_arg, num_rows, num_cols);
 
-        // Single cell → lazy access (the common case, avoids false cycles)
-        if eff_row > 0 && eff_col > 0 {
-            return Ok(index_lazy_cell(
-                evaluator, sheet, range_sr, range_sc, range_er, range_ec, eff_row, eff_col,
-            )
-            .await);
-        }
-
-        // Row/column slice → narrowed sub-range (much smaller than full range)
-        if eff_row == 0 && eff_col == 0 {
-            // Return entire range — must materialize
-            let start = CellRef::Positional {
-                sheet,
-                row: range_sr,
-                col: range_sc,
-            };
-            let end = CellRef::Positional {
-                sheet,
-                row: range_er,
-                col: range_ec,
-            };
-            return match evaluator
-                .data
-                .get_range_values(&start, &end, &RangeType::CellRange)
-                .await
-            {
-                Ok(arr) => Ok(CellValue::Array(arr)),
-                Err(e) => Ok(CellValue::Error(e, None)),
-            };
-        }
-        if eff_row == 0 {
-            // Return entire column within range (single column)
-            let ci = (eff_col - 1) as u32;
-            let target_col = range_sc + ci;
-            if target_col > range_ec {
-                return Ok(CellValue::Error(CellError::Ref, None));
-            }
-            let start = CellRef::Positional {
-                sheet,
-                row: range_sr,
-                col: target_col,
-            };
-            let end = CellRef::Positional {
-                sheet,
-                row: range_er,
-                col: target_col,
-            };
-            return match evaluator
-                .data
-                .get_range_values(&start, &end, &RangeType::CellRange)
-                .await
-            {
-                Ok(arr) => Ok(CellValue::Array(arr)),
-                Err(e) => Ok(CellValue::Error(e, None)),
-            };
-        }
-        // eff_col == 0: return entire row within range (single row)
-        let ri = (eff_row - 1) as u32;
-        let target_row = range_sr + ri;
-        if target_row > range_er {
-            return Ok(CellValue::Error(CellError::Ref, None));
-        }
-        let start = CellRef::Positional {
-            sheet,
-            row: target_row,
-            col: range_sc,
-        };
-        let end = CellRef::Positional {
-            sheet,
-            row: target_row,
-            col: range_ec,
-        };
-        return match evaluator
-            .data
-            .get_range_values(&start, &end, &RangeType::CellRange)
-            .await
-        {
-            Ok(arr) => Ok(CellValue::Array(arr)),
-            Err(e) => Ok(CellValue::Error(e, None)),
-        };
+        return Ok(index_reference_value(
+            evaluator, sheet, range_sr, range_sc, range_er, range_ec, eff_row, eff_col,
+        )
+        .await);
     }
 
     // --- Eager fallback: non-reference args (computed arrays, literals, etc.) ---
@@ -346,7 +270,7 @@ pub(in crate::eval) async fn eval_index<'a, D: EvalDataAccess, M: EvalMetadata>(
     }
 }
 
-async fn index_lazy_cell<'a, D: EvalDataAccess, M: EvalMetadata>(
+async fn index_reference_value<'a, D: EvalDataAccess, M: EvalMetadata>(
     evaluator: &mut Evaluator<'a, D, M>,
     sheet: SheetId,
     range_sr: u32,
@@ -356,17 +280,48 @@ async fn index_lazy_cell<'a, D: EvalDataAccess, M: EvalMetadata>(
     eff_row: usize,
     eff_col: usize,
 ) -> CellValue {
-    let target_row = range_sr + (eff_row - 1) as u32;
-    let target_col = range_sc + (eff_col - 1) as u32;
-    if target_row > range_er || target_col > range_ec {
+    let Some((start_row, end_row)) = index_axis_bounds(range_sr, range_er, eff_row) else {
         return CellValue::Error(CellError::Ref, None);
-    }
-    let ref_ = CellRef::Positional {
-        sheet,
-        row: target_row,
-        col: target_col,
     };
-    evaluator.data.get_cell_value_by_ref(&ref_).await
+    let Some((start_col, end_col)) = index_axis_bounds(range_sc, range_ec, eff_col) else {
+        return CellValue::Error(CellError::Ref, None);
+    };
+    let start = CellRef::Positional {
+        sheet,
+        row: start_row,
+        col: start_col,
+    };
+    if eff_row != 0 && eff_col != 0 {
+        return evaluator.data.get_cell_value_by_ref(&start).await;
+    }
+    // Zero selects the complete axis, including when INDEX is array-lifted.
+    let end = CellRef::Positional {
+        sheet,
+        row: end_row,
+        col: end_col,
+    };
+    match evaluator
+        .data
+        .get_range_values(&start, &end, &RangeType::CellRange)
+        .await
+    {
+        Ok(array) => CellValue::Array(array),
+        Err(error) => CellValue::Error(error, None),
+    }
+}
+
+/// Resolve a one-based INDEX selector without truncation or coordinate overflow.
+/// Zero retains the full axis; all other selectors must identify a cell in it.
+fn index_axis_bounds(start: u32, end: u32, index: usize) -> Option<(u32, u32)> {
+    if start > end {
+        return None;
+    }
+    if index == 0 {
+        return Some((start, end));
+    }
+    let offset = u32::try_from(index.checked_sub(1)?).ok()?;
+    let selected = start.checked_add(offset)?;
+    (selected <= end).then_some((selected, selected))
 }
 
 pub(in crate::eval) async fn eval_index_as_area<'a, D: EvalDataAccess, M: EvalMetadata>(
@@ -391,8 +346,8 @@ pub(in crate::eval) async fn eval_index_as_area<'a, D: EvalDataAccess, M: EvalMe
         });
     }
     let row_num = match row_val.coerce_to_number() {
-        Ok(n) => n as i64,
-        Err(_) => {
+        Ok(n) if n >= 0.0 => n as i64,
+        _ => {
             return Err(ComputeError::Eval {
                 message: "INDEX: row_num not numeric".into(),
             });
@@ -409,8 +364,8 @@ pub(in crate::eval) async fn eval_index_as_area<'a, D: EvalDataAccess, M: EvalMe
             });
         }
         match col_val.coerce_to_number() {
-            Ok(n) => n as i64,
-            Err(_) => {
+            Ok(n) if n >= 0.0 => n as i64,
+            _ => {
                 return Err(ComputeError::Eval {
                     message: "INDEX: col_num not numeric".into(),
                 });
@@ -435,41 +390,14 @@ pub(in crate::eval) async fn eval_index_as_area<'a, D: EvalDataAccess, M: EvalMe
         (row_num, col_num)
     };
 
-    // Compute target area within the range
-    if row_num == 0 && col_num == 0 {
-        // Return entire range
-        Ok((sheet, range_sr, range_sc, range_er, range_ec))
-    } else if row_num == 0 {
-        // Return entire column within range
-        let ci = (col_num - 1) as u32;
-        let target_col = range_sc + ci;
-        if target_col > range_ec {
-            return Err(ComputeError::Eval {
-                message: "INDEX: column out of bounds".into(),
-            });
-        }
-        Ok((sheet, range_sr, target_col, range_er, target_col))
-    } else if col_num == 0 {
-        // Return entire row within range
-        let ri = (row_num - 1) as u32;
-        let target_row = range_sr + ri;
-        if target_row > range_er {
-            return Err(ComputeError::Eval {
-                message: "INDEX: row out of bounds".into(),
-            });
-        }
-        Ok((sheet, target_row, range_sc, target_row, range_ec))
-    } else {
-        // Return single cell
-        let ri = (row_num - 1) as u32;
-        let ci = (col_num - 1) as u32;
-        let target_row = range_sr + ri;
-        let target_col = range_sc + ci;
-        if target_row > range_er || target_col > range_ec {
-            return Err(ComputeError::Eval {
-                message: "INDEX: position out of bounds".into(),
-            });
-        }
-        Ok((sheet, target_row, target_col, target_row, target_col))
-    }
+    let bounds = || {
+        let (start_row, end_row) =
+            index_axis_bounds(range_sr, range_er, usize::try_from(row_num).ok()?)?;
+        let (start_col, end_col) =
+            index_axis_bounds(range_sc, range_ec, usize::try_from(col_num).ok()?)?;
+        Some((sheet, start_row, start_col, end_row, end_col))
+    };
+    bounds().ok_or_else(|| ComputeError::Eval {
+        message: "INDEX: position out of bounds".into(),
+    })
 }

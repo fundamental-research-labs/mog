@@ -440,13 +440,34 @@ impl<'a> AstVisitor for DepExtractor<'a> {
     }
 
     fn visit_identifier(&mut self, name: &str) {
+        self.collect_name_dependencies(
+            name,
+            &[
+                formula_types::Scope::Sheet(self.sheet_ctx),
+                formula_types::Scope::Workbook,
+            ],
+        );
+    }
+
+    fn visit_external_name_ref(
+        &mut self,
+        workbook: &formula_types::ExternalWorkbookToken,
+        name: &str,
+    ) {
+        if workbook.is_current_workbook() {
+            self.collect_name_dependencies(name, &[formula_types::Scope::Workbook]);
+        }
+    }
+}
+
+impl DepExtractor<'_> {
+    fn collect_name_dependencies(&mut self, name: &str, chain: &[formula_types::Scope]) {
         // Check if this identifier resolves to a variable in the VariableStore.
         // If so, emit a dependency on the variable's synthetic CellId AND
         // the actual cell/range refs from the named range definition.
-        use formula_types::{IdentityFormulaRef, Scope};
+        use formula_types::IdentityFormulaRef;
 
-        let chain = [Scope::Sheet(self.sheet_ctx), Scope::Workbook];
-        if let Some((var_cell_id, def)) = self.cell_store.variables.resolve_with_id(name, &chain) {
+        if let Some((var_cell_id, def)) = self.cell_store.variables.resolve_with_id(name, chain) {
             // Keep synthetic variable dep (for LET chain cycle detection)
             self.deps.push(DepTarget::Cell(var_cell_id));
 

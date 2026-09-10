@@ -1,12 +1,13 @@
 use cell_types::{RangePos, SheetId, SheetPos};
 use compute_document::hex::id_to_hex;
-use value_types::ComputeError;
+use value_types::{CellValue, ComputeError};
 
 use crate::cells::CellStore;
 use crate::snapshot::RecalcResult;
 use crate::snapshot::{ChangeKind, PivotTableChange, TableChange};
-use crate::storage::engine::services::metadata_shift;
+use crate::storage::engine::services::{metadata_shift, mutation};
 use crate::storage::engine::stores::EngineStores;
+use crate::storage::workbook::data_tables;
 
 use super::patches::{merge_recalc_results, synthetic_null_change};
 
@@ -137,6 +138,11 @@ pub(in crate::storage::engine) fn mutation_relocate_cells(
     .collect();
 
     // Clear displaced cells while their old positions are still available to recalc.
+    crate::storage::engine::cell_metadata::refresh(
+        &stores.storage,
+        cell_store,
+        stores.layout_metrics,
+    );
     let clear_recalc = if result.target_cells_cleared.is_empty() {
         RecalcResult::empty()
     } else {
@@ -181,6 +187,30 @@ pub(in crate::storage::engine) fn mutation_relocate_cells(
             .validate_raw_user_edit_region_writes(cell_store, &moved_validation_edits)?;
     }
 
+    let region_mutation = if result.moved_cell_ids.is_empty() {
+        data_tables::DataTableRegionMutation::default()
+    } else {
+        data_tables::relocate_regions(
+            cell_store,
+            source_sheet_id,
+            src_start_row,
+            src_start_col,
+            src_end_row,
+            src_end_col,
+            target_sheet_id,
+            target_row,
+            target_col,
+        )
+    };
+    for (cell_id, sheet_id, _) in &moves {
+        let array_ref = stores
+            .storage
+            .cell_metadata(cell_id)
+            .and_then(|metadata| metadata.array_ref.as_deref());
+        mutation::reconcile_persisted_array_ref(cell_store, sheet_id, cell_id, array_ref);
+    }
+    let stale_table_recalc = reconcile_data_table_cells(stores, cell_store, &region_mutation)?;
+
     let mut recalc = if moved_cell_ids.is_empty() {
         clear_recalc
     } else {
@@ -203,6 +233,7 @@ pub(in crate::storage::engine) fn mutation_relocate_cells(
         moved_recalc
     };
 
+    merge_recalc_results(&mut recalc, stale_table_recalc);
     // Report source positions that became empty, including overlap handling.
     for &(row, col) in &result.source_positions_vacated {
         if cell_store
@@ -306,4 +337,60 @@ fn relocate_whole_tables(
     }
 
     changes
+}
+
+/// Remove orphan TABLE dependencies and preserve their current cached values.
+pub(super) fn reconcile_data_table_cells(
+    stores: &mut EngineStores,
+    cell_store: &mut CellStore,
+    mutation: &data_tables::DataTableRegionMutation,
+) -> Result<RecalcResult, ComputeError> {
+    let mut edits = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for (sheet, sr, sc, er, ec) in &mutation.formula_ranges {
+        let ids: Vec<_> = cell_store
+            .cells_in_range(sheet, *sr, *sc, *er, *ec)
+            .map(|(id, _, _)| id)
+            .collect();
+        for id in &ids {
+            if let Some(pos) = cell_store.resolve_position(id) {
+                crate::storage::engine::history::cells::capture_cell(
+                    stores,
+                    cell_store,
+                    *sheet,
+                    *id,
+                    pos.row(),
+                    pos.col(),
+                );
+            }
+        }
+        for id in
+            data_tables::clear_table_formula_cells(&mut stores.storage, cell_store, sheet, &ids)
+        {
+            if !seen.insert(id) {
+                continue;
+            }
+            if let Some(pos) = cell_store.resolve_position(&id) {
+                let value = cell_store
+                    .get_cell_value_raw(&id)
+                    .cloned()
+                    .unwrap_or(CellValue::Null);
+                edits.push((*sheet, id, pos.row(), pos.col(), value, None));
+            }
+        }
+    }
+    if edits.is_empty() {
+        return Ok(RecalcResult::empty());
+    }
+    crate::storage::engine::cell_metadata::refresh(
+        &stores.storage,
+        cell_store,
+        stores.layout_metrics,
+    );
+    stores.compute.set_cells_raw_with_trust(
+        cell_store,
+        &edits,
+        true,
+        crate::scheduler::WriteTrust::TrustedReplay,
+    )
 }

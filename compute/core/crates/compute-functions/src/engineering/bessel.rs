@@ -6,273 +6,634 @@ use super::helpers::coerce_num;
 use crate::{FunctionRegistry, PureFunction};
 
 // ===========================================================================
-// Bessel Function Helpers (series approximations)
+// Bessel Function Helpers (legacy Excel Analysis ToolPak approximations)
 // ===========================================================================
 
-const BESSEL_MAX_ITER: usize = 100;
-const BESSEL_TOL: f64 = 1e-12;
+// Excel's original Analysis ToolPak Bessel routines are documented as the
+// Numerical Recipes rational/asymptotic approximations.  The frozen workbook
+// corpus contains those values (rather than the exact power-series values),
+// so these constants and regime boundaries are part of the compatibility
+// contract.  They are intentionally kept as decimal literals from the
+// published routines; replacing them with a generic series changes Excel
+// compatibility by several ulps to 1e-8 for the corpus's order-three cases.
+// This is the intentionally rounded constant from Excel's published ATP
+// routine. Replacing it with FRAC_2_PI changes the legacy compatibility bits.
+#[allow(clippy::approx_constant)]
+const BESSEL_W: f64 = 0.636619772; // 2/pi in the published routine
+const BESSEL_ACC: f64 = 40.0;
+const BESSEL_BIGNO: f64 = 1.0e10;
+const BESSEL_BIGNI: f64 = 1.0e-10;
+// The published routines take a C `int` order, but the forward K/Y and Miller
+// recurrences are O(n).  Keep the repository's established hang guard while
+// covering the full supported order range without allowing worksheet input to
+// turn one formula into an unbounded loop.
+const BESSEL_MAX_ORDER: usize = 200;
+// Below this x, forming 2/x overflows f64.  I_n/J_n for n >= 2 are already
+// below the representable range; K_n/Y_n for n >= 2 are outside it.
+const BESSEL_TOX_LIMIT: f64 = 2.0 / f64::MAX;
 
-/// Factorial for small non-negative integers. Caps at 170 to avoid infinity.
-fn factorial(n: u64) -> f64 {
-    if n == 0 || n == 1 {
-        return 1.0;
-    }
-    if n > 170 {
-        return f64::INFINITY;
-    }
-    let mut result = 1.0_f64;
-    for i in 2..=n {
-        result *= i as f64;
+/// Evaluate a polynomial written in the Numerical Recipes Horner form.
+#[inline]
+fn horner(y: f64, coefficients: &[f64]) -> f64 {
+    let mut result = coefficients[coefficients.len() - 1];
+    for coefficient in coefficients[..coefficients.len() - 1].iter().rev() {
+        result = *coefficient + y * result;
     }
     result
 }
 
-/// Log-gamma based factorial for large n to avoid overflow.
-/// Uses Stirling's approximation: ln(n!) ≈ n*ln(n) - n + 0.5*ln(2*pi*n)
-fn ln_factorial(n: u64) -> f64 {
-    if n <= 170 {
-        return factorial(n).ln();
+/// Modified Bessel I0 from the legacy Excel/Analysis ToolPak routine.
+fn bessel_i0(x: f64) -> f64 {
+    let ax = x.abs();
+    if ax < 3.75 {
+        let y = (x / 3.75) * (x / 3.75);
+        horner(
+            y,
+            &[
+                1.0,
+                3.5156229,
+                3.0899424,
+                1.2067492,
+                0.2659732,
+                0.360768e-1,
+                0.45813e-2,
+            ],
+        )
+    } else {
+        let y = 3.75 / ax;
+        let polynomial = horner(
+            y,
+            &[
+                0.39894228,
+                0.1328592e-1,
+                0.225319e-2,
+                -0.157565e-2,
+                0.916281e-2,
+                -0.2057706e-1,
+                0.2635537e-1,
+                -0.1647633e-1,
+                0.392377e-2,
+            ],
+        );
+        ax.exp() / ax.sqrt() * polynomial
     }
-    let n_f = n as f64;
-    // Stirling's approximation with correction terms
-    n_f * n_f.ln() - n_f + 0.5 * (2.0 * std::f64::consts::PI * n_f).ln() + 1.0 / (12.0 * n_f)
-        - 1.0 / (360.0 * n_f * n_f * n_f)
 }
 
-/// Modified Bessel function of the first kind I_n(x), series expansion.
-fn bessel_i(x: f64, n: i64) -> f64 {
-    let n = n as u64;
-    // Use logarithmic computation for the initial term to avoid overflow for large n
-    let ln_initial = (n as f64) * (x / 2.0).abs().ln() - ln_factorial(n);
-    if ln_initial < -700.0 {
-        // Result is essentially zero (underflow)
-        return 0.0;
-    }
-    let mut sum = ln_initial.exp();
-    if x < 0.0 && n % 2 == 1 {
-        sum = -sum;
-    }
-    let mut term = sum;
-    for k in 1..BESSEL_MAX_ITER {
-        term *= (x * x) / (4.0 * k as f64 * (k as u64 + n) as f64);
-        sum += term;
-        if term.abs() < BESSEL_TOL * sum.abs() {
-            break;
+/// Modified Bessel I1 from the legacy Excel/Analysis ToolPak routine.
+fn bessel_i1(x: f64) -> f64 {
+    let ax = x.abs();
+    if ax < 3.75 {
+        let y = (x / 3.75) * (x / 3.75);
+        x * horner(
+            y,
+            &[
+                0.5,
+                0.87890594,
+                0.51498869,
+                0.15084934,
+                0.2658733e-1,
+                0.301532e-2,
+                0.32411e-3,
+            ],
+        )
+    } else {
+        let y = 3.75 / ax;
+        // Keep the two Horner stages from the published C routine.  This
+        // preserves its evaluation order and its behavior at the transition.
+        let tail = 0.2282967e-1 + y * (-0.2895312e-1 + y * (0.1787654e-1 - y * 0.420059e-2));
+        let polynomial = 0.39894228
+            + y * (-0.3988024e-1
+                + y * (-0.362018e-2 + y * (0.163801e-2 + y * (-0.1031555e-1 + y * tail))));
+        let result = ax.exp() / ax.sqrt() * polynomial;
+        if x < 0.0 {
+            -result
+        } else {
+            result
         }
     }
-    sum
 }
 
-/// Bessel function of the first kind J_n(x), series expansion.
-fn bessel_j(x: f64, n: i64) -> f64 {
-    let n = n as u64;
-    // Use logarithmic computation for the initial term to avoid overflow for large n
-    let ln_initial = (n as f64) * (x / 2.0).abs().ln() - ln_factorial(n);
-    if ln_initial < -700.0 {
-        // Result is essentially zero (underflow)
+/// Modified Bessel I_n, using Miller's downward recurrence from Excel's ATP.
+fn bessel_i(x: f64, n: usize) -> f64 {
+    if n == 0 {
+        return bessel_i0(x);
+    }
+    if n == 1 {
+        return bessel_i1(x);
+    }
+    if x == 0.0 {
         return 0.0;
     }
-    let mut sum = ln_initial.exp();
-    if x < 0.0 && n % 2 == 1 {
-        sum = -sum;
+
+    let ax = x.abs();
+    if ax <= BESSEL_TOX_LIMIT {
+        return 0.0;
     }
-    let mut term = sum;
-    for k in 1..BESSEL_MAX_ITER {
-        term *= -(x * x) / (4.0 * k as f64 * (k as u64 + n) as f64);
-        sum += term;
-        if term.abs() < BESSEL_TOL * sum.abs() {
-            break;
+    let tox = 2.0 / ax;
+    let root = (BESSEL_ACC * n as f64).sqrt() as usize;
+    let Some(m) = n.checked_add(root).and_then(|value| value.checked_mul(2)) else {
+        return f64::NAN;
+    };
+    let mut bip = 0.0;
+    let mut bi = 1.0;
+    let mut ans = 0.0;
+
+    for j in (1..=m).rev() {
+        let bim = bip + j as f64 * tox * bi;
+        bip = bi;
+        bi = bim;
+        if bi.abs() > BESSEL_BIGNO {
+            ans *= BESSEL_BIGNI;
+            bi *= BESSEL_BIGNI;
+            bip *= BESSEL_BIGNI;
+        }
+        if j == n {
+            ans = bip;
         }
     }
-    sum
+
+    let result = ans * bessel_i0(x) / bi;
+    if x < 0.0 && n % 2 == 1 {
+        -result
+    } else {
+        result
+    }
 }
 
-/// Modified Bessel function of the second kind K0(x).
-/// Uses Abramowitz & Stegun polynomial approximations (9.8.5 and 9.8.6).
+/// Bessel J0 from the legacy Excel/Analysis ToolPak routine.
+fn bessel_j0(x: f64) -> f64 {
+    // The rational approximation is close to, but not exactly, one at zero.
+    // Excel's function has the analytical zero limit, so preserve it before
+    // evaluating the approximation.
+    if x == 0.0 {
+        return 1.0;
+    }
+    let ax = x.abs();
+    if ax < 8.0 {
+        let y = x * x;
+        horner(
+            y,
+            &[
+                57568490574.0,
+                -13362590354.0,
+                651619640.7,
+                -11214424.18,
+                77392.33017,
+                -184.9052456,
+            ],
+        ) / horner(
+            y,
+            &[
+                57568490411.0,
+                1029532985.0,
+                9494680.718,
+                59272.64853,
+                267.8532712,
+                1.0,
+            ],
+        )
+    } else {
+        let z = 8.0 / ax;
+        let y = z * z;
+        let xx = ax - 0.785398164;
+        let ans1 = horner(
+            y,
+            &[
+                1.0,
+                -0.1098628627e-2,
+                0.2734510407e-4,
+                -0.2073370639e-5,
+                0.2093887211e-6,
+            ],
+        );
+        let ans2 = horner(
+            y,
+            &[
+                -0.1562499995e-1,
+                0.1430488765e-3,
+                -0.6911147651e-5,
+                0.7621095161e-6,
+                -0.934935152e-7,
+            ],
+        );
+        (BESSEL_W / ax).sqrt() * (xx.cos() * ans1 - z * xx.sin() * ans2)
+    }
+}
+
+/// Bessel J1 from the legacy Excel/Analysis ToolPak routine.
+fn bessel_j1(x: f64) -> f64 {
+    if x == 0.0 {
+        return 0.0;
+    }
+    let ax = x.abs();
+    if ax < 8.0 {
+        let y = x * x;
+        // Q89404 contains a transposed digit in this numerator.  The value
+        // below is the Numerical Recipes/Excel constant (72,362,614,232),
+        // corroborated by the published Excel example and the other ATP
+        // implementations.
+        x * horner(
+            y,
+            &[
+                72362614232.0,
+                -7895059235.0,
+                242396853.1,
+                -2972611.439,
+                15704.48260,
+                -30.16036606,
+            ],
+        ) / horner(
+            y,
+            &[
+                144725228442.0,
+                2300535178.0,
+                18583304.74,
+                99447.43394,
+                376.9991397,
+                1.0,
+            ],
+        )
+    } else {
+        let z = 8.0 / ax;
+        let y = z * z;
+        let xx = ax - 2.356194491;
+        let ans1 = horner(
+            y,
+            &[
+                1.0,
+                0.183105e-2,
+                -0.3516396496e-4,
+                0.2457520174e-5,
+                -0.240337019e-6,
+            ],
+        );
+        let ans2 = horner(
+            y,
+            &[
+                0.04687499995,
+                -0.2002690873e-3,
+                0.8449199096e-5,
+                -0.88228987e-6,
+                0.105787412e-6,
+            ],
+        );
+        let result = (BESSEL_W / ax).sqrt() * (xx.cos() * ans1 - z * xx.sin() * ans2);
+        if x < 0.0 {
+            -result
+        } else {
+            result
+        }
+    }
+}
+
+/// Bessel J_n, using upward recurrence when stable and Miller's downward
+/// recurrence for the small-argument/high-order regime documented by Excel.
+fn bessel_j(x: f64, n: usize) -> f64 {
+    if n == 0 {
+        return bessel_j0(x);
+    }
+    if n == 1 {
+        return bessel_j1(x);
+    }
+
+    let ax = x.abs();
+    if ax == 0.0 {
+        return 0.0;
+    }
+    if ax <= BESSEL_TOX_LIMIT {
+        return 0.0;
+    }
+
+    let tox = 2.0 / ax;
+    let result = if ax > n as f64 {
+        let mut bjm = bessel_j0(ax);
+        let mut bj = bessel_j1(ax);
+        for j in 1..n {
+            let bjp = j as f64 * tox * bj - bjm;
+            bjm = bj;
+            bj = bjp;
+        }
+        bj
+    } else {
+        let root = (BESSEL_ACC * n as f64).sqrt() as usize;
+        let Some(m) = n
+            .checked_add(root)
+            .and_then(|value| value.checked_div(2))
+            .and_then(|value| value.checked_mul(2))
+        else {
+            return f64::NAN;
+        };
+        let mut bjp = 0.0;
+        let mut bj = 1.0;
+        let mut ans = 0.0;
+        let mut sum = 0.0;
+        let mut jsum = false;
+
+        for j in (1..=m).rev() {
+            let bjm = j as f64 * tox * bj - bjp;
+            bjp = bj;
+            bj = bjm;
+            if bj.abs() > BESSEL_BIGNO {
+                bj *= BESSEL_BIGNI;
+                bjp *= BESSEL_BIGNI;
+                ans *= BESSEL_BIGNI;
+                sum *= BESSEL_BIGNI;
+            }
+            if jsum {
+                sum += bj;
+            }
+            jsum = !jsum;
+            if j == n {
+                ans = bjp;
+            }
+        }
+        sum = 2.0 * sum - bj;
+        ans / sum
+    };
+
+    if x < 0.0 && n % 2 == 1 {
+        -result
+    } else {
+        result
+    }
+}
+
+/// Modified Bessel K0 from the legacy Excel/Analysis ToolPak routine.
 fn bessel_k0(x: f64) -> f64 {
     if x <= 2.0 {
-        // A&S 9.8.5: K0(x) = -ln(x/2)*I0(x) + polynomial in (x/2)^2
-        let t = x / 2.0;
-        let t2 = t * t;
-        let i0 = bessel_i(x, 0);
-        let poly = -0.57721566
-            + 0.42278420 * t2
-            + 0.23069756 * t2 * t2
-            + 0.03488590 * t2.powi(3)
-            + 0.00262698 * t2.powi(4)
-            + 0.00010750 * t2.powi(5)
-            + 0.00000740 * t2.powi(6);
-        -(x / 2.0).ln() * i0 + poly
+        let y = x * x / 4.0;
+        let polynomial = horner(
+            y,
+            &[
+                -0.57721566,
+                0.42278420,
+                0.23069756,
+                0.3488590e-1,
+                0.262698e-2,
+                0.10750e-3,
+                0.74e-5,
+            ],
+        );
+        // Avoid x/2 underflow for the smallest positive subnormal while
+        // retaining the published expression for ordinary arguments.
+        let log_half_x = if x / 2.0 == 0.0 {
+            x.ln() - 2.0_f64.ln()
+        } else {
+            (x / 2.0).ln()
+        };
+        -log_half_x * bessel_i0(x) + polynomial
     } else {
-        // A&S 9.8.6: K0(x) = (sqrt(pi/(2x)) * e^(-x)) * P(1/x)
-        let t = 2.0 / x;
-        let poly = 1.25331414 - 0.07832358 * t + 0.02189568 * t * t - 0.01062446 * t.powi(3)
-            + 0.00587872 * t.powi(4)
-            - 0.00251540 * t.powi(5)
-            + 0.00053208 * t.powi(6);
-        poly * (-x).exp() / x.sqrt()
+        let y = 2.0 / x;
+        let polynomial = horner(
+            y,
+            &[
+                1.25331414,
+                -0.7832358e-1,
+                0.2189568e-1,
+                -0.1062446e-1,
+                0.587872e-2,
+                -0.251540e-2,
+                0.53208e-3,
+            ],
+        );
+        (-x).exp() / x.sqrt() * polynomial
     }
 }
 
-/// Modified Bessel function of the second kind K1(x).
-/// Uses Abramowitz & Stegun polynomial approximations (9.8.7 and 9.8.8).
+/// Modified Bessel K1 from the legacy Excel/Analysis ToolPak routine.
 fn bessel_k1(x: f64) -> f64 {
     if x <= 2.0 {
-        // A&S 9.8.7: K1(x) = ln(x/2)*I1(x) + (1/x)*polynomial
-        let t = x / 2.0;
-        let t2 = t * t;
-        let i1 = bessel_i(x, 1);
-        let poly = 1.0 + 0.15443144 * t2
-            - 0.67278579 * t2 * t2
-            - 0.18156897 * t2.powi(3)
-            - 0.01919402 * t2.powi(4)
-            - 0.00110404 * t2.powi(5)
-            - 0.00004686 * t2.powi(6);
-        (x / 2.0).ln() * i1 + (1.0 / x) * poly
+        let y = x * x / 4.0;
+        let polynomial = horner(
+            y,
+            &[
+                1.0,
+                0.15443144,
+                -0.67278579,
+                -0.18156897,
+                -0.1919402e-1,
+                -0.110404e-2,
+                -0.4686e-4,
+            ],
+        );
+        (x / 2.0).ln() * bessel_i1(x) + polynomial / x
     } else {
-        // A&S 9.8.8: K1(x) = (sqrt(pi/(2x)) * e^(-x)) * Q(1/x)
-        let t = 2.0 / x;
-        let poly = 1.25331414 + 0.23498619 * t - 0.03655620 * t * t + 0.01504268 * t.powi(3)
-            - 0.00780353 * t.powi(4)
-            + 0.00325614 * t.powi(5)
-            - 0.00068245 * t.powi(6);
-        poly * (-x).exp() / x.sqrt()
+        let y = 2.0 / x;
+        let polynomial = horner(
+            y,
+            &[
+                1.25331414,
+                0.23498619,
+                -0.3655620e-1,
+                0.1504268e-1,
+                -0.780353e-2,
+                0.325614e-2,
+                -0.68245e-3,
+            ],
+        );
+        (-x).exp() / x.sqrt() * polynomial
     }
 }
 
-/// Modified Bessel function of the second kind K_n(x).
-fn bessel_k(x: f64, n: i64) -> f64 {
+/// Modified Bessel K_n(x), by the stable forward recurrence used by Excel.
+fn bessel_k(x: f64, n: usize) -> f64 {
     if n == 0 {
-        bessel_k0(x)
-    } else if n == 1 {
-        bessel_k1(x)
-    } else {
-        // Recurrence: K(n+1) = K(n-1) + (2n/x) * K(n)
-        let mut k0 = bessel_k0(x);
-        let mut k1 = bessel_k1(x);
-        for i in 1..n {
-            let kn = k0 + (2.0 * i as f64 / x) * k1;
-            k0 = k1;
-            k1 = kn;
-        }
-        k1
+        return bessel_k0(x);
     }
+    if n == 1 {
+        return bessel_k1(x);
+    }
+
+    if x <= BESSEL_TOX_LIMIT {
+        return f64::INFINITY;
+    }
+    let tox = 2.0 / x;
+    let mut bkm = bessel_k0(x);
+    let mut bk = bessel_k1(x);
+    for j in 1..n {
+        let bkp = bkm + j as f64 * tox * bk;
+        bkm = bk;
+        bk = bkp;
+    }
+    bk
 }
 
-/// Bessel function of the second kind Y0(x).
-/// Uses Abramowitz & Stegun polynomial approximations (9.4.1 and 9.4.2).
+/// Bessel Y0 from the Numerical Recipes routine used by Excel's ATP.
 fn bessel_y0(x: f64) -> f64 {
-    if x <= 5.0 {
-        // A&S 9.4.1: Y0(x) = (2/pi)*ln(x/2)*J0(x) + polynomial
-        // Series: Y0(x) = (2/pi) * [ln(x/2) + gamma] * J0(x) + (2/pi) * sum
-        let euler_gamma = 0.5772156649015329;
-        let j0 = bessel_j(x, 0);
-        let base = (2.0 / std::f64::consts::PI) * ((x / 2.0).ln() + euler_gamma) * j0;
-        let mut sum = 0.0;
-        for k in 1..=25 {
-            let mut harmonic = 0.0;
-            for h in 1..=k {
-                harmonic += 1.0 / h as f64;
-            }
-            // Sign is (-1)^(k+1) = positive for odd k, negative for even k
-            let sign = if k % 2 == 0 { -1.0 } else { 1.0 };
-            let kf = factorial(k as u64);
-            sum += sign * (x / 2.0).powi(2 * k) / (kf * kf) * harmonic;
-        }
-        base + (2.0 / std::f64::consts::PI) * sum
+    if x < 8.0 {
+        let y = x * x;
+        let numerator = horner(
+            y,
+            &[
+                -2957821389.0,
+                7062834065.0,
+                -512359803.6,
+                10879881.29,
+                -86327.92757,
+                228.4622733,
+            ],
+        );
+        let denominator = horner(
+            y,
+            &[
+                40076544269.0,
+                745249964.8,
+                7189466.438,
+                47447.26470,
+                226.1030244,
+                1.0,
+            ],
+        );
+        numerator / denominator + BESSEL_W * bessel_j0(x) * x.ln()
     } else {
-        // A&S 9.4.2: asymptotic expansion for large x
-        // Y0(x) ~ sqrt(2/(pi*x)) * sin(x - pi/4) * P0 + cos(x - pi/4) * Q0
-        let theta = x - std::f64::consts::PI / 4.0;
-        let t = 8.0 / x;
-        let t2 = t * t;
-        let p0 = 1.0 - 0.00000077 * t - 0.00552740 * t2 - 0.00009512 * t2 * t
-            + 0.00137237 * t2 * t2
-            - 0.00072805 * t2 * t2 * t
-            + 0.00014476 * t2.powi(3);
-        let q0 = -0.04166397 * t - 0.00003954 * t2 + 0.00262573 * t2 * t
-            - 0.00054125 * t2 * t2
-            - 0.00029333 * t2 * t2 * t
-            + 0.00013558 * t2.powi(3);
-        let factor = (2.0 / (std::f64::consts::PI * x)).sqrt();
-        factor * (theta.sin() * p0 + theta.cos() * q0)
+        let z = 8.0 / x;
+        let y = z * z;
+        let xx = x - 0.785398164;
+        let ans1 = horner(
+            y,
+            &[
+                1.0,
+                -0.1098628627e-2,
+                0.2734510407e-4,
+                -0.2073370639e-5,
+                0.2093887211e-6,
+            ],
+        );
+        // Y0's final coefficient is .934945152e-7; J0's is .934935152e-7.
+        let ans2 = horner(
+            y,
+            &[
+                -0.1562499995e-1,
+                0.1430488765e-3,
+                -0.6911147651e-5,
+                0.7621095161e-6,
+                -0.934945152e-7,
+            ],
+        );
+        (BESSEL_W / x).sqrt() * (xx.sin() * ans1 + z * xx.cos() * ans2)
     }
 }
 
-/// Bessel function of the second kind Y1(x).
-/// Uses DLMF 10.8.2 / A&S 9.1.11 series for small x and asymptotic expansion for large x.
+/// Bessel Y1 from the Numerical Recipes routine used by Excel's ATP.
 fn bessel_y1(x: f64) -> f64 {
-    if x <= 5.0 {
-        // DLMF 10.8.2 for n=1:
-        // Y1(x) = (2/pi)*ln(x/2)*J1(x) - (2/(pi*x))
-        //   - (1/pi)*sum_{k=0}^{inf} (-1)^k * (psi(k+1)+psi(k+2)) * (x/2)^(2k+1) / (k!*(k+1)!)
-        // where psi(k+1) = -gamma + H(k), H(k) = harmonic number
-        let euler_gamma = 0.5772156649015329;
-        let j1 = bessel_j(x, 1);
-        let two_over_pi = 2.0 / std::f64::consts::PI;
-        let t = x / 2.0;
-
-        let mut sum = 0.0;
-        for k in 0..=30_u64 {
-            let mut h_k = 0.0_f64;
-            for h in 1..=k {
-                h_k += 1.0 / h as f64;
-            }
-            let h_k1 = h_k + 1.0 / (k + 1) as f64;
-            let psi_sum = -2.0 * euler_gamma + h_k + h_k1;
-            let sign = if k % 2 == 0 { 1.0 } else { -1.0 };
-            let kf = factorial(k);
-            let k1f = factorial(k + 1);
-            let term = sign * t.powi(2 * k as i32 + 1) * psi_sum / (kf * k1f);
-            sum += term;
-            if k > 2 && term.abs() < BESSEL_TOL * sum.abs() {
-                break;
-            }
-        }
-        two_over_pi * (x / 2.0).ln() * j1
-            - 2.0 / (std::f64::consts::PI * x)
-            - (1.0 / std::f64::consts::PI) * sum
+    if x < 8.0 {
+        let y = x * x;
+        let numerator = x * horner(
+            y,
+            &[
+                -0.4900604943e13,
+                0.1275274390e13,
+                -0.5153438139e11,
+                0.7349264551e9,
+                -0.4237922726e7,
+                0.8511937935e4,
+            ],
+        );
+        let denominator = horner(
+            y,
+            &[
+                0.2499580570e14,
+                0.4244419664e12,
+                0.3733650367e10,
+                0.2245904002e8,
+                0.1020426050e6,
+                0.3549632885e3,
+                1.0,
+            ],
+        );
+        numerator / denominator + BESSEL_W * (bessel_j1(x) * x.ln() - 1.0 / x)
     } else {
-        // Asymptotic expansion for large x
-        // Y1(x) ~ sqrt(2/(pi*x)) * sin(x - 3*pi/4) * P1 + cos(x - 3*pi/4) * Q1
-        let theta = x - 3.0 * std::f64::consts::PI / 4.0;
-        let t = 8.0 / x;
-        let t2 = t * t;
-        let p1 = 1.0 + 0.00000156 * t + 0.01659667 * t2 + 0.00017105 * t2 * t
-            - 0.00249511 * t2 * t2
-            + 0.00113653 * t2 * t2 * t
-            - 0.00020033 * t2.powi(3);
-        let q1 = 0.12499612 * t + 0.00005650 * t2 - 0.00637879 * t2 * t
-            + 0.00074348 * t2 * t2
-            + 0.00079824 * t2 * t2 * t
-            - 0.00029166 * t2.powi(3);
-        let factor = (2.0 / (std::f64::consts::PI * x)).sqrt();
-        factor * (theta.sin() * p1 + theta.cos() * q1)
+        let z = 8.0 / x;
+        let y = z * z;
+        let xx = x - 2.356194491;
+        let ans1 = horner(
+            y,
+            &[
+                1.0,
+                0.183105e-2,
+                -0.3516396496e-4,
+                0.2457520174e-5,
+                -0.240337019e-6,
+            ],
+        );
+        let ans2 = horner(
+            y,
+            &[
+                0.04687499995,
+                -0.2002690873e-3,
+                0.8449199096e-5,
+                -0.88228987e-6,
+                0.105787412e-6,
+            ],
+        );
+        (BESSEL_W / x).sqrt() * (xx.sin() * ans1 + z * xx.cos() * ans2)
     }
 }
 
-/// Bessel function of the second kind Y_n(x).
-fn bessel_y(x: f64, n: i64) -> f64 {
+/// Bessel Y_n(x), by the stable forward recurrence used by Excel.
+fn bessel_y(x: f64, n: usize) -> f64 {
     if n == 0 {
-        bessel_y0(x)
-    } else if n == 1 {
-        bessel_y1(x)
-    } else {
-        // Recurrence: Y(n+1) = (2n/x) * Y(n) - Y(n-1)
-        let mut y0 = bessel_y0(x);
-        let mut y1 = bessel_y1(x);
-        for i in 1..n {
-            let yn = (2.0 * i as f64 / x) * y1 - y0;
-            y0 = y1;
-            y1 = yn;
-        }
-        y1
+        return bessel_y0(x);
     }
+    if n == 1 {
+        return bessel_y1(x);
+    }
+
+    if x <= BESSEL_TOX_LIMIT {
+        return f64::INFINITY;
+    }
+    let tox = 2.0 / x;
+    let mut bym = bessel_y0(x);
+    let mut by = bessel_y1(x);
+    for j in 1..n {
+        let byp = j as f64 * tox * by - bym;
+        bym = by;
+        by = byp;
+    }
+    by
 }
 
 // ===========================================================================
 // Bessel Functions (4)
 // ===========================================================================
+
+/// Excel truncates a non-negative order toward zero before evaluating it.
+/// The public documentation does not describe an upper bound, but this
+/// repository retains its established `<= 200` hang guard for O(n)
+/// recurrences. A non-finite or over-bound order is reported as a numeric
+/// error rather than being saturated by a float cast.
+fn coerce_bessel_order(name: &str, n: f64) -> Result<usize, CellValue> {
+    if !n.is_finite() || n < 0.0 {
+        return Err(CellValue::error_with_message(
+            CellError::Num,
+            format!("{name}: order must be a finite non-negative number, got {n}"),
+        ));
+    }
+
+    let truncated = n.trunc();
+    if truncated > BESSEL_MAX_ORDER as f64 {
+        return Err(CellValue::error_with_message(
+            CellError::Num,
+            format!(
+                "{name}: order exceeds the finite evaluation bound ({BESSEL_MAX_ORDER}), got {n}"
+            ),
+        ));
+    }
+    Ok(truncated as usize)
+}
+
+/// Excel represents a floating-point overflow from an engineering function
+/// as `#NUM!`; do not let an intermediate NaN/∞ poison the surrounding sheet.
+fn bessel_number(name: &str, result: f64) -> CellValue {
+    if result.is_finite() {
+        CellValue::number(result)
+    } else {
+        CellValue::error_with_message(
+            CellError::Num,
+            format!("{name}: result is outside the numeric range"),
+        )
+    }
+}
 
 pub(super) struct FnBesselI;
 impl PureFunction for FnBesselI {
@@ -297,15 +658,12 @@ impl PureFunction for FnBesselI {
             Ok(v) => v,
             Err(e) => return e,
         };
-        let ni = n as i64;
-        if ni < 0 || (n - ni as f64).abs() > 1e-10 || ni > 200 {
-            return CellValue::error_with_message(
-                CellError::Num,
-                format!("BESSELI: order must be a non-negative integer <= 200, got {n}"),
-            );
-        }
+        let ni = match coerce_bessel_order("BESSELI", n) {
+            Ok(value) => value,
+            Err(error) => return error,
+        };
         let result = bessel_i(x, ni);
-        CellValue::number(result)
+        bessel_number("BESSELI", result)
     }
 }
 
@@ -332,15 +690,12 @@ impl PureFunction for FnBesselJ {
             Ok(v) => v,
             Err(e) => return e,
         };
-        let ni = n as i64;
-        if ni < 0 || (n - ni as f64).abs() > 1e-10 || ni > 200 {
-            return CellValue::error_with_message(
-                CellError::Num,
-                format!("BESSELJ: order must be a non-negative integer <= 200, got {n}"),
-            );
-        }
+        let ni = match coerce_bessel_order("BESSELJ", n) {
+            Ok(value) => value,
+            Err(error) => return error,
+        };
         let result = bessel_j(x, ni);
-        CellValue::number(result)
+        bessel_number("BESSELJ", result)
     }
 }
 
@@ -373,15 +728,12 @@ impl PureFunction for FnBesselK {
                 format!("BESSELK: x must be positive, got {x}"),
             );
         }
-        let ni = n as i64;
-        if ni < 0 || (n - ni as f64).abs() > 1e-10 || ni > 200 {
-            return CellValue::error_with_message(
-                CellError::Num,
-                format!("BESSELK: order must be a non-negative integer <= 200, got {n}"),
-            );
-        }
+        let ni = match coerce_bessel_order("BESSELK", n) {
+            Ok(value) => value,
+            Err(error) => return error,
+        };
         let result = bessel_k(x, ni);
-        CellValue::number(result)
+        bessel_number("BESSELK", result)
     }
 }
 
@@ -414,15 +766,12 @@ impl PureFunction for FnBesselY {
                 format!("BESSELY: x must be positive, got {x}"),
             );
         }
-        let ni = n as i64;
-        if ni < 0 || (n - ni as f64).abs() > 1e-10 || ni > 200 {
-            return CellValue::error_with_message(
-                CellError::Num,
-                format!("BESSELY: order must be a non-negative integer <= 200, got {n}"),
-            );
-        }
+        let ni = match coerce_bessel_order("BESSELY", n) {
+            Ok(value) => value,
+            Err(error) => return error,
+        };
         let result = bessel_y(x, ni);
-        CellValue::number(result)
+        bessel_number("BESSELY", result)
     }
 }
 
@@ -449,58 +798,61 @@ mod tests {
         CellValue::number(n)
     }
 
+    fn assert_close(value: CellValue, expected: f64, tolerance: f64, label: &str) {
+        match value {
+            CellValue::Number(actual) => assert!(
+                (actual.get() - expected).abs() < tolerance,
+                "{label} = {}, expected ~{expected}",
+                actual.get()
+            ),
+            other => panic!("Expected {label} number, got {other:?}"),
+        }
+    }
+
     #[test]
     fn test_besseli() {
         let f = FnBesselI;
-        let result = f.call(&[num(1.5), num(1.0)]);
-        if let CellValue::Number(n) = result {
-            assert!((n.get() - 0.9816664285779074).abs() < 1e-6);
-        } else {
-            panic!("Expected number, got {:?}", result);
-        }
+        assert_close(
+            f.call(&[num(1.5), num(1.0)]),
+            0.9816664285779074,
+            1e-6,
+            "BESSELI(1.5, 1)",
+        );
     }
 
     #[test]
     fn test_besselj() {
         let f = FnBesselJ;
-        let result = f.call(&[num(1.9), num(2.0)]);
-        if let CellValue::Number(n) = result {
-            assert!((n.get() - 0.329926).abs() < 1e-4);
-        } else {
-            panic!("Expected number, got {:?}", result);
-        }
+        assert_close(
+            f.call(&[num(1.9), num(2.0)]),
+            0.329926,
+            1e-4,
+            "BESSELJ(1.9, 2)",
+        );
     }
 
     #[test]
     fn test_besselk_0() {
         // BESSELK(1.5, 0) = 0.2138055... (known value from tables)
         let f = FnBesselK;
-        let result = f.call(&[num(1.5), num(0.0)]);
-        if let CellValue::Number(n) = result {
-            assert!(
-                (n.get() - 0.21380556264235205).abs() < 1e-4,
-                "BESSELK(1.5, 0) = {} but expected ~0.21381",
-                n.get()
-            );
-        } else {
-            panic!("Expected number, got {:?}", result);
-        }
+        assert_close(
+            f.call(&[num(1.5), num(0.0)]),
+            0.21380556264235205,
+            1e-4,
+            "BESSELK(1.5, 0)",
+        );
     }
 
     #[test]
     fn test_besselk_1() {
         // BESSELK(1.5, 1) = 0.2774... (known value from tables)
         let f = FnBesselK;
-        let result = f.call(&[num(1.5), num(1.0)]);
-        if let CellValue::Number(n) = result {
-            assert!(
-                (n.get() - 0.27738780045684834).abs() < 1e-4,
-                "BESSELK(1.5, 1) = {} but expected ~0.27739",
-                n.get()
-            );
-        } else {
-            panic!("Expected number, got {:?}", result);
-        }
+        assert_close(
+            f.call(&[num(1.5), num(1.0)]),
+            0.27738780045684834,
+            1e-4,
+            "BESSELK(1.5, 1)",
+        );
     }
 
     #[test]
@@ -517,32 +869,24 @@ mod tests {
     fn test_bessely_0() {
         // BESSELY(1.5, 0) = 0.38244892... (known value from tables)
         let f = FnBesselY;
-        let result = f.call(&[num(1.5), num(0.0)]);
-        if let CellValue::Number(n) = result {
-            assert!(
-                (n.get() - 0.38244892379775884).abs() < 1e-4,
-                "BESSELY(1.5, 0) = {} but expected ~0.38245",
-                n.get()
-            );
-        } else {
-            panic!("Expected number, got {:?}", result);
-        }
+        assert_close(
+            f.call(&[num(1.5), num(0.0)]),
+            0.38244892379775884,
+            1e-4,
+            "BESSELY(1.5, 0)",
+        );
     }
 
     #[test]
     fn test_bessely_1() {
         // BESSELY(1.5, 1) = -0.41230863... (known value from tables)
         let f = FnBesselY;
-        let result = f.call(&[num(1.5), num(1.0)]);
-        if let CellValue::Number(n) = result {
-            assert!(
-                (n.get() - (-0.412_308_626_973_911_3)).abs() < 1e-4,
-                "BESSELY(1.5, 1) = {} but expected ~-0.41231",
-                n.get()
-            );
-        } else {
-            panic!("Expected number, got {:?}", result);
-        }
+        assert_close(
+            f.call(&[num(1.5), num(1.0)]),
+            -0.412_308_626_973_911_3,
+            1e-4,
+            "BESSELY(1.5, 1)",
+        );
     }
 
     #[test]
@@ -554,53 +898,199 @@ mod tests {
     }
 
     #[test]
-    fn test_besselj_large_order() {
-        // BESSELJ(1, 200) should return a number (very close to 0) or #NUM!, not panic
-        let f = FnBesselJ;
-        let result = f.call(&[num(1.0), num(200.0)]);
-        match result {
-            CellValue::Number(n) => {
-                // For large order and small x, J_n(x) is essentially 0
-                assert!(
-                    n.get().is_finite(),
-                    "BESSELJ(1, 200) should be finite, got {}",
-                    n.get()
-                );
-                assert!(
-                    n.get().abs() < 1e-10,
-                    "BESSELJ(1, 200) should be ~0, got {}",
-                    n.get()
-                );
+    fn first_kind_large_order_is_finite_and_negligible() {
+        let registry = FunctionRegistry::new();
+        for name in ["BESSELI", "BESSELJ"] {
+            match registry.call(name, &[num(1.0), num(200.0)]) {
+                CellValue::Number(value) => {
+                    assert!(value.get().is_finite());
+                    assert!(value.get().abs() < 1e-10);
+                }
+                other => panic!("Expected finite {name}(1, 200), got {other:?}"),
             }
-            CellValue::Error(CellError::Num, _) => {
-                // Also acceptable: returning #NUM! for extreme values
-            }
-            other => panic!("Expected number or #NUM!, got {:?}", other),
         }
     }
 
     #[test]
-    fn test_besseli_large_order() {
-        // BESSELI(1, 200) should return a number (very close to 0) or #NUM!, not panic
-        let f = FnBesselI;
-        let result = f.call(&[num(1.0), num(200.0)]);
-        match result {
-            CellValue::Number(n) => {
+    fn legacy_atp_values_match_bessel_stress_corpus() {
+        // These are the cached values in tier_a_formula_stress_test/golden.xlsx.
+        // The Microsoft ATP definitions identify the rational fits and Miller
+        // recurrences used to produce them; this locks the compatibility path
+        // to that published algorithm rather than to a fitted correction.
+        let registry = FunctionRegistry::new();
+        let cases = [
+            ("BESSELI", 0.21273995970273565),
+            ("BESSELJ", 0.12894324997562717),
+            ("BESSELY", -1.1277837651220644),
+        ];
+        for (name, expected) in cases {
+            let result = registry.call(name, &[num(2.0), num(3.0)]);
+            match result {
+                CellValue::Number(value) => assert!(
+                    (value.get() - expected).abs() < 2e-14,
+                    "{name}(2, 3) = {}, expected {expected}",
+                    value.get()
+                ),
+                other => panic!("Expected {name} number, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn bessel_order_is_truncated_toward_zero() {
+        // Microsoft documents truncation of a non-integer order for all four
+        // functions.  The previous implementation rejected these valid calls.
+        let registry = FunctionRegistry::new();
+        for (name, x, fractional_order, integer_order) in [
+            ("BESSELI", 1.5, 1.9, 1.0),
+            ("BESSELJ", 1.9, 2.9, 2.0),
+            ("BESSELK", 1.5, 1.9, 1.0),
+            ("BESSELY", 2.5, 1.9, 1.0),
+        ] {
+            assert_eq!(
+                registry.call(name, &[num(x), num(fractional_order)]),
+                registry.call(name, &[num(x), num(integer_order)]),
+                "{name} order truncation"
+            );
+        }
+    }
+
+    #[test]
+    fn bessel_first_kind_negative_x_has_integer_order_parity() {
+        let registry = FunctionRegistry::new();
+        for name in ["BESSELI", "BESSELJ"] {
+            for order in [0.0, 1.0, 3.0] {
+                let positive = registry.call(name, &[num(2.0), num(order)]);
+                let negative = registry.call(name, &[num(-2.0), num(order)]);
+                match (positive, negative) {
+                    (CellValue::Number(p), CellValue::Number(n)) => {
+                        let expected = if order as usize % 2 == 1 {
+                            -p.get()
+                        } else {
+                            p.get()
+                        };
+                        assert_eq!(n.get(), expected, "{name} negative-x parity");
+                    }
+                    (positive, negative) => panic!(
+                        "Expected numeric parity values for {name}: {positive:?}, {negative:?}"
+                    ),
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn bessel_negative_orders_are_num_errors_after_truncation_contract() {
+        let registry = FunctionRegistry::new();
+        for name in ["BESSELI", "BESSELJ", "BESSELK", "BESSELY"] {
+            for order in [-1.0, -0.5] {
                 assert!(
-                    n.get().is_finite(),
-                    "BESSELI(1, 200) should be finite, got {}",
-                    n.get()
-                );
-                assert!(
-                    n.get().abs() < 1e-10,
-                    "BESSELI(1, 200) should be ~0, got {}",
-                    n.get()
+                    matches!(
+                        registry.call(name, &[num(2.0), num(order)]),
+                        CellValue::Error(CellError::Num, _)
+                    ),
+                    "{name}({order}) should be #NUM!"
                 );
             }
-            CellValue::Error(CellError::Num, _) => {
-                // Also acceptable
+        }
+    }
+
+    #[test]
+    fn bessel_asymptotic_regimes_are_finite_at_their_boundaries() {
+        let registry = FunctionRegistry::new();
+        for (name, x) in [
+            ("BESSELI", 3.75),
+            ("BESSELJ", 8.0),
+            ("BESSELY", 8.0),
+            ("BESSELK", 2.0),
+        ] {
+            match registry.call(name, &[num(x), num(0.0)]) {
+                CellValue::Number(value) => assert!(
+                    value.get().is_finite(),
+                    "{name}({x}, 0) should be finite, got {}",
+                    value.get()
+                ),
+                other => panic!("Expected {name} boundary value, got {other:?}"),
             }
-            other => panic!("Expected number or #NUM!, got {:?}", other),
+        }
+        // The large-x J/Y routines use the oscillatory asymptotic branch.
+        assert!((bessel_j0(10.0) - -0.2459357644).abs() < 2e-8);
+        assert!((bessel_y0(10.0) - 0.0556711674).abs() < 2e-8);
+    }
+
+    #[test]
+    fn bessel_order_guard_prevents_unbounded_recurrence() {
+        let registry = FunctionRegistry::new();
+        for name in ["BESSELI", "BESSELJ", "BESSELK", "BESSELY"] {
+            assert!(
+                matches!(
+                    registry.call(name, &[num(2.0), num(201.0)]),
+                    CellValue::Error(CellError::Num, _)
+                ),
+                "{name}(2, 201) should be bounded by the recurrence guard"
+            );
+        }
+    }
+
+    #[test]
+    fn bessel_huge_order_is_rejected_before_integer_conversion() {
+        let registry = FunctionRegistry::new();
+        for name in ["BESSELI", "BESSELJ", "BESSELK", "BESSELY"] {
+            assert!(matches!(
+                registry.call(name, &[num(2.0), num(1e308)]),
+                CellValue::Error(CellError::Num, _)
+            ));
+        }
+    }
+
+    #[test]
+    fn bessel_subnormal_x_does_not_overflow_recurrence_ratio() {
+        let registry = FunctionRegistry::new();
+        let tiny = f64::from_bits(1);
+        for name in ["BESSELI", "BESSELJ"] {
+            assert_eq!(
+                registry.call(name, &[num(tiny), num(2.0)]),
+                CellValue::number(0.0)
+            );
+        }
+        for name in ["BESSELK", "BESSELY"] {
+            assert!(matches!(
+                registry.call(name, &[num(tiny), num(0.0)]),
+                CellValue::Number(value) if value.get().is_finite()
+            ));
+            assert!(matches!(
+                registry.call(name, &[num(tiny), num(2.0)]),
+                CellValue::Error(CellError::Num, _)
+            ));
+        }
+    }
+}
+
+#[test]
+fn first_kind_bessel_zero_limits_include_blank_coercion() {
+    // Excel returns 1 for BESSELI when both referenced arguments are blank.
+    // Explicit zero/order cases also verify the analytical BESSELI/BESSELJ limits.
+    let registry = FunctionRegistry::new();
+    for name in ["BESSELI", "BESSELJ"] {
+        for x in [
+            CellValue::Null,
+            CellValue::number(0.0),
+            CellValue::number(-0.0),
+        ] {
+            for order in [CellValue::Null, CellValue::number(0.0)] {
+                assert_eq!(
+                    registry.call(name, &[x.clone(), order]),
+                    CellValue::number(1.0),
+                    "{name}"
+                );
+            }
+            for order in [1.0, 2.0, 200.0] {
+                assert_eq!(
+                    registry.call(name, &[x.clone(), CellValue::number(order)]),
+                    CellValue::number(0.0),
+                    "{name}"
+                );
+            }
         }
     }
 }

@@ -101,3 +101,98 @@ fn test_agg_prepass_mixed_static_dynamic() {
         );
     }
 }
+
+/// Percent criteria are parsed on the criterion side only.  Repeating the
+/// formulas drives the aggregation prepass/cache paths rather than a one-off
+/// scalar evaluation, while the text value `"50%"` remains text data.
+#[test]
+fn test_agg_prepass_percent_criteria_preserves_data_side_text_semantics() {
+    let mut cells = Vec::new();
+    let mut id_counter = 0x6800u128;
+
+    // Only numeric 0.5 and numeric text "0.5" participate.  Text "50%" is
+    // deliberately present to ensure criterion parsing is never applied to
+    // range data when a fast key is built.
+    cells.push(number_cell(&mut id_counter, 0, 0, 0.5));
+    cells.push(number_cell(&mut id_counter, 0, 1, 10.0));
+    cells.push(text_cell(&mut id_counter, 1, 0, "50%"));
+    cells.push(number_cell(&mut id_counter, 1, 1, 100.0));
+    cells.push(text_cell(&mut id_counter, 2, 0, "0.5"));
+    cells.push(number_cell(&mut id_counter, 2, 1, 20.0));
+
+    for row in 4..24u32 {
+        cells.push(text_cell(&mut id_counter, row, 2, "50%"));
+        cells.push(formula_cell(
+            &mut id_counter,
+            row,
+            3,
+            format!("=COUNTIF(A$1:A$3,C{})", row + 1),
+        ));
+        cells.push(formula_cell(
+            &mut id_counter,
+            row,
+            4,
+            format!("=SUMIF(A$1:A$3,C{},B$1:B$3)", row + 1),
+        ));
+        cells.push(formula_cell(
+            &mut id_counter,
+            row,
+            5,
+            format!("=AVERAGEIF(A$1:A$3,C{},B$1:B$3)", row + 1),
+        ));
+        cells.push(formula_cell(
+            &mut id_counter,
+            row,
+            6,
+            format!("=COUNTIFS(A$1:A$3,C{})", row + 1),
+        ));
+        cells.push(formula_cell(
+            &mut id_counter,
+            row,
+            7,
+            format!("=SUMIFS(B$1:B$3,A$1:A$3,C{})", row + 1),
+        ));
+    }
+
+    let (core, cell_store) = init_core(single_sheet_snapshot("Sheet1", 24, 8, cells));
+    let sheet_id = sid(1);
+    for row in 4..24u32 {
+        assert_number_at(
+            &core,
+            &cell_store,
+            &sheet_id,
+            row,
+            3,
+            2.0,
+            "COUNTIF percent",
+        );
+        assert_number_at(&core, &cell_store, &sheet_id, row, 4, 30.0, "SUMIF percent");
+        assert_number_at(
+            &core,
+            &cell_store,
+            &sheet_id,
+            row,
+            5,
+            15.0,
+            "AVERAGEIF percent",
+        );
+        assert_number_at(
+            &core,
+            &cell_store,
+            &sheet_id,
+            row,
+            6,
+            2.0,
+            "COUNTIFS percent",
+        );
+        assert_number_at(
+            &core,
+            &cell_store,
+            &sheet_id,
+            row,
+            7,
+            30.0,
+            "SUMIFS percent",
+        );
+    }
+}

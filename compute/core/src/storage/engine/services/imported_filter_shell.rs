@@ -1,12 +1,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use domain_types::domain::filter::{AutoFilter, OoxmlFilterType};
+use value_types::DateSystem;
 
 use crate::storage::sheet::filters;
 
 pub(in crate::storage::engine::services) fn build_filter_shell_metadata(
     imported_auto_filter: Option<&AutoFilter>,
     button_metadata: BTreeMap<String, filters::FilterButtonMetadata>,
+    date_system: DateSystem,
 ) -> filters::FilterShellMetadata {
     let mut unsupported_reasons = BTreeSet::new();
     let mut lossless_criteria = Vec::new();
@@ -25,7 +27,10 @@ pub(in crate::storage::engine::services) fn build_filter_shell_metadata(
                 continue;
             };
             has_active_lossless_criteria = true;
-            unsupported_reasons.extend(unsupported_reasons_for_filter_type(filter_type));
+            unsupported_reasons.extend(unsupported_reasons_for_filter_type(
+                filter_type,
+                date_system,
+            ));
             lossless_criteria.push(filters::LosslessCriterionDescriptor {
                 filter_col_id: Some(column.col_index),
                 table_column_id: None,
@@ -53,11 +58,17 @@ pub(in crate::storage::engine::services) fn build_filter_shell_metadata(
 
 pub(in crate::storage::engine::services) fn unsupported_reasons_for_filter_type(
     filter_type: &OoxmlFilterType,
+    date_system: DateSystem,
 ) -> Vec<filters::ImportFilterUnsupportedReason> {
     match filter_type {
         OoxmlFilterType::Values {
             date_group_items, ..
-        } if !date_group_items.is_empty() => {
+        } if !date_group_items.is_empty()
+            && !filters::date_group_items_supported_in_date_system(
+                date_group_items,
+                date_system,
+            ) =>
+        {
             vec![filters::ImportFilterUnsupportedReason::DateGroupUnsupported]
         }
         OoxmlFilterType::Custom { conditions, .. } => {
@@ -71,12 +82,17 @@ pub(in crate::storage::engine::services) fn unsupported_reasons_for_filter_type(
             }
         }
         OoxmlFilterType::Dynamic { dynamic_type, .. } => {
-            let mut reasons =
-                vec![filters::ImportFilterUnsupportedReason::DynamicTemporalContextUnsupported];
-            if !is_known_dynamic_type(dynamic_type) {
-                reasons.push(filters::ImportFilterUnsupportedReason::UnknownDynamicType);
+            match filters::dynamic_filter_rule_from_ooxml_type(dynamic_type) {
+                Some(filters::DynamicFilterRule::AboveAverage)
+                | Some(filters::DynamicFilterRule::BelowAverage) => {
+                    vec![filters::ImportFilterUnsupportedReason::DynamicTemporalContextUnsupported]
+                }
+                Some(_) => Vec::new(),
+                None => vec![
+                    filters::ImportFilterUnsupportedReason::UnknownDynamicType,
+                    filters::ImportFilterUnsupportedReason::DynamicTemporalContextUnsupported,
+                ],
             }
-            reasons
         }
         OoxmlFilterType::Color {
             dxf_id: Some(_), ..
@@ -84,8 +100,15 @@ pub(in crate::storage::engine::services) fn unsupported_reasons_for_filter_type(
             vec![filters::ImportFilterUnsupportedReason::ColorDxfUnresolved]
         }
         OoxmlFilterType::Color { dxf_id: None, .. } => Vec::new(),
-        OoxmlFilterType::Icon { .. } => {
-            vec![filters::ImportFilterUnsupportedReason::IconFilterUnsupported]
+        OoxmlFilterType::Icon { icon_set, icon_id } => {
+            if domain_types::icon_filter_is_supported(
+                icon_set.as_deref().unwrap_or_default(),
+                *icon_id,
+            ) {
+                Vec::new()
+            } else {
+                vec![filters::ImportFilterUnsupportedReason::IconFilterUnsupported]
+            }
         }
         _ => Vec::new(),
     }
@@ -147,28 +170,5 @@ fn is_supported_custom_operator(operator: &str) -> bool {
             | "notContains"
             | "between"
             | "notBetween"
-    )
-}
-
-fn is_known_dynamic_type(dynamic_type: &str) -> bool {
-    matches!(
-        dynamic_type,
-        "aboveAverage"
-            | "belowAverage"
-            | "today"
-            | "yesterday"
-            | "tomorrow"
-            | "thisWeek"
-            | "lastWeek"
-            | "nextWeek"
-            | "thisMonth"
-            | "lastMonth"
-            | "nextMonth"
-            | "thisQuarter"
-            | "lastQuarter"
-            | "nextQuarter"
-            | "thisYear"
-            | "lastYear"
-            | "nextYear"
     )
 }

@@ -11,6 +11,8 @@ use crate::domain::styles::types::{
 
 use super::styles::hex_to_color_def;
 
+mod preserved_cf;
+
 pub(super) fn remap_for_export(output: &ParseOutput) -> (ParseOutput, Vec<DxfDef>) {
     let registry = output
         .workbook_stylesheet
@@ -20,17 +22,36 @@ pub(super) fn remap_for_export(output: &ParseOutput) -> (ParseOutput, Vec<DxfDef
 
     let mut reachable = HashSet::new();
     collect_reachable_ids(output, &mut reachable);
+    let theme_colors = preserved_cf::theme_colors(output);
+    preserved_cf::collect_unchanged_ids(output, registry, &theme_colors, &mut reachable);
 
-    let (id_to_export_id, mut dxfs) = if registry_has_dense_ooxml_ids(registry) {
-        preserve_dense_ooxml_ids(registry, &reachable)
-    } else {
-        compact_reachable_ids(registry, &reachable)
-    };
+    // Opaque stylesheet extensions include custom slicer and timeline styles
+    // whose dxfId attributes refer to this registry. Retain its positions as a
+    // unit rather than pruning or renumbering records behind those references.
+    let preserve_extension_ids = output
+        .workbook_stylesheet
+        .as_ref()
+        .is_some_and(|stylesheet| stylesheet.ext_lst_xml.is_some());
+    if preserve_extension_ids {
+        reachable.extend(registry.iter().map(|entry| entry.id));
+    }
+
+    let (id_to_export_id, mut dxfs) =
+        if preserve_extension_ids || registry_has_dense_ooxml_ids(registry) {
+            preserve_dense_ooxml_ids(registry, &reachable)
+        } else {
+            compact_reachable_ids(registry, &reachable)
+        };
 
     let mut remapped = output.clone();
     remap_non_cf_dxf_ids(&mut remapped, &id_to_export_id);
-    clear_cf_dxf_ids(&mut remapped);
-    assign_live_cf_style_dxfs(&mut remapped, &mut dxfs);
+    preserved_cf::assign_styles(
+        &mut remapped,
+        registry,
+        &theme_colors,
+        &id_to_export_id,
+        &mut dxfs,
+    );
     (remapped, dxfs)
 }
 
@@ -242,34 +263,9 @@ fn remap_non_cf_dxf_ids(output: &mut ParseOutput, id_to_export_id: &HashMap<u32,
     }
 }
 
-fn clear_cf_dxf_ids(output: &mut ParseOutput) {
-    for sheet in &mut output.sheets {
-        for cf in &mut sheet.conditional_formats {
-            for style in cf.rules.iter_mut().filter_map(rule_style_mut) {
-                style.dxf_id = None;
-            }
-        }
-    }
-}
-
 fn remap_id(id: &mut Option<u32>, id_to_export_id: &HashMap<u32, u32>) {
     if let Some(current) = *id {
         *id = id_to_export_id.get(&current).copied();
-    }
-}
-
-fn assign_live_cf_style_dxfs(output: &mut ParseOutput, dxfs: &mut Vec<DxfDef>) {
-    for sheet in &mut output.sheets {
-        for cf in &mut sheet.conditional_formats {
-            for style in cf.rules.iter_mut().filter_map(rule_style_mut) {
-                if !cf_style_has_exportable_properties(style) {
-                    continue;
-                }
-                let dxf_id = dxfs.len() as u32;
-                dxfs.push(cf_style_to_dxf(style));
-                style.dxf_id = Some(dxf_id);
-            }
-        }
     }
 }
 
@@ -294,7 +290,6 @@ fn cf_style_has_exportable_properties(style: &CFStyle) -> bool {
         || style.border_right_style.is_some()
 }
 
-#[cfg(test)]
 fn rule_style(rule: &CFRule) -> Option<&CFStyle> {
     match rule {
         CFRule::CellValue { style, .. }
@@ -458,6 +453,25 @@ mod tests {
                 ..Default::default()
             }),
             ..Default::default()
+        }
+    }
+
+    #[test]
+    fn stylesheet_extensions_keep_dense_and_sparse_dxf_positions() {
+        for ids in [vec![0, 1], vec![1, 3]] {
+            let registry: Vec<_> = ids.into_iter().map(registry_entry).collect();
+            let output = ParseOutput {
+                workbook_stylesheet: Some(domain_types::WorkbookStylesheet {
+                    dxf_registry: registry.clone(),
+                    ext_lst_xml: Some(br#"<extLst><ext uri="custom"><slicerStyleElement dxfId="1"/></ext></extLst>"#.to_vec()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            };
+            let (_, emitted) = remap_for_export(&output);
+            for entry in registry {
+                assert_eq!(emitted[entry.id as usize], entry.to_ooxml());
+            }
         }
     }
 

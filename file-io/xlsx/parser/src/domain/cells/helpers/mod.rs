@@ -30,4 +30,5 @@ pub(crate) use tags::{
     post_sheet_data_region, pre_sheet_data_region, start_tag_at,
 };
 pub use value::extract_cell_value_fast;
+pub(crate) use value::extract_inline_string_owned_forward;
 pub(crate) use worksheet_scan::{CellEnd, find_cell_end, parse_row_number};

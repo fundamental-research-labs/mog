@@ -11,5 +11,5 @@ mod store_cell_ref_resolver;
 
 pub use eval_context::EvalContext;
 pub use override_context::OverrideContext;
-pub use store_access::MirrorAccess;
+pub use store_access::StoreAccess;
 pub(crate) use store_cell_ref_resolver::StoreCellRefResolver;

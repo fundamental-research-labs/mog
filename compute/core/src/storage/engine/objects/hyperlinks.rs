@@ -15,7 +15,7 @@ use value_types::ComputeError;
     crate_path = "compute_core"
 )]
 impl ComputeEngine {
-    #[bridge::write(scope = "cell")]
+    #[bridge::write]
     pub fn set_hyperlink(
         &mut self,
         sheet_id: &SheetId,
@@ -36,7 +36,7 @@ impl ComputeEngine {
     }
 
     /// Remove the hyperlink from a cell at the given position.
-    #[bridge::write(scope = "cell")]
+    #[bridge::write]
     pub fn remove_hyperlink(
         &mut self,
         sheet_id: &SheetId,
@@ -55,13 +55,13 @@ impl ComputeEngine {
     }
 
     /// Get the hyperlink URL for a cell at the given position.
-    #[bridge::read(scope = "cell")]
+    #[bridge::read]
     pub fn get_hyperlink(&self, sheet_id: &SheetId, row: u32, col: u32) -> Option<String> {
         services::objects::get_hyperlink(&self.stores, &self.cell_store, sheet_id, row, col)
     }
 
     /// Get full hyperlink metadata for all hyperlinks on a worksheet.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_hyperlinks(&self, sheet_id: &SheetId) -> Vec<Hyperlink> {
         let Some(grid) = self.cell_store.get_sheet(sheet_id) else {
             return Vec::new();
@@ -70,7 +70,7 @@ impl ComputeEngine {
     }
 
     /// Remove explicit hyperlinks whose anchors fall inside a rectangular range.
-    #[bridge::write(scope = "range")]
+    #[bridge::write]
     pub fn clear_hyperlinks_in_range(
         &mut self,
         sheet_id: &SheetId,

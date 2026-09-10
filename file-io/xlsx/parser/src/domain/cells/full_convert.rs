@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use crate::domain::cells::{
     AuthoredStyleOnlyCell, CELL_TYPE_BOOL, CELL_TYPE_EMPTY, CELL_TYPE_ERROR, CELL_TYPE_FORMULA,
     CELL_TYPE_FORMULA_STRING, CELL_TYPE_NUMBER, CELL_TYPE_STRING, CellData, ParseExtras,
-    VALUE_TYPE_CACHED_FORMULA, VALUE_TYPE_FORMULA, VALUE_TYPE_INLINE, VALUE_TYPE_SHARED_STRING,
+    VALUE_TYPE_CACHED_FORMULA, VALUE_TYPE_DECODED_STRING, VALUE_TYPE_FORMULA, VALUE_TYPE_INLINE,
     adjust_formula_references,
 };
 use crate::output::results::{
@@ -134,9 +134,9 @@ pub(crate) fn convert_cell_data(
         let start = c.value_offset as usize;
         let end = (start + c.value_len as usize).min(strings_buffer.len());
         let bytes = &strings_buffer[start..end];
-        let value_already_decoded_from_sst = c.value_type == VALUE_TYPE_SHARED_STRING
+        let value_already_decoded = c.value_type == VALUE_TYPE_DECODED_STRING
             || (c.value_type == VALUE_TYPE_CACHED_FORMULA && c.cell_type == CELL_TYPE_STRING);
-        let may_have_entities = !value_already_decoded_from_sst
+        let may_have_entities = !value_already_decoded
             && (c.cell_type == CELL_TYPE_STRING
                 || c.cell_type == CELL_TYPE_FORMULA_STRING
                 || c.value_type == VALUE_TYPE_FORMULA);
@@ -145,7 +145,7 @@ pub(crate) fn convert_cell_data(
         } else {
             Some(bytes_to_string(bytes))
         }
-    } else if c.value_type == VALUE_TYPE_SHARED_STRING {
+    } else if c.value_type == VALUE_TYPE_DECODED_STRING {
         Some(String::new())
     } else if c.value_type == VALUE_TYPE_INLINE && c.cell_type == CELL_TYPE_FORMULA_STRING {
         Some(String::new())
@@ -196,6 +196,7 @@ pub(crate) fn convert_cell_data(
         value,
         formula,
         force_recalc: false,
+        has_empty_cached_value: false,
         array_ref: None,
         cell_metadata_index: None,
         phonetic: false,
@@ -252,9 +253,50 @@ pub(crate) fn apply_parse_extras(
         }
     }
 
+    for (cell_idx, text) in &extras.cached_inline_strings {
+        if let Some(cell) = cells.get_mut(*cell_idx) {
+            cell.value = Some(text.clone());
+            cell.cached_value_type = CELL_TYPE_FORMULA_STRING;
+        }
+    }
+
     for &cell_idx in &extras.force_recalc_indices {
         if cell_idx < cells.len() {
             cells[cell_idx].force_recalc = true;
+        }
+    }
+    for &cell_idx in &extras.empty_cached_value_indices {
+        if cell_idx < cells.len() {
+            cells[cell_idx].has_empty_cached_value = true;
+        }
+    }
+    {
+        use ooxml_types::worksheet::{CellFormula as OoxmlCellFormula, CellFormulaType};
+
+        for (cell_idx, metadata) in &extras.empty_formula_metadata {
+            if *cell_idx >= cells.len() {
+                continue;
+            }
+
+            // Preserve the authored formula element as typed metadata. An
+            // empty formula is not executable formula text: keeping this
+            // field absent prevents the scheduler/Yrs formula graph from
+            // registering an empty expression or replacing an array cache.
+            cells[*cell_idx].formula = None;
+            cells[*cell_idx].cell_formula = Some(OoxmlCellFormula {
+                t: CellFormulaType::Normal,
+                r#ref: metadata.ref_range.clone(),
+                aca: metadata.aca,
+                dt2d: metadata.dt2d,
+                del1: metadata.del1,
+                del2: metadata.del2,
+                r1: metadata.r1.clone(),
+                r2: metadata.r2.clone(),
+                ca: metadata.ca,
+                bx: metadata.bx,
+                dtr: metadata.dtr,
+                ..Default::default()
+            });
         }
     }
     for &cell_idx in &extras.xml_space_formula_indices {
@@ -499,6 +541,7 @@ mod tests {
             value: value.map(|s| s.to_string()),
             formula: formula.map(|s| s.to_string()),
             force_recalc: false,
+            has_empty_cached_value: false,
             array_ref: None,
             cell_metadata_index: None,
             vm: None,
@@ -514,6 +557,85 @@ mod tests {
     }
 
     #[test]
+    fn authored_empty_formula_preserves_metadata_without_formula_text() {
+        use ooxml_types::worksheet::CellFormulaType;
+
+        let mut cells = vec![make_cell(0, 1, CELL_TYPE_VAL_FORMULA, Some("0"), None)];
+        let mut extras = ParseExtras::default();
+        extras.force_recalc_indices.push(0);
+        extras.empty_cached_value_indices.push(0);
+        extras.empty_formula_metadata.push((
+            0,
+            crate::domain::cells::types::EmptyFormulaMetadata {
+                ca: true,
+                ..Default::default()
+            },
+        ));
+
+        apply_parse_extras(&mut cells, &extras, &[], &[], &[]);
+
+        assert!(cells[0].formula.is_none());
+        assert!(cells[0].force_recalc);
+        assert!(cells[0].has_empty_cached_value);
+        let formula = cells[0]
+            .cell_formula
+            .as_ref()
+            .expect("empty formula metadata should survive conversion");
+        assert_eq!(formula.t, CellFormulaType::Normal);
+        assert!(formula.text.is_empty());
+        assert!(formula.ca);
+        assert_eq!(cells[0].value.as_deref(), Some("0"));
+    }
+
+    #[test]
+    fn worksheet_inline_strings_decode_once_and_preserve_formula_caches() {
+        let xml = br#"<worksheet><sheetData><row r="1">
+          <c r="A1" t="inlineStr"><is><t>&amp;amp;</t></is></c>
+          <c r="B1" t="inlineStr"><is><t>_x005F_x000D_</t></is></c>
+          <c r="C1" t="inlineStr"><is><r><t>&amp;am</t></r><r><t>p;</t></r></is></c>
+          <c r="D1" t="inlineStr"><is><t/></is></c>
+          <c r="E1" t="inlineStr"><f>CONCATENATE(A1,B1)</f><is><t>&amp;amp;</t></is></c>
+          <c r="F1" t="inlineStr"><f>""</f><is/></c>
+          <c r="G1" t="str"><v>&amp;amp;</v></c>
+          <c r="H1" t="s"><v>0</v></c>
+        </row></sheetData></worksheet>"#;
+        let mut packed = vec![CellData::default(); 8];
+        let mut strings = Vec::new();
+        let mut extras = ParseExtras::default();
+        let count = crate::domain::cells::parse_worksheet_fast_with_extras(
+            xml,
+            &["&amp;"],
+            &mut packed,
+            &mut strings,
+            &mut Vec::new(),
+            &mut extras,
+            &[],
+        );
+        assert_eq!(count, 8);
+        let mut cells: Vec<_> = packed
+            .iter()
+            .map(|c| convert_cell_data(c, &strings, &mut Vec::new()))
+            .collect();
+        apply_parse_extras(&mut cells, &extras, &packed, &strings, &["&amp;".into()]);
+        let values: Vec<_> = cells.iter().map(|c| c.value.as_deref()).collect();
+        assert_eq!(
+            values,
+            vec![
+                Some("&amp;"),
+                Some("_x000D_"),
+                Some("&amp;"),
+                Some(""),
+                Some("&amp;"),
+                Some(""),
+                Some("&amp;"),
+                Some("&amp;")
+            ]
+        );
+        assert_eq!(cells[4].formula.as_deref(), Some("CONCATENATE(A1,B1)"));
+        assert_eq!(cells[4].cached_value_type, CELL_TYPE_FORMULA_STRING);
+    }
+
+    #[test]
     fn convert_cell_data_does_not_double_decode_shared_string_entities() {
         let strings_buffer = b"Design &lt;br&gt; work";
         let cell = CellData {
@@ -521,7 +643,7 @@ mod tests {
             col: 0,
             cell_type: CELL_TYPE_STRING,
             style_idx: 0,
-            value_type: VALUE_TYPE_SHARED_STRING,
+            value_type: VALUE_TYPE_DECODED_STRING,
             value_offset: 0,
             value_len: strings_buffer.len() as u32,
         };

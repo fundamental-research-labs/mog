@@ -3,13 +3,13 @@
 
 use std::borrow::Cow;
 
-use super::scan::skip_double_quoted;
+use super::scan::{skip_double_quoted, skip_single_quoted};
 use super::xml::decode_xml_entities;
 
 /// Normalize an XLSX formula string:
 /// 1. Decode XML entities everywhere (undoes XML encoding -- always correct)
 /// 2. Strip `_xlfn._xlws.`, `_xlfn.`, `_xlpm.` prefixes outside of
-///    double-quoted string literals
+///    string literals, sheet names, and structured references
 /// 3. Ensure `=` prefix (XLSX `<f>` elements store formulas without `=`,
 ///    but our internal `formula_strings` contract requires it)
 ///
@@ -27,20 +27,12 @@ pub fn normalize_xlsx_formula(formula: &str) -> String {
         return String::new();
     }
 
-    let needs_entity_decode = formula.contains('&');
-    let needs_prefix_strip = needs_xlsx_prefix_strip(formula);
-
-    let cleaned: Cow<'_, str> = if !needs_entity_decode && !needs_prefix_strip {
-        Cow::Borrowed(formula)
-    } else if needs_entity_decode {
-        let decoded = decode_xml_entities(formula);
-        if needs_prefix_strip {
-            Cow::Owned(strip_xlsx_prefixes(&decoded))
-        } else {
-            decoded
-        }
-    } else {
-        Cow::Owned(strip_xlsx_prefixes(formula))
+    // Entity decoding can reveal a prefix or a quote, so lexical decisions
+    // must use the decoded formula rather than the original XML text.
+    let decoded = decode_xml_entities(formula);
+    let cleaned = match strip_xlsx_prefixes(&decoded) {
+        Some(stripped) => Cow::Owned(stripped),
+        None => decoded,
     };
 
     // Ensure `=` prefix. All other formula_strings insertion paths (user edits
@@ -54,82 +46,123 @@ pub fn normalize_xlsx_formula(formula: &str) -> String {
     }
 }
 
-/// Quick check whether a formula string contains any XLSX prefixes that need
-/// stripping. This is a cheap scan (no allocation) used to skip
-/// `strip_xlsx_prefixes` entirely when the formula is already clean.
-///
-/// Only checks outside of double-quoted string literals, matching the same
-/// semantics as `strip_xlsx_prefixes`.
-fn needs_xlsx_prefix_strip(s: &str) -> bool {
-    // Cheap pre-check: the prefixes always start with '_x' (case-insensitive).
-    // If the formula doesn't contain '_x' or '_X', no prefix can be present.
+/// Strip OOXML prefixes only from complete formula identifiers. Return `None`
+/// for unchanged formulas so the import fast path does not allocate.
+fn strip_xlsx_prefixes(s: &str) -> Option<String> {
     if !s.contains("_x") && !s.contains("_X") {
-        return false;
+        return None;
     }
 
-    // Walk the string respecting double-quoted literals (same as strip_xlsx_prefixes).
     let bytes = s.as_bytes();
-    let len = bytes.len();
     let mut i = 0;
-    while i < len {
-        if bytes[i] == b'"' {
-            i = skip_double_quoted(bytes, i + 1);
+    let mut copied_until = 0;
+    let mut out = None::<String>;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'"' => {
+                i = skip_double_quoted(bytes, i + 1);
+                continue;
+            }
+            b'\'' => {
+                i = skip_single_quoted(bytes, i + 1);
+                continue;
+            }
+            b'[' => {
+                i = skip_bracketed_reference(bytes, i);
+                continue;
+            }
+            _ => {}
+        }
+
+        let ch = s[i..].chars().next().unwrap();
+        if !is_identifier_char(ch) {
+            i += ch.len_utf8();
             continue;
         }
-        // Check for prefixes using byte comparison (prefixes are pure ASCII).
-        if i + 12 <= len && bytes[i..i + 12].eq_ignore_ascii_case(b"_xlfn._xlws.") {
-            return true;
+
+        // Consume the whole identifier so embedded prefix-looking text cannot
+        // become a rewrite candidate. Unicode names are identifiers too.
+        let start = i;
+        i += ch.len_utf8();
+        while i < bytes.len() {
+            let next = s[i..].chars().next().unwrap();
+            if !is_identifier_char(next) {
+                break;
+            }
+            i += next.len_utf8();
         }
-        if i + 6 <= len
-            && (bytes[i..i + 6].eq_ignore_ascii_case(b"_xlfn.")
-                || bytes[i..i + 6].eq_ignore_ascii_case(b"_xlpm."))
+        // A sheet or table name can legitimately start with an OOXML prefix.
+        if s[..start].trim_end().ends_with('!')
+            || s[i..].trim_start().starts_with(['!', '['])
+            || starts_sheet_range(s, i)
         {
-            return true;
+            continue;
+        }
+        let identifier = &s[start..i];
+        for prefix in ["_xlfn._xlws.", "_xlfn.", "_xlpm."] {
+            if identifier
+                .get(..prefix.len())
+                .is_some_and(|head| head.eq_ignore_ascii_case(prefix))
+                && identifier.len() > prefix.len()
+            {
+                let out = out.get_or_insert_with(|| String::with_capacity(s.len()));
+                out.push_str(&s[copied_until..start]);
+                copied_until = start + prefix.len();
+                break;
+            }
+        }
+    }
+    out.map(|mut out| {
+        out.push_str(&s[copied_until..]);
+        out
+    })
+}
+
+fn is_identifier_char(ch: char) -> bool {
+    ch.is_alphanumeric()
+        || matches!(ch, '_' | '.' | '\\')
+        || (!ch.is_ascii() && !ch.is_whitespace())
+}
+
+/// In an unquoted 3D reference (`Start:End!A1`), the first name is a
+/// sheet qualifier as well as the name immediately before `!`.
+fn starts_sheet_range(s: &str, end: usize) -> bool {
+    let Some(second_sheet) = s[end..].trim_start().strip_prefix(':') else {
+        return false;
+    };
+    let second_sheet = second_sheet.trim_start();
+    let end = if second_sheet.starts_with('\'') {
+        skip_single_quoted(second_sheet.as_bytes(), 1)
+    } else {
+        second_sheet
+            .chars()
+            .take_while(|&ch| is_identifier_char(ch))
+            .map(char::len_utf8)
+            .sum::<usize>()
+    };
+    second_sheet[end..].trim_start().starts_with('!')
+}
+
+/// Protect nested structured references and external workbook qualifiers.
+/// Apostrophes escape special characters within a structured-reference header.
+fn skip_bracketed_reference(bytes: &[u8], mut i: usize) -> usize {
+    let mut depth = 0usize;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\'' if matches!(bytes.get(i + 1), Some(b'[' | b']' | b'#' | b'\'' | b'@')) => {
+                i += 2;
+                continue;
+            }
+            b'[' => depth += 1,
+            b']' => {
+                depth -= 1;
+                if depth == 0 {
+                    return i + 1;
+                }
+            }
+            _ => {}
         }
         i += 1;
     }
-    false
-}
-
-/// Strip `_xlfn._xlws.`, `_xlfn.`, `_xlpm.` prefixes from a formula string,
-/// but NOT inside double-quoted string literals.
-///
-/// The prefixes are matched case-insensitively.
-fn strip_xlsx_prefixes(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    let bytes = s.as_bytes();
-    let len = bytes.len();
-    let mut i = 0;
-
-    while i < len {
-        // Inside a double-quoted string — copy verbatim until closing quote
-        if bytes[i] == b'"' {
-            let end = skip_double_quoted(bytes, i + 1);
-            out.push_str(&s[i..end]);
-            i = end;
-            continue;
-        }
-
-        // Try to match prefixes (case-insensitive), longest first.
-        // Prefixes are pure ASCII so .get() on byte indices is safe.
-        let remaining = &s[i..];
-        if remaining.len() >= 12
-            && remaining
-                .get(..12)
-                .is_some_and(|p| p.eq_ignore_ascii_case("_xlfn._xlws."))
-        {
-            i += 12;
-        } else if remaining.len() >= 6
-            && remaining.get(..6).is_some_and(|p| {
-                p.eq_ignore_ascii_case("_xlfn.") || p.eq_ignore_ascii_case("_xlpm.")
-            })
-        {
-            i += 6;
-        } else {
-            let ch = s[i..].chars().next().unwrap();
-            out.push(ch);
-            i += ch.len_utf8();
-        }
-    }
-    out
+    i
 }

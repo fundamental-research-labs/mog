@@ -40,7 +40,7 @@ impl CountFrequencyMap {
     /// O(1) lookup -- normalizes the criteria value before lookup.
     #[inline]
     pub fn count(&self, criteria: &CellValue) -> u64 {
-        let key = NormalizedKey::from_cell_value(criteria);
+        let key = NormalizedKey::from_criteria(criteria);
         let mut total = self.counts.get(&key).copied().unwrap_or(0);
         if matches!(&key, NormalizedKey::Text(s) if s.is_empty()) {
             total += self.counts.get(&NormalizedKey::Null).copied().unwrap_or(0);

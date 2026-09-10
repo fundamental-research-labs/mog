@@ -244,9 +244,14 @@ impl CellStore {
 
     /// Check if a row is hidden.
     pub fn is_row_hidden(&self, sheet_id: &SheetId, row: u32) -> bool {
-        self.sheets
-            .get(sheet_id)
-            .is_some_and(|s| s.hidden_rows.contains(&row))
+        self.cell_metadata_provider
+            .as_ref()
+            .and_then(|provider| provider.row_hidden(self, sheet_id, row))
+            .unwrap_or_else(|| {
+                self.sheets
+                    .get(sheet_id)
+                    .is_some_and(|s| s.hidden_rows.contains(&row))
+            })
     }
 
     /// Check if a column is hidden.

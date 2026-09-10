@@ -5,6 +5,34 @@ use crate::scheduler::ComputeCore;
 use super::{ComputeEngine, construction};
 
 impl ComputeEngine {
+    /// Propagate cache invalidations recorded by the live cell store to the
+    /// durable import sidecar.  The scheduler records an owner as soon as it
+    /// publishes a result, so dependents cannot read an obsolete package
+    /// value during the same recalculation pass.
+    pub(super) fn sync_imported_array_cache_invalidations(&mut self) {
+        let invalidated = self.cell_store.take_imported_array_cache_invalidations();
+        self.stores
+            .storage
+            .invalidate_imported_array_caches_at(invalidated);
+    }
+
+    pub(super) fn metadata_requires_recalc(&self) -> bool {
+        self.cell_store
+            .cell_metadata_provider
+            .as_ref()
+            .is_some_and(|provider| {
+                provider.revision() != self.cell_store.evaluated_metadata_revision
+            })
+    }
+
+    pub(super) fn mark_metadata_evaluated(&mut self) {
+        self.cell_store.evaluated_metadata_revision = self
+            .cell_store
+            .cell_metadata_provider
+            .as_ref()
+            .map_or(0, |provider| provider.revision());
+    }
+
     /// Perform a full recalculation of all formula cells using the existing
     /// dependency graph and AST caches. Does NOT rebuild the ComputeCore.
     ///
@@ -26,13 +54,25 @@ impl ComputeEngine {
             //     explicitly so materialize_all_pivots still runs on next recalc.
             //   - set_culture marks dirty (locale affects date/number parsing).
             //   - Sheet CRUD and named-range CRUD mark dirty (may change resolution).
-            if !engine.stores.compute.is_dirty() {
+            if !engine.stores.compute.is_dirty()
+                && !engine.metadata_requires_recalc()
+                && !engine.stores.compute.has_volatile_cells()
+            {
+                // A no-op calculation still refreshes the retained clock for CF reads.
+                engine.stores.compute.begin_recalc_clock(None);
                 return Ok(crate::snapshot::RecalcResult::empty());
             }
             engine.materialize_all_pivots();
+            crate::storage::engine::cell_metadata::refresh(
+                &engine.stores.storage,
+                &mut engine.cell_store,
+                engine.stores.layout_metrics,
+            );
             let result = engine.stores.compute.full_recalc(&mut engine.cell_store)?;
+            engine.sync_imported_array_cache_invalidations();
             engine.init_cf_caches();
             engine.stores.compute.clear_dirty();
+            engine.mark_metadata_evaluated();
             Ok(result)
         })
     }
@@ -59,20 +99,34 @@ impl ComputeEngine {
             // compute store is clean. Same audit as `recalculate()` above.
             let has_explicit_overrides = options.iterative.is_some()
                 || options.max_iterations.is_some()
-                || options.max_change.is_some();
+                || options.max_change.is_some()
+                || options.timestamp_serial.is_some();
             if !engine.stores.compute.is_dirty()
+                && !engine.metadata_requires_recalc()
                 && !has_explicit_overrides
                 && !engine.stores.compute.has_volatile_cells()
             {
+                // Establish the caller's clock boundary even when formulas are clean.
+                engine
+                    .stores
+                    .compute
+                    .begin_recalc_clock(options.timestamp_serial.map(|timestamp| timestamp.get()));
                 return Ok(crate::snapshot::RecalcResult::empty());
             }
             engine.materialize_all_pivots();
+            crate::storage::engine::cell_metadata::refresh(
+                &engine.stores.storage,
+                &mut engine.cell_store,
+                engine.stores.layout_metrics,
+            );
             let result = engine
                 .stores
                 .compute
                 .full_recalc_with_options(&mut engine.cell_store, options)?;
+            engine.sync_imported_array_cache_invalidations();
             engine.init_cf_caches();
             engine.stores.compute.clear_dirty();
+            engine.mark_metadata_evaluated();
             Ok(result)
         })
     }
@@ -82,16 +136,24 @@ impl ComputeEngine {
         self.without_history(|engine| {
             let snapshot =
                 construction::build_workbook_snapshot(&engine.stores, &engine.cell_store);
+            let char_code_page = engine.cell_store.char_code_page;
             let mut rebuilt_store = construction::build_finalized_store_from_snapshot(
                 &engine.stores.storage,
                 &snapshot,
                 &engine.stores.grid_indexes,
+                engine.stores.layout_metrics,
             )?;
+            rebuilt_store.char_code_page = char_code_page;
             engine.stores.compute = ComputeCore::new();
             let recalc = engine
                 .stores
                 .compute
                 .init_from_snapshot_with_prebuilt_store(&mut rebuilt_store, snapshot)?;
+            let invalidated = rebuilt_store.take_imported_array_cache_invalidations();
+            engine
+                .stores
+                .storage
+                .invalidate_imported_array_caches_at(invalidated);
             engine
                 .stores
                 .compute
@@ -103,6 +165,7 @@ impl ComputeEngine {
             // internal full recalc. Belt-and-braces — rebuild leaves the
             // workbook in a "just recalculated" state.
             engine.stores.compute.clear_dirty();
+            engine.mark_metadata_evaluated();
             Ok(recalc)
         })
     }

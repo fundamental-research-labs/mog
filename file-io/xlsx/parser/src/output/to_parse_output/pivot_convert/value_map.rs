@@ -98,6 +98,7 @@ pub(super) fn convert_pivot_item(item: &PivotItem) -> PivotFieldItem {
 
 pub(super) fn convert_row_col_item(item: &PivotRowColItem) -> DtPivotRowColItem {
     DtPivotRowColItem {
+        data_field_index: item.data_field_index,
         item_type: item.item_type.as_ref().map(convert_item_type),
         x_values: item.x_values.clone(),
     }

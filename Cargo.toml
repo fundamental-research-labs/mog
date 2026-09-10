@@ -29,7 +29,6 @@ members = [
     "compute/core/crates/compute-layout-index",
     "compute/core/crates/compute-text-measurement",
     "compute/core/crates/compute-screenshot",
-    "compute/core/crates/compute-security",
     "compute/api",
     "compute/officejs",
     "file-io/xlsx/test-contracts",

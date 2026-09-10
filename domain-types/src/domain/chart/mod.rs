@@ -62,6 +62,9 @@ pub struct StandardChartProvenance {
     /// Original chart part path, e.g. `xl/charts/chart2.xml`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub original_path: Option<String>,
+    /// Original chart XML bytes retained for authoritative replay.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub original_xml: Option<Vec<u8>>,
     /// Original chart `.rels` part path, when present.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rels_path: Option<String>,
@@ -70,6 +73,13 @@ pub struct StandardChartProvenance {
     /// Import-time fingerprint of the live typed chart projection.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub projection_fingerprint: Option<String>,
+    /// Import-time fingerprint of the worksheet cells referenced by the chart.
+    ///
+    /// This is kept separately from the typed chart projection fingerprint:
+    /// changing a source cell must invalidate the authored chart cache even
+    /// when the chart's formulas and formatting are otherwise unchanged.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_fingerprint: Option<String>,
     /// Relationship evidence owned by the imported chart part.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub relationships: Vec<ChartRelationshipData>,
@@ -97,6 +107,14 @@ pub struct StandardChartExportAuthority {
     /// Current live typed projection fingerprint that authority was granted for.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub projection_fingerprint: Option<String>,
+    /// Import-time fingerprint of the worksheet cells referenced by the chart.
+    ///
+    /// Export compares this with the current worksheet projection before
+    /// replaying the original chart part. `None` means the source dependency
+    /// set could not be represented as ordinary A1 ranges and must use the
+    /// conservative mutation invalidation path.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_fingerprint: Option<String>,
     /// Owner IDs invalidated since import or last validation.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub invalidated_owner_ids: Vec<String>,

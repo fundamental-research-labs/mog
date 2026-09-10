@@ -2,6 +2,7 @@
 
 pub mod cache_definition;
 pub mod cache_records;
+mod field_group;
 pub mod shared_items;
 pub mod table;
 pub mod table_fields;

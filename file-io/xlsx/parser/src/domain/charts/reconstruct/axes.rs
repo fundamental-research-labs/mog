@@ -9,11 +9,13 @@ use ooxml_types::charts::{
 use ooxml_types::drawings::{Paragraph, ParagraphProperties, ShapeProperties, StAngle, TextBody};
 
 use super::{
-    elements::{TitleTextSource, build_chart_text_rich, build_title},
+    chart_space::merge_imported_shape_properties,
+    elements::{TitleTextSource, build_title},
     formatting::{build_outline, build_shape_properties, build_text_body},
     text_body_fidelity::{
         preserve_imported_text_body_properties, preserve_imported_title_text_properties,
     },
+    title_text::build_chart_text_rich,
 };
 
 // =============================================================================
@@ -332,16 +334,121 @@ fn apply_imported_axis_fidelity(
         matches!(sad.crosses_at.as_deref(), Some("min" | "max" | "automatic"))
     };
     rebuilt.auto = original.auto;
-    if let (Some(title), Some(imported_title)) = (rebuilt.title.as_mut(), original.title.as_ref()) {
-        preserve_imported_title_text_properties(title, Some(imported_title));
+    // A title with an imported picture-only shape can have no public text,
+    // while a title edit to `None` still leaves the extracted formatting
+    // snapshot populated. Compare the authored title text with the imported
+    // owner before merging shape properties so an explicit clear cannot
+    // resurrect its relationship-backed fill.
+    let imported_title_text = original
+        .title
+        .as_ref()
+        .and_then(crate::domain::charts::axes::extract_title_text);
+    let title_was_cleared =
+        imported_title_text.is_some() && sad.title.as_deref().map_or(true, str::is_empty);
+    if title_was_cleared {
+        rebuilt.title = None;
+    } else {
+        if let (Some(title), Some(imported_title)) =
+            (rebuilt.title.as_mut(), original.title.as_ref())
+        {
+            preserve_imported_title_text_properties(title, Some(imported_title));
+            merge_imported_shape_properties(&mut title.sp_pr, imported_title.sp_pr.as_ref());
+        }
+        if rebuilt.title.is_none() && sad.title.as_deref().is_some_and(|text| !text.is_empty()) {
+            rebuilt.title = original.title.clone();
+        }
     }
     // Modeled formatting takes precedence; imported OOXML fills properties
     // that the public axis model does not represent.
-    if rebuilt.sp_pr.is_none() {
-        rebuilt.sp_pr = original.sp_pr.clone();
-    }
+    merge_imported_shape_properties(&mut rebuilt.sp_pr, original.sp_pr.as_ref());
+    preserve_imported_chart_lines(
+        &mut rebuilt.major_gridlines,
+        original.major_gridlines.as_ref(),
+        sad.grid_lines != Some(false),
+    );
+    preserve_imported_chart_lines(
+        &mut rebuilt.minor_gridlines,
+        original.minor_gridlines.as_ref(),
+        sad.minor_grid_lines != Some(false),
+    );
+    preserve_imported_display_units(
+        &mut rebuilt.disp_units,
+        original.disp_units.as_ref(),
+        sad.display_unit.is_some()
+            || sad.custom_display_unit.is_some()
+            || sad.display_unit_label.is_some()
+            || sad.display_unit_label_layout.is_some()
+            || sad.display_unit_label_format.is_some(),
+    );
     preserve_imported_text_body_properties(&mut rebuilt.tx_pr, original.tx_pr.as_ref());
     rebuilt.raw_axis_type_attr = original.raw_axis_type_attr.clone();
+}
+
+fn preserve_imported_display_units(
+    target: &mut Option<charts::DisplayUnits>,
+    imported: Option<&charts::DisplayUnits>,
+    preserve_label: bool,
+) {
+    let Some(imported) = imported else {
+        return;
+    };
+    let Some(target) = target.as_mut() else {
+        if !preserve_label {
+            return;
+        }
+        *target = Some(imported.clone());
+        return;
+    };
+
+    if target.kind.is_none() {
+        target.kind = imported.kind.clone();
+    }
+    if target.extensions.is_empty() {
+        target.extensions = imported.extensions.clone();
+    }
+    if !preserve_label {
+        return;
+    }
+    match (
+        target.disp_units_lbl.as_mut(),
+        imported.disp_units_lbl.as_ref(),
+    ) {
+        (Some(target_label), Some(imported_label)) => {
+            if target_label.layout.is_none() {
+                target_label.layout = imported_label.layout.clone();
+            }
+            if target_label.tx.is_none() {
+                target_label.tx = imported_label.tx.clone();
+            }
+            merge_imported_shape_properties(&mut target_label.sp_pr, imported_label.sp_pr.as_ref());
+            preserve_imported_text_body_properties(
+                &mut target_label.tx_pr,
+                imported_label.tx_pr.as_ref(),
+            );
+        }
+        (None, Some(imported_label)) => {
+            target.disp_units_lbl = Some(imported_label.clone());
+        }
+        _ => {}
+    }
+}
+
+fn preserve_imported_chart_lines(
+    target: &mut Option<ChartLines>,
+    imported: Option<&ChartLines>,
+    preserve: bool,
+) {
+    if !preserve {
+        return;
+    }
+    let Some(imported) = imported else {
+        return;
+    };
+    let Some(target) = target.as_mut() else {
+        *target = Some(imported.clone());
+        return;
+    };
+    merge_imported_shape_properties(&mut target.sp_pr, imported.sp_pr.as_ref());
 }
 
 #[derive(Default)]

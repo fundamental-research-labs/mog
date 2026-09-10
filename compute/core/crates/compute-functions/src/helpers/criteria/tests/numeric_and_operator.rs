@@ -198,6 +198,14 @@ fn test_try_parse_criteria_number_percent() {
 }
 
 #[test]
+fn test_try_parse_criteria_number_rejects_nonfinite_values() {
+    assert_eq!(try_parse_criteria_number("NaN"), None);
+    assert_eq!(try_parse_criteria_number("inf"), None);
+    assert_eq!(try_parse_criteria_number("1e309"), None);
+    assert_eq!(try_parse_criteria_number("NaN%"), None);
+}
+
+#[test]
 fn test_countif_criteria_with_percent_suffix() {
     // ">-999%" should mean "> -9.99"
     let crit = parse_criteria(&CellValue::Text(">-999%".into()));

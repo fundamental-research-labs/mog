@@ -19,6 +19,11 @@ impl ComputeEngine {
         let outcome = catch_unwind(AssertUnwindSafe(|| operation(self)));
         self.history.action_depth -= 1;
         if outer {
+            crate::storage::engine::cell_metadata::refresh(
+                &self.stores.storage,
+                &mut self.cell_store,
+                self.stores.layout_metrics,
+            );
             super::super::services::cell_editing::sync_grid_axes(
                 &mut self.stores,
                 &self.cell_store,
@@ -102,17 +107,17 @@ impl ComputeEngine {
     crate_path = "compute_core"
 )]
 impl ComputeEngine {
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn can_undo(&self) -> bool {
         !self.history.undo.is_empty() || !self.history.group.patches.is_empty()
     }
 
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn can_redo(&self) -> bool {
         !self.history.redo.is_empty()
     }
 
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn get_undo_state(&self) -> crate::snapshot::UndoState {
         crate::snapshot::UndoState {
             can_undo: self.can_undo(),
@@ -123,7 +128,7 @@ impl ComputeEngine {
         }
     }
 
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn begin_undo_group(
         &mut self,
     ) -> Result<crate::snapshot::MutationResult, value_types::ComputeError> {
@@ -131,7 +136,7 @@ impl ComputeEngine {
         Ok(crate::snapshot::MutationResult::empty())
     }
 
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn end_undo_group(
         &mut self,
     ) -> Result<crate::snapshot::MutationResult, value_types::ComputeError> {
@@ -144,13 +149,13 @@ impl ComputeEngine {
         Ok(crate::snapshot::MutationResult::empty())
     }
 
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn undo(&mut self) -> Result<crate::snapshot::MutationResult, value_types::ComputeError> {
         self.finish_open_history_action();
         self.replay_history(false)
     }
 
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn redo(&mut self) -> Result<crate::snapshot::MutationResult, value_types::ComputeError> {
         self.finish_open_history_action();
         self.replay_history(true)

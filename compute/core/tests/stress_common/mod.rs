@@ -165,7 +165,7 @@ pub fn has_any_circular_error(result: &RecalcResult) -> bool {
 }
 
 // ---------------------------------------------------------------------------
-// Mirror read helpers — extract values with panics for type mismatches
+// Cell-store read helpers — extract values with panics for type mismatches
 // ---------------------------------------------------------------------------
 
 /// Read f64 from cell_store. Panics if cell is not a Number.
@@ -174,7 +174,7 @@ pub fn read_store_number(cell_store: &CellStore, si: u32, row: u32, col: u32) ->
     match cell_store.get_cell_value(&cell_id) {
         Some(CellValue::Number(n)) => n.get(),
         other => panic!(
-            "Mirror ({},{},{}) expected Number, got {:?}",
+            "CellStore ({},{},{}) expected Number, got {:?}",
             si, row, col, other
         ),
     }
@@ -197,7 +197,7 @@ pub fn assert_store_number(cell_store: &CellStore, si: u32, row: u32, col: u32, 
         Some(CellValue::Number(n)) => {
             assert!(
                 (n.get() - expected).abs() < 1e-6,
-                "Mirror ({},{},{}) expected {}, got {}",
+                "CellStore ({},{},{}) expected {}, got {}",
                 si,
                 row,
                 col,
@@ -206,11 +206,11 @@ pub fn assert_store_number(cell_store: &CellStore, si: u32, row: u32, col: u32, 
             );
         }
         Some(other) => panic!(
-            "Mirror ({},{},{}) expected Number({}), got {:?}",
+            "CellStore ({},{},{}) expected Number({}), got {:?}",
             si, row, col, expected, other
         ),
         None => panic!(
-            "Mirror ({},{},{}) not found (expected Number({}))",
+            "CellStore ({},{},{}) not found (expected Number({}))",
             si, row, col, expected
         ),
     }
@@ -230,7 +230,7 @@ pub fn assert_store_number_tol(
         Some(CellValue::Number(n)) => {
             assert!(
                 (n.get() - expected).abs() < tol,
-                "Mirror ({},{},{}) expected {} ±{}, got {}",
+                "CellStore ({},{},{}) expected {} ±{}, got {}",
                 si,
                 row,
                 col,
@@ -240,11 +240,11 @@ pub fn assert_store_number_tol(
             );
         }
         Some(other) => panic!(
-            "Mirror ({},{},{}) expected Number({}), got {:?}",
+            "CellStore ({},{},{}) expected Number({}), got {:?}",
             si, row, col, expected, other
         ),
         None => panic!(
-            "Mirror ({},{},{}) not found (expected Number({}))",
+            "CellStore ({},{},{}) not found (expected Number({}))",
             si, row, col, expected
         ),
     }
@@ -262,11 +262,11 @@ pub fn assert_store_error(
     match cell_store.get_cell_value(&cell_id) {
         Some(CellValue::Error(err, _)) => assert_eq!(
             *err, expected,
-            "Mirror ({},{},{}) expected {:?}, got {:?}",
+            "CellStore ({},{},{}) expected {:?}, got {:?}",
             si, row, col, expected, err
         ),
         other => panic!(
-            "Mirror ({},{},{}) expected Error({:?}), got {:?}",
+            "CellStore ({},{},{}) expected Error({:?}), got {:?}",
             si, row, col, expected, other
         ),
     }
@@ -278,7 +278,7 @@ pub fn assert_store_null(cell_store: &CellStore, si: u32, row: u32, col: u32) {
     match cell_store.get_cell_value(&cell_id) {
         Some(CellValue::Null) | None => {} // OK
         Some(other) => panic!(
-            "Mirror ({},{},{}) expected Null, got {:?}",
+            "CellStore ({},{},{}) expected Null, got {:?}",
             si, row, col, other
         ),
     }
@@ -368,11 +368,11 @@ pub fn assert_store_text(cell_store: &CellStore, si: u32, row: u32, col: u32, ex
     match cell_store.get_cell_value(&cell_id) {
         Some(CellValue::Text(t)) => assert_eq!(
             &**t, expected,
-            "Mirror ({},{},{}) expected text {:?}, got {:?}",
+            "CellStore ({},{},{}) expected text {:?}, got {:?}",
             si, row, col, expected, t
         ),
         other => panic!(
-            "Mirror ({},{},{}) expected Text({:?}), got {:?}",
+            "CellStore ({},{},{}) expected Text({:?}), got {:?}",
             si, row, col, expected, other
         ),
     }
@@ -393,7 +393,7 @@ pub fn assert_store_is_any_error(cell_store: &CellStore, si: u32, row: u32, col:
     let val = cell_store.get_cell_value(&cell_id);
     assert!(
         matches!(val, Some(CellValue::Error(_, _))),
-        "Mirror ({},{},{}) expected Error, got {:?}",
+        "CellStore ({},{},{}) expected Error, got {:?}",
         si,
         row,
         col,

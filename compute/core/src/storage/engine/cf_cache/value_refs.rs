@@ -14,20 +14,39 @@ pub(super) fn resolve_color_point_color(
     pt: &cf::CFColorPoint,
     theme_palette: &HashMap<String, String>,
 ) -> Option<String> {
+    resolve_cf_color(
+        &cf::CFColor {
+            rgb: Some(pt.color.clone()),
+            theme: pt.color_theme,
+            tint: pt.color_tint,
+            indexed: pt.color_indexed,
+            auto: pt.color_auto == Some(true),
+        },
+        theme_palette,
+    )
+}
+
+pub(super) fn resolve_cf_color(
+    color: &cf::CFColor,
+    theme_palette: &HashMap<String, String>,
+) -> Option<String> {
     // OOXML color attributes are mutually exclusive, but malformed producers
-    // occasionally emit more than one. Match the persistence writer's
+    // occasionally emit more than one. Use the established color-scale
     // precedence (theme > indexed > auto > RGB) before handing the selected
     // representation to the centralized style color resolver.
-    let has_authored_metadata =
-        pt.color_theme.is_some() || pt.color_indexed.is_some() || pt.color_auto == Some(true);
+    let has_authored_metadata = color.theme.is_some() || color.indexed.is_some() || color.auto;
     let color_input = domain_types::style_resolver::ColorInput {
-        rgb: (!has_authored_metadata && !pt.color.trim().is_empty()).then(|| pt.color.clone()),
-        theme: pt.color_theme,
+        rgb: color
+            .rgb
+            .as_ref()
+            .filter(|rgb| !has_authored_metadata && !rgb.trim().is_empty())
+            .cloned(),
+        theme: color.theme,
         // Apply tint once, after every color kind has become concrete. Static
         // style resolution keeps some tints parallel, while compute-cf cannot.
         tint: None,
-        indexed: pt.color_indexed,
-        auto: pt.color_auto == Some(true),
+        indexed: color.indexed,
+        auto: color.auto,
     };
 
     // An empty theme vec deliberately asks the resolver for its canonical
@@ -53,7 +72,7 @@ pub(super) fn resolve_color_point_color(
         from_workbook
     };
 
-    match pt.color_tint {
+    match color.tint {
         Some(tint) if tint != 0.0 => Some(domain_types::theme_color::apply_tint(&concrete, tint)),
         _ => Some(concrete),
     }

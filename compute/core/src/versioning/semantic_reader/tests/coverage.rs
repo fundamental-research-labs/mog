@@ -40,7 +40,10 @@ fn engine_semantic_reader_emits_native_coverage_rows_for_all_scopes() {
         ])
     );
     for path in [
+        "/cellMetadata/formula_result_mode",
         "/workbook/metadata/external_links",
+        "/workbook/metadata/sheet_inventory",
+        "/workbook/metadata/inert_tab_defined_names",
         "/workbook/metadata/named_ranges",
         "/sheets/{sheetId}/metadata/comments",
         "/sheets/{sheetId}/metadata/cell_annotations",
@@ -51,6 +54,7 @@ fn engine_semantic_reader_emits_native_coverage_rows_for_all_scopes() {
             "unclassified native authority: {path}"
         );
     }
+    assert!(!coverage.objects.keys().any(|id| id.contains("/security")));
     assert!(!coverage.objects.keys().any(|id| id.contains("gridIndex")
         || id.contains("rangePayloads")
         || id.contains("bridgeOnly")));

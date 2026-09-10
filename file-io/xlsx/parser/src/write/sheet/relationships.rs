@@ -21,11 +21,3 @@ pub(super) fn write_legacy_drawing_hf(w: &mut XmlWriter, r_id: &Option<String>) 
             .self_close();
     }
 }
-
-pub(super) fn write_pivot_table_definitions(w: &mut XmlWriter, r_ids: &[String]) {
-    for r_id in r_ids {
-        w.start_element("pivotTableDefinition")
-            .attr("r:id", r_id)
-            .self_close();
-    }
-}

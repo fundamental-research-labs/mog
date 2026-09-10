@@ -17,6 +17,8 @@ pub(crate) struct WorkbookMetadata {
         rustc_hash::FxHashMap<String, domain_types::domain::cell_style::CellStyleDef>,
 
     pub sheet_order: Vec<cell_types::SheetId>,
+    pub sheet_inventory: Option<super::sheet_inventory::StoredInventory>,
+    pub inert_tab_defined_names: Vec<domain_types::NamedRange>,
     pub slicers: BTreeMap<String, domain_types::domain::slicer::StoredSlicer>,
     pub timelines: BTreeMap<String, domain_types::domain::slicer::StoredTimeline>,
     pub pivot_specs: BTreeMap<String, domain_types::domain::pivot::ParsedPivotTable>,

@@ -157,8 +157,7 @@ impl ComputeEngine {
         );
 
         // 6. Register bounds for GETPIVOTDATA
-        let bounds = &result.rendered_bounds;
-        let def = engine_config.to_pivot_table_def(bounds, &output_sheet_id);
+        let def = engine_config.to_pivot_table_def_from_result(&result, &output_sheet_id);
         self.cell_store.upsert_pivot_table_def(def);
 
         Ok(result)
@@ -481,7 +480,7 @@ impl ComputeEngine {
     crate_path = "compute_core"
 )]
 impl ComputeEngine {
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn pivot_create(
         &mut self,
         config: serde_json::Value,
@@ -512,7 +511,7 @@ impl ComputeEngine {
     ///
     /// Accepts raw JSON with comprehensive upfront validation.
     #[bridge::skip(ts_bridge)]
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn pivot_create_with_sheet(
         &mut self,
         sheet_name: &str,
@@ -557,7 +556,7 @@ impl ComputeEngine {
     /// Replace a pivot table config.
     ///
     /// Returns `MutationResult` with `PivotTableConfig | null` in `data`.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn pivot_update(
         &mut self,
         sheet_id: &SheetId,
@@ -577,7 +576,7 @@ impl ComputeEngine {
 
     /// Delete a pivot table by ID. Returns `MutationResult` with `bool` in `data`.
     /// Clears materialized cells before deleting.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn pivot_delete(
         &mut self,
         sheet_id: &SheetId,
@@ -621,14 +620,14 @@ impl ComputeEngine {
     }
 
     /// Get a single pivot table by ID.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn pivot_get(&self, sheet_id: &SheetId, pivot_id: &str) -> Option<PivotTableConfig> {
         services::objects::pivot_get(&self.stores, sheet_id, pivot_id)
             .map(|config| self.derive_pivot_sheet_names(config))
     }
 
     /// Get all pivot tables in a sheet.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn pivot_get_all(&self, sheet_id: &SheetId) -> Vec<PivotTableConfig> {
         services::objects::pivot_get_all(&self.stores, sheet_id)
             .into_iter()
@@ -641,7 +640,7 @@ impl ComputeEngine {
     /// This is the persisted import read model used by app surfaces. Promoted
     /// imports include their live native config; unsupported imports include a
     /// preserved read-only config from the original OOXML pivot spec.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn pivot_get_imported_view_records(
         &self,
         sheet_id: &SheetId,
@@ -658,7 +657,7 @@ impl ComputeEngine {
     ///
     /// Auto-detects fields from source data if the config has placements but no
     /// field metadata (common when fields are added via the TS `addField()` API).
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn pivot_compute_from_source(
         &self,
         sheet_id: &SheetId,
@@ -687,7 +686,7 @@ impl ComputeEngine {
     /// Computes the pivot result from stored config and source data, then extracts
     /// discrete `PivotItemInfo` objects for each non-value field. This avoids the
     /// TS layer needing to walk raw row/column headers itself.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn pivot_get_all_items(
         &self,
         sheet_id: &SheetId,
@@ -724,7 +723,7 @@ impl ComputeEngine {
     /// values in rendered pivot cells.
     ///
     /// The `bounds` parameter provides the rendered extent from the pivot compute result.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn pivot_register_def(
         &mut self,
         sheet_id: &SheetId,
@@ -752,7 +751,7 @@ impl ComputeEngine {
     ///
     /// Called when a pivot table is deleted to ensure stale definitions don't
     /// linger in the CellStore.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn pivot_unregister_def(
         &mut self,
         sheet_id: &SheetId,
@@ -767,7 +766,7 @@ impl ComputeEngine {
     ///
     /// This reads source data, computes the pivot, writes result cells into the
     /// output sheet's col_data, and registers the rendered bounds for GETPIVOTDATA.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn pivot_materialize(
         &mut self,
         sheet_id: &SheetId,
@@ -787,7 +786,7 @@ impl ComputeEngine {
     /// handwritten bridge a mutation result without changing the
     /// generated method's public signature.
     #[bridge::skip(ts_bridge)]
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn pivot_materialize_mutation(
         &mut self,
         sheet_id: &SheetId,
@@ -810,7 +809,7 @@ impl ComputeEngine {
     /// mutation event update config subscribers without scheduling another
     /// refresh.
     #[bridge::skip(ts_bridge)]
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn pivot_update_and_materialize(
         &mut self,
         sheet_id: &SheetId,

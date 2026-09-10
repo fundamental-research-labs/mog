@@ -23,10 +23,24 @@ impl ComputeEngine {
         pre: &CalculationSettings,
         post: &CalculationSettings,
     ) {
+        self.sync_runtime_date_system_from_storage();
         self.apply_runtime_calculation_settings(post);
 
         if pre != post {
             self.stores.compute.mark_dirty();
+        }
+    }
+
+    pub(crate) fn sync_runtime_date_system_from_storage(&mut self) {
+        let date1904 =
+            crate::storage::workbook::settings::get_settings(&self.stores.storage.metadata)
+                .date1904;
+        if self.cell_store.date1904 != date1904 {
+            self.cell_store.date1904 = date1904;
+            self.stores.compute.mark_dirty();
+            // Calendar rules depend on the workbook epoch even when literal
+            // date values stay unchanged, including during undo and redo.
+            self.init_cf_caches();
         }
     }
 

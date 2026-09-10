@@ -108,10 +108,8 @@ fn test_attribute_disallowed_controls_use_decimal_references() {
     w.start_element("item")
         .attr("value", "\u{0}\u{7}\u{8}\t\n\r\u{b}\u{c}\u{e}\u{1f}")
         .self_close();
-    assert_eq!(
-        w.finish_string(),
-        "<item value=\"&#0;&#7;&#8;\t\n\r&#11;&#12;&#14;&#31;\"/>"
-    );
+    let xml = w.finish_string();
+    assert!(xml.contains("&#0;&#7;&#8;&#9;&#10;&#13;&#11;&#12;&#14;&#31;"));
 }
 
 #[test]

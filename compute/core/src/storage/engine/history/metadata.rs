@@ -47,6 +47,25 @@ pub(crate) enum MetadataKey {
 }
 
 impl MetadataKey {
+    fn affects_cell_metadata_projection(&self) -> bool {
+        match self {
+            Self::CellProperties(..)
+            | Self::Row(..)
+            | Self::Column(..)
+            | Self::HiddenRow(..)
+            | Self::HiddenColumn(..)
+            | Self::FilterHiddenRows(..) => true,
+            Self::SheetField(_, field) => {
+                field.starts_with("dimensions")
+                    || field.starts_with("grouping")
+                    || *field == "format.default_col_width"
+                    || *field == "cell_properties"
+            }
+            Self::WorkbookField(field) => *field == "style_palette",
+            _ => false,
+        }
+    }
+
     fn sheet_id(&self) -> Option<SheetId> {
         match self {
             Self::CellProperties(s, _)
@@ -179,6 +198,9 @@ impl<T: Debug + PartialEq + Send + Sync + 'static> MetadataSwap for StoredValue<
         effects
             .metadata_events
             .record(&self.key, storage, cell_store);
+        if self.key.affects_cell_metadata_projection() {
+            storage.invalidate_cell_metadata_projection();
+        }
         (self.swap_value)(storage, &self.key, &mut self.old);
         if let MetadataKey::SheetEntry(sheet, "sparklines.items" | "sparklines.groups", _) =
             &self.key
@@ -196,6 +218,9 @@ pub(crate) fn capture_value<T: Debug + Clone + PartialEq + Send + Sync + 'static
     swap_value: StorageSwap<T>,
     impact: MetadataImpact,
 ) {
+    if key.affects_cell_metadata_projection() {
+        storage.invalidate_cell_metadata_projection();
+    }
     if !storage.history.is_active()
         || key
             .sheet_id()

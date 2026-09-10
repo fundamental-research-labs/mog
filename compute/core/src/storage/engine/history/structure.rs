@@ -596,6 +596,7 @@ pub(crate) fn capture_structure(
     sid: SheetId,
     change: &StructureChange,
 ) {
+    stores.storage.invalidate_cell_metadata_projection();
     let capture = &stores.storage.history;
     if !capture.is_active() || capture.owns_sheet(sid) || cell_store.get_sheet(&sid).is_none() {
         return;
@@ -626,6 +627,7 @@ pub(crate) fn capture_sort(
     permutation: &[(u32, u32)],
     reorders_axes: bool,
 ) {
+    stores.storage.invalidate_cell_metadata_projection();
     let capture = &stores.storage.history;
     if !capture.is_active() || capture.owns_sheet(sid) {
         return;
@@ -795,6 +797,7 @@ pub(crate) fn capture_sheet(
     sid: SheetId,
     absent: bool,
 ) {
+    stores.storage.invalidate_cell_metadata_projection();
     let capture = &stores.storage.history;
     if !capture.is_active() || capture.owns_sheet(sid) {
         return;
@@ -806,6 +809,7 @@ pub(crate) fn capture_sheet(
 
 /// Record absence before any child values or metadata for a new sheet are installed.
 pub(crate) fn capture_new_sheet(storage: &crate::storage::WorkbookStorage, sid: SheetId) {
+    storage.invalidate_cell_metadata_projection();
     let capture = &storage.history;
     if !capture.is_active() || capture.owns_sheet(sid) {
         return;

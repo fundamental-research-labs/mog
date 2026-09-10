@@ -35,6 +35,7 @@ pub(crate) fn is_orphan_name(refers_to: &str) -> bool {
 pub(crate) fn convert_named_ranges(
     named_ranges: &[NamedRange],
     resolver: &SheetResolver<'_>,
+    inventory: &[domain_types::WorkbookSheetPackageInfo],
 ) -> Vec<NamedRangeDef> {
     named_ranges
         .iter()
@@ -43,12 +44,17 @@ pub(crate) fn convert_named_ranges(
         .filter_map(|nr| {
             let scope = match nr.local_sheet_id {
                 Some(idx) => {
-                    // Remap XLSX sheet index to the actual SheetId allocated
-                    // for that sheet during snapshot conversion. The resolver
-                    // indexes into the same sheets array, so both lookups
-                    // should always succeed — if they don't, the XLSX is
-                    // malformed and we skip this named range.
-                    let sheet_uuid = match resolver.by_index(idx as usize) {
+                    // localSheetId counts inert tabs too; the evaluator only
+                    // contains editable sheets and must never adopt inert names.
+                    let editable_index = if inventory.is_empty() {
+                        idx as usize
+                    } else {
+                        inventory
+                            .iter()
+                            .find(|entry| entry.workbook_order == idx)?
+                            .editable_sheet_index?
+                    };
+                    let sheet_uuid = match resolver.by_index(editable_index) {
                         Some(uuid) => uuid,
                         None => {
                             tracing::warn!(
@@ -215,5 +221,61 @@ fn extract_position(cell_ref: &CellRef) -> Option<(u32, u32)> {
     match cell_ref {
         CellRef::Positional { row, col, .. } => Some((*row, *col)),
         CellRef::Resolved(_) => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use domain_types::WorkbookSheetPackageInfo;
+
+    #[test]
+    fn inventory_scoped_names_bind_editable_ids_and_exclude_inert_tabs() {
+        let sheets = [SheetSnapshot {
+            identities: vec![],
+            row_axis: None,
+            col_axis: None,
+            id: cell_types::SheetId::from_raw(8).to_uuid_string(),
+            name: "Data".into(),
+            rows: 1,
+            cols: 1,
+            cells: vec![],
+            ranges: vec![],
+        }];
+        let inventory = [
+            WorkbookSheetPackageInfo {
+                workbook_order: 0,
+                name: "Chart".into(),
+                kind: domain_types::WorkbookSheetKind::Chartsheet,
+                ..Default::default()
+            },
+            WorkbookSheetPackageInfo {
+                workbook_order: 1,
+                name: "Data".into(),
+                editable_sheet_index: Some(0),
+                ..Default::default()
+            },
+        ];
+        let names = [
+            NamedRange {
+                name: "ChartValue".into(),
+                refers_to: "42".into(),
+                local_sheet_id: Some(0),
+                ..Default::default()
+            },
+            NamedRange {
+                name: "DataValue".into(),
+                refers_to: "Data!$A$1".into(),
+                local_sheet_id: Some(1),
+                ..Default::default()
+            },
+        ];
+        let converted = convert_named_ranges(&names, &SheetResolver::new(&sheets), &inventory);
+        assert_eq!(converted.len(), 1);
+        assert_eq!(converted[0].name, "DataValue");
+        assert_eq!(
+            converted[0].scope,
+            Scope::Sheet(cell_types::SheetId::from_raw(8))
+        );
     }
 }

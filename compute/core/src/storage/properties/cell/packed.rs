@@ -1,30 +1,32 @@
 use domain_types::CellFormat;
 use snapshot_types::CellProperties;
 
-// Value-presence bits occupy the low twelve positions; booleans need no field.
-const FORMAT: u16 = 1 << 0;
-const PROVENANCE: u16 = 1 << 1;
-const VALIDATION: u16 = 1 << 2;
-const CONNECTION: u16 = 1 << 3;
-const STYLE: u16 = 1 << 4;
-const CELL_METADATA: u16 = 1 << 5;
-const VALUE_METADATA: u16 = 1 << 6;
-const DATE_LEXICAL: u16 = 1 << 7;
-const RESULT_TYPE: u16 = 1 << 8;
-const CACHE_PROVENANCE: u16 = 1 << 9;
-const SST_INDEX: u16 = 1 << 10;
-const ORIGINAL_VALUE: u16 = 1 << 11;
-const PHONETIC: u16 = 1 << 12;
-const EMPTY_CACHE: u16 = 1 << 13;
-const ARRAY_FORMULA: u16 = 1 << 14;
-const CSE_ANCHOR: u16 = 1 << 15;
-const FORMULA_CACHE: u16 = RESULT_TYPE | CACHE_PROVENANCE | EMPTY_CACHE;
+// Value-presence bits occupy the low thirteen positions; booleans need no field.
+const FORMAT: u32 = 1 << 0;
+const PROVENANCE: u32 = 1 << 1;
+const VALIDATION: u32 = 1 << 2;
+const CONNECTION: u32 = 1 << 3;
+const STYLE: u32 = 1 << 4;
+const CELL_METADATA: u32 = 1 << 5;
+const VALUE_METADATA: u32 = 1 << 6;
+const DATE_LEXICAL: u32 = 1 << 7;
+const RESULT_TYPE: u32 = 1 << 8;
+const CACHE_PROVENANCE: u32 = 1 << 9;
+const SST_INDEX: u32 = 1 << 10;
+const ORIGINAL_VALUE: u32 = 1 << 11;
+const RICH_ERROR: u32 = 1 << 12;
+const PHONETIC: u32 = 1 << 13;
+const EMPTY_CACHE: u32 = 1 << 14;
+const ARRAY_FORMULA: u32 = 1 << 15;
+const CSE_ANCHOR: u32 = 1 << 16;
+const FORMULA_CACHE: u32 =
+    VALUE_METADATA | RICH_ERROR | RESULT_TYPE | CACHE_PROVENANCE | EMPTY_CACHE;
 
 /// Only present values allocate storage. The mask also holds boolean properties,
 /// which need no payload entry. Imported style-only cells keep the enum shortcut.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct StoredDetailedProperties {
-    presence: u16,
+    presence: u32,
     fields: Box<[StoredProperty]>,
 }
 
@@ -42,10 +44,11 @@ enum StoredProperty {
     CacheProvenance(Box<domain_types::FormulaCacheProvenance>),
     SstIndex(u32),
     OriginalValue(String),
+    RichError(domain_types::ImportedRichError),
 }
 
 impl StoredProperty {
-    fn mask(&self) -> u16 {
+    fn mask(&self) -> u32 {
         match self {
             Self::Format(_) => FORMAT,
             Self::Provenance(_) => PROVENANCE,
@@ -59,6 +62,7 @@ impl StoredProperty {
             Self::CacheProvenance(_) => CACHE_PROVENANCE,
             Self::SstIndex(_) => SST_INDEX,
             Self::OriginalValue(_) => ORIGINAL_VALUE,
+            Self::RichError(_) => RICH_ERROR,
         }
     }
 }
@@ -79,6 +83,7 @@ impl StoredDetailedProperties {
                 .then(|| StoredProperty::CacheProvenance(Box::new(props.formula_cache_provenance))),
             props.original_sst_index.map(StoredProperty::SstIndex),
             props.original_value.map(StoredProperty::OriginalValue),
+            props.imported_rich_error.map(StoredProperty::RichError),
         ];
         let mut presence = if props.phonetic { PHONETIC } else { 0 }
             | if props.has_empty_cached_value {
@@ -125,12 +130,13 @@ impl StoredDetailedProperties {
                 StoredProperty::CacheProvenance(v) => props.formula_cache_provenance = *v.clone(),
                 StoredProperty::SstIndex(v) => props.original_sst_index = Some(*v),
                 StoredProperty::OriginalValue(v) => props.original_value = Some(v.clone()),
+                StoredProperty::RichError(v) => props.imported_rich_error = Some(*v),
             }
         }
         props
     }
 
-    fn field(&self, mask: u16) -> Option<&StoredProperty> {
+    fn field(&self, mask: u32) -> Option<&StoredProperty> {
         if self.presence & mask == 0 {
             return None;
         }
@@ -204,17 +210,24 @@ mod packed_property_tests {
             },
             original_sst_index: Some(17),
             original_value: Some("original".into()),
+            imported_rich_error: Some(domain_types::ImportedRichError {
+                vm: 13,
+                semantic: value_types::CellError::Calc,
+                fallback: value_types::CellError::Value,
+            }),
             is_array_formula: true,
             is_cse_anchor: true,
         };
         let mut stored = StoredDetailedProperties::from_properties(props.clone());
-        assert_eq!(stored.presence, u16::MAX);
+        assert_eq!(stored.presence, (1 << 17) - 1);
         assert_eq!(stored.properties(), props);
         assert_eq!(stored.format(), props.format.as_ref());
         assert_eq!(stored.style_id(), props.style_id);
         let previous = stored.clone();
         stored.clear_formula_cache();
         props.formula_result_type = None;
+        props.vm = None;
+        props.imported_rich_error = None;
         props.has_empty_cached_value = false;
         props.formula_cache_provenance = Default::default();
         assert_eq!(stored.properties(), props);

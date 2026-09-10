@@ -180,6 +180,17 @@ pub struct SchemaConstraints {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub enum_source_formula: Option<String>,
 
+    /// Original formula operands for range validation bounds.
+    ///
+    /// Numeric and text-length bounds are also represented by the typed
+    /// fields above when a literal can be parsed. Formula operands such as
+    /// `=A1` and `=SUM(A1:A3)` cannot be reduced to those fields without
+    /// losing their dynamic behavior, so they are retained here by the
+    /// validation conversion boundary. Keys use the corresponding
+    /// camelCase constraint names (`min`, `max`, `minLength`, and so on).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub formula_bounds: Option<HashMap<String, String>>,
+
     // Uniqueness
     #[serde(skip_serializing_if = "Option::is_none")]
     pub unique: Option<bool>,

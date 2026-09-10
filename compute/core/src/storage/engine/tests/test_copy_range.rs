@@ -6,6 +6,83 @@ use crate::snapshot::{CellData, SheetSnapshot};
 use crate::storage::engine::mutation::CellInput;
 use formula_types::StructureChange;
 use value_types::{CellValue, FiniteF64};
+use xlsx_parser::{XlsxArchive, write::ZipWriter};
+
+fn imported_dynamic_array_copy_fixture() -> Vec<u8> {
+    let base = xlsx_parser::write::write_xlsx_from_parse_output(&domain_types::ParseOutput {
+        sheets: vec![domain_types::SheetData {
+            name: "Sheet1".into(),
+            rows: 4,
+            cols: 4,
+            cells: vec![domain_types::CellData {
+                value: CellValue::number(1.0),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }],
+        ..Default::default()
+    })
+    .unwrap();
+    let worksheet = r#"<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:C3"/><sheetData>
+<row r="1"><c r="A1" cm="1"><f t="array" ref="A1:A3" aca="1" ca="1">_xlfn.SEQUENCE(3)</f><v>91</v></c><c r="C1" cm="1"><f t="array" ref="C1:C2" aca="1" ca="1">_xlfn.SEQUENCE(2)</f><v>201</v></c></row>
+<row r="2"><c r="A2"><f ca="1"/><v>92</v></c><c r="C2"><f ca="1"/><v>202</v></c></row><row r="3"><c r="A3"><v>93</v></c></row>
+</sheetData></worksheet>"#;
+    let metadata = r#"<metadata xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:xda="http://schemas.microsoft.com/office/spreadsheetml/2017/dynamicarray"><metadataTypes count="1"><metadataType name="XLDAPR" minSupportedVersion="120000" cellMeta="1"/></metadataTypes><futureMetadata name="XLDAPR" count="1"><bk><extLst><ext uri="{bdbb8cdc-fa1e-496e-a857-3c3f30c029c3}"><xda:dynamicArrayProperties fDynamic="1" fCollapsed="0"/></ext></extLst></bk></futureMetadata><cellMetadata count="1"><bk><rc t="1" v="0"/></bk></cellMetadata></metadata>"#;
+    let archive = XlsxArchive::new(&base).unwrap();
+    let mut zip = ZipWriter::new();
+    for entry in archive.entries() {
+        let mut bytes = archive.read_file(&entry.name).unwrap();
+        if entry.name == "xl/worksheets/sheet1.xml" {
+            bytes = worksheet.as_bytes().to_vec();
+        } else if entry.name == "xl/_rels/workbook.xml.rels" {
+            bytes = String::from_utf8(bytes)
+                .unwrap()
+                .replace("</Relationships>", r#"<Relationship Id="rId99" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sheetMetadata" Target="metadata.xml"/></Relationships>"#)
+                .into_bytes();
+        } else if entry.name == "[Content_Types].xml" {
+            bytes = String::from_utf8(bytes)
+                .unwrap()
+                .replace("</Types>", r#"<Override PartName="/xl/metadata.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheetMetadata+xml"/></Types>"#)
+                .into_bytes();
+        }
+        zip.add_file(&entry.name, bytes);
+    }
+    zip.add_file("xl/metadata.xml", metadata.as_bytes().to_vec());
+    zip.finish().unwrap()
+}
+
+#[test]
+fn copy_range_replaces_imported_dynamic_anchor_without_cache_blockers() {
+    let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&imported_dynamic_array_copy_fixture())
+        .expect("fixture should import");
+    let sheet_id = engine.storage().sheet_order()[0];
+
+    engine
+        .apply_mutation(EngineMutation::CopyRange {
+            source_sheet_id: sheet_id,
+            src_start_row: 0,
+            src_start_col: 2,
+            src_end_row: 0,
+            src_end_col: 2,
+            target_sheet_id: sheet_id,
+            target_row: 0,
+            target_col: 0,
+            copy_type: domain_types::CopyType::Formulas,
+            skip_blanks: false,
+            transpose: false,
+        })
+        .expect("copy should replace the imported dynamic-array anchor");
+
+    assert_eq!(
+        engine.get_cell_value(&sheet_id, 0, 0),
+        CellValue::number(1.0)
+    );
+    assert_eq!(
+        engine.get_cell_value(&sheet_id, 1, 0),
+        CellValue::number(2.0)
+    );
+    assert_eq!(engine.get_cell_value(&sheet_id, 2, 0), CellValue::Null);
+}
 
 // -------------------------------------------------------------------
 // Test: CopyRange -- copy values only

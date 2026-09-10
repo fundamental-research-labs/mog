@@ -883,8 +883,12 @@ impl PureFunction for FnProb {
             );
         }
         let sum_p: f64 = ps.iter().sum();
-        // Excel uses a very loose tolerance for sum-of-probabilities check
-        if (sum_p - 1.0).abs() > 0.01 {
+        // A left-to-right n-term binary sum has the standard forward-error
+        // bound gamma_n = n*epsilon/(1-n*epsilon). Accept that roundoff around
+        // the required total, while rejecting any materially non-unit range.
+        let n_epsilon = ps.len() as f64 * f64::EPSILON;
+        let sum_roundoff_bound = n_epsilon / (1.0 - n_epsilon);
+        if (sum_p - 1.0).abs() > sum_roundoff_bound {
             return CellValue::error_with_message(
                 CellError::Num,
                 format!("PROB: probabilities must sum to 1, got {sum_p}"),

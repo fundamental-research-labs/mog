@@ -31,13 +31,11 @@ pub(crate) struct ViewportRegistration {
 /// ## Interior mutability
 ///
 /// Both inner maps are wrapped in `RefCell` so that `get_viewport_binary` and
-/// `get_viewport_binary_delta` can be `&self` reads (required to land
-/// `#[bridge::read(scope = "sheet")]` under the R2 gated delegate — the read
-/// post-filter path cannot use `&mut self`).
+/// `get_viewport_binary_delta` can be `&self` reads.
 ///
 /// Palette interning and the sheet→bounds registry are both *observational*
 /// caches, not authoritative workbook state — mutating them from a logical
-/// read is correct and matches the security-store semantics. `RefCell` is safe
+/// read preserves the engine's read contract. `RefCell` is safe
 /// here because the engine runs on a dedicated single thread (under the
 /// native dispatch loop) or on the main WASM thread via `Rc<RefCell<Engine>>`;
 /// nested borrows are impossible by construction because no method reads a

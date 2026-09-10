@@ -28,7 +28,7 @@ use value_types::ComputeError;
 impl ComputeEngine {
     /// Get full data for the active cell (for toolbar/formula bar display).
     #[bridge::skip(ts_bridge)]
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_active_cell(&self, sheet_id: &SheetId, cell_id: &CellId) -> ActiveCellData {
         let is_sheet_protected = self.is_sheet_protected(sheet_id);
         functions::get_active_cell(
@@ -43,7 +43,7 @@ impl ComputeEngine {
 
     /// Get the formula string for a cell (returns None if no formula).
     /// Delegation to `ComputeCore::get_formula` for bridge generation.
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn get_formula(&self, cell_id: &CellId) -> Option<String> {
         self.stores
             .compute
@@ -53,7 +53,7 @@ impl ComputeEngine {
 
     /// Compute aggregates (SUM, COUNT, AVG, MIN, MAX) for the given cell ranges.
     /// Used for the status bar display.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_selection_aggregates(
         &self,
         sheet_id: &SheetId,
@@ -178,13 +178,13 @@ impl ComputeEngine {
     // -------------------------------------------------------------------
 
     /// Parse a date string using the workbook's locale conventions.
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn parse_date_input(&self, text: &str) -> Option<compute_formats::ParsedDateInput> {
         functions::parse_date_input(&self.settings, text)
     }
 
     /// Format a batch of cell values using format codes and the workbook's locale.
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn format_values(&self, entries: Vec<compute_formats::FormatEntry>) -> Vec<String> {
         functions::format_values(&self.settings, entries)
     }
@@ -195,13 +195,11 @@ impl ComputeEngine {
     /// is derived from the sheet_id for backward compatibility with callers
     /// that don't yet provide an explicit viewport_id.
     ///
-    /// Annotated `#[bridge::read(scope = "sheet")]` so the gated delegate
-    /// routes the result through `filter_viewport_buffer` before handing it
-    /// to the caller (ARCHITECTURE.md §7). Viewport registry + palette
-    /// accumulation are observational caches implemented on `RefCell` inside
+    /// Viewport registry and palette accumulation are observational caches
+    /// implemented on `RefCell` inside
     /// `ViewportService`, so the method takes `&self` despite updating the
     /// registry.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_viewport_binary(
         &self,
         sheet_id: &SheetId,
@@ -261,9 +259,9 @@ impl ComputeEngine {
     /// If there's no overlap with the previous viewport (e.g., first request
     /// or large jump), falls back to a full response with `is_delta=false`.
     ///
-    /// Annotated `#[bridge::read(scope = "sheet")]` — registry/palette writes
+    /// Annotated `#[bridge::read]` — registry/palette writes
     /// here are observational; see the note on `get_viewport_binary`.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_viewport_binary_delta(
         &self,
         sheet_id: &SheetId,
@@ -382,7 +380,7 @@ impl ComputeEngine {
     ///
     /// Delegates to `reset_sheet_viewports` which removes all viewports for
     /// this sheet from the registry.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn reset_viewport_state(
         &mut self,
         sheet_id: &SheetId,

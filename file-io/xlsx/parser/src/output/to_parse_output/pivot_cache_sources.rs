@@ -1,8 +1,8 @@
+use crate::domain::pivot::convert::cache_records::shared_item_to_cell_value;
 use domain_types::PivotCacheSourceDef;
 use domain_types::domain::pivot::{
     PivotCacheSourceKind, PivotCacheWorkbookRefScope, PivotExternalWorksheetSourceDef,
 };
-use value_types::{CellValue, FiniteF64};
 
 use crate::domain::pivot::types::ParsedPivotCache;
 
@@ -28,6 +28,12 @@ pub(super) fn build_pivot_cache_sources<'a>(
                 package.and_then(|package| external_worksheet_source(package, worksheet_source));
             PivotCacheSourceDef {
                 cache_id: *cache_id,
+                ooxml_preservation: parsed_cache.ooxml_preservation.clone(),
+                cache_fields: parsed_cache.definition.cache_fields.items.clone(),
+                typed_records: parsed_cache
+                    .records
+                    .count
+                    .map(|_| parsed_cache.records.clone()),
                 workbook_ref_scope: scopes_by_cache_id
                     .get(cache_id)
                     .copied()
@@ -116,21 +122,4 @@ fn external_worksheet_source(
             .clone()
             .or_else(|| Some("External".to_string())),
     })
-}
-
-fn shared_item_to_cell_value(item: &ooxml_types::pivot::SharedItem) -> CellValue {
-    match item {
-        ooxml_types::pivot::SharedItem::Number(value) => FiniteF64::new(*value)
-            .map(CellValue::Number)
-            .unwrap_or(CellValue::Null),
-        ooxml_types::pivot::SharedItem::String(value) => CellValue::Text(value.clone().into()),
-        ooxml_types::pivot::SharedItem::Boolean(value) => CellValue::Boolean(*value),
-        ooxml_types::pivot::SharedItem::Error(value) => {
-            value_types::CellError::parse_error_str(value)
-                .map(|error| CellValue::Error(error, None))
-                .unwrap_or_else(|| CellValue::Text(value.clone().into()))
-        }
-        ooxml_types::pivot::SharedItem::DateTime(value) => CellValue::Text(value.clone().into()),
-        ooxml_types::pivot::SharedItem::Missing => CellValue::Null,
-    }
 }

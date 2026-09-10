@@ -22,7 +22,9 @@ mod accessors;
 mod atomics;
 mod bridge_imports;
 mod cell_bridge;
+pub(crate) mod cell_metadata;
 mod cell_semantics;
+mod chart_invalidation;
 mod table_result_merge;
 #[doc(hidden)]
 pub mod versioning;
@@ -49,9 +51,6 @@ mod recalc_postprocess;
 mod runtime_diagnostics;
 mod screenshot;
 pub mod search;
-mod security;
-pub(crate) mod security_events;
-mod security_ops;
 pub(crate) mod services;
 mod structural;
 mod styles;
@@ -102,13 +101,6 @@ pub struct ComputeEngine {
     history: history::HistoryStack,
     pub(crate) viewport: ViewportService,
     pub(crate) settings: EngineSettings,
-    /// Security state — R2.3. Owns the live `PolicyEngine`, the version
-    /// counters, the matrix cache, and the shared `active` flag that
-    /// `ComputeService` reads for its gated-delegate fast path.
-    pub(crate) security: crate::storage::security_state::SecurityState,
-    /// Security events shared with the policy engine and drained by API consumers.
-    pub(crate) security_events: std::sync::Arc<security_events::SecurityEventBuffer>,
-
     /// Last canonical import report for this engine instance.
     ///
     /// This is runtime-only diagnostic state: it is replaced on workbook import,

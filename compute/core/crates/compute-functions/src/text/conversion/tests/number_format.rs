@@ -78,6 +78,14 @@ fn test_dollar_error_propagation() {
 }
 
 #[test]
+fn test_dollar_rejects_unrepresentable_decimal_width() {
+    assert!(matches!(
+        FnDollar.call(&[num(1.0), num(9.223_372_036_854_776e18)]),
+        value_types::CellValue::Error(CellError::Value, _)
+    ));
+}
+
+#[test]
 fn test_fixed_default_2_decimals_with_commas() {
     assert_eq!(FnFixed.call(&[num(1234.567)]), text("1,234.57"));
 }
@@ -108,6 +116,14 @@ fn test_fixed_negative_value() {
 #[test]
 fn test_fixed_error_propagation() {
     assert_eq!(FnFixed.call(&[err(CellError::Na)]), err(CellError::Na));
+}
+
+#[test]
+fn test_fixed_rejects_unrepresentable_decimal_width() {
+    assert!(matches!(
+        FnFixed.call(&[num(1.0), num(9.223_372_036_854_776e18)]),
+        value_types::CellValue::Error(CellError::Value, _)
+    ));
 }
 
 #[test]

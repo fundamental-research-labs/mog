@@ -343,6 +343,12 @@ pub(in crate::storage::engine) fn mutation_sort_range(
         return Ok(RecalcResult::empty());
     }
 
+    crate::storage::engine::cell_metadata::refresh(
+        &stores.storage,
+        cell_store,
+        stores.layout_metrics,
+    );
+
     // Publish the moved authored values and recalculate dependents.
     let mut recalc = stores.compute.set_cells_raw_with_trust(
         cell_store,

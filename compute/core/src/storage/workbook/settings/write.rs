@@ -14,6 +14,17 @@ pub fn set_setting(
         message: format!("Invalid workbook setting '{key}': {error}"),
     };
     match key {
+        "workbookViews" => {
+            // Accept the legacy serialized setting and the native JSON array
+            // at the boundary; only typed views enter canonical storage.
+            let views = match value {
+                serde_json::Value::String(serialized) => serde_json::from_str(&serialized),
+                value => serde_json::from_value(value),
+            }
+            .map_err(invalid)?;
+            metadata.views = views;
+            return Ok(());
+        }
         "showHorizontalScrollbar" => {
             settings.show_horizontal_scrollbar = serde_json::from_value(value).map_err(invalid)?
         }
@@ -239,6 +250,29 @@ mod tests {
     use crate::snapshot::{AutomaticConversionPolicy, AutomaticConversionPolicyPatch};
     use crate::storage::workbook::WorkbookMetadata;
     use serde_json::json;
+
+    #[test]
+    fn workbook_views_decode_both_wire_forms_and_reject_invalid_values_atomically() {
+        let mut metadata = WorkbookMetadata::default();
+        let views = vec![domain_types::domain::workbook::WorkbookView {
+            active_tab: 2,
+            x_window: Some(127),
+            ..Default::default()
+        }];
+        let value = serde_json::to_value(&views).unwrap();
+        for wire in [value.clone(), json!(serde_json::to_string(&views).unwrap())] {
+            set_setting(&mut metadata, "workbookViews", wire).unwrap();
+            assert_eq!(metadata.views, views);
+            assert_eq!(
+                super::super::get_setting(&metadata, "workbookViews"),
+                Some(value.clone())
+            );
+        }
+        for invalid in [json!(42), json!("not JSON"), json!([{"activeTab": "bad"}])] {
+            assert!(set_setting(&mut metadata, "workbookViews", invalid).is_err());
+            assert_eq!(metadata.views, views);
+        }
+    }
 
     #[test]
     fn invalid_setting_does_not_change_native_state() {

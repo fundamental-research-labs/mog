@@ -31,8 +31,8 @@ pub use error::*;
 pub use history::UndoState;
 pub use init::{
     CellData, CellDataBin, CellIdentityPosition, ColAxisIdentityRef, ColAxisIdentityRefBin,
-    DataTableOoxmlFlags, DataTableRegionDef, PivotTableDef, RangeData, RangeDataBin,
-    RowAxisIdentityRef, RowAxisIdentityRefBin, SheetSnapshot, SheetSnapshotBin,
+    DataTableOoxmlFlags, DataTableRegionDef, PivotGrandTotalCell, PivotTableDef, RangeData,
+    RangeDataBin, RowAxisIdentityRef, RowAxisIdentityRefBin, SheetSnapshot, SheetSnapshotBin,
     SnapshotAxisIdentityRun, SnapshotAxisIdentityRunRef,
     WORKBOOK_SNAPSHOT_SCHEMA_VERSION_COMPACT_AXIS_IDENTITY,
     WORKBOOK_SNAPSHOT_SCHEMA_VERSION_CURRENT, WORKBOOK_SNAPSHOT_SCHEMA_VERSION_DENSE_IDENTITY,

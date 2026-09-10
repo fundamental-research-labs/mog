@@ -1,6 +1,6 @@
 use super::super::{FnCoupdaybs, FnCoupdays, FnCoupdaysnc, FnCoupncd, FnCoupnum, FnCouppcd};
 use super::{approx, num, ymd_to_serial};
-use crate::PureFunction;
+use crate::{FunctionContext, PureFunction};
 use value_types::{CellError, CellValue};
 
 #[test]
@@ -59,6 +59,13 @@ fn test_coupdays_semi_actual_365() {
 fn test_coupdays_error_settlement_ge_maturity() {
     let d = ymd_to_serial(2020, 1, 15);
     let r = FnCoupdays.call(&[num(d), num(d), num(2.0)]);
+    assert!(matches!(r, CellValue::Error(CellError::Num, _)));
+}
+
+#[test]
+fn coupon_dates_truncate_before_order_check() {
+    let d = ymd_to_serial(2020, 1, 15);
+    let r = FnCoupdays.call(&[num(d + 0.25), num(d + 0.75), num(2.0)]);
     assert!(matches!(r, CellValue::Error(CellError::Num, _)));
 }
 
@@ -191,4 +198,116 @@ fn test_coupnum_error_settlement_ge_maturity() {
     let d = ymd_to_serial(2025, 1, 15);
     let r = FnCoupnum.call(&[num(d), num(d), num(2.0)]);
     assert!(matches!(r, CellValue::Error(CellError::Num, _)));
+}
+
+#[test]
+fn coupon_schedules_preserve_civil_dates_in_the_1904_system() {
+    let settlement_1900 = ymd_to_serial(2023, 3, 15);
+    let maturity_1900 = ymd_to_serial(2028, 1, 15);
+    let offset = value_types::DateSystem::DATE_SYSTEM_1904_OFFSET;
+    let settlement_1904 = settlement_1900 - offset;
+    let maturity_1904 = maturity_1900 - offset;
+    let context = FunctionContext {
+        date1904: true,
+        ..FunctionContext::default()
+    };
+
+    let cases = [
+        (
+            FnCoupdays.call(&[num(settlement_1900), num(maturity_1900), num(2.0), num(1.0)]),
+            FnCoupdays.call_with_context(
+                &[num(settlement_1904), num(maturity_1904), num(2.0), num(1.0)],
+                &context,
+            ),
+        ),
+        (
+            FnCoupdaybs.call(&[num(settlement_1900), num(maturity_1900), num(2.0), num(1.0)]),
+            FnCoupdaybs.call_with_context(
+                &[num(settlement_1904), num(maturity_1904), num(2.0), num(1.0)],
+                &context,
+            ),
+        ),
+        (
+            FnCoupdaysnc.call(&[num(settlement_1900), num(maturity_1900), num(2.0), num(1.0)]),
+            FnCoupdaysnc.call_with_context(
+                &[num(settlement_1904), num(maturity_1904), num(2.0), num(1.0)],
+                &context,
+            ),
+        ),
+        (
+            FnCoupnum.call(&[num(settlement_1900), num(maturity_1900), num(2.0), num(1.0)]),
+            FnCoupnum.call_with_context(
+                &[num(settlement_1904), num(maturity_1904), num(2.0), num(1.0)],
+                &context,
+            ),
+        ),
+    ];
+    for (canonical, workbook) in cases {
+        match (canonical, workbook) {
+            (CellValue::Number(canonical), CellValue::Number(workbook)) => {
+                assert!((canonical.get() - workbook.get()).abs() < 1e-10);
+            }
+            other => panic!("Expected numeric coupon results, got {other:?}"),
+        }
+    }
+
+    let next_1900 = match FnCoupncd.call(&[num(settlement_1900), num(maturity_1900), num(2.0)]) {
+        CellValue::Number(value) => value.get(),
+        other => panic!("COUPNCD 1900 = {other:?}"),
+    };
+    let next_1904 = match FnCoupncd.call_with_context(
+        &[num(settlement_1904), num(maturity_1904), num(2.0)],
+        &context,
+    ) {
+        CellValue::Number(value) => value.get(),
+        other => panic!("COUPNCD 1904 = {other:?}"),
+    };
+    assert_eq!(next_1900 - offset, next_1904);
+
+    let previous_1900 = match FnCouppcd.call(&[num(settlement_1900), num(maturity_1900), num(2.0)])
+    {
+        CellValue::Number(value) => value.get(),
+        other => panic!("COUPPCD 1900 = {other:?}"),
+    };
+    let previous_1904 = match FnCouppcd.call_with_context(
+        &[num(settlement_1904), num(maturity_1904), num(2.0)],
+        &context,
+    ) {
+        CellValue::Number(value) => value.get(),
+        other => panic!("COUPPCD 1904 = {other:?}"),
+    };
+    assert_eq!(previous_1900 - offset, previous_1904);
+}
+
+#[test]
+fn coupon_context_preserves_text_date_and_rejects_1904_edges() {
+    let context = FunctionContext {
+        date1904: true,
+        ..FunctionContext::default()
+    };
+    let settlement = ymd_to_serial(2023, 3, 15) - value_types::DateSystem::DATE_SYSTEM_1904_OFFSET;
+    let maturity = ymd_to_serial(2028, 1, 15) - value_types::DateSystem::DATE_SYSTEM_1904_OFFSET;
+    let numeric = FnCoupdays.call_with_context(
+        &[num(settlement), num(maturity), num(2.0), num(1.0)],
+        &context,
+    );
+    let mixed = FnCoupdays.call_with_context(
+        &[
+            CellValue::Text("3/15/2023".into()),
+            num(maturity),
+            num(2.0),
+            num(1.0),
+        ],
+        &context,
+    );
+    assert_eq!(numeric, mixed);
+
+    for serial in [-1.0, 2_957_004.0] {
+        let result =
+            FnCoupdays.call_with_context(&[num(serial), num(serial + 1.0), num(1.0)], &context);
+        assert!(matches!(result, CellValue::Error(CellError::Value, _)));
+    }
+    let last_valid =
+        FnCoupdays.call_with_context(&[num(2_957_002.0), num(2_957_003.0), num(1.0)], &context);
+    assert!(matches!(last_valid, CellValue::Number(_)));
 }

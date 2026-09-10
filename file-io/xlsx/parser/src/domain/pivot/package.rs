@@ -145,6 +145,9 @@ pub fn parse_pivot_cache_packages(archive: &crate::zip::XlsxArchive) -> PivotPac
         let parsed_cache = crate::domain::pivot::types::ParsedPivotCache {
             definition,
             records: cache_records,
+            ooxml_preservation: crate::domain::pivot::preservation::capture_cache_preservation(
+                &cache_xml,
+            ),
         };
         let link = PivotCachePackageLink {
             cache_id,

@@ -214,10 +214,7 @@ pub(super) fn parsed_pivot_to_def(pt: &ParsedPivotTable) -> domain_types::PivotT
         .unwrap_or_else(|| num_row_fields.max(1));
 
     let style = config.style.as_ref().map(|s| PivotStyleDef {
-        name: s
-            .style_name
-            .clone()
-            .unwrap_or_else(|| "PivotStyleLight16".to_string()),
+        name: s.style_name.clone(),
         show_row_headers: s.show_row_headers.unwrap_or(true),
         show_col_headers: s.show_column_headers.unwrap_or(true),
         show_row_stripes: s.show_row_stripes.unwrap_or(false),

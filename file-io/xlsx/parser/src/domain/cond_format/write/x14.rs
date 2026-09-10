@@ -9,7 +9,7 @@ use domain_types::{
 };
 use ooxml_types::cond_format::CfvoType;
 
-use super::bridge::{cfvo_ooxml_value, ranges_to_sqref};
+use super::bridge::{cfvo_ooxml_value, ranges_to_sqref, write_data_bar_color};
 use crate::domain::sparklines::write::hex_to_argb;
 use crate::write::XmlWriter;
 
@@ -219,18 +219,18 @@ fn write_x14_data_bar(w: &mut XmlWriter, data_bar: &CFDataBar) {
 
     write_x14_cfvo(w, &data_bar.min_point);
     write_x14_cfvo(w, &data_bar.max_point);
-    write_x14_color(w, "x14:color", &data_bar.positive_color);
+    write_data_bar_color(w, "x14:fillColor", &data_bar.positive_color);
     if let Some(color) = &data_bar.border_color {
-        write_x14_color(w, "x14:borderColor", color);
+        write_data_bar_color(w, "x14:borderColor", color);
     }
     if let Some(color) = &data_bar.negative_color {
-        write_x14_color(w, "x14:negativeFillColor", color);
+        write_data_bar_color(w, "x14:negativeFillColor", color);
     }
     if let Some(color) = &data_bar.negative_border_color {
-        write_x14_color(w, "x14:negativeBorderColor", color);
+        write_data_bar_color(w, "x14:negativeBorderColor", color);
     }
     if let Some(color) = &data_bar.axis_color {
-        write_x14_color(w, "x14:axisColor", color);
+        write_data_bar_color(w, "x14:axisColor", color);
     }
     w.end_element("x14:dataBar");
 }
@@ -248,12 +248,6 @@ fn write_x14_cfvo(w: &mut XmlWriter, point: &domain_types::CFColorPoint) {
     } else {
         w.self_close();
     }
-}
-
-fn write_x14_color(w: &mut XmlWriter, element: &str, color: &str) {
-    w.start_element(element)
-        .attr("rgb", &hex_to_argb(color))
-        .self_close();
 }
 
 fn write_x14_icon_set(w: &mut XmlWriter, icon_set: &CFIconSet) {
@@ -350,7 +344,7 @@ mod tests {
                 max_point: point(CFValueRef::AutoMax, ""),
                 min_length: None,
                 max_length: None,
-                positive_color: "#4472C4".to_string(),
+                positive_color: "#4472C4".into(),
                 negative_color: None,
                 negative_border_color: None,
                 border_color: None,

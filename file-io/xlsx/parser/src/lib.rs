@@ -126,8 +126,8 @@ pub use output::results::{FullCellData, FullParseError, FullParseResult, FullPar
 
 pub use domain::cells::{
     CELL_TYPE_BOOL, CELL_TYPE_EMPTY, CELL_TYPE_ERROR, CELL_TYPE_FORMULA, CELL_TYPE_FORMULA_STRING,
-    CELL_TYPE_NUMBER, CELL_TYPE_STRING, CellData, VALUE_TYPE_FORMULA, VALUE_TYPE_INLINE,
-    VALUE_TYPE_NONE, VALUE_TYPE_SHARED_STRING,
+    CELL_TYPE_NUMBER, CELL_TYPE_STRING, CellData, VALUE_TYPE_DECODED_STRING, VALUE_TYPE_FORMULA,
+    VALUE_TYPE_INLINE, VALUE_TYPE_NONE, VALUE_TYPE_SHARED_STRING,
 };
 
 // =============================================================================

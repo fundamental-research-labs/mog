@@ -89,5 +89,10 @@ pub(super) fn sort_range_backed_rows(
     // (h) Delegate to ComputeCore::structure_change(cell_store, None) for dep graph
     //     rebuild + full recalc. This replaces the per-cell formula handling.
     cell_store.projection_registry.clear();
+    crate::storage::engine::cell_metadata::refresh(
+        &stores.storage,
+        cell_store,
+        stores.layout_metrics,
+    );
     stores.compute.structure_change(cell_store, None)
 }

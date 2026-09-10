@@ -197,7 +197,7 @@ pub(in crate::eval) async fn try_eval_multi_criteria_borrowed<
     {
         let criteria_keys: Vec<NormalizedKey> = unwrapped_criteria
             .iter()
-            .map(|cv| NormalizedKey::from_cell_value(cv))
+            .map(|cv| NormalizedKey::from_criteria(cv))
             .collect();
         let (sum_sheet, sum_col, sum_start, sum_end) = sum_range_coords?;
         let cache_key = sumifs_cache_key(

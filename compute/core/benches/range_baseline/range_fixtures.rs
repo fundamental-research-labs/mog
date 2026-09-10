@@ -21,9 +21,7 @@ pub(crate) fn range_backed_snapshot(
     }
 
     let row_ids: Vec<RowId> = (0..rows as usize).map(row_id).collect();
-    let col_ids: Vec<ColId> = (0..cols as usize)
-        .map(|i| col_id(sheet_rows, i))
-        .collect();
+    let col_ids: Vec<ColId> = (0..cols as usize).map(|i| col_id(sheet_rows, i)).collect();
 
     let range_data = RangeData {
         range_id: RangeId::from_uuid_str(&range_uuid(0)).unwrap(),

@@ -71,6 +71,7 @@ hidden_capture!(capture_hidden_row, HiddenRow, RowId, manual_hidden_rows);
 hidden_capture!(capture_hidden_column, HiddenColumn, ColId, hidden_columns);
 
 pub(crate) fn capture_filter_hidden_rows(storage: &WorkbookStorage, sheet: SheetId, id: &str) {
+    storage.invalidate_cell_metadata_projection();
     if !storage.history.is_active() {
         return;
     }
@@ -136,6 +137,7 @@ pub(crate) fn capture_pruned_axis_metadata(
     sheet: SheetId,
     grid: &crate::identity::GridIndex,
 ) {
+    storage.invalidate_cell_metadata_projection();
     if !storage.history.is_active() {
         return;
     }

@@ -1,9 +1,9 @@
-use value_types::{CellError, CellValue};
+use value_types::{CellError, CellValue, KahanSum};
 
 use super::super::helpers::{err_val, num_or_err_msg, req_num};
-use super::dated_cash_flows::collect_value_date_pairs;
-use crate::PureFunction;
+use super::dated_cash_flows::collect_value_date_pairs_with_context;
 use crate::helpers::coercion::flatten_values;
+use crate::{FunctionContext, PureFunction};
 
 pub(super) struct FnXnpv;
 
@@ -18,6 +18,9 @@ impl PureFunction for FnXnpv {
         Some(3)
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
+        self.call_with_context(args, &FunctionContext::default())
+    }
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
             let rate = req_num(args, 0).map_err(err_val)?;
             if rate <= 0.0 {
@@ -30,11 +33,20 @@ impl PureFunction for FnXnpv {
             let flat_vals = flatten_values(&[args[1].clone()]);
             let flat_dates = flatten_values(&[args[2].clone()]);
             let (values, dates) =
-                collect_value_date_pairs(&flat_vals, &flat_dates).map_err(err_val)?;
+                collect_value_date_pairs_with_context(&flat_vals, &flat_dates, context)
+                    .map_err(err_val)?;
             if values.is_empty() {
                 return Err(CellValue::error_with_message(
                     CellError::Num,
                     "XNPV: no valid value/date pairs",
+                ));
+            }
+            let has_pos = values.iter().any(|&value| value > 0.0);
+            let has_neg = values.iter().any(|&value| value < 0.0);
+            if !has_pos || !has_neg {
+                return Err(CellValue::error_with_message(
+                    CellError::Num,
+                    "XNPV: cash flows must have both positive and negative values",
                 ));
             }
 
@@ -54,7 +66,7 @@ impl PureFunction for FnXnpv {
                 }
             }
 
-            let mut npv: f64 = 0.0;
+            let mut npv = KahanSum::new();
             for i in 0..values.len() {
                 let years = (dates[i] - base_date) / 365.0;
                 let denom = (1.0 + rate).powf(years);
@@ -64,8 +76,9 @@ impl PureFunction for FnXnpv {
                         "XNPV: discount factor overflow",
                     ));
                 }
-                npv += values[i] / denom;
+                npv.add(values[i] / denom);
             }
+            let npv = npv.total();
             if !npv.is_finite() {
                 return Err(CellValue::error_with_message(
                     CellError::Num,

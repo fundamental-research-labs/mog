@@ -17,13 +17,13 @@ use crate::snapshot::MutationResult;
 )]
 impl ComputeEngine {
     /// Get all custom cell styles.
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn get_all_custom_cell_styles(&self) -> Vec<CellStyleDef> {
         services::styles::get_all_custom_cell_styles(&self.stores)
     }
 
     /// Create a custom cell style.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn create_custom_cell_style(
         &mut self,
         style: CellStyleDef,
@@ -35,7 +35,7 @@ impl ComputeEngine {
     }
 
     /// Update a custom cell style.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn update_custom_cell_style(
         &mut self,
         id: String,
@@ -49,7 +49,7 @@ impl ComputeEngine {
     }
 
     /// Delete a custom cell style by ID.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn delete_custom_cell_style(&mut self, id: String) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let result = services::styles::delete_custom_cell_style(&mut engine.stores, &id)?;

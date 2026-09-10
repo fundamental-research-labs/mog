@@ -52,7 +52,7 @@ impl ComputeEngine {
     ///
     /// Returns recalculated cells and hydrated metadata in a [`MutationResult`].
     /// Pixel consumers can request explicit viewport snapshots after import.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     #[tracing::instrument(name = "engine_import_from_xlsx_bytes", skip_all)]
     pub fn import_from_xlsx_bytes(
         &mut self,
@@ -101,7 +101,7 @@ impl ComputeEngine {
 
     /// Load the active worksheet into native storage for first display.
     /// `complete_deferred_hydration()` loads the remaining worksheets.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     #[tracing::instrument(name = "engine_import_from_xlsx_bytes_deferred", skip_all)]
     pub fn import_from_xlsx_bytes_deferred(
         &mut self,
@@ -124,7 +124,7 @@ impl ComputeEngine {
 
     /// Load the remaining worksheet payloads and complete the formula graph.
     /// Retains the active sheet already installed by the initial load.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     #[tracing::instrument(name = "engine_complete_deferred_hydration", skip_all)]
     pub fn complete_deferred_hydration(&mut self) -> Result<MutationResult, ComputeError> {
         self.without_history(|engine| {
@@ -153,10 +153,16 @@ impl ComputeEngine {
                         value_types::FiniteF64::new(calculation.iterate_delta)
                             .unwrap_or_else(|| value_types::FiniteF64::must(0.001)),
                     ),
+                    timestamp_serial: None,
                 };
                 Self::materialize_all_pivots_for_import_open(
                     &mut completion.stores,
                     &mut completion.cell_store,
+                );
+                crate::storage::engine::cell_metadata::refresh(
+                    &completion.stores.storage,
+                    &mut completion.cell_store,
+                    completion.stores.layout_metrics,
                 );
                 let result = completion
                     .stores
@@ -215,7 +221,7 @@ impl ComputeEngine {
     ///
     /// Returns hydration metadata directly as a `MutationResult` without
     /// recording a history action.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     #[tracing::instrument(name = "engine_settle_for_store", skip_all)]
     pub fn settle_for_store(&mut self) -> Result<MutationResult, ComputeError> {
         self.without_history(|engine| {
@@ -235,7 +241,7 @@ impl ComputeEngine {
     /// `MutationResultHandler.applyAndNotify` pipeline as live mutations.
     /// See [`Self::import_from_xlsx_bytes`] for the architectural rationale —
     /// CSV is a sibling import boundary that benefits from the same fix.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     #[tracing::instrument(name = "engine_import_from_csv_bytes", skip_all)]
     pub fn import_from_csv_bytes(
         &mut self,
@@ -286,7 +292,7 @@ impl ComputeEngine {
     /// style palette, hydrates each matched sheet into native storage, synchronizes
     /// all stores, and inserts them at `insert_position` in the sheet order.
     /// Returns the names of inserted sheets (possibly deduped to avoid collisions).
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     #[tracing::instrument(name = "engine_import_sheets_from_xlsx", skip_all)]
     pub fn import_sheets_from_xlsx(
         &mut self,

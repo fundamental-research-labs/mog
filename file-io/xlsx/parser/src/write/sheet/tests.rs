@@ -100,6 +100,14 @@ fn test_write_formula_canonicalizes_ooxml_future_function_prefixes() {
 }
 
 #[test]
+fn test_write_digit_containing_function_storage_names() {
+    let mut writer = SheetWriter::new();
+    writer.set_formula(0, 0, "T.DIST.2T(2,10)+T.INV.2T(0.05,10)+LOG10(100)+SUMX2MY2(B1:B2,C1:C2)");
+    let xml = String::from_utf8(writer.to_xml()).unwrap();
+    assert!(xml.contains("<f>_xlfn.T.DIST.2T(2,10)+_xlfn.T.INV.2T(0.05,10)+LOG10(100)+SUMX2MY2(B1:B2,C1:C2)</f>"));
+}
+
+#[test]
 fn test_write_formula_with_cached_value() {
     let mut writer = SheetWriter::new();
     writer.set_formula_with_value(0, 0, "A1*2", CellValue::Number(84.0));
@@ -131,6 +139,79 @@ fn test_write_formula_with_force_recalc() {
         xml
     );
     assert!(xml.contains("<v>42</v>"));
+}
+
+#[test]
+fn typed_empty_formula_cache_preserves_cell_type_and_empty_value() {
+    let mut writer = SheetWriter::new();
+    for (col, cell_type) in [(0, "b"), (1, "e"), (2, "str"), (3, "d")] {
+        let mut cell = CellData::new(
+            0,
+            col,
+            CellValue::Formula {
+                formula: String::new(),
+                cached_value: Some(Box::new(CellValue::FormulaString(String::new()))),
+                cell_formula: Some(ooxml_types::worksheet::CellFormula {
+                    t: ooxml_types::worksheet::CellFormulaType::Normal,
+                    ..Default::default()
+                }),
+            },
+        );
+        cell.original_value = Some(String::new());
+        cell.formula_type_hint = Some(cell_type.to_string());
+        writer.add_cell(cell);
+    }
+
+    let xml = String::from_utf8(writer.to_xml()).unwrap();
+    for (cell_ref, cell_type) in [("A1", "b"), ("B1", "e"), ("C1", "str"), ("D1", "d")] {
+        assert!(
+            xml.contains(&format!(
+                "<c r=\"{cell_ref}\" t=\"{cell_type}\"><f/><v/></c>"
+            )),
+            "typed empty formula cache should retain t={cell_type}: {xml}"
+        );
+    }
+}
+
+#[test]
+fn untyped_empty_formula_cache_does_not_infer_string_type() {
+    let mut writer = SheetWriter::new();
+    let mut cell = CellData::new(
+        0,
+        0,
+        CellValue::Formula {
+            formula: String::new(),
+            cached_value: Some(Box::new(CellValue::FormulaString(String::new()))),
+            cell_formula: Some(ooxml_types::worksheet::CellFormula {
+                t: ooxml_types::worksheet::CellFormulaType::Normal,
+                ..Default::default()
+            }),
+        },
+    );
+    cell.original_value = Some(String::new());
+    writer.add_cell(cell);
+
+    let xml = String::from_utf8(writer.to_xml()).unwrap();
+    assert!(xml.contains("<c r=\"A1\"><f/><v/></c>"), "{xml}");
+}
+
+#[test]
+fn formula_xml_space_preserve_is_emitted() {
+    let mut writer = SheetWriter::new();
+    let mut cell = CellData::new(
+        0,
+        0,
+        CellValue::Formula {
+            formula: "SUM(A1)".to_string(),
+            cached_value: None,
+            cell_formula: None,
+        },
+    );
+    cell.preserve_space_formula = true;
+    writer.add_cell(cell);
+
+    let xml = String::from_utf8(writer.to_xml()).unwrap();
+    assert!(xml.contains("<f xml:space=\"preserve\">SUM(A1)</f>"));
 }
 
 // -------------------------------------------------------------------------

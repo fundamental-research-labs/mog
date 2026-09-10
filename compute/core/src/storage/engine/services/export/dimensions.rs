@@ -25,6 +25,7 @@ use crate::storage::engine::services::queries;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::filters as sheet_filters;
 
+use super::table_filter_preservation::imported_table_filter_runtime_matches_spec;
 use super::table_totals::apply_runtime_table_totals_to_spec;
 
 // -------------------------------------------------------------------
@@ -46,7 +47,7 @@ pub(in crate::storage::engine) fn export_dimensions_for_sheet(
     };
     let grid = stores.grid_indexes.get(sheet_id);
     let default_row = domain_types::units::Points(meta.format.default_row_height.unwrap_or(15.0));
-    let default_col = domain_types::units::CharWidth(meta.format.default_col_width.unwrap_or(8.43));
+    let default_col = meta.format.effective_default_col_width();
     let hidden_rows: std::collections::BTreeSet<_> = queries::get_hidden_rows(stores, sheet_id)
         .into_iter()
         .collect();
@@ -69,7 +70,7 @@ pub(in crate::storage::engine) fn export_dimensions_for_sheet(
     for &row in &hidden_rows {
         rows.entry(row).or_insert_with(|| RowDimension {
             row,
-            height: default_row.0,
+            height: 0.0,
             hidden: true,
             ..Default::default()
         });
@@ -458,6 +459,16 @@ fn apply_runtime_table_filter_to_spec(
     if filter.column_filters.is_empty() && filter.sort_state.is_none() {
         return;
     }
+    let imported_filter_is_unchanged = imported_table_filter_runtime_matches_spec(
+        stores, cell_store, sheet_id, table_id, spec, &filter,
+    );
+    if imported_filter_is_unchanged && filter.sort_state.is_none() {
+        // The catalog already contains the typed table AutoFilter imported
+        // from OOXML. Keeping it avoids replacing dateGroupItem/calendarType
+        // and dynamic val/max/ISO metadata with the lossy runtime projection.
+        return;
+    }
+
     let pos_resolver = |cell_id: &str| {
         crate::storage::engine::filter_import_diagnostics::resolve_filter_cell_pos(
             cell_store, sheet_id, cell_id,
@@ -475,7 +486,9 @@ fn apply_runtime_table_filter_to_spec(
         .iter()
         .filter_map(table_filter_column_spec_from_ooxml)
         .collect();
-    if !filter_columns.is_empty() || !filter.column_filters.is_empty() {
+    if !imported_filter_is_unchanged
+        && (!filter_columns.is_empty() || !filter.column_filters.is_empty())
+    {
         spec.filter_columns = filter_columns;
     }
     if let Some(sort) = auto_filter.sort {
@@ -546,7 +559,7 @@ fn table_filter_spec_from_ooxml(filter: &OoxmlFilterType) -> Option<FilterSpec> 
         },
         OoxmlFilterType::Icon { icon_set, icon_id } => FilterSpec::Icon {
             icon_set: icon_set.clone().unwrap_or_default(),
-            icon_id: Some(*icon_id),
+            icon_id: *icon_id,
         },
     })
 }

@@ -11,3 +11,6 @@ pub use value_types::{CellError, CellValue, ComputeError};
 
 // Snapshot and mutation types
 pub use snapshot_types::{MutationResult, RecalcResult, SheetSnapshot, WorkbookSnapshot};
+
+// Typed inputs for workbook defined names.
+pub use compute_core::bridge_types::named_ranges::{DefinedNameInput, NamedRangeUpdate};

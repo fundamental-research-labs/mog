@@ -183,14 +183,14 @@ fn classify_criteria_static(
         ASTNode::Number(n) => {
             let cv = CellValue::number(*n);
             Some(CriteriaSource::StaticExact {
-                key: NormalizedKey::from_cell_value(&cv),
+                key: NormalizedKey::from_criteria(&cv),
             })
         }
         ASTNode::Text(s) => {
             let cv = CellValue::Text(s.clone().into());
             if is_exact_match_criteria(&cv) {
                 Some(CriteriaSource::StaticExact {
-                    key: NormalizedKey::from_cell_value(&cv),
+                    key: NormalizedKey::from_criteria(&cv),
                 })
             } else {
                 Some(CriteriaSource::StaticFilter { text: s.clone() })

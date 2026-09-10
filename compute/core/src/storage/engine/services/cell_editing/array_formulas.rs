@@ -41,19 +41,50 @@ pub(in crate::storage::engine) fn set_array_formula(
         .unwrap_or(CellValue::Null);
     let old_formula = stores.compute.get_formula(&anchor_id).map(str::to_owned);
 
-    let mut result = stores.compute.set_array_formula(
-        cell_store, sheet_id, anchor_id, top_row, left_col, bottom_row, right_col, formula,
-    )?;
-    sync_grid_axes(stores, cell_store);
-
-    // The native cell owns its CSE range marker; formula text stays in the scheduler.
-    stores.storage.clear_cell_metadata(anchor_id);
+    // Replace imported result-mode metadata before evaluation so an authored
+    // CSE formula cannot inherit a legacy scalar or dynamic-array declaration.
+    let old_metadata = stores.storage.cell_metadata(&anchor_id).cloned();
     stores.storage.set_cell_metadata(
         anchor_id,
         crate::storage::CellMetadata {
             array_ref: Some(a1_range_string(top_row, left_col, bottom_row, right_col)),
+            formula_result_mode: Some(crate::cells::cell_metadata::FormulaResultMode::Cse),
             ..Default::default()
         },
+    );
+    crate::storage::engine::cell_metadata::refresh(
+        &stores.storage,
+        cell_store,
+        stores.layout_metrics,
+    );
+    let mut result = match stores.compute.set_array_formula(
+        cell_store, sheet_id, anchor_id, top_row, left_col, bottom_row, right_col, formula,
+    ) {
+        Ok(result) => result,
+        Err(error) => {
+            if let Some(metadata) = old_metadata {
+                stores.storage.set_cell_metadata(anchor_id, metadata);
+            } else {
+                stores.storage.clear_cell_metadata(anchor_id);
+            }
+            crate::storage::engine::cell_metadata::refresh(
+                &stores.storage,
+                cell_store,
+                stores.layout_metrics,
+            );
+            return Err(error);
+        }
+    };
+    sync_grid_axes(stores, cell_store);
+    crate::storage::properties::clear_formula_cache_metadata_for_cell_ids(
+        &mut stores.storage,
+        sheet_id,
+        &[anchor_id],
+    );
+    crate::storage::engine::cell_metadata::refresh(
+        &stores.storage,
+        cell_store,
+        stores.layout_metrics,
     );
 
     // Patch before-side fields onto the seed change.

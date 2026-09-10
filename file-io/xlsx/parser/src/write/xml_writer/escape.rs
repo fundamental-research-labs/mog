@@ -21,7 +21,7 @@ pub(super) fn append_escaped_attr(buffer: &mut Vec<u8>, value: &str) {
             b'>' => buffer.extend_from_slice(b"&gt;"),
             b'"' => buffer.extend_from_slice(b"&quot;"),
             b'\'' => buffer.extend_from_slice(b"&apos;"),
-            0x00..=0x08 | 0x0B | 0x0C | 0x0E..=0x1F => {
+            0x00..=0x08 | 0x09 | 0x0A | 0x0B | 0x0C | 0x0D | 0x0E..=0x1F => {
                 buffer.extend_from_slice(b"&#");
                 write!(buffer, "{}", byte).ok();
                 buffer.push(b';');

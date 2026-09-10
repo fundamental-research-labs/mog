@@ -1,7 +1,9 @@
 use value_types::CellValue;
 
 use super::{num, text};
-use crate::helpers::frequency_cache::{clear, count_lookup, sum_lookup};
+use crate::helpers::frequency_cache::{
+    CountFrequencyMap, SumFrequencyMap, clear, count_lookup, sum_lookup,
+};
 
 #[test]
 fn test_count_lookup_caches() {
@@ -38,4 +40,18 @@ fn test_sum_lookup_basic() {
 
     let result = sum_lookup(&crit_refs, &sum_refs, &text("x"));
     assert_eq!(result.unwrap(), 20.0);
+}
+
+#[test]
+fn test_percent_criteria_key_does_not_reclassify_percent_text_data() {
+    let criteria_values = [num(0.5), text("50%"), text("0.5")];
+    let criterion_refs: Vec<&CellValue> = criteria_values.iter().collect();
+    let count_map = CountFrequencyMap::build(&criterion_refs);
+    assert_eq!(count_map.count(&text("50%")), 2);
+
+    let sum_values = [num(10.0), num(20.0), num(30.0)];
+    let sum_refs: Vec<&CellValue> = sum_values.iter().collect();
+    let sum_map = SumFrequencyMap::build(&criterion_refs, &sum_refs);
+    assert_eq!(sum_map.sum(&text("50%")).unwrap(), 40.0);
+    assert_eq!(sum_map.sum_and_count(&text("50%")).unwrap(), (40.0, 2));
 }

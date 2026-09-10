@@ -1,8 +1,8 @@
 use super::super::adapters::find_byte;
 use super::super::types::{
     AuthoredStyleOnlyCell, CELL_TYPE_BOOL, CELL_TYPE_DATE, CELL_TYPE_ERROR,
-    CELL_TYPE_FORMULA_STRING, CELL_TYPE_NUMBER, CELL_TYPE_STRING, CellData, VALUE_TYPE_INLINE,
-    VALUE_TYPE_NONE, VALUE_TYPE_SHARED_STRING,
+    CELL_TYPE_FORMULA_STRING, CELL_TYPE_NUMBER, CELL_TYPE_STRING, CellData,
+    VALUE_TYPE_DECODED_STRING, VALUE_TYPE_INLINE, VALUE_TYPE_NONE, VALUE_TYPE_SHARED_STRING,
 };
 use super::a1::parse_a1_reference;
 use super::bytes::parse_u32;
@@ -279,7 +279,7 @@ pub(crate) fn scan_cell<'a>(
                 match extract_inline_string_owned_forward(xml, first_lt) {
                     Some(value) => {
                         let value_bytes = owned_value.insert(value).as_slice();
-                        (VALUE_TYPE_INLINE, value_bytes)
+                        (VALUE_TYPE_DECODED_STRING, value_bytes)
                     }
                     None => (VALUE_TYPE_NONE, b""),
                 }

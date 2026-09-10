@@ -47,13 +47,15 @@ pub struct PrintSettingsOutput {
     pub paper_height: Option<String>,
     pub orientation: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub scale: Option<u16>,
+    /// Scale percentage. `Some(0)` is Excel automatic scaling; nonzero values
+    /// represent an explicit percentage.
+    pub scale: Option<u32>,
     /// Fit to width in pages (None = attribute absent, Some(0) = auto/unlimited)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub fit_to_width: Option<u16>,
+    pub fit_to_width: Option<u32>,
     /// Fit to height in pages (None = attribute absent, Some(0) = auto/unlimited)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub fit_to_height: Option<u16>,
+    pub fit_to_height: Option<u32>,
     pub grid_lines: bool,
     #[serde(default = "default_grid_lines_set")]
     pub grid_lines_set: bool,

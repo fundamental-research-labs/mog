@@ -1,6 +1,6 @@
 use super::super::{FnAccrint, FnAccrintm};
 use super::{approx, num, ymd_to_serial};
-use crate::PureFunction;
+use crate::{FunctionContext, PureFunction};
 use value_types::{CellError, CellValue};
 
 #[test]
@@ -281,6 +281,63 @@ fn test_accrintm_actual_365() {
         r,
         expected
     );
+}
+
+#[test]
+fn accrued_interest_is_date_system_invariant() {
+    let issue = ymd_to_serial(2020, 1, 1);
+    let first_interest = ymd_to_serial(2020, 7, 1);
+    let settlement = ymd_to_serial(2020, 4, 1);
+    let offset = value_types::DateSystem::DATE_SYSTEM_1904_OFFSET;
+    let context = FunctionContext {
+        date1904: true,
+        ..FunctionContext::default()
+    };
+    let args_1900 = [
+        num(issue),
+        num(first_interest),
+        num(settlement),
+        num(0.1),
+        num(1000.0),
+        num(2.0),
+        num(1.0),
+    ];
+    let args_1904 = [
+        num(issue - offset),
+        num(first_interest - offset),
+        num(settlement - offset),
+        num(0.1),
+        num(1000.0),
+        num(2.0),
+        num(1.0),
+    ];
+    let canonical = FnAccrint.call(&args_1900);
+    let workbook = FnAccrint.call_with_context(&args_1904, &context);
+    match (canonical, workbook) {
+        (CellValue::Number(canonical), CellValue::Number(workbook)) => {
+            assert!((canonical.get() - workbook.get()).abs() < 1e-10);
+        }
+        other => panic!("Expected numeric ACCRINT results, got {other:?}"),
+    }
+
+    let canonical =
+        FnAccrintm.call(&[num(issue), num(settlement), num(0.1), num(1000.0), num(1.0)]);
+    let workbook = FnAccrintm.call_with_context(
+        &[
+            num(issue - offset),
+            CellValue::Text("4/1/2020".into()),
+            num(0.1),
+            num(1000.0),
+            num(1.0),
+        ],
+        &context,
+    );
+    match (canonical, workbook) {
+        (CellValue::Number(canonical), CellValue::Number(workbook)) => {
+            assert!((canonical.get() - workbook.get()).abs() < 1e-10);
+        }
+        other => panic!("Expected numeric ACCRINTM results, got {other:?}"),
+    }
 }
 
 #[test]

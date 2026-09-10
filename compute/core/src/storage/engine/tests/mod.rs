@@ -20,7 +20,9 @@ mod test_displayed_format_projection;
 mod test_floating_object_invalid_targets;
 mod test_formatting;
 mod test_formula_format_inheritance;
+mod test_formula_metadata_transfer;
 mod test_imported_autofilter_metadata;
+mod test_imported_temporal_filters;
 mod test_merge_mutations;
 mod test_mutation_display_text;
 mod test_named_range_refers_to;
@@ -62,15 +64,32 @@ mod test_xlsx_col_style_ranges;
 mod test_xlsx_export;
 mod test_xlsx_export_charts;
 mod test_xlsx_export_comments;
+mod test_xlsx_export_connections;
 mod test_xlsx_export_form_controls;
 mod test_xlsx_export_imported_pivots;
 mod test_xlsx_export_print;
 mod test_xlsx_export_protection;
+mod test_xlsx_export_sheet_inventory;
 mod test_xlsx_export_tables;
 mod test_xlsx_export_validations;
 mod test_xlsx_export_vc03;
 mod test_xlsx_export_view_state;
 
+mod test_char_code_page;
+mod test_date_system_evaluation;
+mod test_formula_result_modes;
+
+mod test_subtotal_reference_filtering;
+
+mod test_complex_aggregate_ranges;
+
+mod test_rich_error_values;
+
+mod test_legacy_reference_intersection;
+
+mod test_lambda_callable_bindings;
+
+mod test_index_reference_bounds;
 mod test_native_history_structure;
 
 mod test_native_history_cse;

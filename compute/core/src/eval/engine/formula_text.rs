@@ -50,31 +50,41 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
             ASTNode::UnresolvedSheetRef { .. } | ASTNode::UnresolvedThreeDRef { .. } => {
                 FormulaTextTarget::InvalidRef
             }
+            ASTNode::ExternalNameRef { workbook, name } if workbook.is_current_workbook() => {
+                Self::named_formulatext_target(self.meta.resolve_workbook_name(name))
+            }
             ASTNode::ExternalSheetRef { .. }
             | ASTNode::ExternalThreeDRef { .. }
             | ASTNode::ExternalNameRef { .. } => FormulaTextTarget::ExternalUnavailable,
-            ASTNode::Identifier(name) => match self.meta.resolve_defined_name(name) {
-                Some(formula_types::ResolvedName::Cell { sheet, row, col }) => {
-                    FormulaTextTarget::Local { sheet, row, col }
-                }
-                Some(formula_types::ResolvedName::Range {
-                    sheet,
-                    start_row,
-                    start_col,
-                    end_row,
-                    end_col,
-                }) => FormulaTextTarget::Local {
-                    sheet,
-                    row: start_row.min(end_row),
-                    col: start_col.min(end_col),
-                },
-                Some(formula_types::ResolvedName::Error(CellError::Ref)) => {
-                    FormulaTextTarget::InvalidRef
-                }
-                _ => FormulaTextTarget::Unsupported,
-            },
+            ASTNode::Identifier(name) => {
+                Self::named_formulatext_target(self.meta.resolve_defined_name(name))
+            }
             ASTNode::Paren(inner) => self.resolve_formulatext_target(inner),
             ASTNode::StructuredRef(_) | ASTNode::ThreeDRef { .. } => FormulaTextTarget::Unsupported,
+            _ => FormulaTextTarget::Unsupported,
+        }
+    }
+    fn named_formulatext_target(
+        resolved: Option<formula_types::ResolvedName>,
+    ) -> FormulaTextTarget {
+        match resolved {
+            Some(formula_types::ResolvedName::Cell { sheet, row, col }) => {
+                FormulaTextTarget::Local { sheet, row, col }
+            }
+            Some(formula_types::ResolvedName::Range {
+                sheet,
+                start_row,
+                start_col,
+                end_row,
+                end_col,
+            }) => FormulaTextTarget::Local {
+                sheet,
+                row: start_row.min(end_row),
+                col: start_col.min(end_col),
+            },
+            Some(formula_types::ResolvedName::Error(CellError::Ref)) => {
+                FormulaTextTarget::InvalidRef
+            }
             _ => FormulaTextTarget::Unsupported,
         }
     }

@@ -1,14 +1,3 @@
-#[cfg(test)]
-use std::sync::atomic::{AtomicBool, Ordering};
-
-#[cfg(test)]
-static RECALC_OPTIONS_PANIC_BEFORE_FULL_RECALC: AtomicBool = AtomicBool::new(false);
-
-#[cfg(test)]
-pub(in super::super) fn set_recalc_options_panic_before_full_recalc_for_tests(enabled: bool) {
-    RECALC_OPTIONS_PANIC_BEFORE_FULL_RECALC.store(enabled, Ordering::SeqCst);
-}
-
 use super::*;
 
 impl ComputeCore {
@@ -34,11 +23,29 @@ impl ComputeCore {
         cell_store: &mut CellStore,
         changed_cells: &[CellId],
     ) -> Result<RecalcResult, ComputeError> {
-        if self.is_manual_calculation() {
-            return self.recalc_manual_edit(cell_store, changed_cells);
+        // Capture the caller-thread session clock before any evaluator can
+        // cross into Rayon. An absent session override remains live per lookup.
+        let previous_clock = self.recalc_clock();
+        self.begin_recalc_clock(None);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            if self.is_manual_calculation() {
+                self.recalc_manual_edit(cell_store, changed_cells)
+            } else {
+                self.recalc_automatic(cell_store, changed_cells)
+            }
+        }));
+        match result {
+            Ok(result) => {
+                if result.is_err() {
+                    self.restore_recalc_clock(previous_clock);
+                }
+                result
+            }
+            Err(payload) => {
+                self.restore_recalc_clock(previous_clock);
+                std::panic::resume_unwind(payload)
+            }
         }
-
-        self.recalc_automatic(cell_store, changed_cells)
     }
 
     fn recalc_automatic(
@@ -194,6 +201,29 @@ impl ComputeCore {
         &mut self,
         cell_store: &mut CellStore,
     ) -> Result<RecalcResult, ComputeError> {
+        let previous_clock = self.recalc_clock();
+        self.begin_recalc_clock(None);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            self.full_recalc_inner(cell_store)
+        }));
+        match result {
+            Ok(result) => {
+                if result.is_err() {
+                    self.restore_recalc_clock(previous_clock);
+                }
+                result
+            }
+            Err(payload) => {
+                self.restore_recalc_clock(previous_clock);
+                std::panic::resume_unwind(payload)
+            }
+        }
+    }
+
+    fn full_recalc_inner(
+        &mut self,
+        cell_store: &mut CellStore,
+    ) -> Result<RecalcResult, ComputeError> {
         self.ensure_graph_built(cell_store)?;
         let deadline = make_deadline(self.recalc_timeout);
 
@@ -287,6 +317,9 @@ impl ComputeCore {
         cell_store: &mut CellStore,
         options: &snapshot_types::RecalcOptions,
     ) -> Result<RecalcResult, ComputeError> {
+        let previous_clock = self.recalc_clock();
+        self.begin_recalc_clock(options.timestamp_serial.map(|timestamp| timestamp.get()));
+
         // Save workbook-level settings
         let saved_iterative = self.iterative_calc;
         let saved_max_iterations = self.max_iterations;
@@ -305,11 +338,11 @@ impl ComputeCore {
 
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             #[cfg(test)]
-            if RECALC_OPTIONS_PANIC_BEFORE_FULL_RECALC.swap(false, Ordering::SeqCst) {
+            if std::mem::take(&mut self.recalc_options_panic_before_full_recalc_for_tests) {
                 panic!("test panic before full_recalc_with_options production recalc");
             }
 
-            self.full_recalc(cell_store)
+            self.full_recalc_inner(cell_store)
         }));
 
         self.iterative_calc = saved_iterative;
@@ -317,8 +350,16 @@ impl ComputeCore {
         self.max_change = saved_max_change;
 
         let result = match result {
-            Ok(result) => result,
-            Err(payload) => std::panic::resume_unwind(payload),
+            Ok(result) => {
+                if result.is_err() {
+                    self.restore_recalc_clock(previous_clock);
+                }
+                result
+            }
+            Err(payload) => {
+                self.restore_recalc_clock(previous_clock);
+                std::panic::resume_unwind(payload)
+            }
         };
         if result.is_ok() {
             self.pending_manual_dirty_cells.clear();

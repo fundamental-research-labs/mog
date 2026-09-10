@@ -40,7 +40,7 @@ fn test_top_bottom_bottom_2() {
 }
 
 #[test]
-fn test_top_bottom_duplicate_boundary_selects_exactly_n() {
+fn test_top_bottom_duplicate_boundary_includes_all_ties() {
     use crate::types::{TableTopBottomFilter, TopBottomBy, TopBottomDirection};
     let criteria = FilterCriteria::TopBottom(TableTopBottomFilter {
         direction: TopBottomDirection::Top,
@@ -50,7 +50,7 @@ fn test_top_bottom_duplicate_boundary_selects_exactly_n() {
     let data = vec![cv_num(10.0), cv_num(10.0), cv_num(10.0)];
     let bitmap = eval(&criteria, &data);
     let visible_count: u8 = bitmap.iter().sum();
-    assert_eq!(visible_count, 2);
+    assert_eq!(visible_count, 3);
 }
 
 #[test]

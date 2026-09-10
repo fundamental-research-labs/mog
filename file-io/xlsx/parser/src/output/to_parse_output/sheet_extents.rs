@@ -75,6 +75,7 @@ pub(super) fn explicit_blank_cell(row: u32, col: u32) -> CellData {
         has_empty_cached_value: false,
         formula_cache_provenance: Default::default(),
         vm: None,
+        imported_rich_error: None,
         phonetic: false,
         date_lexical_value: None,
         original_sst_index: None,

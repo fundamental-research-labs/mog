@@ -85,7 +85,7 @@ fn native_table_references_rename_refreshes_source_names_and_incremental_depende
         cell_value(&engine, other, 0, 3),
         Some(CellValue::Text("Sales[Amount]".into()))
     );
-    let output = engine.build_parse_output();
+    let output = engine.build_parse_output().expect("export projection");
     let results = output
         .sheets
         .iter()
@@ -136,7 +136,7 @@ fn native_table_references_conversion_preserves_selected_cross_sheet_columns() {
         cell_value(&engine, other, 0, 2),
         Some(CellValue::from(61.0))
     );
-    let output = engine.build_parse_output();
+    let output = engine.build_parse_output().expect("export projection");
     let results = output
         .sheets
         .iter()

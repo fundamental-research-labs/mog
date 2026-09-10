@@ -14,7 +14,14 @@ pub fn get_row_format(
     row: u32,
     grid: Option<&GridIndex>,
 ) -> Option<CellFormat> {
-    let id = grid?.row_id(row)?;
+    get_row_format_by_id(storage, sheet_id, grid?.row_id(row)?)
+}
+
+pub(crate) fn get_row_format_by_id(
+    storage: &WorkbookStorage,
+    sheet_id: &SheetId,
+    id: cell_types::RowId,
+) -> Option<CellFormat> {
     storage
         .sheet_metadata
         .get(sheet_id)?
@@ -141,7 +148,14 @@ pub fn get_col_format(
     col: u32,
     grid: Option<&GridIndex>,
 ) -> Option<CellFormat> {
-    let id = grid?.col_id(col)?;
+    get_col_format_by_id(storage, sheet_id, grid?.col_id(col)?)
+}
+
+pub(crate) fn get_col_format_by_id(
+    storage: &WorkbookStorage,
+    sheet_id: &SheetId,
+    id: cell_types::ColId,
+) -> Option<CellFormat> {
     storage
         .sheet_metadata
         .get(sheet_id)?

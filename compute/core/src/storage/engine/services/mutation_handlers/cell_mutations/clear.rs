@@ -124,7 +124,12 @@ pub(in crate::storage::engine) fn mutation_clear_cells(
     }
 
     // 1. Clear in compute core: set values to Null, remove formulas, recalc.
-    //    This produces the RecalcResult with changed_cells for mutation consumers.
+    //    This produces the RecalcResult with changed_cells for viewport patching.
+    crate::storage::engine::cell_metadata::refresh(
+        &stores.storage,
+        cell_store,
+        stores.layout_metrics,
+    );
     let mut result = stores.compute.clear_cells(cell_store, &cell_ids)?;
 
     // Patch old_value onto seed changes (cleared cells) that don't already have one.
@@ -147,6 +152,11 @@ pub(in crate::storage::engine) fn mutation_clear_cells(
             );
         }
     }
+    crate::storage::engine::cell_metadata::refresh(
+        &stores.storage,
+        cell_store,
+        stores.layout_metrics,
+    );
 
     Ok(result)
 }

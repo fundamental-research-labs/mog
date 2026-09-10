@@ -867,3 +867,68 @@ fn debug_assert_trips_on_unreserved_gt_column() {
 
     cell_store.materialize_pivot(&sheet_id, ANCHOR_ROW, ANCHOR_COL, &result, &[]);
 }
+
+#[test]
+fn hidden_total_bands_never_allow_corner_aggregate_to_overwrite_visible_cells() {
+    for show_row in [false, true] {
+        for show_column in [false, true] {
+            let (mut cell_store, sheet) = fresh_store_with_sheet(12, 12);
+            let result = PivotTableResult {
+                column_headers: vec![],
+                rows: vec![
+                    pivot_row("A", "category", vec![num(10.0), num(20.0)]),
+                    pivot_row("B", "category", vec![num(30.0), num(40.0)]),
+                ],
+                grand_totals: PivotGrandTotals {
+                    row: show_row.then(|| vec![num(40.0), num(60.0)]),
+                    column: show_column.then(|| vec![vec![num(30.0)], vec![num(70.0)]]),
+                    // Relational aggregation computes this when either band is shown;
+                    // the renderer must independently require a reserved corner slot.
+                    grand: Some(vec![num(100.0)]),
+                    row_label: None,
+                },
+                rendered_bounds: PivotRenderedBounds {
+                    first_data_row: 1,
+                    first_data_col: 1,
+                    total_rows: 3 + u32::from(show_row),
+                    total_cols: 3 + u32::from(show_column),
+                    num_data_cols: 2,
+                },
+                source_row_count: 4,
+                measure_descriptors: vec![],
+                value_records: vec![],
+                errors: None,
+            };
+            cell_store.materialize_pivot(&sheet, 2, 1, &result, &["Category".into()]);
+            for (row, col, expected) in [(3, 2, 10.0), (3, 3, 20.0), (4, 2, 30.0), (4, 3, 40.0)] {
+                assert_eq!(
+                    cell_store.get_cell_value_at(&sheet, SheetPos::new(row, col)),
+                    Some(&num(expected)),
+                    "row band={show_row}, column band={show_column}"
+                );
+            }
+            if show_row {
+                for (col, value) in [(2, 40.0), (3, 60.0)] {
+                    assert_eq!(
+                        cell_store.get_cell_value_at(&sheet, SheetPos::new(5, col)),
+                        Some(&num(value))
+                    );
+                }
+            }
+            if show_column {
+                for (row, value) in [(3, 30.0), (4, 70.0)] {
+                    assert_eq!(
+                        cell_store.get_cell_value_at(&sheet, SheetPos::new(row, 4)),
+                        Some(&num(value))
+                    );
+                }
+            }
+            if show_row && show_column {
+                assert_eq!(
+                    cell_store.get_cell_value_at(&sheet, SheetPos::new(5, 4)),
+                    Some(&num(100.0))
+                );
+            }
+        }
+    }
+}

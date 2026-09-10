@@ -60,6 +60,7 @@ fn icon_set_non_numeric_returns_none() {
     let stats = stats_from_values(&[0.0, 100.0]);
     let rule = make_rule(
         CFRuleKind::IconSet(CFIconSet {
+            custom_icons: Vec::new(),
             icon_set_name: CFIconSetName::ThreeArrows,
             thresholds: vec![],
             reverse_order: false,

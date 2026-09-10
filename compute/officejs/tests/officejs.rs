@@ -112,7 +112,7 @@ fn repeated_sync_preserves_mixed_values_and_refreshes_formula_results() {
         output.value,
         serde_json::json!({
             "before": 21,
-            "after": [[11, true, "日本語 🦀", null, 33]]
+            "after": [[11, true, "日本語 🦀", "", 33]]
         })
     );
 }
@@ -174,7 +174,6 @@ fn unloaded_property_is_not_readable() {
         return await Excel.run(async (context) => {
           const sheet = context.workbook.worksheets.getItem("Sheet1");
           const range = sheet.getRange("A1");
-          range.values = [[1]];
           await context.sync();
           return range.values;
         });

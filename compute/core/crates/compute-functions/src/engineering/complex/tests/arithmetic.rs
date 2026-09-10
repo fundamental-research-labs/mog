@@ -229,3 +229,140 @@ fn test_parse_complex_scientific_notation_imaginary() {
     // Complex with scientific notation in both parts: "1.5e2+2.5e-1i"
     assert_eq!(parse_complex("1.5e2+2.5e-1i"), Some((150.0, 0.25, 'i')));
 }
+
+#[test]
+fn complex_aggregate_ranges_matrices_and_multiple_arguments() {
+    let values = CellValue::from_rows(vec![
+        vec![text("1+j"), CellValue::Null, num(2.0)],
+        vec![CellValue::Null, text("1-j"), text("3")],
+    ]);
+    assert_eq!(FnImSum.call(&[values.clone(), text("2j")]), text("7+2j"));
+    assert_eq!(FnImProduct.call(&[values, text("2j")]), text("24j"));
+    let nested = CellValue::from_rows(vec![vec![
+        text("1+j"),
+        CellValue::from_rows(vec![vec![CellValue::Null, text("1-j")]]),
+    ]]);
+    assert_eq!(FnImSum.call(&[nested.clone()]), text("2"));
+    assert_eq!(FnImProduct.call(&[nested]), text("2"));
+}
+
+#[test]
+fn complex_aggregate_ranges_preserve_errors_and_reject_invalid_text() {
+    let error = CellValue::error_with_message(CellError::Div0, "source failure".to_string());
+    for function in [&FnImSum as &dyn PureFunction, &FnImProduct] {
+        assert_eq!(
+            function.call(&[CellValue::from_rows(vec![vec![text("1+i"), error.clone()]])]),
+            error
+        );
+        for invalid in [text("not complex"), text("")] {
+            assert!(matches!(
+                function.call(&[CellValue::from_rows(vec![vec![text("1+i"), invalid]])]),
+                CellValue::Error(CellError::Num, _)
+            ));
+        }
+        assert!(matches!(
+            function.call(&[CellValue::Null]),
+            CellValue::Error(CellError::Num, _)
+        ));
+    }
+}
+
+#[test]
+fn imdiv_preserves_golden_small_component_from_literal_operands() {
+    // Excel-evaluated logarithm outputs supplied as literal strings to isolate
+    // complex division from the upstream logarithm implementations.
+    assert_eq!(
+        FnImDiv.call(&[
+            text("1.85021985907055+1.41787163074572j"),
+            text("0.556971676153418+0.426821890855467j"),
+        ]),
+        text("3.32192809488737-8.28846662730513E-15j")
+    );
+}
+
+#[test]
+fn imdiv_scaled_operands_retain_finite_identities_and_cancellation() {
+    for magnitude in [f64::from_bits(1), 1e-300_f64, 1e-200, 1e200, f64::MAX] {
+        let z = format!("{magnitude}+{magnitude}i");
+        let conjugate = format!("{magnitude}-{magnitude}i");
+        assert_eq!(
+            FnImDiv.call(&[text(&z), text(&z)]),
+            text("1"),
+            "magnitude={magnitude}"
+        );
+        assert_eq!(
+            FnImDiv.call(&[text(&z), text(&conjugate)]),
+            text("i"),
+            "magnitude={magnitude}"
+        );
+    }
+    assert_eq!(
+        FnImDiv.call(&[text("1+1i"), text("1e-300+1e-300i")]),
+        text("1E+300")
+    );
+    assert_eq!(
+        FnImDiv.call(&[text("1e-300+1e-300i"), text("1+1i")]),
+        text("1E-300")
+    );
+    assert_eq!(
+        FnImDiv.call(&[text("1+1e-20i"), text("1")]),
+        text("1+1E-20i")
+    );
+    let maximum = format!("{}+{}i", f64::MAX, f64::MAX);
+    assert_eq!(
+        FnImDiv.call(&[text(&maximum), text("1+i")]),
+        text("1.7976931348623157E+308")
+    );
+}
+
+#[test]
+fn imsqrt_real_axis_has_exact_zero_components() {
+    for (input, expected) in [
+        ("-1", "i"),
+        ("-4", "2i"),
+        ("1e-300", "1E-150"),
+        ("-1e-300", "1E-150i"),
+    ] {
+        assert_eq!(FnImSqrt.call(&[text(input)]), text(expected), "{input}");
+    }
+}
+
+#[test]
+fn imdiv_recovers_components_after_intermediate_underflow() {
+    for (numerator, denominator, expected) in [
+        ("1E-250i", "1E-200+1E-300i", "1E-150+1E-50i"),
+        ("1E-250", "1E-200+1E-300i", "1E-50-1E-150i"),
+        ("1E300+1E-300i", "1", "1E+300+1E-300i"),
+    ] {
+        assert_eq!(
+            FnImDiv.call(&[text(numerator), text(denominator)]),
+            text(expected)
+        );
+    }
+    // The denominator ratio itself underflows, but multiplying by the large
+    // numerator makes its real contribution representable after division.
+    let numerator = format!("{}i", f64::MAX);
+    let denominator = format!("2+{}i", f64::from_bits(1));
+    assert_eq!(
+        FnImDiv.call(&[text(&numerator), text(&denominator)]),
+        text("2.22044604925031E-16+8.98846567431158E+307i")
+    );
+}
+
+#[test]
+fn imdiv_scaled_determinant_retains_near_cancellation() {
+    let maximum = f64::MAX;
+    let adjacent = f64::from_bits(maximum.to_bits() - 1);
+    let numerator = format!("{maximum}+{adjacent}i");
+    let denominator = format!("{maximum}+{maximum}i");
+    let result = FnImDiv.call(&[text(&numerator), text(&denominator)]);
+    let (re, im, _) = parse_complex(result.as_text().unwrap()).unwrap();
+    // With equal denominator components, Im(z/w)=(b-a)/(2a). Form the
+    // independent expected ratio without ever overflowing 2a.
+    let expected_im = ((adjacent - maximum) / maximum) / 2.0;
+    assert!((re - 1.0).abs() <= f64::EPSILON);
+    assert!(
+        (im / expected_im - 1.0).abs() < 1e-14,
+        "{im} != {expected_im}"
+    );
+}

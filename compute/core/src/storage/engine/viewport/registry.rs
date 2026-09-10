@@ -26,7 +26,7 @@ impl ComputeEngine {
     // generated bridge-method-kind manifest (subscription register, not a
     // workbook/sheet data mutation). Wire semantics are unchanged from
     // `bridge::write` — the runtime still goes through `core.mutate`.
-    #[bridge::write(scope = "range", kind = "subscribe")]
+    #[bridge::write(kind = "subscribe")]
     pub fn register_viewport(
         &mut self,
         viewport_id: &str,
@@ -53,11 +53,7 @@ impl ComputeEngine {
     /// Update the bounds of an already-registered viewport.
     ///
     /// No-op if the viewport ID is not found.
-    //
-    // Scope = "workbook" because the sheet is looked up from the
-    // registry by `viewport_id` — the bridge signature has no SheetId
-    // for the macro to extract. R3 uses the coarse workbook check.
-    #[bridge::write(scope = "workbook")]
+    #[bridge::write]
     pub fn update_viewport_bounds(
         &mut self,
         viewport_id: &str,
@@ -84,7 +80,7 @@ impl ComputeEngine {
     /// No-op if the viewport ID is not found.
     //
     // `kind = "subscribe"` — see `register_viewport` above.
-    #[bridge::write(scope = "workbook", kind = "subscribe")]
+    #[bridge::write(kind = "subscribe")]
     pub fn unregister_viewport(
         &mut self,
         viewport_id: &str,
@@ -98,7 +94,7 @@ impl ComputeEngine {
     /// Get all registered viewports.
     ///
     /// Returns a list of `(viewport_id, sheet_id_hex, start_row, start_col, end_row, end_col)`.
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn get_registered_viewports(&self) -> Vec<(String, String, u32, u32, u32, u32)> {
         super::functions::get_registered_viewports(&self.viewport)
     }
@@ -107,7 +103,7 @@ impl ComputeEngine {
     ///
     /// This replaces the old `reset_viewport_state` for the new registry model.
     /// Removes all viewports whose `sheet_id` matches the given sheet.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn reset_sheet_viewports(
         &mut self,
         sheet_id: &SheetId,

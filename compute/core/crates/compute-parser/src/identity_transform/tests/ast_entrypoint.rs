@@ -128,3 +128,15 @@ fn ast_to_identity_with_mixed_resolved_positional_range() {
         _ => panic!("expected Range ref"),
     }
 }
+
+#[test]
+fn current_workbook_qualified_names_need_no_external_link_binding() {
+    for formula in ["=SUM([0]!Revenue)", "=[0]Revenue+1"] {
+        let resolver = MockResolver::new();
+        let identity = to_identity_formula(formula, &resolver).unwrap();
+        assert!(identity.refs.is_empty(), "{identity:?}");
+        assert!(identity.template.contains("[0]!Revenue"));
+        let reparsed = parse_formula(&format!("={}", identity.template), None).unwrap();
+        assert!(reparsed.into_inner().to_string().contains("[0]!Revenue"));
+    }
+}

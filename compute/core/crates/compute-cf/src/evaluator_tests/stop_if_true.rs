@@ -1,7 +1,7 @@
 use super::helpers::*;
 
-// `stop_if_true` is not global: CascadeEvaluator tracks style and visual
-// stops independently, so a matched rule only blocks later rules in its category.
+// OOXML stopIfTrue prevents every lower-priority rule from applying to the cell,
+// including rules that contribute different visual or style properties.
 
 #[test]
 fn matching_stopped_style_rule_blocks_later_style_rules() {
@@ -111,7 +111,7 @@ fn visual_stop_blocks_later_visual_rules() {
 }
 
 #[test]
-fn style_stop_and_visual_stop_are_independent_categories() {
+fn matching_stop_crosses_style_and_visual_categories() {
     let stats = stats_from_values(&[0.0, 50.0, 100.0]);
     let style_then_visual = vec![
         greater_than_rule(
@@ -144,13 +144,11 @@ fn style_stop_and_visual_stop_are_independent_categories() {
         result.style.unwrap().background_color,
         Some(Color::from_hex("#FF0000").unwrap())
     );
-    assert!(result.color_scale.is_some());
+    assert!(result.color_scale.is_none());
 
     let result = evaluate_rules(&n(50.0), &visual_then_style, &stats, &[], test_now()).unwrap();
-    let style = result.style.unwrap();
     assert!(result.color_scale.is_some());
-    assert_eq!(style.bold, Some(true));
-    assert_eq!(style.font_color, Some(Color::from_hex("#0000FF").unwrap()));
+    assert!(result.style.is_none());
 }
 
 #[test]
@@ -238,32 +236,63 @@ fn all_rules_stop_if_true_returns_first_matching_style_result() {
 }
 
 #[test]
-fn cascade_is_stopped_reports_same_category_stop() {
-    let mut cascade = CascadeEvaluator::new();
-    let rule1 = greater_than_rule("5", Some(test_style()), 1, true);
-    let rule2 = greater_than_rule(
-        "0",
-        Some(CfRenderStyle {
-            bold: Some(true),
-            ..Default::default()
-        }),
-        2,
-        false,
-    );
-
-    cascade.apply(&n(10.0), &rule1, &default_stats(), None, test_now());
-
-    assert!(cascade.is_stopped(&rule2));
+fn empty_style_stop_covers_all_visual_families_and_only_matching_rules() {
+    let stats = stats_from_values(&[0.0, 50.0, 100.0]);
+    for style in [None, Some(CfRenderStyle::default())] {
+        for stop in [false, true] {
+            for matches in [false, true] {
+                for visual in [
+                    color_scale_rule(2, false),
+                    data_bar_rule(2, false),
+                    icon_set_rule(2, false),
+                ] {
+                    let first = greater_than_rule(
+                        if matches { "0" } else { "100" },
+                        style.clone(),
+                        1,
+                        stop,
+                    );
+                    let result =
+                        evaluate_rules(&n(50.0), &[first, visual], &stats, &[], test_now())
+                            .unwrap();
+                    let has_visual = result.color_scale.is_some()
+                        || result.data_bar.is_some()
+                        || result.icon.is_some();
+                    assert_eq!(
+                        has_visual,
+                        !(stop && matches),
+                        "stop={stop} matches={matches} style={style:?}"
+                    );
+                }
+            }
+        }
+    }
 }
 
 #[test]
-fn cascade_is_stopped_does_not_cross_categories() {
+fn stopped_cascade_preserves_earlier_results_and_skips_all_later_rules() {
     let stats = stats_from_values(&[0.0, 50.0, 100.0]);
     let mut cascade = CascadeEvaluator::new();
-    let rule1 = greater_than_rule("0", Some(test_style()), 1, true);
-    let rule2 = color_scale_rule(2, false);
-
-    cascade.apply(&n(50.0), &rule1, &stats, None, test_now());
-
-    assert!(!cascade.is_stopped(&rule2));
+    cascade.apply(&n(50.0), &data_bar_rule(1, false), &stats, None, test_now());
+    assert!(!cascade.is_stopped());
+    cascade.apply(
+        &n(50.0),
+        &greater_than_rule("0", None, 2, true),
+        &stats,
+        None,
+        test_now(),
+    );
+    assert!(cascade.is_stopped());
+    cascade.apply(&n(50.0), &icon_set_rule(3, false), &stats, None, test_now());
+    cascade.apply(
+        &n(50.0),
+        &greater_than_rule("0", Some(test_style()), 4, false),
+        &stats,
+        None,
+        test_now(),
+    );
+    let result = cascade.finish().unwrap();
+    assert!(result.data_bar.is_some());
+    assert!(result.icon.is_none());
+    assert!(result.style.is_none());
 }

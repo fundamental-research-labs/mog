@@ -78,7 +78,9 @@ impl Workbook {
         })
     }
 
-    /// Load a workbook from XLSX bytes.
+    /// Load a workbook from XLSX bytes, preserving imported formula caches.
+    ///
+    /// Call [`Self::recalculate`] explicitly to evaluate formulas before exporting.
     pub fn from_xlsx_bytes(xlsx_data: &[u8]) -> Result<(Self, RecalcResult), ComputeApiError> {
         use compute_core::storage::engine::ComputeEngine;
 
@@ -93,18 +95,45 @@ impl Workbook {
         Ok((Workbook { dispatch }, recalc))
     }
 
-    /// Export the current workbook to XLSX bytes.
-    pub fn to_xlsx_bytes(&self) -> Result<Vec<u8>, ComputeApiError> {
-        self.dispatch
-            .query_engine(|e| e.export_to_xlsx_bytes())
-            .and_then(|r| r.map_err(ComputeApiError::from))
+    /// Load a workbook from an xlsx file on disk, preserving imported formula caches.
+    ///
+    /// Call [`Self::recalculate`] explicitly to evaluate formulas before exporting.
+    pub fn from_xlsx_path(path: &str) -> Result<(Self, RecalcResult), ComputeApiError> {
+        let data = std::fs::read(path)
+            .map_err(|e| ComputeApiError::InvalidOperation(format!("read {path}: {e}")))?;
+        Self::from_xlsx_bytes(&data)
     }
 
-    /// Recalculate every formula cell.
+    /// Evaluate formulas using the current workbook's calculation settings.
+    ///
+    /// An imported XLSX has pending calculation even when it contains cached
+    /// results. Volatile formulas use the current execution environment; their
+    /// results are not expected to equal a previously saved workbook's caches.
     pub fn recalculate(&self) -> Result<RecalcResult, ComputeApiError> {
         self.dispatch
             .call_engine(|e| e.recalculate())
-            .and_then(|r| r.map_err(ComputeApiError::from))
+            .and_then(|result| result.map_err(ComputeApiError::from))
+    }
+
+    /// Export the workbook as xlsx bytes without initiating recalculation.
+    pub fn to_xlsx_bytes(&self) -> Result<Vec<u8>, ComputeApiError> {
+        self.dispatch
+            .query_engine(|e| e.export_to_xlsx_bytes())
+            .and_then(|result| result.map_err(ComputeApiError::from))
+    }
+
+    /// Export the workbook to an xlsx file on disk.
+    pub fn to_xlsx_path(&self, path: &str) -> Result<(), ComputeApiError> {
+        let bytes = self.to_xlsx_bytes()?;
+        if let Some(parent) = std::path::Path::new(path).parent()
+            && !parent.as_os_str().is_empty()
+        {
+            std::fs::create_dir_all(parent).map_err(|e| {
+                ComputeApiError::InvalidOperation(format!("create {parent:?}: {e}"))
+            })?;
+        }
+        std::fs::write(path, bytes)
+            .map_err(|e| ComputeApiError::InvalidOperation(format!("write {path}: {e}")))
     }
 
     // -----------------------------------------------------------------

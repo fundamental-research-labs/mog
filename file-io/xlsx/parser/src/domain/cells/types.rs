@@ -16,7 +16,10 @@ pub const CELL_TYPE_DATE: u8 = 7;
 /// Value type enumeration (for value_type field)
 pub const VALUE_TYPE_NONE: u8 = 0;
 pub const VALUE_TYPE_INLINE: u8 = 1;
-pub const VALUE_TYPE_SHARED_STRING: u8 = 2;
+/// Text already decoded at its XML/xstring boundary (shared or inline string).
+pub const VALUE_TYPE_DECODED_STRING: u8 = 2;
+/// Historical name retained for the packed shared-string representation.
+pub const VALUE_TYPE_SHARED_STRING: u8 = VALUE_TYPE_DECODED_STRING;
 pub const VALUE_TYPE_FORMULA: u8 = 3;
 /// Cached formula: cell has a formula element (e.g., self-closing `<f .../>` shared formula
 /// reference) but the value bytes contain the cached `<v>` value, not formula text.
@@ -144,6 +147,26 @@ pub struct SharedFormulaMaster {
     pub ref_range: String,
 }
 
+/// Metadata for an authored `<f>` element with no formula text.
+///
+/// These cells are still formula-bearing OOXML cells, most commonly array
+/// followers, but the empty element must not become an executable empty
+/// formula in the typed model. The writer uses this metadata to replay the
+/// element while leaving `CellData.formula` absent.
+#[derive(Debug, Clone, Default)]
+pub struct EmptyFormulaMetadata {
+    pub ca: bool,
+    pub aca: bool,
+    pub bx: bool,
+    pub dt2d: bool,
+    pub dtr: bool,
+    pub del1: bool,
+    pub del2: bool,
+    pub ref_range: Option<String>,
+    pub r1: Option<String>,
+    pub r2: Option<String>,
+}
+
 /// Side-channel data collected during `parse_worksheet_fast_with_extras`.
 ///
 /// When passed to the parse function, shared formula info, cached formula values,
@@ -157,11 +180,20 @@ pub struct ParseExtras {
     pub sf_refs: Vec<(u32, u32, u32)>,
     /// Cached `<v>` values for formula cells: (cell_index, offset_in_strings_buffer, len)
     pub cached_values: Vec<(usize, u32, u32)>,
+    /// Already decoded inline-string formula caches: (cell_index, text).
+    pub cached_inline_strings: Vec<(usize, String)>,
     /// Data table entries with region bounds and input cell references.
     pub data_tables: Vec<DataTableEntry>,
     /// Cell indices where the `<f>` element has `ca="1"` (needs recalculation).
     /// The cached `<v>` value in these cells may be stale or a placeholder.
     pub force_recalc_indices: Vec<usize>,
+    /// Formula cells with an authored empty cached `<v/>` or `<v></v>`.
+    /// This is distinct from an absent `<v>` and must survive typed conversion.
+    pub empty_cached_value_indices: Vec<usize>,
+    /// Authored empty formula elements with their non-text formula metadata.
+    /// The typed cell keeps `formula=None`; this side channel replays the
+    /// formula element without registering an executable empty formula.
+    pub empty_formula_metadata: Vec<(usize, EmptyFormulaMetadata)>,
     /// Array formula ranges: (cell_index, ref_string).
     /// Used to identify spill ranges from `<f t="array" ref="A1:C5">`.
     /// The source cell has this entry; phantom cells within the range have cached

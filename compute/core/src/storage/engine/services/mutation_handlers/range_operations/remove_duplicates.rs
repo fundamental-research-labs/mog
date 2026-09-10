@@ -56,8 +56,15 @@ pub(in crate::storage::engine) fn mutation_remove_duplicates(
         return Ok((RecalcResult::empty(), data));
     }
 
+    let region_mutation = crate::storage::workbook::data_tables::invalidate_regions(
+        cell_store, sheet_id, start_row, start_col, end_row, end_col,
+    );
+    let stale_recalc =
+        super::relocate::reconcile_data_table_cells(stores, cell_store, &region_mutation)?;
+
     // Capture all source inputs before applying any overlapping destination writes.
     let mut edits = Vec::new();
+    let mut payloads = Vec::new();
     for (offset, &source_row) in kept.iter().enumerate() {
         let destination_row = (first_row + offset as u64) as u32;
         if source_row == destination_row {
@@ -66,6 +73,27 @@ pub(in crate::storage::engine) fn mutation_remove_duplicates(
         for col in start_col..=end_col {
             let source_pos = SheetPos::new(source_row, col);
             let source_id = cell_store.resolve_cell_id(sheet_id, source_pos);
+            let mut metadata = source_id
+                .as_ref()
+                .and_then(|id| stores.storage.cell_metadata(id))
+                .cloned()
+                .unwrap_or_default();
+            if metadata
+                .formula
+                .as_ref()
+                .is_some_and(|formula| formula.t != ooxml_types::worksheet::CellFormulaType::Normal)
+            {
+                metadata.formula = None;
+            }
+            metadata.array_ref = None;
+            let properties = source_id.as_ref().and_then(|id| {
+                crate::storage::properties::get_properties(
+                    &stores.storage,
+                    sheet_id,
+                    &id.to_uuid_string(),
+                )
+            });
+            payloads.push((destination_row, col, metadata, properties));
             let formula = source_id.as_ref().and_then(|cell_id| {
                 crate::storage::engine::formula_read::formula_text_for_cell_id(
                     stores, cell_store, sheet_id, cell_id,
@@ -95,8 +123,61 @@ pub(in crate::storage::engine) fn mutation_remove_duplicates(
             edits.push((*sheet_id, row as u32, col, CellInput::Clear));
         }
     }
-    let recalc = super::super::cell_mutations::mutation_set_cells_by_position(
+    let mut recalc = super::super::cell_mutations::mutation_set_cells_by_position(
         stores, cell_store, edits, false,
     )?;
+    for (row, col, metadata, properties) in payloads {
+        let position = SheetPos::new(row, col);
+        let existing = cell_store.resolve_cell_id(sheet_id, position);
+        let id = if let Some(id) = existing {
+            id
+        } else {
+            // An authored empty formula marker or rich-string record can own a
+            // blank cell. Capture its absent identity before materializing it.
+            if metadata.is_empty() && properties.is_none() {
+                continue;
+            }
+            super::super::super::cell_editing::ensure_cell_id(
+                stores, cell_store, sheet_id, row, col,
+            )
+            .ok_or_else(|| ComputeError::SheetNotFound {
+                sheet_id: sheet_id.to_uuid_string(),
+            })?
+        };
+        stores.storage.set_cell_metadata(id, metadata);
+        crate::storage::properties::clear_properties(
+            &mut stores.storage,
+            sheet_id,
+            &id.to_uuid_string(),
+        );
+        if let Some(properties) = properties {
+            crate::storage::properties::set_properties(
+                &mut stores.storage,
+                sheet_id,
+                &id.to_uuid_string(),
+                &properties,
+            );
+        }
+        crate::storage::engine::services::mutation::reconcile_persisted_array_ref(
+            cell_store, sheet_id, &id, None,
+        );
+    }
+    for row in (first_row + kept.len() as u64)..=u64::from(end_row) {
+        for col in start_col..=end_col {
+            if let Some(id) = cell_store.resolve_cell_id(sheet_id, SheetPos::new(row as u32, col)) {
+                crate::storage::properties::clear_properties(
+                    &mut stores.storage,
+                    sheet_id,
+                    &id.to_uuid_string(),
+                );
+            }
+        }
+    }
+    crate::storage::engine::cell_metadata::refresh(
+        &stores.storage,
+        cell_store,
+        stores.layout_metrics,
+    );
+    super::patches::merge_recalc_results(&mut recalc, stale_recalc);
     Ok((recalc, data))
 }

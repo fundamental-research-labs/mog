@@ -104,32 +104,28 @@ fn round_to_sig_digits(value: f64, sig: u32) -> String {
 /// significant digits in the mantissa. Examples:
 /// `1.23E+05`, `-9.9E+11`, `1E-05`, `1.234E+100`.
 fn format_scientific(value: f64, sig: u32) -> String {
-    let negative = value < 0.0;
-    let abs = value.abs();
-
-    // Compute mantissa and exponent: value = mantissa * 10^exp, 1 <= |mantissa| < 10.
-    let exp = abs.log10().floor() as i32;
-    let mantissa = abs / 10f64.powi(exp);
-
-    // Round mantissa to `sig - 1` decimal places (sig sig digits total: 1
-    // before the decimal + (sig - 1) after).
-    let prec = (sig - 1) as usize;
-    // Guard against rounding pushing the mantissa to 10 — re-normalize.
-    let factor = 10f64.powi(prec as i32);
-    let rounded_mantissa = (mantissa * factor).round() / factor;
-    let (mantissa_text, final_exp) = if rounded_mantissa >= 10.0 {
-        (format!("{:.prec$}", rounded_mantissa / 10.0), exp + 1)
-    } else {
-        (format!("{rounded_mantissa:.prec$}"), exp)
-    };
+    // Precision-controlled conversion scales without a floating-point power of
+    // ten: 10^-324 underflows even though the smallest f64 is finite.
+    let precision = (sig - 1) as usize;
+    let mut scientific = format!("{value:.precision$E}");
+    // At f64::MAX, rounding to 15 digits crosses the finite boundary. Use
+    // round-trip precision only in that boundary case instead of emitting a
+    // finite input as an infinite number or clamping it to a smaller value.
+    if scientific
+        .parse::<f64>()
+        .is_ok_and(|parsed| !parsed.is_finite())
+    {
+        scientific = format!("{value:.16E}");
+    }
+    let (mantissa_text, exponent_text) = scientific
+        .split_once('E')
+        .expect("finite scientific formatting includes an exponent");
+    let final_exp: i32 = exponent_text.parse().expect("f64 exponent fits in i32");
 
     // Strip trailing zeros after the decimal point, then a trailing decimal
     // point (e.g. `1.000` → `1`, `1.230` → `1.23`).
     let mantissa_trimmed = if mantissa_text.contains('.') {
-        mantissa_text
-            .trim_end_matches('0')
-            .trim_end_matches('.')
-            .to_string()
+        mantissa_text.trim_end_matches('0').trim_end_matches('.')
     } else {
         mantissa_text
     };
@@ -143,8 +139,7 @@ fn format_scientific(value: f64, sig: u32) -> String {
         format!("{exp_abs}")
     };
 
-    let sign = if negative { "-" } else { "" };
-    format!("{sign}{mantissa_trimmed}E{exp_sign}{exp_text}")
+    format!("{mantissa_trimmed}E{exp_sign}{exp_text}")
 }
 
 #[cfg(test)]
@@ -275,6 +270,27 @@ mod tests {
         assert_eq!(format_general(f64::NAN), "#NUM!");
         assert_eq!(format_general(f64::INFINITY), "#NUM!");
         assert_eq!(format_general(f64::NEG_INFINITY), "#NUM!");
+    }
+
+    #[test]
+    fn scientific_finite_extremes_do_not_overflow_during_scaling() {
+        for (value, expected) in [
+            (f64::from_bits(1), "4.94065645841247E-324"),
+            (1e-320, "9.99988867182683E-321"),
+            (f64::MIN_POSITIVE, "2.2250738585072E-308"),
+            (f64::MAX, "1.7976931348623157E+308"),
+        ] {
+            assert_eq!(format_general(value), expected);
+            assert_eq!(format_general(-value), format!("-{expected}"));
+            assert!(format_general(value).parse::<f64>().unwrap().is_finite());
+        }
+    }
+
+    #[test]
+    fn scientific_rounding_preserves_finite_boundary_round_trips() {
+        for value in [f64::MAX, -f64::MAX, f64::from_bits(f64::MAX.to_bits() - 1)] {
+            assert_eq!(format_general(value).parse::<f64>().unwrap(), value);
+        }
     }
 
     #[test]

@@ -581,7 +581,7 @@ pub fn execute_agg_group(
                             .slice
                             .get(output_row as usize)
                             .unwrap_or(&CellValue::Null);
-                        key.push(NormalizedKey::from_cell_value(v));
+                        key.push(NormalizedKey::from_criteria(v));
                     } else {
                         key.push(NormalizedKey::Null);
                     }
@@ -596,7 +596,7 @@ pub fn execute_agg_group(
                     let val = cell_store
                         .get_cell_value_at(sheet, SheetPos::new(*row, *col))
                         .unwrap_or(&CellValue::Null);
-                    key.push(NormalizedKey::from_cell_value(val));
+                    key.push(NormalizedKey::from_criteria(val));
                 }
                 CriteriaSource::DynamicWithPrefix { .. } => {
                     // Should not reach here — build_agg_map returns None for

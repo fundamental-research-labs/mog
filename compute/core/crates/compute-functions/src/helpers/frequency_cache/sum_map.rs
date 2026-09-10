@@ -88,7 +88,7 @@ impl SumFrequencyMap {
     /// Returns `Ok(0.0)` if no matching key found (matches SUMIF behavior).
     #[inline]
     pub fn sum(&self, criteria: &CellValue) -> Result<f64, CellError> {
-        let key = NormalizedKey::from_cell_value(criteria);
+        let key = NormalizedKey::from_criteria(criteria);
         let primary = self.sums.get(&key);
         let null_extra = if matches!(&key, NormalizedKey::Text(s) if s.is_empty()) {
             self.sums.get(&NormalizedKey::Null)
@@ -108,7 +108,7 @@ impl SumFrequencyMap {
     /// O(1) lookup returning (sum, count) for AVERAGEIF.
     #[inline]
     pub fn sum_and_count(&self, criteria: &CellValue) -> Result<(f64, u64), CellError> {
-        let key = NormalizedKey::from_cell_value(criteria);
+        let key = NormalizedKey::from_criteria(criteria);
         let primary = self.sums.get(&key);
         let null_extra = if matches!(&key, NormalizedKey::Text(s) if s.is_empty()) {
             self.sums.get(&NormalizedKey::Null)

@@ -2,8 +2,9 @@ use value_types::{CellError, CellValue};
 
 use crate::{FunctionRegistry, PureFunction};
 
-use statrs::distribution::{Continuous, ContinuousCDF, LogNormal};
+use statrs::distribution::{Continuous, LogNormal};
 
+use super::normal::{standard_normal_cdf, standard_normal_inverse};
 use super::support::try_dist;
 
 // --- LogNormal distribution ---
@@ -49,7 +50,7 @@ impl PureFunction for FnLogNormDist {
         }
         let dist = try_dist!(LogNormal::new(mean, std_dev), self.name());
         if cumulative {
-            CellValue::number(dist.cdf(x))
+            CellValue::number(standard_normal_cdf((x.ln() - mean) / std_dev))
         } else {
             CellValue::number(dist.pdf(x))
         }
@@ -91,8 +92,8 @@ impl PureFunction for FnLogNormDistLegacy {
                 ),
             );
         }
-        let dist = try_dist!(LogNormal::new(mean, std_dev), self.name());
-        CellValue::number(dist.cdf(x))
+        let _dist = try_dist!(LogNormal::new(mean, std_dev), self.name());
+        CellValue::number(standard_normal_cdf((x.ln() - mean) / std_dev))
     }
 }
 
@@ -123,7 +124,7 @@ impl PureFunction for FnLogNormInv {
             Ok(v) => v,
             Err(e) => return CellValue::Error(e, None),
         };
-        if p <= 0.0 || p >= 1.0 || std_dev <= 0.0 {
+        if p.is_nan() || p <= 0.0 || p >= 1.0 || std_dev <= 0.0 {
             return CellValue::error_with_message(
                 CellError::Num,
                 format!(
@@ -131,8 +132,8 @@ impl PureFunction for FnLogNormInv {
                 ),
             );
         }
-        let dist = try_dist!(LogNormal::new(mean, std_dev), self.name());
-        CellValue::number(dist.inverse_cdf(p))
+        let _dist = try_dist!(LogNormal::new(mean, std_dev), self.name());
+        CellValue::number((mean + std_dev * standard_normal_inverse(p)).exp())
     }
 }
 

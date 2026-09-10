@@ -42,8 +42,10 @@ pub use helpers::{decode_xml_entities, decode_xml_entities_string};
 pub(crate) use hyperlinks::resolve_drawing_hyperlink_targets;
 pub use parse::drawing::parse_drawing;
 pub use parse::non_visual::parse_nv_props;
+pub(crate) use parse::pictures::namespace_declarations;
 pub use parse::pictures::parse_blip_fill;
 pub use parse::shapes::{parse_shape, parse_shape_preset};
+pub(crate) use parse::styling::parse_shape_properties_with_namespace_context;
 pub use parse::styling::{
     parse_color, parse_dash_style, parse_effect_list, parse_fill, parse_outline,
     parse_shape_properties, parse_shape_style, parse_transform_2d, scheme_name_to_index,

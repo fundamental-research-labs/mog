@@ -32,12 +32,72 @@ pub(super) fn convert_unified_ole_objects(
 pub(super) fn write_worksheet_ole_objects(
     ole_objects: &[OleObjectExport],
     relationship_ids: &[String],
+    graph: &crate::write::package_graph::ResolvedPackageGraph,
+    sheet_idx: usize,
 ) -> Vec<u8> {
+    let owner = crate::write::package_graph::PackageOwner::Worksheet {
+        index: sheet_idx,
+        path: format!("xl/worksheets/sheet{}.xml", sheet_idx + 1),
+    };
     let objects = ole_objects
         .iter()
-        .map(|entry| entry.object.clone())
+        .map(|entry| {
+            let mut object = entry.object.clone();
+            if let Some(properties) = &mut object.object_pr {
+                properties.r_id = properties
+                    .r_id
+                    .as_ref()
+                    .and_then(|_| entry.preview_path.as_ref())
+                    .and_then(|path| {
+                        graph
+                            .relationship_id(
+                                &owner,
+                                crate::infra::opc::REL_IMAGE,
+                                &super::worksheet_relative_target(path),
+                            )
+                            .map(str::to_owned)
+                    });
+            }
+            object
+        })
         .collect();
     OleWriter::new(objects).write_ole_objects(relationship_ids)
+}
+
+/// Worksheet objectPr and legacy VML references have different relationship
+/// owners even when they point to the same current preview payload.
+pub(super) fn register_preview_relationships(
+    graph: &mut crate::write::package_graph::PackageGraphBuilder,
+    ole_objects: &[OleObjectExport],
+    sheet_idx: usize,
+) -> Result<(), crate::write::write_error::WriteError> {
+    use crate::write::package_graph::{
+        PackageOwner, PackageRelationship, PackageRelationshipTarget, RelationshipIdentityHint,
+    };
+    for entry in ole_objects {
+        let Some(path) = &entry.preview_path else {
+            continue;
+        };
+        let Some(id) = entry
+            .object
+            .object_pr
+            .as_ref()
+            .and_then(|properties| properties.r_id.as_ref())
+        else {
+            continue;
+        };
+        crate::write::package_graph::register_media_part(graph, path)?;
+        graph.add_relationship_if_absent(PackageRelationship {
+            owner: PackageOwner::Worksheet {
+                index: sheet_idx,
+                path: format!("xl/worksheets/sheet{}.xml", sheet_idx + 1),
+            },
+            relationship_type: crate::infra::opc::REL_IMAGE.to_string(),
+            target: PackageRelationshipTarget::InternalPart { path: path.clone() },
+            identity_hint: Some(RelationshipIdentityHint::new(id)),
+        });
+    }
+    Ok(())
 }
 
 fn convert_unified_ole_object(obj: &FloatingObject) -> Option<OleObjectExport> {
@@ -76,6 +136,24 @@ fn convert_unified_ole_object(obj: &FloatingObject) -> Option<OleObjectExport> {
         .clone()
         .or_else(|| (!obj.common.name.is_empty()).then(|| obj.common.name.clone()));
     ole.anchor = object_anchor_from_floating_object(obj, ooxml);
+    ole.preview_vml = ooxml.preview_vml.clone();
+    ole.preview_visible = Some(obj.common.visible);
+    ole.preview_width_pt = (obj.common.width != 0.0
+        || ooxml
+            .preview_vml
+            .as_ref()
+            .and_then(|p| p.width.as_ref())
+            .and_then(|d| d.normalized_pt)
+            .is_some())
+    .then_some(obj.common.width * 0.75);
+    ole.preview_height_pt = (obj.common.height != 0.0
+        || ooxml
+            .preview_vml
+            .as_ref()
+            .and_then(|p| p.height.as_ref())
+            .and_then(|d| d.normalized_pt)
+            .is_some())
+    .then_some(obj.common.height * 0.75);
     ole.dv_aspect = DvAspect::from_ooxml(first_non_empty(&data.dv_aspect, &ooxml.dv_aspect));
     ole.ole_update = OleUpdate::from_ooxml(&ooxml.ole_update);
     ole.auto_load = ooxml.auto_load;
@@ -90,6 +168,24 @@ fn convert_unified_ole_object(obj: &FloatingObject) -> Option<OleObjectExport> {
         .map(|preview| preview.path.clone())
         .or_else(|| ooxml.preview_image_path.clone());
     ole.object_pr = ooxml.object_pr.as_ref().map(convert_object_properties);
+    if let Some(properties) = &mut ole.object_pr
+        && let Some(anchor) = &mut properties.anchor
+    {
+        // Imported objectPr is formatting provenance, not authority to undo a
+        // live floating-object move or resize.
+        anchor.from = CellAnchorPoint {
+            col: ole.anchor.from_col,
+            row: ole.anchor.from_row,
+            col_offset: ole.anchor.from_col_offset,
+            row_offset: ole.anchor.from_row_offset,
+        };
+        anchor.to = CellAnchorPoint {
+            col: ole.anchor.to_col,
+            row: ole.anchor.to_row,
+            col_offset: ole.anchor.to_col_offset,
+            row_offset: ole.anchor.to_row_offset,
+        };
+    }
 
     Some(OleObjectExport {
         object: ole,
@@ -141,31 +237,9 @@ fn fallback_shape_id(obj: &FloatingObject) -> u32 {
 
 fn object_anchor_from_floating_object(
     obj: &FloatingObject,
-    ooxml: &OleObjectOoxmlProps,
+    _ooxml: &OleObjectOoxmlProps,
 ) -> ControlAnchor {
-    if let Some(anchor) = ooxml
-        .object_pr
-        .as_ref()
-        .and_then(|props| props.anchor.as_ref())
-    {
-        return control_anchor_from_ole_anchor(anchor);
-    }
-
     control_anchor_from_floating_anchor(&obj.common.anchor)
-}
-
-fn control_anchor_from_ole_anchor(anchor: &OleObjectAnchor) -> ControlAnchor {
-    ControlAnchor {
-        from_col: anchor.from.col,
-        from_row: anchor.from.row,
-        to_col: anchor.to.col,
-        to_row: anchor.to.row,
-        from_col_offset: anchor.from.col_off,
-        from_row_offset: anchor.from.row_off,
-        to_col_offset: anchor.to.col_off,
-        to_row_offset: anchor.to.row_off,
-        anchor_source: AnchorSource::Modern,
-    }
 }
 
 fn control_anchor_from_floating_anchor(anchor: &FloatingObjectAnchor) -> ControlAnchor {

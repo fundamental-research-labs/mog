@@ -2,8 +2,9 @@
 
 use value_types::{CellError, CellValue};
 
+use super::date_context::canonical_date_arg_truncated;
 use super::helpers::{actual_days_between, err_val, num_or_err_msg, req_num};
-use crate::{FunctionRegistry, PureFunction};
+use crate::{FunctionContext, FunctionRegistry, PureFunction};
 
 // ===========================================================================
 // TBILLPRICE
@@ -24,9 +25,12 @@ impl PureFunction for FnTbillprice {
         Some(3)
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
+        self.call_with_context(args, &FunctionContext::default())
+    }
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
-            let settlement = req_num(args, 0).map_err(err_val)?;
-            let maturity = req_num(args, 1).map_err(err_val)?;
+            let settlement = canonical_date_arg_truncated(args, 0, context).map_err(err_val)?;
+            let maturity = canonical_date_arg_truncated(args, 1, context).map_err(err_val)?;
             let discount = req_num(args, 2).map_err(err_val)?;
             if settlement >= maturity {
                 return Err(CellValue::error_with_message(
@@ -71,9 +75,12 @@ impl PureFunction for FnTbillyield {
         Some(3)
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
+        self.call_with_context(args, &FunctionContext::default())
+    }
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
-            let settlement = req_num(args, 0).map_err(err_val)?;
-            let maturity = req_num(args, 1).map_err(err_val)?;
+            let settlement = canonical_date_arg_truncated(args, 0, context).map_err(err_val)?;
+            let maturity = canonical_date_arg_truncated(args, 1, context).map_err(err_val)?;
             let pr = req_num(args, 2).map_err(err_val)?;
             if settlement >= maturity {
                 return Err(CellValue::error_with_message(
@@ -118,9 +125,12 @@ impl PureFunction for FnTbilleq {
         Some(3)
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
+        self.call_with_context(args, &FunctionContext::default())
+    }
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
-            let settlement = req_num(args, 0).map_err(err_val)?;
-            let maturity = req_num(args, 1).map_err(err_val)?;
+            let settlement = canonical_date_arg_truncated(args, 0, context).map_err(err_val)?;
+            let maturity = canonical_date_arg_truncated(args, 1, context).map_err(err_val)?;
             let discount = req_num(args, 2).map_err(err_val)?;
             if settlement >= maturity {
                 return Err(CellValue::error_with_message(
@@ -156,7 +166,7 @@ pub(super) fn register(registry: &mut FunctionRegistry) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::PureFunction;
+    use crate::{FunctionContext, PureFunction};
     use value_types::{CellError, CellValue};
 
     fn num(n: f64) -> CellValue {
@@ -575,5 +585,60 @@ mod tests {
 
         // 4. BEY > money-market yield (365-day vs 360-day basis)
         assert!(beq > yld);
+    }
+
+    #[test]
+    fn treasury_functions_are_date_system_invariant() {
+        let offset = value_types::DateSystem::DATE_SYSTEM_1904_OFFSET;
+        let settlement = value_types::date_serial::date_to_serial(
+            &chrono::NaiveDate::from_ymd_opt(2023, 4, 1).unwrap(),
+        );
+        let maturity = value_types::date_serial::date_to_serial(
+            &chrono::NaiveDate::from_ymd_opt(2023, 6, 30).unwrap(),
+        );
+        let context = FunctionContext {
+            date1904: true,
+            ..FunctionContext::default()
+        };
+        let settlement_1904 = settlement - offset;
+        let maturity_1904 = maturity - offset;
+
+        let price = FnTbillprice.call(&[num(settlement), num(maturity), num(0.05)]);
+        let price_1904 = FnTbillprice.call_with_context(
+            &[num(settlement_1904), num(maturity_1904), num(0.05)],
+            &context,
+        );
+        assert_approx(&price_1904, extract_num(&price), 1e-12);
+
+        let yield_ = FnTbillyield.call(&[num(settlement), num(maturity), num(98.75)]);
+        let yield_1904 = FnTbillyield.call_with_context(
+            &[num(settlement_1904), num(maturity_1904), num(98.75)],
+            &context,
+        );
+        assert_approx(&yield_1904, extract_num(&yield_), 1e-12);
+
+        let equivalent = FnTbilleq.call(&[num(settlement), num(maturity), num(0.05)]);
+        let equivalent_1904 = FnTbilleq.call_with_context(
+            &[num(settlement_1904), num(maturity_1904), num(0.05)],
+            &context,
+        );
+        assert_approx(&equivalent_1904, extract_num(&equivalent), 1e-12);
+    }
+
+    #[test]
+    fn treasury_context_rejects_invalid_1904_dates() {
+        let context = FunctionContext {
+            date1904: true,
+            ..FunctionContext::default()
+        };
+        let max = 2_957_003.0;
+        for serial in [-1.0, max + 1.0] {
+            let result = FnTbillprice
+                .call_with_context(&[num(serial), num(serial + 1.0), num(0.05)], &context);
+            assert!(
+                matches!(result, CellValue::Error(CellError::Value, _)),
+                "expected #VALUE! for serial {serial}, got {result:?}"
+            );
+        }
     }
 }

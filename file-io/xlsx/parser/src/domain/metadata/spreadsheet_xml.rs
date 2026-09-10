@@ -1,18 +1,38 @@
 use crate::write::xml_writer::XmlWriter;
 
 pub(crate) fn write_metadata_model_xml(metadata: &domain_types::WorkbookMetadata) -> Vec<u8> {
+    write_metadata_model_xml_with_source(
+        metadata,
+        metadata
+            .imported_metadata_xml
+            .as_ref()
+            .map(|imported| imported.bytes.as_slice()),
+    )
+}
+
+pub(crate) fn write_metadata_model_xml_with_source(
+    metadata: &domain_types::WorkbookMetadata,
+    source: Option<&[u8]>,
+) -> Vec<u8> {
     let mut w = XmlWriter::new();
     w.write_declaration();
-    w.start_element("metadata")
-        .attr(
-            "xmlns",
-            "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
-        )
-        .attr(
+    let inherited = imported_root_attributes(source);
+    w.start_element("metadata").attr(
+        "xmlns",
+        "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
+    );
+    for (name, value) in &inherited {
+        if name != "xmlns" {
+            w.attr(name, value);
+        }
+    }
+    if !inherited.iter().any(|(name, _)| name == "xmlns:xda") {
+        w.attr(
             "xmlns:xda",
             "http://schemas.microsoft.com/office/spreadsheetml/2017/dynamicarray",
-        )
-        .end_attrs();
+        );
+    }
+    w.end_attrs();
 
     if !metadata.metadata_types.is_empty() {
         w.start_element("metadataTypes")
@@ -109,5 +129,37 @@ fn write_metadata_block<'a>(
 fn attr_bool_01(w: &mut XmlWriter, name: &str, value: bool) {
     if value {
         w.attr(name, "1");
+    }
+}
+
+/// Opaque futureMetadata blocks may rely on bindings declared only at the
+/// imported metadata root. Keep those bindings when model edits prevent raw
+/// XML replay; decoding attributes here also handles single quotes/entities.
+fn imported_root_attributes(source: Option<&[u8]>) -> Vec<(String, String)> {
+    let Some(source) = source else {
+        return Vec::new();
+    };
+    let mut reader = quick_xml::Reader::from_reader(source);
+    loop {
+        match reader.read_event() {
+            Ok(quick_xml::events::Event::Start(root) | quick_xml::events::Event::Empty(root)) => {
+                return root
+                    .attributes()
+                    .filter_map(Result::ok)
+                    .filter_map(|attribute| {
+                        let name = std::str::from_utf8(attribute.key.as_ref())
+                            .ok()?
+                            .to_string();
+                        let value = attribute
+                            .decode_and_unescape_value(reader.decoder())
+                            .ok()?
+                            .into_owned();
+                        Some((name, value))
+                    })
+                    .collect();
+            }
+            Ok(quick_xml::events::Event::Eof) | Err(_) => return Vec::new(),
+            _ => {}
+        }
     }
 }

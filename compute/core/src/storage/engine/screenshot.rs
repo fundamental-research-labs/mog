@@ -28,12 +28,8 @@ impl ComputeEngine {
     /// (matching the output of `parseCellRange` on the JS side).
     ///
     /// Logically a read — no engine state is authoritatively mutated; the
-    /// viewport format palette is an observational cache. Annotated
-    /// `#[bridge::read(scope = "range")]` so the gated delegate routes
-    /// through `filter_range_values` (a Vec<u8> result is unfiltered by
-    /// the range filter — this is fine; fine-grained cell redaction for
-    /// screenshots is out of scope for R4).
-    #[bridge::read(scope = "range")]
+    /// viewport format palette is an observational cache.
+    #[bridge::read]
     pub fn capture_screenshot(
         &self,
         sheet_id: &SheetId,

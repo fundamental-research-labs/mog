@@ -1,8 +1,9 @@
 //! SUBTOTAL/AGGREGATE dispatch and filtered range collection.
 
+use crate::eval::engine::reference_resolution::parse_defined_name_formula;
 use compute_parser::ASTNode;
 use compute_parser::{CellRefNode, RangeRef};
-use formula_types::{CellRef, RangeType};
+use formula_types::{CellRef, RangeType, ResolvedName};
 use value_types::{CellError, CellValue, ComputeError};
 
 use crate::eval::context::traits::{EvalDataAccess, EvalMetadata};
@@ -413,6 +414,13 @@ fn aggregate_array_dispatch(func: AggregateFunc, filtered: &[CellValue], k: f64)
     }
 }
 
+#[derive(Clone, Copy)]
+struct ReferenceFilter {
+    ignore_hidden: bool,
+    ignore_filtered: bool,
+    ignore_nested: bool,
+}
+
 // ---------------------------------------------------------------------------
 // Evaluator methods for SUBTOTAL/AGGREGATE
 // ---------------------------------------------------------------------------
@@ -455,7 +463,14 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
         // Collect values from range args, excluding cells with SUBTOTAL/AGGREGATE formulas
         // and optionally skipping hidden rows
         let flat = self
-            .collect_subtotal_filtered_values(&args[1..], ignore_hidden)
+            .collect_filtered_values(
+                &args[1..],
+                ReferenceFilter {
+                    ignore_hidden,
+                    ignore_filtered: true,
+                    ignore_nested: true,
+                },
+            )
             .await?;
 
         // Dispatch to the appropriate aggregate
@@ -466,7 +481,7 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
     /// `AGGREGATE(func_num, options, array, k)` for array-form functions.
     ///
     /// AGGREGATE is similar to SUBTOTAL but supports more functions and options.
-    /// Options 4-7 include "ignore nested SUBTOTAL/AGGREGATE" behavior.
+    /// Options 0-3 ignore nested SUBTOTAL/AGGREGATE formulas.
     ///
     /// Two calling conventions:
     /// - Reference form (1-13): `AGGREGATE(fn, opts, ref1, ref2, ...)` — all args are data
@@ -505,11 +520,19 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
             Err(e) => return Ok(CellValue::Error(e, None)),
         };
 
-        // Options: 0=none, 1=ignore hidden, 2=ignore errors, 3=both,
-        //          4=ignore nested, 5=1+4, 6=2+4, 7=all
+        // Excel: options 0-3 ignore nested functions; 4-7 include them.
+        // Hidden-row and error suppression are the low two option bits.
+        if !(0..=7).contains(&options) {
+            return Ok(CellValue::Error(CellError::Value, None));
+        }
         let ignore_hidden_agg = options == 1 || options == 3 || options == 5 || options == 7;
         let ignore_errors = options == 2 || options == 3 || options == 6 || options == 7;
-        let ignore_nested = options >= 4;
+        let ignore_nested = options < 4;
+        let reference_filter = ReferenceFilter {
+            ignore_hidden: ignore_hidden_agg,
+            ignore_filtered: ignore_hidden_agg,
+            ignore_nested,
+        };
 
         if func.is_array_form() {
             // Array form: AGGREGATE(fn, opts, array, k)
@@ -531,12 +554,9 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
             // Data args are between options and k
             let data_args = &args[2..args.len() - 1];
 
-            let flat = if ignore_nested {
-                self.collect_subtotal_filtered_values(data_args, ignore_hidden_agg)
-                    .await?
-            } else {
-                self.eval_and_flatten(data_args).await?
-            };
+            let flat = self
+                .collect_filtered_values(data_args, reference_filter)
+                .await?;
 
             // Optionally filter errors
             let filtered: Vec<CellValue> = if ignore_errors {
@@ -557,12 +577,9 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
             // Reference form: AGGREGATE(fn, opts, ref1, ref2, ...)
             let rest_args = &args[2..];
 
-            let flat = if ignore_nested {
-                self.collect_subtotal_filtered_values(rest_args, ignore_hidden_agg)
-                    .await?
-            } else {
-                self.eval_and_flatten(rest_args).await?
-            };
+            let flat = self
+                .collect_filtered_values(rest_args, reference_filter)
+                .await?;
 
             // Optionally filter errors
             let filtered: Vec<CellValue> = if ignore_errors {
@@ -582,187 +599,325 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
         }
     }
 
-    /// Collect cell values from range/ref arguments, excluding cells whose formula
-    /// is a SUBTOTAL or AGGREGATE call.
-    ///
-    /// When `ignore_hidden` is true (SUBTOTAL 101-111, AGGREGATE options 1/3/5/7),
-    /// rows hidden by autofilter or manual hide are also skipped.
-    ///
-    /// For range arguments (A1:B10), individual cells are enumerated and checked.
-    /// For single cell references, the cell is checked.
-    /// For other argument types (expressions, named ranges, etc.), values are
-    /// included without filtering (we can't easily determine source cell identity).
-    pub(in crate::eval) async fn collect_subtotal_filtered_values(
+    /// Keep source identities until row visibility and nested-formula filtering
+    /// have been applied. Computed arrays have no reference identity and retain
+    /// normal evaluation semantics (including AGGREGATE's array-expression rule).
+    async fn collect_filtered_values(
         &mut self,
         args: &[ASTNode],
-        ignore_hidden: bool,
+        filter: ReferenceFilter,
     ) -> Result<Vec<CellValue>, ComputeError> {
         let mut flat = Vec::new();
         for arg in args {
-            self.collect_subtotal_filtered_arg(arg, &mut flat, ignore_hidden)
-                .await?;
+            self.collect_filtered_arg(arg, &mut flat, filter).await?;
         }
         Ok(flat)
     }
 
-    /// Process a single argument for SUBTOTAL, filtering out SUBTOTAL/AGGREGATE cells.
-    pub(in crate::eval) fn collect_subtotal_filtered_arg<'b>(
+    fn collect_filtered_arg<'b>(
         &'b mut self,
         arg: &'b ASTNode,
         out: &'b mut Vec<CellValue>,
-        ignore_hidden: bool,
+        filter: ReferenceFilter,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), ComputeError>> + 'b>> {
         Box::pin(async move {
             self.tick()?;
-            match arg {
-                ASTNode::Range(RangeRef {
-                    start,
-                    end,
-                    range_type,
-                    ..
-                }) => {
-                    self.collect_filtered_range(start, end, range_type, out, ignore_hidden)
-                        .await
-                }
-                ASTNode::CellReference(CellRefNode { reference, .. }) => {
-                    self.collect_filtered_cell_ref(reference, out, ignore_hidden)
-                        .await
-                }
-                ASTNode::SheetRef { inner, .. } => {
-                    self.collect_subtotal_filtered_arg(inner, out, ignore_hidden)
-                        .await
-                }
-                ASTNode::StructuredRef(ref_) => {
-                    self.collect_filtered_structured_ref(ref_, out).await
-                }
-                // For other arg types (named ranges, expressions, etc.),
-                // evaluate normally and include all values (no filtering possible).
-                other => {
-                    let v = self.eval_node_cv(other).await?;
-                    flatten_value(&v, out);
-                    Ok(())
-                }
-            }
+            self.push_depth()?;
+            let result = self.collect_filtered_arg_inner(arg, out, filter).await;
+            self.pop_depth();
+            result
         })
     }
 
-    /// Collect values from a range, skipping SUBTOTAL/AGGREGATE cells
-    /// and optionally hidden rows.
-    pub(in crate::eval) async fn collect_filtered_range(
+    async fn collect_filtered_arg_inner(
+        &mut self,
+        arg: &ASTNode,
+        out: &mut Vec<CellValue>,
+        filter: ReferenceFilter,
+    ) -> Result<(), ComputeError> {
+        match arg {
+            ASTNode::Range(RangeRef {
+                start,
+                end,
+                range_type,
+                ..
+            }) => {
+                self.collect_filtered_range(start, end, range_type, out, filter)
+                    .await
+            }
+            ASTNode::CellReference(CellRefNode { reference, .. }) => {
+                self.collect_filtered_range(
+                    reference,
+                    reference,
+                    &RangeType::CellRange,
+                    out,
+                    filter,
+                )
+                .await
+            }
+            ASTNode::Paren(inner) => self.collect_filtered_arg(inner, out, filter).await,
+            ASTNode::Union { ranges } => {
+                for range in ranges {
+                    self.collect_filtered_arg(range, out, filter).await?;
+                }
+                Ok(())
+            }
+            ASTNode::SheetRef { sheet, inner } => {
+                if let ASTNode::Identifier(name) = inner.as_ref() {
+                    let resolved = self.meta.resolve_defined_name_for_sheet(name, *sheet);
+                    self.collect_filtered_name(resolved, arg, out, filter).await
+                } else {
+                    let patched = Self::patch_sheet_id(inner, *sheet);
+                    self.collect_filtered_arg(&patched, out, filter).await
+                }
+            }
+            ASTNode::UnresolvedSheetRef { sheet_name, inner } => {
+                if let Some(sheet) = self.meta.sheet_by_name(sheet_name) {
+                    let resolved = ASTNode::SheetRef {
+                        sheet,
+                        inner: inner.clone(),
+                    };
+                    self.collect_filtered_arg(&resolved, out, filter).await
+                } else {
+                    out.push(CellValue::Error(CellError::Ref, None));
+                    Ok(())
+                }
+            }
+            ASTNode::ExternalNameRef { workbook, name } if workbook.is_current_workbook() => {
+                let resolved = self.meta.resolve_workbook_name(name);
+                self.collect_filtered_name(resolved, arg, out, filter).await
+            }
+            ASTNode::Identifier(name) if self.get_variable(name).is_none() => {
+                let resolved = self.meta.resolve_defined_name(name);
+                self.collect_filtered_name(resolved, arg, out, filter).await
+            }
+            ASTNode::StructuredRef(reference) => {
+                match self.meta.resolve_structured_ref(reference) {
+                    Ok(resolved) => {
+                        // Structured references may have separate row areas and
+                        // disjoint column selections; never replace them by a
+                        // bounding rectangle that would include unrelated cells.
+                        for range in resolved.ranges {
+                            for row in range.start_row..=range.end_row {
+                                if self.skip_aggregate_row(&resolved.sheet, row, filter) {
+                                    continue;
+                                }
+                                for &col in &range.columns {
+                                    self.collect_filtered_position(
+                                        resolved.sheet,
+                                        row,
+                                        col,
+                                        out,
+                                        filter,
+                                    )
+                                    .await?;
+                                }
+                            }
+                        }
+                    }
+                    Err(error) => out.push(CellValue::Error(error, None)),
+                }
+                Ok(())
+            }
+            ASTNode::Function { name, args } if name.eq_ignore_ascii_case("INDIRECT") => {
+                match self.indirect_reference_node(args).await {
+                    Ok(reference) => self.collect_filtered_arg(&reference, out, filter).await,
+                    Err(ComputeError::Eval { .. }) => {
+                        out.push(CellValue::Error(CellError::Ref, None));
+                        Ok(())
+                    }
+                    Err(error) => Err(error),
+                }
+            }
+            ASTNode::RangeOp { .. }
+            | ASTNode::BinaryOp {
+                op: compute_parser::BinOp::Intersect,
+                ..
+            } => self.collect_filtered_area_arg(arg, out, filter).await,
+            ASTNode::Function { name, .. }
+                if name.eq_ignore_ascii_case("INDEX") || name.eq_ignore_ascii_case("OFFSET") =>
+            {
+                self.collect_filtered_area_arg(arg, out, filter).await
+            }
+            other => {
+                let value = self.eval_node_cv(other).await?;
+                flatten_value(&value, out);
+                Ok(())
+            }
+        }
+    }
+
+    async fn collect_filtered_name(
+        &mut self,
+        resolved: Option<ResolvedName>,
+        original: &ASTNode,
+        out: &mut Vec<CellValue>,
+        filter: ReferenceFilter,
+    ) -> Result<(), ComputeError> {
+        match resolved {
+            Some(ResolvedName::Cell { sheet, row, col }) => {
+                if !self.skip_aggregate_row(&sheet, row, filter) {
+                    self.collect_filtered_position(sheet, row, col, out, filter)
+                        .await?;
+                }
+                Ok(())
+            }
+            Some(ResolvedName::Range {
+                sheet,
+                start_row,
+                start_col,
+                end_row,
+                end_col,
+            }) => {
+                self.collect_filtered_range(
+                    &CellRef::Positional {
+                        sheet,
+                        row: start_row,
+                        col: start_col,
+                    },
+                    &CellRef::Positional {
+                        sheet,
+                        row: end_row,
+                        col: end_col,
+                    },
+                    &RangeType::CellRange,
+                    out,
+                    filter,
+                )
+                .await
+            }
+            Some(ResolvedName::Formula { raw_expression }) => {
+                if let Some(reference) = parse_defined_name_formula(&raw_expression, self.meta) {
+                    self.collect_filtered_arg(&reference, out, filter).await
+                } else {
+                    out.push(CellValue::Error(CellError::Name, None));
+                    Ok(())
+                }
+            }
+            _ => {
+                let value = self.eval_node_cv(original).await?;
+                flatten_value(&value, out);
+                Ok(())
+            }
+        }
+    }
+
+    async fn collect_filtered_area_arg(
+        &mut self,
+        arg: &ASTNode,
+        out: &mut Vec<CellValue>,
+        filter: ReferenceFilter,
+    ) -> Result<(), ComputeError> {
+        match self.eval_node_as_area(arg).await {
+            Ok((sheet, start_row, start_col, end_row, end_col)) => {
+                self.collect_filtered_range(
+                    &CellRef::Positional {
+                        sheet,
+                        row: start_row,
+                        col: start_col,
+                    },
+                    &CellRef::Positional {
+                        sheet,
+                        row: end_row,
+                        col: end_col,
+                    },
+                    &RangeType::CellRange,
+                    out,
+                    filter,
+                )
+                .await
+            }
+            // INDEX can also select from computed arrays; preserve normal
+            // evaluation and its precise error when it is not a reference.
+            Err(ComputeError::Eval { .. }) => {
+                let value = self.eval_node_cv(arg).await?;
+                flatten_value(&value, out);
+                Ok(())
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    fn skip_aggregate_row(
+        &self,
+        sheet: &cell_types::SheetId,
+        row: u32,
+        filter: ReferenceFilter,
+    ) -> bool {
+        (filter.ignore_filtered && self.meta.is_row_filtered(sheet, row))
+            || (filter.ignore_hidden && self.meta.is_row_hidden(sheet, row))
+    }
+
+    async fn collect_filtered_position(
+        &mut self,
+        sheet: cell_types::SheetId,
+        row: u32,
+        col: u32,
+        out: &mut Vec<CellValue>,
+        filter: ReferenceFilter,
+    ) -> Result<(), ComputeError> {
+        self.tick()?;
+        if !filter.ignore_nested || !self.meta.cell_has_subtotal_formula(&sheet, row, col) {
+            out.push(
+                self.data
+                    .get_cell_value_by_ref(&CellRef::Positional { sheet, row, col })
+                    .await,
+            );
+        }
+        Ok(())
+    }
+
+    async fn collect_filtered_range(
         &mut self,
         start: &CellRef,
         end: &CellRef,
-        _range_type: &RangeType,
+        range_type: &RangeType,
         out: &mut Vec<CellValue>,
-        ignore_hidden: bool,
+        filter: ReferenceFilter,
     ) -> Result<(), ComputeError> {
-        let s_pos = match start {
-            CellRef::Resolved(id) => self.meta.resolve_position(id),
-            CellRef::Positional { sheet, row, col } => Some((*sheet, *row, *col)),
+        let Some((sheet, start_row, start_col)) = self.resolve_cell_ref_position(start) else {
+            out.push(CellValue::Error(CellError::Ref, None));
+            return Ok(());
         };
-        let (s_sheet, s_row, s_col) = match s_pos {
-            Some(pos) => pos,
-            None => {
-                out.push(CellValue::Error(CellError::Ref, None));
-                return Ok(());
-            }
+        let Some((end_sheet, end_row, end_col)) = self.resolve_cell_ref_position(end) else {
+            out.push(CellValue::Error(CellError::Ref, None));
+            return Ok(());
         };
-        let e_pos = match end {
-            CellRef::Resolved(id) => self.meta.resolve_position(id),
-            CellRef::Positional { sheet, row, col } => Some((*sheet, *row, *col)),
-        };
-        let (e_sheet, e_row, e_col) = match e_pos {
-            Some(pos) => pos,
-            None => {
-                out.push(CellValue::Error(CellError::Ref, None));
-                return Ok(());
-            }
-        };
-        if s_sheet != e_sheet {
+        if sheet != end_sheet {
             out.push(CellValue::Error(CellError::Ref, None));
             return Ok(());
         }
-
-        let min_row = s_row.min(e_row);
-        let max_row = s_row.max(e_row);
-        let min_col = s_col.min(e_col);
-        let max_col = s_col.max(e_col);
-
-        for r in min_row..=max_row {
-            if ignore_hidden && self.meta.is_row_hidden(&s_sheet, r) {
-                continue; // Skip hidden rows for func codes 101-111
-            }
-            for c in min_col..=max_col {
-                if self.meta.cell_has_subtotal_formula(&s_sheet, r, c) {
-                    continue; // Skip nested SUBTOTAL/AGGREGATE cells
-                }
-                let val = match self.meta.resolve_cell_id(&s_sheet, r, c) {
-                    Some(cell_id) => self.data.get_cell_value(&cell_id).await,
-                    None => CellValue::Null,
-                };
-                out.push(val);
-            }
-        }
-        Ok(())
-    }
-
-    /// Collect value from a single cell reference, skipping if it's SUBTOTAL/AGGREGATE
-    /// or if the row is hidden and `ignore_hidden` is set.
-    pub(in crate::eval) async fn collect_filtered_cell_ref(
-        &mut self,
-        reference: &CellRef,
-        out: &mut Vec<CellValue>,
-        ignore_hidden: bool,
-    ) -> Result<(), ComputeError> {
-        match reference {
-            CellRef::Resolved(id) => {
-                if let Some((sheet, row, col)) = self.meta.resolve_position(id) {
-                    if self.meta.cell_has_subtotal_formula(&sheet, row, col) {
-                        return Ok(()); // Skip
-                    }
-                    if ignore_hidden && self.meta.is_row_hidden(&sheet, row) {
-                        return Ok(()); // Skip hidden row
-                    }
-                }
-                out.push(self.data.get_cell_value(id).await);
-            }
-            CellRef::Positional { sheet, row, col } => {
-                if self.meta.cell_has_subtotal_formula(sheet, *row, *col) {
-                    return Ok(()); // Skip
-                }
-                if ignore_hidden && self.meta.is_row_hidden(sheet, *row) {
-                    return Ok(()); // Skip hidden row
-                }
-                match self.meta.resolve_cell_id(sheet, *row, *col) {
-                    Some(cell_id) => out.push(self.data.get_cell_value(&cell_id).await),
-                    None => out.push(CellValue::Null),
+        // The data provider owns whole-row/column bounds. Obtain its bounded
+        // shape instead of interpreting sentinel endpoint positions as cells.
+        let full_range = if !matches!(range_type, RangeType::CellRange) {
+            match self.data.get_range_values(start, end, range_type).await {
+                Ok(values) if values.rows() > 0 && values.cols() > 0 => Some(values),
+                Ok(_) => return Ok(()),
+                Err(error) => {
+                    out.push(CellValue::Error(error, None));
+                    return Ok(());
                 }
             }
-        }
-        Ok(())
-    }
-
-    /// Collect values from a structured ref, filtering out SUBTOTAL/AGGREGATE cells.
-    pub(in crate::eval) async fn collect_filtered_structured_ref(
-        &mut self,
-        ref_: &crate::table::types::StructuredRef,
-        out: &mut Vec<CellValue>,
-    ) -> Result<(), ComputeError> {
-        // For structured refs, get the resolved ranges and filter cell by cell.
-        // Fall back to normal evaluation if we can't resolve.
-        match self.meta.resolve_structured_ref(ref_) {
-            Ok(resolved) => {
-                let rows = self.fetch_structured_ref_values(&resolved).await;
-                // We got the values but don't have position info.
-                // Structured refs are rare in SUBTOTAL contexts; include all values.
-                for row in &rows {
-                    for v in row {
-                        out.push(v.clone());
-                    }
-                }
+        } else {
+            None
+        };
+        let (min_row, max_row) = if matches!(range_type, RangeType::ColumnRange) {
+            (0, full_range.as_ref().unwrap().rows() as u32 - 1)
+        } else {
+            (start_row.min(end_row), start_row.max(end_row))
+        };
+        let (min_col, max_col) = if matches!(range_type, RangeType::RowRange) {
+            (0, full_range.as_ref().unwrap().cols() as u32 - 1)
+        } else {
+            (start_col.min(end_col), start_col.max(end_col))
+        };
+        for row in min_row..=max_row {
+            if self.skip_aggregate_row(&sheet, row, filter) {
+                continue;
             }
-            Err(e) => {
-                out.push(CellValue::Error(e, None));
+            for col in min_col..=max_col {
+                self.collect_filtered_position(sheet, row, col, out, filter)
+                    .await?;
             }
         }
         Ok(())

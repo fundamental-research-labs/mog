@@ -157,6 +157,13 @@ fn policy_domain(
 mod tests {
     use super::*;
 
+    fn policy_contract_fixture() -> SemanticMergePolicyManifest {
+        serde_json::from_str(include_str!(
+            "../../tests/fixtures/semantic-merge-policy-manifest.json"
+        ))
+        .expect("semantic merge policy contract fixture")
+    }
+
     #[test]
     fn semantic_merge_policy_manifest_lists_first_slice_supported_domains() {
         let manifest = first_slice_semantic_merge_policy_manifest();
@@ -190,5 +197,11 @@ mod tests {
 
         assert_eq!(first_digest, second_digest);
         assert_eq!(first_digest.byte_length, Some(canonical_bytes.len()));
+    }
+
+    #[test]
+    fn semantic_merge_policy_manifest_matches_contract_fixture() {
+        let fixture = policy_contract_fixture();
+        assert_eq!(first_slice_semantic_merge_policy_manifest(), fixture);
     }
 }

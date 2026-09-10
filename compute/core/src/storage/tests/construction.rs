@@ -23,3 +23,14 @@ fn snapshot_initializes_native_sheet_metadata() {
         assert_eq!(storage.sheet_metadata[id].name, sheet.name);
     }
 }
+
+#[test]
+fn metadata_projection_revisions_identify_independent_storage_instances() {
+    let storage = WorkbookStorage::new();
+    let original_revision = storage.metadata_revision();
+    let cloned = storage.clone();
+    assert_ne!(cloned.metadata_revision(), original_revision);
+    storage.invalidate_cell_metadata_projection();
+    assert_ne!(storage.metadata_revision(), original_revision);
+    assert_ne!(storage.metadata_revision(), cloned.metadata_revision());
+}

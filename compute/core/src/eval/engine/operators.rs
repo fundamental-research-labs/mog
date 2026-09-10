@@ -1,5 +1,8 @@
 //! Binary/unary operators, comparison, and array broadcasting.
 
+#[cfg(feature = "dd-precision")]
+use compute_functions::helpers::arithmetic::normalize_formula_value;
+use compute_functions::helpers::arithmetic::{is_formula_zero, normalize_formula_result};
 use compute_functions::helpers::power::try_negative_base_pow;
 use compute_parser::{BinOp, UnaryOp};
 use value_types::{CellArray, CellError, CellValue};
@@ -13,6 +16,22 @@ fn lo_of(val: &CellValue) -> f64 {
         CellValue::Number(n) => n.lo(),
         _ => 0.0,
     }
+}
+
+/// Construct a formula number after applying Excel's arithmetic underflow
+/// boundary.  `CellValue::number` remains a storage/import constructor and is
+/// intentionally not changed to perform this normalization globally.
+#[inline]
+fn formula_number(value: f64) -> CellValue {
+    CellValue::number(normalize_formula_result(value))
+}
+
+/// Construct a double-double formula number while applying the same boundary
+/// to its high/low representation.
+#[cfg(feature = "dd-precision")]
+#[inline]
+fn formula_number_dd(hi: f64, lo: f64) -> CellValue {
+    normalize_formula_value(CellValue::number_dd(hi, lo))
 }
 
 pub(in crate::eval) fn eval_binary_op(op: BinOp, left: &CellValue, right: &CellValue) -> CellValue {
@@ -69,10 +88,10 @@ pub(in crate::eval) fn eval_binary_op(op: BinOp, left: &CellValue, right: &CellV
                     {
                         let r = value_types::F64x2::new(ln, lo_of(left))
                             + value_types::F64x2::new(rn, lo_of(right));
-                        CellValue::number_dd(r.hi(), r.lo())
+                        formula_number_dd(r.hi(), r.lo())
                     }
                     #[cfg(not(feature = "dd-precision"))]
-                    CellValue::number(ln + rn)
+                    formula_number(ln + rn)
                 }
                 BinOp::Sub => {
                     #[cfg(feature = "dd-precision")]
@@ -81,7 +100,7 @@ pub(in crate::eval) fn eval_binary_op(op: BinOp, left: &CellValue, right: &CellV
                         // no need for the snap-to-15-digit cancellation heuristic.
                         let r = value_types::F64x2::new(ln, lo_of(left))
                             - value_types::F64x2::new(rn, lo_of(right));
-                        CellValue::number_dd(r.hi(), r.lo())
+                        formula_number_dd(r.hi(), r.lo())
                     }
                     #[cfg(not(feature = "dd-precision"))]
                     {
@@ -93,9 +112,9 @@ pub(in crate::eval) fn eval_binary_op(op: BinOp, left: &CellValue, right: &CellV
                         // Return exact 0 to match Excel's behavior for check rows
                         // like Total_Assets - Total_Liabilities.
                         if result != 0.0 && subtraction_cancels_at_15_digits(ln, rn) {
-                            return CellValue::number(0.0);
+                            return formula_number(0.0);
                         }
-                        CellValue::number(result)
+                        formula_number(result)
                     }
                 }
                 BinOp::Mul => {
@@ -103,23 +122,23 @@ pub(in crate::eval) fn eval_binary_op(op: BinOp, left: &CellValue, right: &CellV
                     {
                         let r = value_types::F64x2::new(ln, lo_of(left))
                             * value_types::F64x2::new(rn, lo_of(right));
-                        CellValue::number_dd(r.hi(), r.lo())
+                        formula_number_dd(r.hi(), r.lo())
                     }
                     #[cfg(not(feature = "dd-precision"))]
-                    CellValue::number(ln * rn)
+                    formula_number(ln * rn)
                 }
                 BinOp::Div => {
-                    if rn == 0.0 {
+                    if is_formula_zero(rn) {
                         CellValue::Error(CellError::Div0, None)
                     } else {
                         #[cfg(feature = "dd-precision")]
                         {
                             let r = value_types::F64x2::new(ln, lo_of(left))
                                 / value_types::F64x2::new(rn, lo_of(right));
-                            CellValue::number_dd(r.hi(), r.lo())
+                            formula_number_dd(r.hi(), r.lo())
                         }
                         #[cfg(not(feature = "dd-precision"))]
-                        CellValue::number(ln / rn)
+                        formula_number(ln / rn)
                     }
                 }
                 BinOp::Pow => {
@@ -128,7 +147,7 @@ pub(in crate::eval) fn eval_binary_op(op: BinOp, left: &CellValue, right: &CellV
                         if rn == 0.0 {
                             return CellValue::Error(CellError::Num, None); // Excel: 0^0 = #NUM!
                         } else if rn > 0.0 {
-                            return CellValue::number(0.0);
+                            return formula_number(0.0);
                         } else {
                             return CellValue::Error(CellError::Div0, None); // 0^negative = #DIV/0!
                         }
@@ -144,14 +163,14 @@ pub(in crate::eval) fn eval_binary_op(op: BinOp, left: &CellValue, right: &CellV
                     }
                     // 3. 1^anything = 1
                     if ln == 1.0 {
-                        return CellValue::number(1.0);
+                        return formula_number(1.0);
                     }
                     // 4. |exp| >= 1e308 -> #NUM! (except small positive base + huge negative exp -> 0)
                     if rn.abs() >= 1e308 {
                         if ln > 0.0 && rn < 0.0 {
                             // Any positive base with huge negative exp underflows to 0
                             // (ln=1 already handled above)
-                            return CellValue::number(0.0);
+                            return formula_number(0.0);
                         }
                         return CellValue::Error(CellError::Num, None);
                     }
@@ -159,7 +178,7 @@ pub(in crate::eval) fn eval_binary_op(op: BinOp, left: &CellValue, right: &CellV
                     const MAX_SAFE_INT: f64 = 9_007_199_254_740_992.0;
                     if rn.abs() > MAX_SAFE_INT {
                         if ln > 0.0 && rn < 0.0 {
-                            return CellValue::number(0.0);
+                            return formula_number(0.0);
                         }
                         return CellValue::Error(CellError::Num, None);
                     }
@@ -170,7 +189,7 @@ pub(in crate::eval) fn eval_binary_op(op: BinOp, left: &CellValue, right: &CellV
                     // 7. (-1)^n
                     if ln == -1.0 {
                         let is_even = rn % 2.0 == 0.0;
-                        return CellValue::number(if is_even { 1.0 } else { -1.0 });
+                        return formula_number(if is_even { 1.0 } else { -1.0 });
                     }
                     let r = ln.powf(rn);
                     if r.is_nan() || r.is_infinite() {
@@ -182,7 +201,7 @@ pub(in crate::eval) fn eval_binary_op(op: BinOp, left: &CellValue, right: &CellV
                             CellValue::Error(CellError::Num, None)
                         }
                     } else {
-                        CellValue::number(r)
+                        formula_number(r)
                     }
                 }
                 _ => unreachable!(),
@@ -244,12 +263,12 @@ pub(in crate::eval) fn eval_unary_op(op: UnaryOp, val: &CellValue) -> CellValue 
             // This matches Lotus 1-2-3 compatibility: +expr is identity for text values.
             match val {
                 CellValue::Text(_) => match val.coerce_to_number() {
-                    Ok(n) => CellValue::number(n),
+                    Ok(n) => formula_number(n),
                     Err(_) => val.clone(),
                 },
-                CellValue::Null => CellValue::number(0.0),
+                CellValue::Null => formula_number(0.0),
                 _ => match val.coerce_to_number() {
-                    Ok(n) => CellValue::number(n),
+                    Ok(n) => formula_number(n),
                     Err(e) => CellValue::Error(e, None),
                 },
             }
@@ -258,10 +277,10 @@ pub(in crate::eval) fn eval_unary_op(op: UnaryOp, val: &CellValue) -> CellValue 
             Ok(n) => {
                 #[cfg(feature = "dd-precision")]
                 {
-                    CellValue::number_dd(-n, -lo_of(val))
+                    formula_number_dd(-n, -lo_of(val))
                 }
                 #[cfg(not(feature = "dd-precision"))]
-                CellValue::number(-n)
+                formula_number(-n)
             }
             Err(e) => CellValue::Error(e, None),
         },
@@ -271,10 +290,10 @@ pub(in crate::eval) fn eval_unary_op(op: UnaryOp, val: &CellValue) -> CellValue 
                 {
                     let r =
                         value_types::F64x2::new(n, lo_of(val)) / value_types::F64x2::from(100.0);
-                    CellValue::number_dd(r.hi(), r.lo())
+                    formula_number_dd(r.hi(), r.lo())
                 }
                 #[cfg(not(feature = "dd-precision"))]
-                CellValue::number(n / 100.0)
+                formula_number(n / 100.0)
             }
             Err(e) => CellValue::Error(e, None),
         },

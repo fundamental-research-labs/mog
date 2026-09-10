@@ -5,8 +5,8 @@ engine's mutation APIs return `MutationResult` directly; this crate handles
 viewport data requested by rendering and screenshot consumers.
 
 The crate provides cell flags, byte-layout constants, viewport render types,
-format-palette interning and serialization, and filtering of viewport buffers
-according to sheet access rules. All multi-byte values are little-endian.
+format-palette interning and serialization, and conditional-format render data.
+All multi-byte values are little-endian.
 
 ## Viewport format
 
@@ -44,7 +44,7 @@ its own string pool.
 ## Verification
 
 Unit and integration tests cover viewport serialization, palette roundtrips,
-conditional formatting, strings, malformed buffers, and access filtering.
+conditional formatting, strings, and malformed buffers.
 The `test-utils` feature exposes the viewport deserializer for downstream tests.
 
 ```sh

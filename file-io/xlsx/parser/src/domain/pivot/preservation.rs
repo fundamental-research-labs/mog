@@ -51,7 +51,7 @@ pub(crate) const FIELD_TYPED_ATTRS: &[&str] = &[
 ];
 
 pub(crate) const ITEM_TYPED_ATTRS: &[&str] = &["t", "x", "h", "sd", "s"];
-pub(crate) const ROW_COL_ITEM_TYPED_ATTRS: &[&str] = &["t"];
+pub(crate) const ROW_COL_ITEM_TYPED_ATTRS: &[&str] = &["t", "i"];
 
 const TYPED_ROOT_CHILDREN: &[&str] = &[
     "location",
@@ -323,4 +323,58 @@ mod tests {
             r#"<autoSortScope><pivotArea><references><reference field="4294967294"><x v="0"/></reference></references></pivotArea></autoSortScope>"#
         );
     }
+}
+
+/// Keep cache metadata scoped to its owning root/field; generated values and
+/// relationship IDs remain authoritative during export.
+pub(crate) fn capture_cache_preservation(
+    xml: &[u8],
+) -> Option<domain_types::domain::pivot::PivotCacheOoxmlPreservation> {
+    use crate::domain::pivot::reader::elements::first_element_span;
+    use domain_types::domain::pivot::PivotCacheOoxmlPreservation;
+    let root = first_element_span(xml, b"pivotCacheDefinition", 0)?;
+    let tag = &xml[root.start..root.tag_end];
+    let mut result = PivotCacheOoxmlPreservation {
+        root_namespace_declarations: collect_attrs(tag, &[], true),
+        root_attributes: collect_attrs(tag, &["id", "recordCount"], false),
+        children: collect_direct_children(xml, root, &["cacheSource", "cacheFields"]),
+        fields: Vec::new(),
+    };
+    if let Some(fields) = find_child_span(xml, root, b"cacheFields") {
+        let mut pos = fields.tag_end;
+        while let Some(start) = find_child_start(xml, fields, b"cacheField", pos) {
+            let Some(span) = element_span_at(xml, b"cacheField", start) else {
+                break;
+            };
+            result.fields.push(PivotFieldOoxmlPreservation {
+                attributes: collect_attrs(
+                    &xml[span.start..span.tag_end],
+                    &[
+                        "name",
+                        "caption",
+                        "numFmtId",
+                        "formula",
+                        "sqlType",
+                        "hierarchy",
+                        "level",
+                        "databaseField",
+                        "uniqueList",
+                        "memberPropertyField",
+                        "serverField",
+                        "propertyName",
+                        "mappingCount",
+                    ],
+                    false,
+                ),
+                children: if span.self_closing {
+                    Vec::new()
+                } else {
+                    collect_direct_children(xml, span, &["sharedItems", "fieldGroup"])
+                },
+                ..Default::default()
+            });
+            pos = span.end;
+        }
+    }
+    Some(result)
 }

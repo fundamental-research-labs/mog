@@ -3,6 +3,19 @@ use value_types::{CellError, CellValue};
 use crate::helpers::coercion::check_error;
 use crate::{FunctionRegistry, PureFunction};
 
+const TEXT_LIMIT: usize = 32_767;
+
+fn format_text_result(name: &str, formatted: String) -> CellValue {
+    if formatted.chars().count() > TEXT_LIMIT {
+        CellValue::error_with_message(
+            CellError::Value,
+            format!("{name}: result exceeds 32767 character limit"),
+        )
+    } else {
+        CellValue::Text(formatted.into())
+    }
+}
+
 pub(super) struct FnDollar;
 impl PureFunction for FnDollar {
     fn is_scalar_arg(&self, _index: usize) -> bool {
@@ -30,14 +43,23 @@ impl PureFunction for FnDollar {
                 return e;
             }
             match args[1].coerce_to_number() {
-                Ok(d) => d as i32,
+                Ok(d) => {
+                    let decimals = d as i32;
+                    if decimals > TEXT_LIMIT as i32 {
+                        return CellValue::error_with_message(
+                            CellError::Value,
+                            "DOLLAR: decimals would exceed the 32767 character limit",
+                        );
+                    }
+                    decimals
+                }
                 Err(e) => return CellValue::Error(e, None),
             }
         } else {
             2
         };
 
-        CellValue::Text(compute_formats::format_dollar(number, decimals).into())
+        format_text_result("DOLLAR", compute_formats::format_dollar(number, decimals))
     }
 }
 
@@ -68,7 +90,16 @@ impl PureFunction for FnFixed {
                 return e;
             }
             match args[1].coerce_to_number() {
-                Ok(d) => d as i32,
+                Ok(d) => {
+                    let decimals = d as i32;
+                    if decimals > TEXT_LIMIT as i32 {
+                        return CellValue::error_with_message(
+                            CellError::Value,
+                            "FIXED: decimals would exceed the 32767 character limit",
+                        );
+                    }
+                    decimals
+                }
                 Err(e) => return CellValue::Error(e, None),
             }
         } else {
@@ -86,7 +117,10 @@ impl PureFunction for FnFixed {
             false
         };
 
-        CellValue::Text(compute_formats::format_fixed(number, decimals, no_commas).into())
+        format_text_result(
+            "FIXED",
+            compute_formats::format_fixed(number, decimals, no_commas),
+        )
     }
 }
 

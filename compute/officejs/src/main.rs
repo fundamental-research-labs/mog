@@ -7,7 +7,7 @@ use compute_api::Workbook;
 use mog::{OfficeJsError, run_office_js, run_office_js_with_workbook};
 
 fn usage() -> String {
-    "Usage: mog <script.js>\n       mog --eval <source>\n       mog save [--recalculate] <in.xlsx> <out.xlsx>\n       mog run [--recalculate] <in.xlsx> <script.js> <out.xlsx>\n".to_string()
+    "Usage:\n  mog save [--recalculate] <in.xlsx> <out.xlsx>\n  mog run [--recalculate] <in.xlsx> <script.js> <out.xlsx>\n  mog [--eval] <script.js>\n\nSave preserves formula caches by default. --recalculate evaluates formulas before export.\n".to_string()
 }
 
 fn main() -> ExitCode {

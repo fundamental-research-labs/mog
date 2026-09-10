@@ -7,17 +7,20 @@
 //!
 //! Ported from `table-engine/src/filter.ts`.
 
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
 use super::compare::{build_value_key_set, compare_values, type_rank, value_in_key_set};
-use super::filter_resolve::{evaluate_top_bottom_direct, resolve_dynamic_filter};
+use super::filter_resolve::{
+    evaluate_top_bottom_direct, resolve_dynamic_filter, resolve_dynamic_filter_with_date_system,
+};
 use super::types::{
     ConditionFilter, FilterCriteria, FilterLogic, FilterOperator, TableColorFilter,
     TableFilterCondition, TableFilterState, ValueFilter,
 };
 use domain_types::CellFormat;
-use value_types::{CellValue, Color};
+use value_types::{CellValue, Color, DateSystem};
 
 // =============================================================================
 // TableFilterState CRUD (all return new TableFilterState)
@@ -83,7 +86,7 @@ pub fn has_active_filters(state: &TableFilterState) -> bool {
 /// pass this explicitly so that filter evaluation is deterministic and testable.
 ///
 /// `column_formats` carries one resolved `CellFormat` per data row. It is
-/// **required** when `criteria` is `Color` or `Icon` (the predicate consults
+/// **required** when `criteria` is `Color` (the predicate consults
 /// per-cell fill / font color); otherwise it is ignored. Callers that don't
 /// support color filters may pass `None`.
 pub fn evaluate_column_filter(
@@ -93,9 +96,93 @@ pub fn evaluate_column_filter(
     now: Option<chrono::NaiveDate>,
     week_start_day: Option<chrono::Weekday>,
 ) -> Vec<u8> {
+    evaluate_column_filter_with_icons(
+        criteria,
+        column_data,
+        column_formats,
+        None,
+        now,
+        week_start_day,
+    )
+}
+
+/// Evaluate a filter using the workbook's date serial system for dynamic
+/// calendar rules.  Other criteria retain the same behavior as
+/// `evaluate_column_filter`.
+pub fn evaluate_column_filter_with_date_system(
+    criteria: &FilterCriteria,
+    column_data: &[CellValue],
+    column_formats: Option<&[CellFormat]>,
+    now: Option<chrono::NaiveDate>,
+    week_start_day: Option<chrono::Weekday>,
+    date_system: DateSystem,
+) -> Vec<u8> {
+    evaluate_column_filter_with_icons_and_date_system(
+        criteria,
+        column_data,
+        column_formats,
+        None,
+        now,
+        week_start_day,
+        date_system,
+    )
+}
+
+/// Evaluate with one fresh, canonical CF icon identity per row. Missing context
+/// cannot prove any row matches an icon criterion; it never means all-pass.
+pub fn evaluate_column_filter_with_icons(
+    criteria: &FilterCriteria,
+    column_data: &[CellValue],
+    column_formats: Option<&[CellFormat]>,
+    column_icons: Option<&[Option<domain_types::FilterIconIdentity>]>,
+    now: Option<chrono::NaiveDate>,
+    week_start_day: Option<chrono::Weekday>,
+) -> Vec<u8> {
+    evaluate_column_filter_with_icons_internal(
+        criteria,
+        column_data,
+        column_formats,
+        column_icons,
+        now,
+        week_start_day,
+        None,
+    )
+}
+
+/// Evaluate with icon context and an explicit workbook date serial system.
+pub fn evaluate_column_filter_with_icons_and_date_system(
+    criteria: &FilterCriteria,
+    column_data: &[CellValue],
+    column_formats: Option<&[CellFormat]>,
+    column_icons: Option<&[Option<domain_types::FilterIconIdentity>]>,
+    now: Option<chrono::NaiveDate>,
+    week_start_day: Option<chrono::Weekday>,
+    date_system: DateSystem,
+) -> Vec<u8> {
+    evaluate_column_filter_with_icons_internal(
+        criteria,
+        column_data,
+        column_formats,
+        column_icons,
+        now,
+        week_start_day,
+        Some(date_system),
+    )
+}
+
+fn evaluate_column_filter_with_icons_internal(
+    criteria: &FilterCriteria,
+    column_data: &[CellValue],
+    column_formats: Option<&[CellFormat]>,
+    column_icons: Option<&[Option<domain_types::FilterIconIdentity>]>,
+    now: Option<chrono::NaiveDate>,
+    week_start_day: Option<chrono::Weekday>,
+    date_system: Option<DateSystem>,
+) -> Vec<u8> {
     let len = column_data.len();
 
-    // TopBottom: use index-based evaluation to correctly handle ties
+    // TopBottom: evaluate from the numeric cutoff so ties at the boundary are
+    // included consistently with Excel.
     if let FilterCriteria::TopBottom(tb) = criteria {
         return evaluate_top_bottom_direct(tb, column_data);
     }
@@ -120,17 +207,37 @@ pub fn evaluate_column_filter(
         };
     }
 
-    // Icon filters are evaluated by the bridge layer (requires CF rule context).
-    // Return all-visible bitmap as a no-op at the engine level.
-    if let FilterCriteria::Icon(_) = criteria {
-        return vec![1u8; len];
+    if let FilterCriteria::Icon(filter) = criteria {
+        return (0..len)
+            .map(|row| {
+                let Some(icon) = column_icons.and_then(|icons| icons.get(row)) else {
+                    return 0;
+                };
+                u8::from(match (filter.icon_index, icon) {
+                    (None, None) => true,
+                    (Some(index), Some(icon)) => {
+                        icon.icon_set_name == filter.icon_set_name && icon.icon_index == index
+                    }
+                    _ => false,
+                })
+            })
+            .collect();
     }
 
     // Resolve data-dependent filters to concrete form
     let resolved: FilterCriteria;
     let criteria_ref = if let FilterCriteria::Dynamic(dyn_filter) = criteria {
         let wsd = week_start_day.unwrap_or(chrono::Weekday::Sun);
-        resolved = resolve_dynamic_filter(dyn_filter, column_data, now, wsd);
+        resolved = match date_system {
+            Some(date_system) => resolve_dynamic_filter_with_date_system(
+                dyn_filter,
+                column_data,
+                now,
+                wsd,
+                date_system,
+            ),
+            None => resolve_dynamic_filter(dyn_filter, column_data, now, wsd),
+        };
         &resolved
     } else {
         criteria
@@ -209,11 +316,8 @@ fn cell_matches_criteria(
             unreachable!("ValueFilter should use matches_value_filter_fast");
         }
         FilterCriteria::Condition(cf) => matches_condition_filter(value, cf, precomputed_cond_str),
-        // Color is handled via the per-row format-aware path in
-        // evaluate_column_filter and never reaches this dispatch. Icon still
-        // requires CF-rule context (out of scope for the pure engine) so it
-        // passes through.
-        FilterCriteria::Icon(_) => true,
+        // Visual filters are handled above with explicit per-row context.
+        FilterCriteria::Icon(_) => unreachable!("Icon filters require per-row CF identity context"),
         FilterCriteria::Color(_) => {
             unreachable!(
                 "Color filters are dispatched in evaluate_column_filter via column_formats"
@@ -243,6 +347,10 @@ pub(crate) fn matches_value_filter_fast(
     }
 
     value_in_key_set(value, key_set)
+        || filter
+            .included
+            .iter()
+            .any(|criterion| numeric_value_matches_text(value, criterion))
 }
 
 // =============================================================================
@@ -284,7 +392,8 @@ pub(crate) fn matches_condition_filter(
 /// between, notBetween, isBlank, isNotBlank.
 ///
 /// Semantics:
-/// - Type compatibility: values are comparable only if they have the same type_rank.
+/// - Type compatibility: values are comparable only if they have the same type_rank,
+///   except that numeric row values accept parseable lexical numeric criteria.
 ///   Type mismatch -> false for positive operators, true for negative operators.
 /// - NaN: matches only notEquals, notBetween, isNotBlank.
 ///   String operators (beginsWith, etc.) fall through to treat NaN as "NaN" string.
@@ -298,6 +407,16 @@ pub(crate) fn matches_single_condition(
     let value_is_blank = value.is_visually_blank();
     let op = &condition.operator;
 
+    // OOXML stores custom filter operands as lexical text, even when the
+    // filtered column contains numbers. Preserve that lexical representation
+    // at the persistence boundary, but compare it numerically at evaluation
+    // time when the row value proves that the column is numeric.
+    let condition_value = if is_numeric_comparison_operator(op) {
+        normalize_numeric_condition_value(value, &condition.value)
+    } else {
+        Cow::Borrowed(&condition.value)
+    };
+
     // FiniteF64 can never be NaN, so no NaN guard needed.
 
     match op {
@@ -305,41 +424,41 @@ pub(crate) fn matches_single_condition(
             if value_is_blank {
                 return false;
             }
-            if !types_compatible(value, &condition.value) {
+            if !types_compatible(value, condition_value.as_ref()) {
                 return false;
             }
-            compare_values(value, &condition.value) == Ordering::Equal
+            compare_values(value, condition_value.as_ref()) == Ordering::Equal
         }
 
         FilterOperator::NotEquals => {
             if value_is_blank {
                 return true;
             }
-            if !types_compatible(value, &condition.value) {
+            if !types_compatible(value, condition_value.as_ref()) {
                 return true;
             }
-            compare_values(value, &condition.value) != Ordering::Equal
+            compare_values(value, condition_value.as_ref()) != Ordering::Equal
         }
 
         FilterOperator::GreaterThan => {
             if value_is_blank {
                 return false;
             }
-            if !types_compatible(value, &condition.value) {
+            if !types_compatible(value, condition_value.as_ref()) {
                 return false;
             }
-            compare_values(value, &condition.value) == Ordering::Greater
+            compare_values(value, condition_value.as_ref()) == Ordering::Greater
         }
 
         FilterOperator::GreaterThanOrEqual => {
             if value_is_blank {
                 return false;
             }
-            if !types_compatible(value, &condition.value) {
+            if !types_compatible(value, condition_value.as_ref()) {
                 return false;
             }
             matches!(
-                compare_values(value, &condition.value),
+                compare_values(value, condition_value.as_ref()),
                 Ordering::Greater | Ordering::Equal
             )
         }
@@ -348,21 +467,21 @@ pub(crate) fn matches_single_condition(
             if value_is_blank {
                 return false;
             }
-            if !types_compatible(value, &condition.value) {
+            if !types_compatible(value, condition_value.as_ref()) {
                 return false;
             }
-            compare_values(value, &condition.value) == Ordering::Less
+            compare_values(value, condition_value.as_ref()) == Ordering::Less
         }
 
         FilterOperator::LessThanOrEqual => {
             if value_is_blank {
                 return false;
             }
-            if !types_compatible(value, &condition.value) {
+            if !types_compatible(value, condition_value.as_ref()) {
                 return false;
             }
             matches!(
-                compare_values(value, &condition.value),
+                compare_values(value, condition_value.as_ref()),
                 Ordering::Less | Ordering::Equal
             )
         }
@@ -423,22 +542,26 @@ pub(crate) fn matches_single_condition(
             if value_is_blank {
                 return false;
             }
-            if !types_compatible(value, &condition.value) {
+            if !types_compatible(value, condition_value.as_ref()) {
                 return false;
             }
-            let value2 = condition
-                .value2
-                .as_ref()
-                .cloned()
-                .unwrap_or(CellValue::Null);
-            if !types_compatible(value, &value2) {
+            let value2 = condition.value2.as_ref().map(|criterion| {
+                if is_numeric_comparison_operator(op) {
+                    normalize_numeric_condition_value(value, criterion)
+                } else {
+                    Cow::Borrowed(criterion)
+                }
+            });
+            let null_value = CellValue::Null;
+            let value2 = value2.as_deref().unwrap_or(&null_value);
+            if !types_compatible(value, value2) {
                 return false;
             }
             matches!(
-                compare_values(value, &condition.value),
+                compare_values(value, condition_value.as_ref()),
                 Ordering::Greater | Ordering::Equal
             ) && matches!(
-                compare_values(value, &value2),
+                compare_values(value, value2),
                 Ordering::Less | Ordering::Equal
             )
         }
@@ -450,19 +573,23 @@ pub(crate) fn matches_single_condition(
                 // blanks pass all negative/exclusion operators.
                 return true;
             }
-            if !types_compatible(value, &condition.value) {
+            if !types_compatible(value, condition_value.as_ref()) {
                 return true;
             }
-            let value2 = condition
-                .value2
-                .as_ref()
-                .cloned()
-                .unwrap_or(CellValue::Null);
-            if !types_compatible(value, &value2) {
+            let value2 = condition.value2.as_ref().map(|criterion| {
+                if is_numeric_comparison_operator(op) {
+                    normalize_numeric_condition_value(value, criterion)
+                } else {
+                    Cow::Borrowed(criterion)
+                }
+            });
+            let null_value = CellValue::Null;
+            let value2 = value2.as_deref().unwrap_or(&null_value);
+            if !types_compatible(value, value2) {
                 return true;
             }
-            compare_values(value, &condition.value) == Ordering::Less
-                || compare_values(value, &value2) == Ordering::Greater
+            compare_values(value, condition_value.as_ref()) == Ordering::Less
+                || compare_values(value, value2) == Ordering::Greater
         }
 
         FilterOperator::IsBlank => value_is_blank,
@@ -481,6 +608,57 @@ pub(crate) fn matches_single_condition(
 /// This matches Excel behavior where type-mismatched comparisons fail.
 fn types_compatible(a: &CellValue, b: &CellValue) -> bool {
     type_rank(a) == type_rank(b)
+}
+
+/// Numeric comparison operators accept the lexical numeric operands emitted by
+/// OOXML custom filters. String operators intentionally keep their existing
+/// stringification semantics.
+fn is_numeric_comparison_operator(operator: &FilterOperator) -> bool {
+    matches!(
+        operator,
+        FilterOperator::Equals
+            | FilterOperator::NotEquals
+            | FilterOperator::GreaterThan
+            | FilterOperator::GreaterThanOrEqual
+            | FilterOperator::LessThan
+            | FilterOperator::LessThanOrEqual
+            | FilterOperator::Between
+            | FilterOperator::NotBetween
+    )
+}
+
+/// Coerce a textual criterion to a number only when the row value is already
+/// numeric. This keeps text columns type-strict while allowing imported
+/// numeric-column criteria such as `greaterThan val="10"` to evaluate as Excel
+/// does. Text rows retain the original text criterion and existing text
+/// comparison semantics. Invalid and non-finite text remains text and
+/// therefore retains the normal type-mismatch behavior for numeric rows.
+fn normalize_numeric_condition_value<'a>(
+    value: &CellValue,
+    criterion: &'a CellValue,
+) -> Cow<'a, CellValue> {
+    if let (CellValue::Number(_), CellValue::Text(text)) = (value, criterion) {
+        if let Ok(number) = text.trim().parse::<f64>() {
+            if number.is_finite() {
+                return Cow::Owned(CellValue::number(number));
+            }
+        }
+    }
+    Cow::Borrowed(criterion)
+}
+
+/// Match a numeric cell against a lexical numeric value from a Values filter.
+/// Values filters retain strict type identity for all other pairs, so a text
+/// value such as `"5"` still matches text cells and only matches numeric cells
+/// after successful numeric parsing.
+fn numeric_value_matches_text(value: &CellValue, criterion: &CellValue) -> bool {
+    let (CellValue::Number(actual), CellValue::Text(text)) = (value, criterion) else {
+        return false;
+    };
+    let Ok(expected) = text.trim().parse::<f64>() else {
+        return false;
+    };
+    expected.is_finite() && actual.get() == expected
 }
 
 /// Match a resolved CellFormat against a color filter criterion.

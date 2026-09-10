@@ -3,10 +3,14 @@
 use super::helpers::engine_from_parse_output_normal;
 use crate::snapshot::{MutationResult, RuntimeDiagnosticsOptions};
 use cell_types::SheetId;
-use domain_types::domain::table::{FilterColumnSpec, FilterSpec, TableColumnSpec, TableSpec};
-use domain_types::{AutoFilter, FilterColumn, OoxmlFilterType, ParseOutput, SheetData};
+use domain_types::domain::table::{
+    CustomFilterSpec, FilterColumnSpec, FilterSpec, TableColumnSpec, TableSpec,
+};
+use domain_types::{
+    AutoFilter, FilterColumn, OoxmlFilterCondition, OoxmlFilterType, ParseOutput, SheetData,
+};
 use std::sync::Arc;
-use value_types::CellValue;
+use value_types::{CellValue, FiniteF64};
 
 #[test]
 fn deleted_imported_auto_filter_does_not_export_stale_lossless_metadata() {
@@ -201,6 +205,170 @@ fn imported_table_autofilter_materializes_runtime_table_filter() {
             .iter()
             .any(|info| info.col == 1 && info.has_active_filter && info.button_visible)
     );
+}
+
+#[test]
+fn imported_sheet_numeric_custom_filter_coerces_lexical_operand() {
+    let input = ParseOutput {
+        sheets: vec![SheetData {
+            name: "ImportedNumericSheetFilter".to_string(),
+            rows: 5,
+            cols: 1,
+            cells: numeric_filter_cells(),
+            auto_filter: Some(AutoFilter {
+                range_ref: "A1:A5".to_string(),
+                columns: vec![FilterColumn {
+                    col_index: 0,
+                    filter_type: Some(OoxmlFilterType::Custom {
+                        conditions: vec![OoxmlFilterCondition {
+                            operator: "greaterThan".to_string(),
+                            value: CellValue::Text(Arc::from("2")),
+                            value2: None,
+                        }],
+                        and_logic: false,
+                    }),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let engine = engine_from_parse_output_normal(&input);
+    let sheet_id =
+        SheetId::from_uuid_str(&engine.get_all_sheet_ids()[0]).expect("valid hydrated sheet id");
+
+    // Header row is 0; values 1 and 2 at rows 1 and 2 are hidden by >2.
+    assert_eq!(engine.get_hidden_rows(&sheet_id), vec![1, 2]);
+
+    let exported = engine
+        .export_to_parse_output()
+        .expect("export numeric sheet filter")
+        .parse_output;
+    let exported_filter_type = exported.sheets[0].auto_filter.as_ref().unwrap().columns[0]
+        .filter_type
+        .as_ref()
+        .unwrap();
+    match exported_filter_type {
+        OoxmlFilterType::Custom { conditions, .. } => {
+            assert_eq!(conditions[0].value, CellValue::Text(Arc::from("2")));
+        }
+        other => panic!("expected exported custom filter, got {other:?}"),
+    }
+}
+
+#[test]
+fn imported_table_numeric_custom_filter_coerces_lexical_operand() {
+    let input = ParseOutput {
+        sheets: vec![SheetData {
+            name: "ImportedNumericTableFilter".to_string(),
+            rows: 5,
+            cols: 1,
+            cells: numeric_filter_cells(),
+            tables: vec![numeric_table_spec(vec![FilterColumnSpec {
+                col_id: 0,
+                hidden_button: false,
+                show_button: true,
+                filter: FilterSpec::Custom {
+                    and: false,
+                    filters: vec![CustomFilterSpec {
+                        operator: "greaterThan".to_string(),
+                        val: "2".to_string(),
+                    }],
+                },
+                ext_lst_raw: None,
+            }])],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let engine = engine_from_parse_output_normal(&input);
+    let sheet_id =
+        SheetId::from_uuid_str(&engine.get_all_sheet_ids()[0]).expect("valid hydrated sheet id");
+
+    // The table projection stores the OOXML custom operand as text and the
+    // runtime evaluator must still apply numeric comparison to rows 1..4.
+    assert_eq!(engine.get_hidden_rows(&sheet_id), vec![1, 2]);
+
+    let exported = engine
+        .export_to_parse_output()
+        .expect("export numeric table filter")
+        .parse_output;
+    match &exported.sheets[0].tables[0].filter_columns[0].filter {
+        FilterSpec::Custom { filters, .. } => {
+            assert_eq!(filters[0].val, "2");
+        }
+        other => panic!("expected exported custom table filter, got {other:?}"),
+    }
+}
+
+#[test]
+fn imported_table_numeric_values_filter_coerces_lexical_operand() {
+    let input = ParseOutput {
+        sheets: vec![SheetData {
+            name: "ImportedNumericTableValuesFilter".to_string(),
+            rows: 5,
+            cols: 1,
+            cells: numeric_filter_cells(),
+            tables: vec![numeric_table_spec(vec![FilterColumnSpec {
+                col_id: 0,
+                hidden_button: false,
+                show_button: true,
+                filter: FilterSpec::Values {
+                    blank: false,
+                    values: vec!["2".to_string()],
+                    calendar_type: None,
+                    date_group_items: Vec::new(),
+                },
+                ext_lst_raw: None,
+            }])],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let engine = engine_from_parse_output_normal(&input);
+    let sheet_id =
+        SheetId::from_uuid_str(&engine.get_all_sheet_ids()[0]).expect("valid hydrated sheet id");
+
+    // Only the numeric value 2 (row 2) is selected by the lexical value.
+    assert_eq!(engine.get_hidden_rows(&sheet_id), vec![1, 3, 4]);
+}
+
+#[test]
+fn imported_table_top_bottom_filter_includes_boundary_ties() {
+    let input = ParseOutput {
+        sheets: vec![SheetData {
+            name: "ImportedNumericTopFilter".to_string(),
+            rows: 5,
+            cols: 1,
+            cells: numeric_tie_filter_cells(),
+            tables: vec![numeric_table_spec(vec![FilterColumnSpec {
+                col_id: 0,
+                hidden_button: false,
+                show_button: true,
+                filter: FilterSpec::Top10 {
+                    top: true,
+                    percent: false,
+                    val: 2.0,
+                    filter_val: None,
+                },
+                ext_lst_raw: None,
+            }])],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let engine = engine_from_parse_output_normal(&input);
+    let sheet_id =
+        SheetId::from_uuid_str(&engine.get_all_sheet_ids()[0]).expect("valid hydrated sheet id");
+
+    // Top 2 has a boundary of 10; all three rows tied at 10 remain visible.
+    assert!(engine.get_hidden_rows(&sheet_id).is_empty());
 }
 
 #[test]
@@ -471,7 +639,7 @@ fn assert_unsupported_icon_table_filter(table: &TableSpec) {
     match &table.filter_columns[0].filter {
         FilterSpec::Icon { icon_set, icon_id } => {
             assert_eq!(icon_set, "3TrafficLights1");
-            assert_eq!(*icon_id, Some(1));
+            assert_eq!(*icon_id, Some(99));
         }
         other => panic!("expected preserved icon filter metadata, got {other:?}"),
     }
@@ -506,7 +674,7 @@ fn unsupported_people_table_filter_parse_output() -> ParseOutput {
                 show_button: true,
                 filter: FilterSpec::Icon {
                     icon_set: "3TrafficLights1".to_string(),
-                    icon_id: Some(1),
+                    icon_id: Some(99),
                 },
                 ext_lst_raw: None,
             }])],
@@ -532,6 +700,42 @@ fn people_table_cells() -> Vec<domain_types::CellData> {
         row,
         col,
         value: CellValue::Text(Arc::from(value)),
+        ..Default::default()
+    })
+    .collect()
+}
+
+fn numeric_filter_cells() -> Vec<domain_types::CellData> {
+    [
+        (0, 0, CellValue::Text(Arc::from("Value"))),
+        (1, 0, CellValue::Number(FiniteF64::must(1.0))),
+        (2, 0, CellValue::Number(FiniteF64::must(2.0))),
+        (3, 0, CellValue::Number(FiniteF64::must(3.0))),
+        (4, 0, CellValue::Number(FiniteF64::must(4.0))),
+    ]
+    .into_iter()
+    .map(|(row, col, value)| domain_types::CellData {
+        row,
+        col,
+        value,
+        ..Default::default()
+    })
+    .collect()
+}
+
+fn numeric_tie_filter_cells() -> Vec<domain_types::CellData> {
+    [
+        (0, 0, CellValue::Text(Arc::from("Value"))),
+        (1, 0, CellValue::Number(FiniteF64::must(20.0))),
+        (2, 0, CellValue::Number(FiniteF64::must(10.0))),
+        (3, 0, CellValue::Number(FiniteF64::must(10.0))),
+        (4, 0, CellValue::Number(FiniteF64::must(10.0))),
+    ]
+    .into_iter()
+    .map(|(row, col, value)| domain_types::CellData {
+        row,
+        col,
+        value,
         ..Default::default()
     })
     .collect()
@@ -672,4 +876,21 @@ fn copied_native_filter_has_independent_ids_visibility_and_lossless_metadata() {
     assert!(copied_filter.columns[0].filter_type.is_none());
     assert!(copied_filter.columns[0].hidden_button);
     assert_eq!(copied_filter.xr_uid.as_deref(), Some("filter-uid"));
+}
+
+fn numeric_table_spec(filter_columns: Vec<FilterColumnSpec>) -> TableSpec {
+    TableSpec {
+        id: 2,
+        name: "NumericValues".to_string(),
+        display_name: "NumericValues".to_string(),
+        range_ref: "A1:A5".to_string(),
+        auto_filter_ref: Some("A1:A5".to_string()),
+        columns: vec![TableColumnSpec {
+            id: 1,
+            name: "Value".to_string(),
+            ..Default::default()
+        }],
+        filter_columns,
+        ..Default::default()
+    }
 }

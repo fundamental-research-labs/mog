@@ -264,7 +264,16 @@ pub fn is_row_hidden_by_any_filter(
     row: u32,
     grid: Option<&GridIndex>,
 ) -> bool {
-    let Some(id) = grid.and_then(|grid| grid.row_id(row)) else {
+    is_row_hidden_by_any_filter_id(storage, sheet_id, grid.and_then(|grid| grid.row_id(row)))
+}
+
+/// Query filter ownership using a stable row identity without allocating an axis.
+pub fn is_row_hidden_by_any_filter_id(
+    storage: &WorkbookStorage,
+    sheet_id: &SheetId,
+    row_id: Option<cell_types::RowId>,
+) -> bool {
+    let Some(id) = row_id else {
         return false;
     };
     storage.sheet_metadata.get(sheet_id).is_some_and(|meta| {

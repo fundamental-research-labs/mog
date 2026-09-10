@@ -25,6 +25,7 @@ pub use cascade::{
 pub(crate) use cascade::{
     get_effective_format_from_preloaded_layers,
     get_effective_format_from_preloaded_layers_with_range, get_workbook_base_format,
+    materialize_cell_layer_format,
 };
 pub(crate) use cell::StoredCellProperties;
 pub(crate) use cell::{PreloadedCellFormatLayers, get_cell_format_layers_for_ids};
@@ -45,6 +46,7 @@ pub use row_col::{
     get_row_xlsx_style_id, patch_col_borders, patch_col_format, patch_row_borders,
     patch_row_format, set_col_format, set_row_format,
 };
+pub(crate) use row_col::{get_col_format_by_id, get_row_format_by_id};
 pub use string_ids::{
     clear_cell_format, clear_cell_formats, clear_formula_cache_metadata, clear_properties,
     get_cell_format, get_properties, patch_cell_borders, patch_cell_format, patch_cell_formats,

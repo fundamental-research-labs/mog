@@ -7,6 +7,14 @@ use crate::helpers::coercion::{check_error, extract_numbers, flatten_values};
 use crate::{FunctionRegistry, PureFunction};
 
 // ===========================================================================
+// TVM stability fallbacks
+// ===========================================================================
+
+#[path = "time_value_stability.rs"]
+mod time_value_stability;
+use self::time_value_stability::pv_with_stable_fallback;
+
+// ===========================================================================
 // PV
 // ===========================================================================
 
@@ -38,13 +46,7 @@ impl PureFunction for FnPv {
                     format!("PV: type must be 0 or 1, got {type_}"),
                 ));
             }
-            if rate == 0.0 {
-                return Ok(-(fv + pmt * nper));
-            }
-            let pow = (1.0 + rate).powf(nper);
-            let type_adj = if type_ != 0.0 { 1.0 + rate } else { 1.0 };
-            let af = (pow - 1.0) / rate;
-            Ok(-(fv / pow + (pmt * af * type_adj) / pow))
+            Ok(pv_with_stable_fallback(rate, nper, pmt, fv, type_))
         })())
     }
 }
@@ -198,6 +200,10 @@ impl PureFunction for FnNper {
 // ===========================================================================
 
 pub(super) struct FnRate;
+
+#[path = "rate_boundary.rs"]
+mod rate_boundary;
+
 impl PureFunction for FnRate {
     fn is_scalar_arg(&self, _index: usize) -> bool {
         true
@@ -239,13 +245,17 @@ impl PureFunction for FnRate {
                 ));
             }
 
-            // Degenerate case: when pmt=0 and fv=0, the equation pv*(1+r)^nper = 0
-            // has no finite solution (requires r=-1, which is outside the domain).
+            // Excel can converge toward -1 for these cash flows, but does not
+            // accept every mathematical endpoint solution. Preserve its
+            // numerical convergence/error behavior instead of rejecting all
+            // such inputs or returning -1 unconditionally.
             if pmt == 0.0 && fv == 0.0 && pv != 0.0 {
-                return Err(CellValue::error_with_message(
-                    CellError::Num,
-                    "RATE: no solution — pmt=0 and fv=0 with non-zero pv",
-                ));
+                return rate_boundary::solve(nper, pv, guess).ok_or_else(|| {
+                    CellValue::error_with_message(
+                        CellError::Num,
+                        "RATE: failed to converge near -100% — check inputs",
+                    )
+                });
             }
 
             // Combined f(rate) that dispatches between normal and log-stable near -1
@@ -462,6 +472,44 @@ mod tests {
         let r = FnFvSchedule.call(&[num(1000.0), schedule]);
         // 1000 * 1.05 * 1.06 * 1.07 = 1190.91
         assert!(approx(&r, 1190.91, 0.01));
+    }
+
+    #[test]
+    fn test_rate_minus_one_boundary_preserves_validation_and_other_cash_flows() {
+        for nper in [0.0, -1.0] {
+            assert_eq!(
+                FnRate.call(&[num(nper), num(0.0), num(-100.0)]),
+                err(CellError::Num)
+            );
+        }
+        for type_ in [-1.0, 2.0] {
+            assert_eq!(
+                FnRate.call(&[num(6.0), num(0.0), num(-100.0), num(0.0), num(type_)]),
+                err(CellError::Num)
+            );
+        }
+        for index in 0..6 {
+            let mut args = [
+                num(6.0),
+                num(0.0),
+                num(-100.0),
+                num(0.0),
+                num(0.0),
+                num(0.1),
+            ];
+            args[index] = err(CellError::Ref);
+            assert_eq!(FnRate.call(&args), err(CellError::Ref), "argument {index}");
+        }
+
+        // With every cash flow zero, any rate works: retain the solver's guess.
+        let all_zero = [num(6.0), num(0.0), num(0.0), num(0.0), num(0.0), num(0.2)];
+        assert_eq!(FnRate.call(&all_zero), num(0.2));
+
+        // A nonzero future value or payment must still use the ordinary solver.
+        let nonzero_fv = FnRate.call(&[num(1.0), num(0.0), num(-100.0), num(110.0)]);
+        assert!(approx(&nonzero_fv, 0.1, 1e-10), "{nonzero_fv:?}");
+        let nonzero_pmt = FnRate.call(&[num(1.0), num(110.0), num(-100.0)]);
+        assert!(approx(&nonzero_pmt, 0.1, 1e-10), "{nonzero_pmt:?}");
     }
 
     #[test]

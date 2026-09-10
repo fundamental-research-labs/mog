@@ -137,16 +137,67 @@ fn test_hypgeom_dist_sample_gt_pop() {
 
 #[test]
 fn test_hypgeom_dist_s_gt_sample() {
-    assert_eq!(
+    assert_num(
         FnHypGeomDist.call(&[
             num(5.0),
             num(4.0),
             num(8.0),
             num(20.0),
-            CellValue::Boolean(false)
+            CellValue::Boolean(false),
+        ]),
+        0.0,
+        1e-12,
+        "HYPGEOM.DIST s greater than sample is zero",
+    );
+}
+
+#[test]
+fn test_hypgeom_dist_population_relation_errors_and_support_zeros() {
+    assert_num(
+        FnHypGeomDist.call(&[
+            num(0.0),
+            num(4.0),
+            num(1.0),
+            num(4.0),
+            CellValue::Boolean(false),
+        ]),
+        0.0,
+        1e-12,
+        "HYPGEOM.DIST impossible support is zero",
+    );
+    assert_eq!(
+        FnHypGeomDist.call(&[
+            num(0.0),
+            num(1.0),
+            num(1.0),
+            num(0.0),
+            CellValue::Boolean(false),
         ]),
         err(CellError::Num)
     );
+    for args in [
+        [
+            num(0.0),
+            num(0.0),
+            num(1.0),
+            num(1.0),
+            CellValue::Boolean(false),
+        ],
+        [
+            num(0.0),
+            num(1.0),
+            num(0.0),
+            num(1.0),
+            CellValue::Boolean(false),
+        ],
+    ] {
+        assert_num(
+            FnHypGeomDist.call(&args),
+            1.0,
+            1e-12,
+            "zero sample/successes have probability one",
+        );
+    }
 }
 
 #[test]
@@ -165,4 +216,29 @@ fn test_hypgeomdist_legacy_sample_gt_pop() {
         FnHypGeomDistLegacy.call(&[num(1.0), num(100.0), num(8.0), num(20.0)]),
         err(CellError::Num)
     );
+}
+
+#[test]
+fn test_hypgeomdist_legacy_population_relation_errors_and_support_zeros() {
+    assert_num(
+        FnHypGeomDistLegacy.call(&[num(0.0), num(4.0), num(1.0), num(4.0)]),
+        0.0,
+        1e-12,
+        "HYPGEOMDIST impossible support is zero",
+    );
+    assert_eq!(
+        FnHypGeomDistLegacy.call(&[num(0.0), num(1.0), num(1.0), num(0.0)]),
+        err(CellError::Num)
+    );
+    for args in [
+        [num(0.0), num(0.0), num(1.0), num(1.0)],
+        [num(0.0), num(1.0), num(0.0), num(1.0)],
+    ] {
+        assert_num(
+            FnHypGeomDistLegacy.call(&args),
+            1.0,
+            1e-12,
+            "zero sample/successes have probability one",
+        );
+    }
 }

@@ -21,6 +21,7 @@ use crate::write::xml_writer::XmlWriter;
 
 /// Namespace for markup compatibility.
 const NS_MC: &str = "http://schemas.openxmlformats.org/markup-compatibility/2006";
+const NS_X14: &str = "http://schemas.microsoft.com/office/spreadsheetml/2009/9/main";
 
 /// Writer for OLE embedded objects in XLSX files.
 #[derive(Debug)]
@@ -122,12 +123,24 @@ pub fn ole_object_zip_path(index: usize) -> String {
 fn write_ole_object_entry(w: &mut XmlWriter, obj: &OleObject, r_id: &str) {
     w.start_element("mc:AlternateContent")
         .attr("xmlns:mc", NS_MC)
+        .attr("xmlns:x14", NS_X14)
         .end_attrs();
 
     w.start_element("mc:Choice")
-        .attr("Requires", "r")
+        .attr("Requires", "x14")
         .end_attrs();
 
+    write_ole_object(w, obj, r_id, true);
+    w.end_element("mc:Choice");
+    w.start_element("mc:Fallback").end_attrs();
+    // Pre-2010 consumers still need the embedding and its VML shape binding;
+    // only the Office 2010 objectPr extension is omitted from the fallback.
+    write_ole_object(w, obj, r_id, false);
+    w.end_element("mc:Fallback");
+    w.end_element("mc:AlternateContent");
+}
+
+fn write_ole_object(w: &mut XmlWriter, obj: &OleObject, r_id: &str, include_properties: bool) {
     w.start_element("oleObject");
 
     if !obj.prog_id.is_empty() {
@@ -149,18 +162,15 @@ fn write_ole_object_entry(w: &mut XmlWriter, obj: &OleObject, r_id: &str) {
     w.attr_num("shapeId", obj.shape_id);
     w.attr("r:id", r_id);
 
-    if let Some(ref object_pr) = obj.object_pr {
+    if let Some(ref object_pr) = obj.object_pr
+        && include_properties
+    {
         w.end_attrs();
         write_object_pr(w, object_pr);
         w.end_element("oleObject");
     } else {
         w.self_close();
     }
-
-    w.end_element("mc:Choice");
-    w.start_element("mc:Fallback").end_attrs();
-    w.end_element("mc:Fallback");
-    w.end_element("mc:AlternateContent");
 }
 
 fn write_object_pr(w: &mut XmlWriter, props: &ObjectProperties) {
@@ -244,7 +254,7 @@ pub fn parse_ole_objects(xml: &[u8], objects: &mut Vec<OleObject>) {
 }
 
 #[allow(clippy::string_slice)]
-fn parse_ole_objects_with_context(
+pub(super) fn parse_ole_objects_with_context(
     xml: &[u8],
     containing_xml: Option<&[u8]>,
     objects: &mut Vec<OleObject>,
@@ -364,6 +374,7 @@ fn enrich_ole_relationships(
 
     for full_path in relationships::legacy_vml_drawing_targets(&relationships) {
         if let Ok(vml_xml) = archive.read_file(full_path) {
+            super::ole_preview::capture(&vml_xml, ole_objects);
             let imagedata_map = vml::parse_vml_imagedata(&vml_xml);
             apply_vml_preview_rel_ids(&imagedata_map, ole_objects);
             resolve_vml_preview_paths(archive, full_path, ole_objects);

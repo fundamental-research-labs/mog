@@ -422,10 +422,10 @@ fn test_indirect_empty_string() {
 }
 
 #[test]
-fn test_indirect_r1c1_not_supported() {
+fn test_indirect_r1c1_absolute_reference() {
     let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
-    // INDIRECT("R1C1", FALSE) -> #REF! (R1C1 not supported)
+    // INDIRECT("R1C1", FALSE) resolves the top-left cell.
     let result = eval(
         &func(
             "INDIRECT",
@@ -433,7 +433,7 @@ fn test_indirect_r1c1_not_supported() {
         ),
         &ctx,
     );
-    assert_eq!(result, CellValue::Error(CellError::Ref, None));
+    assert_eq!(result, CellValue::number(0.0));
 }
 
 #[test]
@@ -485,4 +485,140 @@ fn test_offset_in_sum() {
     );
     let result = eval(&func("SUM", vec![offset_node]), &ctx);
     assert_eq!(result, CellValue::number(30.0));
+}
+
+#[test]
+fn indirect_r1c1_resolves_absolute_relative_omitted_and_mixed_axes() {
+    let (cell_store, sheet) = test_store();
+    let context = EvalContext::new(&cell_store, cell_id_at(2, 2), sheet);
+    for (reference, expected) in [
+        ("R2C4", 13.0),
+        ("R[-1]C[1]", 13.0),
+        ("RC", 22.0),
+        ("R[-1]C4", 13.0),
+        ("R2C[1]", 13.0),
+        ("r2c4", 13.0),
+        ("'Sheet1'!R2C4", 13.0),
+    ] {
+        assert_eq!(
+            eval(
+                &func(
+                    "INDIRECT",
+                    vec![ASTNode::Text(reference.into()), ASTNode::Boolean(false)]
+                ),
+                &context
+            ),
+            CellValue::number(expected),
+            "{reference}"
+        );
+    }
+    for reference in [
+        "R0C1",
+        "R1C0",
+        "R[-3]C",
+        "RC[-3]",
+        "R1048577C1",
+        "R1C16385",
+        "R[]C1",
+        "R1C1junk",
+        "A1",
+        "R1C1:C2",
+        "SUM(A1)",
+    ] {
+        assert!(
+            matches!(
+                eval(
+                    &func(
+                        "INDIRECT",
+                        vec![ASTNode::Text(reference.into()), ASTNode::Boolean(false)]
+                    ),
+                    &context
+                ),
+                CellValue::Error(CellError::Ref, _)
+            ),
+            "{reference}"
+        );
+    }
+}
+
+#[test]
+fn dynamic_reference_consumers_share_indirect_geometry() {
+    let (cell_store, sheet) = test_store();
+    let context = make_ctx(&cell_store, sheet);
+    for (function, reference, a1, expected) in [
+        ("ROW", "B4", true, 4.0),
+        ("COLUMN", "E1", true, 5.0),
+        ("ROW", "R4C2", false, 4.0),
+        ("COLUMN", "R1C5", false, 5.0),
+        ("ROWS", "R1C1:R3C2", false, 3.0),
+        ("COLUMNS", "R1C1:R3C2", false, 2.0),
+        ("SUM", "R1C1:R2C2", false, 22.0),
+    ] {
+        let indirect = func(
+            "INDIRECT",
+            vec![ASTNode::Text(reference.into()), ASTNode::Boolean(a1)],
+        );
+        assert_eq!(
+            eval(&func(function, vec![indirect]), &context),
+            CellValue::number(expected),
+            "{function} {reference}"
+        );
+    }
+    let last_column = func(
+        "INDIRECT",
+        vec![
+            ASTNode::Text("C16384:C16384".into()),
+            ASTNode::Boolean(false),
+        ],
+    );
+    assert_eq!(
+        eval(&func("COLUMN", vec![last_column]), &context),
+        CellValue::number(16384.0)
+    );
+    let last_row = func(
+        "INDIRECT",
+        vec![
+            ASTNode::Text("R1048576:R1048576".into()),
+            ASTNode::Boolean(false),
+        ],
+    );
+    assert_eq!(
+        eval(&func("ROW", vec![last_row]), &context),
+        CellValue::number(1048576.0)
+    );
+    let invalid = func("INDIRECT", vec![ASTNode::Text("A0".into())]);
+    assert!(matches!(
+        eval(&func("ROW", vec![invalid]), &context),
+        CellValue::Error(CellError::Ref, _)
+    ));
+}
+
+#[test]
+fn workbook_qualified_names_bypass_sheet_local_shadowing() {
+    let sheet = SheetId::from_uuid_str(TEST_SHEET_UUID).unwrap();
+    let (cell_store, sheet) = test_store_with_named_ranges(vec![
+        NamedRangeDef::from_expression("Revenue".into(), Scope::Workbook, "=Sheet1!A2:A3".into()),
+        NamedRangeDef::from_expression(
+            "Revenue".into(),
+            Scope::Sheet(sheet),
+            "=Sheet1!B2:B3".into(),
+        ),
+    ]);
+    let context = make_ctx(&cell_store, sheet);
+    for (formula, expected) in [
+        ("=SUM(Revenue)", 32.0),
+        ("=SUM([0]!Revenue)", 30.0),
+        ("=ROW([0]!Revenue)", 2.0),
+        ("=SUM([0]Sheet1!A2:A3)", 30.0),
+    ] {
+        let node = compute_parser::parse_formula(formula, None)
+            .unwrap()
+            .into_inner();
+        let value = eval(&node, &context);
+        let first = match value {
+            CellValue::Array(ref array) => array.get(0, 0).unwrap(),
+            ref scalar => scalar,
+        };
+        assert_eq!(first, &CellValue::number(expected), "{formula}");
+    }
 }

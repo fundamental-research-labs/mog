@@ -54,7 +54,9 @@ impl ComputeCore {
 
         // 1. Populate the cell store from snapshot.
         let total_cell_count: usize = snapshot.sheets.iter().map(|s| s.cells.len()).sum();
+        let char_code_page = cell_store.char_code_page;
         *cell_store = CellStore::from_snapshot(snapshot)?;
+        cell_store.char_code_page = char_code_page;
         cell_store.set_id_alloc(self.id_alloc.clone());
         self.normalize_raw_named_ranges_for_graph(cell_store);
         let formula_count = formula_cells.len();
@@ -195,7 +197,9 @@ impl ComputeCore {
         }
 
         let total_cell_count: usize = snapshot.sheets.iter().map(|s| s.cells.len()).sum();
+        let char_code_page = cell_store.char_code_page;
         *cell_store = CellStore::from_snapshot(snapshot)?;
+        cell_store.char_code_page = char_code_page;
         cell_store.set_id_alloc(self.id_alloc.clone());
         self.normalize_raw_named_ranges_for_graph(cell_store);
         let formula_count = formula_cells.len();
@@ -257,7 +261,9 @@ impl ComputeCore {
                 ));
         }
 
+        let char_code_page = cell_store.char_code_page;
         *cell_store = CellStore::from_snapshot(snapshot)?;
+        cell_store.char_code_page = char_code_page;
         cell_store.set_id_alloc(self.id_alloc.clone());
         self.normalize_raw_named_ranges_for_graph(cell_store);
 
@@ -339,7 +345,9 @@ impl ComputeCore {
         // Readback does not depend on this marker.
         self.workbook_load_pending = true;
 
+        let char_code_page = cell_store.char_code_page;
         *cell_store = CellStore::from_snapshot(snapshot)?;
+        cell_store.char_code_page = char_code_page;
         cell_store.set_id_alloc(self.id_alloc.clone());
 
         Ok(RecalcResult::empty())

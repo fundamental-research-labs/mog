@@ -10,6 +10,7 @@ pub use compute_core::table::types::{
     SlicerSortOrder, SortSpec, StructuredRef, Table, TableCellFormat, TableRange,
     TableStructureChange, TableStyleDef, TableTopBottomFilter,
 };
+pub use domain_types::FilterIconIdentity;
 
 use compute_core::bridge_pure::TableBridge;
 
@@ -19,7 +20,17 @@ use compute_core::bridge_pure::TableBridge;
 
 /// Evaluate a column filter against column data, returning a per-row bitmap.
 pub fn evaluate_column_filter(criteria: FilterCriteria, column_data: Vec<CellValue>) -> Vec<u8> {
-    TableBridge::table_evaluate_column_filter(criteria, column_data)
+    TableBridge::table_evaluate_column_filter(criteria, column_data, None)
+}
+
+/// Evaluate using the displayed CF icon identity for each row. Icon criteria
+/// require this context; a missing icon entry means the cell displays no icon.
+pub fn evaluate_column_filter_with_icons(
+    criteria: FilterCriteria,
+    column_data: Vec<CellValue>,
+    column_icons: Vec<Option<FilterIconIdentity>>,
+) -> Vec<u8> {
+    TableBridge::table_evaluate_column_filter(criteria, column_data, Some(column_icons))
 }
 
 /// Resolve a dynamic filter rule against column data.

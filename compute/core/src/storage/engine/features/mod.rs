@@ -31,7 +31,7 @@ impl ComputeEngine {
     // Filters
     // -------------------------------------------------------------------
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn create_filter(
         &mut self,
         sheet_id: &SheetId,
@@ -40,7 +40,7 @@ impl ComputeEngine {
         self.with_history(|engine| filters::create_filter(engine, sheet_id, config))
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn delete_filter(
         &mut self,
         sheet_id: &SheetId,
@@ -49,7 +49,7 @@ impl ComputeEngine {
         self.with_history(|engine| filters::delete_filter(engine, sheet_id, filter_id))
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_column_filter(
         &mut self,
         sheet_id: &SheetId,
@@ -62,7 +62,7 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn clear_column_filter(
         &mut self,
         sheet_id: &SheetId,
@@ -74,7 +74,7 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn clear_all_column_filters(
         &mut self,
         sheet_id: &SheetId,
@@ -83,12 +83,12 @@ impl ComputeEngine {
         self.with_history(|engine| filters::clear_all_column_filters(engine, sheet_id, filter_id))
     }
 
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_filters_in_sheet(&self, sheet_id: &SheetId) -> Vec<sheet_filters::FilterState> {
         filters::get_filters_in_sheet(self, sheet_id)
     }
 
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_filter_header_info(
         &self,
         sheet_id: &SheetId,
@@ -97,7 +97,7 @@ impl ComputeEngine {
     }
 
     /// Apply an Excel Advanced Filter from raw user-visible range strings.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn apply_advanced_filter(
         &mut self,
         sheet_id: &SheetId,
@@ -113,7 +113,7 @@ impl ComputeEngine {
     /// hidden-row state without requiring a separate `calculate()` call.
     ///
     /// Visibility changes invalidate derived geometry for subsequent reads.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn apply_filter(
         &mut self,
         sheet_id: &SheetId,
@@ -122,7 +122,7 @@ impl ComputeEngine {
         self.with_history(|engine| filters::apply_filter(engine, sheet_id, filter_id))
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn reapply_filter(
         &mut self,
         sheet_id: &SheetId,
@@ -133,7 +133,7 @@ impl ComputeEngine {
 
     /// Get unique values in a filter column for populating the filter dropdown.
     /// Returns deduplicated, sorted cell values as JSON.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_unique_column_values(
         &self,
         sheet_id: &SheetId,
@@ -155,7 +155,7 @@ impl ComputeEngine {
     /// this to construct a `between` condition filter that compares against
     /// cell values directly.  Single source of truth: the same date math
     /// runs in `evaluate_column_filter` for native filter evaluation.
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn compute_dynamic_filter_serial_range(
         &self,
         rule: sheet_filters::DynamicFilterRule,
@@ -171,7 +171,7 @@ impl ComputeEngine {
     ///
     /// Conditional formats are re-evaluated after sorting so subsequent format
     /// and viewport queries include changes outside the sorted cells.
-    #[bridge::write(scope = "range")]
+    #[bridge::write]
     pub fn sort_range(
         &mut self,
         sheet_id: &SheetId,
@@ -197,7 +197,7 @@ impl ComputeEngine {
     ///
     /// Delegates to the `compute-fill` crate for pure computation, then
     /// applies the resulting updates to the native stores and scheduler.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn auto_fill(
         &mut self,
         sheet_id: &SheetId,
@@ -208,7 +208,7 @@ impl ComputeEngine {
 
     /// Dry-run autofill against the production fill engine without mutating
     /// storage or viewport state.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn auto_fill_preview(
         &self,
         sheet_id: &SheetId,
@@ -222,7 +222,7 @@ impl ComputeEngine {
     ///
     /// `source_range` is the column of input values; `target_range` is the
     /// column where some cells contain examples and empty cells will be filled.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn flash_fill(
         &mut self,
         sheet_id: &SheetId,
@@ -242,7 +242,7 @@ impl ComputeEngine {
     ///
     /// Maps to OfficeJS `Range.copyFrom()`.
     ///
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     #[allow(clippy::too_many_arguments)]
     pub fn copy_range(
         &mut self,
@@ -282,7 +282,7 @@ impl ComputeEngine {
 
     /// Group a range of rows, creating a new outline group.
     /// Returns the created group definition as JSON via `MutationResult.data`.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn group_rows(
         &mut self,
         sheet_id: &SheetId,
@@ -293,7 +293,7 @@ impl ComputeEngine {
     }
 
     /// Ungroup (remove) the innermost row group containing the range.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn ungroup_rows(
         &mut self,
         sheet_id: &SheetId,
@@ -305,7 +305,7 @@ impl ComputeEngine {
 
     /// Group a range of columns, creating a new outline group.
     /// Returns the created group definition as JSON via `MutationResult.data`.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn group_columns(
         &mut self,
         sheet_id: &SheetId,
@@ -316,7 +316,7 @@ impl ComputeEngine {
     }
 
     /// Ungroup (remove) the innermost column group containing the range.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn ungroup_columns(
         &mut self,
         sheet_id: &SheetId,
@@ -327,7 +327,7 @@ impl ComputeEngine {
     }
 
     /// Set the collapsed state of a specific group by ID.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_group_collapsed(
         &mut self,
         sheet_id: &SheetId,
@@ -340,7 +340,7 @@ impl ComputeEngine {
     }
 
     /// Toggle the collapsed state of a group. Returns the new state via `MutationResult.data`.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn toggle_group_collapsed(
         &mut self,
         sheet_id: &SheetId,
@@ -350,7 +350,7 @@ impl ComputeEngine {
     }
 
     /// Expand all groups on both axes.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn expand_all_groups(
         &mut self,
         sheet_id: &SheetId,
@@ -359,7 +359,7 @@ impl ComputeEngine {
     }
 
     /// Collapse all groups on both axes.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn collapse_all_groups(
         &mut self,
         sheet_id: &SheetId,
@@ -368,7 +368,7 @@ impl ComputeEngine {
     }
 
     /// Get the full grouping configuration for a sheet.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_sheet_grouping_config(
         &self,
         sheet_id: &SheetId,
@@ -377,7 +377,7 @@ impl ComputeEngine {
     }
 
     /// Get all groups for a given axis (row or column) in a sheet.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_groups(
         &self,
         sheet_id: &SheetId,
@@ -392,7 +392,7 @@ impl ComputeEngine {
 
     /// Create a new slicer from a typed config.
     /// Returns the created slicer as JSON.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn create_slicer(
         &mut self,
         sheet_id: &SheetId,
@@ -402,7 +402,7 @@ impl ComputeEngine {
     }
 
     /// Delete a slicer by ID.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn delete_slicer(
         &mut self,
         sheet_id: &SheetId,
@@ -412,7 +412,7 @@ impl ComputeEngine {
     }
 
     /// Delete multiple slicers in one all-or-nothing mutation.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn delete_slicers(
         &mut self,
         sheet_id: &SheetId,
@@ -422,7 +422,7 @@ impl ComputeEngine {
     }
 
     /// Update a slicer's configuration with a partial update.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn update_slicer_config(
         &mut self,
         sheet_id: &SheetId,
@@ -435,25 +435,25 @@ impl ComputeEngine {
     }
 
     /// Get all slicers for a sheet.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_all_slicers(&self, sheet_id: &SheetId) -> Vec<StoredSlicer> {
         slicers::get_all_slicers(self, sheet_id)
     }
 
     /// Get all slicers across all sheets in the workbook.
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn get_all_slicers_workbook(&self) -> Vec<StoredSlicer> {
         slicers::get_all_slicers_workbook(self)
     }
 
     /// Get a slicer's current state.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_slicer_state(&self, sheet_id: &SheetId, slicer_id: &str) -> Option<StoredSlicer> {
         slicers::get_slicer_state(self, sheet_id, slicer_id)
     }
 
     /// Toggle a slicer item selection.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn toggle_slicer_item(
         &mut self,
         sheet_id: &SheetId,
@@ -464,7 +464,7 @@ impl ComputeEngine {
     }
 
     /// Replace a slicer's selection in one authoritative mutation.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_slicer_selection(
         &mut self,
         sheet_id: &SheetId,
@@ -477,7 +477,7 @@ impl ComputeEngine {
     }
 
     /// Clear all slicer selections (show all data).
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn clear_slicer_selection(
         &mut self,
         sheet_id: &SheetId,
@@ -491,7 +491,7 @@ impl ComputeEngine {
     // -------------------------------------------------------------------
 
     /// Map a slicer invalidation reason to a cache invalidation event reason code.
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn map_slicer_invalidation_reason(
         &self,
         reason: &str,
@@ -500,7 +500,7 @@ impl ComputeEngine {
     }
 
     /// Map a slicer disconnection reason to a disconnection event reason code.
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn map_slicer_disconnection_reason(
         &self,
         reason: &str,
@@ -509,7 +509,7 @@ impl ComputeEngine {
     }
 
     /// Convert slicer cache items to UI-ready slicer items.
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn get_slicer_items_from_cache(
         &self,
         cache: SlicerCache,
@@ -518,7 +518,7 @@ impl ComputeEngine {
     }
 
     /// Check if a slicer's source column exists in a table's columns.
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn is_slicer_column_connected(
         &self,
         source_column_id: &str,
@@ -528,13 +528,13 @@ impl ComputeEngine {
     }
 
     /// Find indices of slicers connected to a specific table.
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn find_slicers_for_table(&self, slicer_list: Vec<Slicer>, table_id: &str) -> Vec<usize> {
         slicers::find_slicers_for_table(self, slicer_list, table_id)
     }
 
     /// Find indices of slicers that reference deleted tables.
-    #[bridge::read(scope = "workbook")]
+    #[bridge::read]
     pub fn find_disconnected_slicers(
         &self,
         slicer_list: Vec<Slicer>,
@@ -552,7 +552,7 @@ impl ComputeEngine {
     /// summary_below_data, replace_existing, has_headers.
     /// Routes through `apply_mutation()` for recalculation and complete mutation results.
     /// Returns the `SubtotalResult` via `MutationResult.data`.
-    #[bridge::write(scope = "range")]
+    #[bridge::write]
     pub fn create_subtotals(
         &mut self,
         sheet_id: &SheetId,
@@ -570,7 +570,7 @@ impl ComputeEngine {
     }
 
     /// Remove subtotal rows and associated groups from a range.
-    #[bridge::write(scope = "range")]
+    #[bridge::write]
     pub fn remove_subtotals(
         &mut self,
         sheet_id: &SheetId,
@@ -586,7 +586,7 @@ impl ComputeEngine {
 
     /// Automatically detect formula patterns and create outline groups.
     /// Returns the number of groups created via `MutationResult.data`.
-    #[bridge::write(scope = "range")]
+    #[bridge::write]
     pub fn auto_outline(
         &mut self,
         sheet_id: &SheetId,
@@ -601,7 +601,7 @@ impl ComputeEngine {
     }
 
     /// Get current subtotal configuration for a sheet (alias for get_sheet_grouping_config).
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_subtotal_config(&self, sheet_id: &SheetId) -> sheet_grouping::SheetGroupingConfig {
         grouping::get_subtotal_config(self, sheet_id)
     }
@@ -610,7 +610,7 @@ impl ComputeEngine {
     // Sparklines
     // -------------------------------------------------------------------
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn add_sparkline(
         &mut self,
         sheet_id: &SheetId,
@@ -619,7 +619,7 @@ impl ComputeEngine {
         self.with_history(|engine| sparklines::add_sparkline(engine, sheet_id, sparkline))
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn update_sparkline(
         &mut self,
         sheet_id: &SheetId,
@@ -631,7 +631,7 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn delete_sparkline(
         &mut self,
         sheet_id: &SheetId,
@@ -640,7 +640,7 @@ impl ComputeEngine {
         self.with_history(|engine| sparklines::delete_sparkline(engine, sheet_id, sparkline_id))
     }
 
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_sparklines_in_sheet(&self, sheet_id: &SheetId) -> Vec<sheet_sparklines::Sparkline> {
         sparklines::get_sparklines_in_sheet(self, sheet_id)
     }
@@ -657,7 +657,7 @@ impl ComputeEngine {
     /// boundary but doesn't carry the layout shift across the rest of
     /// the viewport. Rebuild the full viewport binary so the kernel's
     /// `removeDuplicates` no longer needs `forceRefreshAllViewports`.
-    #[bridge::write(scope = "range")]
+    #[bridge::write]
     #[allow(clippy::too_many_arguments)]
     pub fn remove_duplicates(
         &mut self,
@@ -683,7 +683,7 @@ impl ComputeEngine {
         })
     }
 
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     #[allow(clippy::too_many_arguments)]
     pub fn text_to_columns(
         &mut self,
@@ -707,7 +707,7 @@ impl ComputeEngine {
     /// Maps the simple delimiter name ('comma', 'tab', 'semicolon', 'space', 'custom')
     /// and text qualifier ('"', "'", 'none') to the internal bridge format, then
     /// delegates to the existing `text_to_columns` implementation.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     #[allow(clippy::too_many_arguments)]
     pub fn text_to_columns_simple(
         &mut self,
@@ -744,7 +744,7 @@ impl ComputeEngine {
     // -------------------------------------------------------------------
 
     /// Get a single filter by ID.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_filter(
         &self,
         sheet_id: &SheetId,
@@ -755,14 +755,14 @@ impl ComputeEngine {
 
     /// Get the count of filters in a sheet.
     /// Skipped for napi: usize is not supported by napi-rs FFI.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     #[bridge::skip(napi)]
     pub fn get_filter_count(&self, sheet_id: &SheetId) -> usize {
         filters::get_filter_count(self, sheet_id)
     }
 
     /// Get the filter associated with a table by table ID.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_table_filter(
         &self,
         sheet_id: &SheetId,
@@ -772,21 +772,21 @@ impl ComputeEngine {
     }
 
     /// Get all active filters (those with non-empty column_filters) in a sheet.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_active_filters(&self, sheet_id: &SheetId) -> Vec<sheet_filters::FilterState> {
         filters::get_active_filters(self, sheet_id)
     }
 
     /// Get count of active column filters across all filters in a sheet.
     /// Skipped for napi: usize is not supported by napi-rs FFI.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     #[bridge::skip(napi)]
     pub fn get_active_filter_count(&self, sheet_id: &SheetId) -> usize {
         filters::get_active_filter_count(self, sheet_id)
     }
 
     /// Set the sort state for a filter.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_filter_sort_state(
         &mut self,
         sheet_id: &SheetId,
@@ -799,7 +799,7 @@ impl ComputeEngine {
     }
 
     /// Get the sort state for a filter.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_filter_sort_state(
         &self,
         sheet_id: &SheetId,
@@ -809,7 +809,7 @@ impl ComputeEngine {
     }
 
     /// Clear all filters in a sheet.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn clear_all_filters(
         &mut self,
         sheet_id: &SheetId,
@@ -818,7 +818,7 @@ impl ComputeEngine {
     }
 
     /// Get filtered record count (visible vs total) for a filter.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_filtered_record_count(
         &self,
         sheet_id: &SheetId,
@@ -832,7 +832,7 @@ impl ComputeEngine {
     // -------------------------------------------------------------------
 
     /// Get a sparkline by ID.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_sparkline(
         &self,
         sheet_id: &SheetId,
@@ -842,7 +842,7 @@ impl ComputeEngine {
     }
 
     /// Get sparkline at a specific cell (O(1) lookup via cell index).
-    #[bridge::read(scope = "cell")]
+    #[bridge::read]
     pub fn get_sparkline_at_cell(
         &self,
         sheet_id: &SheetId,
@@ -853,7 +853,7 @@ impl ComputeEngine {
     }
 
     /// Add a sparkline group.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn add_sparkline_group(
         &mut self,
         sheet_id: &SheetId,
@@ -863,7 +863,7 @@ impl ComputeEngine {
     }
 
     /// Get a sparkline group by ID.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_sparkline_group(
         &self,
         sheet_id: &SheetId,
@@ -873,7 +873,7 @@ impl ComputeEngine {
     }
 
     /// Get all sparkline groups in a sheet.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_sparkline_groups_in_sheet(
         &self,
         sheet_id: &SheetId,
@@ -882,7 +882,7 @@ impl ComputeEngine {
     }
 
     /// Delete a sparkline group. If delete_sparklines is true, member sparklines are also deleted.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn delete_sparkline_group(
         &mut self,
         sheet_id: &SheetId,
@@ -895,7 +895,7 @@ impl ComputeEngine {
     }
 
     /// Clear sparklines in a range.
-    #[bridge::write(scope = "range")]
+    #[bridge::write]
     pub fn clear_sparklines_in_range(
         &mut self,
         sheet_id: &SheetId,
@@ -912,7 +912,7 @@ impl ComputeEngine {
     }
 
     /// Clear all sparklines and groups for a sheet.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn clear_sparklines_for_sheet(
         &mut self,
         sheet_id: &SheetId,
@@ -921,7 +921,7 @@ impl ComputeEngine {
     }
 
     /// Check if a cell has a sparkline (O(1) via cell index).
-    #[bridge::read(scope = "cell")]
+    #[bridge::read]
     pub fn has_sparkline(&self, sheet_id: &SheetId, row: u32, col: u32) -> bool {
         sparklines::has_sparkline(self, sheet_id, row, col)
     }
@@ -931,7 +931,7 @@ impl ComputeEngine {
     // -------------------------------------------------------------------
 
     /// Get a group by ID within a single sheet.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_group_in_sheet(
         &self,
         sheet_id: &SheetId,
@@ -941,7 +941,7 @@ impl ComputeEngine {
     }
 
     /// Get row outline levels for a range.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_row_outline_levels(
         &self,
         sheet_id: &SheetId,
@@ -952,7 +952,7 @@ impl ComputeEngine {
     }
 
     /// Get column outline levels for a range.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_column_outline_levels(
         &self,
         sheet_id: &SheetId,
@@ -963,13 +963,13 @@ impl ComputeEngine {
     }
 
     /// Get the maximum outline level for an axis.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_max_outline_level(&self, sheet_id: &SheetId, axis: &str) -> u32 {
         grouping::get_max_outline_level(self, sheet_id, axis)
     }
 
     /// Get outline gutter dimensions (width, height) based on max outline levels.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_outline_gutter_dimensions(
         &self,
         sheet_id: &SheetId,
@@ -980,7 +980,7 @@ impl ComputeEngine {
     }
 
     /// Get outline level buttons for a sheet.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_outline_level_buttons(
         &self,
         sheet_id: &SheetId,
@@ -989,7 +989,7 @@ impl ComputeEngine {
     }
 
     /// Get outline render data for a viewport.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_outline_render_data(
         &self,
         sheet_id: &SheetId,
@@ -999,7 +999,7 @@ impl ComputeEngine {
     }
 
     /// Get outline symbols for a viewport.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_outline_symbols(
         &self,
         sheet_id: &SheetId,
@@ -1009,37 +1009,37 @@ impl ComputeEngine {
     }
 
     /// Check whether outlines should be rendered for a sheet.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn should_render_outlines(&self, sheet_id: &SheetId) -> bool {
         grouping::should_render_outlines(self, sheet_id)
     }
 
     /// Get detail rows affected by a group.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_affected_rows_by_group(&self, sheet_id: &SheetId, group_id: &str) -> Vec<u32> {
         grouping::get_affected_rows_by_group(self, sheet_id, group_id)
     }
 
     /// Get detail columns affected by a group.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn get_affected_columns_by_group(&self, sheet_id: &SheetId, group_id: &str) -> Vec<u32> {
         grouping::get_affected_columns_by_group(self, sheet_id, group_id)
     }
 
     /// Check if a row is visible based on group collapse state.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn is_row_visible_by_groups(&self, sheet_id: &SheetId, row: u32) -> bool {
         grouping::is_row_visible_by_groups(self, sheet_id, row)
     }
 
     /// Check if a column is visible based on group collapse state.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn is_column_visible_by_groups(&self, sheet_id: &SheetId, col: u32) -> bool {
         grouping::is_column_visible_by_groups(self, sheet_id, col)
     }
 
     /// Set level-based collapse state for all groups at or above a level.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_level_collapsed(
         &mut self,
         sheet_id: &SheetId,
@@ -1053,7 +1053,7 @@ impl ComputeEngine {
     }
 
     /// Update outline settings (summaryRowsBelow, summaryColumnsRight, etc.).
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn set_outline_settings(
         &mut self,
         sheet_id: &SheetId,
@@ -1063,7 +1063,7 @@ impl ComputeEngine {
     }
 
     /// Clear row grouping in a range.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn clear_row_grouping(
         &mut self,
         sheet_id: &SheetId,
@@ -1076,7 +1076,7 @@ impl ComputeEngine {
     }
 
     /// Clear column grouping in a range.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn clear_column_grouping(
         &mut self,
         sheet_id: &SheetId,
@@ -1089,7 +1089,7 @@ impl ComputeEngine {
     }
 
     /// Clear all grouping (rows and columns) for a sheet.
-    #[bridge::write(scope = "sheet")]
+    #[bridge::write]
     pub fn clear_all_grouping(
         &mut self,
         sheet_id: &SheetId,
@@ -1103,7 +1103,7 @@ impl ComputeEngine {
 
     /// Check if a sort range contains merged cells (which would block sorting).
     /// Returns JSON with `hasMerges` (bool) and optional `message` (string).
-    #[bridge::read(scope = "range")]
+    #[bridge::read]
     pub fn check_sort_range_merges(
         &self,
         sheet_id: &SheetId,
@@ -1120,7 +1120,7 @@ impl ComputeEngine {
     // -------------------------------------------------------------------
 
     /// Preview text to columns split without applying changes.
-    #[bridge::read(scope = "sheet")]
+    #[bridge::read]
     pub fn preview_text_to_columns(
         &self,
         sheet_id: &SheetId,

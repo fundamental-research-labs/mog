@@ -64,4 +64,11 @@ pub struct CFStyle {
     /// OOXML dxfId index — preserved for roundtrip fidelity.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dxf_id: Option<u32>,
+
+    /// Theme palette used when projecting the imported DXF into editable fields.
+    /// Keeping this import context distinguishes a later workbook theme change
+    /// from an explicit edit to a CF color. It is not a replacement for the
+    /// workbook-scoped DXF registry, which retains the complete structured style.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dxf_theme_palette: Option<Vec<String>>,
 }

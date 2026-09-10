@@ -359,6 +359,161 @@ fn test_norm_inv_p_one() {
     );
 }
 
+fn number(result: CellValue, label: &str) -> f64 {
+    match result {
+        CellValue::Number(value) => value.get(),
+        other => panic!("{label}: expected Number, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_normal_cdf_reference_grid_and_symmetry() {
+    // Reference values from the AS 241 test table (z = 0..4), extended with
+    // the corresponding standard-normal tail values for coverage of both
+    // branches of the erfc approximation.
+    let references = [
+        (-8.0, 6.220960574271819e-16),
+        (-5.0, 2.866515718791946e-7),
+        (-3.0, 0.0013498980316300957),
+        (-2.0, 0.02275013194817922),
+        (-1.0, 0.15865525393145707),
+        (-0.5, 0.30853753872598694),
+        (0.0, 0.5),
+        (0.5, 0.691462461274013),
+        (1.0, 0.8413447460685429),
+        (2.0, 0.9772498680518208),
+        (3.0, 0.9986501019683699),
+        (5.0, 0.9999997133484281),
+        (8.0, 0.9999999999999993),
+    ];
+
+    for (z, expected) in references {
+        let actual = number(
+            FnNormSDist.call(&[num(z), bv(true)]),
+            "NORM.S.DIST reference",
+        );
+        assert!(
+            (actual - expected).abs() <= 2.0e-15,
+            "NORM.S.DIST({z}) expected {expected:.17e}, got {actual:.17e}"
+        );
+    }
+
+    for z in [0.125, 0.5, 1.0, 2.0, 3.0, 5.0, 8.0] {
+        let lower = number(
+            FnNormSDist.call(&[num(-z), bv(true)]),
+            "NORM.S.DIST symmetry lower",
+        );
+        let upper = number(
+            FnNormSDist.call(&[num(z), bv(true)]),
+            "NORM.S.DIST symmetry upper",
+        );
+        assert!(
+            (lower + upper - 1.0).abs() <= 8.0 * f64::EPSILON,
+            "Phi(-{z}) + Phi({z}) was {:.17e}",
+            lower + upper
+        );
+    }
+}
+
+#[test]
+fn test_normal_inverse_reference_grid_and_symmetry() {
+    // AS 241 (Wichura, Applied Statistics 37 (1988), 477-484) reference
+    // probabilities cover the central approximation and both inverse tails.
+    let references = [
+        (0.001, -3.090232306167813),
+        (0.025, -1.9599639845400538),
+        (0.1, -1.2815515655446008),
+        (0.5, 0.0),
+        (0.9, 1.2815515655446008),
+        (0.975, 1.9599639845400536),
+        (0.999, 3.090232306167813),
+    ];
+
+    for (probability, expected) in references {
+        let actual = number(FnNormSInv.call(&[num(probability)]), "NORM.S.INV reference");
+        assert!(
+            (actual - expected).abs() <= 4.0e-15,
+            "NORM.S.INV({probability}) expected {expected:.17e}, got {actual:.17e}"
+        );
+    }
+
+    for probability in [0.001, 0.025, 0.1, 0.25, 0.5] {
+        let lower = number(
+            FnNormSInv.call(&[num(probability)]),
+            "NORM.S.INV symmetry lower",
+        );
+        let upper = number(
+            FnNormSInv.call(&[num(1.0 - probability)]),
+            "NORM.S.INV symmetry upper",
+        );
+        assert!(
+            (lower + upper).abs() <= 8.0 * f64::EPSILON,
+            "Phi^-1({probability}) + Phi^-1({}) was {:.17e}",
+            1.0 - probability,
+            lower + upper
+        );
+    }
+}
+
+#[test]
+fn test_normal_inverse_independent_lower_tail_oracle() {
+    // Independent Cephes/SciPy oracle: ndtri(1e-16) =
+    // -8.222082216130435. This is a direct quantile check rather than a
+    // CDF/inverse round trip, so a shared approximation error cannot cancel.
+    let actual = number(
+        FnNormSInv.call(&[num(1.0e-16)]),
+        "NORM.S.INV(1e-16) lower-tail oracle",
+    );
+    let expected = -8.222082216130435;
+    assert!(
+        (actual - expected).abs() <= 2.0e-15,
+        "NORM.S.INV(1e-16) expected {expected:.17e}, got {actual:.17e}"
+    );
+}
+
+#[test]
+fn test_normal_corpus_stress_inputs() {
+    // These are the actual normal-family inputs found in the frozen
+    // tier_a_formula_stress_test residual corpus: z = 1/3, 3, and 2.
+    let one_third = number(
+        FnNormDist.call(&[num(0.0), num(-1.0), num(3.0), bv(true)]),
+        "NORM.DIST(0,-1,3,TRUE)",
+    );
+    assert!((one_third - 0.6305586598182363).abs() <= 4.0e-16);
+
+    let three = number(
+        FnNormSDist.call(&[num(3.0), bv(true)]),
+        "NORM.S.DIST(3,TRUE)",
+    );
+    assert!((three - 0.9986501019683699).abs() <= 4.0e-16);
+
+    let two = number(
+        FnNormSDist.call(&[num(2.0), bv(true)]),
+        "NORM.S.DIST(2,TRUE)",
+    );
+    assert!((two - 0.9772498680518208).abs() <= 4.0e-16);
+
+    // Round trips use the computed CDF, so this checks the inverse without
+    // baking a workbook cache value into the implementation contract.
+    let one_third_inverse = number(
+        FnNormInv.call(&[num(one_third), num(-1.0), num(3.0)]),
+        "NORM.INV(NORM.DIST(0,-1,3,TRUE),-1,3)",
+    );
+    assert!(one_third_inverse.abs() <= 4.0e-15);
+
+    let three_inverse = number(
+        FnNormSInv.call(&[num(three)]),
+        "NORM.S.INV(NORM.S.DIST(3,TRUE))",
+    );
+    assert!((three_inverse - 3.0).abs() <= 4.0e-15);
+
+    let two_inverse = number(
+        FnNormSInv.call(&[num(two)]),
+        "NORM.S.INV(NORM.S.DIST(2,TRUE))",
+    );
+    assert!((two_inverse - 2.0).abs() <= 4.0e-15);
+}
+
 #[test]
 fn test_norm_s_inv_p_zero() {
     assert_eq!(FnNormSInv.call(&[num(0.0)]), err(CellError::Num));

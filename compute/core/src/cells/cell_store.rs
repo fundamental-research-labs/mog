@@ -6,7 +6,7 @@ use crate::projection::{
     CellRender, MaterializedCellView, PlainCellView, ProjectionRegistry, ProjectionView,
     RegionKind, RegionRef,
 };
-use cell_types::{CellId, ColId, RowId, SheetId};
+use cell_types::{CellId, ColId, RowId, SheetId, SheetPos};
 use domain_types::domain::table::TableCatalogEntry as CanonicalTable;
 use formula_types::TableDef;
 use snapshot_types::{DataTableRegionDef, PivotTableDef};
@@ -20,7 +20,19 @@ use super::variable_store::VariableStore;
 /// Holds all sheets with their cells, plus workbook-level named ranges and tables.
 #[derive(Debug, Clone)]
 pub struct CellStore {
+    pub(crate) cell_metadata_provider:
+        Option<std::sync::Arc<dyn super::cell_metadata::CellMetadataProvider>>,
+    pub(crate) evaluated_metadata_revision: u64,
+    /// Workbook date system supplied by the engine's workbook settings store.
+    pub(crate) date1904: bool,
     pub(crate) history: crate::storage::engine::history::HistoryCapture,
+    /// Runtime-only code page selected for the legacy CHAR/CODE functions.
+    ///
+    /// This is deliberately kept alongside the evaluation store instead of
+    /// being inferred from workbook culture or persisted workbook metadata.
+    /// A rebuilt store copies the value from the previous session so a
+    /// calculation-context change remains effective across lifecycle paths.
+    pub(crate) char_code_page: compute_functions::CharCodePage,
     pub(super) id_alloc: std::sync::Arc<cell_types::IdAllocator>,
     pub(super) sheets: FxHashMap<SheetId, SheetStore>,
     /// Lowercase sheet name -> SheetId for case-insensitive lookup.
@@ -62,6 +74,12 @@ pub struct CellStore {
     /// degenerate case and lives here too — populated via XLSX hydration
     /// and via `set_array_formula` for in-app entries.
     pub(crate) cse_anchors: FxHashSet<CellId>,
+    /// Imported-array cache positions invalidated while evaluating this store.
+    ///
+    /// The storage sidecar owns the durable cache metadata. The cell store keeps
+    /// this small write-through set so callers can update that sidecar exactly
+    /// when a live array owner publishes a result, before dependents evaluate.
+    pub(crate) imported_array_cache_invalidations: FxHashSet<(SheetId, cell_types::SheetPos)>,
 }
 
 impl Default for CellStore {
@@ -97,7 +115,11 @@ impl CellStore {
     /// Create an empty cell store.
     pub fn new() -> Self {
         Self {
+            cell_metadata_provider: None,
+            evaluated_metadata_revision: 0,
+            date1904: false,
             history: Default::default(),
+            char_code_page: compute_functions::DEFAULT_CHAR_CODE_PAGE,
             id_alloc: std::sync::Arc::new(cell_types::IdAllocator::new()),
             sheets: FxHashMap::default(),
             sheet_names: FxHashMap::default(),
@@ -116,7 +138,62 @@ impl CellStore {
             col_versions: FxHashMap::default(),
             cse_single_cell: FxHashSet::default(),
             cse_anchors: FxHashSet::default(),
+            imported_array_cache_invalidations: FxHashSet::default(),
         }
+    }
+
+    /// Install package-cached values for imported dynamic-array spill members.
+    /// The cache is kept separate from authored identities so a declared spill
+    /// range cannot be mistaken for a set of blockers during recalc.
+    pub(crate) fn install_imported_array_caches(
+        &mut self,
+        caches: &std::collections::HashMap<
+            SheetId,
+            Vec<crate::imported_array_cache::ImportedArrayCache>,
+        >,
+    ) {
+        self.imported_array_cache_invalidations.clear();
+        for sheet in self.sheets.values_mut() {
+            sheet.clear_imported_array_cache();
+        }
+        for (sheet_id, cells) in caches {
+            if let Some(sheet) = self.sheets.get_mut(sheet_id) {
+                sheet.install_imported_array_cache(cells.iter().cloned());
+            }
+        }
+    }
+
+    /// Clear imported package caches after a live edit or successful recalc.
+    pub(crate) fn clear_imported_array_caches(&mut self) {
+        self.imported_array_cache_invalidations.clear();
+        for sheet in self.sheets.values_mut() {
+            sheet.clear_imported_array_cache();
+        }
+    }
+
+    /// Invalidate only imported spill caches touched by the supplied changes.
+    pub(crate) fn invalidate_imported_array_caches_at(
+        &mut self,
+        changes: impl IntoIterator<Item = (SheetId, SheetPos)>,
+    ) {
+        let mut by_sheet: std::collections::HashMap<SheetId, Vec<SheetPos>> =
+            std::collections::HashMap::new();
+        for (sheet_id, position) in changes {
+            by_sheet.entry(sheet_id).or_default().push(position);
+        }
+        for (sheet_id, positions) in by_sheet {
+            for position in &positions {
+                self.imported_array_cache_invalidations
+                    .insert((sheet_id, *position));
+            }
+            if let Some(sheet) = self.sheets.get_mut(&sheet_id) {
+                sheet.invalidate_imported_array_caches_at(positions.iter().copied());
+            }
+        }
+    }
+
+    pub(crate) fn take_imported_array_cache_invalidations(&mut self) -> Vec<(SheetId, SheetPos)> {
+        self.imported_array_cache_invalidations.drain().collect()
     }
 
     /// Mark `cell_id` as the anchor of a CSE array formula. Idempotent.
@@ -136,7 +213,13 @@ impl CellStore {
 
     /// Returns `true` if `cell_id` is registered as a CSE anchor.
     pub fn is_cse_anchor(&self, cell_id: &CellId) -> bool {
-        self.cse_anchors.contains(cell_id)
+        !matches!(
+            self.formula_result_mode(cell_id),
+            Some(
+                super::cell_metadata::FormulaResultMode::Dynamic
+                    | super::cell_metadata::FormulaResultMode::LegacyScalar
+            )
+        ) && self.cse_anchors.contains(cell_id)
     }
 
     /// Returns the CSE anchor whose extent covers `(sheet, row, col)` —
@@ -153,7 +236,7 @@ impl CellStore {
         col: u32,
     ) -> Option<(CellId, SheetPos)> {
         let (source, _, _) = self.projection_registry.resolve(sheet, row, col)?;
-        if !self.cse_anchors.contains(&source) {
+        if !self.is_cse_anchor(&source) {
             return None;
         }
         let anchor_pos = self.resolve_position(&source)?;
@@ -174,7 +257,7 @@ impl CellStore {
         col: u32,
     ) -> Option<(CellId, SheetPos)> {
         let (source, _, _) = self.projection_registry.resolve(sheet, row, col)?;
-        if self.cse_anchors.contains(&source) {
+        if self.is_cse_anchor(&source) {
             return None;
         }
         let anchor_pos = self.resolve_position(&source)?;
@@ -262,13 +345,21 @@ impl CellStore {
                 scalar if elem_row == 0 && elem_col == 0 => scalar,
                 _ => &CellValue::Null,
             };
+            let value = if value.is_null() {
+                self.sheets
+                    .get(sheet)
+                    .and_then(|sheet| sheet.imported_array_cache_value_at(SheetPos::new(row, col)))
+                    .unwrap_or(value)
+            } else {
+                value
+            };
 
             return CellRender::Projection(ProjectionView {
                 anchor_id,
                 anchor_row: anchor_pos.row(),
                 anchor_col: anchor_pos.col(),
                 value,
-                is_cse: self.cse_anchors.contains(&anchor_id),
+                is_cse: self.is_cse_anchor(&anchor_id),
             });
         }
 
@@ -592,7 +683,6 @@ impl CellStore {
 // ---------------------------------------------------------------------------
 
 use crate::eval::context::traits::DataSource;
-use cell_types::SheetPos;
 use compute_graph::positions::{CellPosition, PositionResolver};
 use value_types::CellValue;
 

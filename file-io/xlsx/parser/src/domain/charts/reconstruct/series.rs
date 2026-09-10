@@ -13,15 +13,17 @@ use ooxml_types::charts::{
 use ooxml_types::drawings::{DrawingColor, DrawingFill, ShapeProperties, SolidFill};
 
 use super::{
+    chart_space::merge_imported_shape_properties,
     elements::{
-        apply_default_shadow_to_shape_properties, build_chart_text_rich, build_data_label_override,
-        build_data_labels,
+        apply_default_shadow_to_shape_properties, build_data_label_override, build_data_labels,
     },
     formatting::{build_drawing_color, build_outline, build_shape_properties, build_text_body},
     text_body_fidelity::{
-        preserve_imported_data_label_text_properties,
+        preserve_imported_extensions, preserve_imported_matching_data_label_text_properties,
         preserve_imported_optional_data_label_options_fidelity,
+        preserve_imported_text_body_properties,
     },
+    title_text::build_chart_text_rich,
 };
 
 // =============================================================================
@@ -207,18 +209,156 @@ fn apply_series_leader_lines(d_lbls: &mut Option<charts::DataLabelOptions>, sd: 
 pub(super) fn preserve_imported_series_text_body_properties(
     target: &mut charts::ChartSeries,
     imported: &charts::ChartSeries,
+    modeled: &ChartSeriesData,
 ) {
+    merge_imported_shape_properties(&mut target.sp_pr, imported.sp_pr.as_ref());
+    if target.marker.is_none() {
+        target.marker = imported.marker.clone();
+    } else if let (Some(target_marker), Some(imported_marker)) =
+        (target.marker.as_mut(), imported.marker.as_ref())
+    {
+        merge_imported_shape_properties(&mut target_marker.sp_pr, imported_marker.sp_pr.as_ref());
+        preserve_imported_extensions(
+            &mut target_marker.extensions,
+            &imported_marker.extensions,
+            false,
+        );
+    }
+    preserve_imported_extensions(&mut target.extensions, &imported.extensions, false);
+    target.has_empty_ext_lst |= imported.has_empty_ext_lst;
+    if target.raw_series_type_attr.is_none() {
+        target.raw_series_type_attr = imported.raw_series_type_attr.clone();
+    }
+
+    for point in &mut target.d_pt {
+        let Some(imported_point) = imported
+            .d_pt
+            .iter()
+            .find(|candidate| candidate.idx == point.idx)
+        else {
+            continue;
+        };
+        merge_imported_shape_properties(&mut point.sp_pr, imported_point.sp_pr.as_ref());
+        if point.marker.is_none() {
+            point.marker = imported_point.marker.clone();
+        } else if let (Some(target_marker), Some(imported_marker)) =
+            (point.marker.as_mut(), imported_point.marker.as_ref())
+        {
+            merge_imported_shape_properties(
+                &mut target_marker.sp_pr,
+                imported_marker.sp_pr.as_ref(),
+            );
+            preserve_imported_extensions(
+                &mut target_marker.extensions,
+                &imported_marker.extensions,
+                false,
+            );
+        }
+        preserve_imported_extensions(&mut point.extensions, &imported_point.extensions, false);
+    }
+
     preserve_imported_optional_data_label_options_fidelity(
         &mut target.d_lbls,
         imported.d_lbls.as_ref(),
     );
 
-    for label in &mut target.d_lbl {
-        let imported_label = imported
-            .d_lbl
+    if let Some(target_labels) = target.d_lbls.as_mut() {
+        preserve_imported_matching_data_label_text_properties(
+            &mut target_labels.d_lbl,
+            &imported.d_lbl,
+        );
+    }
+
+    preserve_imported_matching_data_label_text_properties(&mut target.d_lbl, &imported.d_lbl);
+
+    preserve_imported_trendlines(&mut target.trendline, &imported.trendline, modeled);
+    preserve_imported_error_bars(&mut target.err_bars, &imported.err_bars, modeled);
+}
+
+fn preserve_imported_trendlines(
+    target: &mut Vec<Trendline>,
+    imported: &[Trendline],
+    modeled: &ChartSeriesData,
+) {
+    let Some(modeled_trendlines) = modeled.trendlines.as_ref() else {
+        if target.is_empty() {
+            target.extend(imported.iter().cloned());
+        }
+        return;
+    };
+    // An explicit empty list is the owner-clear contract. Do not replay the
+    // imported trendline (or its relationship-backed label fill) in that case.
+    if modeled_trendlines.is_empty() {
+        return;
+    }
+    for (index, trendline) in target.iter_mut().enumerate() {
+        let Some(imported_trendline) = imported.get(index) else {
+            continue;
+        };
+        merge_imported_shape_properties(&mut trendline.sp_pr, imported_trendline.sp_pr.as_ref());
+        preserve_imported_extensions(
+            &mut trendline.extensions,
+            &imported_trendline.extensions,
+            false,
+        );
+        preserve_imported_trendline_label(
+            &mut trendline.trendline_lbl,
+            imported_trendline.trendline_lbl.as_ref(),
+        );
+    }
+}
+
+fn preserve_imported_trendline_label(
+    target: &mut Option<TrendlineLabel>,
+    imported: Option<&TrendlineLabel>,
+) {
+    let Some(imported) = imported else {
+        return;
+    };
+    let Some(target) = target.as_mut() else {
+        return;
+    };
+    if target.layout.is_none() {
+        target.layout = imported.layout.clone();
+    }
+    if target.tx.is_none() {
+        target.tx = imported.tx.clone();
+    }
+    if target.num_fmt.is_none() {
+        target.num_fmt = imported.num_fmt.clone();
+    }
+    merge_imported_shape_properties(&mut target.sp_pr, imported.sp_pr.as_ref());
+    preserve_imported_text_body_properties(&mut target.tx_pr, imported.tx_pr.as_ref());
+    preserve_imported_extensions(&mut target.extensions, &imported.extensions, false);
+}
+
+fn preserve_imported_error_bars(
+    target: &mut Vec<ErrorBars>,
+    imported: &[ErrorBars],
+    modeled: &ChartSeriesData,
+) {
+    let modeled_has_error_bar_state = modeled.error_bars.is_some()
+        || modeled.x_error_bars.is_some()
+        || modeled.y_error_bars.is_some();
+    if !modeled_has_error_bar_state {
+        // Parsed series with no error bars have an empty imported vector. For
+        // an imported vector, the three public slots being absent represent an
+        // explicit clear (used by edit callers), so leave the target empty.
+        return;
+    }
+    for error_bars in target.iter_mut() {
+        let Some(imported_error_bars) = imported
             .iter()
-            .find(|candidate| candidate.idx == label.idx);
-        preserve_imported_data_label_text_properties(label, imported_label);
+            .find(|candidate| candidate.err_dir == error_bars.err_dir)
+        else {
+            continue;
+        };
+        merge_imported_shape_properties(&mut error_bars.sp_pr, imported_error_bars.sp_pr.as_ref());
+        preserve_imported_extensions(
+            &mut error_bars.extensions,
+            &imported_error_bars.extensions,
+            false,
+        );
     }
 }
 

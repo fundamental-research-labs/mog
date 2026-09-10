@@ -2,11 +2,12 @@
 
 use value_types::CellValue;
 
+use super::super::date_context::canonical_date_arg_truncated;
 use super::super::helpers::{
     arg_num, count_coupons_remaining, coupdaybs_calc, coupdaysnc_calc, days_in_coupon_period,
     err_val, next_coupon_date, num_or_err_msg, prev_coupon_date, req_num, validate_bond_args,
 };
-use crate::PureFunction;
+use crate::{FunctionContext, PureFunction};
 
 pub(super) struct FnCoupdays;
 impl PureFunction for FnCoupdays {
@@ -23,9 +24,12 @@ impl PureFunction for FnCoupdays {
         Some(4)
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
+        self.call_with_context(args, &FunctionContext::default())
+    }
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
-            let settlement = req_num(args, 0).map_err(err_val)?;
-            let maturity = req_num(args, 1).map_err(err_val)?;
+            let settlement = canonical_date_arg_truncated(args, 0, context).map_err(err_val)?;
+            let maturity = canonical_date_arg_truncated(args, 1, context).map_err(err_val)?;
             let frequency = req_num(args, 2).map_err(err_val)? as i32;
             let basis = arg_num(args, 3, 0.0).map_err(err_val)? as i32;
             validate_bond_args(settlement, maturity, frequency, basis)?;
@@ -51,9 +55,12 @@ impl PureFunction for FnCoupdaybs {
         Some(4)
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
+        self.call_with_context(args, &FunctionContext::default())
+    }
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
-            let settlement = req_num(args, 0).map_err(err_val)?;
-            let maturity = req_num(args, 1).map_err(err_val)?;
+            let settlement = canonical_date_arg_truncated(args, 0, context).map_err(err_val)?;
+            let maturity = canonical_date_arg_truncated(args, 1, context).map_err(err_val)?;
             let frequency = req_num(args, 2).map_err(err_val)? as i32;
             let basis = arg_num(args, 3, 0.0).map_err(err_val)? as i32;
             validate_bond_args(settlement, maturity, frequency, basis)?;
@@ -77,9 +84,12 @@ impl PureFunction for FnCoupdaysnc {
         Some(4)
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
+        self.call_with_context(args, &FunctionContext::default())
+    }
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
-            let settlement = req_num(args, 0).map_err(err_val)?;
-            let maturity = req_num(args, 1).map_err(err_val)?;
+            let settlement = canonical_date_arg_truncated(args, 0, context).map_err(err_val)?;
+            let maturity = canonical_date_arg_truncated(args, 1, context).map_err(err_val)?;
             let frequency = req_num(args, 2).map_err(err_val)? as i32;
             let basis = arg_num(args, 3, 0.0).map_err(err_val)? as i32;
             validate_bond_args(settlement, maturity, frequency, basis)?;
@@ -103,13 +113,17 @@ impl PureFunction for FnCoupncd {
         Some(4)
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
+        self.call_with_context(args, &FunctionContext::default())
+    }
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
-            let settlement = req_num(args, 0).map_err(err_val)?;
-            let maturity = req_num(args, 1).map_err(err_val)?;
+            let settlement = canonical_date_arg_truncated(args, 0, context).map_err(err_val)?;
+            let maturity = canonical_date_arg_truncated(args, 1, context).map_err(err_val)?;
             let frequency = req_num(args, 2).map_err(err_val)? as i32;
             let basis = arg_num(args, 3, 0.0).map_err(err_val)? as i32;
             validate_bond_args(settlement, maturity, frequency, basis)?;
-            Ok(next_coupon_date(settlement, maturity, frequency))
+            Ok(context
+                .from_canonical_date_serial(next_coupon_date(settlement, maturity, frequency)))
         })())
     }
 }
@@ -129,13 +143,17 @@ impl PureFunction for FnCouppcd {
         Some(4)
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
+        self.call_with_context(args, &FunctionContext::default())
+    }
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
-            let settlement = req_num(args, 0).map_err(err_val)?;
-            let maturity = req_num(args, 1).map_err(err_val)?;
+            let settlement = canonical_date_arg_truncated(args, 0, context).map_err(err_val)?;
+            let maturity = canonical_date_arg_truncated(args, 1, context).map_err(err_val)?;
             let frequency = req_num(args, 2).map_err(err_val)? as i32;
             let basis = arg_num(args, 3, 0.0).map_err(err_val)? as i32;
             validate_bond_args(settlement, maturity, frequency, basis)?;
-            Ok(prev_coupon_date(settlement, maturity, frequency))
+            Ok(context
+                .from_canonical_date_serial(prev_coupon_date(settlement, maturity, frequency)))
         })())
     }
 }
@@ -155,9 +173,12 @@ impl PureFunction for FnCoupnum {
         Some(4)
     }
     fn call(&self, args: &[CellValue]) -> CellValue {
+        self.call_with_context(args, &FunctionContext::default())
+    }
+    fn call_with_context(&self, args: &[CellValue], context: &FunctionContext) -> CellValue {
         num_or_err_msg((|| {
-            let settlement = req_num(args, 0).map_err(err_val)?;
-            let maturity = req_num(args, 1).map_err(err_val)?;
+            let settlement = canonical_date_arg_truncated(args, 0, context).map_err(err_val)?;
+            let maturity = canonical_date_arg_truncated(args, 1, context).map_err(err_val)?;
             let frequency = req_num(args, 2).map_err(err_val)? as i32;
             let basis = arg_num(args, 3, 0.0).map_err(err_val)? as i32;
             validate_bond_args(settlement, maturity, frequency, basis)?;

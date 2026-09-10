@@ -3,7 +3,7 @@
 //! AMORDEGRC, AMORLINC, DB, DDB, SLN, SYD, VDB,
 //! IRR, MIRR, NPV, XIRR, XNPV,
 //! ACCRINT, ACCRINTM, COUPDAYBS, COUPDAYS, COUPDAYSNC, COUPNCD, COUPNUM, COUPPCD,
-//! DURATION, MDURATION, PRICE, YIELD,
+//! DURATION, MDURATION, PRICE, YIELD, ODDFPRICE, ODDFYIELD, ODDLPRICE, ODDLYIELD,
 //! DISC, INTRATE, PRICEDISC, PRICEMAT, RECEIVED, YIELDDISC, YIELDMAT,
 //! TBILLEQ, TBILLPRICE, TBILLYIELD,
 //! DOLLARDE, DOLLARFR, EFFECT, NOMINAL, PDURATION, RRI,
@@ -12,6 +12,7 @@
 pub(crate) mod helpers;
 
 mod conversion;
+pub(crate) mod date_context;
 mod depreciation;
 mod discount;
 mod investment;
@@ -19,6 +20,9 @@ mod payment;
 mod securities;
 mod time_value;
 mod treasury;
+
+#[cfg(test)]
+mod date_contracts;
 
 use crate::FunctionRegistry;
 

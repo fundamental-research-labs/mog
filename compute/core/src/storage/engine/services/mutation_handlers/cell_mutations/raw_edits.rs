@@ -10,6 +10,7 @@ use crate::storage::engine::stores::EngineStores;
 
 use super::edits::{canonicalize_resolved_raw_edits, validate_edit_bounds};
 use super::identity_registration::register_cell_positions;
+use super::imported_array_caches;
 
 pub(in crate::storage::engine) fn mutation_set_cells_raw(
     stores: &mut EngineStores,
@@ -44,6 +45,9 @@ pub(in crate::storage::engine) fn mutation_set_cells_raw_with_trust(
             .compute
             .validate_raw_user_edit_region_writes(cell_store, &edits)?;
     }
+    // Viewport-only deferred imports reject graph construction. Do that
+    // preflight before history, identity, and metadata are mutated below.
+    stores.compute.ensure_graph_construction_ready()?;
 
     for (sheet, cell, row, col, _, _) in &edits {
         crate::storage::engine::history::cells::capture_cell(
@@ -83,6 +87,9 @@ pub(in crate::storage::engine) fn mutation_set_cells_raw_with_trust(
     let mut cache_metadata_cells: HashMap<SheetId, Vec<CellId>> = HashMap::new();
     for (sheet_id, cell_id, _, _, _, _) in &edits {
         stores.storage.clear_cell_metadata(*cell_id);
+        // A single-cell imported CSE marker is runtime declaration state too.
+        // Ordinary authored replacement must not retain its scalar-only behavior.
+        cell_store.cse_single_cell.remove(cell_id);
         cache_metadata_cells
             .entry(*sheet_id)
             .or_default()
@@ -96,6 +103,21 @@ pub(in crate::storage::engine) fn mutation_set_cells_raw_with_trust(
         );
     }
 
+    crate::storage::engine::cell_metadata::refresh(
+        &stores.storage,
+        cell_store,
+        stores.layout_metrics,
+    );
+
+    // Raw edits power copy, fill, paste, and scenario paths. They need the
+    // same pre-scheduler retirement as parsed edits so an imported spill's
+    // old cached children cannot block a replacement of its anchor.
+    imported_array_caches::retire_for_positions(
+        cell_store,
+        edits
+            .iter()
+            .map(|(sheet_id, _, row, col, _, _)| (*sheet_id, *row, *col)),
+    );
     // 5. Delegate to ComputeCore for recalculation via lossless entry point.
     //    For formula edits, `process_value_input` owns the cell store update and
     //    will preserve the prior value as a seed when the formula matches.
@@ -106,9 +128,17 @@ pub(in crate::storage::engine) fn mutation_set_cells_raw_with_trust(
     //    materialization can pass `TrustedReplay` after validating the parent
     //    operation atomically.
     let mut result =
-        stores
+        match stores
             .compute
-            .set_cells_raw_with_trust(cell_store, &edits, skip_cycle_check, trust)?;
+            .set_cells_raw_with_trust(cell_store, &edits, skip_cycle_check, trust)
+        {
+            Ok(result) => result,
+            Err(error) => {
+                imported_array_caches::restore_after_rejection(stores, cell_store);
+                return Err(error);
+            }
+        };
+    imported_array_caches::commit(stores, cell_store);
     sync_grid_axes(stores, cell_store);
 
     // Patch before-side fields onto seed changes. Direct formula edits can

@@ -40,8 +40,31 @@ pub(crate) fn format_datetime(
     serial: f64,
     section: &FormatSection,
     locale: &CultureInfo,
+    date1904: bool,
 ) -> String {
-    let (year, month, day, hours, minutes, seconds) = serial_to_datetime_parts(serial);
+    let precision = section
+        .tokens
+        .iter()
+        .filter_map(|t| {
+            if let Token::FractionalSecond(n) = t {
+                Some(*n)
+            } else {
+                None
+            }
+        })
+        .max()
+        .unwrap_or(0)
+        .min(9);
+    let factor = 10u64.pow(precision as u32);
+    let ticks = (serial.fract().abs() * 86400.0 * factor as f64).round() as u64;
+    let total_seconds = ticks / factor;
+    let fractional_ticks = ticks % factor;
+    let calendar_serial =
+        serial.floor() + if date1904 { 1462.0 } else { 0.0 } + (total_seconds / 86400) as f64;
+    let (year, month, day, _, _, _) = serial_to_datetime_parts(calendar_serial);
+    let hours = ((total_seconds / 3600) % 24) as u32;
+    let minutes = ((total_seconds / 60) % 60) as u32;
+    let seconds = (total_seconds % 60) as u32;
 
     let has_ampm = section.tokens.iter().any(|t| matches!(t, Token::AmPm(_)));
     let (display_hour, ampm_str) = if has_ampm {
@@ -60,7 +83,8 @@ pub(crate) fn format_datetime(
 
     // Elapsed time computations (for [h], [m], [s] brackets)
     let total_seconds_f = serial.abs() * 86400.0;
-    let total_seconds_all = total_seconds_f.round() as u64;
+    let total_seconds_all =
+        ((total_seconds_f * factor as f64).round() / factor as f64).floor() as u64;
     let total_hours = total_seconds_all / 3600;
     let total_minutes_all = total_seconds_all / 60;
 
@@ -81,12 +105,12 @@ pub(crate) fn format_datetime(
     // (mapped to Mar 1, 1900 which has the correct weekday for the fictional Feb 29, 1900).
     // Serial 0 is a special case: Excel treats it as Saturday.
     // weekday_sun0: Sunday=0, Monday=1, ..., Saturday=6 (matches locale's day_names indexing)
-    let int_serial = serial.floor() as i64;
+    let int_serial = calendar_serial.floor() as i64;
     let weekday_sun0 = if int_serial == 0 {
         6 // Saturday in Sun=0..Sat=6 indexing
     } else {
         // SAFETY: 1900-01-01 is a valid date; from_ymd_opt cannot return None here.
-        let weekday_date = serial_to_date(serial)
+        let weekday_date = serial_to_date(calendar_serial)
             .unwrap_or(chrono::NaiveDate::from_ymd_opt(1900, 1, 1).expect("constant date"));
         weekday_date.weekday().num_days_from_sunday() as usize
     };
@@ -94,7 +118,10 @@ pub(crate) fn format_datetime(
     let mut result = String::new();
     for tok in &section.tokens {
         match tok {
-            Token::DateYear4 => {
+            // The locale model currently supplies Gregorian calendar names,
+            // not an alternate calendar/era selector. Preserve the era token
+            // separately so calendar-specific rendering can be added later.
+            Token::DateYear4 | Token::DateEraYear(_) => {
                 let _ = write!(result, "{year:04}");
             }
             Token::DateYear2 => {
@@ -188,9 +215,22 @@ pub(crate) fn format_datetime(
             Token::AmPm(orig) => {
                 let upper = orig.to_uppercase();
                 if upper == "A/P" {
-                    result.push_str(&ampm_str[..1]);
+                    // A/P preserves the case of each marker independently;
+                    // AM/PM uses the locale designator regardless of token case.
+                    if let Some(marker) = orig.chars().nth(if hours < 12 { 0 } else { 2 }) {
+                        result.push(marker);
+                    }
                 } else {
                     result.push_str(ampm_str);
+                }
+            }
+            Token::FractionalSecond(digits) => {
+                let width = (*digits).min(9);
+                let value = fractional_ticks / 10u64.pow((precision - width) as u32);
+                result.push_str(&locale.decimal_separator);
+                let _ = write!(result, "{value:0width$}");
+                if *digits > width {
+                    result.push_str(&"0".repeat(*digits - width));
                 }
             }
             Token::Literal(s) => result.push_str(s),

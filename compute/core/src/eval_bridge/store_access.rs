@@ -1,4 +1,4 @@
-//! MirrorAccess — shared structural query layer over CellStore.
+//! StoreAccess — shared structural query layer over CellStore.
 //!
 //! Provides positional resolution and direct value access methods extracted
 //! from EvalContext. Composed by both EvalContext and OverrideContext
@@ -50,7 +50,7 @@ fn classify_name_fallback(raw: &str) -> ResolvedName {
     }
 }
 
-/// One-cell value override consulted by [`MirrorAccess::get_cell_value_by_ref`]
+/// One-cell value override consulted by [`StoreAccess::get_cell_value_by_ref`]
 /// before reading the cell store. Used by the editor-commit data-validation path
 /// where the typed value has not yet been committed to the cell store but the
 /// formula constraint must see it as if it were.
@@ -64,7 +64,7 @@ pub struct PendingCellOverride {
 /// Wraps a `&CellStore` plus evaluation cell context. Provides all structural
 /// queries (positional resolution, defined name resolution, table resolution)
 /// and direct value access from the cell store.
-pub struct MirrorAccess<'a> {
+pub struct StoreAccess<'a> {
     pub cell_store: &'a CellStore,
     pub current_cell_id: CellId,
     pub current_sheet: SheetId,
@@ -75,7 +75,7 @@ pub struct MirrorAccess<'a> {
     pub formula_text_provider: FormulaTextProvider<'a>,
 }
 
-impl<'a> MirrorAccess<'a> {
+impl<'a> StoreAccess<'a> {
     pub fn new(cell_store: &'a CellStore, current_cell_id: CellId, current_sheet: SheetId) -> Self {
         Self {
             cell_store,
@@ -323,6 +323,11 @@ impl<'a> MirrorAccess<'a> {
         // Build scope chain: current sheet first, then workbook
         let chain = [Scope::Sheet(self.current_sheet), Scope::Workbook];
         let nr = self.cell_store.resolve_variable(name, &chain)?;
+        self.resolve_named_range_def(nr)
+    }
+
+    pub fn resolve_workbook_name(&self, name: &str) -> Option<ResolvedName> {
+        let nr = self.cell_store.resolve_variable(name, &[Scope::Workbook])?;
         self.resolve_named_range_def(nr)
     }
 

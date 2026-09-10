@@ -18,7 +18,8 @@ pub struct PageSetup {
     pub paper_height: Option<UniversalMeasure>,
     /// Page orientation
     pub orientation: Orientation,
-    /// Scale percentage (10-400, 100 = 100%)
+    /// Scale percentage (10-400, 100 = 100%). Excel also accepts `0` as
+    /// automatic scaling; callers must keep that sentinel distinct from 10.
     pub scale: Option<u32>,
     /// Fit to width in pages (0 = auto)
     pub fit_to_width: Option<u32>,

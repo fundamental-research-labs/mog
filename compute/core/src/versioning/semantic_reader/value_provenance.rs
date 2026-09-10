@@ -207,6 +207,13 @@ fn record_native_cell_value_provenance(
     let Some(metadata) = engine.storage().cell_metadata(&cell_id) else {
         return;
     };
+    if let Some(mode) = metadata.formula_result_mode {
+        provenance.insert_marker(
+            FORMULA_METADATA_CATEGORY,
+            "formulaResultMode",
+            serde_json::to_value(mode).expect("typed formula result mode serializes"),
+        );
+    }
     if let Some(formula) = &metadata.formula {
         provenance.insert_marker(
             FORMULA_METADATA_CATEGORY,

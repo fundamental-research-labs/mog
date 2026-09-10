@@ -84,6 +84,29 @@ fn test_coth() {
 }
 
 #[test]
+fn test_coth_large_finite_arguments_avoid_hyperbolic_overflow() {
+    assert_eq!(FnCoth.call(&[num(800.0)]), num(1.0));
+    assert_eq!(FnCoth.call(&[num(-800.0)]), num(-1.0));
+}
+
+#[test]
+fn test_coth_preserves_finite_direct_ratio_and_small_inputs() {
+    for x in [0.5, -0.5, f64::MIN_POSITIVE, -f64::MIN_POSITIVE] {
+        assert_eq!(
+            FnCoth.call(&[num(x)]),
+            num(x.cosh() / x.sinh()),
+            "COTH({x}) should retain the finite cosh/sinh result"
+        );
+    }
+}
+
+#[test]
+fn test_coth_signed_zero_is_division_by_zero() {
+    assert_eq!(FnCoth.call(&[num(0.0)]), err(CellError::Div0));
+    assert_eq!(FnCoth.call(&[num(-0.0)]), err(CellError::Div0));
+}
+
+#[test]
 fn test_hyperbolic_identity() {
     let r = reg();
     for x in [0.0, 0.5, 1.0, -1.0, 2.0, -0.3] {

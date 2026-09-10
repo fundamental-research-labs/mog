@@ -73,6 +73,24 @@ fn test_write_full_ole_object() {
     assert!(xml_str.contains("autoLoad=\"true\""));
     assert!(xml_str.contains("shapeId=\"1026\""));
     assert!(xml_str.contains("r:id=\"rId6\""));
+    assert!(
+        xml_str.contains(
+            r#"xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main""#
+        )
+    );
+    assert!(xml_str.contains(r#"Requires="x14""#));
+    assert!(!xml_str.contains(r#"Requires="r""#));
+    let fallback = xml_str
+        .split("<mc:Fallback>")
+        .nth(1)
+        .unwrap()
+        .split("</mc:Fallback>")
+        .next()
+        .unwrap();
+    assert!(fallback.contains(r#"progId="Excel.Sheet.12""#));
+    assert!(fallback.contains(r#"shapeId="1026""#));
+    assert!(fallback.contains(r#"r:id="rId6""#));
+    assert!(!fallback.contains("objectPr"));
 }
 
 #[test]

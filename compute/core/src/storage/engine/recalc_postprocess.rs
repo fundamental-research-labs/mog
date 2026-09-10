@@ -15,6 +15,29 @@ impl ComputeEngine {
         &mut self,
         recalc: &mut RecalcResult,
     ) {
+        // Imported spill members are package caches. Invalidate only the
+        // declared source/range touched by this mutation so unrelated arrays
+        // remain available when calculation is deferred or manual.
+        let changed = recalc.changed_cells.iter().filter_map(|cell| {
+            let sheet = SheetId::from_uuid_str(&cell.sheet_id).ok()?;
+            let position = cell.position.as_ref()?;
+            Some((sheet, cell_types::SheetPos::new(position.row, position.col)))
+        });
+        let changed: Vec<_> = changed.collect();
+        self.cell_store
+            .invalidate_imported_array_caches_at(changed.iter().copied());
+        let invalidated = self.cell_store.take_imported_array_cache_invalidations();
+        self.stores
+            .storage
+            .invalidate_imported_array_caches_at(invalidated);
+        self.prepare_recalc_for_flush_inner(recalc, true);
+    }
+
+    fn prepare_recalc_for_flush_inner(
+        &mut self,
+        recalc: &mut RecalcResult,
+        invalidate_chart_sources: bool,
+    ) {
         // A mutation reached this funnel: a subsequent full recalc must run.
         // This covers every Engine-level mutation entry point in one place:
         //   set_cell / set_cell_binary / set_cell_value_parsed /
@@ -24,7 +47,15 @@ impl ComputeEngine {
         //   RemoveDuplicates, ClearRange, ClearRangeAndReturnIds, DeleteSheet,
         //   CreateSubtotals, AutoFill, FlashFill, RelocateCells, CopyRange, …
         self.stores.compute.mark_dirty();
+        if invalidate_chart_sources {
+            self.invalidate_chart_source_replays(recalc);
+        }
 
+        crate::storage::engine::cell_metadata::refresh(
+            &self.stores.storage,
+            &mut self.cell_store,
+            self.stores.layout_metrics,
+        );
         self.refresh_cf_caches_after_recalc(recalc);
         self.enrich_display_text(recalc);
 
@@ -54,14 +85,29 @@ impl ComputeEngine {
 
     /// Post-process an import-open recalc for the direct hydration return path.
     ///
-    /// Apply the mutation enrichment without leaving compute dirty; the payload
-    /// is returned directly by `complete_deferred_hydration`.
+    /// This needs the same observable enrichment as mutation flushes, but it
+    /// must preserve the incoming calculation state and not seed a pending
+    /// viewport recalc because the enriched payload is returned directly.
+    /// Deferred imports that only loaded cached results still need their first
+    /// explicit calculation; imports already recalculated on open stay clean.
     pub(in crate::storage::engine) fn postprocess_import_open_recalc(
         &mut self,
         recalc: &mut RecalcResult,
     ) {
-        self.postprocess_mutation_recalc(recalc);
-        self.stores.compute.clear_dirty();
+        let pending_calculation = self.stores.compute.is_dirty();
+        // The initial import recalc describes hydration, not a user edit. Its
+        // changed cells must not invalidate the imported chart package before
+        // the first export has a chance to replay it authoritatively.
+        self.prepare_recalc_for_flush_inner(recalc, false);
+        // Deferred import may have performed a full calculation before this
+        // post-process hook. Propagate publication-time cache invalidations to
+        // storage before a later rebuild can reinstall stale package values.
+        self.sync_imported_array_cache_invalidations();
+        self.enrich_metadata_flags(recalc);
+        if !pending_calculation {
+            self.stores.compute.clear_dirty();
+            self.mark_metadata_evaluated();
+        }
     }
 
     /// Append `RecalcValidationAnnotation` entries for every changed cell

@@ -47,7 +47,9 @@ impl PureFunction for FnType {
     }
 
     fn is_scalar_arg(&self, _index: usize) -> bool {
-        true
+        // TYPE describes an array as one value (64), rather than lifting
+        // element-by-element and describing each scalar inside it.
+        false
     }
 
     fn call(&self, args: &[CellValue]) -> CellValue {

@@ -2,8 +2,6 @@
 
 pub mod engine;
 pub mod properties;
-pub mod security_cache;
-pub mod security_state;
 
 // ---------------------------------------------------------------------------
 // Sub-directories (internal organization)
@@ -17,6 +15,7 @@ pub mod workbook;
 pub(crate) use cell_metadata::{CellMetadata, CellMetadataMap, FormulaMetadata};
 
 use crate::snapshot::WorkbookSnapshot;
+use std::sync::atomic::{AtomicU64, Ordering};
 use value_types::ComputeError;
 
 pub(crate) static STORAGE_ID_ALLOC: std::sync::LazyLock<cell_types::IdAllocator> =
@@ -38,19 +37,83 @@ pub(crate) fn new_runtime_metadata_id_allocator() -> cell_types::IdAllocator {
     cell_types::IdAllocator::with_client_partition(random_nonzero_runtime_partition())
 }
 
+/// A projection revision belongs to one native storage instance. Clones receive
+/// a fresh token so a provider retained by a cloned store cannot mistake a
+/// different storage snapshot for the state it previously observed.
+#[derive(Debug)]
+struct MetadataRevision(AtomicU64);
+
+impl MetadataRevision {
+    fn next() -> u64 {
+        static NEXT: AtomicU64 = AtomicU64::new(1);
+        NEXT.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
+            value.checked_add(1)
+        })
+        .expect("metadata projection revision exhausted")
+    }
+}
+
+impl Default for MetadataRevision {
+    fn default() -> Self {
+        Self(AtomicU64::new(Self::next()))
+    }
+}
+
+impl Clone for MetadataRevision {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
 /// Owns native metadata. The engine owns cell values and identities in a sibling
 /// store so metadata and cell mutations can borrow independently.
 #[derive(Clone, Default)]
 pub struct WorkbookStorage {
+    metadata_revision: MetadataRevision,
     pub(crate) history: engine::history::HistoryCapture,
     pub(crate) cell_metadata: CellMetadataMap,
     pub(crate) metadata: Box<workbook::WorkbookMetadata>,
     pub(crate) sheet_metadata: std::collections::HashMap<cell_types::SheetId, sheet::SheetMetadata>,
+    /// Cached values for imported dynamic-array spill members.
+    ///
+    /// Spill members are package caches, rather than authored cells. They are
+    /// deliberately omitted from the sparse snapshot/grid so they cannot act
+    /// as blockers during projection registration. The cache is retained here
+    /// until a live mutation or recalculation makes the cell store authoritative.
+    pub(crate) imported_array_caches: std::collections::HashMap<
+        cell_types::SheetId,
+        Vec<crate::imported_array_cache::ImportedArrayCache>,
+    >,
 }
 
 impl WorkbookStorage {
+    pub(crate) fn metadata_revision(&self) -> u64 {
+        self.metadata_revision.0.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn invalidate_cell_metadata_projection(&self) {
+        self.metadata_revision
+            .0
+            .store(MetadataRevision::next(), Ordering::Relaxed);
+    }
+
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub(crate) fn invalidate_imported_array_caches_at(
+        &mut self,
+        changes: impl IntoIterator<Item = (cell_types::SheetId, cell_types::SheetPos)>,
+    ) {
+        for (sheet_id, position) in changes {
+            if let Some(caches) = self.imported_array_caches.get_mut(&sheet_id) {
+                for cache in caches {
+                    if cache.source == position || cache.contains(position) {
+                        cache.invalidate_values();
+                    }
+                }
+            }
+        }
     }
 
     pub fn from_snapshot(snapshot: WorkbookSnapshot) -> Result<Self, ComputeError> {

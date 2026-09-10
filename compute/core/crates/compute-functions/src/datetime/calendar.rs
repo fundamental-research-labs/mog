@@ -15,6 +15,32 @@ pub(super) fn serial_to_datetime(serial: f64) -> Option<NaiveDateTime> {
     date.and_hms_opt(hours, minutes, seconds)
 }
 
+/// Return the calendar fields Excel associates with a serial number.
+///
+/// `NaiveDate` cannot represent Excel's compatibility date 1900-02-29, so
+/// `value-types::serial_to_date` maps both serials 60 and 61 to 1900-03-01.
+/// Date functions that operate on calendar fields must retain the distinct
+/// serial-60 fields instead of going through that lossy conversion.
+pub(super) fn excel_serial_to_ymd(serial: f64) -> Option<(i32, u32, u32)> {
+    if !serial.is_finite() || serial < 0.0 {
+        return None;
+    }
+    let day = serial.floor();
+    if day == 60.0 {
+        return Some((1900, 2, 29));
+    }
+    serial_to_date(serial).map(|date| (date.year(), date.month(), date.day()))
+}
+
+/// Convert Excel calendar fields to a serial, including the compatibility
+/// date 1900-02-29 (serial 60).
+pub(super) fn excel_ymd_to_serial(year: i32, month: u32, day: u32) -> Option<f64> {
+    if year == 1900 && month == 2 && day == 29 {
+        return Some(60.0);
+    }
+    NaiveDate::from_ymd_opt(year, month, day).map(|date| date_to_serial(&date))
+}
+
 /// Compute Excel-compatible day-of-week directly from serial number.
 /// Returns 0=Sunday, 1=Monday, ..., 6=Saturday.
 ///
@@ -87,6 +113,35 @@ pub(super) fn last_day_of_month(year: i32, month: u32) -> u32 {
     }
 }
 
+/// Last day of a month in Excel's 1900 date system.
+///
+/// The compatibility date is the only calendar day that differs from the
+/// proleptic Gregorian calendar used by `chrono`.
+pub(super) fn excel_last_day_of_month(year: i32, month: u32) -> u32 {
+    if year == 1900 && month == 2 {
+        29
+    } else {
+        last_day_of_month(year, month)
+    }
+}
+
+/// Add whole calendar months using Excel's source date fields.
+///
+/// Excel exposes serial 60 as the compatibility date 1900-02-29 when it
+/// chooses the day to carry into another month. The target month is still
+/// clamped to the real Gregorian month length: `EDATE(60, 0)` therefore
+/// returns serial 59 (February 28), while `EDATE(60, 1)` carries day 29 into
+/// March and returns serial 89.
+pub(super) fn add_months_to_excel_serial(serial: f64, months: i32) -> Option<f64> {
+    let (year, month, day) = excel_serial_to_ymd(serial)?;
+    let total_months = i64::from(year) * 12 + i64::from(month - 1) + i64::from(months);
+    let target_year = total_months.div_euclid(12);
+    let target_month = (total_months.rem_euclid(12) + 1) as u32;
+    let target_year = i32::try_from(target_year).ok()?;
+    let target_day = day.min(last_day_of_month(target_year, target_month));
+    excel_ymd_to_serial(target_year, target_month, target_day)
+}
+
 pub(super) fn is_leap_year(year: i32) -> bool {
     (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)
 }
@@ -143,9 +198,9 @@ pub(super) fn excel_iso_week_from_serial(serial: f64) -> u32 {
 }
 
 /// Calculate average year length for YEARFRAC basis 1 (actual/actual).
-pub(super) fn year_length_actual(start: NaiveDate, end: NaiveDate) -> f64 {
-    let sy = start.year();
-    let ey = end.year();
+pub(super) fn year_length_actual(start_year: i32, end_year: i32) -> f64 {
+    let sy = start_year;
+    let ey = end_year;
     if sy == ey {
         if is_leap_year(sy) { 366.0 } else { 365.0 }
     } else {
@@ -274,5 +329,16 @@ mod tests {
                 weekday_type1
             );
         }
+    }
+
+    #[test]
+    fn excel_calendar_helpers_keep_the_serial_60_compatibility_day() {
+        assert_eq!(super::excel_serial_to_ymd(60.75), Some((1900, 2, 29)));
+        assert_eq!(super::excel_ymd_to_serial(1900, 2, 29), Some(60.0));
+        assert_eq!(super::excel_last_day_of_month(1900, 2), 29);
+        assert_eq!(super::last_day_of_month(1900, 2), 28);
+        assert_eq!(super::add_months_to_excel_serial(60.0, 0), Some(59.0));
+        assert_eq!(super::add_months_to_excel_serial(60.0, 1), Some(89.0));
+        assert_eq!(super::add_months_to_excel_serial(60.0, -1), Some(29.0));
     }
 }

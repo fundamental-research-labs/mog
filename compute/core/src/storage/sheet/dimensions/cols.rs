@@ -4,7 +4,7 @@ use cell_types::SheetId;
 use domain_types::units::CharWidth;
 use value_types::ComputeError;
 
-pub const DEFAULT_COL_WIDTH: CharWidth = CharWidth(8.43);
+pub const DEFAULT_COL_WIDTH: CharWidth = domain_types::units::DEFAULT_COL_WIDTH;
 
 pub fn set_col_width(
     storage: &mut WorkbookStorage,
@@ -70,7 +70,14 @@ pub fn get_col_width_explicit(
     col: u32,
     grid_index: Option<&GridIndex>,
 ) -> Option<CharWidth> {
-    let id = grid_index?.col_id(col)?;
+    get_col_width_by_id(storage, sheet_id, grid_index?.col_id(col)?)
+}
+
+pub(crate) fn get_col_width_by_id(
+    storage: &WorkbookStorage,
+    sheet_id: &SheetId,
+    id: cell_types::ColId,
+) -> Option<CharWidth> {
     storage
         .sheet_metadata
         .get(sheet_id)?
@@ -84,7 +91,6 @@ pub fn get_sheet_default_col_width(storage: &WorkbookStorage, sheet_id: &SheetId
     storage
         .sheet_metadata
         .get(sheet_id)
-        .and_then(|meta| meta.format.default_col_width)
-        .map(CharWidth)
+        .map(|meta| meta.format.effective_default_col_width())
         .unwrap_or(DEFAULT_COL_WIDTH)
 }

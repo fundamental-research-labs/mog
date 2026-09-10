@@ -25,19 +25,6 @@ domain-types = { path = "../../domain-types" }
 formula-types = { path = "../core/crates/types/formula-types" }
 snapshot-types = { path = "../core/crates/types/snapshot-types" }
 
-# Security types — `ComputeService` owns the active principal and the
-# intern pool (R2.4). Principals cross the bridge as tag lists and are
-# canonicalized client-side via `make_principal`.
-compute-security = { path = "../core/crates/compute-security" }
-
-# Wire crate — R4 viewport filter (`filter_viewport_buffer`) is emitted
-# by the gated delegate for `#[bridge::read(scope = "sheet")]` byte
-# returns (viewport binaries).
-compute-wire = { path = "../core/crates/compute-wire" }
-
-# ArcSwap — service-side `active_principal` swap without `&mut self`.
-arc-swap = "1"
-
 # Serialization
 serde = { workspace = true }
 serde_json = { workspace = true }

@@ -199,6 +199,9 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
             .stores
             .compute
             .init_from_snapshot_viewport_only(&mut engine.cell_store, workbook_snap.clone())?;
+        engine
+            .cell_store
+            .install_imported_array_caches(&engine.stores.storage.imported_array_caches);
         profile.counter("sheets", workbook_snap.sheets.len() as u64);
         profile.counter(
             "snapshot_cells",
@@ -264,6 +267,11 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
     );
     engine.cell_store.finalize_range_hydration();
 
+    // Filter hydration lowers calendar criteria to workbook serials, so install
+    // the epoch before normalizing the critical sheet's imported filters.
+    engine.cell_store.date1904 =
+        crate::storage::workbook::settings::get_settings(&engine.stores.storage.metadata).date1904;
+
     crate::storage::engine::services::imported_filters::normalize_imported_auto_filter_visibility(
         &mut engine.stores,
         &mut engine.cell_store,
@@ -271,6 +279,11 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
         domain_types::ImportPhase::CriticalSheet,
     );
 
+    crate::storage::engine::cell_metadata::refresh(
+        &engine.stores.storage,
+        &mut engine.cell_store,
+        engine.stores.layout_metrics,
+    );
     engine.settings = derive_settings(&engine.stores.storage);
     engine.viewport.clear();
 
@@ -455,6 +468,7 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
     for region in &snapshot.data_table_regions {
         cell_store.upsert_data_table_region(region.clone());
     }
+    cell_store.install_imported_array_caches(&storage.imported_array_caches);
 
     let mut grid_indexes = build_grid_indexes(&cell_store, &snapshot, shared_alloc.clone())?;
     let merge_indexes = build_merge_indexes(&storage, &snapshot, &cell_store)?;
@@ -478,6 +492,9 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
     let calculation = output.calculation.clone();
     cell_store.set_id_alloc(shared_alloc.clone());
     let mut compute = ComputeCore::new();
+    crate::storage::engine::cell_metadata::refresh(&storage, &mut cell_store, layout_metrics);
+    cell_store.date1904 =
+        crate::storage::workbook::settings::get_settings(&storage.metadata).date1904;
     compute.init_native_formula_descriptors(
         &mut cell_store,
         &sheet_ids,

@@ -20,6 +20,3 @@ rust_out
 
 # Python benchmark tooling
 __pycache__/
-
-# Local Excel verifier clone (not a submodule; not committed)
-vendor/calipers/

@@ -149,7 +149,7 @@ fn roundtrip_row_and_col_dimensions() {
 }
 
 #[test]
-fn roundtrip_row_metadata_through_yrs() {
+fn roundtrip_row_metadata() {
     let mut output = make_single_sheet(
         "Row metadata",
         vec![cell(0, 0, CellValue::Number(FiniteF64::new(1.0).unwrap()))],

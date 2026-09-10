@@ -1,5 +1,5 @@
 //! Target-neutral descriptor IR consumed by downstream bridge target crates
-//! (bridge-napi-macros, bridge-cli-macros, ...).
+//! (`bridge-delegate-macros` and remaining descriptor consumers).
 //!
 //! Upstream, `bridge-core`'s `#[bridge::api]` proc macro emits a
 //! `__bridge_descriptor_*!` declarative macro containing the target-neutral

@@ -19,97 +19,17 @@ force `fullCalcOnLoad`, `calcCompleted`, or `forceFullCalc` changes.
 
 ## Architecture
 
-```
-xlsx-parser/
-  src/
-    lib.rs              # WASM entry point and main parse_xlsx function
-    scanner.rs          # SIMD-optimized XML byte scanning
-    strings.rs          # Shared strings table parser
-    lazy.rs             # Lazy parsing for deferred XML processing
-    arena.rs            # Arena allocator for efficient memory management
-    workbook.rs         # Workbook-level parsing
-    styles.rs           # Style definitions parser
+Modules are organized as:
 
-    # Shared types between read/write operations
-    common/
-      mod.rs            # Module exports
-      axis.rs           # Row/column axis types
-      cond_format.rs    # Conditional formatting shared types
-      range.rs          # Cell range utilities
+- **`domain/`** — OOXML feature parsers (cells, charts, styles, tables, …)
+- **`pipeline/`** — parse orchestration (full, lazy, streaming)
+- **`infra/`** — XML, ZIP, namespace, and error infrastructure
+- **`output/`** — result types and serialization helpers
+- **`write/`** — round-trip write path used by the compute engine
+- **`zip/`** — ZIP archive reading
 
-    # Cell parsing submodule
-    cell_parser/
-      mod.rs            # Module exports
-      types.rs          # Cell type definitions
-      parsing.rs        # Core cell parsing logic
-      helpers.rs        # Parsing helper functions
-      recovery.rs       # Error recovery strategies
-      adapters.rs       # Format adapters
-      tests.rs          # Unit tests
-
-    # Parsing modules (reading XLSX)
-    charts/             # Chart parsing (axes, series, types)
-    cond_format/        # Conditional formatting parser
-    drawings/           # Drawing objects (shapes, images, anchors)
-    print/              # Print settings (page setup, headers/footers)
-    tables/             # Table definitions (filters, sorting, styles)
-    themes/             # Theme parsing (colors, fonts, effects)
-    zip/                # ZIP archive handling (decompression, entries)
-
-    # Additional parsing
-    comments.rs         # Cell comments
-    hyperlinks.rs       # Hyperlink definitions
-    names.rs            # Named ranges
-    validation.rs       # Data validation rules
-    pivot.rs            # Pivot table parsing
-    rich_text.rs        # Rich text formatting
-    sparklines.rs       # Sparkline charts
-    protection.rs       # Sheet/workbook protection
-    external.rs         # External references
-    vba.rs              # VBA macro handling
-
-    # Writing modules (creating XLSX)
-    write/
-      mod.rs            # Module exports and writer coordination
-      workbook.rs       # Workbook XML writer
-      sheet.rs          # Worksheet XML writer
-      shared_strings.rs # Shared strings table writer
-      relationships.rs  # Relationships writer
-      content_types.rs  # Content types writer
-      xml_writer.rs     # Low-level XML writing utilities
-      zip_writer.rs     # ZIP archive creation
-
-      # Submodule writers
-      charts/           # Chart XML writer
-      cond_format/      # Conditional formatting writer
-      drawings/         # Drawing objects writer
-      pivot/            # Pivot table writer (cache, table)
-      print/            # Print settings writer
-      styles/           # Styles XML writer
-
-      # Additional writers
-      comments_writer.rs
-      tables_writer.rs
-      themes_writer.rs
-      validation_writer.rs
-      sparklines_writer.rs
-      protection_writer.rs
-
-    # TypeScript bindings
-    types.ts            # TypeScript type definitions
-    index.ts            # TypeScript entry point
-    wasm-parser.ts      # WASM module wrapper
-
-  Cargo.toml            # Rust dependencies and WASM configuration
-  package.json          # NPM package configuration
-```
-
-### Module Organization
-
-The crate follows a **read/write symmetry** pattern:
-- **Parsing modules** (`charts/`, `drawings/`, etc.) handle reading XLSX files
-- **Write modules** (`write/charts/`, `write/drawings/`, etc.) handle creating XLSX files
-- **Common module** (`common/`) contains shared types used by both read and write operations, ensuring type consistency for round-trip parsing
+Native callers use `parse_xlsx_to_output()` / `parse_xlsx_full_native()`. There
+is no WASM or TypeScript entry point in this crate.
 
 ## Building
 
@@ -124,27 +44,26 @@ The `xlsx-roundtrip` CLI tool verifies that XLSX files can be parsed and re-seri
 ### Building the CLI Tool
 
 ```bash
-# Build for native (not WASM)
-cargo build --features cli --bin xlsx-roundtrip --target aarch64-apple-darwin --release
+cargo build -p xlsx-parser --features cli --bin xlsx-roundtrip --release
 ```
 
 ### Usage
 
 ```bash
 # Single file test
-./target-native/aarch64-apple-darwin/release/xlsx-roundtrip file.xlsx
+cargo run -p xlsx-parser --features cli --bin xlsx-roundtrip -- file.xlsx
 
 # Verbose mode (show details on differences)
-./target-native/aarch64-apple-darwin/release/xlsx-roundtrip file.xlsx -v
+cargo run -p xlsx-parser --features cli --bin xlsx-roundtrip -- file.xlsx -v
 
 # Benchmark mode (multiple iterations)
-./target-native/aarch64-apple-darwin/release/xlsx-roundtrip file.xlsx -b -n 20
+cargo run -p xlsx-parser --features cli --bin xlsx-roundtrip -- file.xlsx -b -n 20
 
 # Save round-tripped output
-./target-native/aarch64-apple-darwin/release/xlsx-roundtrip file.xlsx -o output.xlsx
+cargo run -p xlsx-parser --features cli --bin xlsx-roundtrip -- file.xlsx -o output.xlsx
 
 # Ignore attribute order differences
-./target-native/aarch64-apple-darwin/release/xlsx-roundtrip file.xlsx --ignore-order
+cargo run -p xlsx-parser --features cli --bin xlsx-roundtrip -- file.xlsx --ignore-order
 ```
 
 ### Convenience Script

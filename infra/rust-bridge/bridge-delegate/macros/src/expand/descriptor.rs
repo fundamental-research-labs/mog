@@ -16,16 +16,14 @@ pub(super) fn emit_new_descriptor(desc: &DelegateDescriptor) -> TokenStream {
             Access::LifecycleCreate => quote! { lifecycle create },
             Access::Pure => quote! { method pure },
             Access::Read => quote! { method read },
-            // Structural collapses to write in re-emission — downstream codegens
-            // (bridge-napi/pyo3/wasm/tauri) don't yet recognize `method structural`,
-            // and from their perspective the method is a mutation either way.
+            // Structural collapses to write in re-emission — remaining
+            // descriptor consumers treat the method as a mutation either way.
             // The original Structural semantics were already consumed by the
             // delegate macro's gated wrapper above.
             Access::Write | Access::Structural => quote! { method write },
-            // R2.4: keep `session` distinct when re-emitting so downstream
-            // codegens preserve `&self`. All four (napi/pyo3/tauri/wasm)
-            // now parse `method session` as an alias for `method read` at
-            // the FFI-shape level.
+            // R2.4: keep `session` distinct when re-emitting so `&self`
+            // is preserved. `method session` is an alias for `method read`
+            // at the FFI-shape level.
             Access::Session => quote! { method session },
         };
 

@@ -56,4 +56,4 @@ pub mod range_resolution; // CellId-based range resolution
 pub mod selection; // Selection range helpers (Ctrl+Space, header click) // Table lifecycle event types + diff
 
 // -- Internal --
-pub mod compare; // Shared comparison utilities (exposed for WASM bridge)
+pub mod compare; // Shared comparison utilities

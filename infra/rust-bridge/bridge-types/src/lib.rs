@@ -112,12 +112,10 @@ pub trait BridgeStructuredError: BridgeError {
 // Wire-level error formatting (Track R3)
 // ---------------------------------------------------------------------------
 //
-// All transports (WASM JsError, NAPI napi::Error, Tauri Result<_, String>)
-// surface engine errors only as a single string (the `Display` impl). To
-// give the TS side a typed discriminated union without changing every
-// transport's binding contract, we embed a tagged-JSON envelope INTO the
-// error string when the error type opts in by implementing
-// [`BridgeStructuredError`].
+// Callers surface engine errors as a single string (the `Display` impl). To
+// carry a typed discriminated union without changing the string contract,
+// we embed a tagged-JSON envelope INTO the error string when the error
+// type opts in by implementing [`BridgeStructuredError`].
 //
 // Wire format:
 //
@@ -126,15 +124,14 @@ pub trait BridgeStructuredError: BridgeError {
 // ```
 //
 // The opening sentinel `[BRIDGE_ERROR]` is deliberately ASCII, contains no
-// JSON-special characters, and is unambiguous on the TS side: a single
-// `String.startsWith('[BRIDGE_ERROR]')` check identifies the structured
+// JSON-special characters, and is unambiguous: a single
+// `starts_with("[BRIDGE_ERROR]")` check identifies the structured
 // path. Anything else is a legacy/free-form Display error.
 //
-// Both NAPI and WASM call the same `format_bridge_error` helper so the
-// envelope is byte-for-byte identical across transports.
+// Callers use the same `format_bridge_error` helper so the envelope is
+// byte-for-byte identical.
 
-/// Sentinel prefix marking a tagged-JSON bridge error. Kept in sync with
-/// `parseBridgeError` on the TS side (`infra/transport/src/bridge-error.ts`).
+/// Sentinel prefix marking a tagged-JSON bridge error.
 pub const BRIDGE_ERROR_SENTINEL: &str = "[BRIDGE_ERROR]";
 
 /// Newtype wrapper used by [`format_bridge_error`] to anchor inherent-vs-
@@ -702,28 +699,14 @@ mod tests {
         assert!(parse_bridge_error(&s).is_none());
     }
 
-    // Transport-boundary uniformity: WASM and NAPI generators both emit
-    // `bridge_types::bridge_format_err!(e)` at every error site (see
-    // `infra/rust-bridge/bridge-{wasm,napi,tauri}/macros/src/expand*.rs`).
-    // So the byte-for-byte envelope is identical by construction. This
-    // test pins that the macro output is the exact wire payload — if a
-    // transport ever wraps it, this test is the canary.
+    // Pins that the macro output is the exact wire payload.
     #[test]
-    fn macro_output_is_uniform_across_transport_call_shape() {
+    fn macro_output_is_the_wire_payload() {
         let err = ApiError::RateLimited {
             retry_after_secs: 99,
         };
-        // Three call shapes simulating the three transport patterns:
-        //   WASM:  &bridge_format_err!(e)              (passed to JsError::new)
-        //   NAPI:  bridge_format_err!(e)               (passed to napi::Error::from_reason)
-        //   Tauri: bridge_format_err!(e)               (returned as String)
-        let wasm_form = crate::bridge_format_err!(err).to_string();
-        let napi_form = crate::bridge_format_err!(err);
-        let tauri_form: String = crate::bridge_format_err!(err);
-        assert_eq!(wasm_form, napi_form);
-        assert_eq!(napi_form, tauri_form);
-        // And each parses to the same structured payload.
-        let parsed = parse_bridge_error(&wasm_form).unwrap();
+        let encoded = crate::bridge_format_err!(err);
+        let parsed = parse_bridge_error(&encoded).unwrap();
         assert_eq!(parsed["kind"], "rate_limited");
         assert_eq!(parsed["retryAfterSecs"], 99);
     }

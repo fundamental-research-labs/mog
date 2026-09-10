@@ -12,13 +12,13 @@
 // ASCII-boundary justification. See `AGENTS.md` at repo root.
 #![warn(clippy::string_slice)]
 
-// Cross-platform time utilities (std::time::Instant panics on WASM)
+// Cross-platform time utilities (std::time::Instant panics on some targets)
 #[doc(hidden)]
 pub mod time_compat;
 
 pub(crate) mod xlsx_profile;
 
-// Cell Store — internal, but exposed for integration tests and dev tools (formula-eval)
+// Cell Store — internal, but exposed for integration tests
 #[doc(hidden)]
 pub mod cells;
 
@@ -37,13 +37,13 @@ pub use compute_functions as functions;
 
 pub(crate) mod formula_text;
 
-// Dependency Graph (used by formula-eval dev tool)
+// Dependency Graph (exposed under `__internal` for in-tree tools)
 #[cfg(feature = "__internal")]
 pub use compute_graph as graph;
 #[cfg(not(feature = "__internal"))]
 pub(crate) use compute_graph as graph;
 
-// Recalc Scheduler — internal, but exposed for integration tests and dev tools (formula-eval)
+// Recalc Scheduler — internal, but exposed for integration tests
 #[doc(hidden)]
 pub mod scheduler;
 
@@ -131,7 +131,7 @@ pub use storage::engine::CellInfo;
 #[cfg(feature = "journal")]
 pub mod journal;
 
-// XLSX import pipeline (used by formula-eval dev tool)
+// XLSX import pipeline (exposed under `__internal` for in-tree tools)
 #[cfg(feature = "__internal")]
 pub mod import;
 #[cfg(not(feature = "__internal"))]

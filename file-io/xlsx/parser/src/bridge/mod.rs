@@ -1,4 +1,4 @@
-//! FFI boundary types for WASM and N-API bridges.
+//! Serializable FFI boundary types for parser results.
 
 pub mod error;
 pub mod types;

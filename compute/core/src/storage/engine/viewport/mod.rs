@@ -189,11 +189,7 @@ impl ComputeEngine {
         functions::format_values(&self.settings, entries)
     }
 
-    /// Binary viewport transfer — returns raw bytes for zero-copy TS consumption.
-    ///
-    /// The bridge handles `Vec<u8>` as direct byte transfer:
-    ///   - Tauri: raw bytes via IPC (near zero-copy)
-    ///   - WASM: wasm-bindgen does single memcpy to `Uint8Array`
+    /// Binary viewport transfer — returns raw bytes.
     ///
     /// Uses the viewport registry to track state. A synthetic viewport key
     /// is derived from the sheet_id for backward compatibility with callers

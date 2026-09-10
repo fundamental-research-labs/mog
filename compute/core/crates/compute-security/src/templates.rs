@@ -48,8 +48,7 @@ where
 ///
 /// Serde shape is tagged-enum with `kind` discriminator so SDKs send
 /// `{ "kind": "protect_workbook" }` / `{ "kind": "protect_sheet",
-/// "sheet_id": "..." }` — matches how B.2's tagged-enum codegen
-/// consumes payloads across NAPI and PyO3.
+/// "sheet_id": "..." }`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Template {

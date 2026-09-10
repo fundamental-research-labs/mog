@@ -23,12 +23,12 @@ type ApplicableCFEntry<'a> = (
 impl ComputeCore {
     /// Evaluate all CF rules for a sheet. Pure computation: reads from CellStore.
     ///
-    /// Called via IPC (Tauri) or WASM (web). Each rule carries its own applies-to
-    /// ranges as `Vec<RangePos>` (position-native, resolved at read time by the
-    /// engine boundary layer). Stats are computed per-rule.
+    /// Each rule carries its own applies-to ranges as `Vec<RangePos>`
+    /// (position-native, resolved at read time by the engine boundary layer).
+    /// Stats are computed per-rule.
     ///
     /// Returns fully resolved visual properties for each cell that matches at
-    /// least one rule. The TS bridge caches these, the renderer reads from cache.
+    /// least one rule.
     pub fn eval_cf(
         &self,
         cell_store: &CellStore,

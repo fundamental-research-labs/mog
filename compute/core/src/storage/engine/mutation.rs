@@ -421,11 +421,9 @@ pub(crate) enum MutationOutput {
 mod sort_wire_tests {
     //! Wire-format roundtrip tests for sort criterion / mode types.
     //!
-    //! These pin the JSON shape that the kernel layer emits — if the
-    //! discriminator key, variant tag, or field name drifts the kernel
-    //! and engine fall out of sync silently. The strings below are
-    //! exactly what `kernel/src/api/worksheet/operations/sort-operations.ts`
-    //! produces today.
+    //! These pin the JSON shape of sort criterion / mode types. If the
+    //! discriminator key, variant tag, or field name drifts, callers fall
+    //! out of sync silently.
 
     use super::*;
     use value_types::CellValue;

@@ -1,6 +1,7 @@
 # Storage model: memory and speed
 
-This comparison measures the [storage model change](storage-model-plan.md)
+This comparison measures the native sparse store described in
+[architecture](architecture-overview.md)
 against `2a2f34cf48d99570c517b56033322692268586f6`, the native-storage baseline.
 Memory and speed are separate measurements: reducing resident memory does not
 guarantee faster reads or recalculation.

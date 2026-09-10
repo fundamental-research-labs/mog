@@ -852,7 +852,7 @@ impl ComputeCore {
     }
 
     // -----------------------------------------------------------------------
-    // Time injection (for WASM / testing)
+    // Time injection (for tests and hosts without a system clock)
     // -----------------------------------------------------------------------
 
     /// Set the current time for NOW()/TODAY() as an Excel serial date number.

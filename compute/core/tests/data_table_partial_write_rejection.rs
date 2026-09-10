@@ -354,9 +354,8 @@ fn set_cells_raw_user_edit_rejects_data_table_partial_write() {
 #[test]
 fn set_cells_raw_trusted_replay_skips_data_table_guard() {
     // TrustedReplay path bypasses the guard — by design. The upstream
-    // op (collab peer's user edit) already passed its guard, so the
-    // replay is consistent with the region invariant. This test
-    // documents the contract.
+    // op already passed its guard, so the replay is consistent with the
+    // region invariant. This test documents the contract.
     let (mut core, mut cell_store, sheet_id) = make_data_table_workbook();
 
     let c3_id = cid(0, 2, 2);
@@ -369,7 +368,7 @@ fn set_cells_raw_trusted_replay_skips_data_table_guard() {
         None::<String>,
     )];
 
-    // TrustedReplay must NOT reject — collab/replay path semantics.
+    // TrustedReplay must NOT reject — replay path semantics.
     let result =
         core.set_cells_raw_with_trust(&mut cell_store, &edits, false, WriteTrust::TrustedReplay);
     assert!(

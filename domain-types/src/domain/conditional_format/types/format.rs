@@ -7,7 +7,7 @@ use super::CFRule;
 /// Re-export of `cell_types::SheetRange` for ergonomic use in CF contexts.
 pub type CFCellRange = cell_types::SheetRange;
 
-/// Cell-identity-based range for collaborative editing.
+/// Cell-identity-based range.
 /// Identifies a rectangular region by the stable IDs of its corner cells,
 /// so the range survives row/column insertions and deletions.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

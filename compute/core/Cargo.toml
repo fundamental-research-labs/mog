@@ -10,7 +10,7 @@ description = "Native Rust compute engine for spreadsheet formula evaluation"
 
 [features]
 default = ["native"]
-# Native target (desktop via Tauri): includes threading, system clock support,
+# Native target: includes threading, system clock support,
 # and parallel XLSX parse/export support.
 native = [
     "dep:rayon",
@@ -19,15 +19,14 @@ native = [
     "xlsx-api/parallel",
     "xlsx-parser/parallel",
 ]
-# WASM target is implicit via #[cfg(target_arch = "wasm32")] — no explicit feature needed
 # Full Power Query CRUD — gate unwired functions only
 power-query-full = []
 # Enable tracing spans in eval hot paths (zero overhead when off)
 profile = []
 # Enable execution journal (structured runtime path tracing for agent debugging)
 journal = []
-# Expose internal modules (mirror, scheduler, import, graph, document, fill)
-# for dev tools like formula-eval. External consumers should NOT enable this.
+# Expose internal modules (cells, scheduler, import, graph, document, fill)
+# for integration tests and in-tree tools. External consumers should NOT enable this.
 __internal = []
 # Enable double-double precision for intermediate arithmetic — carries (hi, lo) error
 # term in FiniteF64, giving ~31 decimal digits to eliminate catastrophic cancellation.
@@ -122,7 +121,7 @@ compute-text-measurement = { path = "crates/compute-text-measurement" }
 # Headless sheet screenshot renderer (tiny-skia rasterizer → PNG)
 compute-screenshot = { path = "crates/compute-screenshot" }
 
-# Bridge code generation (proc macros for WASM/Tauri/TS binding generation)
+# Bridge code generation (proc macros for `#[bridge::api]` descriptors)
 bridge-core = { path = "../../infra/rust-bridge/bridge-core" }
 bridge-types = { path = "../../infra/rust-bridge/bridge-types" }
 

@@ -1,4 +1,4 @@
-use super::support::{cell_uuid, range_uuid, sheet_uuid, yrs_col_id, yrs_row_id};
+use super::support::{cell_uuid, col_id, range_uuid, row_id, sheet_uuid};
 use cell_types::{ColId, PayloadEncoding, RangeAnchor, RangeId, RangeKind, RowId};
 use snapshot_types::{CellData, RangeData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
@@ -20,9 +20,9 @@ pub(crate) fn range_backed_snapshot(
         }
     }
 
-    let row_ids: Vec<RowId> = (0..rows as usize).map(yrs_row_id).collect();
+    let row_ids: Vec<RowId> = (0..rows as usize).map(row_id).collect();
     let col_ids: Vec<ColId> = (0..cols as usize)
-        .map(|i| yrs_col_id(sheet_rows, i))
+        .map(|i| col_id(sheet_rows, i))
         .collect();
 
     let range_data = RangeData {

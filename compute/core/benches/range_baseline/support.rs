@@ -68,10 +68,10 @@ pub(crate) fn range_uuid(idx: u32) -> String {
     format!("b0000000-0000-0000-0000-{:012x}", idx as u64)
 }
 
-pub(crate) fn yrs_row_id(row_index: usize) -> RowId {
+pub(crate) fn row_id(row_index: usize) -> RowId {
     RowId::from_raw((row_index + 1) as u128)
 }
 
-pub(crate) fn yrs_col_id(sheet_rows: usize, col_index: usize) -> ColId {
+pub(crate) fn col_id(sheet_rows: usize, col_index: usize) -> ColId {
     ColId::from_raw((sheet_rows + col_index + 1) as u128)
 }

@@ -23,12 +23,12 @@ pub(super) fn emit_title(w: &mut XmlWriter, title: &Title) {
         emit_layout(w, lay);
     }
 
-    // overlay
-    if let Some(v) = title.overlay {
-        w.start_element("c:overlay")
-            .attr("val", if v { "1" } else { "0" })
-            .self_close();
-    }
+    // overlay — default to 0 (do not overlay) when unset so Excel reserves
+    // space for authored titles instead of auto-placing them on the plot.
+    let overlay_val = title.overlay.unwrap_or(false);
+    w.start_element("c:overlay")
+        .attr("val", if overlay_val { "1" } else { "0" })
+        .self_close();
 
     // spPr
     if let Some(ref sp) = title.sp_pr {

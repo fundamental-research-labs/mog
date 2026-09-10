@@ -78,6 +78,35 @@ impl Workbook {
         })
     }
 
+    /// Load a workbook from XLSX bytes.
+    pub fn from_xlsx_bytes(xlsx_data: &[u8]) -> Result<(Self, RecalcResult), ComputeApiError> {
+        use compute_core::storage::engine::ComputeEngine;
+
+        let (engine, recalc) = ComputeEngine::from_xlsx_bytes(xlsx_data)?;
+
+        #[cfg(feature = "native")]
+        let dispatch = Dispatch::spawn(engine)?;
+
+        #[cfg(not(feature = "native"))]
+        let dispatch = Dispatch::new(engine);
+
+        Ok((Workbook { dispatch }, recalc))
+    }
+
+    /// Export the current workbook to XLSX bytes.
+    pub fn to_xlsx_bytes(&self) -> Result<Vec<u8>, ComputeApiError> {
+        self.dispatch
+            .query_engine(|e| e.export_to_xlsx_bytes())
+            .and_then(|r| r.map_err(ComputeApiError::from))
+    }
+
+    /// Recalculate every formula cell.
+    pub fn recalculate(&self) -> Result<RecalcResult, ComputeApiError> {
+        self.dispatch
+            .call_engine(|e| e.recalculate())
+            .and_then(|r| r.map_err(ComputeApiError::from))
+    }
+
     // -----------------------------------------------------------------
     // Sheet access
     // -----------------------------------------------------------------

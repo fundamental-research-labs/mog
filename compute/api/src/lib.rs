@@ -53,3 +53,5 @@ pub use workbook::{
     scenarios::WorkbookScenarios, settings::WorkbookSettings, sheets::WorkbookSheets,
     styles::WorkbookStyles,
 };
+
+pub use compute_core::bridge_types::named_ranges::DefinedNameInput;

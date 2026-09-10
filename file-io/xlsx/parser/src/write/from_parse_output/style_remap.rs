@@ -34,7 +34,10 @@ pub(super) struct StyleExportPlan {
 
 #[must_use]
 pub(super) fn build_style_export_plan(output: &ParseOutput) -> StyleExportPlan {
-    let palette = if output_references_style_ids(output) {
+    // Cells without `s` still inherit Normal (xf 0). Treat any cell as a live
+    // style use so we do not rewrite the workbook font to Calibri 11. Empty
+    // sheets with no style ids still regenerate defaults (unused xf drop).
+    let palette = if output_references_style_ids(output) || sheets_have_cells(output) {
         output.style_palette.as_slice()
     } else {
         &[]
@@ -45,6 +48,14 @@ pub(super) fn build_style_export_plan(output: &ParseOutput) -> StyleExportPlan {
     };
     let stylesheet = stylesheet.normalized();
     if !can_replay_imported_styles(&stylesheet, palette) {
+        if palette.is_empty() && sheets_have_cells(output) && !stylesheet.cell_xfs.is_empty() {
+            return StyleExportPlan {
+                writer: StylesWriter::from_workbook_stylesheet(&stylesheet),
+                remapper: StyleExportRemapper {
+                    emitted_cell_xf_ids: Vec::new(),
+                },
+            };
+        }
         return generated_style_export_plan(palette);
     }
 
@@ -71,6 +82,10 @@ pub(super) fn build_style_export_plan(output: &ParseOutput) -> StyleExportPlan {
             emitted_cell_xf_ids,
         },
     }
+}
+
+fn sheets_have_cells(output: &ParseOutput) -> bool {
+    output.sheets.iter().any(|sheet| !sheet.cells.is_empty())
 }
 
 fn generated_style_export_plan(palette: &[domain_types::DocumentFormat]) -> StyleExportPlan {

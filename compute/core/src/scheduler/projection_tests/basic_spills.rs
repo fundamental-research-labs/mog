@@ -47,8 +47,8 @@ fn test_interactive_sequence_spills() {
 
     // Check projected values via col_data (no phantom CellIds created)
     let sheet_store = cell_store.get_sheet(&sheet_id).unwrap();
-    let col_slice = sheet_store
-        .get_column_view(0)
+    let col_slice = cell_store
+        .get_column_view(&sheet_id, 0)
         .expect("col_data for column 0 should exist");
     for row in 1..5u32 {
         assert_eq!(
@@ -150,8 +150,8 @@ fn test_spill_shrinkage_clears_old_phantoms() {
     // Verify A4 and A5 have values via col_data
     {
         let sheet_store = cell_store.get_sheet(&sheet_id).unwrap();
-        let col_slice = sheet_store
-            .get_column_view(0)
+        let col_slice = cell_store
+            .get_column_view(&sheet_id, 0)
             .expect("col_data should exist");
         assert_eq!(col_slice[3], CellValue::number(4.0), "A4 should be 4");
         assert_eq!(col_slice[4], CellValue::number(5.0), "A5 should be 5");
@@ -164,8 +164,8 @@ fn test_spill_shrinkage_clears_old_phantoms() {
     // A4 and A5 should now be Null in col_data
     {
         let sheet_store = cell_store.get_sheet(&sheet_id).unwrap();
-        let col_slice = sheet_store
-            .get_column_view(0)
+        let col_slice = cell_store
+            .get_column_view(&sheet_id, 0)
             .expect("col_data should exist");
         assert_eq!(
             col_slice[3],

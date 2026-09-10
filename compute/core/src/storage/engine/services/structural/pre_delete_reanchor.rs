@@ -82,11 +82,9 @@ pub(super) fn pre_delete_re_anchor_range_refs(
 
     let formula_cells: Vec<(CellId, formula_types::IdentityFormula)> = all_sheet_ids
         .iter()
-        .filter_map(|owning_sheet| cell_store.get_sheet(owning_sheet))
-        .flat_map(|sheet_store| {
-            sheet_store
-                .formulas
-                .iter()
+        .flat_map(|owning_sheet| {
+            cell_store
+                .iter_sheet_formulas(owning_sheet)
                 .map(|(id, formula)| (*id, formula.clone()))
         })
         .collect();

@@ -119,9 +119,9 @@ impl CellPatch {
             sheet,
             cell,
             pos,
-            entry: source.and_then(|s| s.cells.get(&cell)).cloned(),
+            entry: cell_store.cells.get(&cell).cloned(),
             store_pos: source.and_then(|s| s.position_of(&cell)),
-            identity_formula: source.and_then(|s| s.formula(&cell)).cloned(),
+            identity_formula: cell_store.formulas.get(&cell).cloned(),
             formula: (cell_store.sheet_for_cell(&cell) == Some(sheet))
                 .then(|| stores.compute.get_formula(&cell).map(str::to_owned))
                 .flatten(),

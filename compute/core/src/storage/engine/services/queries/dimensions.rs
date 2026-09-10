@@ -101,11 +101,11 @@ pub(in crate::storage::engine) fn get_data_bounds(
     let mut found = false;
 
     // 1. Bounds from cell_store cells (value / formula cells)
-    for cell_id in sheet.cell_ids() {
-        if sheet.is_ghost(cell_id) {
+    for cell_id in cell_store.sheet_cell_ids(sheet_id) {
+        if cell_store.is_ghost(&cell_id) {
             continue;
         }
-        if let Some(pos) = sheet.position_of(cell_id) {
+        if let Some(pos) = sheet.position_of(&cell_id) {
             found = true;
             min_row = min_row.min(pos.row());
             max_row = max_row.max(pos.row());
@@ -118,7 +118,7 @@ pub(in crate::storage::engine) fn get_data_bounds(
     //    spill arrays, range payloads). Dense storage may retain null padding after
     //    clears, so raw sheet extents are not content bounds.
     if let Some((dense_min_row, dense_min_col, dense_max_row, dense_max_col)) =
-        sheet.dense_content_bounds()
+        sheet.dense_content_bounds(&cell_store.cells, &cell_store.formulas)
     {
         found = true;
         min_row = min_row.min(dense_min_row);
@@ -433,11 +433,11 @@ pub(in crate::storage::engine) fn find_last_row(
 
     // 1. Scan CellStore cells (value / formula cells) for this column.
     if let Some(sheet) = cell_store.get_sheet(sheet_id) {
-        for cell_id in sheet.cell_ids() {
-            if sheet.is_ghost(cell_id) {
+        for cell_id in cell_store.sheet_cell_ids(sheet_id) {
+            if cell_store.is_ghost(&cell_id) {
                 continue;
             }
-            if let Some(pos) = sheet.position_of(cell_id)
+            if let Some(pos) = sheet.position_of(&cell_id)
                 && pos.col() == col
             {
                 last_data_row = Some(last_data_row.map_or(pos.row(), |cur| cur.max(pos.row())));
@@ -445,7 +445,7 @@ pub(in crate::storage::engine) fn find_last_row(
         }
 
         // 2. Scan col_data (spill arrays, pivot output, etc.) for this column.
-        if let Some(col_slice) = sheet.get_column_view(col) {
+        if let Some(col_slice) = cell_store.get_column_view(sheet_id, col) {
             for (row, val) in col_slice.iter().enumerate() {
                 if !val.is_null() {
                     last_data_row =
@@ -487,11 +487,11 @@ pub(in crate::storage::engine) fn find_last_column(
 
     // 1. Scan CellStore cells (value / formula cells) for this row.
     if let Some(sheet) = cell_store.get_sheet(sheet_id) {
-        for cell_id in sheet.cell_ids() {
-            if sheet.is_ghost(cell_id) {
+        for cell_id in cell_store.sheet_cell_ids(sheet_id) {
+            if cell_store.is_ghost(&cell_id) {
                 continue;
             }
-            if let Some(pos) = sheet.position_of(cell_id)
+            if let Some(pos) = sheet.position_of(&cell_id)
                 && pos.row() == row
             {
                 last_data_col = Some(last_data_col.map_or(pos.col(), |cur| cur.max(pos.col())));
@@ -501,7 +501,7 @@ pub(in crate::storage::engine) fn find_last_column(
         // 2. Scan col_data for all columns at this row.
         if !sheet.column_values_are_empty() && sheet.rows > row {
             for c in 0..sheet.cols {
-                if let Some(col_slice) = sheet.get_column_view(c)
+                if let Some(col_slice) = cell_store.get_column_view(sheet_id, c)
                     && let Some(val) = col_slice.get(row as usize)
                     && !val.is_null()
                 {

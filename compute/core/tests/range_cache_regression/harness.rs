@@ -51,9 +51,8 @@ pub(crate) fn assert_num(result: &RecalcResult, row: u32, col: u32, expected: f6
 
 pub(crate) fn col_data_value(cell_store: &CellStore, col: u32, row: u32) -> CellValue {
     let sid = cell_store.sheet_by_name("sheet1").expect("sheet not found");
-    let sheet = cell_store.get_sheet(&sid).expect("sheet store not found");
-    sheet
-        .get_column_view(col)
+    cell_store
+        .get_column_view(&sid, col)
         .and_then(|s| s.get(row as usize))
         .cloned()
         .unwrap_or(CellValue::Null)
@@ -76,7 +75,7 @@ pub(crate) fn warm_dense_cache(cell_store: &mut CellStore, col: u32) {
 
     let mut values = vec![f64::NAN; num_rows];
     let mut numeric_count = 0usize;
-    if let Some(col_slice) = sheet.get_column_view(col) {
+    if let Some(col_slice) = cell_store.get_column_view(&sheet.id, col) {
         let len = num_rows.min(col_slice.len());
         for row in 0..len {
             if let CellValue::Number(n) = &col_slice[row] {

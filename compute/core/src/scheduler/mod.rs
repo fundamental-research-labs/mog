@@ -521,11 +521,7 @@ impl ComputeCore {
         sheet_id: &SheetId,
     ) -> Result<RecalcResult, ComputeError> {
         // Collect cell IDs from this sheet before removing
-        let cell_ids: Vec<CellId> = if let Some(sheet) = cell_store.get_sheet(sheet_id) {
-            sheet.cell_ids().copied().collect()
-        } else {
-            Vec::new()
-        };
+        let cell_ids: Vec<CellId> = cell_store.sheet_cell_ids(sheet_id).collect();
 
         // Before removing, collect all dependents in OTHER sheets so we can
         // recalc them after deletion (they should now produce #REF!).

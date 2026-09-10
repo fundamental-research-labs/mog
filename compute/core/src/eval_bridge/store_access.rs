@@ -287,7 +287,7 @@ impl<'a> StoreAccess<'a> {
             col,
             start_row,
             end_row,
-            self.cell_store.get_sheet(sheet)?,
+            self.cell_store,
         )
     }
 
@@ -299,7 +299,7 @@ impl<'a> StoreAccess<'a> {
         if self.pending_override.is_some() {
             return None;
         }
-        self.cell_store.get_sheet(sheet)?.get_column_view(col)
+        self.cell_store.get_column_view(sheet, col)
     }
 
     pub fn col_version(&self, sheet: &SheetId, col: u32) -> u64 {
@@ -746,7 +746,7 @@ impl<'a> StoreAccess<'a> {
                 let mut row = Vec::new();
                 for &c in &range.columns {
                     let val = sheet
-                        .and_then(|s| s.get_column_view(c))
+                        .and_then(|_| self.cell_store.get_column_view(&resolved.sheet, c))
                         .and_then(|col| col.get(r as usize))
                         .cloned()
                         .unwrap_or_else(|| {

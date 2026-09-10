@@ -13,8 +13,8 @@ pub(in crate::storage::engine) fn build_sheet_snapshot(
         .unwrap_or((100, 26));
 
     let mut cells = Vec::new();
-    if let Some(sheet) = cell_store.get_sheet(sheet_id) {
-        for (cell_id, entry) in sheet.cells_iter() {
+    if cell_store.get_sheet(sheet_id).is_some() {
+        for (cell_id, entry) in cell_store.iter_sheet_cells(sheet_id) {
             if let Some(pos) = cell_store.resolve_position(cell_id) {
                 let formula = stores.compute.get_formula(cell_id).map(|s| s.to_string());
 
@@ -37,7 +37,7 @@ pub(in crate::storage::engine) fn build_sheet_snapshot(
                     col: pos.col(),
                     value: entry.value.clone(),
                     formula,
-                    identity_formula: sheet.formula(cell_id).cloned(),
+                    identity_formula: cell_store.get_formula(cell_id).cloned(),
                     array_ref,
                 });
             }

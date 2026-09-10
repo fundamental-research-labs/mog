@@ -108,7 +108,7 @@ pub(in crate::storage::engine) fn enrich_metadata_flags(
                 .and_then(|sheet| {
                     sheet
                         .cell_id_at(SheetPos::new(pos.row, pos.col))
-                        .and_then(|cid| sheet.formula(&cid))
+                        .and_then(|cid| cell_store.get_formula(&cid))
                 })
                 .is_some()
             || cell_store

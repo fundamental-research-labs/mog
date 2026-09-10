@@ -31,8 +31,8 @@ pub(in crate::storage::engine) fn collect_authored_cells_in_range(
             for row in start_row.max(extent.start_row)..=end_row.min(extent.end_row) {
                 for col in start_col.max(extent.start_col)..=end_col.min(extent.end_col) {
                     let pos = cell_types::SheetPos::new(row, col);
-                    if sheet
-                        .value_at(pos)
+                    if cell_store
+                        .get_cell_value_at(&sheet_id, pos)
                         .is_none_or(|value| matches!(value, CellValue::Null))
                     {
                         continue;

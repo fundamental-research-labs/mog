@@ -8,8 +8,11 @@ fn test_set_value_mut_invalidates_dense_cache() {
     let (mut cell_store, sheet_id) = store_with_grid();
     // Materialize column 0 into dense cache using direct field access
     // to avoid borrow conflicts (get_sheet borrows &self, dense_cache_mut borrows &mut self).
-    let sheet = &cell_store.sheets[&sheet_id];
-    cell_store.dense_cache.materialize(&sheet_id, 0, sheet);
+    {
+        let mut cache = std::mem::take(&mut cell_store.dense_cache);
+        cache.materialize(&sheet_id, 0, &cell_store);
+        cell_store.dense_cache = cache;
+    }
     assert!(cell_store.dense_cache().get(&sheet_id, 0).is_some());
 
     // set_value_mut should invalidate the dense cache for that column
@@ -23,8 +26,11 @@ fn test_set_value_mut_invalidates_dense_cache() {
 #[test]
 fn test_insert_cell_invalidates_dense_cache() {
     let (mut cell_store, sheet_id) = store_with_grid();
-    let sheet = &cell_store.sheets[&sheet_id];
-    cell_store.dense_cache.materialize(&sheet_id, 0, sheet);
+    {
+        let mut cache = std::mem::take(&mut cell_store.dense_cache);
+        cache.materialize(&sheet_id, 0, &cell_store);
+        cell_store.dense_cache = cache;
+    }
     assert!(cell_store.dense_cache().get(&sheet_id, 0).is_some());
 
     // insert_cell should invalidate the dense cache
@@ -52,8 +58,11 @@ fn test_remove_cell_clears_column_values_and_dense_cache() {
     );
 
     // Materialize dense cache
-    let sheet = &cell_store.sheets[&sheet_id];
-    cell_store.dense_cache.materialize(&sheet_id, 0, sheet);
+    {
+        let mut cache = std::mem::take(&mut cell_store.dense_cache);
+        cache.materialize(&sheet_id, 0, &cell_store);
+        cell_store.dense_cache = cache;
+    }
     assert!(cell_store.dense_cache().get(&sheet_id, 0).is_some());
 
     // Remove the cell
@@ -67,7 +76,7 @@ fn test_remove_cell_clears_column_values_and_dense_cache() {
 
     // column_values should have Null at the old position
     let sheet = cell_store.get_sheet(&sheet_id).unwrap();
-    if let Some(col_vec) = sheet.get_column_view(0) {
+    if let Some(col_vec) = cell_store.get_column_view(&sheet_id, 0) {
         if !col_vec.is_empty() {
             assert_eq!(
                 col_vec[0],
@@ -89,7 +98,7 @@ fn test_column_values_grows_on_out_of_bounds_insert() {
     cell_store.insert_cell(&sheet_id, make_cell_id(800), SheetPos::new(8, 0), entry);
 
     let sheet = cell_store.get_sheet(&sheet_id).unwrap();
-    if let Some(col_vec) = sheet.get_column_view(0) {
+    if let Some(col_vec) = cell_store.get_column_view(&sheet_id, 0) {
         assert!(
             col_vec.len() > 8,
             "column_values vector should have grown to accommodate row 8"
@@ -116,7 +125,7 @@ fn test_column_values_grows_on_set_value_mut() {
     cell_store.set_value_mut(&cell_id, CellValue::Number(FiniteF64::must(99.0)));
 
     let sheet = cell_store.get_sheet(&sheet_id).unwrap();
-    if let Some(col_vec) = sheet.get_column_view(0) {
+    if let Some(col_vec) = cell_store.get_column_view(&sheet_id, 0) {
         assert!(
             col_vec.len() > 9,
             "column_values should grow for set_value_mut at high row"
@@ -158,7 +167,7 @@ fn test_column_values_rebuilt_after_insert_rows() {
     );
 
     let sheet = cell_store.get_sheet(&sheet_id).unwrap();
-    if let Some(col_vec) = sheet.get_column_view(0) {
+    if let Some(col_vec) = cell_store.get_column_view(&sheet_id, 0) {
         // Row 0 should still have value 10.0
         assert_eq!(
             col_vec[0],
@@ -192,7 +201,7 @@ fn test_column_values_rebuilt_after_delete_rows() {
 
     let sheet = cell_store.get_sheet(&sheet_id).unwrap();
     // After deleting row 0, old row 1 (cell_id 110, value=10.0) should be at row 0
-    if let Some(col_vec) = sheet.get_column_view(0) {
+    if let Some(col_vec) = cell_store.get_column_view(&sheet_id, 0) {
         assert_eq!(
             col_vec[0],
             CellValue::Number(FiniteF64::must(10.0)),
@@ -220,7 +229,7 @@ fn test_column_values_padded_to_sheet_rows_after_insert() {
     let sheet = cell_store.get_sheet(&sheet_id).unwrap();
     assert_eq!(sheet.rows, 12, "sheet.rows should be 10 + 2 = 12");
     for col in sheet.column_lengths.keys() {
-        let col_vec = sheet.get_column_view(*col).unwrap();
+        let col_vec = cell_store.get_column_view(&sheet_id, *col).unwrap();
         assert_eq!(
             col_vec.len(),
             sheet.rows as usize,
@@ -247,7 +256,7 @@ fn test_column_values_padded_to_sheet_rows_after_delete() {
     let sheet = cell_store.get_sheet(&sheet_id).unwrap();
     assert_eq!(sheet.rows, 9, "sheet.rows should be 10 - 1 = 9");
     for col in sheet.column_lengths.keys() {
-        let col_vec = sheet.get_column_view(*col).unwrap();
+        let col_vec = cell_store.get_column_view(&sheet_id, *col).unwrap();
         assert_eq!(
             col_vec.len(),
             sheet.rows as usize,

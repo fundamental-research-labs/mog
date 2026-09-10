@@ -111,9 +111,9 @@ fn test_delete_rows_removes_and_shifts() {
     );
 
     // Old row 1 cells gone
-    assert!(sheet.cells.get(&make_cell_id(110)).is_none());
-    assert!(sheet.cells.get(&make_cell_id(111)).is_none());
-    assert!(sheet.cells.get(&make_cell_id(112)).is_none());
+    assert!(cell_store.cells.get(&make_cell_id(110)).is_none());
+    assert!(cell_store.cells.get(&make_cell_id(111)).is_none());
+    assert!(cell_store.cells.get(&make_cell_id(112)).is_none());
 
     // Old row 2 -> now row 1
     assert_eq!(
@@ -139,7 +139,7 @@ fn test_delete_rows_removes_and_shifts() {
     assert_eq!(sheet.rows, 9);
 
     // Total cells: started with 9, deleted 3 = 6
-    assert_eq!(sheet.cells.len(), 6);
+    assert_eq!(cell_store.iter_sheet_cells(&sheet_id).count(), 6);
 }
 #[test]
 fn test_insert_cols_shifts_positions() {
@@ -220,9 +220,9 @@ fn test_delete_cols_removes_and_shifts() {
     let sheet = cell_store.get_sheet(&sheet_id).unwrap();
 
     // Old col 0 cells gone
-    assert!(sheet.cells.get(&make_cell_id(100)).is_none());
-    assert!(sheet.cells.get(&make_cell_id(110)).is_none());
-    assert!(sheet.cells.get(&make_cell_id(120)).is_none());
+    assert!(cell_store.cells.get(&make_cell_id(100)).is_none());
+    assert!(cell_store.cells.get(&make_cell_id(110)).is_none());
+    assert!(cell_store.cells.get(&make_cell_id(120)).is_none());
 
     // Old col 1 -> now col 0
     assert_eq!(
@@ -256,7 +256,7 @@ fn test_delete_cols_removes_and_shifts() {
     assert_eq!(sheet.cols, 4);
 
     // Total cells: 9 - 3 = 6
-    assert_eq!(sheet.cells.len(), 6);
+    assert_eq!(cell_store.iter_sheet_cells(&sheet_id).count(), 6);
 }
 #[test]
 fn test_remap_positions() {
@@ -393,7 +393,7 @@ fn test_delete_all_rows_with_cells() {
     );
 
     let sheet = cell_store.get_sheet(&sheet_id).unwrap();
-    assert_eq!(sheet.cells.len(), 0);
+    assert_eq!(cell_store.iter_sheet_cells(&sheet_id).count(), 0);
     assert_eq!(sheet.cell_by_axes.len(), 0);
     assert_eq!(sheet.axes_by_cell.len(), 0);
     assert_eq!(sheet.rows, 7);

@@ -143,9 +143,7 @@ fn native_bitmask_context_uses_borrowed_window_and_bypasses_probe_overrides() {
     let cache = WorkbookCache::new();
     let current = CellId::from_raw(100);
     let column = cell_store
-        .get_sheet(&sheet)
-        .unwrap()
-        .get_column_view(0)
+        .get_column_view(&sheet, 0)
         .unwrap();
     let window = column.slice(1..4);
     let criterion = CellValue::number(1.0);

@@ -327,7 +327,7 @@ pub(in crate::storage::engine) fn mutation_copy_sheet(
         .get_sheet(source_sheet_id)
         .into_iter()
         .flat_map(|sheet| {
-            sheet.cells_iter().filter_map(|(id, _)| {
+            cell_store.iter_sheet_cells(source_sheet_id).filter_map(|(id, _)| {
                 let pos = sheet.position_of(id)?;
                 let text = crate::storage::engine::formula_read::formula_text_for_cell_id(
                     stores,

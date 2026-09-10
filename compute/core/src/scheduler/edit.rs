@@ -756,9 +756,9 @@ impl ComputeCore {
         self.formula_strings.clear();
         let sheet_ids: Vec<SheetId> = cell_store.sheet_ids().copied().collect();
         for sheet_id in sheet_ids {
-            if let Some(sheet) = cell_store.get_sheet(&sheet_id) {
+            if cell_store.get_sheet(&sheet_id).is_some() {
                 let lookup = StorePositionLookup::new(cell_store, sheet_id);
-                for (cell_id, formula) in &sheet.formulas {
+                for (cell_id, formula) in cell_store.iter_sheet_formulas(&sheet_id) {
                     let a1 = compute_parser::to_a1_string(formula, &lookup);
                     self.formula_strings.insert(*cell_id, a1);
                 }
@@ -782,9 +782,9 @@ impl ComputeCore {
         let mut formula_text_updates: Vec<(CellId, String)> = Vec::new();
         let sheet_ids: Vec<SheetId> = cell_store.sheet_ids().copied().collect();
         for sheet_id in sheet_ids {
-            if let Some(sheet) = cell_store.get_sheet(&sheet_id) {
+            if cell_store.get_sheet(&sheet_id).is_some() {
                 let lookup = StorePositionLookup::new(cell_store, sheet_id);
-                for (cell_id, formula) in &sheet.formulas {
+                for (cell_id, formula) in cell_store.iter_sheet_formulas(&sheet_id) {
                     let rendered = compute_parser::to_a1_string(formula, &lookup);
                     let rendered_changed = previous_formula_strings
                         .get(cell_id)
@@ -829,10 +829,10 @@ impl ComputeCore {
             if sheet_id == *deleted_sheet_id {
                 continue;
             }
-            if let Some(sheet) = cell_store.get_sheet(&sheet_id) {
+            if cell_store.get_sheet(&sheet_id).is_some() {
                 let lookup =
                     DeletedSheetDisplayLookup::new(cell_store, sheet_id, *deleted_sheet_id);
-                for (cell_id, formula) in &sheet.formulas {
+                for (cell_id, formula) in cell_store.iter_sheet_formulas(&sheet_id) {
                     let rendered = compute_parser::to_a1_string(formula, &lookup);
                     let rendered_changed = previous_formula_strings
                         .get(cell_id)

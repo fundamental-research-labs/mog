@@ -21,7 +21,7 @@ fn test_from_snapshot_basic() {
     // cells occupy rows 0–1 and cols 0–1, so rows=2, cols=2
     assert_eq!(sheet.rows, 2);
     assert_eq!(sheet.cols, 2);
-    assert_eq!(sheet.cells.len(), 3);
+    assert_eq!(cell_store.iter_sheet_cells(&sid).count(), 3);
 }
 #[test]
 fn test_from_snapshot_uuid_parsing() {
@@ -49,6 +49,84 @@ fn test_from_snapshot_formula() {
     // The scheduler's formula_strings map is the authoritative source.
     let cell_id = CellId::from_uuid_str("550e8400-e29b-41d4-a716-446655440003").unwrap();
     assert!(cell_store.get_formula(&cell_id).is_none());
+}
+
+#[test]
+fn from_snapshot_hydrates_global_payloads_across_two_sheets() {
+    let formula = formula_types::IdentityFormula {
+        template: "1+1".to_string(),
+        refs: vec![],
+        is_dynamic_array: false,
+        is_volatile: false,
+        is_aggregate: false,
+    };
+    let id_a = "550e8400-e29b-41d4-a716-4466554400aa";
+    let id_b = "550e8400-e29b-41d4-a716-4466554400bb";
+    let snap = WorkbookSnapshot {
+        sheets: vec![
+            SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
+                id: "550e8400-e29b-41d4-a716-446655440010".to_string(),
+                name: "Left".to_string(),
+                rows: 10,
+                cols: 10,
+                cells: vec![CellData {
+                    cell_id: id_a.to_string(),
+                    row: 0,
+                    col: 0,
+                    value: CellValue::Number(FiniteF64::must(7.0)),
+                    formula: None,
+                    identity_formula: Some(formula.clone()),
+                    array_ref: None,
+                }],
+                ranges: vec![],
+            },
+            SheetSnapshot {
+                identities: Vec::new(),
+                row_axis: None,
+                col_axis: None,
+                id: "550e8400-e29b-41d4-a716-446655440011".to_string(),
+                name: "Right".to_string(),
+                rows: 10,
+                cols: 10,
+                cells: vec![CellData {
+                    cell_id: id_b.to_string(),
+                    row: 2,
+                    col: 1,
+                    value: CellValue::Text("keep".into()),
+                    formula: None,
+                    identity_formula: None,
+                    array_ref: None,
+                }],
+                ranges: vec![],
+            },
+        ],
+        ..Default::default()
+    };
+    let store = CellStore::from_snapshot(snap).unwrap();
+    let cell_a = CellId::from_uuid_str(id_a).unwrap();
+    let cell_b = CellId::from_uuid_str(id_b).unwrap();
+    assert_eq!(
+        store.get_cell_value(&cell_a),
+        Some(&CellValue::Number(FiniteF64::must(7.0)))
+    );
+    assert_eq!(store.get_formula(&cell_a), Some(&formula));
+    assert_eq!(
+        store.get_cell_value(&cell_b),
+        Some(&CellValue::Text("keep".into()))
+    );
+    assert!(store.get_formula(&cell_b).is_none());
+
+    let exported: Vec<_> = store
+        .iter_sheet_cells(&store.sheet_by_name("Left").unwrap())
+        .map(|(id, entry)| (*id, entry.value.clone(), store.get_formula(id).cloned()))
+        .collect();
+    assert_eq!(exported.len(), 1);
+    assert_eq!(exported[0].0, cell_a);
+    assert_eq!(exported[0].1, CellValue::Number(FiniteF64::must(7.0)));
+    assert_eq!(exported[0].2, Some(formula));
 }
 #[test]
 fn test_from_snapshot_invalid_uuid() {
@@ -251,7 +329,7 @@ fn test_empty_sheet() {
     let cell_store = CellStore::from_snapshot(snap).unwrap();
     let sid = cell_store.sheet_by_name("empty").unwrap();
     let sheet = cell_store.get_sheet(&sid).unwrap();
-    assert_eq!(sheet.cells.len(), 0);
+    assert_eq!(cell_store.iter_sheet_cells(&sid).count(), 0);
     assert!(
         cell_store
             .get_cell_value_at(&sid, SheetPos::new(0, 0))

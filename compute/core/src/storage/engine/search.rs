@@ -133,8 +133,8 @@ impl ComputeEngine {
 
         let mut results = Vec::new();
 
-        for (cell_id, entry) in sheet.cells_iter() {
-            if sheet.is_ghost(cell_id) {
+        for (cell_id, entry) in self.cell_store.iter_sheet_cells(sheet_id) {
+            if self.cell_store.is_ghost(cell_id) {
                 continue;
             }
             if let Some(pos) = sheet.position_of(cell_id)
@@ -175,7 +175,7 @@ impl ComputeEngine {
 
         let mut results = Vec::new();
 
-        for (cell_id, formula) in &sheet.formulas {
+        for (cell_id, formula) in self.cell_store.iter_sheet_formulas(sheet_id) {
             let a1 = self
                 .stores
                 .compute

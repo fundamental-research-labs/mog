@@ -12,7 +12,7 @@ impl CellStore {
                 invalidate_col = Some(pos.col());
             }
             // Rebuild only position metadata; values remain with their owners.
-            s.rebuild_column_index();
+            s.rebuild_column_index(&self.cells, &self.formulas);
         }
         if let Some(col) = invalidate_col {
             self.dense_cache.invalidate(sheet_id, col);

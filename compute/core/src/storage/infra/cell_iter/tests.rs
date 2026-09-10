@@ -71,8 +71,7 @@ fn find_data_edge(
         direction,
         |r, c| {
             cell_store
-                .get_sheet(&sheet_id)
-                .and_then(|s| s.value_at(SheetPos::new(r, c)))
+                .get_cell_value_at(&sheet_id, SheetPos::new(r, c))
                 .is_some_and(|v| !v.is_null())
         },
     )

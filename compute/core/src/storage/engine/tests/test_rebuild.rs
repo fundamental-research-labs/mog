@@ -245,9 +245,7 @@ fn test_rebuild_preserves_projections() {
     assert_eq!(*a1_val, CellValue::Number(FiniteF64::must(1.0)), "A1=1");
     let col = engine
         .cell_store()
-        .get_sheet(&sid)
-        .unwrap()
-        .get_column_view(0)
+        .get_column_view(&sid, 0)
         .unwrap();
     assert_eq!(
         col[1],
@@ -288,9 +286,7 @@ fn test_rebuild_preserves_projections() {
     );
     let col_after = engine
         .cell_store()
-        .get_sheet(&sid)
-        .unwrap()
-        .get_column_view(0)
+        .get_column_view(&sid, 0)
         .unwrap();
     assert_eq!(
         col_after[1],
@@ -497,9 +493,7 @@ fn test_structure_change_reregisters_projections() {
     assert_eq!(*a1_val, CellValue::Number(FiniteF64::must(1.0)), "A1=1");
     let col = engine
         .cell_store()
-        .get_sheet(&sid)
-        .unwrap()
-        .get_column_view(0)
+        .get_column_view(&sid, 0)
         .unwrap();
     assert_eq!(
         col[1],
@@ -578,9 +572,7 @@ fn test_recalculate_preserves_projections() {
     assert_eq!(*a1_val, CellValue::Number(FiniteF64::must(1.0)), "A1=1");
     let col = engine
         .cell_store()
-        .get_sheet(&sid)
-        .unwrap()
-        .get_column_view(0)
+        .get_column_view(&sid, 0)
         .unwrap();
     assert_eq!(
         col[1],

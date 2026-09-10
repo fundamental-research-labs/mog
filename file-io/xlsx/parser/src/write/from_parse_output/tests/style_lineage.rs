@@ -146,3 +146,39 @@ fn invalid_imported_custom_number_format_reference_is_not_replayed() {
     assert_eq!(emitted, 2);
     assert_ne!(plan.writer.cell_xfs[emitted as usize].num_fmt_id, Some(999));
 }
+
+#[test]
+fn imported_normal_font_survives_cells_without_style_ids() {
+    let mut defaults = StylesWriter::with_defaults();
+    defaults.fonts[0].name = Some("Aptos Narrow".to_string());
+    defaults.fonts[0].size = Some(12.0);
+    let xf = defaults.cell_xfs[0].clone();
+    let output = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Sheet1".to_string(),
+            cells: vec![DomainCellData {
+                row: 0,
+                col: 0,
+                value: DomainValue::Number(FiniteF64::new(1.0).unwrap()),
+                style_id: None,
+                ..Default::default()
+            }],
+            ..Default::default()
+        }],
+        style_palette: vec![],
+        workbook_stylesheet: Some(WorkbookStylesheet {
+            fonts: defaults.fonts,
+            fills: defaults.fills,
+            borders: defaults.borders,
+            cell_style_xfs: defaults.cell_style_xfs,
+            cell_xfs: vec![xf],
+            cell_xf_lineage: vec![DocumentFormat::default()],
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    let plan = build_style_export_plan(&output);
+    assert_eq!(plan.writer.fonts[0].name.as_deref(), Some("Aptos Narrow"));
+    assert_eq!(plan.writer.fonts[0].size, Some(12.0));
+}

@@ -42,3 +42,39 @@ jobs:
 
       - name: Test
         run: cargo test --workspace --locked
+
+  verify:
+    name: Calipers verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Checkout calipers submodule
+        run: |
+          git submodule init vendor/calipers
+          git config submodule.calipers.url https://github.com/fundamental-research-labs/calipers.git
+          git submodule update vendor/calipers
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
+        with:
+          toolchain: stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: ". -> target-native"
+          cache-on-failure: true
+
+      - name: Install Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: vendor/calipers/go.mod
+          cache-dependency-path: vendor/calipers/go.sum
+
+      - name: Build Mog
+        run: cargo build -p mog --locked
+
+      - name: Verify XLSX roundtrip cases
+        run: ./run-calipers-verify.sh

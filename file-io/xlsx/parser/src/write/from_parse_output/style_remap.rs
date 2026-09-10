@@ -44,6 +44,18 @@ pub(super) fn build_style_export_plan(output: &ParseOutput) -> StyleExportPlan {
     };
     let stylesheet = stylesheet.normalized();
     if !can_replay_imported_styles(&stylesheet, palette) {
+        // A populated sheet can inherit Normal even when its cells carry no
+        // explicit style IDs and the modeled palette is absent. Preserve the
+        // imported stylesheet in that case instead of inventing defaults.
+        if palette.is_empty() && sheets_have_cells(output) && !stylesheet.cell_xfs.is_empty() {
+            return StyleExportPlan {
+                writer: StylesWriter::from_workbook_stylesheet(&stylesheet),
+                remapper: StyleExportRemapper {
+                    emitted_cell_xf_ids: Vec::new(),
+                },
+            };
+        }
+
         let mut plan = generated_style_export_plan(palette);
         // Rebuilding cell XFs must not discard unrelated stylesheet metadata.
         // DXFs (including extension references) are reconciled independently.
@@ -79,6 +91,10 @@ pub(super) fn build_style_export_plan(output: &ParseOutput) -> StyleExportPlan {
             emitted_cell_xf_ids,
         },
     }
+}
+
+fn sheets_have_cells(output: &ParseOutput) -> bool {
+    output.sheets.iter().any(|sheet| !sheet.cells.is_empty())
 }
 
 fn generated_style_export_plan(palette: &[domain_types::DocumentFormat]) -> StyleExportPlan {

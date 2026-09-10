@@ -191,3 +191,170 @@ fn unloaded_property_is_not_readable() {
         other => panic!("expected script error, got {other}"),
     }
 }
+
+fn archive_text(bytes: &[u8], path: &str) -> String {
+    String::from_utf8(
+        xlsx_parser::zip::XlsxArchive::new(bytes)
+            .unwrap()
+            .read_file(path)
+            .unwrap(),
+    )
+    .unwrap()
+}
+
+fn excel_shaped_xlsx(sheet_name: &str, sheet_id: &str) -> Vec<u8> {
+    let mut zip = xlsx_parser::write::ZipWriter::new();
+    zip.add_file(
+        "[Content_Types].xml",
+        br#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+      <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+      <Default Extension="xml" ContentType="application/xml"/>
+      <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+      <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+    </Types>"#
+            .to_vec(),
+    );
+    zip.add_file(
+        "_rels/.rels",
+        br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+      <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+    </Relationships>"#
+            .to_vec(),
+    );
+    let workbook = format!(
+        r#"<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+      <sheets><sheet name="{sheet_name}" sheetId="{sheet_id}" r:id="rId1"/></sheets>
+      <calcPr calcId="191029"/>
+      <extLst><ext uri="{{140A7094-0E35-4892-8432-C4D2E57EDEB7}}"><x15:workbookPr xmlns:x15="http://schemas.microsoft.com/office/spreadsheetml/2010/11/main" chartTrackingRefBase="1"/></ext></extLst>
+    </workbook>"#
+    );
+    zip.add_file("xl/workbook.xml", workbook.into_bytes());
+    zip.add_file(
+        "xl/_rels/workbook.xml.rels",
+        br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+      <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+    </Relationships>"#
+            .to_vec(),
+    );
+    zip.add_file(
+        "xl/worksheets/sheet1.xml",
+        br#"<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+      <sheetData><row r="1"><c r="A1"><v>1</v></c></row></sheetData>
+    </worksheet>"#
+            .to_vec(),
+    );
+    zip.finish().unwrap()
+}
+
+#[test]
+fn names_add_on_loaded_workbook_keeps_defined_names_in_schema_order() {
+    let bytes = excel_shaped_xlsx("Sheet1", "1");
+    let (workbook, _) = Workbook::from_xlsx_bytes(&bytes).unwrap();
+    run_office_js_with_workbook(
+        &workbook,
+        r#"
+        await Excel.run(async (context) => {
+          const sheet = context.workbook.worksheets.getActiveWorksheet();
+          context.workbook.names.add("Repro_Name", sheet.getRange("A1:A10"));
+          await context.sync();
+        });
+        "#,
+    )
+    .unwrap();
+    let exported = workbook.to_xlsx_bytes().unwrap();
+    let xml = archive_text(&exported, "xl/workbook.xml");
+    let names = xml.find("<definedNames>").expect(&xml);
+    let calc = xml.find("<calcPr").expect(&xml);
+    assert!(names < calc, "{xml}");
+    assert!(xml.contains("Repro_Name"), "{xml}");
+}
+
+#[test]
+fn worksheets_add_after_sparse_import_emits_unique_sheet_ids() {
+    let bytes = excel_shaped_xlsx("Imported", "2");
+    let (workbook, _) = Workbook::from_xlsx_bytes(&bytes).unwrap();
+    run_office_js_with_workbook(
+        &workbook,
+        r#"
+        await Excel.run(async (context) => {
+          context.workbook.worksheets.add("Added");
+          await context.sync();
+        });
+        "#,
+    )
+    .unwrap();
+    let exported = workbook.to_xlsx_bytes().unwrap();
+    let xml = archive_text(&exported, "xl/workbook.xml");
+    let mut ids = Vec::new();
+    for part in xml.split("sheetId=\"").skip(1) {
+        ids.push(part.split('"').next().unwrap().parse::<u32>().unwrap());
+    }
+    assert_eq!(ids.len(), 2, "{xml}");
+    assert!(ids.iter().all(|id| *id > 0), "{xml}");
+    assert_eq!(
+        ids.iter()
+            .copied()
+            .collect::<std::collections::BTreeSet<_>>()
+            .len(),
+        2,
+        "{xml}"
+    );
+}
+
+#[test]
+fn multi_row_formulas_survive_officejs_export() {
+    let (workbook, _) = Workbook::blank().unwrap();
+    run_office_js_with_workbook(
+        &workbook,
+        r#"
+        await Excel.run(async (context) => {
+          const sheet = context.workbook.worksheets.getItem("Sheet1");
+          sheet.getRange("A1:C2").formulas = [
+            [100, "=A1", "=B1+B2"],
+            [200, "=A2", null],
+          ];
+          await context.sync();
+        });
+        "#,
+    )
+    .unwrap();
+    let exported = workbook.to_xlsx_bytes().unwrap();
+    let xml = archive_text(&exported, "xl/worksheets/sheet1.xml");
+    assert!(
+        xml.contains("<f>A2</f>") || xml.contains("<f>=A2</f>"),
+        "{xml}"
+    );
+}
+
+#[test]
+fn authored_chart_titles_emit_overlay_through_officejs() {
+    let (workbook, _) = Workbook::blank().unwrap();
+    run_office_js_with_workbook(
+        &workbook,
+        r#"
+        await Excel.run(async (context) => {
+          const sheet = context.workbook.worksheets.getItem("Sheet1");
+          sheet.getRange("A1:B5").values = [
+            ["Month", "Units"],
+            ["M0", 10],
+            ["M1", 13],
+            ["M2", 16],
+            ["M3", 19],
+          ];
+          const chart = sheet.charts.add(Excel.ChartType.columnClustered, sheet.getRange("A1:B5"));
+          chart.title.text = "Monthly Units";
+          chart.axes.categoryAxis.title.text = "Month";
+          chart.axes.valueAxis.title.text = "Units Sold";
+          await context.sync();
+        });
+        "#,
+    )
+    .unwrap();
+    let exported = workbook.to_xlsx_bytes().unwrap();
+    let chart = archive_text(&exported, "xl/charts/chart1.xml");
+    assert!(chart.contains(">Monthly Units<"), "{chart}");
+    assert!(
+        chart.matches(r#"<c:overlay val="0"/>"#).count() >= 3,
+        "{chart}"
+    );
+}
